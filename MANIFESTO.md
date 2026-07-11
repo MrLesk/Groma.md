@@ -49,17 +49,28 @@ The central distinction in Groma is **intent versus evidence**.
 Intent explains meaning:
 
 - responsibilities and descriptions;
-- conceptual boundaries and grouping;
+- conceptual boundaries and recursive containment;
 - inputs, outputs, and actions;
 - declared relationships;
 - lifecycle and desired state.
 
-For v0.1, the structured component vocabulary is deliberately limited to **intent,
-inputs, outputs, actions, and relationships**. Requirements are expressed through
-relationships; important failures and events are inputs or outputs; state, guarantees,
-triggers, and effects remain readable intent prose until repeated use proves that they
-need independent structure. This small model is a product constraint: users should not
-have to complete an architectural questionnaire before a component becomes useful.
+Every architectural node in the standard model is a **component**. A component has an
+open type token and zero or one structural parent. Components without a parent are
+roots of the blueprint; every other component belongs to exactly one parent. Parents
+may contain any number of components of the same or different types, recursively.
+Containment is acyclic and is separate from the component's other many-to-many
+relationships. The blueprint itself is the workspace around these roots, not another
+required entity. A domain is therefore an ordinary root component with a `domain`
+type, not a distinct container entity.
+
+For v0.1, the structured meaning carried by a component is deliberately limited to
+**intent, inputs, outputs, actions, and relationships**. Type and parent are small
+structural metadata, not a separate architectural taxonomy or questionnaire.
+Requirements are expressed through relationships; important failures and events are
+inputs or outputs; state, guarantees, triggers, and effects remain readable intent
+prose until repeated use proves that they need independent structure. This small model
+is a product constraint: users should not have to complete an architectural
+questionnaire before a component becomes useful.
 
 Evidence explains what a source currently observes:
 
