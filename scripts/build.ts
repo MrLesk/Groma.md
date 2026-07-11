@@ -4,7 +4,6 @@ import path from "node:path";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const outputDirectory = path.join(projectRoot, "dist");
-const outputFile = path.join(outputDirectory, "groma");
 const entrypoint = path.join(projectRoot, "src", "cli", "main.ts");
 
 function parseTarget(args: readonly string[]): string | undefined {
@@ -25,6 +24,9 @@ function parseTarget(args: readonly string[]): string | undefined {
 }
 
 const target = parseTarget(Bun.argv.slice(2));
+const isWindows =
+  target === undefined ? process.platform === "win32" : target.startsWith("bun-windows-");
+const outputFile = path.join(outputDirectory, isWindows ? "groma.exe" : "groma");
 
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });

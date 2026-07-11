@@ -12,7 +12,8 @@
     "format": "prettier --write src scripts .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
     "format:check": "prettier --check src scripts .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
     "check:boundaries": "bun run scripts/check-boundaries.ts",
-    "smoke": "./dist/groma --version && ./dist/groma --help",
+    "check:targets": "bun run scripts/verify-targets.ts",
+    "smoke": "bun run scripts/verify-binary.ts",
     "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run build && bun run smoke"
   },
   "devDependencies": {
