@@ -54,7 +54,7 @@ Core must never import Bun APIs, filesystem or Markdown implementations, CLI, HT
 React, or any other surface technology. Application operations must never reach into
 provider implementations directly. The host is the composition root.
 
-The directory names follow the architectural groups and seed terminology in
+The directory names follow the root component domains and seed terminology in
 `ARCHITECTURE.md`. They can be split into distributable packages only when an actual
 plugin or public API boundary requires it.
 

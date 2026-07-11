@@ -4,7 +4,7 @@ title: Define bounded query and graph-event contracts
 status: To Do
 assignee: []
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 17:36'
+updated_date: '2026-07-11 22:39'
 labels:
   - core
   - queries
@@ -44,3 +44,9 @@ Implement the Core contracts shared by short-lived commands and later long-lived
 4. Supply reusable contract fixtures without implementing the 1B projection index.
 5. Test pagination, cursor invalidation, event order, and recovery signals.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Reviewed for GROM-19: recursive containment remains Standard Model policy. GROM-11 intentionally keeps Core query and event contracts generic; model and application layers interpret bounded relation traversal as parent or child hierarchy.
+<!-- SECTION:NOTES:END -->

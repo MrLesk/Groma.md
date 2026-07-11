@@ -16,7 +16,8 @@ Every component card uses these fields:
 
 - **Seed key:** temporary stable handle used by this document. It is not a future
   Groma entity ID.
-- **Group:** the default architectural group containing the component.
+- **Type:** an open model-owned token describing the component's architectural role.
+- **Parent:** the single structural parent component, or `None` for a root.
 - **First delivery:** the first iteration expected to make the component real.
 - **Intent:** why the component exists, independent of implementation technology.
 - **Inputs:** concepts or information the component receives.
@@ -26,21 +27,24 @@ Every component card uses these fields:
 
 The planned delivery iterations are:
 
-| Iteration | Architectural outcome |
-| --- | --- |
-| 1A | Correctness walking skeleton and minimal persistence |
-| 1B | Official host, projection, validation, and manual self-blueprint |
-| 2 | Scanning, evidence, binding, and reconciliation |
-| 3 | Plans, Git history, and architectural comparison |
-| 4 | Long-lived application service and web viewer |
-| 5 | Web editing and complete self-hosting |
+| Iteration | Architectural outcome                                            |
+| --------- | ---------------------------------------------------------------- |
+| 1A        | Correctness walking skeleton and minimal persistence             |
+| 1B        | Official host, projection, validation, and manual self-blueprint |
+| 2         | Scanning, evidence, binding, and reconciliation                  |
+| 3         | Plans, Git history, and architectural comparison                 |
+| 4         | Long-lived application service and web viewer                    |
+| 5         | Web editing and complete self-hosting                            |
 
 ## v0.1 Component Vocabulary
 
-The first Groma model intentionally structures only five concepts:
+The blueprint is a workspace containing one or more root components. Every
+architectural node beneath that workspace uses the same recursively composable model:
 
 ```text
 Component
+├── type
+├── parent?              # absent for roots
 ├── intent
 ├── inputs
 ├── outputs
@@ -48,21 +52,34 @@ Component
 └── relationships
 ```
 
-This is enough to make a component understandable and connectable without forcing
-users or scanners to fill in a large architectural taxonomy. Other useful concepts map
-onto this vocabulary until real usage justifies promoting them:
+Type is an open token rather than a closed hierarchy. For example, a Shopify blueprint
+may have `Shop` and `Users` root components of type `domain`, with recursively nested
+components beneath them. A parent may contain children of its own type or any other
+type. Each non-root component has exactly one parent; roots have none; containment
+cycles are invalid. A component may additionally have any number of ordinary
+relationships, including relationships to components in other branches.
 
-| Richer concept | v0.1 representation |
-| --- | --- |
-| State | Behavioral prose in the component body |
-| Requirements | `requires` relationships |
-| Guarantees | Optional guarantees section in the component body |
-| Triggers | Usually implied by an input and described by its action |
-| Effects | Outputs, relationships, or action prose |
-| Failure outcomes | Architecturally meaningful outputs |
-| Configuration | An input when it matters to other components |
-| Commands | Inputs that request an action |
-| Events | Inputs or outputs representing something that happened |
+`parent` is the Standard Model's single-reference view of structural containment. The
+model maps and validates that structure over Core's technology-neutral graph
+contracts; Core does not learn component types or hierarchy policy.
+
+Type and parent are structural metadata. The model intentionally limits structured
+component meaning to five concepts: intent, inputs, outputs, actions, and
+relationships. This is enough to make a component understandable and connectable
+without forcing users or scanners to fill in a large architectural taxonomy. Other
+useful concepts map onto this vocabulary until real usage justifies promoting them:
+
+| Richer concept     | v0.1 representation                                      |
+| ------------------ | -------------------------------------------------------- |
+| State              | Behavioral prose in the component body                   |
+| Requirements       | `requires` relationships                                 |
+| Guarantees         | Optional guarantees section in the component body        |
+| Triggers           | Usually implied by an input and described by its action  |
+| Effects            | Outputs, relationships, or action prose                  |
+| Failure outcomes   | Architecturally meaningful outputs                       |
+| Configuration      | An input when it matters to other components             |
+| Commands           | Inputs that request an action                            |
+| Events             | Inputs or outputs representing something that happened   |
 | Metrics and status | Outputs when another component or operator consumes them |
 
 Inputs and outputs are the v0.1 connection points. A later model may describe them as
@@ -127,7 +144,27 @@ flowchart LR
     Backlog["Backlog.md"] -. "coordinates implementation between plans" .-> Actor
 ```
 
-## Architectural Groups
+## Architectural Component Tree
+
+The nine sections below are root components of the Groma blueprint. They have no
+parent; their former role as dedicated containers is now expressed by the same
+component model used everywhere else.
+
+| Root component                 | Seed key                   | Type     |
+| ------------------------------ | -------------------------- | -------- |
+| Core                           | `core`                     | `domain` |
+| Official Host                  | `official-host`            | `domain` |
+| Standard Blueprint Model       | `standard-blueprint-model` | `domain` |
+| Canonical Persistence          | `canonical-persistence`    | `domain` |
+| Projection                     | `projection`               | `domain` |
+| Scanning and Reconciliation    | `scanning-reconciliation`  | `domain` |
+| Planning and History           | `planning-history`         | `domain` |
+| CLI, Service, and Web Surfaces | `surfaces`                 | `domain` |
+| Plugin Development             | `plugin-development`       | `domain` |
+
+Every card nested under a root uses type `component` unless the card explicitly says
+otherwise. The `Parent` field is structural containment; the `Relationships` field
+remains the unrestricted collaboration graph.
 
 ### 1. Core
 
@@ -137,7 +174,8 @@ filesystems, Markdown, Git, SQLite, CLI syntax, scanner processes, or browsers.
 #### Graph Kernel
 
 - **Seed key:** `graph-kernel`
-- **Group:** Core
+- **Type:** `component`
+- **Parent:** Core
 - **First delivery:** 1A
 - **Intent:** Give every architectural concept stable identity and a common graph
   representation without prescribing a storage or surface technology.
@@ -153,7 +191,8 @@ filesystems, Markdown, Git, SQLite, CLI syntax, scanner processes, or browsers.
 #### Transaction Engine
 
 - **Seed key:** `transaction-engine`
-- **Group:** Core
+- **Type:** `component`
+- **Parent:** Core
 - **First delivery:** 1A
 - **Intent:** Make semantic graph changes deterministic, conflict-aware, atomic at the
   capability boundary, and observable by projections and surfaces.
@@ -169,7 +208,8 @@ filesystems, Markdown, Git, SQLite, CLI syntax, scanner processes, or browsers.
 #### Query and Event Contracts
 
 - **Seed key:** `query-event-contracts`
-- **Group:** Core
+- **Type:** `component`
+- **Parent:** Core
 - **First delivery:** 1A
 - **Intent:** Provide bounded, generation-aware reads and change notifications that
   work for both short-lived commands and long-lived surfaces.
@@ -184,7 +224,8 @@ filesystems, Markdown, Git, SQLite, CLI syntax, scanner processes, or browsers.
 #### Observation Contract
 
 - **Seed key:** `observation-contract`
-- **Group:** Core
+- **Type:** `component`
+- **Parent:** Core
 - **First delivery:** 2
 - **Intent:** Define safe finite sessions through which blind scanners report evidence
   without accessing or mutating the existing blueprint.
@@ -200,7 +241,8 @@ filesystems, Markdown, Git, SQLite, CLI syntax, scanner processes, or browsers.
 #### Plugin Runtime
 
 - **Seed key:** `plugin-runtime`
-- **Group:** Core
+- **Type:** `component`
+- **Parent:** Core
 - **First delivery:** 1B
 - **Intent:** Compose replaceable capabilities while making dependencies,
   cardinalities, lifecycle, and incompatibilities explicit.
@@ -220,7 +262,8 @@ not part of Core.
 #### Default Host
 
 - **Seed key:** `default-host`
-- **Group:** Official Host
+- **Type:** `component`
+- **Parent:** Official Host
 - **First delivery:** 1A
 - **Intent:** Start Groma in local CLI, service, and initialization contexts without
   embedding default technologies into Core.
@@ -235,7 +278,8 @@ not part of Core.
 #### Bootstrap Configuration
 
 - **Seed key:** `bootstrap-configuration`
-- **Group:** Official Host
+- **Type:** `component`
+- **Parent:** Official Host
 - **First delivery:** 1B
 - **Intent:** Discover and load configuration before the runtime plugin graph exists,
   while keeping filesystem and YAML assumptions replaceable.
@@ -250,7 +294,8 @@ not part of Core.
 #### Plugin Package Manager
 
 - **Seed key:** `plugin-package-manager`
-- **Group:** Official Host
+- **Type:** `component`
+- **Parent:** Official Host
 - **First delivery:** 1B for local packages; remote acquisition after the runtime API
   is proven
 - **Intent:** Install, select, reproduce, and update distributable plugin packages
@@ -272,32 +317,36 @@ The official model is a required built-in plugin rather than a Core assumption.
 #### Standard Model
 
 - **Seed key:** `standard-model`
-- **Group:** Standard Blueprint Model
+- **Type:** `component`
+- **Parent:** Standard Blueprint Model
 - **First delivery:** 1A
-- **Intent:** Express an intentionally small architectural vocabulary through groups,
-  components, intent, inputs, outputs, actions, relationships, lifecycle, and desired
-  state.
+- **Intent:** Express an intentionally small architectural vocabulary through
+  recursively nested components, open types, intent, inputs, outputs, actions,
+  relationships, lifecycle, and desired state.
 - **Inputs:** Partial semantic entity mutations; extension metadata; relation-type
   registrations.
 - **Outputs:** Validated partial or complete model entities; model-specific views;
   semantic diagnostics.
 - **Actions:** Define the minimal entity vocabulary; normalize semantic documents;
-  preserve omitted fields; resolve primary grouping; derive standard display states.
+  preserve omitted fields; resolve structural parents; derive child views and standard
+  display states.
 - **Relationships:** Uses Graph Kernel; consumed explicitly by official CLI, planning,
   reconciliation, and web plugins.
 
 #### Model Invariants
 
 - **Seed key:** `model-invariants`
-- **Group:** Standard Blueprint Model
+- **Type:** `component`
+- **Parent:** Standard Blueprint Model
 - **First delivery:** 1A
 - **Intent:** Ensure no application surface or replacement reconciliation strategy can
   violate the standard model's architectural guarantees.
 - **Inputs:** Proposed model transaction; prior entities; evidence ownership;
   conceptual-boundary state.
 - **Outputs:** Approval or actionable invariant diagnostics.
-- **Actions:** Protect scanner-safe fields; enforce primary-group rules; preserve
-  pinned boundaries; reject invalid relations and ambiguous identities.
+- **Actions:** Protect scanner-safe fields; enforce single-parent and acyclic
+  containment rules; preserve pinned boundaries; reject invalid relations and
+  ambiguous identities.
 - **Relationships:** Registered with Transaction Engine; shared by CLI, web, plans, and
   reconciliation.
 
@@ -309,7 +358,8 @@ aliases, plans, and transaction recovery.
 #### Local Resource Provider
 
 - **Seed key:** `local-resource-provider`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 1A
 - **Intent:** Give official storage and configuration plugins portable local resource
   access without exposing filesystem concepts to Core.
@@ -323,12 +373,13 @@ aliases, plans, and transaction recovery.
 #### Markdown Intent Store
 
 - **Seed key:** `markdown-intent-store`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 1A
 - **Intent:** Persist human- and agent-curated architectural meaning as deterministic,
   reviewable Markdown without mixing it with scan churn.
-- **Inputs:** Groups; components; embedded interface items; declared relations; model
-  extensions.
+- **Inputs:** Components; structural parent references; embedded interface items;
+  declared relations; model extensions.
 - **Outputs:** Versioned intent documents; content revisions; parsed semantic entities.
 - **Actions:** Load and serialize intent; shard by stable identity; preserve unknown
   extensions; diagnose malformed or conflicted documents.
@@ -338,7 +389,8 @@ aliases, plans, and transaction recovery.
 #### Evidence and Binding Store
 
 - **Seed key:** `evidence-binding-store`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 2
 - **Intent:** Preserve completed observations, provenance, coverage, and Groma-owned
   bindings separately from semantic intent.
@@ -354,7 +406,8 @@ aliases, plans, and transaction recovery.
 #### Alias Store
 
 - **Seed key:** `alias-store`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 1B
 - **Intent:** Preserve continuity when conceptual entities merge or scanner keys
   migrate.
@@ -368,7 +421,8 @@ aliases, plans, and transaction recovery.
 #### Transaction Journal
 
 - **Seed key:** `transaction-journal`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 1A
 - **Intent:** Ensure local multi-resource changes recover to a complete previous or new
   generation after interruption.
@@ -383,7 +437,8 @@ aliases, plans, and transaction recovery.
 #### Schema Migration
 
 - **Seed key:** `schema-migration`
-- **Group:** Canonical Persistence
+- **Type:** `component`
+- **Parent:** Canonical Persistence
 - **First delivery:** 1B
 - **Intent:** Evolve versioned canonical documents explicitly and reviewably without
   silently changing a workspace during ordinary mutations.
@@ -402,7 +457,8 @@ the blueprint.
 #### Projection Index
 
 - **Seed key:** `projection-index`
-- **Group:** Projection
+- **Type:** `component`
+- **Parent:** Projection
 - **First delivery:** 1B
 - **Intent:** Materialize canonical state into a fast local index for search, joins,
   traversal, evidence state, and plan views.
@@ -418,7 +474,8 @@ the blueprint.
 #### Query Engine
 
 - **Seed key:** `query-engine`
-- **Group:** Projection
+- **Type:** `component`
+- **Parent:** Projection
 - **First delivery:** 1B
 - **Intent:** Answer bounded architectural questions without loading the complete
   organization graph.
@@ -439,7 +496,8 @@ observations into Groma identity and canonical evidence.
 #### Project Registry
 
 - **Seed key:** `project-registry`
-- **Group:** Scanning and Reconciliation
+- **Type:** `component`
+- **Parent:** Scanning and Reconciliation
 - **First delivery:** 2
 - **Intent:** Register heterogeneous source roots as scanner, provenance, and watch
   boundaries inside one aggregate blueprint.
@@ -455,7 +513,8 @@ observations into Groma identity and canonical evidence.
 #### Scanner Runtime
 
 - **Seed key:** `scanner-runtime`
-- **Group:** Scanning and Reconciliation
+- **Type:** `component`
+- **Parent:** Scanning and Reconciliation
 - **First delivery:** 2
 - **Intent:** Execute blind scanner plugins as finite, cancellable, scoped observation
   sessions.
@@ -470,7 +529,8 @@ observations into Groma identity and canonical evidence.
 #### Reconciliation Engine
 
 - **Seed key:** `reconciliation-engine`
-- **Group:** Scanning and Reconciliation
+- **Type:** `component`
+- **Parent:** Scanning and Reconciliation
 - **First delivery:** 2
 - **Intent:** Incorporate validated observations while preserving curated meaning,
   source ownership, explicit bindings, and pinned boundaries.
@@ -487,7 +547,8 @@ observations into Groma identity and canonical evidence.
 #### TypeScript and Bun Scanner
 
 - **Seed key:** `typescript-bun-scanner`
-- **Group:** Scanning and Reconciliation
+- **Type:** `component`
+- **Parent:** Scanning and Reconciliation
 - **First delivery:** 2
 - **Intent:** Provide the first deterministic technology-specific observation source
   and prove that the generic scanner boundary works on Groma itself.
@@ -499,13 +560,14 @@ observations into Groma identity and canonical evidence.
 - **Actions:** Discover configured boundaries; inspect public exports; map cross-boundary
   imports; optionally detect Bun routes; emit stable observations.
 - **Relationships:** Runs through Scanner Runtime; knows Observation Contract but no
-  Groma entities, bindings, groups, or descriptions; is never required to populate a
-  complete component.
+  Groma entities, bindings, component hierarchy, or descriptions; is never required
+  to populate a complete component.
 
 #### External Observation Submission
 
 - **Seed key:** `external-observation-submission`
-- **Group:** Scanning and Reconciliation
+- **Type:** `component`
+- **Parent:** Scanning and Reconciliation
 - **First delivery:** 2
 - **Intent:** Let external agents, humans, and independent scanners report observations
   through the same safe session model without editing canonical files.
@@ -524,7 +586,8 @@ Planning represents desired architecture. History reconstructs prior canonical s
 #### Plan Registry and Overlays
 
 - **Seed key:** `plan-registry-overlays`
-- **Group:** Planning and History
+- **Type:** `component`
+- **Parent:** Planning and History
 - **First delivery:** 3
 - **Intent:** Let humans and agents describe ordered future architectural states without
   encoding implementation operations.
@@ -540,7 +603,8 @@ Planning represents desired architecture. History reconstructs prior canonical s
 #### View Resolver
 
 - **Seed key:** `view-resolver`
-- **Group:** Planning and History
+- **Type:** `component`
+- **Parent:** Planning and History
 - **First delivery:** 3
 - **Intent:** Materialize current, cumulative planned, and historical blueprint views
   through one consistent interface.
@@ -555,7 +619,8 @@ Planning represents desired architecture. History reconstructs prior canonical s
 #### Graph Comparator
 
 - **Seed key:** `graph-comparator`
-- **Group:** Planning and History
+- **Type:** `component`
+- **Parent:** Planning and History
 - **First delivery:** 3
 - **Intent:** Explain architectural difference between views and determine whether one
   plan's asserted intent has been satisfied.
@@ -571,7 +636,8 @@ Planning represents desired architecture. History reconstructs prior canonical s
 #### Git Revision Provider
 
 - **Seed key:** `git-revision-provider`
-- **Group:** Planning and History
+- **Type:** `component`
+- **Parent:** Planning and History
 - **First delivery:** 3
 - **Intent:** Reconstruct past canonical blueprints from Git without placing Git
   concepts in Core.
@@ -590,7 +656,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### Shared Application Operations
 
 - **Seed key:** `application-operations`
-- **Group:** CLI, Service, and Web Surfaces
+- **Type:** `component`
+- **Parent:** CLI, Service, and Web Surfaces
 - **First delivery:** 1A
 - **Intent:** Define one semantic path for every supported read and mutation regardless
   of surface.
@@ -606,7 +673,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### CLI Surface
 
 - **Seed key:** `cli-surface`
-- **Group:** CLI, Service, and Web Surfaces
+- **Type:** `component`
+- **Parent:** CLI, Service, and Web Surfaces
 - **First delivery:** 1A
 - **Intent:** Provide the complete automation and agent-facing Groma workflow with
   deterministic human-readable results.
@@ -622,7 +690,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### Application Service
 
 - **Seed key:** `application-service`
-- **Group:** CLI, Service, and Web Surfaces
+- **Type:** `component`
+- **Parent:** CLI, Service, and Web Surfaces
 - **First delivery:** 4
 - **Intent:** Expose the shared Groma operations and committed graph events to a
   long-lived local web client without creating new semantics.
@@ -637,7 +706,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### Web Viewer and Editor
 
 - **Seed key:** `web-surface`
-- **Group:** CLI, Service, and Web Surfaces
+- **Type:** `component`
+- **Parent:** CLI, Service, and Web Surfaces
 - **First delivery:** 4 for viewing, 5 for editing
 - **Intent:** Give humans a scalable visual environment for understanding and editing
   the aggregate blueprint.
@@ -655,7 +725,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### Plugin SDK and Conformance
 
 - **Seed key:** `plugin-sdk-conformance`
-- **Group:** Plugin Development
+- **Type:** `component`
+- **Parent:** Plugin Development
 - **First delivery:** 1B
 - **Intent:** Let built-in and third-party plugins implement capabilities against one
   public contract and verify compatible behavior.
@@ -671,7 +742,8 @@ Surfaces never write stores directly. They call shared application operations.
 #### Plugin Scaffolding
 
 - **Seed key:** `plugin-scaffolding`
-- **Group:** Plugin Development
+- **Type:** `component`
+- **Parent:** Plugin Development
 - **First delivery:** 1B
 - **Intent:** Create a minimal local plugin skeleton that follows public capability and
   manifest conventions without coupling authors to repository internals.
@@ -698,11 +770,7 @@ A package declares its Groma entry points explicitly:
   "version": "1.4.0",
   "groma": {
     "api": "^1.0.0",
-    "plugins": [
-      "./plugins/ownership.js",
-      "./plugins/policy.js",
-      "./plugins/typescript-scanner.js"
-    ]
+    "plugins": ["./plugins/ownership.js", "./plugins/policy.js", "./plugins/typescript-scanner.js"]
   }
 }
 ```
@@ -818,6 +886,35 @@ acquisition, integrity locking, and automatic synchronization ship only after th
 plugin API and long-running lifecycle have passed their conformance and self-hosting
 gates.
 
+## Example: Recursive Shopify Blueprint
+
+The original product sketch maps directly to the recursive component model. `Shop`
+and `Users` are root components of type `domain`; the Shopify blueprint is their
+workspace, not a required parent entity. Every nested box is another component with
+one structural parent:
+
+```text
+Shop [domain]
+├── Cart [component]
+├── Orders [component]
+│   └── OrderItem [component]
+├── Products [component]
+└── Shipments [component]
+
+Users [domain]
+├── Profile [component]
+└── Authentication [component]
+    ├── Registration [component]
+    └── Login [component]
+        └── GoogleLogin [component]
+```
+
+This hierarchy may continue to any depth. A component can contain children of its own
+type or other types, but a child has only one parent and containment cannot form a
+cycle. Cart's `Add item` and `Remove item` entries are actions owned by Cart, not child
+components. Dependencies or flows between any nodes—including nodes in different
+roots—use ordinary many-to-many relationships and do not affect containment.
+
 ## Example: Ordering System
 
 This example shows how a complex TypeScript ordering system should appear at the
@@ -849,8 +946,9 @@ The component boundaries express ownership:
 - **Fulfillment** owns delivery of accepted orders.
 - **Notifications** owns delivery of customer communications.
 
-The following is an illustrative v0.1 Ordering component. Example IDs are placeholders,
-not canonical IDs for the future Groma self-blueprint.
+The following is an illustrative v0.1 Ordering component nested beneath a Commerce
+root component of type `domain`. Example IDs are placeholders, not canonical IDs for
+the future Groma self-blueprint.
 
 ```md
 ---
@@ -858,7 +956,8 @@ schema: groma/v0.1
 id: cmp_example_ordering
 kind: component
 name: Ordering
-primary_group: grp_example_commerce
+type: service
+parent: cmp_example_commerce
 
 desired: present
 lifecycle: active
@@ -977,15 +1076,15 @@ The structured frontmatter remains limited to intent-adjacent identity, inputs,
 outputs, actions, and relationships. The richer concepts are represented without
 adding mandatory schema:
 
-| Ordering concept | Representation |
-| --- | --- |
-| Order lifecycle state | `Behavioral notes` prose |
-| Pricing, inventory, and payment requirements | `requires` relationships |
-| Idempotency and acceptance guarantees | `Guarantees` prose |
-| Place-order trigger | `Place order request` input |
-| Rejection and cancellation outcomes | Outputs |
-| Reservation and payment effects | Relationship and action descriptions |
-| Fulfillment and payment events | Inputs |
+| Ordering concept                             | Representation                       |
+| -------------------------------------------- | ------------------------------------ |
+| Order lifecycle state                        | `Behavioral notes` prose             |
+| Pricing, inventory, and payment requirements | `requires` relationships             |
+| Idempotency and acceptance guarantees        | `Guarantees` prose                   |
+| Place-order trigger                          | `Place order request` input          |
+| Rejection and cancellation outcomes          | Outputs                              |
+| Reservation and payment effects              | Relationship and action descriptions |
+| Fulfillment and payment events               | Inputs                               |
 
 A TypeScript scanner might observe only:
 
@@ -1004,7 +1103,7 @@ Those remain human- or agent-curated intent.
 
 ```mermaid
 flowchart TB
-    Intent["Intent Plane\ncomponents and groups"]
+    Intent["Intent Plane\ncomponents and containment"]
     Evidence["Evidence Plane\ncompleted observations and provenance"]
     Bindings["Binding Plane\nautomatic, explicit, ignored, superseded"]
     Aliases["Alias Plane\nidentity continuity"]
@@ -1169,9 +1268,13 @@ stable cross-references but retain separate responsibilities.
 15. Large graphs are explored through search, aggregation, and bounded subgraphs.
 16. Unknown plugin metadata survives even when its plugin is unavailable.
 17. Ambiguous identity, binding, and relation targets fail closed.
-18. The v0.1 component model structures only intent, inputs, outputs, actions, and
-    relationships.
-19. Scanner observations are partial contributions; no scanner must populate a
+18. Every architectural node is a component with an open type and zero or one
+    structural parent; the blueprint workspace may contain multiple roots.
+19. Component containment is acyclic, permits same- or mixed-type recursion, and is
+    independent from unrestricted non-containment relationships.
+20. The v0.1 component model structures only intent, inputs, outputs, actions, and
+    relationships as meaning beyond its small type and parent metadata.
+21. Scanner observations are partial contributions; no scanner must populate a
     complete component.
 
 ## Deliberately Unresolved Decisions
@@ -1179,16 +1282,16 @@ stable cross-references but retain separate responsibilities.
 These questions remain open until their scheduled iteration provides evidence. They
 must not be guessed during earlier implementation.
 
-| Decision | Earliest evidence | Freeze point |
-| --- | --- | --- |
-| Exact standard state taxonomy and display precedence | Self-scan and drift cases | End of Iteration 2 |
-| External observation transport grammar | Synthetic scanner and agent submission | End of Iteration 2 |
-| Plaintext grammar details | Real agent use across scanning and binding | End of Iteration 2 |
-| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture | End of Iteration 2 |
-| Default CLI page size | Real query and comparison benchmarks | End of Iteration 3 |
-| Plan ordering UX | Concurrent plan dogfood | End of Iteration 3 |
-| Event batching thresholds | Viewer and scan load tests | End of Iteration 4 |
-| Browser expansion and retained-node budgets | Layout prototype on reference hardware | End of Iteration 4 |
+| Decision                                                     | Earliest evidence                          | Freeze point       |
+| ------------------------------------------------------------ | ------------------------------------------ | ------------------ |
+| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                  | End of Iteration 2 |
+| External observation transport grammar                       | Synthetic scanner and agent submission     | End of Iteration 2 |
+| Plaintext grammar details                                    | Real agent use across scanning and binding | End of Iteration 2 |
+| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                | End of Iteration 2 |
+| Default CLI page size                                        | Real query and comparison benchmarks       | End of Iteration 3 |
+| Plan ordering UX                                             | Concurrent plan dogfood                    | End of Iteration 3 |
+| Event batching thresholds                                    | Viewer and scan load tests                 | End of Iteration 4 |
+| Browser expansion and retained-node budgets                  | Layout prototype on reference hardware     | End of Iteration 4 |
 
 The following are explicitly outside v0.1 rather than unresolved:
 
@@ -1205,8 +1308,8 @@ The following are explicitly outside v0.1 rather than unresolved:
 When Iteration 1B makes the CLI capable of representing this architecture:
 
 1. Initialize `groma/` in this repository.
-2. Create one Groma group for each group in this document.
-3. Create one Groma component for each component card.
+2. Create the nine root components listed in the architectural component tree.
+3. Create one nested component for each component card using its documented parent.
 4. Preserve each `Seed key` as migration metadata.
 5. Recreate declared relationships through shared operations.
 6. Validate the generated blueprint against this overview.
