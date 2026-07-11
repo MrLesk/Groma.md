@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { GraphKernel, type GraphSnapshot } from "./graph.ts";
-import { createOpaqueIdSource } from "./identity.ts";
+import { GraphKernel, type GraphSnapshot } from "../graph.ts";
+import { createOpaqueIdSource } from "../identity.ts";
 
 function createKernel(maxPageSize = 3): GraphKernel {
   let value = 0;

@@ -1,11 +1,11 @@
 ---
 id: GROM-7
 title: Implement the technology-neutral graph kernel
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 20:45'
+updated_date: '2026-07-11 22:07'
 labels:
   - core
   - graph
@@ -33,16 +33,17 @@ Create the smallest Core graph foundation needed by 1A: stable opaque identity, 
 - [x] #4 Public graph reads require explicit bounds or an exact identifier and do not expose an unbounded load-the-world operation
 - [x] #5 Core graph tests cover identity stability across rename and move simulations, invalid relations, deterministic order, and bound enforcement
 - [x] #6 The graph kernel has no imports from the standard model, Bun, local resources, Markdown, the host, or CLI code
+- [x] #7 Tests are organized in boundary-local tests directories so production module roots remain readable as each subsystem grows
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define opaque entity identifiers, entity kinds, relationship primitives, and typed diagnostics.
-2. Implement deterministic identity minting and exact resolution without name-based identity.
-3. Implement relationship validation and bounded graph access primitives.
-4. Add tests for rename continuity, malformed and wrong-kind references, ambiguity, ordering, and limits.
-5. Verify the Core dependency boundary.
+1. Preserve the implemented graph identity, relation, diagnostic, and bounded-read contracts.
+2. Move Core tests into src/core/tests, CLI tests into src/cli/tests, and tooling tests into scripts/tests without changing behavior.
+3. Update relative imports and document the boundary-local test convention.
+4. Run targeted tests, the architecture checker, the full local gate, and four-target cross-compilation.
+5. Require the ready GROM-7 PR checks to pass before re-finalizing the task.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -57,10 +58,10 @@ The kernel rejects malformed IDs and tokens, unknown references, wrong kinds, du
 Local bun run check passes: architecture boundary scan confirms Core has only Core-relative imports; 18 tests pass with identity stability across rename and move payloads, exact typed relations, invalid relation cases, deterministic ASCII ordering, pagination limits, and bounded traversal; standalone build and smoke also pass.
 
 GitHub Actions run 29167588295 passed on the first pushed kernel revision: Quality gates 11s, Linux x64 baseline 8s, macOS arm64 8s.
+
+Reopened with Alexs explicit authorization to standardize the current test layout in the GROM-7 PR. This is a mechanical refactor: Bun and TypeScript recurse into tests directories, while the architecture checker retains src/core/tests as Core and src/cli/tests as CLI.
+
+Moved all current tests into owner-local directories: src/core/tests, src/cli/tests, and scripts/tests. Updated only relative imports and documented the convention in DEVELOPMENT.md. Bun still discovers all 18 tests recursively, TypeScript includes the nested files, and the architecture checker continues to classify Core and CLI tests by their owning boundary.
+
+Validation after the move: targeted tests 18 pass; architecture boundaries pass; full bun run check passes; check:targets cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 and executes the local macOS target.
 <!-- SECTION:NOTES:END -->
-
-## Final Summary
-
-<!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the technology-neutral Graph Kernel with injected opaque identity generation, model-neutral entity and relation tokens, immutable snapshots, exact fail-closed resolution, and explicitly bounded deterministic reads. Added diagnostics for malformed, dangling, wrong-kind, ambiguous, collision, direction, and bound failures plus 8 Core tests. The full 18-test repository gate and both target-binary CI jobs pass.
-<!-- SECTION:FINAL_SUMMARY:END -->
