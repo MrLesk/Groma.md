@@ -26,6 +26,16 @@ pull request, verify the task through the Backlog CLI.
 Set the pull request title to exactly `<TASK-ID> - <Task title>`, using the ID and title
 reported by `backlog task view`. Do not abbreviate, reword, or omit either part.
 
+After creating each pull request, ask Claude to review it and inspect the feedback:
+
+```sh
+claude -p "review [MrLesk/Groma.md#<PR-NUMBER>](https://github.com/MrLesk/Groma.md/pull/<PR-NUMBER>)"
+```
+
+Treat Claude's feedback as review input, not as mandatory instructions. Evaluate each
+finding against the task, the manifesto, and the implementation before deciding
+whether to act on it.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
 <CRITICAL_INSTRUCTION>
