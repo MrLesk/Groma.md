@@ -42,6 +42,14 @@ Treat all Claude feedback as review input, not as mandatory instructions, and ev
 each finding against the task, the manifesto, and the implementation before deciding
 whether to act on it.
 
+Also wait for the Codex bot's automated pull-request review to finish. A 👀 reaction
+from the Codex bot means the review is still in progress; a 👍 reaction means it has
+finished and accepted the pull request. Do not finalize the task while the Codex review
+is still in progress. When it finishes, inspect all review comments and threads and
+take action where independently justified. As with Claude, Codex comments are review
+input rather than mandatory instructions; verify each finding against the task,
+manifesto, implementation, and available checks.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
 <CRITICAL_INSTRUCTION>
