@@ -63,6 +63,11 @@ relationships, including relationships to components in other branches.
 model maps and validates that structure over Core's technology-neutral graph
 contracts; Core does not learn component types or hierarchy policy.
 
+`kind` and `type` have different scopes. Graph-level `kind` identifies the entity as a
+standard-model `component` and lets codecs reject a document for the wrong entity
+kind. Model-level `type` is the open architectural role chosen for that component,
+such as `domain`, `service`, or `component`.
+
 Type and parent are structural metadata. The model intentionally limits structured
 component meaning to five concepts: intent, inputs, outputs, actions, and
 relationships. This is enough to make a component understandable and connectable
@@ -150,21 +155,23 @@ The nine sections below are root components of the Groma blueprint. They have no
 parent; their former role as dedicated containers is now expressed by the same
 component model used everywhere else.
 
-| Root component                 | Seed key                   | Type     |
-| ------------------------------ | -------------------------- | -------- |
-| Core                           | `core`                     | `domain` |
-| Official Host                  | `official-host`            | `domain` |
-| Standard Blueprint Model       | `standard-blueprint-model` | `domain` |
-| Canonical Persistence          | `canonical-persistence`    | `domain` |
-| Projection                     | `projection`               | `domain` |
-| Scanning and Reconciliation    | `scanning-reconciliation`  | `domain` |
-| Planning and History           | `planning-history`         | `domain` |
-| CLI, Service, and Web Surfaces | `surfaces`                 | `domain` |
-| Plugin Development             | `plugin-development`       | `domain` |
+| Root component                 | Seed key                   | Type     | Parent |
+| ------------------------------ | -------------------------- | -------- | ------ |
+| Core                           | `core`                     | `domain` | `None` |
+| Official Host                  | `official-host`            | `domain` | `None` |
+| Standard Blueprint Model       | `standard-blueprint-model` | `domain` | `None` |
+| Canonical Persistence          | `canonical-persistence`    | `domain` | `None` |
+| Projection                     | `projection`               | `domain` | `None` |
+| Scanning and Reconciliation    | `scanning-reconciliation`  | `domain` | `None` |
+| Planning and History           | `planning-history`         | `domain` | `None` |
+| CLI, Service, and Web Surfaces | `surfaces`                 | `domain` | `None` |
+| Plugin Development             | `plugin-development`       | `domain` | `None` |
 
-Every card nested under a root uses type `component` unless the card explicitly says
-otherwise. The `Parent` field is structural containment; the `Relationships` field
-remains the unrestricted collaboration graph.
+The table rows and their section introductions are intentionally sparse root component
+definitions; the standard model does not require a full card. Every card nested under
+a root uses type `component` unless the card explicitly says otherwise. The `Parent`
+field is structural containment; the `Relationships` field remains the unrestricted
+collaboration graph.
 
 ### 1. Core
 
@@ -911,9 +918,10 @@ Users [domain]
 
 This hierarchy may continue to any depth. A component can contain children of its own
 type or other types, but a child has only one parent and containment cannot form a
-cycle. Cart's `Add item` and `Remove item` entries are actions owned by Cart, not child
-components. Dependencies or flows between any nodes—including nodes in different
-roots—use ordinary many-to-many relationships and do not affect containment.
+cycle. Actions such as `Add item` and `Remove item` are owned by Cart rather than
+modeled as child components. Dependencies or flows between any nodes—including nodes
+in different roots—use ordinary many-to-many relationships and do not affect
+containment.
 
 ## Example: Ordering System
 
