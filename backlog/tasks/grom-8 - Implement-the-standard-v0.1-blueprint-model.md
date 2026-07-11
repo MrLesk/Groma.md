@@ -1,10 +1,11 @@
 ---
 id: GROM-8
 title: Implement the standard v0.1 blueprint model
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 22:39'
+updated_date: '2026-07-11 23:48'
 labels:
   - model
 milestone: m-1
