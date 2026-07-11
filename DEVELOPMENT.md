@@ -28,8 +28,10 @@ bun run typecheck     # strict TypeScript validation
 bun run test          # Bun tests
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
+bun run check:boundaries # enforce architectural dependency directions
 bun run build         # compile the native standalone executable to dist/groma
 bun run smoke         # exercise version and help on the compiled executable
+bun run check         # run every required local verification gate
 ```
 
 The compiled executable disables runtime loading of `.env`, `bunfig.toml`,
@@ -41,18 +43,23 @@ supported application and host capabilities rather than ambient build-tool files
 The initial repository uses internal source boundaries rather than separate
 publishable packages. These are dependency directions, not public package contracts.
 
-| Boundary | Responsibility | May depend on |
-| --- | --- | --- |
-| `src/core` | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core |
-| `src/standard-model` | The official minimal blueprint model and its invariants | Core |
-| `src/persistence` | Official local-resource, Markdown, journal, and later projection providers | Core and the standard model |
-| `src/application` | Presentation-neutral semantic operations | Core, model, and capability contracts |
-| `src/host` | Official composition, lifecycle, and process integration | All registered capabilities and surfaces |
-| `src/cli` | CLI parsing and terminal presentation | Host and application operations |
+| Boundary             | Responsibility                                                                         | May depend on                            |
+| -------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `src/core`           | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core                     |
+| `src/standard-model` | The official minimal blueprint model and its invariants                                | Core                                     |
+| `src/persistence`    | Official local-resource, Markdown, journal, and later projection providers             | Core and the standard model              |
+| `src/application`    | Presentation-neutral semantic operations                                               | Core, model, and capability contracts    |
+| `src/host`           | Official composition, lifecycle, and process integration                               | All registered capabilities and surfaces |
+| `src/cli`            | CLI parsing and terminal presentation                                                  | Host and application operations          |
 
 Core must never import Bun APIs, filesystem or Markdown implementations, CLI, HTTP,
 React, or any other surface technology. Application operations must never reach into
 provider implementations directly. The host is the composition root.
+
+`bun run check:boundaries` parses TypeScript imports, exports, dynamic imports, import
+types, and `require` calls. Production Core files may import only other Core files.
+Tests may import `bun:test`, but test code still cannot cross architectural layers.
+Unresolved relative imports fail the check rather than being ignored.
 
 The directory names follow the root component domains and seed terminology in
 `ARCHITECTURE.md`. They can be split into distributable packages only when an actual
@@ -63,10 +70,10 @@ plugin or public API boundary requires it.
 One binary is produced per target; “single-file” describes the runtime artifact, not
 one universal binary for every operating system.
 
-| Bun target | Iteration 1A commitment | Current validation |
-| --- | --- | --- |
-| Native `bun-darwin-arm64` | Supported on Apple Silicon macOS | Compiled and smoke-tested locally in GROM-5 |
-| `bun-linux-x64-baseline` | Supported on baseline x64 glibc Linux before 1A closes | Cross-compilation is available; runnable CI validation belongs to GROM-6 |
+| Bun target                | Iteration 1A commitment               | Current validation                                                      |
+| ------------------------- | ------------------------------------- | ----------------------------------------------------------------------- |
+| Native `bun-darwin-arm64` | Supported on Apple Silicon macOS      | Compiled and smoke-tested locally and on the `macos-15` arm64 CI runner |
+| `bun-linux-x64-baseline`  | Supported on baseline x64 glibc Linux | Compiled and smoke-tested on the `ubuntu-24.04` x64 CI runner           |
 
 Build the Linux target explicitly:
 
@@ -77,6 +84,21 @@ bun run build -- --target=bun-linux-x64-baseline
 Windows, Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a
 target requires compilation and runtime smoke coverage, not only a successful
 cross-compile.
+
+## Continuous Verification
+
+GitHub Actions runs on every pull request and every push to `main`. The required
+quality job starts from a clean checkout, installs with `bun ci`, and invokes the same
+`bun run check` command used locally. A separate binary matrix compiles and runs the
+two promised 1A targets on matching host architectures.
+
+The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
+retaining their release tags as comments for review. Setup Bun reads the exact Bun
+version from `package.json`.
+
+When verification fails, run `bun run check` first. Its fail-fast order is formatting,
+types, architectural boundaries, tests, build, and binary smoke behavior. Run the
+named subcommand directly after identifying the failing gate.
 
 ## Deliberately Deferred
 
