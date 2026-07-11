@@ -13,6 +13,12 @@ conflict and ask Alex rather than silently proceeding.
 Do not edit the manifesto as a side effect of implementation. Changes to it require
 an explicit product decision.
 
+## Pull Requests
+
+Create every pull request in **ready-for-review** state, never as a draft. Automated
+reviews start only for ready pull requests. If work is not ready for review, keep it
+on its branch and do not open the pull request yet.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
 <CRITICAL_INSTRUCTION>
