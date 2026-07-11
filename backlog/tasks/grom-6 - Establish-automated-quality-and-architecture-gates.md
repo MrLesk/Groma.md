@@ -1,11 +1,11 @@
 ---
 id: GROM-6
 title: Establish automated quality and architecture gates
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-11 21:29'
+updated_date: '2026-07-11 21:30'
 labels:
   - tooling
   - ci
@@ -29,11 +29,11 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 One documented local verification command runs type checking, formatting validation, unit tests, and architecture-boundary checks
-- [ ] #2 GitHub Actions runs the same required checks from a clean checkout using the committed Bun lockfile
+- [x] #2 GitHub Actions runs the same required checks from a clean checkout using the committed Bun lockfile
 - [x] #3 An automated boundary test fails if technology-neutral Core imports host, filesystem, Markdown, CLI, HTTP, or React code
-- [ ] #4 CI compiles the single-file executable for every target in the documented 1A support matrix and smoke-tests every runnable host target
+- [x] #4 CI compiles the single-file executable for every target in the documented 1A support matrix and smoke-tests every runnable host target
 - [x] #5 A failing test, type error, formatting change, boundary violation, or binary smoke failure causes a nonzero check result
-- [ ] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
+- [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -68,4 +68,12 @@ Alex clarified that native runners are unnecessary because Bun cross-compiles th
 Implemented a portable build and verification path following Bun 1.3.14 current standalone-executable docs. Windows targets use bun-windows-x64-baseline and bun-windows-arm64 with explicit dist/groma.exe output. The smoke script is now Bun-based and works on Unix and Windows instead of relying on shell-specific ./dist/groma commands.
 
 Added check:targets, which sequentially cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 on one machine; verifies exactly one correctly named artifact after each build; and executes version/help only for the target matching the current host. Local macOS run verified all four artifacts and executed macOS arm64. Full bun run check passes with 10 tests.
+
+GitHub Actions run 29168888457 passed from a clean checkout after the correction: Quality gates 8s and Cross-platform binaries 13s. The single Ubuntu runner cross-compiled macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; verified exactly one expected artifact after each build; and executed version/help for Linux x64.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Extended GROM-6 from two-platform native CI to honest four-target single-runner verification following Bun 1.3.14 current executable documentation. The portable tooling now emits groma or groma.exe correctly, cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, checks one artifact per target, and executes only the host-compatible binary. Full local gates and clean GitHub Actions pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
