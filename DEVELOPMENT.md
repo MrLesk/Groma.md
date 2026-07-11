@@ -66,6 +66,15 @@ The directory names follow the architectural groups and seed terminology in
 `ARCHITECTURE.md`. They can be split into distributable packages only when an actual
 plugin or public API boundary requires it.
 
+## Test Layout
+
+Tests live in a `tests/` directory inside the boundary they verify, for example
+`src/core/tests/` and `src/cli/tests/`. Tooling tests live in `scripts/tests/`. Bun
+discovers `*.test.ts` recursively, and keeping tests inside their owning boundary lets
+the architecture checker enforce the same dependency direction without cluttering
+production module roots. Add deeper fixture or golden-output directories only when a
+test suite demonstrates that need.
+
 ## Iteration 1A Build Targets
 
 One binary is produced per target; “single-file” describes the runtime artifact, not

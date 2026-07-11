@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { createOpaqueIdSource, parseEntityId, parseRelationId } from "./identity.ts";
+import { createOpaqueIdSource, parseEntityId, parseRelationId } from "../identity.ts";
 
 describe("opaque graph identity", () => {
   test("formats exactly 128 supplied entropy bits without names or paths", () => {

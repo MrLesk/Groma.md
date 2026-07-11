@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { GROMA_VERSION, HELP_TEXT, runProgram, type ProgramOutput } from "./program.ts";
+import { GROMA_VERSION, HELP_TEXT, runProgram, type ProgramOutput } from "../program.ts";
 
 function captureOutput(): ProgramOutput & { errors: string[]; output: string[] } {
   const errors: string[] = [];
