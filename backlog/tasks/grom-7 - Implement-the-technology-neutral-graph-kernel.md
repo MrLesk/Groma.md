@@ -1,7 +1,7 @@
 ---
 id: GROM-7
 title: Implement the technology-neutral graph kernel
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
@@ -55,4 +55,12 @@ Context-hunter classification: L2 foundational data semantics with no prior Core
 The kernel rejects malformed IDs and tokens, unknown references, wrong kinds, duplicate identities, invalid directions, unresolvable page anchors, invalid limits, entropy failures, and exhausted collision retries with actionable diagnostic codes. Duplicate identity is rejected while loading so ambiguity never enters a readable snapshot.
 
 Local bun run check passes: architecture boundary scan confirms Core has only Core-relative imports; 18 tests pass with identity stability across rename and move payloads, exact typed relations, invalid relation cases, deterministic ASCII ordering, pagination limits, and bounded traversal; standalone build and smoke also pass.
+
+GitHub Actions run 29167588295 passed on the first pushed kernel revision: Quality gates 11s, Linux x64 baseline 8s, macOS arm64 8s.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the technology-neutral Graph Kernel with injected opaque identity generation, model-neutral entity and relation tokens, immutable snapshots, exact fail-closed resolution, and explicitly bounded deterministic reads. Added diagnostics for malformed, dangling, wrong-kind, ambiguous, collision, direction, and bound failures plus 8 Core tests. The full 18-test repository gate and both target-binary CI jobs pass.
+<!-- SECTION:FINAL_SUMMARY:END -->
