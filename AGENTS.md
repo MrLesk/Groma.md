@@ -19,6 +19,13 @@ Create every pull request in **ready-for-review** state, never as a draft. Autom
 reviews start only for ready pull requests. If work is not ready for review, keep it
 on its branch and do not open the pull request yet.
 
+Every pull request must correspond to an existing Backlog task unless Alex explicitly
+authorizes a taskless pull request in the current instruction. Before creating the
+pull request, verify the task through the Backlog CLI.
+
+Set the pull request title to exactly `<TASK-ID> - <Task title>`, using the ID and title
+reported by `backlog task view`. Do not abbreviate, reword, or omit either part.
+
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
 <CRITICAL_INSTRUCTION>
