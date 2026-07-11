@@ -1,10 +1,11 @@
 ---
 id: GROM-6
 title: Establish automated quality and architecture gates
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-11 17:36'
+updated_date: '2026-07-11 20:39'
 labels:
   - tooling
   - ci
@@ -27,9 +28,9 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One documented local verification command runs type checking, formatting validation, unit tests, and architecture-boundary checks
+- [x] #1 One documented local verification command runs type checking, formatting validation, unit tests, and architecture-boundary checks
 - [ ] #2 GitHub Actions runs the same required checks from a clean checkout using the committed Bun lockfile
-- [ ] #3 An automated boundary test fails if technology-neutral Core imports host, filesystem, Markdown, CLI, HTTP, or React code
+- [x] #3 An automated boundary test fails if technology-neutral Core imports host, filesystem, Markdown, CLI, HTTP, or React code
 - [ ] #4 CI compiles the single-file executable for every target in the documented 1A support matrix and smoke-tests every runnable host target
 - [ ] #5 A failing test, type error, formatting change, boundary violation, or binary smoke failure causes a nonzero check result
 <!-- AC:END -->
@@ -43,3 +44,13 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 4. Compile and smoke-test the supported single-file executable targets.
 5. Document failure diagnosis and keep the suite fast enough for every change.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Started as a stacked branch from completed GROM-5 while draft PR #1 is awaiting review.
+
+Context-hunter classification: L2 cross-cutting tooling. Reused the build-script fail-fast pattern, package command surface, and DEVELOPMENT.md dependency table. Added a no-analogue architecture checker using pinned @babel/parser 8.0.4 because Bun scanning omits type-only imports and TypeScript 7 exposes compiler AST APIs as unstable. The checker covers import, export, dynamic import, import type, import-equals, and require forms with explicit layer allow-lists and unresolved-relative failures.
+
+Local required check passes in 2.2 seconds: formatting, TypeScript, real-tree architecture boundaries, 10 tests, standalone build, and smoke. Boundary fixtures prove Core rejects host, CLI, Bun, node:fs, marked, node:http, and React dependencies. CI uses current action release commits: actions/checkout v7.0.0 at 9c091bb and setup-bun v2.2.0 at 0c5077e; runner choices match GitHub current macOS arm64 and Ubuntu x64 documentation.
+<!-- SECTION:NOTES:END -->

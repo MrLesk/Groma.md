@@ -1,0 +1,59 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Install exact dependencies
+        run: bun ci
+      - name: Run required checks
+        run: bun run check
+
+  binaries:
+    name: ${{ matrix.name }} binary
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+            target: bun-darwin-arm64
+          - name: Linux x64 baseline
+            runner: ubuntu-24.04
+            target: bun-linux-x64-baseline
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Install exact dependencies
+        run: bun ci
+      - name: Compile target
+        run: bun run build -- --target=${{ matrix.target }}
+      - name: Verify single-file artifact
+        run: test "$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 1
+      - name: Smoke-test executable
+        run: |
+          ./dist/groma --version
+          ./dist/groma --help
