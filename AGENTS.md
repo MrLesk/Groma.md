@@ -32,8 +32,14 @@ After creating each pull request, ask Claude to review it and inspect the feedba
 claude -p "review [MrLesk/Groma.md#<PR-NUMBER>](https://github.com/MrLesk/Groma.md/pull/<PR-NUMBER>)"
 ```
 
-Treat Claude's feedback as review input, not as mandatory instructions. Evaluate each
-finding against the task, the manifesto, and the implementation before deciding
+Use Claude primarily as a second perspective on text, naming, conceptual simplicity,
+coherence, and how the tool or change will be understood and used. Its broad product
+perspective is the value of this deliberately slower review.
+
+Do not rely on Claude as the primary bug or correctness reviewer. Verify bugs and
+errors independently through your own code review, tests, static analysis, and CI.
+Treat all Claude feedback as review input, not as mandatory instructions, and evaluate
+each finding against the task, the manifesto, and the implementation before deciding
 whether to act on it.
 
 <!-- BACKLOG.MD GUIDELINES START -->
