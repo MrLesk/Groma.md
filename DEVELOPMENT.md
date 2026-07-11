@@ -29,8 +29,9 @@ bun run test          # Bun tests
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
+bun run check:targets # cross-compile every supported target and run the host-compatible one
 bun run build         # compile the native standalone executable to dist/groma
-bun run smoke         # exercise version and help on the compiled executable
+bun run smoke         # verify one native artifact and exercise version and help
 bun run check         # run every required local verification gate
 ```
 
@@ -70,10 +71,12 @@ plugin or public API boundary requires it.
 One binary is produced per target; “single-file” describes the runtime artifact, not
 one universal binary for every operating system.
 
-| Bun target                | Iteration 1A commitment               | Current validation                                                      |
-| ------------------------- | ------------------------------------- | ----------------------------------------------------------------------- |
-| Native `bun-darwin-arm64` | Supported on Apple Silicon macOS      | Compiled and smoke-tested locally and on the `macos-15` arm64 CI runner |
-| `bun-linux-x64-baseline`  | Supported on baseline x64 glibc Linux | Compiled and smoke-tested on the `ubuntu-24.04` x64 CI runner           |
+| Bun target                 | Iteration 1A commitment               | CI verification                                         |
+| -------------------------- | ------------------------------------- | ------------------------------------------------------- |
+| `bun-darwin-arm64`         | Supported on Apple Silicon macOS      | Cross-compiled and checked as one Mach-O artifact       |
+| `bun-linux-x64-baseline`   | Supported on baseline x64 glibc Linux | Cross-compiled and smoke-tested on the Linux CI host    |
+| `bun-windows-x64-baseline` | Supported on baseline x64 Windows     | Cross-compiled and checked as one `.exe` artifact       |
+| `bun-windows-arm64`        | Supported on ARM64 Windows            | Cross-compiled and checked as one ARM64 `.exe` artifact |
 
 Build the Linux target explicitly:
 
@@ -81,16 +84,30 @@ Build the Linux target explicitly:
 bun run build -- --target=bun-linux-x64-baseline
 ```
 
-Windows, Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a
-target requires compilation and runtime smoke coverage, not only a successful
-cross-compile.
+Build the Windows target explicitly. Bun's standalone-executable contract uses the
+`.exe` suffix for Windows outputs, and Groma writes `dist/groma.exe` explicitly:
+
+```sh
+bun run build -- --target=bun-windows-x64-baseline
+bun run build -- --target=bun-windows-arm64
+```
+
+Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a target
+requires compilation and runtime smoke coverage, not only a successful cross-compile.
 
 ## Continuous Verification
 
 GitHub Actions runs on every pull request and every push to `main`. The required
 quality job starts from a clean checkout, installs with `bun ci`, and invokes the same
-`bun run check` command used locally. A separate binary matrix compiles and runs the
-two promised 1A targets on matching host architectures.
+`bun run check` command used locally. A second job uses one Linux runner to
+cross-compile all four promised 1A targets. It verifies the exact single-file output
+for every target and executes version and help only for the Linux binary that the host
+can run.
+
+`bun run check:targets` uses the same rule locally: it cross-compiles every target and
+smoke-tests the target matching the current operating system and architecture. A
+successful cross-compile is not described as native runtime verification for a
+different operating system.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
 retaining their release tags as comments for review. Setup Bun reads the exact Bun
