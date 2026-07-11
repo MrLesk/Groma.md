@@ -1,0 +1,21 @@
+{
+  "name": "groma",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "dev": "bun run src/cli/main.ts",
+    "build": "bun run scripts/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "format": "prettier --write src scripts package.json tsconfig.json .prettierrc.json",
+    "format:check": "prettier --check src scripts package.json tsconfig.json .prettierrc.json",
+    "smoke": "./dist/groma --version && ./dist/groma --help"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "prettier": "3.9.5",
+    "typescript": "7.0.2"
+  }
+}
