@@ -130,6 +130,7 @@ const maximumOwnerBytes = 1024;
 const maximumCoordinationReacquisitionAttempts = 8;
 const writeChunkBytes = 64 * 1024;
 const intrinsicNormalize = String.prototype.normalize;
+const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
@@ -267,7 +268,9 @@ function isWithin(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return (
     relative === "" ||
-    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+    (!(Reflect.apply(intrinsicStartsWith, relative, [`..${path.sep}`]) as boolean) &&
+      relative !== ".." &&
+      !path.isAbsolute(relative))
   );
 }
 
@@ -331,7 +334,7 @@ function canonicalOwner(value: unknown): CoordinationOwner | undefined {
     !Number.isSafeInteger(pid) ||
     pid <= 0 ||
     typeof token !== "string" ||
-    !/^[0-9a-f-]{36}$/.test(token)
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(token)
   ) {
     return undefined;
   }
@@ -737,6 +740,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
               }
             }
             if (!writeBoundaryInjected) await this.#inject("write");
+            await handle.chmod(0o600);
             await this.#inject("flush");
             await handle.sync();
           } finally {
@@ -1170,7 +1174,9 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           state.afterSeen = true;
         } else {
           traverseDirectory =
-            kind === "directory" && state.after?.startsWith(`${entry.locator}/`) === true;
+            kind === "directory" &&
+            state.after !== undefined &&
+            (Reflect.apply(intrinsicStartsWith, state.after, [`${entry.locator}/`]) as boolean);
         }
       } else {
         state.collected.push(entry);
@@ -1181,22 +1187,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       }
       if (traverseDirectory) {
         if (depth >= maxDepth) {
-          const revalidatedChild = await this.#revalidateEnumerationDirectory(
-            childPath,
-            locatorResult.value,
-          );
-          if (!revalidatedChild.ok) return revalidatedChild;
-          const child = await opendir(revalidatedChild.value);
-          try {
-            const deeper = await child.read();
-            if (deeper !== null) state.truncatedByDepth = true;
-          } finally {
-            try {
-              await child.close();
-            } catch {
-              // See the directory close note above.
-            }
-          }
+          state.truncatedByDepth = true;
         } else {
           const nested = await this.#walkDirectory(
             childPath,
@@ -1266,7 +1257,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     const prefix = "groma-resource-v1.";
-    if (!value.startsWith(prefix)) {
+    if (!(Reflect.apply(intrinsicStartsWith, value, [prefix]) as boolean)) {
       return failure(
         diagnostic(
           "malformed-resource-cursor",

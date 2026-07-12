@@ -487,7 +487,7 @@ describe("bounded deterministic enumeration", () => {
     ]);
   });
 
-  test("revalidates a depth-limit directory before inspection after a namespace swap", async () => {
+  test("revalidates a recursive directory before opening it after a namespace swap", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();
     const nested = path.join(roots.workspaceRoot, "nested");
@@ -511,13 +511,47 @@ describe("bounded deterministic enumeration", () => {
     const result = await provider.enumerate({
       limit: 10,
       locator: locator(),
-      maxDepth: 0,
+      maxDepth: 1,
       maxEntriesPerDirectory: 10,
     });
 
     expect(diagnosticCode(result)).toBe("resource-unsupported-kind");
     expect(directoryProbeCount).toBe(2);
     expect(JSON.stringify(result)).not.toContain("secret.md");
+  });
+
+  test("does not open unreadable directories beyond the requested depth", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const boundary = path.join(roots.workspaceRoot, "boundary");
+    await mkdir(boundary);
+    await writeFile(path.join(boundary, "hidden.md"), "hidden");
+    await chmod(boundary, 0);
+    let directoryProbes = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: (phase) => {
+        if (phase === "enumeration-directory") directoryProbes += 1;
+      },
+    });
+    let result: Awaited<ReturnType<typeof provider.enumerate>>;
+    try {
+      result = await provider.enumerate({
+        limit: 10,
+        locator: locator(),
+        maxDepth: 0,
+        maxEntriesPerDirectory: 10,
+      });
+    } finally {
+      await chmod(boundary, 0o700);
+    }
+
+    expect(result.ok).toBeTrue();
+    expect(directoryProbes).toBe(1);
+    if (result.ok) {
+      expect(result.value.truncatedByDepth).toBeTrue();
+      expect(result.value.entries.map((entry) => String(entry.locator))).toEqual(["boundary"]);
+    }
   });
 
   test("surfaces enumeration provider failures", async () => {
@@ -809,6 +843,27 @@ describe("staged atomic replacement", () => {
 
     expect((await lstat(existingPath)).mode & 0o777).toBe(0o754);
     expect((await lstat(missingPath)).mode & 0o777).toBe(0o666 & ~process.umask());
+  });
+
+  test("forces a private stage mode through its handle under a restrictive umask", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const previousUmask = process.umask(0o777);
+    let staged: Result<StagedReplacementHandle> | undefined;
+    try {
+      staged = await provider.stageReplacement(locator("restricted.md"), textEncoder.encode("new"));
+    } finally {
+      process.umask(previousUmask);
+    }
+    expect(staged?.ok).toBeTrue();
+    if (staged === undefined || !staged.ok) return;
+    const stageName = (await readdir(roots.workspaceRoot)).find((name) =>
+      name.startsWith(".groma-stage-"),
+    );
+    if (stageName === undefined) throw new Error("expected a private stage");
+    expect((await lstat(path.join(roots.workspaceRoot, stageName))).mode & 0o777).toBe(0o600);
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
   });
 
   for (const phase of ["write", "flush"] as const) {
@@ -1185,6 +1240,9 @@ describe("same-machine coordination", () => {
 
   test("uses captured string intrinsics for stage reservation and coordination aliases", async () => {
     const roots = await fixture();
+    await mkdir(path.join(roots.workspaceRoot, "base", "resume"), { recursive: true });
+    await writeFile(path.join(roots.workspaceRoot, "base", "resume", "a.md"), "a");
+    await writeFile(path.join(roots.workspaceRoot, "base", "resume", "b.md"), "b");
     const first = await createLocalResourceProvider(roots);
     const second = await createLocalResourceProvider(roots);
     const methods = ["normalize", "startsWith", "toLowerCase"] as const;
@@ -1193,6 +1251,7 @@ describe("same-machine coordination", () => {
     );
     let calls = 0;
     let reservedRejected = false;
+    let cursorContinued = false;
     let aliasContended = false;
     let holderSucceeded = false;
     let release: (() => void) | undefined;
@@ -1211,6 +1270,21 @@ describe("same-machine coordination", () => {
       const reserved = parseWorkspaceResourceLocator(".GrOmA-StAgE-private");
       reservedRejected =
         !reserved.ok && reserved.diagnostics[0]?.code === "invalid-resource-locator";
+      const request = {
+        limit: 2,
+        locator: locator("base"),
+        maxDepth: 1,
+        maxEntriesPerDirectory: 10,
+      };
+      const firstPage = await first.enumerate(request);
+      if (!firstPage.ok || firstPage.value.nextCursor === undefined) {
+        throw new Error("expected an intrinsic-safe continuation cursor");
+      }
+      const secondPage = await first.enumerate({
+        ...request,
+        cursor: firstPage.value.nextCursor,
+      });
+      cursorContinued = secondPage.ok;
       let ready!: () => void;
       const acquired = new Promise<void>((resolve) => {
         ready = resolve;
@@ -1244,6 +1318,7 @@ describe("same-machine coordination", () => {
 
     expect(calls).toBe(0);
     expect(reservedRejected).toBeTrue();
+    expect(cursorContinued).toBeTrue();
     expect(aliasContended).toBeTrue();
     expect(holderSucceeded).toBeTrue();
   });
@@ -1411,6 +1486,35 @@ describe("same-machine coordination", () => {
     );
     expect(diagnosticCode(uncertain)).toBe("resource-coordination-contended");
     expect(called).toBeFalse();
+    expect((await lstat(lockPath)).isDirectory()).toBeTrue();
+
+    await rm(lockPath, { recursive: true });
+    const departed = Bun.spawn({
+      cmd: [process.execPath, "-e", "await Bun.sleep(10_000)"],
+      stderr: "ignore",
+      stdout: "ignore",
+    });
+    const deadPid = departed.pid;
+    departed.kill();
+    await departed.exited;
+    await Bun.sleep(5);
+    await mkdir(lockPath, { mode: 0o700 });
+    await writeFile(
+      path.join(lockPath, "owner.json"),
+      JSON.stringify({ createdAt: 0, pid: deadPid, token: "------------------------------------" }),
+      { mode: 0o600 },
+    );
+    let invalidTokenCalled = false;
+
+    const invalidToken = await provider.withCoordination(
+      { context: "local-machine", locator: lockLocator },
+      () => {
+        invalidTokenCalled = true;
+      },
+    );
+
+    expect(diagnosticCode(invalidToken)).toBe("resource-coordination-contended");
+    expect(invalidTokenCalled).toBeFalse();
     expect((await lstat(lockPath)).isDirectory()).toBeTrue();
   });
 

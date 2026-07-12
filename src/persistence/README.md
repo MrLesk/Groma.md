@@ -29,13 +29,12 @@ remain private. Resolution walks the workspace-relative chain with `lstat` and
 that canonical paths remain under the selected workspace. Enumeration may report a
 link entry but never traverses it.
 
-Enumeration re-resolves the expected directory at every walk entry and immediately
-before depth-limit inspection. These checks narrow, but portable Bun/Node APIs cannot
-fully close, the `lstat`-to-`opendir` enumeration window or the resolve-to-`rename`
-replacement window without directory-handle-relative `openat`/`O_NOFOLLOW` operations.
-The provider rejects observed links and revalidates before sensitive operations; it
-assumes no hostile process is concurrently mutating the workspace filesystem
-namespace.
+Enumeration re-resolves the expected directory at every recursive walk entry before
+opening it. These checks narrow, but portable Bun/Node APIs cannot fully close, the
+`lstat`-to-`opendir` enumeration window or the resolve-to-`rename` replacement window
+without directory-handle-relative `openat`/`O_NOFOLLOW` operations. The provider rejects
+observed links and revalidates before sensitive operations; it assumes no hostile
+process is concurrently mutating the workspace filesystem namespace.
 
 Staging owns first-time workspace initialization. It creates a missing parent chain
 one segment at a time, handles a concurrent creator through `EEXIST`, and then
@@ -76,7 +75,9 @@ cap before its names are sorted. Traversal order is deterministic and stops afte
 page plus one continuation item; it does not load the complete tree. Pages report
 depth truncation and use an opaque cursor bound to the locator and every request
 bound. Malformed, stale, mismatched, and oversized cursors and directory overflow are
-diagnostic outcomes rather than implicit truncation.
+diagnostic outcomes rather than implicit truncation. A directory entry at the requested
+depth conservatively marks the page as depth-truncated without opening that directory,
+so unreadable contents beyond the caller's bound cannot fail the parent enumeration.
 
 Provider-owned `.groma-stage-` siblings count toward the raw per-directory scan cap
 but are omitted from public pages. Because the locator parser reserves that namespace
@@ -88,8 +89,9 @@ through a forged branded string.
 Replacement is deliberately staged and committed in two calls. Staging copies caller
 bytes, exclusive-creates a private sibling of the target (therefore on the same
 filesystem), completely writes it through a bounded loop, calls `FileHandle.sync`,
-and closes the handle. The sibling remains mode `0600` while it awaits commit. The
-provider-owned opaque handle contains no path.
+forces mode `0600` through the already-open handle so a restrictive process umask cannot
+remove owner access, and closes the handle. The sibling remains mode `0600` while it
+awaits commit. The provider-owned opaque handle contains no path.
 
 Commit revalidates confinement and the current target, records the existing target's
 POSIX permission and executable bits, and atomically renames the still-`0600` sibling
@@ -143,7 +145,8 @@ move-before-cleanup rule, so cleanup failure can leave only ignored unique artif
 and cannot strand contention. Malformed, young, permission-denied, live, or PID-reused
 owners remain contended. Stale replacement reacquisition is capped; repeated namespace
 replacement returns `resource-coordination-retry-exhausted` instead of recursing
-without bound.
+without bound. Owner tokens must match the exact lowercase UUID v4 shape emitted by
+`randomUUID`; looser hyphenated strings are treated as malformed and remain contended.
 
 If the callback throws, coordination returns `coordination-action-failed`. If release
 then fails, `coordination-release-failed` includes `details.actionCompleted`: `true`
