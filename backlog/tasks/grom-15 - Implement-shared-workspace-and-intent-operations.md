@@ -1,11 +1,11 @@
 ---
 id: GROM-15
 title: Implement shared workspace and intent operations
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 22:21'
+updated_date: '2026-07-12 22:37'
 labels:
   - operations
 milestone: m-1
@@ -30,13 +30,13 @@ Expose one presentation-neutral application path for initializing a workspace an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Initialization creates the minimal valid canonical Groma workspace transactionally and reports already-initialized or conflicting state without overwriting it
-- [ ] #2 Root and nested component create, exact read, bounded list and child traversal, sparse update, reparent, and explicit remove operations are available through typed presentation-neutral requests and results
-- [ ] #3 Component operations support open type, optional structural parent, intent prose, inputs, outputs, actions, ordinary relationships, lifecycle, desired state, and unknown extensions without requiring a complete component
-- [ ] #4 Every mutation accepts expected revisions where applicable, runs registered invariants, commits through the transaction engine and local journal, and returns the committed generation and new revisions
-- [ ] #5 All list and hierarchy operations implement the bounded query contract with deterministic ordering and opaque continuation
-- [ ] #6 No operation reads or writes Markdown, filesystem resources, or host state directly
-- [ ] #7 Operation-level tests run against both in-memory fault fixtures and the official local persistence composition and produce equivalent domain results
+- [x] #1 Initialization creates the minimal valid canonical Groma workspace transactionally and reports already-initialized or conflicting state without overwriting it
+- [x] #2 Root and nested component create, exact read, bounded list and child traversal, sparse update, reparent, and explicit remove operations are available through typed presentation-neutral requests and results
+- [x] #3 Component operations support open type, optional structural parent, intent prose, inputs, outputs, actions, ordinary relationships, lifecycle, desired state, and unknown extensions without requiring a complete component
+- [x] #4 Every mutation accepts expected revisions where applicable, runs registered invariants, commits through the transaction engine and local journal, and returns the committed generation and new revisions
+- [x] #5 All list and hierarchy operations implement the bounded query contract with deterministic ordering and opaque continuation
+- [x] #6 No operation reads or writes Markdown, filesystem resources, or host state directly
+- [x] #7 Operation-level tests run against both in-memory fault fixtures and the official local persistence composition and produce equivalent domain results
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -85,4 +85,12 @@ Residual hardening completed: application diagnostics now expose capability/prov
 ApplicationOperationBounds now includes explicit maxRequestDataDepth and maxRequestDataValues limits with absolute constructor ceilings. Create and update copy their combined component/patch plus outgoing relationship data through the Core structural GraphData copier before model normalization/patching, identity allocation, graph/provider snapshots, relationship planning, or transaction execution. The shared total budget covers component extensions and embedded items plus relationship descriptions and extensions; hostile proxy inputs remain contained.
 
 Superseding validation evidence: focused application+host tests 35 passed with 231 assertions; full bun run check 300 passed with 1,560 assertions; bun run check:targets verified Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct src/application/index.ts compilation passed those same four targets. Formatting, typecheck, architecture boundaries, build, smoke, git diff --check, diagnostic secrecy review, and no-side-effect budget assertions passed.
+
+Final review evidence at implementation commit 05be28e: independent specification and code-quality reviews passed; Claude approved with only non-blocking follow-up suggestions; PR #13 CI passed Quality gates and Cross-platform binaries; Codex completed with 👍 and no comments or review threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented one presentation-neutral workspace and recursive component operation layer over injected Core and Standard Model capabilities. Initialization, exact and bounded reads, root/nested create, sparse update, ordinary relationship changes, reparent, and explicit removal all share revision, invariant, transaction, journal, diagnostic-containment, and structural-budget semantics without importing host or persistence concerns. Verified by 35 focused tests with 231 assertions, the full 300-test/1,560-assertion check, all four supported compile targets, equivalent in-memory and official local persistence/restart conformance, independent specification and quality reviews, Claude approval, green CI, and Codex 👍 with no review threads.
+<!-- SECTION:FINAL_SUMMARY:END -->
