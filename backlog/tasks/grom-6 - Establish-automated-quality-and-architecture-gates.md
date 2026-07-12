@@ -1,11 +1,11 @@
 ---
 id: GROM-6
 title: Establish automated quality and architecture gates
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-12 00:54'
+updated_date: '2026-07-12 01:09'
 labels:
   - tooling
   - ci
@@ -34,9 +34,9 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [x] #4 CI compiles the single-file executable for every target in the documented 1A support matrix and smoke-tests every runnable host target
 - [x] #5 A failing test, type error, formatting change, boundary violation, or binary smoke failure causes a nonzero check result
 - [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
-- [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
-- [ ] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
-- [ ] #9 Constrained production layers reserve every bare require identifier and report one fail-closed boundary violation per file, while syntax-aware fixtures prove non-computed require property names and unrelated calls remain allowed
+- [x] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
+- [x] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
+- [x] #9 Constrained production layers reserve every bare require identifier and report one fail-closed boundary violation per file, while syntax-aware fixtures prove non-computed require property names and unrelated calls remain allowed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -96,10 +96,12 @@ Namespace scope correction implemented: every TSModuleDeclaration body is now a 
 The lexical require approach failed repeated edge-case review and is deliberately replaced under the manifesto simplicity principle. Because the constrained TypeScript/Bun stack is ESM, require is now a reserved bare identifier in Core, standard-model, and application production code. One syntax-aware violation per file replaces scope and dataflow inference; non-computed property tokens remain allowed.
 
 Reserved-bare-require policy implemented. The checker records one boolean per constrained production file, skips direct require dependency duplication there, preserves static/dynamic import diagnostics, and keeps direct require analysis in host/persistence. Syntax-aware property filtering allows non-computed property tokens while rejecting require.resolve through its bare object identifier. The lexical checker fell from 517 to 338 lines and its fixtures from 311 to 212 lines, a combined 278-line reduction. Seven focused fixtures, 27 full tests, quality gates, four-target verification, immediate native smoke, and diff check pass. Replacement AC remains unchecked pending external review.
+
+Recovery PR #5 validation passed: local bun run check, four-target check:targets, immediate native smoke, GitHub Actions run 29174596793 (Quality gates and Cross-platform binaries), independent spec and quality reviews, and Codex bot acceptance. Claude was invoked for the required text, naming, and simplicity review and returned no written feedback.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Extended GROM-6 from two-platform native CI to honest four-target single-runner verification following Bun 1.3.14 current executable documentation. The portable tooling now emits groma or groma.exe correctly, cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, checks one artifact per target, and executes only the host-compatible binary. Full local gates and clean GitHub Actions pass.
+Restored automated quality gates directly onto mainline, verified one-runner Bun cross-compilation for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, restored a native artifact after target verification, and hardened Core boundaries with fail-closed dynamic imports plus a simple reserved bare require policy. Verified locally, in GitHub Actions, and by independent and automated review.
 <!-- SECTION:FINAL_SUMMARY:END -->

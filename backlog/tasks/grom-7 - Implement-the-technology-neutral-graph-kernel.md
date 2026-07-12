@@ -1,11 +1,11 @@
 ---
 id: GROM-7
 title: Implement the technology-neutral graph kernel
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 00:15'
+updated_date: '2026-07-12 01:09'
 labels:
   - core
   - graph
@@ -34,9 +34,9 @@ Create the smallest Core graph foundation needed by 1A: stable opaque identity, 
 - [x] #5 Core graph tests cover identity stability across rename and move simulations, invalid relations, deterministic order, and bound enforcement
 - [x] #6 The graph kernel has no imports from the standard model, Bun, local resources, Markdown, the host, or CLI code
 - [x] #7 Tests are organized in boundary-local tests directories so production module roots remain readable as each subsystem grows
-- [ ] #8 Entity and relation payloads are defensively copied into deeply immutable data values so caller-owned aliases cannot mutate any existing snapshot
-- [ ] #9 Bulk load validates into one local graph state and creates one snapshot without per-item map copies, with representative scale coverage
-- [ ] #10 Payload validation rejects Array subclasses and arrays with custom prototypes according to the documented canonical graph data contract
+- [x] #8 Entity and relation payloads are defensively copied into deeply immutable data values so caller-owned aliases cannot mutate any existing snapshot
+- [x] #9 Bulk load validates into one local graph state and creates one snapshot without per-item map copies, with representative scale coverage
+- [x] #10 Payload validation rejects Array subclasses and arrays with custom prototypes according to the documented canonical graph data contract
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -74,10 +74,12 @@ Reopened during mainline restoration after independent quality review reproduced
 Fresh quality review found that Array.isArray alone admits subclasses and custom-prototype arrays despite the documented plain-array payload contract. The correction will require the intrinsic Array prototype and add regression coverage.
 
 Payload validation now requires Array.prototype exactly, rejecting both Array subclasses and manually replaced prototypes with unsupported-payload diagnostics. Focused graph tests and the full quality and target gates pass; acceptance criteria remain unchecked pending external review.
+
+Recovery PR #5 validation passed: local bun run check, four-target check:targets, immediate native smoke, GitHub Actions run 29174596793 (Quality gates and Cross-platform binaries), independent spec and quality reviews, and Codex bot acceptance. Claude was invoked for the required text, naming, and simplicity review and returned no written feedback.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the technology-neutral graph kernel with opaque stable identity, typed relations, actionable reference diagnostics, deterministic bounded reads, and boundary-local test directories. Verified with 18 passing Bun tests, architecture and type/format gates, standalone smoke testing, and cross-compilation for macOS arm64, Linux x64, Windows x64, and Windows arm64; ready PR checks passed.
+Restored the technology-neutral graph kernel directly onto mainline with opaque stable identity, typed relations, bounded deterministic reads, actionable diagnostics, deeply immutable JSON-like payloads, boundary-local tests, and linear one-snapshot bulk loading. Verified locally, across all four standalone targets, in GitHub Actions, and by independent and automated review.
 <!-- SECTION:FINAL_SUMMARY:END -->
