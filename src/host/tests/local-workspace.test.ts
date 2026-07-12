@@ -299,4 +299,47 @@ describe("local workspace capability", () => {
       ok: false,
     });
   });
+
+  test("retains and retries an initialization lease after release failure", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let releases = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "releaseCoordination") {
+          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+            releases += 1;
+            if (releases === 1) {
+              return {
+                diagnostics: [{ code: "private-release-failure", message: roots.workspaceRoot }],
+                ok: false,
+              };
+            }
+            return target.releaseCoordination(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-configuration-provider-failure",
+          message: "Workspace configuration access failed",
+        },
+      ],
+      status: "provider-failure",
+    });
+    expect(workspace.status()).toEqual({ state: "configured" });
+    expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
+    expect(workspace.status()).toEqual({ state: "ready" });
+    expect(releases).toBe(2);
+  });
 });

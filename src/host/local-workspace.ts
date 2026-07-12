@@ -193,6 +193,20 @@ export async function createLocalWorkspaceCapability(
   const bounds = validateBounds(options.bounds);
   let current: WorkspaceStatus;
   let recoveredGeneration = 0;
+  let retainedInitializationLease: LocalCoordinationLease | undefined;
+
+  const releaseRetainedInitializationLease = async (): Promise<Result<void>> => {
+    const retained = retainedInitializationLease;
+    if (retained === undefined) return success(undefined);
+    try {
+      const released = await options.resources.releaseCoordination(retained);
+      if (!released.ok) return failure(providerFailure());
+      retainedInitializationLease = undefined;
+      return success(undefined);
+    } catch {
+      return failure(providerFailure());
+    }
+  };
 
   const inspect = async (): Promise<WorkspaceStatus> => {
     try {
@@ -223,6 +237,8 @@ export async function createLocalWorkspaceCapability(
   current = await inspect();
 
   const recover = async (): Promise<Result<WorkspaceRecoveryReport>> => {
+    const released = await releaseRetainedInitializationLease();
+    if (!released.ok) return released;
     if (current.state === "missing") {
       return failure(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
@@ -250,6 +266,13 @@ export async function createLocalWorkspaceCapability(
   };
 
   const initialize = async (): Promise<WorkspaceInitializationOutcome> => {
+    const retainedRelease = await releaseRetainedInitializationLease();
+    if (!retainedRelease.ok) {
+      return Object.freeze({
+        diagnostics: retainedRelease.diagnostics,
+        status: "provider-failure",
+      });
+    }
     if (current.state === "conflict") {
       return initializationFailure(current);
     }
@@ -326,12 +349,14 @@ export async function createLocalWorkspaceCapability(
           try {
             const released = await options.resources.releaseCoordination(lease);
             if (!released.ok) {
+              retainedInitializationLease = lease;
               outcome = Object.freeze({
                 diagnostics: Object.freeze([providerFailure()]),
                 status: "provider-failure",
               });
             }
           } catch {
+            retainedInitializationLease = lease;
             outcome = Object.freeze({
               diagnostics: Object.freeze([providerFailure()]),
               status: "provider-failure",
