@@ -172,7 +172,7 @@ describe("architecture boundary checker", () => {
     expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
   });
 
-  test("ignores member require access and unrelated calls", async () => {
+  test("ignores non-computed member require access and unrelated calls", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": [
         'const moduleName = "node:fs";',
@@ -183,6 +183,85 @@ describe("architecture boundary checker", () => {
     });
 
     expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
+  });
+
+  test("does not treat type-only imports as runtime require bindings", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/declaration-type.ts": [
+        'import type { X as require } from "./types.ts";',
+        'void require("node:fs");',
+      ].join("\n"),
+      "core/import-equals-type.ts": [
+        'import type require = require("./types.ts");',
+        'void require("node:fs");',
+      ].join("\n"),
+      "core/runtime.ts": [
+        'import { X as require } from "./types.ts";',
+        'void require("node:http");',
+      ].join("\n"),
+      "core/specifier-type.ts": [
+        'import { type X as require } from "./types.ts";',
+        'void require("node:fs");',
+      ].join("\n"),
+      "core/types.ts": "export const X = (value: string): string => value;",
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/declaration-type.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+      {
+        file: "core/import-equals-type.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+      {
+        file: "core/specifier-type.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+    ]);
+  });
+
+  test("distinguishes runtime namespaces from ambient namespace declarations", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/ambient.ts": [
+        "declare namespace require { const value: number; }",
+        'void require("node:fs");',
+      ].join("\n"),
+      "core/runtime.ts": [
+        "namespace require { export const value = 1; }",
+        'void require("node:http");',
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/ambient.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+    ]);
+  });
+
+  test("treats computed ambient require member keys as value escapes", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": [
+        "void registry[require];",
+        "void loader.require;",
+        'void require.resolve("node:fs");',
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/index.ts",
+        reason:
+          "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
+      },
+    ]);
   });
 
   test("rejects unresolved relative imports and source outside a boundary", async () => {

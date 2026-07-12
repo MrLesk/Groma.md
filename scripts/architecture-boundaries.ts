@@ -133,9 +133,9 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
   const scopes = new WeakMap<AstNode, LexicalScope>();
   const rootScope: LexicalScope = { bindings: new Set(), kind: "function" };
 
-  function collect(value: unknown, currentScope: LexicalScope): void {
+  function collect(value: unknown, currentScope: LexicalScope, ambientContext = false): void {
     if (Array.isArray(value)) {
-      for (const item of value) collect(item, currentScope);
+      for (const item of value) collect(item, currentScope, ambientContext);
       return;
     }
     if (!isAstNode(value)) return;
@@ -160,6 +160,11 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
       }
       nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
       addPatternBindings(value.id, nodeScope);
+    } else if (value.type === "TSModuleDeclaration") {
+      const moduleIsAmbient = ambientContext || value.declare === true || value.kind === "global";
+      if (!moduleIsAmbient) addPatternBindings(value.id, currentScope);
+      nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
+      ambientContext = moduleIsAmbient;
     } else if (blockScopeNodeTypes.has(value.type)) {
       nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
       if (value.type === "CatchClause") addPatternBindings(value.param, nodeScope);
@@ -171,11 +176,17 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
       for (const declaration of value.declarations) {
         if (isAstNode(declaration)) addPatternBindings(declaration.id, bindingScope);
       }
-    } else if (value.type === "ImportDeclaration" && Array.isArray(value.specifiers)) {
+    } else if (
+      value.type === "ImportDeclaration" &&
+      value.importKind !== "type" &&
+      Array.isArray(value.specifiers)
+    ) {
       for (const specifier of value.specifiers) {
-        if (isAstNode(specifier)) addPatternBindings(specifier.local, nodeScope);
+        if (isAstNode(specifier) && specifier.importKind !== "type") {
+          addPatternBindings(specifier.local, nodeScope);
+        }
       }
-    } else if (value.type === "TSImportEqualsDeclaration") {
+    } else if (value.type === "TSImportEqualsDeclaration" && value.importKind !== "type") {
       addPatternBindings(value.id, nodeScope);
     } else if (value.type === "TSDeclareFunction") {
       addPatternBindings(value.id, nodeScope);
@@ -183,7 +194,7 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
       addPatternBindings(value.id, nodeScope);
     }
 
-    for (const child of Object.values(value)) collect(child, nodeScope);
+    for (const child of Object.values(value)) collect(child, nodeScope, ambientContext);
   }
 
   collect(syntaxTree, rootScope);
@@ -219,7 +230,7 @@ function isReferencedValue(
   switch (parent.type) {
     case "MemberExpression":
     case "OptionalMemberExpression":
-      return false;
+      return parent.property === node && parent.computed === true;
     case "VariableDeclarator":
       return parent.init === node;
     case "ClassMethod":

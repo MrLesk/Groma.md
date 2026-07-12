@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-12 00:31'
+updated_date: '2026-07-12 00:38'
 labels:
   - tooling
   - ci
@@ -37,16 +37,18 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
 - [ ] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
 - [ ] #9 Architecture boundary analysis rejects ambient require aliases and escaping references while direct ambient calls remain validated and lexically shadowed local require bindings are not treated as module dependencies
+- [ ] #10 Require scope analysis distinguishes type-only imports and ambient namespaces from runtime imports and namespaces, and treats computed ambient require member keys as value escapes while preserving the non-computed member policy
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the existing four-target single-runner verification and restore a host-compatible artifact afterward.
-2. Distinguish cross-compiled artifact coverage from compatible-host runtime smoke coverage in development guidance.
-3. Track lexical value bindings so ambient require calls and escapes fail closed while shadowed local require functions remain ordinary local code.
-4. Add focused fixtures for ambient aliasing, direct literal and non-literal calls, lexical shadowing, and unrelated member calls.
-5. Run local and cross-target gates and require fresh review.
+1. Preserve four-target verification and restore a host-compatible artifact afterward.
+2. Keep cross-compiled artifact coverage distinct from compatible-host runtime smoke coverage.
+3. Track lexical runtime bindings so ambient require calls and escapes fail closed while shadowed local require values remain ordinary local code.
+4. Exclude declaration-level and specifier-level type-only imports from runtime bindings; include non-declare identifier namespaces; exclude ambient declarations.
+5. Treat computed member keys using ambient require as value escapes while ignoring non-computed require properties and require member access under the current policy.
+6. Add exact regression fixtures, run local and cross-target gates, and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -83,6 +85,10 @@ Implemented fail-closed collection for non-literal dynamic import and bare requi
 Final quality review found that ambient require can escape through an alias while lexically shadowed local require functions are falsely classified. The correction will add lexical value-binding awareness, reject ambient require used as a value, and preserve ignored member and unrelated calls.
 
 Implemented a focused two-pass lexical scope map for runtime TypeScript bindings. Unbound ambient require calls retain literal and non-literal dependency checks; any other referenced ambient require value fails closed at the escape, while local shadowing, member access, and unrelated calls are excluded. Nine focused boundary fixtures, 29 full tests, all quality gates, four-target verification, and immediate native smoke pass. New acceptance criteria remain unchecked pending external review.
+
+Delta spec review found three remaining scope distinctions: type-only imports incorrectly shadow ambient require, runtime namespaces do not shadow it, and computed member keys using require are ignored. Babel AST inspection confirmed importKind at both declaration and specifier levels, declare on ambient TSModuleDeclaration nodes, and computed MemberExpression property shape.
+
+Implemented the delta distinctions using inspected Babel fields only: declaration/specifier/import-equals importKind controls runtime import bindings; non-declare TSModuleDeclaration identifier namespaces bind in a namespace-local scope while declare/global ambient contexts propagate without runtime bindings; computed member properties are referenced values while non-computed properties and require member objects remain ignored. Twelve focused fixtures, 32 full tests, typecheck, all quality gates, four-target verification, immediate native smoke, and diff check pass. Acceptance criteria remain unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
