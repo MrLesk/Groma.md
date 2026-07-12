@@ -41,6 +41,7 @@ export type LocalResourceFaultPhase =
   | "replacement-after-rename-before-mode"
   | "replacement-parent-creation-sync"
   | "replacement-parent-directory-sync"
+  | "replacement-target-file-sync"
   | "write";
 
 export type LocalResourceFaultInjector = (phase: LocalResourceFaultPhase) => void | Promise<void>;
@@ -72,7 +73,9 @@ interface StagedRecord {
   readonly stagePath: string;
   readonly targetPath: string;
   state: "committed" | "discarded" | "renamed-pending-finalization" | "staged";
+  targetFinalizationHandle?: Awaited<ReturnType<typeof open>>;
   targetFileFinalized?: boolean;
+  targetModeApplied?: boolean;
 }
 
 interface CoordinationOwner {
@@ -130,9 +133,16 @@ const defaultStaleLockMilliseconds = 5 * 60 * 1000;
 const maximumOwnerBytes = 1024;
 const maximumCoordinationReacquisitionAttempts = 8;
 const writeChunkBytes = 64 * 1024;
+const exactOwnerToken = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const intrinsicTextDecoder = new TextDecoder();
+const intrinsicTextEncoder = new TextEncoder();
+const intrinsicDecode = TextDecoder.prototype.decode;
+const intrinsicEncode = TextEncoder.prototype.encode;
 const intrinsicNormalize = String.prototype.normalize;
+const intrinsicSplit = String.prototype.split;
 const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
+const intrinsicTest = RegExp.prototype.test;
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
   return Object.freeze({ code, message, ...(details === undefined ? {} : { details }) });
@@ -276,7 +286,7 @@ function isWithin(root: string, candidate: string): boolean {
 }
 
 function locatorSegments(locator: WorkspaceResourceLocator): readonly string[] {
-  return locator === "." ? [] : locator.split("/");
+  return locator === "." ? [] : (Reflect.apply(intrinsicSplit, locator, ["/"]) as string[]);
 }
 
 function coordinationIdentity(root: string, locator: WorkspaceResourceLocator): string {
@@ -335,7 +345,7 @@ function canonicalOwner(value: unknown): CoordinationOwner | undefined {
     !Number.isSafeInteger(pid) ||
     pid <= 0 ||
     typeof token !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(token)
+    !(Reflect.apply(intrinsicTest, exactOwnerToken, [token]) as boolean)
   ) {
     return undefined;
   }
@@ -830,9 +840,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         throw new Error("replacement target mode was not recorded before rename");
       }
       if (record.targetFileFinalized !== true) {
-        await this.#inject("replacement-after-rename-before-mode");
-        await this.#applyReplacementMode(record.targetPath, record.intendedTargetMode);
-        record.targetFileFinalized = true;
+        if (record.targetModeApplied !== true) {
+          await this.#inject("replacement-after-rename-before-mode");
+        }
+        await this.#finalizeReplacementTarget(record, record.intendedTargetMode);
       }
       await this.#syncReplacementDirectory(
         path.dirname(record.targetPath),
@@ -855,17 +866,29 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
-  async #applyReplacementMode(targetPath: string, mode: number): Promise<void> {
-    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-    const handle = await open(targetPath, constants.O_RDWR | noFollow);
-    try {
-      const stats = await handle.stat();
-      if (!stats.isFile()) throw new Error("replacement target is not a regular file");
-      await handle.chmod(mode);
-      await handle.sync();
-    } finally {
-      await handle.close();
+  async #finalizeReplacementTarget(record: StagedRecord, mode: number): Promise<void> {
+    let handle = record.targetFinalizationHandle;
+    if (handle === undefined) {
+      const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+      handle = await open(record.targetPath, constants.O_RDWR | noFollow);
+      try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) throw new Error("replacement target is not a regular file");
+        record.targetFinalizationHandle = handle;
+      } catch (error) {
+        await handle.close();
+        throw error;
+      }
     }
+    if (record.targetModeApplied !== true) {
+      await handle.chmod(mode);
+      record.targetModeApplied = true;
+    }
+    await this.#inject("replacement-target-file-sync");
+    await handle.sync();
+    record.targetFileFinalized = true;
+    delete record.targetFinalizationHandle;
+    await handle.close();
   }
 
   async #syncReplacementDirectory(
@@ -1341,7 +1364,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumOwnerBytes)
         return undefined;
       const bytes = await readBoundedFile(ownerPath, maximumOwnerBytes);
-      return canonicalOwner(JSON.parse(new TextDecoder().decode(bytes)) as unknown);
+      const decoded = Reflect.apply(intrinsicDecode, intrinsicTextDecoder, [bytes]) as string;
+      return canonicalOwner(JSON.parse(decoded) as unknown);
     } catch {
       return undefined;
     }
@@ -1371,7 +1395,9 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         pid: owner.pid,
         token: owner.token,
       });
-      const encoded = new TextEncoder().encode(JSON.stringify(serializableOwner));
+      const encoded = Reflect.apply(intrinsicEncode, intrinsicTextEncoder, [
+        JSON.stringify(serializableOwner),
+      ]) as Uint8Array;
       const ownerHandle = await open(path.join(candidatePath, "owner.json"), "wx", 0o600);
       try {
         let offset = 0;

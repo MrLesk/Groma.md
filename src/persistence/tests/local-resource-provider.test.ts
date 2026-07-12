@@ -979,7 +979,11 @@ describe("staged atomic replacement", () => {
     expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
   });
 
-  for (const phase of ["replacement-parent-directory-sync", "after-rename"] as const) {
+  for (const phase of [
+    "replacement-target-file-sync",
+    "replacement-parent-directory-sync",
+    "after-rename",
+  ] as const) {
     test(`retries ${phase} without reopening a finalized read-only target`, async () => {
       if (process.platform === "win32") return;
       const roots = await fixture();
@@ -1296,38 +1300,95 @@ describe("same-machine coordination", () => {
     expect(coordinationSucceeded).toBeTrue();
   });
 
-  test("uses captured string intrinsics for stage reservation and coordination aliases", async () => {
+  test("uses captured persistence intrinsics and codec instances", async () => {
     const roots = await fixture();
     await mkdir(path.join(roots.workspaceRoot, "base", "resume"), { recursive: true });
     await writeFile(path.join(roots.workspaceRoot, "base", "resume", "a.md"), "a");
     await writeFile(path.join(roots.workspaceRoot, "base", "resume", "b.md"), "b");
     const first = await createLocalResourceProvider(roots);
     const second = await createLocalResourceProvider(roots);
-    const methods = ["normalize", "startsWith", "toLowerCase"] as const;
-    const previous = methods.map(
+    const methods = [
+      "charCodeAt",
+      "endsWith",
+      "includes",
+      "normalize",
+      "split",
+      "startsWith",
+      "toLowerCase",
+    ] as const;
+    const previousStrings = methods.map(
       (name) => [name, Object.getOwnPropertyDescriptor(String.prototype, name)] as const,
     );
+    const previousTest = Object.getOwnPropertyDescriptor(RegExp.prototype, "test");
+    const textDecoderPrototype = TextDecoder.prototype;
+    const textEncoderPrototype = TextEncoder.prototype;
+    const previousDecode = Object.getOwnPropertyDescriptor(textDecoderPrototype, "decode");
+    const previousEncode = Object.getOwnPropertyDescriptor(textEncoderPrototype, "encode");
+    const previousTextDecoder = Object.getOwnPropertyDescriptor(globalThis, "TextDecoder");
+    const previousTextEncoder = Object.getOwnPropertyDescriptor(globalThis, "TextEncoder");
     let calls = 0;
+    let validParsed = false;
+    let forbiddenRejected = false;
     let reservedRejected = false;
+    let readSucceeded = false;
     let cursorContinued = false;
     let aliasContended = false;
     let holderSucceeded = false;
     let release: (() => void) | undefined;
     let held: Promise<Result<void>> | undefined;
-    for (const name of methods) {
-      Object.defineProperty(String.prototype, name, {
+    try {
+      for (const name of methods) {
+        Object.defineProperty(String.prototype, name, {
+          configurable: true,
+          value: () => {
+            calls += 1;
+            throw new Error(`patched ${name} must not run`);
+          },
+          writable: true,
+        });
+      }
+      Object.defineProperty(RegExp.prototype, "test", {
         configurable: true,
         value: () => {
           calls += 1;
-          throw new Error(`patched ${name} must not run`);
+          throw new Error("patched test must not run");
         },
         writable: true,
       });
-    }
-    try {
+      for (const [prototype, name, descriptor] of [
+        [textDecoderPrototype, "decode", previousDecode],
+        [textEncoderPrototype, "encode", previousEncode],
+      ] as const) {
+        if (descriptor === undefined) throw new Error(`expected ${name} descriptor`);
+        Object.defineProperty(prototype, name, {
+          ...descriptor,
+          value: () => {
+            calls += 1;
+            throw new Error(`patched ${name} must not run`);
+          },
+        });
+      }
+      for (const name of ["TextDecoder", "TextEncoder"] as const) {
+        Object.defineProperty(globalThis, name, {
+          configurable: true,
+          value: class {
+            constructor() {
+              calls += 1;
+              throw new Error(`patched ${name} constructor must not run`);
+            }
+          },
+          writable: true,
+        });
+      }
+      validParsed = parseWorkspaceResourceLocator("base/resume/a.md").ok;
+      const forbidden = parseWorkspaceResourceLocator("back\\slash");
+      forbiddenRejected =
+        !forbidden.ok && forbidden.diagnostics[0]?.code === "invalid-resource-locator";
       const reserved = parseWorkspaceResourceLocator(".GrOmA-StAgE-private");
       reservedRejected =
         !reserved.ok && reserved.diagnostics[0]?.code === "invalid-resource-locator";
+      const read = await first.read({ locator: locator("base", "resume", "a.md"), maxBytes: 8 });
+      readSucceeded = read.ok && read.value.bytes.byteLength === 1 && read.value.bytes[0] === 97;
       const request = {
         limit: 2,
         locator: locator("base"),
@@ -1368,14 +1429,27 @@ describe("same-machine coordination", () => {
     } finally {
       release?.();
       if (held !== undefined) await held.catch(() => undefined);
-      for (const [name, descriptor] of previous) {
+      for (const [name, descriptor] of previousStrings) {
         if (descriptor === undefined) Reflect.deleteProperty(String.prototype, name);
         else Object.defineProperty(String.prototype, name, descriptor);
       }
+      if (previousTest === undefined) Reflect.deleteProperty(RegExp.prototype, "test");
+      else Object.defineProperty(RegExp.prototype, "test", previousTest);
+      if (previousDecode === undefined) Reflect.deleteProperty(textDecoderPrototype, "decode");
+      else Object.defineProperty(textDecoderPrototype, "decode", previousDecode);
+      if (previousEncode === undefined) Reflect.deleteProperty(textEncoderPrototype, "encode");
+      else Object.defineProperty(textEncoderPrototype, "encode", previousEncode);
+      if (previousTextDecoder === undefined) Reflect.deleteProperty(globalThis, "TextDecoder");
+      else Object.defineProperty(globalThis, "TextDecoder", previousTextDecoder);
+      if (previousTextEncoder === undefined) Reflect.deleteProperty(globalThis, "TextEncoder");
+      else Object.defineProperty(globalThis, "TextEncoder", previousTextEncoder);
     }
 
     expect(calls).toBe(0);
+    expect(validParsed).toBeTrue();
+    expect(forbiddenRejected).toBeTrue();
     expect(reservedRejected).toBeTrue();
+    expect(readSucceeded).toBeTrue();
     expect(cursorContinued).toBeTrue();
     expect(aliasContended).toBeTrue();
     expect(holderSucceeded).toBeTrue();

@@ -109,13 +109,16 @@ directory before acknowledging `committed`. Windows receives the corresponding
 Bun/Node `chmod` behavior but no ACL-preservation claim, skips unsupported directory
 sync, and makes no power-loss directory-durability claim. Mode, file-sync, parent-sync,
 or acknowledgement failure is `committed-indeterminate`, and a repeated commit on the
-same handle retries finalization without renaming again. Once target mode and file sync
-succeed, that substep is recorded so later directory or acknowledgement retries do not
-reopen a now-read-only target. The target therefore exposes only the complete prior
-bytes or complete replacement bytes. Discard and cleanup are idempotent.
+same handle retries finalization without renaming again. If target-file sync fails after
+mode application, the live replacement record retains the already-open target handle so
+retry can sync even when the restored mode is read-only; successful sync closes that
+handle. Once target mode and file sync succeed, that substep is recorded so later
+directory or acknowledgement retries do not reopen a now-read-only target. The target
+therefore exposes only complete prior or replacement bytes. Discard and cleanup are
+idempotent.
 Persistence-local fault injection covers write, flush, rename, post-rename mode
-finalization, parent creation and target-parent directory sync, after-rename, and cleanup
-boundaries without adding test behavior to Core.
+finalization, target-file sync, parent creation and target-parent directory sync,
+after-rename, and cleanup boundaries without adding test behavior to Core.
 
 Handles are live-operation capabilities, not durable journal records. The transaction
 journal implemented by GROM-14 must durably record the target locator and replacement

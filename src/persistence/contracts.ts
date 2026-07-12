@@ -82,9 +82,15 @@ const reservedWindowsName =
   /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
 const forbiddenWindowsCharacters = /[<>:"|?*\\\u0000-\u001f]/;
 const absoluteOrDrivePrefix = /^(?:\/|\\|[a-z]:)/i;
+const intrinsicTextEncoder = new TextEncoder();
 const intrinsicEncode = TextEncoder.prototype.encode;
+const intrinsicCharCodeAt = String.prototype.charCodeAt;
+const intrinsicEndsWith = String.prototype.endsWith;
+const intrinsicIncludes = String.prototype.includes;
+const intrinsicSplit = String.prototype.split;
 const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
+const intrinsicTest = RegExp.prototype.test;
 
 export function isReservedWorkspaceResourceSegment(value: string): boolean {
   const lowered = Reflect.apply(intrinsicToLowerCase, value, []) as string;
@@ -103,10 +109,10 @@ function invalidLocator(reason: string): Result<never> {
 
 function containsUnpairedSurrogate(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index);
+    const unit = Reflect.apply(intrinsicCharCodeAt, value, [index]) as number;
     if (unit >= 0xd800 && unit <= 0xdbff) {
       if (index + 1 >= value.length) return true;
-      const next = value.charCodeAt(index + 1);
+      const next = Reflect.apply(intrinsicCharCodeAt, value, [index + 1]) as number;
       if (next < 0xdc00 || next > 0xdfff) return true;
       index += 1;
     } else if (unit >= 0xdc00 && unit <= 0xdfff) {
@@ -127,20 +133,23 @@ function validateSegment(segment: string): Result<string> {
   if (isReservedWorkspaceResourceSegment(segment)) {
     return invalidLocator("segments must not use the provider-owned staging namespace");
   }
-  if (segment.endsWith(".") || segment.endsWith(" ")) {
+  if (
+    (Reflect.apply(intrinsicEndsWith, segment, ["."]) as boolean) ||
+    (Reflect.apply(intrinsicEndsWith, segment, [" "]) as boolean)
+  ) {
     return invalidLocator("segments must not end with a dot or space");
   }
-  if (forbiddenWindowsCharacters.test(segment)) {
+  if (Reflect.apply(intrinsicTest, forbiddenWindowsCharacters, [segment]) as boolean) {
     return invalidLocator("segments contain a non-portable or reserved path character");
   }
-  if (reservedWindowsName.test(segment)) {
+  if (Reflect.apply(intrinsicTest, reservedWindowsName, [segment]) as boolean) {
     return invalidLocator("segments must not use a reserved Windows device name");
   }
   if (containsUnpairedSurrogate(segment)) {
     return invalidLocator("segments must contain well-formed Unicode scalar values");
   }
   if (
-    Reflect.apply(intrinsicEncode, new TextEncoder(), [segment]).byteLength > maximumSegmentBytes
+    Reflect.apply(intrinsicEncode, intrinsicTextEncoder, [segment]).byteLength > maximumSegmentBytes
   ) {
     return invalidLocator(`segments must not exceed ${maximumSegmentBytes} UTF-8 bytes`);
   }
@@ -154,13 +163,15 @@ export function parseWorkspaceResourceLocator(value: unknown): Result<WorkspaceR
   if (value.length > maximumLocatorBytes) {
     return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
   }
-  if (absoluteOrDrivePrefix.test(value)) {
+  if (Reflect.apply(intrinsicTest, absoluteOrDrivePrefix, [value]) as boolean) {
     return invalidLocator("absolute, UNC, and drive-qualified paths are not allowed");
   }
-  if (Reflect.apply(intrinsicEncode, new TextEncoder(), [value]).byteLength > maximumLocatorBytes) {
+  if (
+    Reflect.apply(intrinsicEncode, intrinsicTextEncoder, [value]).byteLength > maximumLocatorBytes
+  ) {
     return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
   }
-  const segments = value.split("/");
+  const segments = Reflect.apply(intrinsicSplit, value, ["/"]) as string[];
   for (let index = 0; index < segments.length; index += 1) {
     const validated = validateSegment(segments[index]!);
     if (!validated.ok) return validated;
@@ -184,7 +195,7 @@ export function workspaceResourceLocator(
     if (totalCodeUnits > maximumLocatorBytes) {
       return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
     }
-    if (segment.includes("/")) {
+    if (Reflect.apply(intrinsicIncludes, segment, ["/"]) as boolean) {
       return invalidLocator("factory segments must not contain resource separators");
     }
     const parsed = validateSegment(segment);
