@@ -1,10 +1,11 @@
 ---
 id: GROM-11
 title: Define bounded query and graph-event contracts
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 22:39'
+updated_date: '2026-07-12 01:58'
 labels:
   - core
   - queries
@@ -38,15 +39,20 @@ Implement the Core contracts shared by short-lived commands and later long-lived
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define exact-read, bounded-page, cursor, graph-generation, and typed-event contracts.
-2. Add validation for bounds and opaque cursor context.
-3. Define deterministic continuation and generation-gap recovery semantics.
-4. Supply reusable contract fixtures without implementing the 1B projection index.
-5. Test pagination, cursor invalidation, event order, and recovery signals.
+1. Define branded nonnegative graph generations, exact read results, validated bounded query requests, deterministic generation-bearing pages, opaque continuation cursors, and committed/gap event types in Core.
+2. Canonicalize a technology-neutral query context and encode cursor state containing version, generation, query binding, and deterministic continuation anchor without exposing provider internals through the public type.
+3. Validate positive capped limits and fail closed on malformed cursors, wrong query binding, and stale generation before a provider continues a page.
+4. Define committed events with sorted affected entity/relation identities and an event-sequence helper that emits an explicit refetch-required generation gap instead of inferring missed changes.
+5. Add boundary-local contract tests for exact reads, empty/exact-limit/continued pages, invalid bounds, cursor misuse/staleness, deterministic event identities, contiguous events, duplicates/out-of-order events, and generation gaps.
+6. Run focused tests, full quality and four-target gates, independent reviews, then publish a ready task-linked PR and complete Claude/Codex review gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Reviewed for GROM-19: recursive containment remains Standard Model policy. GROM-11 intentionally keeps Core query and event contracts generic; model and application layers interpret bounded relation traversal as parent or child hierarchy.
+
+Context-hunter classification: L2 foundational Core contract. Reuses Core stable IDs, canonical GraphData copying, Result diagnostics, and bounded graph conventions. This task defines portable contracts and deterministic helpers only; the fast projection provider remains 1B. Cursor opacity is an API boundary rather than secrecy, and cursor state is self-contained so short-lived CLI processes can continue pages.
+
+Implemented provider-neutral query and event contracts in Core: branded safe graph generations; generation-bearing exact reads and bounded pages; self-contained canonical GraphData cursors with explicit character budgets and fail-closed version/query/generation validation; deterministic committed events; and contiguous-generation/refetch sequencing. Added 13 boundary-local contract tests covering 46 assertions. Full local quality gate passes with 51 tests total. Acceptance criteria remain unchecked pending independent and external review.
 <!-- SECTION:NOTES:END -->

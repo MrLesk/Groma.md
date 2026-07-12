@@ -8,7 +8,7 @@ export interface GraphDataRecord {
 
 export type GraphData = GraphDataScalar | GraphDataRecord | readonly GraphData[];
 
-type PayloadOwner = "entity" | "relation";
+type PayloadOwner = "entity" | "query" | "relation";
 
 function payloadPath(parent: string, key: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)

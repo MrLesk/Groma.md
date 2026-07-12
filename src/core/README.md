@@ -23,3 +23,33 @@ caller aliases or behavior-bearing objects.
 
 Aliases are intentionally not persisted here. The Iteration 1B Alias Store will add
 continuity resolution without changing exact graph identity.
+
+## Query and event contracts
+
+Shared operation and provider boundaries use branded, nonnegative safe graph
+generations. Exact reads and bounded pages always identify the generation they came
+from. The graph kernel's raw stable-ID pages remain in-process primitives; a surface
+or provider uses `BoundedQueryContracts` when a page can cross an operation or process
+boundary.
+
+Every bounded collection or traversal request supplies a positive safe limit no
+greater than the configured maximum. Providers remain responsible for executing a
+query and returning items in its declared deterministic order. Core canonicalizes the
+complete query context and deterministic continuation anchor as `GraphData`, validates
+explicit context, anchor, and cursor character budgets, and returns a branded opaque
+cursor. The cursor is self-contained so a later short-lived CLI process can continue
+the page. It is opaque as an API boundary, not encrypted or secret: callers must not
+interpret it, and providers must still treat it as untrusted input.
+
+Cursors carry their format version, graph generation, canonical query context, and
+continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
+formats, changed query context, and stale generations. Completed pages—including a
+page whose item count exactly equals its limit—have no cursor unless the provider
+explicitly knows that more results exist.
+
+`graph.committed` events contain only the resulting generation and sorted,
+deduplicated stable entity and relation identities. Event consumers accept exactly
+the next generation. A missed, duplicate, or reversed event yields an explicit
+`refetch-required` result; consumers never infer changes across a generation gap.
+Provider-specific storage, projection, or transport details do not enter these
+contracts.
