@@ -28,8 +28,11 @@ bun run typecheck     # strict TypeScript validation
 bun run test          # Bun tests
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
+bun run check:boundaries # enforce architectural dependency directions
+bun run check:targets # cross-compile every supported target and run the host-compatible one
 bun run build         # compile the native standalone executable to dist/groma
-bun run smoke         # exercise version and help on the compiled executable
+bun run smoke         # verify one native artifact and exercise version and help
+bun run check         # run every required local verification gate
 ```
 
 The compiled executable disables runtime loading of `.env`, `bunfig.toml`,
@@ -41,32 +44,48 @@ supported application and host capabilities rather than ambient build-tool files
 The initial repository uses internal source boundaries rather than separate
 publishable packages. These are dependency directions, not public package contracts.
 
-| Boundary | Responsibility | May depend on |
-| --- | --- | --- |
-| `src/core` | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core |
-| `src/standard-model` | The official minimal blueprint model and its invariants | Core |
-| `src/persistence` | Official local-resource, Markdown, journal, and later projection providers | Core and the standard model |
-| `src/application` | Presentation-neutral semantic operations | Core, model, and capability contracts |
-| `src/host` | Official composition, lifecycle, and process integration | All registered capabilities and surfaces |
-| `src/cli` | CLI parsing and terminal presentation | Host and application operations |
+| Boundary             | Responsibility                                                                         | May depend on                            |
+| -------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `src/core`           | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core                     |
+| `src/standard-model` | The official minimal blueprint model and its invariants                                | Core                                     |
+| `src/persistence`    | Official local-resource, Markdown, journal, and later projection providers             | Core and the standard model              |
+| `src/application`    | Presentation-neutral semantic operations                                               | Core, model, and capability contracts    |
+| `src/host`           | Official composition, lifecycle, and process integration                               | All registered capabilities and surfaces |
+| `src/cli`            | CLI parsing and terminal presentation                                                  | Host and application operations          |
 
 Core must never import Bun APIs, filesystem or Markdown implementations, CLI, HTTP,
 React, or any other surface technology. Application operations must never reach into
 provider implementations directly. The host is the composition root.
 
+`bun run check:boundaries` parses TypeScript imports, exports, dynamic imports, import
+types, and `require` calls. Production Core files may import only other Core files.
+Tests may import `bun:test`, but test code still cannot cross architectural layers.
+Unresolved relative imports fail the check rather than being ignored.
+
 The directory names follow the root component domains and seed terminology in
 `ARCHITECTURE.md`. They can be split into distributable packages only when an actual
 plugin or public API boundary requires it.
+
+## Test Layout
+
+Tests live in a `tests/` directory inside the boundary they verify, for example
+`src/core/tests/` and `src/cli/tests/`. Tooling tests live in `scripts/tests/`. Bun
+discovers `*.test.ts` recursively, and keeping tests inside their owning boundary lets
+the architecture checker enforce the same dependency direction without cluttering
+production module roots. Add deeper fixture or golden-output directories only when a
+test suite demonstrates that need.
 
 ## Iteration 1A Build Targets
 
 One binary is produced per target; “single-file” describes the runtime artifact, not
 one universal binary for every operating system.
 
-| Bun target | Iteration 1A commitment | Current validation |
-| --- | --- | --- |
-| Native `bun-darwin-arm64` | Supported on Apple Silicon macOS | Compiled and smoke-tested locally in GROM-5 |
-| `bun-linux-x64-baseline` | Supported on baseline x64 glibc Linux before 1A closes | Cross-compilation is available; runnable CI validation belongs to GROM-6 |
+| Bun target                 | Iteration 1A commitment               | CI verification                                         |
+| -------------------------- | ------------------------------------- | ------------------------------------------------------- |
+| `bun-darwin-arm64`         | Supported on Apple Silicon macOS      | Cross-compiled and checked as one Mach-O artifact       |
+| `bun-linux-x64-baseline`   | Supported on baseline x64 glibc Linux | Cross-compiled and smoke-tested on the Linux CI host    |
+| `bun-windows-x64-baseline` | Supported on baseline x64 Windows     | Cross-compiled and checked as one `.exe` artifact       |
+| `bun-windows-arm64`        | Supported on ARM64 Windows            | Cross-compiled and checked as one ARM64 `.exe` artifact |
 
 Build the Linux target explicitly:
 
@@ -74,9 +93,40 @@ Build the Linux target explicitly:
 bun run build -- --target=bun-linux-x64-baseline
 ```
 
-Windows, Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a
-target requires compilation and runtime smoke coverage, not only a successful
-cross-compile.
+Build the Windows target explicitly. Bun's standalone-executable contract uses the
+`.exe` suffix for Windows outputs, and Groma writes `dist/groma.exe` explicitly:
+
+```sh
+bun run build -- --target=bun-windows-x64-baseline
+bun run build -- --target=bun-windows-arm64
+```
+
+Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a target
+requires cross-compiled artifact verification. Runtime smoke coverage is recorded
+separately and runs only on a compatible CI or local host.
+
+## Continuous Verification
+
+GitHub Actions runs on every pull request and every push to `main`. The required
+quality job starts from a clean checkout, installs with `bun ci`, and invokes the same
+`bun run check` command used locally. A second job uses one Linux runner to
+cross-compile all four promised 1A targets. It verifies the exact single-file output
+for every target and executes version and help only for the Linux binary that the host
+can run.
+
+`bun run check:targets` uses the same rule locally: it cross-compiles every target and
+smoke-tests the target matching the current operating system and architecture. A
+successful cross-compile is not described as native runtime verification for a
+different operating system. After verifying the matrix, it restores a native artifact
+so `bun run smoke` can run immediately.
+
+The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
+retaining their release tags as comments for review. Setup Bun reads the exact Bun
+version from `package.json`.
+
+When verification fails, run `bun run check` first. Its fail-fast order is formatting,
+types, architectural boundaries, tests, build, and binary smoke behavior. Run the
+named subcommand directly after identifying the failing gate.
 
 ## Deliberately Deferred
 
