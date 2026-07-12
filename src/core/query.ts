@@ -1,6 +1,7 @@
 import { parseGraphGeneration, type GraphGeneration } from "./generation.ts";
 import { copyGraphPayload, type GraphData } from "./payload.ts";
 import { failure, type Result, success } from "./result.ts";
+import { inspectExactRecord } from "./runtime.ts";
 
 declare const continuationCursorBrand: unique symbol;
 declare const pageLimitBrand: unique symbol;
@@ -123,7 +124,14 @@ export class BoundedQueryContracts {
   exact<T>(generation: number, item: T): Result<ExactGraphRead<T>> {
     const parsedGeneration = parseGraphGeneration(generation);
     if (!parsedGeneration.ok) return parsedGeneration;
-    return success(Object.freeze({ generation: parsedGeneration.value, item }));
+    const copiedItem = copyGraphPayload(item, "query");
+    if (!copiedItem.ok) return copiedItem;
+    return success(
+      Object.freeze({
+        generation: parsedGeneration.value,
+        item: copiedItem.value as T,
+      }),
+    );
   }
 
   prepare(
@@ -131,14 +139,21 @@ export class BoundedQueryContracts {
     query: unknown,
     request: BoundedQueryRequest,
   ): Result<PreparedBoundedQuery> {
+    const inspectedRequest = inspectExactRecord(
+      request,
+      [["limit"], ["cursor", "limit"]],
+      "invalid-bounded-query-request",
+      "Bounded query request",
+    );
+    if (!inspectedRequest.ok) return inspectedRequest;
     const parsedGeneration = parseGraphGeneration(generation);
     if (!parsedGeneration.ok) return parsedGeneration;
-    const limit = this.#parseLimit(request.limit);
+    const limit = this.#parseLimit(inspectedRequest.value.limit);
     if (!limit.ok) return limit;
     const canonicalQuery = canonicalQueryContext(query, this.#maxQueryContextCharacters);
     if (!canonicalQuery.ok) return canonicalQuery;
 
-    if (request.cursor === undefined) {
+    if (!("cursor" in inspectedRequest.value)) {
       return success(
         Object.freeze({
           generation: parsedGeneration.value,
@@ -148,7 +163,7 @@ export class BoundedQueryContracts {
       );
     }
 
-    const decoded = this.#decodeCursor(request.cursor);
+    const decoded = this.#decodeCursor(inspectedRequest.value.cursor);
     if (!decoded.ok) return decoded;
     if (
       serializeCanonicalData(decoded.value.query) !== serializeCanonicalData(canonicalQuery.value)
@@ -184,57 +199,104 @@ export class BoundedQueryContracts {
     items: readonly T[],
     state: QueryPageState,
   ): Result<GraphQueryPage<T>> {
-    const generation = parseGraphGeneration(prepared.generation);
+    const inspectedPrepared = inspectExactRecord(
+      prepared,
+      [
+        ["generation", "limit", "query"],
+        ["after", "generation", "limit", "query"],
+      ],
+      "invalid-prepared-query",
+      "Prepared bounded query",
+    );
+    if (!inspectedPrepared.ok) return inspectedPrepared;
+    const generation = parseGraphGeneration(inspectedPrepared.value.generation);
     if (!generation.ok) return generation;
-    const limit = this.#parseLimit(prepared.limit);
+    const limit = this.#parseLimit(inspectedPrepared.value.limit);
     if (!limit.ok) return limit;
-    if (items.length > limit.value) {
+    const query = canonicalQueryContext(
+      inspectedPrepared.value.query,
+      this.#maxQueryContextCharacters,
+    );
+    if (!query.ok) return query;
+    if ("after" in inspectedPrepared.value) {
+      const after = canonicalAnchor(inspectedPrepared.value.after, this.#maxAnchorCharacters);
+      if (!after.ok) return after;
+    }
+    const copiedItems = copyGraphPayload(items, "query");
+    if (!copiedItems.ok) return copiedItems;
+    if (!Array.isArray(copiedItems.value)) {
+      return failure({
+        code: "invalid-query-items",
+        message: "Query items must be an intrinsic array of canonical graph data",
+      });
+    }
+    if (copiedItems.value.length > limit.value) {
       return failure({
         code: "query-page-overflow",
         message: "Query provider returned more items than the validated page limit",
-        details: { actual: items.length, limit: limit.value },
+        details: { actual: copiedItems.value.length, limit: limit.value },
       });
     }
-    if (state.hasMore && items.length === 0) {
+    const inspectedState = inspectExactRecord(
+      state,
+      [["hasMore"], ["hasMore", "nextAnchor"]],
+      "invalid-query-page-state",
+      "Query page state",
+    );
+    if (!inspectedState.ok) return inspectedState;
+    if (typeof inspectedState.value.hasMore !== "boolean") {
+      return failure({
+        code: "invalid-query-page-state",
+        message: "Query page hasMore state must be a boolean",
+      });
+    }
+    const hasAnchor = "nextAnchor" in inspectedState.value;
+    if (inspectedState.value.hasMore && copiedItems.value.length === 0) {
       return failure({
         code: "invalid-query-page",
         message: "An empty page cannot claim that more items are available",
       });
     }
-    if (state.hasMore && state.nextAnchor === undefined) {
+    if (inspectedState.value.hasMore && !hasAnchor) {
       return failure({
         code: "missing-continuation-anchor",
         message: "A page with more items must provide a deterministic continuation anchor",
       });
     }
-    if (!state.hasMore && state.nextAnchor !== undefined) {
+    if (!inspectedState.value.hasMore && hasAnchor) {
       return failure({
         code: "unexpected-continuation-anchor",
         message: "A completed page must not provide a continuation anchor",
       });
     }
 
-    const nextCursor = state.hasMore
-      ? this.#encodeCursor(prepared.generation, prepared.query, state.nextAnchor)
+    const nextCursor = inspectedState.value.hasMore
+      ? this.#encodeCursor(generation.value, query.value, inspectedState.value.nextAnchor)
       : undefined;
     if (nextCursor !== undefined && !nextCursor.ok) return nextCursor;
     return success(
       Object.freeze({
         generation: generation.value,
-        hasMore: state.hasMore,
-        items: Object.freeze([...items]),
+        hasMore: inspectedState.value.hasMore,
+        items: copiedItems.value as readonly T[],
         ...(nextCursor?.ok ? { nextCursor: nextCursor.value } : {}),
       }),
     );
   }
 
-  #parseLimit(value: number): Result<PageLimit> {
-    return Number.isSafeInteger(value) && value > 0 && value <= this.#maxPageSize
+  #parseLimit(value: unknown): Result<PageLimit> {
+    return typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= this.#maxPageSize
       ? success(value as PageLimit)
       : failure({
           code: "invalid-page-limit",
           message: `Page limit must be a positive safe integer no greater than ${this.#maxPageSize}`,
-          details: { limit: value, maximum: this.#maxPageSize },
+          details: {
+            maximum: this.#maxPageSize,
+            receivedType: typeof value,
+          },
         });
   }
 

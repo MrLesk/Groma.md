@@ -41,6 +41,13 @@ cursor. The cursor is self-contained so a later short-lived CLI process can cont
 the page. It is opaque as an API boundary, not encrypted or secret: callers must not
 interpret it, and providers must still treat it as untrusted input.
 
+Exact-read items and page items also cross this boundary as canonical `GraphData`.
+Core defensively copies and deeply freezes them, normalizes negative zero to zero, and
+rejects accessors, `toJSON` hooks, custom collections, iterable or length spoofs, and
+other behavior-bearing values. Requests, prepared query values, page state, events,
+and affected-identity arrays are descriptor-validated at runtime even when their
+TypeScript types were forged.
+
 Cursors carry their format version, graph generation, canonical query context, and
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
 formats, changed query context, and stale generations. Completed pages—including a

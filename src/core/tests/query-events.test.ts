@@ -49,6 +49,33 @@ describe("bounded query contracts", () => {
       diagnostics: [{ code: "invalid-graph-generation" }],
       ok: false,
     });
+    const negativeZero = contracts.exact(-0, "item");
+    expect(negativeZero.ok).toBeTrue();
+    if (negativeZero.ok) expect(Object.is(negativeZero.value.generation, -0)).toBeFalse();
+  });
+
+  test("copies and deeply freezes exact and page items without retaining aliases", () => {
+    const contracts = createContracts();
+    const exactDraft = { nested: { labels: ["exact"] } };
+    const exact = contracts.exact(1, exactDraft);
+    if (!exact.ok) throw new Error(exact.diagnostics[0]?.message);
+    exactDraft.nested.labels.push("caller mutation");
+    expect(exact.value.item).toEqual({ nested: { labels: ["exact"] } });
+    expect(() => exact.value.item.nested.labels.push("result mutation")).toThrow();
+
+    const pageDraft = { nested: { labels: ["page"] } };
+    const page = contracts.page(prepareFirst(contracts, 1, {}, 1), [pageDraft], {
+      hasMore: false,
+    });
+    if (!page.ok) throw new Error(page.diagnostics[0]?.message);
+    pageDraft.nested.labels.push("caller mutation");
+    expect(page.value.items).toEqual([{ nested: { labels: ["page"] } }]);
+    expect(() => page.value.items[0]!.nested.labels.push("result mutation")).toThrow();
+
+    expect(contracts.exact(1, { behavior: () => "unsafe" })).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload" }],
+      ok: false,
+    });
   });
 
   test("creates empty and exact-limit completed pages without cursors", () => {
@@ -115,6 +142,18 @@ describe("bounded query contracts", () => {
     expect(leftPage).toEqual(rightPage);
   });
 
+  test("normalizes negative zero before exposing or binding provider query context", () => {
+    const contracts = createContracts();
+    const negative = prepareFirst(contracts, 3, { offset: -0 }, 1);
+    const positive = prepareFirst(contracts, 3, { offset: 0 }, 1);
+    expect(Object.is((negative.query as { offset: number }).offset, -0)).toBeFalse();
+    expect(negative.query).toEqual({ offset: 0 });
+
+    const negativePage = contracts.page(negative, [1], { hasMore: true, nextAnchor: -0 });
+    const positivePage = contracts.page(positive, [1], { hasMore: true, nextAnchor: 0 });
+    expect(negativePage).toEqual(positivePage);
+  });
+
   test("rejects invalid limits and inconsistent provider page state", () => {
     const contracts = createContracts();
     for (const limit of [0, -1, 1.5, 4, Number.MAX_SAFE_INTEGER + 1]) {
@@ -141,6 +180,114 @@ describe("bounded query contracts", () => {
       diagnostics: [{ code: "unexpected-continuation-anchor" }],
       ok: false,
     });
+    expect(contracts.page(prepared, [1], {} as { hasMore: boolean })).toMatchObject({
+      diagnostics: [{ code: "invalid-query-page-state" }],
+      ok: false,
+    });
+    expect(
+      contracts.page(prepared, [1], { hasMore: "false" } as unknown as { hasMore: boolean }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-query-page-state" }], ok: false });
+    expect(
+      contracts.page(prepared, [1], {
+        hasMore: false,
+        providerWatermark: 7,
+      } as unknown as { hasMore: boolean }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-query-page-state" }], ok: false });
+
+    let anchorGetterInvoked = false;
+    const accessorState = { hasMore: true } as Record<string, unknown>;
+    Object.defineProperty(accessorState, "nextAnchor", {
+      enumerable: true,
+      get: () => {
+        anchorGetterInvoked = true;
+        return 1;
+      },
+    });
+    expect(
+      contracts.page(prepared, [1], accessorState as unknown as { hasMore: boolean }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-query-page-state" }], ok: false });
+    expect(anchorGetterInvoked).toBeFalse();
+  });
+
+  test("validates intrinsic item arrays by copied contents rather than spoofable length or iteration", () => {
+    const contracts = createContracts();
+    const prepared = prepareFirst(contracts, 1, {}, 1);
+    const iterableLengthSpoof = {
+      length: 0,
+      *[Symbol.iterator]() {
+        yield 1;
+        yield 2;
+      },
+    };
+    expect(() =>
+      contracts.page(prepared, iterableLengthSpoof as unknown as readonly number[], {
+        hasMore: false,
+      }),
+    ).not.toThrow();
+    expect(
+      contracts.page(prepared, iterableLengthSpoof as unknown as readonly number[], {
+        hasMore: false,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "unsupported-payload" }], ok: false });
+
+    const extended = [1];
+    Object.defineProperty(extended, "reportedLength", { enumerable: true, value: 0 });
+    expect(contracts.page(prepared, extended, { hasMore: false })).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload" }],
+      ok: false,
+    });
+  });
+
+  test("treats prepared query objects as forged runtime input", () => {
+    const contracts = createContracts();
+    const forged = (query: unknown, continuation?: { readonly after: unknown }) =>
+      ({
+        ...(continuation === undefined ? {} : { after: continuation.after }),
+        generation: 1,
+        limit: 1,
+        query,
+      }) as unknown as ReturnType<typeof prepareFirst>;
+    for (const query of [{ value: 1n }, { toJSON: () => ({ value: 1 }) }, { value: undefined }]) {
+      expect(() => contracts.page(forged(query), [1], { hasMore: false })).not.toThrow();
+      expect(contracts.page(forged(query), [1], { hasMore: false })).toMatchObject({
+        diagnostics: [{ code: "unsupported-payload" }],
+        ok: false,
+      });
+    }
+
+    expect(() => contracts.page(forged({}, { after: 1n }), [1], { hasMore: false })).not.toThrow();
+    expect(contracts.page(forged({}, { after: 1n }), [1], { hasMore: false })).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload" }],
+      ok: false,
+    });
+
+    const providerOrder = { z: 2, a: 1 };
+    const canonical = prepareFirst(contracts, 1, { a: 1, z: 2 }, 1);
+    const forgedPage = contracts.page(forged(providerOrder), [1], {
+      hasMore: true,
+      nextAnchor: 1,
+    });
+    const canonicalPage = contracts.page(canonical, [1], {
+      hasMore: true,
+      nextAnchor: 1,
+    });
+    expect(forgedPage).toEqual(canonicalPage);
+
+    let getterInvoked = false;
+    const accessorPrepared = { generation: 1, limit: 1 } as Record<string, unknown>;
+    Object.defineProperty(accessorPrepared, "query", {
+      enumerable: true,
+      get: () => {
+        getterInvoked = true;
+        return {};
+      },
+    });
+    expect(
+      contracts.page(accessorPrepared as unknown as ReturnType<typeof prepareFirst>, [1], {
+        hasMore: false,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-prepared-query" }], ok: false });
+    expect(getterInvoked).toBeFalse();
   });
 
   test("fails closed for malformed, unsupported, mismatched, and stale cursors", () => {
@@ -261,6 +408,24 @@ describe("committed graph event contracts", () => {
       diagnostics: [{ code: "invalid-relation-id" }],
       ok: false,
     });
+    expect(() => createGraphCommittedEvent(1, null)).not.toThrow();
+    expect(createGraphCommittedEvent(1, null)).toMatchObject({
+      diagnostics: [{ code: "invalid-affected-identities" }],
+      ok: false,
+    });
+    expect(createGraphCommittedEvent(1, { entities: [Symbol("id")] })).toMatchObject({
+      diagnostics: [{ code: "invalid-affected-identities" }],
+      ok: false,
+    });
+    expect(
+      createGraphCommittedEvent(1, {
+        entities: [{ toString: () => entity("1") }],
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-affected-identities" }], ok: false });
+    expect(createGraphCommittedEvent(1, { entities: [], provider: "sqlite" })).toMatchObject({
+      diagnostics: [{ code: "invalid-affected-identities" }],
+      ok: false,
+    });
   });
 
   test("accepts only the next contiguous generation", () => {
@@ -298,6 +463,39 @@ describe("committed graph event contracts", () => {
       ok: true,
       value: { action: "refetch", reason: "reversed", status: "refetch-required" },
     });
+  });
+
+  test("revalidates event shape and affected identities before sequencing", () => {
+    expect(() => sequenceGraphCommittedEvent(1, null)).not.toThrow();
+    expect(sequenceGraphCommittedEvent(1, null)).toMatchObject({
+      diagnostics: [{ code: "invalid-graph-event" }],
+      ok: false,
+    });
+    expect(
+      sequenceGraphCommittedEvent(1, { generation: 2, type: "graph.committed" }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
+    expect(
+      sequenceGraphCommittedEvent(1, {
+        affected: { entities: [], relations: [] },
+        generation: 2,
+        provider: "sqlite",
+        type: "graph.committed",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
+    expect(
+      sequenceGraphCommittedEvent(1, {
+        affected: { entities: [] },
+        generation: 2,
+        type: "graph.committed",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
+    expect(
+      sequenceGraphCommittedEvent(1, {
+        affected: { entities: [Symbol("id")], relations: [] },
+        generation: 2,
+        type: "graph.committed",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
   });
 
   test("classifies a duplicate at the largest generation without guessing", () => {

@@ -6,7 +6,7 @@ export type GraphGeneration = number & { readonly [graphGenerationBrand]: true }
 
 export function parseGraphGeneration(value: unknown): Result<GraphGeneration> {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? success(value as GraphGeneration)
+    ? success((Object.is(value, -0) ? 0 : value) as GraphGeneration)
     : failure({
         code: "invalid-graph-generation",
         message: "Graph generation must be a nonnegative safe integer",

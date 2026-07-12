@@ -33,7 +33,7 @@ export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<
     }
     if (typeof value === "number") {
       return Number.isFinite(value)
-        ? success(value)
+        ? success(Object.is(value, -0) ? 0 : value)
         : unsupportedPayload(owner, path, "numbers must be finite");
     }
     if (typeof value !== "object") {
@@ -56,6 +56,16 @@ export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<
         );
       }
       const ownKeys = Reflect.ownKeys(value);
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+      if (
+        lengthDescriptor === undefined ||
+        !("value" in lengthDescriptor) ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0
+      ) {
+        return unsupportedPayload(owner, path, "arrays must have an intrinsic data length");
+      }
+      const arrayLength = lengthDescriptor.value;
       const symbolKey = ownKeys.find((key) => typeof key === "symbol");
       if (symbolKey !== undefined) {
         return unsupportedPayload(owner, path, "arrays must not contain symbol properties");
@@ -64,10 +74,7 @@ export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<
         if (key === "length" || typeof key !== "string") return false;
         const index = Number(key);
         return (
-          !Number.isSafeInteger(index) ||
-          index < 0 ||
-          index >= value.length ||
-          String(index) !== key
+          !Number.isSafeInteger(index) || index < 0 || index >= arrayLength || String(index) !== key
         );
       });
       if (extraKey !== undefined) {
@@ -81,7 +88,7 @@ export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<
       activeContainers.add(value);
       try {
         const copiedItems: GraphData[] = [];
-        for (let index = 0; index < value.length; index += 1) {
+        for (let index = 0; index < arrayLength; index += 1) {
           const itemPath = `${path}[${index}]`;
           const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
           if (descriptor === undefined) {
