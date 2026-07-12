@@ -9,6 +9,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -23,6 +24,7 @@ import {
   createLocalResourceProvider,
   localResourceProviderCeilings,
   shouldSyncLocalCoordinationDirectory,
+  shouldSyncLocalReplacementDirectory,
 } from "../local-resource-provider.ts";
 import {
   type ResourceEnumerationPage,
@@ -442,6 +444,39 @@ describe("bounded deterministic enumeration", () => {
     ]);
   });
 
+  test("revalidates a depth-limit directory before inspection after a namespace swap", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const nested = path.join(roots.workspaceRoot, "nested");
+    const parked = path.join(path.dirname(roots.workspaceRoot), "parked-nested");
+    const outside = path.join(path.dirname(roots.workspaceRoot), "outside-enumeration");
+    await mkdir(nested);
+    await mkdir(outside);
+    await writeFile(path.join(outside, "secret.md"), "outside");
+    let directoryProbeCount = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "enumeration-directory") return;
+        directoryProbeCount += 1;
+        if (directoryProbeCount !== 2) return;
+        await rename(nested, parked);
+        await symlink(outside, nested, "dir");
+      },
+    });
+
+    const result = await provider.enumerate({
+      limit: 10,
+      locator: locator(),
+      maxDepth: 0,
+      maxEntriesPerDirectory: 10,
+    });
+
+    expect(diagnosticCode(result)).toBe("resource-unsupported-kind");
+    expect(directoryProbeCount).toBe(2);
+    expect(JSON.stringify(result)).not.toContain("secret.md");
+  });
+
   test("surfaces enumeration provider failures", async () => {
     const roots = await fixture();
     const provider = await createLocalResourceProvider({
@@ -660,6 +695,38 @@ describe("staged atomic replacement", () => {
     });
   });
 
+  test("keeps stages private and applies POSIX target creation modes only at commit", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const existingPath = path.join(roots.workspaceRoot, "executable.sh");
+    const missingPath = path.join(roots.workspaceRoot, "created.md");
+    await writeFile(existingPath, "old");
+    await chmod(existingPath, 0o754);
+    const provider = await createLocalResourceProvider(roots);
+    const existing = await provider.stageReplacement(
+      locator("executable.sh"),
+      textEncoder.encode("new"),
+    );
+    const missing = await provider.stageReplacement(
+      locator("created.md"),
+      textEncoder.encode("created"),
+    );
+    if (!existing.ok || !missing.ok) throw new Error("staging failed unexpectedly");
+    const stageNames = (await readdir(roots.workspaceRoot)).filter((name) =>
+      name.startsWith(".groma-stage-"),
+    );
+    expect(stageNames).toHaveLength(2);
+    for (const stageName of stageNames) {
+      expect((await lstat(path.join(roots.workspaceRoot, stageName))).mode & 0o777).toBe(0o600);
+    }
+
+    expect((await provider.commitReplacement(existing.value)).state).toBe("committed");
+    expect((await provider.commitReplacement(missing.value)).state).toBe("committed");
+
+    expect((await lstat(existingPath)).mode & 0o777).toBe(0o754);
+    expect((await lstat(missingPath)).mode & 0o777).toBe(0o666 & ~process.umask());
+  });
+
   for (const phase of ["write", "flush"] as const) {
     test(`${phase} failure leaves the complete prior target`, async () => {
       const roots = await fixture();
@@ -694,6 +761,13 @@ describe("staged atomic replacement", () => {
 
     expect(outcome.state).toBe("not-committed");
     expect(await readFile(target, "utf8")).toBe("old-complete");
+    if (process.platform !== "win32") {
+      const stageName = (await readdir(roots.workspaceRoot)).find((name) =>
+        name.startsWith(".groma-stage-"),
+      );
+      if (stageName === undefined) throw new Error("expected the private stage to remain");
+      expect((await lstat(path.join(roots.workspaceRoot, stageName))).mode & 0o777).toBe(0o600);
+    }
     expect((await provider.discardReplacement(staged.value)).ok).toBeTrue();
     expect((await provider.discardReplacement(staged.value)).ok).toBeTrue();
   });
@@ -716,6 +790,29 @@ describe("staged atomic replacement", () => {
 
     expect(outcome.state).toBe("committed-indeterminate");
     expect(await readFile(target, "utf8")).toBe("new-complete");
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+  });
+
+  test("retries POSIX parent-directory durability after an indeterminate commit", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "state.md");
+    await writeFile(target, "old-complete");
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("replacement-parent-directory-sync"),
+    });
+    const staged = await provider.stageReplacement(
+      locator("state.md"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    const first = await provider.commitReplacement(staged.value);
+
+    expect(first.state).toBe("committed-indeterminate");
+    expect(await readFile(target, "utf8")).toBe("new-complete");
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
   });
 
   test("cleanup failure is reported while discard remains idempotent", async () => {
@@ -741,9 +838,11 @@ describe("staged atomic replacement", () => {
 describe("same-machine coordination", () => {
   test("keeps Windows directory-sync and custom-root policy explicit", () => {
     expect(shouldSyncLocalCoordinationDirectory("win32")).toBeFalse();
+    expect(shouldSyncLocalReplacementDirectory("win32")).toBeFalse();
     expect(allowsCustomLocalCoordinationRoot("win32")).toBeFalse();
     for (const platform of ["darwin", "linux"] as const) {
       expect(shouldSyncLocalCoordinationDirectory(platform)).toBeTrue();
+      expect(shouldSyncLocalReplacementDirectory(platform)).toBeTrue();
       expect(allowsCustomLocalCoordinationRoot(platform)).toBeTrue();
     }
   });
@@ -803,14 +902,19 @@ describe("same-machine coordination", () => {
     const first = await createLocalResourceProvider(roots);
     const second = await createLocalResourceProvider(roots);
     const request = { context: "local-machine" as const, locator: locator("transaction") };
+    let ready!: () => void;
+    const acquired = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
     let release!: () => void;
     const held = first.withCoordination(request, async () => {
+      ready();
       await new Promise<void>((resolve) => {
         release = resolve;
       });
       return "first";
     });
-    await Bun.sleep(5);
+    await within(acquired, 5_000, "same-process coordination acquisition");
 
     const contended = await second.withCoordination(request, () => "second");
     expect(diagnosticCode(contended)).toBe("resource-coordination-contended");

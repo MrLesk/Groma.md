@@ -29,8 +29,9 @@ remain private. Resolution walks the workspace-relative chain with `lstat` and
 that canonical paths remain under the selected workspace. Enumeration may report a
 link entry but never traverses it.
 
-These checks revalidate the namespace they observe, but portable Bun/Node APIs cannot
-fully close the `lstat`-to-`opendir` enumeration window or the resolve-to-`rename`
+Enumeration re-resolves the expected directory at every walk entry and immediately
+before depth-limit inspection. These checks narrow, but portable Bun/Node APIs cannot
+fully close, the `lstat`-to-`opendir` enumeration window or the resolve-to-`rename`
 replacement window without directory-handle-relative `openat`/`O_NOFOLLOW` operations.
 The provider rejects observed links and revalidates before sensitive operations; it
 assumes no hostile process is concurrently mutating the workspace filesystem
@@ -81,13 +82,23 @@ through a forged branded string.
 Replacement is deliberately staged and committed in two calls. Staging copies caller
 bytes, exclusive-creates a private sibling of the target (therefore on the same
 filesystem), completely writes it through a bounded loop, calls `FileHandle.sync`,
-and closes the handle. The provider-owned opaque handle contains no path.
+and closes the handle. The sibling remains mode `0600` while it awaits commit. The
+provider-owned opaque handle contains no path.
 
-Commit revalidates confinement and atomically renames the sibling over the target.
-Before that rename, failures are `not-committed`; after a successful rename but lost
-acknowledgement, the result is `committed-indeterminate`. The target therefore exposes
-only the complete prior bytes or complete replacement bytes. Discard and cleanup are
-idempotent. Persistence-local fault injection covers write, flush, rename,
+Commit revalidates confinement and the current target. Immediately before rename it
+opens the private stage, applies the existing target's POSIX permission and executable
+bits, syncs that metadata, closes the handle, and atomically renames the sibling over
+the target. A missing target uses normal file-creation policy: mode `0666` masked by
+the process umask. Windows receives the corresponding Bun/Node `chmod` behavior; this
+does not claim preservation of Windows ACLs.
+
+Before rename, failures are `not-committed`. After rename, POSIX syncs the target
+parent directory before acknowledging `committed`; Windows skips unsupported directory
+sync and makes no power-loss directory-durability claim. Parent-sync or acknowledgement
+failure is `committed-indeterminate`, and a repeated commit on the same handle retries
+finalization without renaming again. The target therefore exposes only the complete
+prior bytes or complete replacement bytes. Discard and cleanup are idempotent.
+Persistence-local fault injection covers write, flush, rename, parent-directory sync,
 after-rename, and cleanup boundaries without adding test behavior to Core.
 
 Handles are live-operation capabilities, not durable journal records. The transaction

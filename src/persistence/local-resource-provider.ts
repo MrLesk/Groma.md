@@ -33,10 +33,12 @@ export type LocalResourceFaultPhase =
   | "coordination-reacquire"
   | "coordination-release"
   | "enumerate"
+  | "enumeration-directory"
   | "flush"
   | "parent-directory"
   | "read"
   | "rename"
+  | "replacement-parent-directory-sync"
   | "write";
 
 export type LocalResourceFaultInjector = (phase: LocalResourceFaultPhase) => void | Promise<void>;
@@ -66,7 +68,7 @@ interface StagedRecord {
   readonly locator: WorkspaceResourceLocator;
   readonly stagePath: string;
   readonly targetPath: string;
-  state: "committed" | "discarded" | "staged";
+  state: "committed" | "discarded" | "renamed-pending-finalization" | "staged";
 }
 
 interface CoordinationOwner {
@@ -108,6 +110,10 @@ export function allowsCustomLocalCoordinationRoot(platform: NodeJS.Platform): bo
 }
 
 export function shouldSyncLocalCoordinationDirectory(platform: NodeJS.Platform): boolean {
+  return platform !== "win32";
+}
+
+export function shouldSyncLocalReplacementDirectory(platform: NodeJS.Platform): boolean {
   return platform !== "win32";
 }
 const defaultMaxReadBytes = 16 * 1024 * 1024;
@@ -769,40 +775,90 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         diagnostic("replacement-discarded", "Replacement handle has already been discarded"),
       );
     }
-    try {
-      const target = await this.#resolve(record.locator, true);
-      if (!target.ok) return notCommitted(...target.diagnostics);
-      if (target.value.absolutePath !== record.targetPath) {
-        return notCommitted(providerFailure("validate a replacement target"));
+    if (record.state === "staged") {
+      try {
+        const target = await this.#resolve(record.locator, true);
+        if (!target.ok) return notCommitted(...target.diagnostics);
+        if (target.value.absolutePath !== record.targetPath) {
+          return notCommitted(providerFailure("validate a replacement target"));
+        }
+        if (target.value.stats !== undefined && !target.value.stats.isFile()) {
+          return notCommitted(
+            diagnostic(
+              "resource-unsupported-kind",
+              "Replacement target changed to an unsupported kind",
+            ),
+          );
+        }
+        const targetMode =
+          target.value.stats === undefined
+            ? 0o666 & ~process.umask()
+            : typeof target.value.stats.mode === "bigint"
+              ? Number(target.value.stats.mode & 0o777n)
+              : target.value.stats.mode & 0o777;
+        await this.#inject("rename");
+        await this.#applyReplacementMode(record.stagePath, targetMode);
+        await rename(record.stagePath, record.targetPath);
+        record.state = "renamed-pending-finalization";
+      } catch (error) {
+        if (!(await this.#restorePrivateStage(record.stagePath))) record.state = "discarded";
+        return notCommitted(resourceError(error, "commit a staged replacement"));
       }
-      if (target.value.stats !== undefined && !target.value.stats.isFile()) {
-        return notCommitted(
-          diagnostic(
-            "resource-unsupported-kind",
-            "Replacement target changed to an unsupported kind",
-          ),
-        );
-      }
-      await this.#inject("rename");
-      await rename(record.stagePath, record.targetPath);
-      record.state = "committed";
-    } catch (error) {
-      return notCommitted(resourceError(error, "commit a staged replacement"));
     }
     try {
+      if (shouldSyncLocalReplacementDirectory(process.platform)) {
+        await this.#inject("replacement-parent-directory-sync");
+        const parentHandle = await open(
+          path.dirname(record.targetPath),
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+        try {
+          await parentHandle.sync();
+        } finally {
+          await parentHandle.close();
+        }
+      }
       await this.#inject("after-rename");
+      record.state = "committed";
       return Object.freeze({ state: "committed" });
     } catch {
       return Object.freeze({
         diagnostics: Object.freeze([
           diagnostic(
             "replacement-commit-indeterminate",
-            "Replacement was renamed but commit acknowledgement failed",
+            "Replacement was renamed but durability finalization or acknowledgement failed",
             { commitState: "committed-indeterminate" },
           ),
         ]),
         state: "committed-indeterminate",
       });
+    }
+  }
+
+  async #applyReplacementMode(stagePath: string, mode: number): Promise<void> {
+    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+    const handle = await open(stagePath, constants.O_RDWR | noFollow);
+    try {
+      const stats = await handle.stat();
+      if (!stats.isFile()) throw new Error("replacement stage is not a regular file");
+      await handle.chmod(mode);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  async #restorePrivateStage(stagePath: string): Promise<boolean> {
+    try {
+      await this.#applyReplacementMode(stagePath, 0o600);
+      return true;
+    } catch {
+      try {
+        await rm(stagePath, { force: true });
+        return false;
+      } catch {
+        return true;
+      }
     }
   }
 
@@ -1030,7 +1086,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     state: WalkState,
   ): Promise<Result<void>> {
     if (state.stopped) return success(undefined);
-    const dir = await opendir(absoluteDirectory);
+    const revalidated = await this.#revalidateEnumerationDirectory(
+      absoluteDirectory,
+      directoryLocator,
+    );
+    if (!revalidated.ok) return revalidated;
+    const dir = await opendir(revalidated.value);
     const names: string[] = [];
     let encountered = 0;
     try {
@@ -1101,7 +1162,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       }
       if (traverseDirectory) {
         if (depth >= maxDepth) {
-          const child = await opendir(childPath);
+          const revalidatedChild = await this.#revalidateEnumerationDirectory(
+            childPath,
+            locatorResult.value,
+          );
+          if (!revalidatedChild.ok) return revalidatedChild;
+          const child = await opendir(revalidatedChild.value);
           try {
             const deeper = await child.read();
             if (deeper !== null) state.truncatedByDepth = true;
@@ -1128,6 +1194,28 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       }
     }
     return success(undefined);
+  }
+
+  async #revalidateEnumerationDirectory(
+    expectedPath: string,
+    locator: WorkspaceResourceLocator,
+  ): Promise<Result<string>> {
+    await this.#inject("enumeration-directory");
+    const resolved = await this.#resolve(locator, false);
+    if (!resolved.ok) return resolved;
+    if (
+      resolved.value.absolutePath !== expectedPath ||
+      resolved.value.stats?.isSymbolicLink() ||
+      !resolved.value.stats?.isDirectory()
+    ) {
+      return failure(
+        diagnostic(
+          "resource-unsupported-kind",
+          "Enumerated directories must remain confined non-link directories",
+        ),
+      );
+    }
+    return success(resolved.value.absolutePath);
   }
 
   #encodeCursor(state: CursorState): Result<ResourceContinuationCursor> {
