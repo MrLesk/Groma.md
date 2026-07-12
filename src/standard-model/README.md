@@ -27,3 +27,18 @@ future standard fields cannot silently change meaning.
 Parsed values expose extensions as nested read-only maps. Serialization validates
 those public values before flattening extensions back into graph payloads, so an
 extension cannot replace component identity or standard component and item fields.
+
+`createStandardModelInvariant` is the single Standard Model transaction boundary for
+direct callers and host surfaces. It receives exact, bounded records for the complete
+prior component/relationship state, one complete mutation batch, and ownership plus
+pinned conceptual-boundary context. It applies the whole batch before validating
+parents, cycles, and relationship endpoints, which makes reparenting and coordinated
+removal atomic while preserving omitted fields through the model's sparse patch.
+
+The invariant factory requires explicit collection and owner-string bounds so a host
+can align model work with its `TransactionEngine` request and snapshot budgets.
+Pinned component IDs are validated, sorted, unique, and resolvable in the prior or
+proposed graph in 1A, but do not yet change mutation authority. Evidence ownership
+and pinned-boundary protection policy begin with reconciliation; retaining this
+context now lets that policy use the same transaction path later without adding
+scanner behavior to the model.
