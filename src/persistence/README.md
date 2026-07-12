@@ -24,8 +24,10 @@ schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content revis
 parses YAML integer lexemes as BigInt first, converts only values represented exactly
 by a finite JavaScript number, and rejects inexact integers, non-finite overflow, or
 nonzero underflow before Standard Model use. Finite YAML float and exponent scalars
-retain the Standard Model's IEEE Number semantics. The store never writes timestamps,
-host paths, evidence, bindings, or derived state.
+retain the Standard Model's IEEE Number semantics. When serializing an integer-valued
+finite Number outside the safe-integer range, the codec forces exponent notation so
+its own canonical bytes parse as a float rather than an exact integer lexeme. The store
+never writes timestamps, host paths, evidence, bindings, or derived state.
 
 Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
 provider continuation pages, accepts only the exact shard/file layout, produces stable

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { isAlias, parseDocument, stringify, visit } from "yaml";
+import { isAlias, parseDocument, Scalar, stringify, visit } from "yaml";
 
 import {
   failure,
@@ -359,12 +359,28 @@ function encodeDocument(
   const intentUnicode = validateUnicode(intent, "intent");
   if (!intentUnicode.ok) return intentUnicode;
   try {
-    const yaml = stringify(front, {
-      aliasDuplicateObjects: false,
-      indent: 2,
-      lineWidth: 0,
-      minContentWidth: 0,
-    });
+    const yaml = stringify(
+      front,
+      (_key, value: unknown) => {
+        if (
+          typeof value === "number" &&
+          Number.isFinite(value) &&
+          Number.isInteger(value) &&
+          !Number.isSafeInteger(value)
+        ) {
+          const scalar = new Scalar(value);
+          scalar.format = "EXP";
+          return scalar;
+        }
+        return value;
+      },
+      {
+        aliasDuplicateObjects: false,
+        indent: 2,
+        lineWidth: 0,
+        minContentWidth: 0,
+      },
+    );
     const body = intent === undefined ? "" : `\n# Intent\n\n${intent}\n`;
     return success(textEncoder.encode(`---\n${yaml}---\n${body}`));
   } catch (error) {

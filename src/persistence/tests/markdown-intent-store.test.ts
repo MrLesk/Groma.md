@@ -396,21 +396,47 @@ vendor.io/nested:
 
   test("round-trips finite GraphData numbers beyond the safe-integer range", () => {
     const id = entityId("8051");
+    const target = entityId("8052");
+    const reportedInteger = 1_000_000_000_000_000_100;
+    const reportedExponent = 1.2345678901234568e20;
     const values = {
       exactNegativeInteger: -9_007_199_254_740_992,
       exactPositiveInteger: 9_007_199_254_740_992,
       largeNegativeExponent: -1e100,
       largePositiveExponent: 1e100,
+      reportedInteger,
     };
     const store = createMarkdownIntentStore({
       model: createStandardModelCapability(),
       resources: {} as never,
     });
-    const encoded = store.serialize(component(id, { "vendor.io/numbers": values }), []);
+    const relation: GraphRelation = {
+      id: relationId("8051"),
+      payload: { "vendor.io/numbers": { negativeReportedInteger: -reportedInteger } },
+      source: id,
+      target,
+      type: "uses",
+    };
+    const encoded = store.serialize(
+      component(id, {
+        actions: [{ id: "act", "vendor.io/numbers": { reportedExponent } }],
+        "vendor.io/numbers": values,
+      }),
+      [relation],
+    );
     if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+    const text = decoder.decode(encoded.value.bytes);
+    expect(text).toContain("reportedInteger: 1.0000000000000001e+18");
+    expect(text).toContain("reportedExponent: 1.2345678901234568e+20");
+    expect(text).toContain("negativeReportedInteger: -1.0000000000000001e+18");
+    expect(text).not.toContain("!!float");
     const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
     if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect(decoded.value.entity.payload).toMatchObject({ "vendor.io/numbers": values });
+    expect(decoded.value.entity.payload).toMatchObject({
+      actions: [{ id: "act", "vendor.io/numbers": { reportedExponent } }],
+      "vendor.io/numbers": values,
+    });
+    expect(decoded.value.relations).toEqual([relation]);
     const rewritten = store.serialize(decoded.value.entity, decoded.value.relations);
     if (!rewritten.ok) throw new Error(rewritten.diagnostics[0]?.message);
     expect(rewritten.value.bytes).toEqual(encoded.value.bytes);
