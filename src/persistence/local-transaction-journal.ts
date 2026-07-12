@@ -971,7 +971,6 @@ export function createLocalTransactionJournal(
       }
       if (removed.state !== "committed") return false;
     } else {
-      if (current.revision === target.result && handle === undefined) return true;
       let staged = handle;
       if (staged === undefined) {
         const bytes = Buffer.from(target.replacement, "base64url");
@@ -1118,6 +1117,9 @@ export function createLocalTransactionJournal(
       }
       const targets = storedTargets(materialized.value);
       verifyExpectedTargets(proposal, targets);
+      if (targets.some((target) => target.locator === localTransactionStateLocator)) {
+        throw new Error("The transaction state resource cannot be a canonical transaction target");
+      }
       for (const target of targets) {
         const locator = parseWorkspaceResourceLocator(target.locator);
         if (!locator.ok) throw new Error(locator.diagnostics[0]?.message);

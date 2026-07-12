@@ -28,6 +28,7 @@ import {
   localTransactionStateLocator,
   markdownIntentLocator,
   workspaceResourceLocator,
+  type LocalResourceFaultContext,
   type LocalResourceProvider,
   type LocalResourceFaultPhase,
   type CanonicalTransactionAdapter,
@@ -95,7 +96,10 @@ const invariantBounds = {
 async function harness(
   roots: Awaited<ReturnType<typeof workspace>>,
   faultInjector?: (phase: LocalTransactionFaultPhase, targetIndex?: number) => void,
-  resourceFaultInjector?: (phase: LocalResourceFaultPhase) => void,
+  resourceFaultInjector?: (
+    phase: LocalResourceFaultPhase,
+    context?: LocalResourceFaultContext,
+  ) => void,
   defaultStalePolicy = false,
 ) {
   const resources = await createLocalResourceProvider({
@@ -601,7 +605,28 @@ describe("local transaction journal", () => {
         child.unref();
       }
 
-      const restarted = await harness(roots, undefined, undefined, true);
+      const stateAfterExit = JSON.parse(
+        await readFile(
+          path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+          "utf8",
+        ),
+      ) as { readonly phase?: unknown };
+      let recoveredReplacementCommits = 0;
+      const replacementLocators = new Set([String(shopLocator.value), String(ordersLocator.value)]);
+      const restarted = await harness(
+        roots,
+        undefined,
+        (phase, context) => {
+          if (
+            phase === "after-rename" &&
+            context?.locator !== undefined &&
+            replacementLocators.has(String(context.locator))
+          ) {
+            recoveredReplacementCommits += 1;
+          }
+        },
+        true,
+      );
       const snapshot = await within(
         Promise.resolve(
           restarted.provider.snapshot([resourceFor(entityId(1)), resourceFor(entityId(2))]),
@@ -618,6 +643,9 @@ describe("local transaction journal", () => {
       expect(loaded.value.entities).toHaveLength(crashCase.expectedEntities);
       expect(loaded.value.relations).toHaveLength(crashCase.expectedEntities === 2 ? 1 : 0);
       expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+      if (stateAfterExit.phase === "committing") {
+        expect(recoveredReplacementCommits).toBeGreaterThan(0);
+      }
 
       if (crashCase.expectedGeneration === 0) {
         expect(await restarted.engine.execute(createRequest())).toMatchObject({
@@ -993,6 +1021,67 @@ describe("local transaction journal", () => {
         await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
       ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
     }
+  });
+
+  test("rejects the transaction state resource as a canonical target before publication", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const stateResource = parseResourceKey(localTransactionStateLocator);
+    if (!stateResource.ok) throw new Error("invalid transaction state resource key");
+    const damagingBytes = new TextEncoder().encode("destroy the transaction journal");
+    const damagingRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(damagingBytes).digest("hex")}`,
+    );
+    if (!damagingRevision.ok) throw new Error("invalid damaging revision");
+    const adapter: CanonicalTransactionAdapter = Object.freeze({
+      load: async () =>
+        success(
+          Object.freeze({
+            resources: Object.freeze([]),
+            state: {},
+          }),
+        ),
+      materialize: () =>
+        success(
+          Object.freeze({
+            state: {},
+            targets: Object.freeze([
+              Object.freeze({
+                expected: null,
+                locator: localTransactionStateLocator,
+                replacement: damagingBytes,
+                resource: stateResource.value,
+                result: damagingRevision.value,
+              }),
+            ]),
+          }),
+        ),
+    });
+    const journal = createLocalTransactionJournal({ adapter, resources });
+    const proposal = {
+      affected: { entities: [], relations: [] },
+      baseGeneration: 0,
+      context: {},
+      expectedRevisions: [{ expected: null, resource: stateResource.value }],
+      generation: 1,
+      mutation: {},
+      priorState: {},
+    } as unknown as ProposedTransaction;
+
+    await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+    expect(
+      await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
+    ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+    expect(await journal.snapshot([stateResource.value])).toMatchObject({
+      generation: 0,
+      revisions: [{ resource: stateResource.value, revision: null }],
+    });
+
+    const valid = await harness(roots);
+    expect(await valid.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
   });
 
   test("keeps externally divergent committing state indeterminate", async () => {

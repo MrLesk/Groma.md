@@ -59,7 +59,9 @@ future canonical planes can supply the same small adapter contract.
 The journal independently requires those targets to form an exact bijection with the
 proposal's expected revisions, including the same resource and expected value. A
 faulty adapter therefore cannot add, omit, duplicate, or reclassify an unchecked
-resource before journal publication.
+resource before journal publication. The fixed transaction-state resource is reserved
+for the journal itself and is rejected as a canonical transaction target even when a
+proposal and adapter agree on it.
 
 The fixed `groma/transaction-state.json` record is the committed generation marker
 and recovery journal. It has deterministic canonical JSON, explicit byte/target
@@ -93,7 +95,11 @@ Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes
 a visible committing record durably before changing any target, and re-publishes a
-visible matching idle settlement before acknowledging it as committed.
+visible matching idle settlement before acknowledging it as committed. When a fresh
+process finds replacement bytes already visible at their recorded result revision, it
+still re-stages those exact journal bytes and requires a provider-confirmed commit plus
+exact readback before advancing the generation. Visibility alone cannot substitute for
+reasserting file and parent-directory durability after a post-rename crash.
 
 Deletion is idempotent. POSIX removals sync the containing directory even when the
 target is already absent, so recovery can reassert deletion durability. Windows keeps
