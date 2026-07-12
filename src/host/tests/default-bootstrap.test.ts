@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -89,5 +89,20 @@ describe("default bootstrap registry", () => {
       ],
       ok: false,
     });
+  });
+
+  test("contains no server, React, dynamic plugin, or project-code loading path", async () => {
+    const hostRoot = path.resolve(import.meta.dir, "..");
+    const productionFiles = (await readdir(hostRoot)).filter((file) => file.endsWith(".ts")).sort();
+    const sources = await Promise.all(
+      productionFiles.map((file) => readFile(path.join(hostRoot, file), "utf8")),
+    );
+    const production = sources.join("\n");
+
+    expect(production).not.toContain("node:http");
+    expect(production).not.toContain("Bun.serve");
+    expect(production).not.toContain('from "react"');
+    expect(production).not.toContain("import(");
+    expect(production).not.toContain("projectPlugin");
   });
 });

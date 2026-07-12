@@ -16,6 +16,7 @@ import {
   workspaceResourceLocator,
   type LocalCoordinationLease,
   type LocalResourceProvider,
+  type StagedReplacementHandle,
 } from "../persistence/index.ts";
 import { STANDARD_COMPONENT_KIND } from "../standard-model/index.ts";
 import type {
@@ -64,6 +65,18 @@ const configurationConflict = () =>
 
 const providerFailure = () =>
   diagnostic("workspace-configuration-provider-failure", "Workspace configuration access failed");
+
+function initializationFailure(
+  conflict: Extract<WorkspaceStatus, { readonly state: "conflict" }>,
+): WorkspaceInitializationOutcome {
+  return Object.freeze({
+    diagnostics: Object.freeze([conflict.diagnostic]),
+    status:
+      conflict.diagnostic.code === "workspace-configuration-conflict"
+        ? "conflict"
+        : "provider-failure",
+  });
+}
 
 function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): LocalWorkspaceBounds {
   const selected = { ...defaultBounds, ...input };
@@ -191,8 +204,11 @@ export async function createLocalWorkspaceCapability(
         return { diagnostic: providerFailure(), state: "conflict" };
       }
       if (!read.ok) {
-        return read.diagnostics[0]?.code === "resource-missing"
-          ? Object.freeze({ state: "missing" as const })
+        if (read.diagnostics[0]?.code === "resource-missing") {
+          return Object.freeze({ state: "missing" as const });
+        }
+        return read.diagnostics[0]?.code === "resource-too-large"
+          ? Object.freeze({ diagnostic: configurationConflict(), state: "conflict" as const })
           : Object.freeze({ diagnostic: providerFailure(), state: "conflict" as const });
       }
       if (!(read.value.bytes instanceof Uint8Array) || !sameBytes(read.value.bytes)) {
@@ -235,10 +251,7 @@ export async function createLocalWorkspaceCapability(
 
   const initialize = async (): Promise<WorkspaceInitializationOutcome> => {
     if (current.state === "conflict") {
-      return Object.freeze({
-        diagnostics: Object.freeze([current.diagnostic]),
-        status: "conflict",
-      });
+      return initializationFailure(current);
     }
     if (current.state === "ready") {
       return Object.freeze({
@@ -250,6 +263,7 @@ export async function createLocalWorkspaceCapability(
     const previouslyConfigured = current.state === "configured";
     if (!previouslyConfigured) {
       let lease: LocalCoordinationLease | undefined;
+      let pendingStage: StagedReplacementHandle | undefined;
       let outcome: WorkspaceInitializationOutcome | undefined;
       try {
         const acquired = await options.resources.acquireCoordination({
@@ -270,27 +284,43 @@ export async function createLocalWorkspaceCapability(
               canonicalBytes.slice(),
             );
             if (!staged.ok) throw new Error("configuration staging failed");
+            pendingStage = staged.value;
             const committed = await options.resources.commitReplacement(staged.value);
             if (committed.state === "not-committed") {
               await options.resources.discardReplacement(staged.value);
+              pendingStage = undefined;
               throw new Error("configuration commit failed");
             }
+            pendingStage = undefined;
             current = await inspect();
           }
           if (current.state === "conflict") {
-            outcome = Object.freeze({
-              diagnostics: Object.freeze([current.diagnostic]),
-              status: "conflict",
-            });
+            outcome = initializationFailure(current);
           } else if (current.state !== "configured") {
             throw new Error("configuration was not established");
           }
         }
       } catch {
-        outcome = Object.freeze({
-          diagnostics: Object.freeze([providerFailure()]),
-          status: "provider-failure",
-        });
+        if (pendingStage !== undefined) {
+          current = await inspect();
+          if (current.state !== "configured") {
+            try {
+              await options.resources.discardReplacement(pendingStage);
+            } catch {
+              // The host-owned diagnostic below remains stable and path-free.
+            }
+            outcome = Object.freeze({
+              diagnostics: Object.freeze([providerFailure()]),
+              status: "provider-failure",
+            });
+          }
+          pendingStage = undefined;
+        } else {
+          outcome = Object.freeze({
+            diagnostics: Object.freeze([providerFailure()]),
+            status: "provider-failure",
+          });
+        }
       } finally {
         if (lease !== undefined) {
           try {

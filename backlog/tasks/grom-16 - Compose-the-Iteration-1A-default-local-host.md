@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 23:00'
+updated_date: '2026-07-12 23:03'
 labels:
   - host
   - bootstrap
@@ -61,4 +61,6 @@ Frozen 1A decisions: process context supplies one absolute workspace root (the C
 Implemented and focused-tested the strict local workspace capability: exact one-line groma/v0.1 discovery, path-free typed missing/conflict/recovery diagnostics, same-machine staged atomic initialization, idempotent same-session recovery promotion, bounded malformed recovery rejection, and deterministic coordination release on failure.
 
 Moved the real local application stack into the default bootstrap registry and migrated the existing application conformance/restart test onto it. The registry exposes named, frozen capability identities; aligns graph/query/model/store/journal/application bounds; injects host entropy and the selected surface; and keeps application/Core contracts unchanged. Strengthened snapshot recovery validation against malformed or structurally unbounded provider state.
+
+Implemented the injected host lifecycle: cancellation/signals are installed before composition; ready workspaces recover before dispatch; missing workspaces dispatch only the workspace gate; active sessions stop exactly once with awaited cleanup; listeners unsubscribe on all exits. Deterministic tests cover normal, signal, startup cancellation, recovery cancellation/failure, surface failure, malformed capabilities, interrupted initialization publication, bounded hostile recovery, and forbidden server/React/plugin-loading paths. Documented the exact 1A marker, registry seam, workspace gate, and lifecycle.
 <!-- SECTION:NOTES:END -->

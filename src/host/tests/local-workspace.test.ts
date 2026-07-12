@@ -97,6 +97,7 @@ describe("local workspace capability", () => {
       ["incompatible", "schema: groma/v9\n"],
       ["malformed", "schema: [\n"],
       ["noncanonical", "schema: groma/v0.1\r\n"],
+      ["oversized", "x".repeat(4_097)],
     ] as const) {
       const roots = await temporaryWorkspace();
       await Bun.write(path.join(roots.workspaceRoot, "groma", "groma.yaml"), contents);
@@ -180,6 +181,85 @@ describe("local workspace capability", () => {
       diagnostics: [{ code: "invalid-workspace-recovery" }],
       ok: false,
     });
+  });
+
+  test("rejects hostile recovery state and validates configured bounds", async () => {
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const resources = await createLocalResourceProvider(roots);
+    const hostile = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(hostile, "generation", { get: () => 0 });
+    Object.defineProperty(hostile, "revisions", {
+      get: () => {
+        throw new Error(roots.workspaceRoot);
+      },
+    });
+    Object.defineProperty(hostile, "state", { get: () => ({}) });
+    const outcomes: unknown[] = [
+      null,
+      { generation: 0, revisions: [], state: {} },
+      hostile,
+      emptySnapshot(),
+    ];
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => outcomes.shift() as never),
+      resources,
+    });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(await workspace.recover()).toMatchObject({
+        diagnostics: [{ code: "invalid-workspace-recovery" }],
+        ok: false,
+      });
+    }
+    expect(await workspace.recover()).toMatchObject({ ok: true });
+    await expect(
+      createLocalWorkspaceCapability({
+        bounds: { maxSnapshotStateValues: 1_000_001 },
+        operations,
+        transactionProvider: provider(emptySnapshot),
+        resources,
+      }),
+    ).rejects.toThrow("maxSnapshotStateValues");
+  });
+
+  test("recognizes an atomically committed marker after an interrupted commit report", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let releases = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            await target.commitReplacement(...args);
+            throw new Error(roots.workspaceRoot);
+          };
+        }
+        if (property === "releaseCoordination") {
+          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+            releases += 1;
+            return target.releaseCoordination(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(releases).toBe(1);
+    expect(await readFile(path.join(roots.workspaceRoot, "groma", "groma.yaml"), "utf8")).toBe(
+      defaultWorkspaceDocument,
+    );
   });
 
   test("releases initialization coordination when staging fails", async () => {
