@@ -99,6 +99,16 @@ context such as ownership. The provider supplies a consistent prior semantic sta
 current revisions, and base graph generation. Core copies and deeply freezes all of
 those values into one complete proposal.
 
+The engine requires explicit positive structural limits for total affected
+identities, request data depth and value occurrences, and provider snapshot-state
+depth and value occurrences. Context and mutation share one request counter, while
+snapshot state has an independently configurable counter so hosts can size it for
+representative projects. Every scalar and container counts once per output path; a
+shared input object reached through two paths therefore counts twice. Dense arrays
+whose immediate children cannot fit are rejected from their length descriptor before
+their keys or values are traversed. These limits bound defensive copying without
+changing the unbounded-by-default graph/model payload helpers used elsewhere in Core.
+
 Registered invariants run synchronously in deterministic registration order. Every
 invariant receives the same proposal object, including prior state and ownership
 context, and all diagnostics are aggregated before provider preparation begins. An
@@ -117,6 +127,11 @@ contains only the provider's opaque preparation token and independently verifiab
 generation/resource bounds. A committed recovery result supplies affected identities
 from the provider's durable preparation evidence; caller-restored data cannot choose
 the event contents.
+
+Provider result variants are exact: `not-committed` and `indeterminate` carry only
+their status, while `committed` carries its generation, resulting revisions, and
+durably recorded affected identities. Fields from one variant cannot be combined
+with another status.
 
 Confirmed durable success advances exactly one generation and returns one canonical
 `graph.committed` event value plus the resulting content revisions. Core publishes

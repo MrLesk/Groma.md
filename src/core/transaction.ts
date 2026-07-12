@@ -5,7 +5,12 @@ import {
   type GraphCommittedEvent,
 } from "./events.ts";
 import { nextGraphGeneration, parseGraphGeneration, type GraphGeneration } from "./generation.ts";
-import { copyGraphPayload, type GraphData } from "./payload.ts";
+import {
+  copyGraphPayload,
+  copyGraphPayloadPair,
+  type GraphData,
+  type GraphDataStructuralBudget,
+} from "./payload.ts";
 import { failure, type Diagnostic, type Result, success } from "./result.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "./runtime.ts";
 
@@ -99,8 +104,17 @@ export interface TransactionProvider {
   readonly prepare: (proposal: ProposedTransaction) => MaybePromise<TransactionPrepareResultInput>;
   /** Attempts the canonical commit. Any thrown or malformed result is uncertain. */
   readonly commit: (token: string) => MaybePromise<TransactionCommitResultInput>;
-  /** Resolves an uncertain commit using the provider's opaque preparation token. */
+  /** Idempotently resolves an uncertain commit using the provider's opaque preparation token. */
   readonly recover: (token: string) => MaybePromise<TransactionRecoveryResultInput>;
+}
+
+export interface TransactionEngineOptions {
+  readonly maxAffectedIdentities: number;
+  readonly maxRequestDataDepth: number;
+  readonly maxRequestDataValues: number;
+  readonly maxSnapshotStateDepth: number;
+  readonly maxSnapshotStateValues: number;
+  readonly provider: TransactionProvider;
 }
 
 export type TransactionProviderPhase = "commit" | "prepare" | "recovery" | "snapshot";
@@ -184,6 +198,13 @@ type ConfirmedProviderResult =
 const maximumOpaqueCharacters = 4_096;
 const maximumRevisionCount = 10_000;
 const maximumInvariantDiagnosticCount = 1_000;
+const maximumInvariantDetailCount = 64;
+
+function validatePositiveBudget(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`);
+  }
+}
 
 function frozenDiagnostic(
   code: string,
@@ -237,6 +258,18 @@ function providerFailure(
   return Object.freeze({
     committed: false as const,
     diagnostics: frozenDiagnostics(frozenDiagnostic(code, message)),
+    phase,
+    status: "provider-failure" as const,
+  });
+}
+
+function providerFailureWithDiagnostics(
+  phase: TransactionProviderPhase,
+  diagnostics: readonly Diagnostic[],
+): TransactionProviderFailure {
+  return Object.freeze({
+    committed: false as const,
+    diagnostics: frozenDiagnostics(...diagnostics),
     phase,
     status: "provider-failure" as const,
   });
@@ -374,7 +407,50 @@ function parseRevisionEntries(
   return success(sorted);
 }
 
-function parseRequest(request: unknown): Result<ValidatedTransactionRequest> {
+function structuralBudget(
+  code: string,
+  message: string,
+  maximumDepth: number,
+  maximumValues: number,
+): GraphDataStructuralBudget {
+  return { code, maximumDepth, maximumValues, message };
+}
+
+function parseAffectedIdentities(
+  generation: unknown,
+  value: unknown,
+  maximum: number,
+  code: string,
+  subject: string,
+): Result<AffectedGraphIdentities> {
+  const inspected = inspectExactRecord(
+    value,
+    [[], ["entities"], ["relations"], ["entities", "relations"]],
+    code,
+    subject,
+  );
+  if (!inspected.ok) return inspected;
+  let total = 0;
+  for (const key of ["entities", "relations"] as const) {
+    if (!(key in inspected.value)) continue;
+    const length = inspectIntrinsicArrayLength(inspected.value[key], code, `${subject} ${key}`);
+    if (!length.ok) return length;
+    if (length.value > maximum - total) {
+      return failure(
+        frozenDiagnostic(code, `${subject} exceeds the configured identity count`, { maximum }),
+      );
+    }
+    total += length.value;
+  }
+  const event = createGraphCommittedEvent(generation, inspected.value);
+  return event.ok ? success(event.value.affected) : event;
+}
+
+function parseRequest(
+  request: unknown,
+  maxAffectedIdentities: number,
+  dataBudget: GraphDataStructuralBudget,
+): Result<ValidatedTransactionRequest> {
   const inspected = inspectExactRecord(
     request,
     [["affected", "context", "expectedRevisions", "mutation"]],
@@ -384,18 +460,27 @@ function parseRequest(request: unknown): Result<ValidatedTransactionRequest> {
   if (!inspected.ok) return inspected;
   const expectedRevisions = parseRevisionEntries(inspected.value.expectedRevisions, "expectation");
   if (!expectedRevisions.ok) return expectedRevisions;
-  const affected = createGraphCommittedEvent(0, inspected.value.affected);
+  const affected = parseAffectedIdentities(
+    0,
+    inspected.value.affected,
+    maxAffectedIdentities,
+    "invalid-transaction-affected-identities",
+    "Transaction affected identities",
+  );
   if (!affected.ok) return affected;
-  const context = copyGraphPayload(inspected.value.context, "transaction");
-  if (!context.ok) return context;
-  const mutation = copyGraphPayload(inspected.value.mutation, "transaction");
-  if (!mutation.ok) return mutation;
+  const payloads = copyGraphPayloadPair(
+    inspected.value.context,
+    inspected.value.mutation,
+    "transaction",
+    dataBudget,
+  );
+  if (!payloads.ok) return payloads;
   return success(
     Object.freeze({
-      affected: affected.value.affected,
-      context: context.value,
+      affected: affected.value,
+      context: payloads.value[0],
       expectedRevisions: expectedRevisions.value as readonly ContentRevisionExpectation[],
-      mutation: mutation.value,
+      mutation: payloads.value[1],
     }),
   );
 }
@@ -418,6 +503,7 @@ function sameResources(
 function parseSnapshot(
   value: unknown,
   expected: readonly ContentRevisionExpectation[],
+  dataBudget: GraphDataStructuralBudget,
 ): Result<ValidatedSnapshot> {
   const inspected = inspectExactRecord(
     value,
@@ -439,7 +525,7 @@ function parseSnapshot(
       ),
     );
   }
-  const state = copyGraphPayload(inspected.value.state, "transaction");
+  const state = copyGraphPayload(inspected.value.state, "transaction", dataBudget);
   if (!state.ok) return state;
   return success(
     Object.freeze({ generation: generation.value, revisions: typedRevisions, state: state.value }),
@@ -465,6 +551,70 @@ function staleDiagnostics(
     }
   }
   return Object.freeze(diagnostics);
+}
+
+function parseInvariantDetails(
+  value: unknown,
+): Result<Readonly<Record<string, string | number | boolean>>> {
+  try {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return failure(
+        frozenDiagnostic("invalid-invariant-result", "Diagnostic details must be a record"),
+      );
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return failure(
+        frozenDiagnostic("invalid-invariant-result", "Diagnostic details must be a plain record"),
+      );
+    }
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > maximumInvariantDetailCount) {
+      return failure(
+        frozenDiagnostic("invalid-invariant-result", "Diagnostic details contain too many values"),
+      );
+    }
+    const copied: Record<string, string | number | boolean> = Object.create(null) as Record<
+      string,
+      string | number | boolean
+    >;
+    for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index];
+      if (typeof key !== "string" || key.length > maximumOpaqueCharacters) {
+        return failure(
+          frozenDiagnostic("invalid-invariant-result", "Diagnostic detail key is invalid"),
+        );
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return failure(
+          frozenDiagnostic(
+            "invalid-invariant-result",
+            "Diagnostic details must use data properties",
+          ),
+        );
+      }
+      const detail = descriptor.value;
+      if (
+        (typeof detail !== "string" || detail.length > maximumOpaqueCharacters) &&
+        (typeof detail !== "number" || !Number.isFinite(detail)) &&
+        typeof detail !== "boolean"
+      ) {
+        return failure(
+          frozenDiagnostic("invalid-invariant-result", "Diagnostic detail value is invalid"),
+        );
+      }
+      Object.defineProperty(copied, key, { enumerable: true, value: detail });
+    }
+    return success(Object.freeze(copied));
+  } catch {
+    return failure(
+      frozenDiagnostic(
+        "invalid-invariant-result",
+        "Diagnostic details could not be inspected safely",
+      ),
+    );
+  }
 }
 
 function parseInvariantDiagnostics(value: unknown, invariantId: string): readonly Diagnostic[] {
@@ -513,13 +663,8 @@ function parseInvariantDiagnostics(value: unknown, invariantId: string): readonl
     }
     let details: Readonly<Record<string, string | number | boolean>> | undefined;
     if ("details" in entry.value) {
-      const copied = copyGraphPayload(entry.value.details, "transaction");
-      if (
-        !copied.ok ||
-        typeof copied.value !== "object" ||
-        copied.value === null ||
-        Array.isArray(copied.value)
-      ) {
+      const copied = parseInvariantDetails(entry.value.details);
+      if (!copied.ok) {
         return frozenDiagnostics(
           frozenDiagnostic(
             "invalid-invariant-result",
@@ -528,50 +673,7 @@ function parseInvariantDiagnostics(value: unknown, invariantId: string): readonl
           ),
         );
       }
-      const candidate: Record<string, string | number | boolean> = Object.create(null) as Record<
-        string,
-        string | number | boolean
-      >;
-      const detailKeys = Reflect.ownKeys(copied.value);
-      if (detailKeys.length > 64) {
-        return frozenDiagnostics(
-          frozenDiagnostic(
-            "invalid-invariant-result",
-            "Invariant returned diagnostics with an invalid runtime shape",
-            { invariant: invariantId },
-          ),
-        );
-      }
-      for (let detailIndex = 0; detailIndex < detailKeys.length; detailIndex += 1) {
-        const key = detailKeys[detailIndex]!;
-        if (typeof key !== "string") {
-          return frozenDiagnostics(
-            frozenDiagnostic(
-              "invalid-invariant-result",
-              "Invariant returned diagnostics with an invalid runtime shape",
-              { invariant: invariantId },
-            ),
-          );
-        }
-        const descriptor = Object.getOwnPropertyDescriptor(copied.value, key);
-        const detail =
-          descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
-        if (
-          typeof detail !== "string" &&
-          typeof detail !== "number" &&
-          typeof detail !== "boolean"
-        ) {
-          return frozenDiagnostics(
-            frozenDiagnostic(
-              "invalid-invariant-result",
-              "Invariant returned diagnostics with an invalid runtime shape",
-              { invariant: invariantId },
-            ),
-          );
-        }
-        Object.defineProperty(candidate, key, { enumerable: true, value: detail });
-      }
-      details = Object.freeze(candidate);
+      details = copied.value;
     }
     diagnostics[index] = frozenDiagnostic(entry.value.code, entry.value.message, details);
   }
@@ -621,6 +723,7 @@ function parseConfirmedResult(
   value: unknown,
   generation: GraphGeneration,
   resources: readonly ResourceKey[],
+  maxAffectedIdentities: number,
   phase: "commit" | "recovery",
   expectedAffected?: AffectedGraphIdentities,
 ): Result<ConfirmedProviderResult> {
@@ -633,13 +736,25 @@ function parseConfirmedResult(
     `Transaction provider ${phase} result`,
   );
   if (!inspected.ok) return inspected;
-  if (inspected.value.status === "not-committed" || inspected.value.status === "indeterminate") {
-    return success(Object.freeze({ status: inspected.value.status }));
-  }
-  if (inspected.value.status !== "committed") {
+  const hasCommittedFields = "affected" in inspected.value;
+  if (!hasCommittedFields) {
+    if (inspected.value.status === "not-committed" || inspected.value.status === "indeterminate") {
+      return success(Object.freeze({ status: inspected.value.status }));
+    }
     return failure(frozenDiagnostic(code, `Transaction provider ${phase} status is invalid`));
   }
-  const affected = createGraphCommittedEvent(generation, inspected.value.affected);
+  if (inspected.value.status !== "committed") {
+    return failure(
+      frozenDiagnostic(code, `Transaction provider ${phase} result fields do not match its status`),
+    );
+  }
+  const affected = parseAffectedIdentities(
+    generation,
+    inspected.value.affected,
+    maxAffectedIdentities,
+    code,
+    `Transaction provider ${phase} affected identities`,
+  );
   if (!affected.ok) {
     return failure(
       frozenDiagnostic(code, `Transaction provider ${phase} returned invalid affected identities`),
@@ -647,8 +762,8 @@ function parseConfirmedResult(
   }
   if (
     expectedAffected !== undefined &&
-    (!sameStrings(expectedAffected.entities, affected.value.affected.entities) ||
-      !sameStrings(expectedAffected.relations, affected.value.affected.relations))
+    (!sameStrings(expectedAffected.entities, affected.value.entities) ||
+      !sameStrings(expectedAffected.relations, affected.value.relations))
   ) {
     return failure(
       frozenDiagnostic(
@@ -676,7 +791,7 @@ function parseConfirmedResult(
   }
   return success(
     Object.freeze({
-      affected: affected.value.affected,
+      affected: affected.value,
       generation: confirmedGeneration.value,
       revisions: typedRevisions,
       status: "committed" as const,
@@ -804,10 +919,35 @@ function parseRecovery(value: unknown): Result<TransactionRecovery> {
 
 export class TransactionEngine {
   readonly #invariants: RegisteredInvariant[] = [];
+  readonly #maxAffectedIdentities: number;
   readonly #provider: TransactionProvider;
+  readonly #requestDataBudget: GraphDataStructuralBudget;
+  readonly #snapshotStateBudget: GraphDataStructuralBudget;
 
-  constructor(provider: TransactionProvider) {
-    this.#provider = provider;
+  constructor(options: TransactionEngineOptions) {
+    validatePositiveBudget(options.maxAffectedIdentities, "maxAffectedIdentities");
+    validatePositiveBudget(options.maxRequestDataDepth, "maxRequestDataDepth");
+    validatePositiveBudget(options.maxRequestDataValues, "maxRequestDataValues");
+    validatePositiveBudget(options.maxSnapshotStateDepth, "maxSnapshotStateDepth");
+    validatePositiveBudget(options.maxSnapshotStateValues, "maxSnapshotStateValues");
+    this.#maxAffectedIdentities = options.maxAffectedIdentities;
+    this.#provider = options.provider;
+    this.#requestDataBudget = Object.freeze(
+      structuralBudget(
+        "transaction-request-too-large",
+        "Transaction context and mutation exceed the configured structural budget",
+        options.maxRequestDataDepth,
+        options.maxRequestDataValues,
+      ),
+    );
+    this.#snapshotStateBudget = Object.freeze(
+      structuralBudget(
+        "transaction-snapshot-state-too-large",
+        "Transaction provider state exceeds the configured structural budget",
+        options.maxSnapshotStateDepth,
+        options.maxSnapshotStateValues,
+      ),
+    );
   }
 
   registerInvariant(invariant: TransactionInvariant): Result<void>;
@@ -854,7 +994,11 @@ export class TransactionEngine {
   }
 
   async execute(request: TransactionRequest): Promise<TransactionOutcome> {
-    const validatedRequest = parseRequest(request);
+    const validatedRequest = parseRequest(
+      request,
+      this.#maxAffectedIdentities,
+      this.#requestDataBudget,
+    );
     if (!validatedRequest.ok) return validationRejected(...validatedRequest.diagnostics);
     const invariantCopy = new Array<RegisteredInvariant>(this.#invariants.length);
     for (let index = 0; index < this.#invariants.length; index += 1) {
@@ -885,13 +1029,13 @@ export class TransactionEngine {
         "Transaction provider failed before a transaction was prepared",
       );
     }
-    const snapshot = parseSnapshot(snapshotInput, validatedRequest.value.expectedRevisions);
+    const snapshot = parseSnapshot(
+      snapshotInput,
+      validatedRequest.value.expectedRevisions,
+      this.#snapshotStateBudget,
+    );
     if (!snapshot.ok) {
-      return providerFailure(
-        "snapshot",
-        "invalid-provider-snapshot",
-        "Transaction provider returned an invalid snapshot",
-      );
+      return providerFailureWithDiagnostics("snapshot", snapshot.diagnostics);
     }
 
     const stale = staleDiagnostics(
@@ -996,6 +1140,7 @@ export class TransactionEngine {
       commitInput,
       proposal.generation,
       resources,
+      this.#maxAffectedIdentities,
       "commit",
       proposal.affected,
     );
@@ -1048,6 +1193,7 @@ export class TransactionEngine {
       recoveredInput,
       parsed.value.generation,
       parsed.value.resources,
+      this.#maxAffectedIdentities,
       "recovery",
     );
     if (!recovered.ok || recovered.value.status === "indeterminate") {

@@ -8,6 +8,7 @@ import {
   type ResourceKey,
   type ResourceRevisionInput,
   type TransactionCommitResultInput,
+  type TransactionEngineOptions,
   type TransactionPrepareResultInput,
   type TransactionProvider,
   type TransactionProviderSnapshotInput,
@@ -146,6 +147,21 @@ class FaultProvider implements TransactionProvider {
   }
 }
 
+function createEngine(
+  provider: TransactionProvider,
+  overrides: Partial<Omit<TransactionEngineOptions, "provider">> = {},
+): TransactionEngine {
+  return new TransactionEngine({
+    maxAffectedIdentities: 100,
+    maxRequestDataDepth: 32,
+    maxRequestDataValues: 10_000,
+    maxSnapshotStateDepth: 64,
+    maxSnapshotStateValues: 100_000,
+    provider,
+    ...overrides,
+  });
+}
+
 function request(overrides: Record<string, unknown> = {}) {
   return {
     affected: {
@@ -166,10 +182,27 @@ function diagnostic(code: string, message = code): Diagnostic {
   return { code, message };
 }
 
+function malformedConfirmedResults(): readonly unknown[] {
+  const fields = {
+    affected: { entities: [firstEntity, secondEntity], relations: [firstRelation] },
+    generation: 5,
+    revisions: [
+      { resource: "components/one", revision: "revision-5" },
+      { resource: "components/two", revision: "revision-5" },
+    ],
+  };
+  return [
+    { ...fields, status: "not-committed" },
+    { ...fields, status: "indeterminate" },
+    { status: "committed" },
+    { ...fields, extra: true, status: "committed" },
+  ];
+}
+
 describe("transaction engine", () => {
   test("rejects stale expected content revisions without preparing or writing", async () => {
     const provider = new FaultProvider();
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     const result = await engine.execute(
       request({
         expectedRevisions: [{ expected: "stale", resource: "components/one" }],
@@ -187,7 +220,7 @@ describe("transaction engine", () => {
 
   test("supports expected absence and returns resulting revisions", async () => {
     const provider = new FaultProvider();
-    const result = await new TransactionEngine(provider).execute(request());
+    const result = await createEngine(provider).execute(request());
 
     expect(result).toMatchObject({
       generation: 5,
@@ -201,7 +234,7 @@ describe("transaction engine", () => {
 
   test("runs every invariant in registration order against one complete immutable proposal", async () => {
     const provider = new FaultProvider();
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     const calls: string[] = [];
     const proposals: ProposedTransaction[] = [];
     const first = engine.registerInvariant({
@@ -249,8 +282,18 @@ describe("transaction engine", () => {
 
   test("continues invariant aggregation when an invariant throws or forges diagnostics", async () => {
     const provider = new FaultProvider();
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     const calls: string[] = [];
+    let nestedOwnKeysCalled = false;
+    const nestedDetail = new Proxy(
+      {},
+      {
+        ownKeys: (target) => {
+          nestedOwnKeysCalled = true;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
     engine.registerInvariant({
       id: "throws",
       validate: () => {
@@ -262,7 +305,7 @@ describe("transaction engine", () => {
       id: "forges",
       validate: () => {
         calls.push("forges");
-        return [{ code: "bad", message: "bad", details: { nested: {} } }];
+        return [{ code: "bad", message: "bad", details: { nested: nestedDetail } }];
       },
     } as unknown as Parameters<TransactionEngine["registerInvariant"]>[0]);
     engine.registerInvariant({
@@ -275,6 +318,7 @@ describe("transaction engine", () => {
 
     const result = await engine.execute(request());
     expect(calls).toEqual(["throws", "forges", "last"]);
+    expect(nestedOwnKeysCalled).toBeFalse();
     expect(result).toMatchObject({
       diagnostics: [
         { code: "invariant-threw" },
@@ -292,7 +336,7 @@ describe("transaction engine", () => {
         if (mode === "generation") provider.generation += 1;
         else provider.revisions.set("components/one", "concurrent-revision");
       };
-      const result = await new TransactionEngine(provider).execute(request());
+      const result = await createEngine(provider).execute(request());
       expect(result).toMatchObject({
         diagnostics: [
           {
@@ -312,7 +356,7 @@ describe("transaction engine", () => {
 
   test("advances exactly one generation and returns one canonical event only after confirmation", async () => {
     const provider = new FaultProvider();
-    const result = await new TransactionEngine(provider).execute(request());
+    const result = await createEngine(provider).execute(request());
     provider.log.push("event-observed");
 
     expect(provider.generation).toBe(5);
@@ -349,7 +393,7 @@ describe("transaction engine", () => {
   test("reports known commit rejection as provider failure without success", async () => {
     const provider = new FaultProvider();
     provider.commitMode = "not-committed";
-    const result = await new TransactionEngine(provider).execute(request());
+    const result = await createEngine(provider).execute(request());
 
     expect(result).toMatchObject({
       committed: false,
@@ -365,7 +409,7 @@ describe("transaction engine", () => {
     for (const mode of ["throw", "indeterminate", "malformed"] as const) {
       const provider = new FaultProvider();
       provider.commitMode = mode;
-      const result = await new TransactionEngine(provider).execute(request());
+      const result = await createEngine(provider).execute(request());
       expect(result).toMatchObject({
         recovery: { baseGeneration: 4, generation: 5, token: "prepared-1" },
         status: "indeterminate",
@@ -384,7 +428,7 @@ describe("transaction engine", () => {
     ] as const) {
       const provider = new FaultProvider();
       provider.commitMode = "indeterminate";
-      const engine = new TransactionEngine(provider);
+      const engine = createEngine(provider);
       const uncertain = await engine.execute(request());
       if (uncertain.status !== "indeterminate") throw new Error("expected recovery handle");
       provider.recoveryMode = mode;
@@ -415,7 +459,7 @@ describe("transaction engine", () => {
       const provider = new FaultProvider();
       if (phase === "snapshot") provider.snapshotMode = mode;
       else provider.prepareMode = mode;
-      const result = await new TransactionEngine(provider).execute(request());
+      const result = await createEngine(provider).execute(request());
       expect(result).toMatchObject({ committed: false, phase, status: "provider-failure" });
       expect(result).not.toHaveProperty("event");
       expect(provider.commitCalls).toBe(0);
@@ -424,7 +468,7 @@ describe("transaction engine", () => {
 
   test("rejects malformed requests, duplicate expectations, and invalid invariants deterministically", async () => {
     const provider = new FaultProvider();
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     expect(engine.registerInvariant({ id: "same", validate: () => [] }).ok).toBeTrue();
     expect(engine.registerInvariant({ id: "same", validate: () => [] })).toMatchObject({
       diagnostics: [{ code: "duplicate-invariant-id" }],
@@ -465,7 +509,7 @@ describe("transaction engine", () => {
 
   test("does not invoke accessors in transaction inputs or retain caller-owned aliases", async () => {
     const provider = new FaultProvider();
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     let getterCalled = false;
     const accessorRequest = request() as Record<string, unknown>;
     Object.defineProperty(accessorRequest, "mutation", {
@@ -511,7 +555,7 @@ describe("transaction engine", () => {
       revisions: [{ resource: "unexpected", revision: "revision-1" }],
       state: {},
     })) as typeof provider.snapshot;
-    expect(await new TransactionEngine(provider).execute(request())).toMatchObject({
+    expect(await createEngine(provider).execute(request())).toMatchObject({
       phase: "snapshot",
       status: "provider-failure",
     });
@@ -523,7 +567,7 @@ describe("transaction engine", () => {
       revisions: [{ resource: "unexpected", revision: "revision-5" }],
       status: "committed",
     })) as typeof provider.commit;
-    expect(await new TransactionEngine(provider).execute(request())).toMatchObject({
+    expect(await createEngine(provider).execute(request())).toMatchObject({
       status: "indeterminate",
     });
   });
@@ -542,7 +586,7 @@ describe("transaction engine", () => {
       });
       return response as unknown as TransactionProviderSnapshotInput;
     }) as typeof provider.snapshot;
-    expect(await new TransactionEngine(provider).execute(request())).toMatchObject({
+    expect(await createEngine(provider).execute(request())).toMatchObject({
       phase: "snapshot",
       status: "provider-failure",
     });
@@ -566,7 +610,7 @@ describe("transaction engine", () => {
       });
       return response as unknown as TransactionCommitResultInput;
     }) as typeof commitProvider.commit;
-    expect(await new TransactionEngine(commitProvider).execute(request())).toMatchObject({
+    expect(await createEngine(commitProvider).execute(request())).toMatchObject({
       status: "indeterminate",
     });
     expect(commitGetterCalled).toBeFalse();
@@ -575,7 +619,7 @@ describe("transaction engine", () => {
   test("derives recovered event identities from durable provider evidence, not the caller envelope", async () => {
     const provider = new FaultProvider();
     provider.commitMode = "indeterminate";
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     const uncertain = await engine.execute(request());
     if (uncertain.status !== "indeterminate") throw new Error("expected recovery handle");
 
@@ -603,7 +647,7 @@ describe("transaction engine", () => {
   test("classifies repeated recovery idempotently with the same single-event outcome", async () => {
     const provider = new FaultProvider();
     provider.commitMode = "indeterminate";
-    const engine = new TransactionEngine(provider);
+    const engine = createEngine(provider);
     const uncertain = await engine.execute(request());
     if (uncertain.status !== "indeterminate") throw new Error("expected recovery handle");
 
@@ -612,5 +656,269 @@ describe("transaction engine", () => {
 
     expect(first).toEqual(second);
     expect(first).toMatchObject({ event: { type: "graph.committed" }, status: "committed" });
+  });
+
+  test("binds commit result fields exactly to the committed status", async () => {
+    for (const malformed of malformedConfirmedResults()) {
+      const provider = new FaultProvider();
+      provider.commit = (() => malformed) as typeof provider.commit;
+
+      const result = await createEngine(provider).execute(request());
+
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "invalid-provider-commit-result" }],
+        status: "indeterminate",
+      });
+      expect(result).not.toHaveProperty("committed", false);
+    }
+  });
+
+  test("binds recovery result fields exactly to the committed status", async () => {
+    for (const malformed of malformedConfirmedResults()) {
+      const provider = new FaultProvider();
+      provider.commitMode = "indeterminate";
+      const engine = createEngine(provider);
+      const uncertain = await engine.execute(request());
+      if (uncertain.status !== "indeterminate") throw new Error("expected recovery handle");
+      provider.recover = (() => malformed) as typeof provider.recover;
+
+      const result = await engine.recover(uncertain.recovery);
+
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "invalid-provider-recovery-result" }],
+        status: "indeterminate",
+      });
+      expect(result).not.toHaveProperty("committed", false);
+    }
+  });
+
+  test("validates every structural budget constructor option", () => {
+    const provider = new FaultProvider();
+    const valid: TransactionEngineOptions = {
+      maxAffectedIdentities: 1,
+      maxRequestDataDepth: 1,
+      maxRequestDataValues: 1,
+      maxSnapshotStateDepth: 1,
+      maxSnapshotStateValues: 1,
+      provider,
+    };
+    expect(() => new TransactionEngine(valid)).not.toThrow();
+    for (const option of [
+      "maxAffectedIdentities",
+      "maxRequestDataDepth",
+      "maxRequestDataValues",
+      "maxSnapshotStateDepth",
+      "maxSnapshotStateValues",
+    ] as const) {
+      for (const invalid of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(() => new TransactionEngine({ ...valid, [option]: invalid })).toThrow(RangeError);
+      }
+    }
+  });
+
+  test("bounds total affected identities before enumerating over-limit arrays", async () => {
+    const affected = {
+      entities: [firstEntity, secondEntity],
+      relations: [firstRelation],
+    };
+    expect(
+      await createEngine(new FaultProvider(), { maxAffectedIdentities: 3 }).execute(
+        request({ affected }),
+      ),
+    ).toMatchObject({ status: "committed" });
+    const overLimitProvider = new FaultProvider();
+    expect(
+      await createEngine(overLimitProvider, { maxAffectedIdentities: 2 }).execute(
+        request({ affected }),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "invalid-transaction-affected-identities" }],
+      status: "validation-rejected",
+    });
+    expect(overLimitProvider.snapshotCalls).toBe(0);
+
+    let ownKeysCalled = false;
+    const overLimitEntities = new Proxy([firstEntity, secondEntity, firstEntity, secondEntity], {
+      ownKeys: (target) => {
+        ownKeysCalled = true;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(
+      await createEngine(new FaultProvider(), { maxAffectedIdentities: 3 }).execute(
+        request({ affected: { entities: overLimitEntities } }),
+      ),
+    ).toMatchObject({ status: "validation-rejected" });
+    expect(ownKeysCalled).toBeFalse();
+  });
+
+  test("preflights provider-confirmed affected identities before key enumeration", async () => {
+    const provider = new FaultProvider();
+    let ownKeysCalled = false;
+    const overLimitEntities = new Proxy([firstEntity, secondEntity, firstEntity, secondEntity], {
+      ownKeys: (target) => {
+        ownKeysCalled = true;
+        return Reflect.ownKeys(target);
+      },
+    });
+    provider.commit = (() => ({
+      affected: { entities: overLimitEntities },
+      generation: 5,
+      revisions: [
+        { resource: "components/one", revision: "revision-5" },
+        { resource: "components/two", revision: "revision-5" },
+      ],
+      status: "committed",
+    })) as typeof provider.commit;
+
+    const result = await createEngine(provider, { maxAffectedIdentities: 3 }).execute(
+      request({
+        affected: { entities: [firstEntity, secondEntity], relations: [firstRelation] },
+      }),
+    );
+
+    expect(result).toMatchObject({ status: "indeterminate" });
+    expect(ownKeysCalled).toBeFalse();
+  });
+
+  test("shares exact value and depth budgets across request context and mutation", async () => {
+    const bounded = request({ context: { a: 1 }, mutation: { b: [true] } });
+    expect(
+      await createEngine(new FaultProvider(), { maxRequestDataValues: 5 }).execute(bounded),
+    ).toMatchObject({ status: "committed" });
+    const overLimit = new FaultProvider();
+    expect(
+      await createEngine(overLimit, { maxRequestDataValues: 4 }).execute(bounded),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-request-too-large" }],
+      status: "validation-rejected",
+    });
+    expect(overLimit.snapshotCalls).toBe(0);
+
+    const deep = request({ context: null, mutation: { a: { b: 1 } } });
+    expect(
+      await createEngine(new FaultProvider(), { maxRequestDataDepth: 3 }).execute(deep),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await createEngine(new FaultProvider(), { maxRequestDataDepth: 2 }).execute(deep),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-request-too-large" }],
+      status: "validation-rejected",
+    });
+
+    let ownKeysCalled = false;
+    const overLimitArray = new Proxy([1, 2, 3, 4, 5], {
+      ownKeys: (target) => {
+        ownKeysCalled = true;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(
+      await createEngine(new FaultProvider(), { maxRequestDataValues: 4 }).execute(
+        request({ context: null, mutation: overLimitArray }),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-request-too-large" }],
+      status: "validation-rejected",
+    });
+    expect(ownKeysCalled).toBeFalse();
+  });
+
+  test("counts every shared-DAG request occurrence and freezes feasible copies", async () => {
+    const shared = { value: 1 };
+    const context = { left: shared, right: shared };
+    let proposal: ProposedTransaction | undefined;
+    const provider = new FaultProvider();
+    const exact = createEngine(provider, { maxRequestDataValues: 6 });
+    exact.registerInvariant({
+      id: "capture-request-budget",
+      validate: (value) => {
+        proposal = value;
+        return [];
+      },
+    });
+    expect(await exact.execute(request({ context, mutation: null }))).toMatchObject({
+      status: "committed",
+    });
+    const copied = proposal?.context as
+      | { readonly left: { readonly value: number }; readonly right: { readonly value: number } }
+      | undefined;
+    expect(copied).toEqual({ left: { value: 1 }, right: { value: 1 } });
+    expect(copied?.left).not.toBe(copied?.right);
+    expect(Object.isFrozen(copied)).toBeTrue();
+    expect(Object.isFrozen(copied?.left)).toBeTrue();
+
+    expect(
+      await createEngine(new FaultProvider(), { maxRequestDataValues: 5 }).execute(
+        request({ context, mutation: null }),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-request-too-large" }],
+      status: "validation-rejected",
+    });
+  });
+
+  test("applies exact value and depth budgets independently to snapshot state", async () => {
+    const exactValues = new FaultProvider();
+    exactValues.state = { a: 1 };
+    expect(
+      await createEngine(exactValues, { maxSnapshotStateValues: 2 }).execute(request()),
+    ).toMatchObject({ status: "committed" });
+    const overValues = new FaultProvider();
+    overValues.state = { a: 1 };
+    expect(
+      await createEngine(overValues, { maxSnapshotStateValues: 1 }).execute(request()),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-snapshot-state-too-large" }],
+      phase: "snapshot",
+      status: "provider-failure",
+    });
+
+    const exactDepth = new FaultProvider();
+    exactDepth.state = { a: { b: 1 } };
+    expect(
+      await createEngine(exactDepth, { maxSnapshotStateDepth: 3 }).execute(request()),
+    ).toMatchObject({ status: "committed" });
+    const overDepth = new FaultProvider();
+    overDepth.state = { a: { b: 1 } };
+    expect(
+      await createEngine(overDepth, { maxSnapshotStateDepth: 2 }).execute(request()),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-snapshot-state-too-large" }],
+      phase: "snapshot",
+      status: "provider-failure",
+    });
+  });
+
+  test("counts every shared-DAG snapshot occurrence and freezes feasible copies", async () => {
+    const shared = { value: 1 };
+    let proposal: ProposedTransaction | undefined;
+    const provider = new FaultProvider();
+    provider.state = { left: shared, right: shared };
+    const exact = createEngine(provider, { maxSnapshotStateValues: 5 });
+    exact.registerInvariant({
+      id: "capture-snapshot-budget",
+      validate: (value) => {
+        proposal = value;
+        return [];
+      },
+    });
+    expect(await exact.execute(request())).toMatchObject({ status: "committed" });
+    const copied = proposal?.priorState as
+      | { readonly left: { readonly value: number }; readonly right: { readonly value: number } }
+      | undefined;
+    expect(copied?.left).not.toBe(copied?.right);
+    expect(Object.isFrozen(copied)).toBeTrue();
+    expect(Object.isFrozen(copied?.right)).toBeTrue();
+
+    const overLimit = new FaultProvider();
+    overLimit.state = { left: shared, right: shared };
+    expect(
+      await createEngine(overLimit, { maxSnapshotStateValues: 4 }).execute(request()),
+    ).toMatchObject({
+      diagnostics: [{ code: "transaction-snapshot-state-too-large" }],
+      phase: "snapshot",
+      status: "provider-failure",
+    });
   });
 });

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 05:00'
+updated_date: '2026-07-12 05:24'
 labels:
   - core
   - transactions
@@ -55,5 +55,7 @@ Dependency corrected before execution: the transaction engine publishes the comm
 
 Context-hunter classification: L2 foundational Core transaction boundary. GROM-11 is merged and supplies graph generations and committed-event contracts. GROM-10 will coordinate generic snapshot/revision, invariant, prepare, commit, and recovery capabilities only; filesystem, Markdown, local-resource, and journal technology remain outside Core. The full proposal and expected revisions must be validated before provider prepare. Confirmed durable success advances exactly one generation and returns one canonical committed event; uncertain provider completion remains an explicit indeterminate outcome rather than success or rollback fiction.
 
-Implemented the Core transaction engine and technology-neutral provider protocol. Requests, provider snapshots, proposals, invariant diagnostics, prepare/commit responses, and recovery receipts are runtime-validated and defensively frozen. Provider prepare atomically rechecks base generation and revisions; committed and recovered events derive from provider-confirmed durable evidence. Added a 16-test fault-injecting provider suite covering stale expectations, full proposal invariant order/aggregation, concurrent prepare races, known and uncertain commit failures, all recovery outcomes, event ordering, forged shapes/accessors, immutable aliases, recovery forgery, and repeated idempotent recovery. Verification: focused 16 tests/76 assertions; full 86 tests/367 assertions; bun run check; four standalone target builds.
+Implemented the Core transaction engine and technology-neutral provider protocol. Requests, provider snapshots, proposals, invariant diagnostics, prepare/commit responses, and recovery receipts are runtime-validated and defensively frozen. Provider prepare atomically rechecks base generation and revisions; committed and recovered events derive from provider-confirmed durable evidence. Added a fault-injecting provider suite covering stale expectations, full proposal invariant order/aggregation, concurrent prepare races, known and uncertain commit failures, all recovery outcomes, event ordering, forged shapes/accessors, immutable aliases, recovery forgery, and repeated idempotent recovery.
+
+Quality-review hardening: bound provider result fields exactly to their status; malformed commit or recovery confirmations remain indeterminate. Added required configurable limits for affected identities, shared request GraphData depth/value occurrences, and independent snapshot-state depth/value occurrences. Structural copying counts repeated DAG paths, preflights dense arrays and affected-ID arrays before key enumeration when over limit, and preserves existing payload behavior when no structural budget is supplied. Invariant diagnostic details reject nested or oversized values descriptor-first. Added constructor, exact/N+1, deep-chain, shared-DAG, freezing, status-variant, and Proxy regressions. Verification: focused transaction suite 25 tests/143 assertions; full 95 tests/434 assertions; bun run check; all four standalone targets; git diff --check.
 <!-- SECTION:NOTES:END -->
