@@ -638,6 +638,67 @@ describe("staged atomic replacement", () => {
     if (read.ok) expect(textDecoder.decode(read.value.bytes)).toBe("initialized");
   });
 
+  test("restores owner access on new parent chains under a restrictive umask", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const parentPaths = [
+      path.join(roots.workspaceRoot, "groma"),
+      path.join(roots.workspaceRoot, "groma", "nested"),
+      path.join(roots.workspaceRoot, "groma", "nested", "deeper"),
+    ];
+    const previousUmask = process.umask(0o777);
+    let stagedSuccessfully = false;
+    let committed = false;
+    let parentModes: number[] = [];
+    try {
+      const staged = await provider.stageReplacement(
+        locator("groma", "nested", "deeper", "state.md"),
+        textEncoder.encode("new"),
+      );
+      stagedSuccessfully = staged.ok;
+      if (staged.ok) {
+        parentModes = await Promise.all(
+          parentPaths.map(async (parent) => (await lstat(parent)).mode & 0o777),
+        );
+        committed = (await provider.commitReplacement(staged.value)).state === "committed";
+      }
+    } finally {
+      process.umask(previousUmask);
+    }
+
+    expect(stagedSuccessfully).toBeTrue();
+    expect(parentModes).toEqual([0o700, 0o700, 0o700]);
+    expect(committed).toBeTrue();
+  });
+
+  test("preserves umask-allowed group and other bits on new parent directories", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const previousUmask = process.umask(0o000);
+    let parentModes: number[] = [];
+    try {
+      const staged = await provider.stageReplacement(
+        locator("shared", "nested", "state.md"),
+        textEncoder.encode("new"),
+      );
+      if (staged.ok) {
+        parentModes = await Promise.all(
+          [
+            path.join(roots.workspaceRoot, "shared"),
+            path.join(roots.workspaceRoot, "shared", "nested"),
+          ].map(async (parent) => (await lstat(parent)).mode & 0o777),
+        );
+        await provider.discardReplacement(staged.value);
+      }
+    } finally {
+      process.umask(previousUmask);
+    }
+
+    expect(parentModes).toEqual([0o777, 0o777]);
+  });
+
   test("retries ancestor durability before staging after an initial sync failure", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();
@@ -1146,6 +1207,29 @@ describe("same-machine coordination", () => {
     } finally {
       await chmod(coordinationRoot, 0o700);
     }
+  });
+
+  test("repairs a newly created custom coordination root under a restrictive umask", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    await rm(coordinationRoot, { recursive: true });
+    const previousUmask = process.umask(0o777);
+    let rootMode: number | undefined;
+    let coordinated: Result<string> | undefined;
+    try {
+      const provider = await createLocalResourceProvider(roots);
+      rootMode = (await lstat(coordinationRoot)).mode & 0o777;
+      coordinated = await provider.withCoordination(
+        { context: "local-machine", locator: locator("new-custom-root") },
+        () => "coordinated",
+      );
+    } finally {
+      process.umask(previousUmask);
+    }
+
+    expect(rootMode).toBe(0o700);
+    expect(coordinated).toEqual({ ok: true, value: "coordinated" });
   });
 
   test("requires owner write and search permissions on POSIX coordination roots", async () => {
@@ -1738,6 +1822,48 @@ describe("same-machine coordination", () => {
     expect(diagnosticCode(invalidToken)).toBe("resource-coordination-contended");
     expect(invalidTokenCalled).toBeFalse();
     expect((await lstat(lockPath)).isDirectory()).toBeTrue();
+  });
+
+  test("keeps symlink lock and reaping artifacts contended despite stale valid owners", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    const departed = Bun.spawn({
+      cmd: [process.execPath, "-e", "await Bun.sleep(10_000)"],
+      stderr: "ignore",
+      stdout: "ignore",
+    });
+    const deadPid = departed.pid;
+    departed.kill();
+    await departed.exited;
+
+    for (const suffix of ["lock", "reaping"] as const) {
+      const lockLocator = locator(`linked-${suffix}`);
+      const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
+      const artifactPath = path.join(coordinationRoot, `${identity}.${suffix}`);
+      const outsideArtifact = path.join(path.dirname(roots.workspaceRoot), `outside-${suffix}`);
+      await mkdir(outsideArtifact, { mode: 0o700 });
+      await writeFile(
+        path.join(outsideArtifact, "owner.json"),
+        JSON.stringify({ createdAt: 0, pid: deadPid, token: randomUUID() }),
+        { mode: 0o600 },
+      );
+      await symlink(outsideArtifact, artifactPath, "dir");
+      const provider = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
+      let called = false;
+
+      const result = await provider.withCoordination(
+        { context: "local-machine", locator: lockLocator },
+        () => {
+          called = true;
+        },
+      );
+
+      expect(diagnosticCode(result)).toBe("resource-coordination-contended");
+      expect(called).toBeFalse();
+      expect((await lstat(artifactPath)).isSymbolicLink()).toBeTrue();
+      expect((await lstat(path.join(outsideArtifact, "owner.json"))).isFile()).toBeTrue();
+    }
   });
 
   test("reaps a killed valid owner while concurrent reapers and acquirers fail safe", async () => {

@@ -403,8 +403,10 @@ export async function createLocalResourceProvider(
   if (isWithin(canonicalRoot, preflightCoordinationRoot)) {
     throw new TypeError("coordinationRoot must be a directory outside the canonical workspace");
   }
+  let coordinationRootExisted = false;
   try {
     const existing = await lstat(requestedCoordinationRoot);
+    coordinationRootExisted = true;
     if (existing.isSymbolicLink()) {
       throw new TypeError("coordinationRoot must not be a symbolic link or junction");
     }
@@ -418,13 +420,16 @@ export async function createLocalResourceProvider(
     throw new TypeError("coordinationRoot must be a non-link directory");
   }
   if (process.platform !== "win32") {
+    if (!coordinationRootExisted || options.coordinationRoot === undefined) {
+      await chmod(requestedCoordinationRoot, 0o700);
+      coordinationStats = await lstat(requestedCoordinationRoot);
+      if (coordinationStats.isSymbolicLink() || !coordinationStats.isDirectory()) {
+        throw new TypeError("coordinationRoot must be a non-link directory");
+      }
+    }
     const currentUser = process.getuid?.();
     if (currentUser === undefined || coordinationStats.uid !== currentUser) {
       throw new TypeError("coordinationRoot must be owned by the current user");
-    }
-    if (options.coordinationRoot === undefined) {
-      await chmod(requestedCoordinationRoot, 0o700);
-      coordinationStats = await lstat(requestedCoordinationRoot);
     }
     if ((coordinationStats.mode & 0o077) !== 0) {
       throw new TypeError("coordinationRoot must not grant group or other permissions");
@@ -1121,8 +1126,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     let current = this.#root;
     for (let index = 0; index < segments.length - 1; index += 1) {
       current = path.join(current, segments[index]!);
+      let created = false;
       try {
         await mkdir(current);
+        created = true;
       } catch (error) {
         if (errorCode(error) !== "EEXIST") {
           return failure(resourceError(error, "create a resource parent directory"));
@@ -1142,6 +1149,26 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             "Replacement parent paths must be directories and must not be links",
           ),
         );
+      }
+      if (created && process.platform !== "win32") {
+        const actualMode = stats.mode & 0o7777;
+        const usableMode = actualMode | 0o700;
+        if (usableMode !== actualMode) {
+          try {
+            await chmod(current, usableMode);
+            stats = await lstat(current);
+          } catch (error) {
+            return failure(resourceError(error, "make a resource parent directory usable"));
+          }
+          if (stats.isSymbolicLink() || !stats.isDirectory()) {
+            return failure(
+              diagnostic(
+                "resource-unsupported-kind",
+                "Replacement parent paths must be directories and must not be links",
+              ),
+            );
+          }
+        }
       }
       let canonical: string;
       try {
@@ -1401,8 +1428,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       : success(undefined);
   }
 
-  async #readOwner(ownerPath: string): Promise<CoordinationOwner | undefined> {
+  async #readOwner(artifactPath: string): Promise<CoordinationOwner | undefined> {
     try {
+      const artifactStats = await lstat(artifactPath);
+      if (artifactStats.isSymbolicLink() || !artifactStats.isDirectory()) return undefined;
+      const ownerPath = path.join(artifactPath, "owner.json");
       const stats = await lstat(ownerPath);
       if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumOwnerBytes)
         return undefined;
@@ -1509,7 +1539,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     owner: CoordinationOwner,
     label: string,
   ): Promise<Result<string>> {
-    const current = await this.#readOwner(path.join(canonicalPath, "owner.json"));
+    const current = await this.#readOwner(canonicalPath);
     if (current === undefined || current.token !== owner.token) {
       return failure(
         diagnostic(
@@ -1535,7 +1565,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const reapingPath = path.join(this.#coordinationRoot, `${identity}.reaping`);
     try {
       if (await this.#coordinationPathExists(reapingPath)) {
-        const reapingOwner = await this.#readOwner(path.join(reapingPath, "owner.json"));
+        const reapingOwner = await this.#readOwner(reapingPath);
         if (
           reapingOwner === undefined ||
           Date.now() - reapingOwner.createdAt < this.#staleLockMilliseconds ||
@@ -1573,7 +1603,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       return success(owner);
     }
     if (first.diagnostics[0]?.code !== "resource-coordination-contended") return first;
-    const existing = await this.#readOwner(path.join(lockPath, "owner.json"));
+    const existing = await this.#readOwner(lockPath);
     if (
       existing === undefined ||
       Date.now() - existing.createdAt < this.#staleLockMilliseconds ||
@@ -1586,7 +1616,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     if (!guarded.ok) return first;
     let quarantinePath: string | undefined;
     try {
-      const confirmed = await this.#readOwner(path.join(lockPath, "owner.json"));
+      const confirmed = await this.#readOwner(lockPath);
       if (
         confirmed === undefined ||
         confirmed.token !== existing.token ||

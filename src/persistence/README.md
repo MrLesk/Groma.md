@@ -44,12 +44,16 @@ Staging owns first-time workspace initialization. It creates a missing parent ch
 one segment at a time, handles a concurrent creator through `EEXIST`, and then
 revalidates every segment with `lstat` and `realpath` as an in-workspace, non-link
 directory. On POSIX, every validated ancestor has its containing directory synced in
-top-down order. This makes newly or concurrently created entries durable and retries a
-prior failed sync even when `mkdir` later reports `EEXIST`. Syncing only the eventual
-target parent after file rename is insufficient when one or more ancestor directory
-entries were also created for the first time. Windows skips unsupported directory sync
-and retains only the documented atomic-rename/process-crash guarantee. Configuration
-and canonical stores therefore do not need raw filesystem bootstrap access.
+top-down order. A newly created POSIX parent also has owner read, write, and search
+permissions restored before the provider descends further; this ORs `0700` into the
+actual permission bits and preserves any group or other access allowed by the caller's
+umask. This makes newly or concurrently created entries durable and retries a prior
+failed sync even when `mkdir` later reports `EEXIST`. Syncing only the eventual target
+parent after file rename is insufficient when one or more ancestor directory entries
+were also created for the first time. Windows skips POSIX mode repair and unsupported
+directory sync, retaining only the documented atomic-rename/process-crash guarantee.
+Configuration and canonical stores therefore do not need raw filesystem bootstrap
+access.
 
 ### Reads
 
@@ -161,6 +165,10 @@ owners remain contended. Stale replacement reacquisition is capped; repeated nam
 replacement returns `resource-coordination-retry-exhausted` instead of recursing
 without bound. Owner tokens must match the exact lowercase UUID v4 shape emitted by
 `randomUUID`; looser hyphenated strings are treated as malformed and remain contended.
+The `.lock` or `.reaping` artifact containing `owner.json` must itself be a real,
+non-link directory; symlink and junction artifacts remain contended and are never
+accepted as stale ownership evidence. The documented namespace race assumption still
+applies between artifact `lstat` and bounded owner-file read.
 
 If the callback throws, coordination returns `coordination-action-failed`. If release
 then fails, `coordination-release-failed` includes `details.actionCompleted`: `true`
@@ -175,11 +183,13 @@ a resulting candidate inside the workspace; custom missing roots therefore requi
 existing parent. The final canonical root is checked again after creation. POSIX roots
 must be owned by the current user, grant owner write and search, and grant no group/other
 bits; the provider securely tightens its own user-scoped default to mode `0700`. A custom
-coordination root is a POSIX-only host option. Windows rejects that option before any
-filesystem access and always uses the provider-created default beneath its per-user
-temporary directory and platform ACL behavior. Cross-compilation is not a claim of
-native Windows permission verification. Volatile claims, quarantines, owner tokens,
-PIDs, and times never enter `groma/` or Git state.
+coordination root observed as missing is likewise repaired to mode `0700` after creation,
+while a pre-existing custom root is validated without mutation. A custom coordination
+root is a POSIX-only host option. Windows rejects that option before any filesystem
+access and always uses the provider-created default beneath its per-user temporary
+directory and platform ACL behavior. Cross-compilation is not a claim of native Windows
+permission verification. Volatile claims, quarantines, owner tokens, PIDs, and times
+never enter `groma/` or Git state.
 
 The coordination guarantee covers process crashes and same-machine concurrency. On
 Windows, atomic publication begins at the rename of the already complete candidate;
