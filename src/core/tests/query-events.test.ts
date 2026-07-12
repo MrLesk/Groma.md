@@ -968,6 +968,67 @@ describe("bounded query contracts", () => {
     });
   });
 
+  test("isolates cursor decoding from mutable String prototype methods", () => {
+    const contracts = createContracts();
+    const query = { order: "id" };
+    const firstPage = contracts.page(prepareFirst(contracts, 4, query, 1), [entity("1")], {
+      hasMore: true,
+      nextAnchor: entity("1"),
+    });
+    if (!firstPage.ok || firstPage.value.nextCursor === undefined) {
+      throw new Error("expected emitted cursor");
+    }
+    const startsWith = Object.getOwnPropertyDescriptor(String.prototype, "startsWith");
+    const slice = Object.getOwnPropertyDescriptor(String.prototype, "slice");
+    if (startsWith === undefined || slice === undefined) {
+      throw new Error("expected intrinsic String methods");
+    }
+    let pollutedCalls = 0;
+    let thrown: unknown;
+    let valid: ReturnType<BoundedQueryContracts["prepare"]> | undefined;
+    let malformedEnvelope: ReturnType<BoundedQueryContracts["prepare"]> | undefined;
+    let malformedEncoding: ReturnType<BoundedQueryContracts["prepare"]> | undefined;
+    const polluted = () => {
+      pollutedCalls += 1;
+      throw new Error("cursor decoding must use captured String intrinsics");
+    };
+    try {
+      Object.defineProperty(String.prototype, "startsWith", {
+        configurable: true,
+        value: polluted,
+      });
+      Object.defineProperty(String.prototype, "slice", {
+        configurable: true,
+        value: polluted,
+      });
+      try {
+        valid = contracts.prepare(4, query, { cursor: firstPage.value.nextCursor, limit: 1 });
+        malformedEnvelope = contracts.prepare(4, query, { cursor: "not-a-cursor", limit: 1 });
+        malformedEncoding = contracts.prepare(4, query, {
+          cursor: "groma.cursor.v1:%",
+          limit: 1,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+    } finally {
+      Object.defineProperty(String.prototype, "startsWith", startsWith);
+      Object.defineProperty(String.prototype, "slice", slice);
+    }
+
+    expect(thrown).toBeUndefined();
+    expect(pollutedCalls).toBe(0);
+    expect(valid).toMatchObject({ ok: true });
+    expect(malformedEnvelope).toMatchObject({
+      diagnostics: [{ code: "malformed-continuation-cursor" }],
+      ok: false,
+    });
+    expect(malformedEncoding).toMatchObject({
+      diagnostics: [{ code: "malformed-continuation-cursor" }],
+      ok: false,
+    });
+  });
+
   test("rejects a non-advancing continuation anchor after canonical comparison", () => {
     const contracts = createContracts();
     const firstPrepared = prepareFirst(contracts, 9, { order: "id" }, 1);

@@ -117,6 +117,8 @@ const cursorBeforeQuery = ',"query":';
 const cursorAfterQuery = ',"version":1}';
 const intrinsicEncodeURIComponent = globalThis.encodeURIComponent;
 const intrinsicDecodeURIComponent = globalThis.decodeURIComponent;
+const intrinsicStartsWith = String.prototype.startsWith;
+const intrinsicSlice = String.prototype.slice;
 
 interface CursorRawStateParts {
   readonly anchorCanonicalJson: string;
@@ -447,14 +449,14 @@ export class BoundedQueryContracts {
         "Continuation cursor exceeds the configured size budget",
       );
     }
-    if (!cursor.startsWith(cursorPrefix)) {
+    if (!Reflect.apply(intrinsicStartsWith, cursor, [cursorPrefix])) {
       return cursorFailure(
         "malformed-continuation-cursor",
         "Continuation cursor has an invalid envelope",
       );
     }
 
-    const suffix = cursor.slice(cursorPrefix.length);
+    const suffix = Reflect.apply(intrinsicSlice, cursor, [cursorPrefix.length]);
     let decodedState: string;
     let parsed: unknown;
     try {
