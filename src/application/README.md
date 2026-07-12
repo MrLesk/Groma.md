@@ -23,3 +23,7 @@ source component. Reparenting is a separate operation, and removal fails closed 
 children and every incident relationship have been handled explicitly. Mutation
 outcomes retain semantic generations, affected stable identities, and component
 revisions while omitting transaction resource keys and provider recovery secrets.
+Updates, reparenting, and removal require the caller's current component revision;
+stale revisions return an explicit conflict without guessing or overwriting. All
+validation and transaction diagnostics are copied into presentation-neutral outcomes
+with canonical resource details removed.

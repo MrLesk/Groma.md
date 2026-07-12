@@ -1,10 +1,11 @@
 ---
 id: GROM-15
 title: Implement shared workspace and intent operations
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-11 22:38'
+updated_date: '2026-07-12 21:22'
 labels:
   - operations
 milestone: m-1
@@ -27,31 +28,6 @@ ordinal: 12000
 Expose one presentation-neutral application path for initializing a workspace and creating, reading, listing, updating, reparenting, and explicitly removing recursive standard-model components. Every mutation must use the same transaction, invariant, revision, persistence, and event contracts regardless of its future surface.
 <!-- SECTION:DESCRIPTION:END -->
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Implementation Plan
-
-<!-- SECTION:PLAN:BEGIN -->
-1. Define workspace and recursive component operation request and result contracts.
-2. Implement initialization, exact reads, bounded lists, and parent or child traversal over injected capabilities.
-3. Implement root and nested creation, sparse update, atomic reparenting, and explicit removal as semantic transactions.
-4. Return revisions, generations, cursors, and typed diagnostics without presentation concerns.
-5. Run reusable operation suites against in-memory and local Markdown compositions.
-<!-- SECTION:PLAN:END -->
-
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Initialization creates the minimal valid canonical Groma workspace transactionally and reports already-initialized or conflicting state without overwriting it
@@ -62,3 +38,31 @@ Expose one presentation-neutral application path for initializing a workspace an
 - [ ] #6 No operation reads or writes Markdown, filesystem resources, or host state directly
 - [ ] #7 Operation-level tests run against both in-memory fault fixtures and the official local persistence composition and produce equivalent domain results
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Define presentation-neutral workspace/component request, page, revision, mutation-outcome, and injected-capability contracts in src/application. Workspace initialization delegates to an atomic capability so the application layer does not freeze the local configuration format owned by GROM-16.
+2. Build a validated Standard Model view from Core transaction-provider snapshots through injected GraphKernel and model capabilities. Map stable component IDs to opaque Core resource keys through an injected mapper; never import persistence implementations.
+3. Implement exact component reads plus deterministic bounded all-component, root, child, and relationship pages with BoundedQueryContracts cursors bound to graph generation and query context. Use a bounded generation-retry handshake when a second snapshot is needed to attach page content revisions.
+4. Implement root/nested create with minted or supplied stable identity and optional outgoing ordinary relationships. Normalize complete or sparse component data, mint relation identities through the graph capability, and commit one Standard Model transaction with expected absence.
+5. Implement sparse update (including outgoing relationship upsert/removal), explicit reparent, and explicit leaf/relation-free remove. Require the current component revision, reject relation hijacking/cascade ambiguity before mutation, register all affected identities, and route every write through the injected TransactionEngine.
+6. Translate Core outcomes into presentation-neutral component revisions, generations, affected identities, and typed diagnostics without resource locators or surface formatting. Keep indeterminate/provider/conflict states explicit.
+7. Add a reusable operation conformance suite over an in-memory transaction provider, covering initialization idempotence/conflict, sparse and rich components, recursive same/mixed types, ordinary cross-branch relationships, pagination/cursors, revisions/conflicts, reparent, and explicit removal.
+8. Run the same domain conformance cases through a host-boundary test composed with the real Local Resource Provider, Markdown store, journal, TransactionEngine, Standard Model invariant, graph, and query contracts; assert equivalent results and canonical restart persistence.
+9. Run focused/full checks and all four targets, independent specification and quality reviews, then publish a ready task-linked PR and complete Claude/Codex/CI gates before finalization and merge.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Context-hunter classification: L3 application boundary. GROM-15 must expose one presentation-neutral operation path over injected graph/query/transaction capabilities, keep Markdown/filesystem/host policy outside application code, and prove equivalent domain behavior with in-memory and official local persistence compositions. Discovery and final plan in progress.
+
+Discovery decision: initialization is a semantic application operation over an injected atomic workspace capability; GROM-15 intentionally does not freeze YAML/configuration bytes or access local resources. Component relationships are scoped to outgoing relations owned by that component document. Explicit removal fails closed unless the component is a leaf with no incident ordinary relationships; this prevents implicit cascades and lets callers remove relations or reparent children through supported operations first. Read pages use Core bounded cursors and attach semantic component revisions without exposing storage locators.
+
+Implementation completed in three reviewable slices. The application boundary now exposes injected-only initialization; exact component reads with bounded outgoing relationships; deterministic bounded all/root/child pages; root and nested create; sparse update with outgoing relationship upsert/removal; explicit reparent; and explicit leaf, relation-free removal. Every mutation builds the Standard Model transaction envelope, uses intent ownership with an empty pinned set, supplies exact component-resource revision expectations, and executes only through the injected transaction execution capability. Application results retain stable IDs, semantic generations, component revisions, and copied diagnostics while omitting resource keys and recovery resources/tokens.
+
+A reusable provider-neutral conformance workflow exercises two roots, recursive same- and mixed-type containment, sparse and rich meaning, namespaced extensions and items, a cross-branch outgoing relation, all page families and continuation, sparse update, valid reparent, stale conflict/no change, explicit relationship cleanup, and leaf removal. The same normalized trace passes with the in-memory TransactionEngine plus registered Standard invariant and with the official local composition of LocalResourceProvider, MarkdownIntentStore, MarkdownIntentTransactionAdapter, LocalTransactionJournal, TransactionEngine, graph/query contracts, and Standard invariant. A fresh composition over the same local workspace confirms generation 10, identical five-component semantics and hierarchy, stable IDs, present revisions, zero remaining relationships, and five canonical Markdown documents. The workspace initializer remains an injected semantic test capability; no production configuration bytes or GROM-16 format were introduced.
+
+Validation evidence: focused application+host tests 18 passed with 96 assertions; full bun run check 283 passed with 1,425 assertions including format, typecheck, architecture boundaries, build, and smoke; bun run check:targets verified Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct src/application/index.ts compilation succeeded for bun-darwin-arm64, bun-linux-x64-baseline, bun-windows-x64-baseline, and bun-windows-aarch64. git diff --check and cumulative application-boundary import/leak review passed.
+<!-- SECTION:NOTES:END -->

@@ -31,6 +31,10 @@ import {
   type ApplicationOperationsOptions,
   type WorkspaceInitializationOutcome,
 } from "../index.ts";
+import {
+  exerciseApplicationOperations,
+  expectedApplicationOperationsTrace,
+} from "./conformance.ts";
 
 const ids = {
   domain: "ent_00000000000000000000000000000001",
@@ -534,6 +538,11 @@ function committedRevision(outcome: ApplicationMutationOutcome<unknown>): string
 }
 
 describe("application component mutations", () => {
+  test("matches the reusable provider-neutral semantic workflow", async () => {
+    const trace = await exerciseApplicationOperations(mutationOperations().api);
+    expect(trace).toEqual(expectedApplicationOperationsTrace);
+  });
+
   test("creates rich roots and nested components with supplied and minted stable identities", async () => {
     const fixture = mutationOperations();
     const root = await fixture.api.createComponent({
