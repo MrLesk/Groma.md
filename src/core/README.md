@@ -48,6 +48,10 @@ is exceeded. The serializer never consults object or array `toJSON` hooks—incl
 polluted inherited hooks—and page length is preflighted before any item is traversed.
 The shared payload walker has a separate copy-only mode for graph and model data; it
 performs the same validation and freezing without constructing or discarding JSON.
+Array minimum sizes and cursor envelope sizes are checked before key enumeration or
+percent encoding when the result cannot fit. The exact encoded cursor length remains
+the final authority because Unicode and reserved JSON punctuation expand during
+encoding.
 
 Exact-read items and page items also cross this boundary as canonical `GraphData`.
 Core defensively copies and deeply freezes them, normalizes negative zero to zero, and
@@ -67,7 +71,9 @@ Cursors carry their format version, graph generation, canonical query context, a
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
 formats, changed query context, and stale generations. Completed pages—including a
 page whose item count exactly equals its limit—have no cursor unless the provider
-explicitly knows that more results exist.
+explicitly knows that more results exist. A continued page cannot issue a cursor with
+an anchor canonically equal to its previous anchor; providers must advance or return
+an explicit failure instead of creating an infinite continuation loop.
 
 `graph.committed` events contain only the resulting generation and sorted,
 deduplicated stable entity and relation identities. Event consumers accept exactly

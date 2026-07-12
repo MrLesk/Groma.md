@@ -186,7 +186,6 @@ function copyGraphData(
           "arrays must use the intrinsic Array prototype without subclasses or custom prototypes",
         );
       }
-      const ownKeys = Reflect.ownKeys(value);
       const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
       if (
         lengthDescriptor === undefined ||
@@ -197,6 +196,11 @@ function copyGraphData(
         return unsupportedPayload(owner, path, "arrays must have an intrinsic data length");
       }
       const arrayLength = lengthDescriptor.value;
+      if (emitCanonicalJson) {
+        if (remaining < 2) return tooLarge();
+        if (arrayLength > 0 && arrayLength > (remaining - 1) / 2) return tooLarge();
+      }
+      const ownKeys = Reflect.ownKeys(value);
       for (let keyIndex = 0; keyIndex < ownKeys.length; keyIndex += 1) {
         const key = ownKeys[keyIndex]!;
         if (typeof key === "symbol") {
@@ -217,8 +221,6 @@ function copyGraphData(
           );
         }
       }
-      if (emitCanonicalJson && remaining < 2) return tooLarge();
-
       activeContainers.add(value);
       try {
         const copiedItems: GraphData[] = [];

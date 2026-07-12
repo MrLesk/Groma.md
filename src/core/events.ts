@@ -40,7 +40,37 @@ export interface AffectedIdentityInput {
 function uniqueSorted<TIdentity extends string>(
   values: readonly TIdentity[],
 ): readonly TIdentity[] {
-  return Object.freeze([...new Set(values)].sort());
+  let source = new Array<TIdentity>(values.length);
+  for (let index = 0; index < values.length; index += 1) source[index] = values[index]!;
+  let target = new Array<TIdentity>(values.length);
+  for (let width = 1; width < values.length; width *= 2) {
+    for (let start = 0; start < values.length; start += width * 2) {
+      const proposedMiddle = start + width;
+      const proposedEnd = start + width * 2;
+      const middle = proposedMiddle < values.length ? proposedMiddle : values.length;
+      const end = proposedEnd < values.length ? proposedEnd : values.length;
+      let left = start;
+      let right = middle;
+      let output = start;
+      while (left < middle && right < end) {
+        if (source[left]! <= source[right]!) target[output++] = source[left++]!;
+        else target[output++] = source[right++]!;
+      }
+      while (left < middle) target[output++] = source[left++]!;
+      while (right < end) target[output++] = source[right++]!;
+    }
+    const previous = source;
+    source = target;
+    target = previous;
+  }
+
+  const unique: TIdentity[] = [];
+  for (let index = 0; index < source.length; index += 1) {
+    if (index === 0 || source[index] !== source[index - 1]) {
+      unique[unique.length] = source[index]!;
+    }
+  }
+  return Object.freeze(unique);
 }
 
 export function createGraphCommittedEvent(
@@ -69,16 +99,18 @@ export function createGraphCommittedEvent(
   );
   if (!relationCandidates.ok) return relationCandidates;
   const entities: EntityId[] = [];
-  for (const candidate of entityCandidates.value) {
+  for (let index = 0; index < entityCandidates.value.length; index += 1) {
+    const candidate = entityCandidates.value[index]!;
     const identity = parseEntityId(candidate);
     if (!identity.ok) return identity;
-    entities.push(identity.value);
+    entities[entities.length] = identity.value;
   }
   const relations: RelationId[] = [];
-  for (const candidate of relationCandidates.value) {
+  for (let index = 0; index < relationCandidates.value.length; index += 1) {
+    const candidate = relationCandidates.value[index]!;
     const identity = parseRelationId(candidate);
     if (!identity.ok) return identity;
-    relations.push(identity.value);
+    relations[relations.length] = identity.value;
   }
 
   return success(
@@ -107,11 +139,13 @@ function inspectIdentityArray(
       });
     }
     const ownKeys = Reflect.ownKeys(value);
-    if (ownKeys.some((key) => typeof key === "symbol")) {
-      return failure({
-        code: "invalid-affected-identities",
-        message: `Affected ${identityKind} identities must not contain symbol properties`,
-      });
+    for (let index = 0; index < ownKeys.length; index += 1) {
+      if (typeof ownKeys[index] === "symbol") {
+        return failure({
+          code: "invalid-affected-identities",
+          message: `Affected ${identityKind} identities must not contain symbol properties`,
+        });
+      }
     }
     const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
     if (
@@ -126,14 +160,22 @@ function inspectIdentityArray(
       });
     }
     const arrayLength = lengthDescriptor.value as number;
-    const keys = (ownKeys as string[]).sort();
-    if (keys.length !== arrayLength + 1 || !keys.includes("length")) {
+    const keys = ownKeys as string[];
+    let hasLength = false;
+    for (let index = 0; index < keys.length; index += 1) {
+      if (keys[index] === "length") {
+        hasLength = true;
+        break;
+      }
+    }
+    if (keys.length !== arrayLength + 1 || !hasLength) {
       return failure({
         code: "invalid-affected-identities",
         message: `Affected ${identityKind} identities must be dense without extra properties`,
       });
     }
-    for (const key of keys) {
+    for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+      const key = keys[keyIndex]!;
       if (key === "length") continue;
       const index = Number(key);
       if (
@@ -162,7 +204,7 @@ function inspectIdentityArray(
           message: `Affected ${identityKind} identities must be primitive string data values`,
         });
       }
-      identities.push(descriptor.value);
+      identities[identities.length] = descriptor.value;
     }
     return success(Object.freeze(identities));
   } catch {

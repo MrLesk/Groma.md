@@ -576,6 +576,24 @@ describe("bounded query contracts", () => {
     expect(anchorGetterInvoked).toBeFalse();
   });
 
+  test("rejects impossible array budgets before enumerating keys", () => {
+    let ownKeysInvocations = 0;
+    const query = new Proxy(new Array(10_000), {
+      ownKeys: () => {
+        ownKeysInvocations += 1;
+        throw new Error("minimum array size must fail before ownKeys");
+      },
+    });
+    const result = createContracts({ maxQueryContextCharacters: 8 }).prepare(1, query, {
+      limit: 1,
+    });
+    expect(result).toMatchObject({
+      diagnostics: [{ code: "query-context-too-large" }],
+      ok: false,
+    });
+    expect(ownKeysInvocations).toBe(0);
+  });
+
   test("rejects impossible flat-record budgets before sorting keys or reading values", () => {
     const originalSort = Object.getOwnPropertyDescriptor(Array.prototype, "sort");
     if (originalSort === undefined || typeof originalSort.value !== "function") {
@@ -686,6 +704,59 @@ describe("bounded query contracts", () => {
     }
   });
 
+  test("preflights raw cursor size before encoding and still catches Unicode expansion", () => {
+    const encodeDescriptor = Object.getOwnPropertyDescriptor(globalThis, "encodeURIComponent");
+    if (encodeDescriptor === undefined || typeof encodeDescriptor.value !== "function") {
+      throw new Error("expected global encodeURIComponent");
+    }
+    let encodeInvocations = 0;
+    let impossible: ReturnType<BoundedQueryContracts["page"]> | undefined;
+    const tiny = createContracts({ maxCursorCharacters: 1 });
+    const tinyPrepared = prepareFirst(tiny, 1, {}, 1);
+    try {
+      Object.defineProperty(globalThis, "encodeURIComponent", {
+        configurable: true,
+        value: () => {
+          encodeInvocations += 1;
+          throw new Error("raw cursor lower bound must fail before encoding");
+        },
+      });
+      impossible = tiny.page(tinyPrepared, [1], { hasMore: true, nextAnchor: 1 });
+    } finally {
+      Object.defineProperty(globalThis, "encodeURIComponent", encodeDescriptor);
+    }
+    expect(impossible).toMatchObject({
+      diagnostics: [{ code: "continuation-cursor-too-large" }],
+      ok: false,
+    });
+    expect(encodeInvocations).toBe(0);
+
+    const prefix = "groma.cursor.v1:";
+    const roomy = createContracts({ maxCursorCharacters: 4_096 });
+    const roomyPrepared = prepareFirst(roomy, 1, { label: "😀" }, 1);
+    const roomyPage = roomy.page(roomyPrepared, [1], {
+      hasMore: true,
+      nextAnchor: { label: "😀" },
+    });
+    if (!roomyPage.ok || roomyPage.value.nextCursor === undefined) {
+      throw new Error("expected Unicode cursor");
+    }
+    const encodedCursor = roomyPage.value.nextCursor;
+    const rawCursorLength =
+      prefix.length + decodeURIComponent(encodedCursor.slice(prefix.length)).length;
+    expect(encodedCursor.length).toBeGreaterThan(rawCursorLength);
+
+    const tight = createContracts({ maxCursorCharacters: rawCursorLength });
+    const tightPage = tight.page(prepareFirst(tight, 1, { label: "😀" }, 1), [1], {
+      hasMore: true,
+      nextAnchor: { label: "😀" },
+    });
+    expect(tightPage).toMatchObject({
+      diagnostics: [{ code: "continuation-cursor-too-large" }],
+      ok: false,
+    });
+  });
+
   test("ignores inherited toJSON pollution while binding and continuing cursors", () => {
     const objectToJson = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
     const arrayToJson = Object.getOwnPropertyDescriptor(Array.prototype, "toJSON");
@@ -788,6 +859,43 @@ describe("bounded query contracts", () => {
       ok: false,
     });
   });
+
+  test("rejects a non-advancing continuation anchor after canonical comparison", () => {
+    const contracts = createContracts();
+    const firstPrepared = prepareFirst(contracts, 9, { order: "id" }, 1);
+    const firstPage = contracts.page(firstPrepared, [entity("1")], {
+      hasMore: true,
+      nextAnchor: { id: entity("1"), order: ["id", "ascending"] },
+    });
+    if (!firstPage.ok || firstPage.value.nextCursor === undefined) {
+      throw new Error("expected first cursor");
+    }
+    const continued = contracts.prepare(
+      9,
+      { order: "id" },
+      {
+        cursor: firstPage.value.nextCursor,
+        limit: 1,
+      },
+    );
+    if (!continued.ok) throw new Error("expected prepared continuation");
+
+    expect(
+      contracts.page(continued.value, [entity("2")], {
+        hasMore: true,
+        nextAnchor: { order: ["id", "ascending"], id: entity("1") },
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "non-advancing-continuation-anchor" }],
+      ok: false,
+    });
+    expect(
+      contracts.page(continued.value, [entity("2")], {
+        hasMore: true,
+        nextAnchor: { order: ["id", "ascending"], id: entity("2") },
+      }),
+    ).toMatchObject({ ok: true, value: { hasMore: true } });
+  });
 });
 
 describe("committed graph event contracts", () => {
@@ -807,6 +915,48 @@ describe("committed graph event contracts", () => {
         type: "graph.committed",
       },
     });
+  });
+
+  test("orders and sequences events without mutable Array prototype methods", () => {
+    const sort = Object.getOwnPropertyDescriptor(Array.prototype, "sort");
+    const some = Object.getOwnPropertyDescriptor(Array.prototype, "some");
+    const includes = Object.getOwnPropertyDescriptor(Array.prototype, "includes");
+    if (sort === undefined || some === undefined || includes === undefined) {
+      throw new Error("expected intrinsic Array methods");
+    }
+    let pollutedCalls = 0;
+    let created: ReturnType<typeof createGraphCommittedEvent> | undefined;
+    let sequenced: ReturnType<typeof sequenceGraphCommittedEvent> | undefined;
+    const polluted = () => {
+      pollutedCalls += 1;
+      throw new Error("event contracts must not call mutable Array methods");
+    };
+    try {
+      Object.defineProperty(Array.prototype, "sort", { configurable: true, value: polluted });
+      Object.defineProperty(Array.prototype, "some", { configurable: true, value: polluted });
+      Object.defineProperty(Array.prototype, "includes", { configurable: true, value: polluted });
+      created = createGraphCommittedEvent(2, {
+        entities: [entity("3"), entity("1"), entity("2"), entity("1")],
+        relations: [relation("2"), relation("1")],
+      });
+      if (created.ok) sequenced = sequenceGraphCommittedEvent(1, created.value);
+    } finally {
+      Object.defineProperty(Array.prototype, "sort", sort);
+      Object.defineProperty(Array.prototype, "some", some);
+      Object.defineProperty(Array.prototype, "includes", includes);
+    }
+
+    expect(pollutedCalls).toBe(0);
+    expect(created).toMatchObject({
+      ok: true,
+      value: {
+        affected: {
+          entities: [entity("1"), entity("2"), entity("3")],
+          relations: [relation("1"), relation("2")],
+        },
+      },
+    });
+    expect(sequenced).toMatchObject({ ok: true, value: { generation: 2, status: "accepted" } });
   });
 
   test("rejects invalid affected identities and generations", () => {
