@@ -1038,10 +1038,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     let current = this.#root;
     for (let index = 0; index < segments.length - 1; index += 1) {
       current = path.join(current, segments[index]!);
-      let created = false;
       try {
         await mkdir(current);
-        created = true;
       } catch (error) {
         if (errorCode(error) !== "EEXIST") {
           return failure(resourceError(error, "create a resource parent directory"));
@@ -1076,12 +1074,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           ),
         );
       }
-      if (created) {
-        await this.#syncReplacementDirectory(
-          path.dirname(current),
-          "replacement-parent-creation-sync",
-        );
-      }
+      await this.#syncReplacementDirectory(
+        path.dirname(current),
+        "replacement-parent-creation-sync",
+      );
     }
     return success(undefined);
   }

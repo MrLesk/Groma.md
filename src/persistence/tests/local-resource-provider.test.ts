@@ -561,22 +561,38 @@ describe("staged atomic replacement", () => {
     if (read.ok) expect(textDecoder.decode(read.value.bytes)).toBe("initialized");
   });
 
-  test("aborts staging when a newly created ancestor cannot be made durable", async () => {
+  test("retries ancestor durability before staging after an initial sync failure", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();
     const targetPath = path.join(roots.workspaceRoot, "groma", "nested", "state.md");
+    let syncAttempts = 0;
     const provider = await createLocalResourceProvider({
       ...roots,
-      faultInjector: injectedOnce("replacement-parent-creation-sync"),
+      faultInjector: (phase) => {
+        if (phase !== "replacement-parent-creation-sync") return;
+        syncAttempts += 1;
+        if (syncAttempts === 1) throw new Error("injected ancestor sync failure");
+      },
     });
 
-    const staged = await provider.stageReplacement(
+    const first = await provider.stageReplacement(
       locator("groma", "nested", "state.md"),
       textEncoder.encode("new"),
     );
 
-    expect(diagnosticCode(staged)).toBe("replacement-stage-failed");
+    expect(diagnosticCode(first)).toBe("replacement-stage-failed");
     await expect(lstat(targetPath)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const retried = await provider.stageReplacement(
+      locator("groma", "nested", "state.md"),
+      textEncoder.encode("new"),
+    );
+
+    expect(retried.ok).toBeTrue();
+    expect(syncAttempts).toBe(3);
+    await expect(lstat(targetPath)).rejects.toMatchObject({ code: "ENOENT" });
+    if (retried.ok)
+      expect((await provider.commitReplacement(retried.value)).state).toBe("committed");
   });
 
   test("handles concurrent creation of the same missing parent chain", async () => {

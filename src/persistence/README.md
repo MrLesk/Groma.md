@@ -40,12 +40,13 @@ namespace.
 Staging owns first-time workspace initialization. It creates a missing parent chain
 one segment at a time, handles a concurrent creator through `EEXIST`, and then
 revalidates every segment with `lstat` and `realpath` as an in-workspace, non-link
-directory. On POSIX, each newly created ancestor is made durable immediately by
-syncing its containing directory in top-down order. Syncing only the eventual target
-parent after file rename is insufficient when one or more ancestor directory entries
-were also created for the first time. Windows skips unsupported directory sync and
-retains only the documented atomic-rename/process-crash guarantee. Configuration and
-canonical stores therefore do not need raw filesystem bootstrap access.
+directory. On POSIX, every validated ancestor has its containing directory synced in
+top-down order. This makes newly or concurrently created entries durable and retries a
+prior failed sync even when `mkdir` later reports `EEXIST`. Syncing only the eventual
+target parent after file rename is insufficient when one or more ancestor directory
+entries were also created for the first time. Windows skips unsupported directory sync
+and retains only the documented atomic-rename/process-crash guarantee. Configuration
+and canonical stores therefore do not need raw filesystem bootstrap access.
 
 ### Reads
 
