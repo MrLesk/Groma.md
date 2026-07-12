@@ -1,11 +1,11 @@
 ---
 id: GROM-13
 title: Implement deterministic Markdown intent persistence
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 13:18'
+updated_date: '2026-07-12 13:25'
 labels:
   - persistence
   - markdown
@@ -16,6 +16,17 @@ dependencies:
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
+documentation:
+  - ARCHITECTURE.md
+  - src/persistence/README.md
+modified_files:
+  - ARCHITECTURE.md
+  - bun.lock
+  - package.json
+  - src/persistence/README.md
+  - src/persistence/index.ts
+  - src/persistence/markdown-intent-store.ts
+  - src/persistence/tests/markdown-intent-store.test.ts
 priority: high
 ordinal: 10000
 ---
@@ -28,13 +39,13 @@ Persist standard-model components as deterministic, human-readable Markdown unde
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Root and recursively nested components, open types, structural parents, and ordinary relationships round-trip between the standard model and readable Markdown without semantic loss
-- [ ] #2 Canonical files are sharded and named by stable identity so renaming, moving, or reparenting a component does not change entity identity
-- [ ] #3 Equivalent semantic state serializes to byte-identical output with deterministic type, parent, field, embedded-item, relationship, extension, and file ordering
-- [ ] #4 No volatile timestamps, absolute machine paths, evidence, bindings, or derived status are written into intent files
-- [ ] #5 Unknown namespaced extensions survive load, unrelated mutation, and rewrite byte-stably where canonical normalization permits
-- [ ] #6 Every loaded document has a deterministic content revision and malformed, duplicated, conflicted, cyclic, or wrong-kind documents produce actionable diagnostics
-- [ ] #7 Direct store APIs cannot bypass the standard model codec and do not receive scanner observations
+- [x] #1 Root and recursively nested components, open types, structural parents, and ordinary relationships round-trip between the standard model and readable Markdown without semantic loss
+- [x] #2 Canonical files are sharded and named by stable identity so renaming, moving, or reparenting a component does not change entity identity
+- [x] #3 Equivalent semantic state serializes to byte-identical output with deterministic type, parent, field, embedded-item, relationship, extension, and file ordering
+- [x] #4 No volatile timestamps, absolute machine paths, evidence, bindings, or derived status are written into intent files
+- [x] #5 Unknown namespaced extensions survive load, unrelated mutation, and rewrite byte-stably where canonical normalization permits
+- [x] #6 Every loaded document has a deterministic content revision and malformed, duplicated, conflicted, cyclic, or wrong-kind documents produce actionable diagnostics
+- [x] #7 Direct store APIs cannot bypass the standard model codec and do not receive scanner observations
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -65,4 +76,12 @@ Final specification numeric/input follow-up: exact integer lexemes outside Numbe
 Final numeric emission quality fix: canonical serialization now wraps every finite integer-valued Number outside the safe-integer range in an untagged yaml Scalar with EXP format. This prevents yaml from emitting ambiguous plain integer lexemes while preserving the decoder's strict rejection of user-authored inexact integers. Regressions cover 1000000000000000100, 1.2345678901234568e20, the negative counterpart, nested component/item/relation extensions, no explicit !!float tag, and byte-identical rewrite. Validation: focused Markdown intent suite 27 passed (124 assertions); bun run typecheck passed; git diff --check passed.
 
 Claude/Codex review fixes: serialize now rejects complete column-zero Git conflict blocks with intent-conflict-marker while lone separator prose remains valid. Intent bytes use intrinsic typed-array tag/buffer/offset/length inspection and raw-buffer copies, accepting Buffer/Uint8Array subclasses without species or subclass constructors, rejecting wrong typed arrays/proxies, and returning isolated plain Uint8Array snapshots whose mutation cannot invalidate revisions. The __proto__ regression now proves an own data property survives. Bounded loads reject empty non-final pages and cap pages at maxDocuments + 256 shards + one terminal page. Validation: focused Markdown intent suite 30 passed (144 assertions); bun run typecheck passed; git diff --check passed.
+
+Final validation at 8750d421d252bdddf31c9016f72e276bd3f93aaa: bun run check passed 215 tests with 997 assertions; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; independent specification and quality reviews passed. Ready PR #11 passed both CI jobs. Claude review and Codex review of 3ac6ffc were independently assessed and their actionable findings were fixed; Codex exact-head retry produced only a service usage-limit notice, not new code feedback.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the deterministic groma/v0.1 Markdown intent store with stable-ID sharding, reversible prose, outgoing relationships, exact revisions, bounded provider loading, strict lossless YAML/numeric handling, graph diagnostics, extension preservation, and defensive runtime copying. Documented the canonical format and verified it with 30 focused tests, the full 215-test suite, independent spec/quality review, ready PR review, CI, and all four supported Bun binary targets.
+<!-- SECTION:FINAL_SUMMARY:END -->
