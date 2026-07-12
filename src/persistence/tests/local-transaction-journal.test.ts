@@ -149,6 +149,68 @@ async function stageArtifacts(directory: string): Promise<string[]> {
   return artifacts;
 }
 
+async function crashTransactionProcess(
+  roots: Awaited<ReturnType<typeof workspace>>,
+  mode: "create" | "delete",
+  phase: LocalResourceFaultPhase,
+  locator: WorkspaceResourceLocator,
+  occurrence: number,
+): Promise<void> {
+  let armedResolve!: () => void;
+  let armedReject!: (error: Error) => void;
+  const armed = new Promise<void>((resolve, reject) => {
+    armedResolve = resolve;
+    armedReject = reject;
+  });
+  const child = Bun.spawn({
+    cmd: [
+      process.execPath,
+      transactionCrashChild,
+      roots.workspaceRoot,
+      roots.coordinationRoot ?? "-",
+      mode,
+      phase,
+      String(locator),
+      String(occurrence),
+    ],
+    ipc(message) {
+      if (typeof message !== "object" || message === null || !("type" in message)) return;
+      if (message.type === "armed") armedResolve();
+      if (message.type === "unexpected-completion") {
+        armedReject(new Error("crash fixture completed without reaching its fault boundary"));
+      }
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  try {
+    await within(
+      Promise.race([
+        armed,
+        child.exited.then(async (code) => {
+          if (code === 86) return;
+          const stderr = await new Response(child.stderr).text();
+          throw new Error(`crash fixture exited before arming (${code}): ${stderr}`);
+        }),
+      ]),
+      5_000,
+      "transaction crash fixture arming",
+    );
+    expect(await within(child.exited, 5_000, "transaction crash boundary")).toBe(86);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill();
+      await Promise.race([child.exited, Bun.sleep(2_000)]);
+    }
+    try {
+      child.disconnect();
+    } catch {
+      // The deliberately terminated child may already have closed IPC.
+    }
+    child.unref();
+  }
+}
+
 interface ProviderOverrides {
   readonly acquireCoordination?: LocalResourceProvider["acquireCoordination"];
   readonly commitReplacement?: LocalResourceProvider["commitReplacement"];
@@ -551,59 +613,13 @@ describe("local transaction journal", () => {
           : crashCase.locator === "shop"
             ? shopLocator.value
             : ordersLocator.value;
-      let armedResolve!: () => void;
-      let armedReject!: (error: Error) => void;
-      const armed = new Promise<void>((resolve, reject) => {
-        armedResolve = resolve;
-        armedReject = reject;
-      });
-      const child = Bun.spawn({
-        cmd: [
-          process.execPath,
-          transactionCrashChild,
-          roots.workspaceRoot,
-          roots.coordinationRoot ?? "-",
-          crashCase.mode,
-          crashCase.phase,
-          String(faultLocator),
-          String(crashCase.occurrence),
-        ],
-        ipc(message) {
-          if (typeof message !== "object" || message === null || !("type" in message)) return;
-          if (message.type === "armed") armedResolve();
-          if (message.type === "unexpected-completion") {
-            armedReject(new Error("crash fixture completed without reaching its fault boundary"));
-          }
-        },
-        stderr: "pipe",
-        stdout: "pipe",
-      });
-      try {
-        await within(
-          Promise.race([
-            armed,
-            child.exited.then(async (code) => {
-              if (code === 86) return;
-              const stderr = await new Response(child.stderr).text();
-              throw new Error(`crash fixture exited before arming (${code}): ${stderr}`);
-            }),
-          ]),
-          5_000,
-          "transaction crash fixture arming",
-        );
-        expect(await within(child.exited, 5_000, "transaction crash boundary")).toBe(86);
-      } finally {
-        if (child.exitCode === null) {
-          child.kill();
-          await Promise.race([child.exited, Bun.sleep(2_000)]);
-        }
-        try {
-          child.disconnect();
-        } catch {
-          // The deliberately terminated child may already have closed IPC.
-        }
-        child.unref();
-      }
+      await crashTransactionProcess(
+        roots,
+        crashCase.mode,
+        crashCase.phase,
+        faultLocator,
+        crashCase.occurrence,
+      );
 
       const stateAfterExit = JSON.parse(
         await readFile(
@@ -685,6 +701,45 @@ describe("local transaction journal", () => {
       }
     });
   }
+
+  test("cleans recovery-created stages after an unconfirmed startup target", async () => {
+    const roots = await workspace();
+    const shopLocator = markdownIntentLocator(entityId(1));
+    if (!shopLocator.ok) throw new Error("invalid recovery-cleanup target locator");
+    await crashTransactionProcess(roots, "create", "after-rename", localTransactionStateLocator, 2);
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ generation: 1, phase: "committing" });
+
+    let failedBeforeRename = false;
+    const restarted = await harness(
+      roots,
+      undefined,
+      (phase, context) => {
+        if (!failedBeforeRename && phase === "rename" && context?.locator === shopLocator.value) {
+          failedBeforeRename = true;
+          throw new Error("interrupt recovered target before rename");
+        }
+      },
+      true,
+    );
+    const requested = [resourceFor(entityId(1)), resourceFor(entityId(2))];
+    await expect(restarted.provider.snapshot(requested)).rejects.toThrow(
+      "interrupted transaction cannot be settled",
+    );
+    expect(failedBeforeRename).toBeTrue();
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+
+    const settled = await restarted.provider.snapshot(requested);
+    expect(settled.generation).toBe(1);
+    expect(settled.revisions.filter((entry) => entry.revision !== null)).toHaveLength(2);
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+  });
 
   test("rejects optimistic races and preserves a projection watermark through settlement", async () => {
     const roots = await workspace();
@@ -1206,6 +1261,31 @@ describe("local transaction journal", () => {
       generation: 1,
       status: "committed",
     });
+  });
+
+  test("retains a freshly acquired recovery lease until release can be retried", async () => {
+    const roots = await workspace();
+    const interrupted = await harness(roots, (phase) => {
+      if (phase === "after-committing-state") throw new Error("interrupt before targets");
+    });
+    const outcome = await interrupted.engine.execute(createRequest());
+    expect(outcome.status).toBe("indeterminate");
+    if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+
+    let releaseCalls = 0;
+    const restarted = await harness(roots, undefined, (phase) => {
+      if (phase !== "coordination-release") return;
+      releaseCalls += 1;
+      if (releaseCalls === 1) throw new Error("interrupt fresh recovery lease release");
+    });
+    expect(await restarted.engine.recover(outcome.recovery)).toMatchObject({
+      status: "indeterminate",
+    });
+    expect(await restarted.engine.recover(outcome.recovery)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(releaseCalls).toBe(2);
   });
 
   test("rolls forward a mixed replacement and deletion from exact old/new revisions", async () => {

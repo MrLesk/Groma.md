@@ -91,6 +91,12 @@ while the pending record still retains their locators. Only then is idle state w
 with the new generation, making the generation marker the last canonical change.
 Unknown tokens, malformed state, external divergence, cleanup failure, and lease
 release failure stay indeterminate or fail closed.
+Replacement handles created during either commit or startup recovery are attached to
+their transaction token before the provider commit begins. An unconfirmed target is
+discarded through that token record before recovery returns indeterminate, including
+the snapshot/startup path. Successfully discarded handle slots are cleared, but the
+record survives a cleanup failure for retry; handle-only records are removed after
+confirmed cleanup, while lease-bearing records remain until lease release succeeds.
 Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes

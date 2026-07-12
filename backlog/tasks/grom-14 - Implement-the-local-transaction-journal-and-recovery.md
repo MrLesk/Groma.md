@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 19:46'
+updated_date: '2026-07-12 19:57'
 labels:
   - persistence
   - transactions
@@ -68,4 +68,6 @@ Quality-review corrections: journal publication now retries the same staged hand
 Post-correction validation: focused journal/resource suite 101 tests / 531 assertions; full check 254 tests / 1256 assertions including formatting, typecheck, boundaries, build, and smoke; check:targets passes macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct local-transaction-journal compilation passes all four targets. Ready for exact-commit specification and quality re-review.
 
 Exact-review durability fixes: fresh-process roll-forward no longer treats matching replacement bytes as sufficient. Without a live handle it re-stages the exact replacement stored in the deterministic journal, requires a provider-confirmed commit, and verifies exact result readback before settlement. The real child-process crash matrix now passes portable locator context through the resource fault callback and proves every durable committing state performs at least one confirmed target replacement/reassertion during fresh default-stale recovery before subsequent work. Prepare also rejects groma/transaction-state.json as a canonical target before journal publication even when proposal expectations and a generic adapter agree; a real-provider damaging regression proves the journal stays absent, snapshot remains usable, and a later valid transaction commits. Validation: focused persistence 102 tests / 545 assertions; full check 255 tests / 1270 assertions; all four standalone targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
+
+Final specification cleanup fix: token-scoped live preparation records now track every recovery-created replacement handle before provider commit, clear handle slots only after successful discard, retain cleanup-pending records across failures, remove handle-only records after confirmed cleanup, and retain lease-bearing records until release succeeds. Freshly acquired finish/recovery leases are attached to the token record so a failed release remains retryable. Roll-forward cleans tracked stages before returning an unconfirmed target and also on injected target-phase faults, covering both explicit recover and snapshot/startup settlement. Added a real child-process regression that leaves a durable committing record, fails the first fresh snapshot at target pre-rename, settles on the second snapshot, and proves zero stage artifacts, plus a fresh recovery lease-release retry regression. Validation: focused journal/provider 104 tests / 557 assertions; full check 257 tests / 1282 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
 <!-- SECTION:NOTES:END -->

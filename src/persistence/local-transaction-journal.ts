@@ -149,8 +149,9 @@ interface PendingState {
 type JournalState = IdleState | PendingState;
 
 interface LivePreparation {
-  readonly handles: readonly (StagedReplacementHandle | undefined)[];
-  readonly lease: LocalCoordinationLease;
+  readonly handles: (StagedReplacementHandle | undefined)[];
+  lease?: LocalCoordinationLease;
+  stagesCleaned: boolean;
 }
 
 class JournalCommitUnconfirmedError extends Error {
@@ -913,16 +914,23 @@ export function createLocalTransactionJournal(
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
     const released = await options.resources.releaseCoordination(lease);
     if (!released.ok) return false;
-    live.delete(token);
+    const preparation = live.get(token);
+    if (preparation?.lease === lease) {
+      delete preparation.lease;
+      if (preparation.stagesCleaned) live.delete(token);
+    }
     return true;
   };
   const discardLiveStages = async (token: string, state: PendingState): Promise<void> => {
     const preparation = live.get(token);
     if (preparation !== undefined) {
-      for (const handle of preparation.handles) {
+      preparation.stagesCleaned = false;
+      for (let index = 0; index < preparation.handles.length; index += 1) {
+        const handle = preparation.handles[index];
         if (handle !== undefined) {
           const discarded = await options.resources.discardReplacement(handle);
           if (!discarded.ok) throw new Error(discarded.diagnostics[0]?.message);
+          preparation.handles[index] = undefined;
         }
       }
     }
@@ -933,6 +941,10 @@ export function createLocalTransactionJournal(
       if (!cleaned.ok && cleaned.diagnostics[0]?.code !== "resource-missing") {
         throw new Error(cleaned.diagnostics[0]?.message);
       }
+    }
+    if (preparation !== undefined) {
+      preparation.stagesCleaned = true;
+      if (preparation.lease === undefined) live.delete(token);
     }
   };
   const settlementResult = (settlement: StoredSettlement): TransactionCommitResultInput => {
@@ -958,7 +970,8 @@ export function createLocalTransactionJournal(
   };
   const applyTarget = async (
     target: StoredTarget,
-    handle?: StagedReplacementHandle,
+    targetIndex: number,
+    preparation: LivePreparation,
   ): Promise<boolean> => {
     const locator = parseWorkspaceResourceLocator(target.locator);
     if (!locator.ok) return false;
@@ -971,12 +984,13 @@ export function createLocalTransactionJournal(
       }
       if (removed.state !== "committed") return false;
     } else {
-      let staged = handle;
+      let staged = preparation.handles[targetIndex];
       if (staged === undefined) {
         const bytes = Buffer.from(target.replacement, "base64url");
         const created = await options.resources.stageReplacement(locator.value, bytes);
         if (!created.ok) return false;
         staged = created.value;
+        preparation.handles[targetIndex] = staged;
       }
       let committed = await options.resources.commitReplacement(staged);
       if (committed.state === "committed-indeterminate") {
@@ -987,16 +1001,30 @@ export function createLocalTransactionJournal(
     return (await readExact(locator.value, limits.maxTargetBytes)).revision === target.result;
   };
   const rollForward = async (state: PendingState): Promise<TransactionCommitResultInput> => {
-    await writeState(state);
-    await options.faultInjector?.("after-committing-state");
-    const preparation = live.get(state.token);
-    for (let index = 0; index < state.targets.length; index += 1) {
-      if (!(await applyTarget(state.targets[index]!, preparation?.handles[index]))) {
-        return Object.freeze({ status: "indeterminate" });
-      }
-      await options.faultInjector?.("after-target", index);
+    let preparation = live.get(state.token);
+    if (preparation === undefined) {
+      preparation = {
+        handles: Array.from({ length: state.targets.length }, () => undefined),
+        stagesCleaned: false,
+      };
+      live.set(state.token, preparation);
     }
-    await options.faultInjector?.("before-settled-state");
+    preparation.stagesCleaned = false;
+    await writeState(state);
+    try {
+      await options.faultInjector?.("after-committing-state");
+      for (let index = 0; index < state.targets.length; index += 1) {
+        if (!(await applyTarget(state.targets[index]!, index, preparation))) {
+          await discardLiveStages(state.token, state);
+          return Object.freeze({ status: "indeterminate" });
+        }
+        await options.faultInjector?.("after-target", index);
+      }
+      await options.faultInjector?.("before-settled-state");
+    } catch (error) {
+      await discardLiveStages(state.token, state);
+      throw error;
+    }
     await discardLiveStages(state.token, state);
     const revisions = Object.freeze(
       state.targets.map((target) =>
@@ -1144,7 +1172,7 @@ export function createLocalTransactionJournal(
       await writeState(pending);
       await options.faultInjector?.("after-prepared-state");
       const handles: (StagedReplacementHandle | undefined)[] = [];
-      live.set(token, { handles, lease: acquired.value });
+      live.set(token, { handles, lease: acquired.value, stagesCleaned: false });
       for (let index = 0; index < targets.length; index += 1) {
         const target = targets[index]!;
         if (target.replacement === undefined) {
@@ -1171,8 +1199,12 @@ export function createLocalTransactionJournal(
           // A later snapshot/recovery will deterministically roll back the prepared record.
         }
       }
-      const released = await options.resources.releaseCoordination(acquired.value);
-      if (!released.ok)
+      const preparation = token === undefined ? undefined : live.get(token);
+      const released =
+        token !== undefined && preparation?.lease === acquired.value
+          ? await release(token, acquired.value)
+          : (await options.resources.releaseCoordination(acquired.value)).ok;
+      if (!released)
         throw new Error("local transaction preparation could not release coordination");
       throw new Error("local transaction preparation failed");
     }
@@ -1191,6 +1223,12 @@ export function createLocalTransactionJournal(
       });
       if (!acquired.ok) return Object.freeze({ status: "indeterminate" });
       lease = acquired.value;
+      if (preparation === undefined) {
+        preparation = { handles: [], lease, stagesCleaned: true };
+        live.set(token, preparation);
+      } else {
+        preparation.lease = lease;
+      }
     }
     let result: TransactionCommitResultInput;
     try {
