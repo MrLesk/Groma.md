@@ -4,3 +4,4 @@ export * from "./graph.ts";
 export * from "./identity.ts";
 export * from "./query.ts";
 export * from "./result.ts";
+export * from "./transaction.ts";

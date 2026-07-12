@@ -8,7 +8,7 @@ export interface GraphDataRecord {
 
 export type GraphData = GraphDataScalar | GraphDataRecord | readonly GraphData[];
 
-type PayloadOwner = "entity" | "query" | "relation";
+type PayloadOwner = "entity" | "query" | "relation" | "transaction";
 
 export interface CanonicalGraphDataCopy {
   readonly canonicalJson: string;

@@ -89,3 +89,38 @@ Forged events whose affected arrays are valid but unsorted or duplicated are rej
 rather than normalized during consumption.
 Provider-specific storage, projection, or transport details do not enter these
 contracts.
+
+## Transaction contracts
+
+`TransactionEngine` is the single Core coordination path for semantic writes. A
+request carries one canonical mutation, expected content revisions (including
+explicit expected absence), affected graph identities, and technology-neutral
+context such as ownership. The provider supplies a consistent prior semantic state,
+current revisions, and base graph generation. Core copies and deeply freezes all of
+those values into one complete proposal.
+
+Registered invariants run synchronously in deterministic registration order. Every
+invariant receives the same proposal object, including prior state and ownership
+context, and all diagnostics are aggregated before provider preparation begins. An
+invariant cannot write or short-circuit later invariants. A provider's `prepare`
+capability stages the complete proposal without changing canonical state and must
+atomically recheck both the base generation and every expected revision. This second
+check, rather than the preliminary snapshot alone, closes the concurrent-writer
+window.
+
+Commit results distinguish validation rejection, optimistic conflict, provider
+failure known not to have committed, and an indeterminate result that requires
+recovery. Once commit has begun, a throw, malformed provider response, or explicit
+uncertainty is never interpreted as rollback. The serializable recovery receipt
+contains only the provider's opaque preparation token and independently verifiable
+generation/resource bounds. A committed recovery result supplies affected identities
+from the provider's durable preparation evidence; caller-restored data cannot choose
+the event contents.
+
+Confirmed durable success advances exactly one generation and returns one canonical
+`graph.committed` event value plus the resulting content revisions. Core returns the
+event but does not publish it, keeping transport failures outside the durability
+decision. Provider recovery is idempotent and may classify repeated calls with the
+same committed result; the application or durable journal settles that result and
+routes its single event once. Filesystems, Markdown, journals, and surface concerns
+remain provider or application responsibilities.

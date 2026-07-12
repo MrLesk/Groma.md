@@ -1,10 +1,11 @@
 ---
 id: GROM-10
 title: Implement the Core transaction engine
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 01:50'
+updated_date: '2026-07-12 05:00'
 labels:
   - core
   - transactions
@@ -38,15 +39,21 @@ Implement deterministic semantic transactions with expected revisions, registere
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define mutation, revision, generation, provider, invariant, event, and outcome contracts.
-2. Implement deterministic validation and expected-revision conflict detection.
-3. Coordinate prepare and commit through the canonical-store capability.
-4. Publish events only after confirmed durable success and expose explicit recovery states.
-5. Add an in-memory fault-injecting provider test suite and verify technology neutrality.
+1. Define immutable technology-neutral transaction requests, opaque content revisions, complete proposed-transaction views, registered invariant contracts, and confirmed/rejected/indeterminate outcome types in Core.
+2. Validate and snapshot every mutation, expected revision, affected identity, current store snapshot, and provider response at runtime; reject duplicate or malformed revision expectations deterministically before provider prepare.
+3. Read the current provider snapshot, detect immediately stale expectations, run every registered invariant against the same complete immutable proposal, and aggregate deterministic validation diagnostics before any prepare call.
+4. Compute exactly one next graph generation and call an abstract provider prepare contract that atomically rechecks the base generation and expected revisions; map stale prepare races to conflict without canonical writes.
+5. Coordinate commit and recovery with explicit confirmed/not-committed/indeterminate provider results. Return one canonical graph.committed event only after confirmed durable success, never expose a partial success, and never infer rollback after an uncertain commit.
+6. Add boundary-local fault-injecting provider tests for malformed input, invariant aggregation/order, pre-prepare rejection, stale snapshot and concurrent prepare conflict, known commit failure, thrown/indeterminate commit, recovery to committed/not-committed/still-indeterminate, exact generation advancement, event ordering, and technology-neutral imports.
+7. Run focused and full quality gates, all four standalone targets, independent specification and quality reviews, then publish a ready task-linked PR and complete Claude/Codex review gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Dependency corrected before execution: the transaction engine publishes the committed-event contract owned by GROM-11, so GROM-11 must land first to avoid a competing event model.
+
+Context-hunter classification: L2 foundational Core transaction boundary. GROM-11 is merged and supplies graph generations and committed-event contracts. GROM-10 will coordinate generic snapshot/revision, invariant, prepare, commit, and recovery capabilities only; filesystem, Markdown, local-resource, and journal technology remain outside Core. The full proposal and expected revisions must be validated before provider prepare. Confirmed durable success advances exactly one generation and returns one canonical committed event; uncertain provider completion remains an explicit indeterminate outcome rather than success or rollback fiction.
+
+Implemented the Core transaction engine and technology-neutral provider protocol. Requests, provider snapshots, proposals, invariant diagnostics, prepare/commit responses, and recovery receipts are runtime-validated and defensively frozen. Provider prepare atomically rechecks base generation and revisions; committed and recovered events derive from provider-confirmed durable evidence. Added a 16-test fault-injecting provider suite covering stale expectations, full proposal invariant order/aggregation, concurrent prepare races, known and uncertain commit failures, all recovery outcomes, event ordering, forged shapes/accessors, immutable aliases, recovery forgery, and repeated idempotent recovery. Verification: focused 16 tests/76 assertions; full 86 tests/367 assertions; bun run check; four standalone target builds.
 <!-- SECTION:NOTES:END -->
