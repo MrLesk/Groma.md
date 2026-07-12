@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   TransactionEngine,
+  parseContentRevision,
   parseEntityId,
   parseRelationId,
   parseResourceKey,
+  success,
   type ProposedTransaction,
+  type ContentRevision,
   type ResourceKey,
 } from "../../core/index.ts";
 import {
@@ -25,12 +29,15 @@ import {
   workspaceResourceLocator,
   type LocalResourceProvider,
   type LocalResourceFaultPhase,
+  type CanonicalTransactionAdapter,
+  type CanonicalTransactionTarget,
   type LocalTransactionFaultPhase,
   type WorkspaceResourceLocator,
 } from "../index.ts";
 
 const roots: string[] = [];
 const decoder = new TextDecoder();
+const transactionCrashChild = path.join(import.meta.dir, "fixtures", "transaction-crash-child.ts");
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -88,11 +95,12 @@ async function harness(
   roots: Awaited<ReturnType<typeof workspace>>,
   faultInjector?: (phase: LocalTransactionFaultPhase, targetIndex?: number) => void,
   resourceFaultInjector?: (phase: LocalResourceFaultPhase) => void,
+  defaultStalePolicy = false,
 ) {
   const resources = await createLocalResourceProvider({
     ...roots,
     ...(resourceFaultInjector === undefined ? {} : { faultInjector: resourceFaultInjector }),
-    staleLockMilliseconds: 1,
+    ...(defaultStalePolicy ? {} : { staleLockMilliseconds: 1 }),
   });
   const model = createStandardModelCapability();
   const store = createMarkdownIntentStore({ model, resources });
@@ -112,6 +120,63 @@ async function harness(
   const registered = engine.registerInvariant(createStandardModelInvariant(invariantBounds));
   if (!registered.ok) throw new Error("invariant registration failed");
   return { engine, model, provider, resources, store };
+}
+
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function stageArtifacts(directory: string): Promise<string[]> {
+  const artifacts: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.name.startsWith(".groma-stage-")) artifacts.push(absolute);
+    if (entry.isDirectory()) artifacts.push(...(await stageArtifacts(absolute)));
+  }
+  return artifacts;
+}
+
+function forwardingProvider(
+  base: LocalResourceProvider,
+  removeResource: LocalResourceProvider["removeResource"],
+): LocalResourceProvider {
+  const provider: LocalResourceProvider = {
+    acquireCoordination: (request) => base.acquireCoordination(request),
+    cleanupReplacementStages: (locator) => base.cleanupReplacementStages(locator),
+    commitReplacement: (handle) => base.commitReplacement(handle),
+    discardReplacement: (handle) => base.discardReplacement(handle),
+    enumerate: (request) => base.enumerate(request),
+    read: (request) => base.read(request),
+    releaseCoordination: (lease) => base.releaseCoordination(lease),
+    removeResource,
+    stageReplacement: (locator, bytes) => base.stageReplacement(locator, bytes),
+    withCoordination(request, action) {
+      return base.withCoordination(request, action);
+    },
+  };
+  return Object.freeze(provider);
+}
+
+function engineFor(provider: ReturnType<typeof createLocalTransactionJournal>) {
+  const engine = new TransactionEngine({
+    maxAffectedIdentities: 100,
+    maxRequestDataDepth: 30,
+    maxRequestDataValues: 10_000,
+    maxSnapshotStateDepth: 30,
+    maxSnapshotStateValues: 100_000,
+    provider,
+  });
+  const registered = engine.registerInvariant(createStandardModelInvariant(invariantBounds));
+  if (!registered.ok) throw new Error("invariant registration failed");
+  return engine;
 }
 
 function createRequest() {
@@ -343,6 +408,193 @@ describe("local transaction journal", () => {
     });
   }
 
+  const processCrashCases: readonly {
+    readonly expectedEntities: number;
+    readonly expectedGeneration: number;
+    readonly locator: "journal" | "orders" | "shop";
+    readonly mode: "create" | "delete";
+    readonly phase: LocalResourceFaultPhase;
+  }[] = [
+    {
+      expectedEntities: 0,
+      expectedGeneration: 0,
+      locator: "journal",
+      mode: "create",
+      phase: "after-rename",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "shop",
+      mode: "create",
+      phase: "replacement-after-rename-before-mode",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "shop",
+      mode: "create",
+      phase: "replacement-target-file-sync",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "shop",
+      mode: "create",
+      phase: "replacement-parent-directory-sync",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "shop",
+      mode: "create",
+      phase: "after-rename",
+    },
+    {
+      expectedEntities: 1,
+      expectedGeneration: 2,
+      locator: "orders",
+      mode: "delete",
+      phase: "removal-parent-directory-sync",
+    },
+    {
+      expectedEntities: 1,
+      expectedGeneration: 2,
+      locator: "orders",
+      mode: "delete",
+      phase: "removal-after-unlink",
+    },
+  ];
+
+  for (const crashCase of processCrashCases) {
+    test(`recovers a real process exit at ${crashCase.phase} for ${crashCase.locator}`, async () => {
+      const roots = await workspace();
+      if (crashCase.mode === "delete") {
+        const initial = await harness(roots);
+        expect(await initial.engine.execute(createRequest())).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
+      }
+      const shopLocator = markdownIntentLocator(entityId(1));
+      const ordersLocator = markdownIntentLocator(entityId(2));
+      if (!shopLocator.ok || !ordersLocator.ok) throw new Error("invalid crash-test locators");
+      const faultLocator =
+        crashCase.locator === "journal"
+          ? localTransactionStateLocator
+          : crashCase.locator === "shop"
+            ? shopLocator.value
+            : ordersLocator.value;
+      let armedResolve!: () => void;
+      let armedReject!: (error: Error) => void;
+      const armed = new Promise<void>((resolve, reject) => {
+        armedResolve = resolve;
+        armedReject = reject;
+      });
+      const child = Bun.spawn({
+        cmd: [
+          process.execPath,
+          transactionCrashChild,
+          roots.workspaceRoot,
+          roots.coordinationRoot ?? "-",
+          crashCase.mode,
+          crashCase.phase,
+          String(faultLocator),
+        ],
+        ipc(message) {
+          if (typeof message !== "object" || message === null || !("type" in message)) return;
+          if (message.type === "armed") armedResolve();
+          if (message.type === "unexpected-completion") {
+            armedReject(new Error("crash fixture completed without reaching its fault boundary"));
+          }
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+      try {
+        await within(
+          Promise.race([
+            armed,
+            child.exited.then(async (code) => {
+              if (code === 86) return;
+              const stderr = await new Response(child.stderr).text();
+              throw new Error(`crash fixture exited before arming (${code}): ${stderr}`);
+            }),
+          ]),
+          5_000,
+          "transaction crash fixture arming",
+        );
+        expect(await within(child.exited, 5_000, "transaction crash boundary")).toBe(86);
+      } finally {
+        if (child.exitCode === null) {
+          child.kill();
+          await Promise.race([child.exited, Bun.sleep(2_000)]);
+        }
+        try {
+          child.disconnect();
+        } catch {
+          // The deliberately terminated child may already have closed IPC.
+        }
+        child.unref();
+      }
+
+      const restarted = await harness(roots, undefined, undefined, true);
+      const snapshot = await within(
+        Promise.resolve(
+          restarted.provider.snapshot([resourceFor(entityId(1)), resourceFor(entityId(2))]),
+        ),
+        5_000,
+        "default-stale transaction recovery",
+      );
+      expect(snapshot.generation).toBe(crashCase.expectedGeneration);
+      expect(snapshot.revisions.filter((entry) => entry.revision !== null)).toHaveLength(
+        crashCase.expectedEntities,
+      );
+      const loaded = await restarted.store.load();
+      if (!loaded.ok) throw new Error("expected recovered graph");
+      expect(loaded.value.entities).toHaveLength(crashCase.expectedEntities);
+      expect(loaded.value.relations).toHaveLength(crashCase.expectedEntities === 2 ? 1 : 0);
+      expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+
+      if (crashCase.expectedGeneration === 0) {
+        expect(await restarted.engine.execute(createRequest())).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
+      } else {
+        const shopDocument = loaded.value.documents.find(
+          (document) => document.entity.id === entityId(1),
+        );
+        if (shopDocument === undefined) throw new Error("recovered graph is missing Shop");
+        expect(
+          await restarted.engine.execute({
+            affected: { entities: [entityId(1)], relations: [] },
+            context: {
+              ownership: { owner: "curated", plane: "intent" },
+              pinnedComponentIds: [],
+            },
+            expectedRevisions: [
+              { expected: shopDocument.revision, resource: shopDocument.resource },
+            ],
+            mutation: {
+              components: [
+                {
+                  id: entityId(1),
+                  patch: { intent: `Recovered after ${crashCase.phase}.` },
+                  type: "patch",
+                },
+              ],
+              relationships: [],
+            },
+          }),
+        ).toMatchObject({
+          generation: crashCase.expectedGeneration + 1,
+          status: "committed",
+        });
+      }
+    });
+  }
+
   test("rejects optimistic races and preserves a projection watermark through settlement", async () => {
     const roots = await workspace();
     const resources = await createLocalResourceProvider(roots);
@@ -406,6 +658,78 @@ describe("local transaction journal", () => {
       resources,
     });
     await expect(oversized.snapshot([])).rejects.toThrow("byte bound");
+  });
+
+  test("independently rejects generic adapters that change the expected resource set", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const checkedLocator = workspaceResourceLocator("groma", "checked.md");
+    const uncheckedLocator = workspaceResourceLocator("groma", "unchecked.md");
+    if (!checkedLocator.ok || !uncheckedLocator.ok) throw new Error("invalid test locators");
+    const checkedResource = parseResourceKey(checkedLocator.value);
+    const uncheckedResource = parseResourceKey(uncheckedLocator.value);
+    if (!checkedResource.ok || !uncheckedResource.ok) throw new Error("invalid test resources");
+    const safeBytes = new TextEncoder().encode("must remain unchanged");
+    await seed(resources, uncheckedLocator.value, safeBytes);
+    const replacement = new TextEncoder().encode("unchecked replacement");
+    const replacementRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
+    );
+    const priorRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(safeBytes).digest("hex")}`,
+    );
+    if (!replacementRevision.ok || !priorRevision.ok) throw new Error("invalid test revision");
+    const target = (
+      locator: WorkspaceResourceLocator,
+      resource: ResourceKey,
+      expected: ContentRevision | null,
+    ): CanonicalTransactionTarget =>
+      Object.freeze({
+        expected,
+        locator,
+        replacement,
+        resource,
+        result: replacementRevision.value,
+      });
+    const checkedTarget = target(checkedLocator.value, checkedResource.value, null);
+    const uncheckedTarget = target(
+      uncheckedLocator.value,
+      uncheckedResource.value,
+      priorRevision.value,
+    );
+    const cases: readonly (readonly CanonicalTransactionTarget[])[] = [
+      [checkedTarget, uncheckedTarget],
+      [uncheckedTarget],
+      [],
+      [checkedTarget, checkedTarget],
+      [target(checkedLocator.value, checkedResource.value, priorRevision.value)],
+    ];
+    const proposal = {
+      affected: { entities: [], relations: [] },
+      baseGeneration: 0,
+      context: {},
+      expectedRevisions: [{ expected: null, resource: checkedResource.value }],
+      generation: 1,
+      mutation: {},
+      priorState: {},
+    } as unknown as ProposedTransaction;
+
+    for (const targets of cases) {
+      const adapter: CanonicalTransactionAdapter = Object.freeze({
+        load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
+        materialize: () =>
+          success(Object.freeze({ state: {}, targets: Object.freeze(Array.from(targets)) })),
+      });
+      const journal = createLocalTransactionJournal({ adapter, resources });
+      await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+      const unchecked = await resources.read({ locator: uncheckedLocator.value, maxBytes: 100 });
+      expect(unchecked).toMatchObject({ ok: true });
+      if (!unchecked.ok) throw new Error("expected unchecked resource");
+      expect(unchecked.value.bytes).toEqual(safeBytes);
+      expect(
+        await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
+      ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+    }
   });
 
   test("keeps externally divergent committing state indeterminate", async () => {
@@ -579,6 +903,93 @@ describe("local transaction journal", () => {
     expect(final.value.entities[0]?.payload).toMatchObject({ intent: "Updated after restart." });
     expect(final.value.relations).toEqual([]);
   });
+
+  for (const mode of ["retry-succeeds", "retry-remains-indeterminate"] as const) {
+    test(`requires confirmed deletion durability when ${mode}`, async () => {
+      const roots = await workspace();
+      const initial = await harness(roots);
+      expect(await initial.engine.execute(createRequest())).toMatchObject({ status: "committed" });
+      const loaded = await initial.store.load();
+      if (!loaded.ok) throw new Error("expected initial graph");
+      const shop = entityId(1);
+      const orders = entityId(2);
+      const shopDocument = loaded.value.documents.find((document) => document.entity.id === shop)!;
+      const ordersDocument = loaded.value.documents.find(
+        (document) => document.entity.id === orders,
+      )!;
+
+      const base = await createLocalResourceProvider(roots);
+      let forceIndeterminate = true;
+      let removalCalls = 0;
+      const resources = forwardingProvider(base, async (locator) => {
+        removalCalls += 1;
+        const actual = await base.removeResource(locator);
+        if (forceIndeterminate && (mode === "retry-remains-indeterminate" || removalCalls === 1)) {
+          return Object.freeze({
+            diagnostics: Object.freeze([
+              {
+                code: "injected-removal-indeterminate",
+                message: "Injected deletion acknowledgement uncertainty",
+              },
+            ]),
+            state: "committed-indeterminate" as const,
+          });
+        }
+        return actual;
+      });
+      const model = createStandardModelCapability();
+      const store = createMarkdownIntentStore({ model, resources });
+      const journal = createLocalTransactionJournal({
+        adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+        resources,
+      });
+      const engine = engineFor(journal);
+      const request = {
+        affected: { entities: [shop, orders], relations: [relationId(1)] },
+        context: {
+          ownership: { owner: "curated", plane: "intent" },
+          pinnedComponentIds: [],
+        },
+        expectedRevisions: [
+          { expected: shopDocument.revision, resource: shopDocument.resource },
+          { expected: ordersDocument.revision, resource: ordersDocument.resource },
+        ],
+        mutation: {
+          components: [
+            { id: shop, patch: { intent: `Deletion ${mode}.` }, type: "patch" },
+            { id: orders, type: "remove" },
+          ],
+          relationships: [{ id: relationId(1), type: "remove" }],
+        },
+      } as const;
+      const outcome = await engine.execute(request);
+      expect(removalCalls).toBe(2);
+      if (mode === "retry-succeeds") {
+        expect(outcome).toMatchObject({ generation: 2, status: "committed" });
+      } else {
+        expect(outcome.status).toBe("indeterminate");
+        if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+        expect(
+          JSON.parse(
+            await readFile(
+              path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+              "utf8",
+            ),
+          ),
+        ).toMatchObject({ generation: 2, phase: "committing" });
+        forceIndeterminate = false;
+        expect(await engine.recover(outcome.recovery)).toMatchObject({
+          generation: 2,
+          status: "committed",
+        });
+        expect(removalCalls).toBe(3);
+      }
+      const final = await store.load();
+      if (!final.ok) throw new Error("expected final graph");
+      expect(final.value.entities.map((entity) => entity.id)).toEqual([shop]);
+      expect(final.value.relations).toEqual([]);
+    });
+  }
 
   test("a prepared transaction holds coordination until commit", async () => {
     const roots = await workspace();

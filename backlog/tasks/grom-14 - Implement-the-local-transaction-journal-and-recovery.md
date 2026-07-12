@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 14:05'
+updated_date: '2026-07-12 14:26'
 labels:
   - persistence
   - transactions
@@ -60,4 +60,6 @@ Context-hunter classification: L3 crash-durability and cross-process coordinatio
 Implemented the persistence-local canonical adapter and official Markdown intent materializer; extended the local resource provider with persistent opaque leases, bounded target-specific orphan-stage cleanup, and idempotent durable removal; implemented deterministic prepared/committing/idle recovery with exact revisions, bounded last settlement, and projection watermark preservation. Added real-store integration, phase restart, concurrency, cleanup/release failure, create/replace/delete, malformed/bounded state, and four-target compilation coverage. Full check passes 231 tests / 1094 assertions; focused persistence passes 78 tests / 369 assertions; all four standalone targets and the journal module compile. Pending independent specification and quality review before PR.
 
 Persistent transaction leases now use immediate recovery only after the exact owner token is revalidated and its PID is proven dead twice; ordinary callback coordination retains the stale-age threshold. Added a real killed-child regression for both policies. Final pre-review validation: full check passes 233 tests / 1101 assertions; focused persistence passes 80 tests / 376 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
+
+Specification-review fixes: the journal now independently verifies an exact resource/expected-revision bijection against every generic adapter materialization before publishing prepared state; deletion retries committed-indeterminate and requires confirmed commit plus exact absence readback; resource fault injection carries the portable locator. Added damaging fake-adapter cases, one-shot/repeated indeterminate deletion recovery, and a no-cleanup child-process matrix that exits at journal after-rename, target rename-before-mode, target file sync, target parent sync, target after-rename acknowledgement, removal parent sync, and removal after-unlink acknowledgement. Fresh default-stale providers recover the proven-dead lease promptly, expose only complete old/new graphs, clean stages, and accept subsequent transactions. Validation: full check 243 tests / 1185 assertions; focused journal/provider 90 tests / 460 assertions; four binary targets and four direct journal targets pass.
 <!-- SECTION:NOTES:END -->

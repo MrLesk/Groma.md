@@ -56,6 +56,10 @@ policy to Core. A persistence-local adapter loads one semantic snapshot and turn
 already validated mutation into an exact, sorted set of canonical replacements and
 deletions. The official adapter uses the Standard Model and Markdown intent store;
 future canonical planes can supply the same small adapter contract.
+The journal independently requires those targets to form an exact bijection with the
+proposal's expected revisions, including the same resource and expected value. A
+faulty adapter therefore cannot add, omit, duplicate, or reclassify an unchecked
+resource before journal publication.
 
 The fixed `groma/transaction-state.json` record is the committed generation marker
 and recovery journal. It has deterministic canonical JSON, explicit byte/target
@@ -85,6 +89,9 @@ the same exact old/new classification and atomic file behavior but, like replace
 makes no unsupported power-loss directory-durability claim. The journal and provider
 compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;
 cross-compilation is not a substitute for native permission/durability verification.
+An indeterminate deletion result is retried and accepted only after the provider
+confirms `committed` and exact readback confirms absence; repeated uncertainty leaves
+the committing record recoverable.
 
 ## Local resource capability
 
@@ -209,7 +216,8 @@ same live staged handle are serialized in invocation order. Concurrent duplicate
 therefore observe the first operation's resulting state, while commit/discard overlap
 cannot delete a replacement whose earlier commit is already publishing or publish a
 stage whose earlier discard is already removing it.
-Persistence-local fault injection covers write, flush, rename, post-rename mode
+Persistence-local fault injection carries the portable target locator and covers
+write, flush, rename, post-rename mode
 finalization, target-file sync, parent creation and target-parent directory sync,
 after-rename, and cleanup boundaries without adding test behavior to Core.
 

@@ -811,6 +811,33 @@ function storedTargets(materialized: CanonicalTransactionMaterialization): reado
   return Object.freeze(sorted);
 }
 
+function verifyExpectedTargets(
+  proposal: ProposedTransaction,
+  targets: readonly StoredTarget[],
+): void {
+  const expected = Array.from(proposal.expectedRevisions).sort((left, right) =>
+    compareText(left.resource, right.resource),
+  );
+  if (expected.length !== targets.length) {
+    throw new Error(
+      "Canonical transaction targets must exactly match the proposed expected revisions",
+    );
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    const proposalEntry = expected[index]!;
+    const target = targets[index]!;
+    if (
+      (index > 0 && expected[index - 1]!.resource === proposalEntry.resource) ||
+      proposalEntry.resource !== target.resource ||
+      proposalEntry.expected !== target.expected
+    ) {
+      throw new Error(
+        "Canonical transaction targets must exactly match the proposed expected revisions",
+      );
+    }
+  }
+}
+
 function tokenFor(
   baseGeneration: number,
   generation: number,
@@ -922,8 +949,11 @@ export function createLocalTransactionJournal(
     const current = await readExact(locator.value, limits.maxReplacementBytes);
     if (current.revision !== target.result && current.revision !== target.expected) return false;
     if (target.replacement === undefined) {
-      const removed = await options.resources.removeResource(locator.value);
-      if (removed.state === "not-committed") return false;
+      let removed = await options.resources.removeResource(locator.value);
+      if (removed.state === "committed-indeterminate") {
+        removed = await options.resources.removeResource(locator.value);
+      }
+      if (removed.state !== "committed") return false;
     } else {
       if (current.revision === target.result && handle === undefined) return true;
       let staged = handle;
@@ -1064,6 +1094,7 @@ export function createLocalTransactionJournal(
           throw new Error("transaction replacement bytes exceed bound");
       }
       const targets = storedTargets(materialized.value);
+      verifyExpectedTargets(proposal, targets);
       token = tokenFor(proposal.baseGeneration, proposal.generation, proposal.affected, targets);
       const pending: PendingState = Object.freeze({
         affected: proposal.affected,

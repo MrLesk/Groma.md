@@ -48,7 +48,14 @@ export type LocalResourceFaultPhase =
   | "replacement-target-file-sync"
   | "write";
 
-export type LocalResourceFaultInjector = (phase: LocalResourceFaultPhase) => void | Promise<void>;
+export interface LocalResourceFaultContext {
+  readonly locator?: WorkspaceResourceLocator;
+}
+
+export type LocalResourceFaultInjector = (
+  phase: LocalResourceFaultPhase,
+  context?: LocalResourceFaultContext,
+) => void | Promise<void>;
 
 export interface LocalResourceProviderOptions {
   /** Absolute host configuration. It is never returned through capability results. */
@@ -804,12 +811,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
               offset += result.bytesWritten;
               if (!writeBoundaryInjected) {
                 writeBoundaryInjected = true;
-                await this.#inject("write");
+                await this.#inject("write", locator.value);
               }
             }
-            if (!writeBoundaryInjected) await this.#inject("write");
+            if (!writeBoundaryInjected) await this.#inject("write", locator.value);
             await handle.chmod(0o600);
-            await this.#inject("flush");
+            await this.#inject("flush", locator.value);
             await handle.sync();
           } finally {
             await handle.close();
@@ -904,7 +911,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             : typeof target.value.stats.mode === "bigint"
               ? Number(target.value.stats.mode & 0o777n)
               : target.value.stats.mode & 0o777;
-        await this.#inject("rename");
+        await this.#inject("rename", record.locator);
         record.intendedTargetMode = targetMode;
         await rename(record.stagePath, record.targetPath);
         liveStagePaths.delete(record.stagePath);
@@ -919,15 +926,16 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       }
       if (record.targetFileFinalized !== true) {
         if (record.targetModeApplied !== true) {
-          await this.#inject("replacement-after-rename-before-mode");
+          await this.#inject("replacement-after-rename-before-mode", record.locator);
         }
         await this.#finalizeReplacementTarget(record, record.intendedTargetMode);
       }
       await this.#syncReplacementDirectory(
         path.dirname(record.targetPath),
         "replacement-parent-directory-sync",
+        record.locator,
       );
-      await this.#inject("after-rename");
+      await this.#inject("after-rename", record.locator);
       record.state = "committed";
       return Object.freeze({ state: "committed" });
     } catch {
@@ -962,7 +970,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       await handle.chmod(mode);
       record.targetModeApplied = true;
     }
-    await this.#inject("replacement-target-file-sync");
+    await this.#inject("replacement-target-file-sync", record.locator);
     await handle.sync();
     record.targetFileFinalized = true;
     delete record.targetFinalizationHandle;
@@ -972,9 +980,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
   async #syncReplacementDirectory(
     directoryPath: string,
     phase: "replacement-parent-creation-sync" | "replacement-parent-directory-sync",
+    locator: WorkspaceResourceLocator,
   ): Promise<void> {
     if (!shouldSyncLocalReplacementDirectory(process.platform)) return;
-    await this.#inject(phase);
+    await this.#inject(phase, locator);
     const handle = await open(
       directoryPath,
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
@@ -1099,7 +1108,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       targetPath = target.value.absolutePath;
       if (target.value.stats === undefined) {
         try {
-          await this.#finalizeRemovedTarget(path.dirname(targetPath));
+          await this.#finalizeRemovedTarget(path.dirname(targetPath), locator.value);
           return Object.freeze({ state: "committed" });
         } catch {
           return removalIndeterminate();
@@ -1113,12 +1122,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           ),
         );
       }
-      await this.#inject("removal-unlink");
+      await this.#inject("removal-unlink", locator.value);
       await rm(targetPath);
     } catch (error) {
       if (errorCode(error) === "ENOENT") {
         try {
-          await this.#finalizeRemovedTarget(path.dirname(targetPath!));
+          await this.#finalizeRemovedTarget(path.dirname(targetPath!), locator.value);
           return Object.freeze({ state: "committed" });
         } catch {
           return removalIndeterminate();
@@ -1127,21 +1136,27 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       return notCommitted(resourceError(error, "remove a resource"));
     }
     try {
-      await this.#finalizeRemovedTarget(path.dirname(targetPath));
+      await this.#finalizeRemovedTarget(path.dirname(targetPath), locator.value);
       return Object.freeze({ state: "committed" });
     } catch {
       return removalIndeterminate();
     }
   }
 
-  async #finalizeRemovedTarget(directoryPath: string): Promise<void> {
-    await this.#finalizeRemovalDirectory(directoryPath);
-    await this.#inject("removal-after-unlink");
+  async #finalizeRemovedTarget(
+    directoryPath: string,
+    locator: WorkspaceResourceLocator,
+  ): Promise<void> {
+    await this.#finalizeRemovalDirectory(directoryPath, locator);
+    await this.#inject("removal-after-unlink", locator);
   }
 
-  async #finalizeRemovalDirectory(directoryPath: string): Promise<void> {
+  async #finalizeRemovalDirectory(
+    directoryPath: string,
+    locator: WorkspaceResourceLocator,
+  ): Promise<void> {
     if (!shouldSyncLocalReplacementDirectory(process.platform)) return;
-    await this.#inject("removal-parent-directory-sync");
+    await this.#inject("removal-parent-directory-sync", locator);
     const directory = await open(
       directoryPath,
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
@@ -1434,6 +1449,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       await this.#syncReplacementDirectory(
         path.dirname(current),
         "replacement-parent-creation-sync",
+        locator,
       );
     }
     return success(undefined);
@@ -1654,8 +1670,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
-  async #inject(phase: LocalResourceFaultPhase): Promise<void> {
-    await this.#faultInjector?.(phase);
+  async #inject(phase: LocalResourceFaultPhase, locator?: WorkspaceResourceLocator): Promise<void> {
+    await this.#faultInjector?.(
+      phase,
+      locator === undefined ? undefined : Object.freeze({ locator }),
+    );
   }
 
   async #cleanupPath(stagePath: string): Promise<Result<void>> {
