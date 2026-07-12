@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
 import {
   chmod,
+  chown,
   lstat,
   mkdir,
   mkdtemp,
@@ -19,6 +20,7 @@ import type { Result } from "../../core/result.ts";
 import {
   type LocalResourceFaultPhase,
   createLocalResourceProvider,
+  localResourceProviderCeilings,
 } from "../local-resource-provider.ts";
 import {
   type ResourceEnumerationPage,
@@ -44,8 +46,24 @@ async function fixture(): Promise<{ coordinationRoot: string; workspaceRoot: str
   const workspaceRoot = path.join(root, "workspace");
   const coordinationRoot = path.join(root, "coordination");
   await mkdir(workspaceRoot);
-  await mkdir(coordinationRoot);
+  await mkdir(coordinationRoot, { mode: 0o700 });
   return { coordinationRoot, workspaceRoot };
+}
+
+async function coordinationHash(
+  workspaceRoot: string,
+  resourceLocator: WorkspaceResourceLocator,
+): Promise<string> {
+  const canonicalRoot = await realpath(workspaceRoot);
+  const absoluteResource = path.resolve(
+    canonicalRoot,
+    ...(resourceLocator === "." ? [] : resourceLocator.split("/")),
+  );
+  const key = `${canonicalRoot}\0${absoluteResource}`
+    .normalize("NFC")
+    .toLowerCase()
+    .normalize("NFC");
+  return createHash("sha256").update(key).digest("hex");
 }
 
 function locator(...segments: readonly string[]): WorkspaceResourceLocator {
@@ -110,6 +128,27 @@ async function collectPages(
 }
 
 describe("bounded local resource reads", () => {
+  test("rejects every configured option beyond its absolute ceiling", async () => {
+    const roots = await fixture();
+    const cases = [
+      ["maxReadBytes", localResourceProviderCeilings.maxReadBytes],
+      ["maxReplacementBytes", localResourceProviderCeilings.maxReplacementBytes],
+      ["maxPageSize", localResourceProviderCeilings.maxPageSize],
+      ["maxEntriesPerDirectory", localResourceProviderCeilings.maxEntriesPerDirectory],
+      ["maxDepth", localResourceProviderCeilings.maxDepth],
+      ["maxCursorBytes", localResourceProviderCeilings.maxCursorBytes],
+      ["staleLockMilliseconds", localResourceProviderCeilings.staleLockMilliseconds],
+    ] as const;
+
+    for (const [name, maximum] of cases) {
+      for (const value of [0, -1, 1.5, Number.NaN, maximum + 1, Number.MAX_SAFE_INTEGER]) {
+        expect(createLocalResourceProvider({ ...roots, [name]: value })).rejects.toThrow(
+          `${name} must be a positive safe integer`,
+        );
+      }
+    }
+  });
+
   test("reads Unicode resources without exposing host paths", async () => {
     const roots = await fixture();
     await mkdir(path.join(roots.workspaceRoot, "設計"));
@@ -375,6 +414,51 @@ describe("bounded deterministic enumeration", () => {
 });
 
 describe("staged atomic replacement", () => {
+  test("bounds replacement snapshots and validates bytes without invoking proxy traps", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({ ...roots, maxReplacementBytes: 4 });
+    expect(
+      diagnosticCode(await provider.stageReplacement(locator("large.md"), new Uint8Array(5))),
+    ).toBe("replacement-too-large");
+
+    let traps = 0;
+    const trapped = new Proxy(new Uint8Array([1]), {
+      get: () => {
+        traps += 1;
+        throw new Error("proxy trap must not run");
+      },
+      getPrototypeOf: () => {
+        traps += 1;
+        throw new Error("proxy trap must not run");
+      },
+    });
+    expect(diagnosticCode(await provider.stageReplacement(locator("proxy.md"), trapped))).toBe(
+      "invalid-replacement-bytes",
+    );
+    expect(traps).toBe(0);
+    expect(
+      diagnosticCode(
+        await provider.stageReplacement(locator("int16.md"), new Int16Array([1]) as never),
+      ),
+    ).toBe("invalid-replacement-bytes");
+    expect(
+      diagnosticCode(
+        await provider.stageReplacement(
+          locator("view.md"),
+          new DataView(new ArrayBuffer(1)) as never,
+        ),
+      ),
+    ).toBe("invalid-replacement-bytes");
+
+    class ByteSubclass extends Uint8Array {}
+    const subclass = await provider.stageReplacement(
+      locator("subclass.md"),
+      new ByteSubclass([1, 2]),
+    );
+    expect(subclass.ok).toBeTrue();
+    if (subclass.ok) expect((await provider.discardReplacement(subclass.value)).ok).toBeTrue();
+  });
+
   test("creates and revalidates several missing Unicode parent directories", async () => {
     const roots = await fixture();
     const provider = await createLocalResourceProvider(roots);
@@ -625,7 +709,33 @@ describe("same-machine coordination", () => {
         coordinationRoot: linkedCoordination,
         workspaceRoot: roots.workspaceRoot,
       }),
-    ).rejects.toThrow("outside the canonical workspace");
+    ).rejects.toThrow("must not be a symbolic link or junction");
+  });
+
+  test("rejects permissive custom coordination roots on POSIX", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    await chmod(roots.coordinationRoot, 0o777);
+    try {
+      expect(createLocalResourceProvider(roots)).rejects.toThrow(
+        "must not grant group or other permissions",
+      );
+    } finally {
+      await chmod(roots.coordinationRoot, 0o700);
+    }
+  });
+
+  test("rejects a custom coordination root owned by another POSIX user when testable", async () => {
+    if (process.platform === "win32" || process.getuid?.() !== 0) return;
+    const roots = await fixture();
+    await chown(roots.coordinationRoot, 1, 1);
+    try {
+      expect(createLocalResourceProvider(roots)).rejects.toThrow(
+        "must be owned by the current user",
+      );
+    } finally {
+      await chown(roots.coordinationRoot, 0, 0);
+    }
   });
 
   test("fails closed under concurrent same-process providers and releases callback scope", async () => {
@@ -652,9 +762,48 @@ describe("same-machine coordination", () => {
     });
   });
 
+  test("case-folds and NFC-normalizes conservative coordination aliases", async () => {
+    const roots = await fixture();
+    await writeFile(path.join(roots.workspaceRoot, "State.md"), "state");
+    const first = await createLocalResourceProvider(roots);
+    const second = await createLocalResourceProvider(roots);
+
+    const assertAliasesContend = async (
+      heldLocator: WorkspaceResourceLocator,
+      aliasLocator: WorkspaceResourceLocator,
+    ): Promise<void> => {
+      let ready!: () => void;
+      let release!: () => void;
+      const acquired = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const held = first.withCoordination(
+        { context: "local-machine", locator: heldLocator },
+        async () => {
+          ready();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        },
+      );
+      await within(acquired, 5_000, "alias coordination acquisition");
+      const contended = await second.withCoordination(
+        { context: "local-machine", locator: aliasLocator },
+        () => undefined,
+      );
+      expect(diagnosticCode(contended)).toBe("resource-coordination-contended");
+      release();
+      expect((await held).ok).toBeTrue();
+    };
+
+    await assertAliasesContend(locator("State.md"), locator("state.md"));
+    await assertAliasesContend(locator("café.md"), locator("café.md"));
+  });
+
   test("fails closed while a real child process holds the same local lock", async () => {
     const roots = await fixture();
-    const lockLocator = locator("cross-process-transaction");
+    const childLocator = locator("State.md");
+    const parentAlias = locator("state.md");
     let readyResolve!: () => void;
     let readyReject!: (error: Error) => void;
     const ready = new Promise<void>((resolve, reject) => {
@@ -667,7 +816,7 @@ describe("same-machine coordination", () => {
         coordinationChild,
         roots.workspaceRoot,
         roots.coordinationRoot,
-        lockLocator,
+        childLocator,
       ],
       ipc(message) {
         if (isChildMessage(message, "ready")) readyResolve();
@@ -694,7 +843,7 @@ describe("same-machine coordination", () => {
       let called = false;
 
       const contended = await provider.withCoordination(
-        { context: "local-machine", locator: lockLocator },
+        { context: "local-machine", locator: parentAlias },
         () => {
           called = true;
         },
@@ -706,7 +855,7 @@ describe("same-machine coordination", () => {
       expect(await within(child.exited, 5_000, "child coordination release")).toBe(0);
       expect(
         await provider.withCoordination(
-          { context: "local-machine", locator: lockLocator },
+          { context: "local-machine", locator: parentAlias },
           () => "released",
         ),
       ).toEqual({ ok: true, value: "released" });
@@ -745,51 +894,136 @@ describe("same-machine coordination", () => {
     expect(called).toBeFalse();
   });
 
-  test("reaps an old owner proven dead but never steals uncertain owner state", async () => {
+  test("never publishes an incomplete claim and keeps malformed external locks contended", async () => {
     const roots = await fixture();
-    const canonicalRoot = await realpath(roots.workspaceRoot);
     const lockLocator = locator("transaction");
-    const identity = createHash("sha256")
-      .update(canonicalRoot)
-      .update("\0")
-      .update(lockLocator)
-      .digest("hex");
+    const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
     const lockPath = path.join(roots.coordinationRoot, `${identity}.lock`);
-    let deadPid: number | undefined;
-    for (const candidate of [2_147_483_647, 2_000_000_000, process.pid + 1_000_000]) {
-      try {
-        process.kill(candidate, 0);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ESRCH") {
-          deadPid = candidate;
-          break;
-        }
-      }
-    }
-    if (deadPid === undefined) return;
-    await mkdir(lockPath);
-    await writeFile(
-      path.join(lockPath, "owner.json"),
-      JSON.stringify({ createdAt: 0, pid: deadPid, token: randomUUID() }),
-    );
-    const provider = await createLocalResourceProvider({
+    const interrupted = await createLocalResourceProvider({
       ...roots,
-      staleLockMilliseconds: 1,
+      faultInjector: injectedOnce("coordination-claim"),
     });
-
     expect(
-      await provider.withCoordination(
-        { context: "local-machine", locator: lockLocator },
-        () => "recovered",
+      diagnosticCode(
+        await interrupted.withCoordination(
+          { context: "local-machine", locator: lockLocator },
+          () => undefined,
+        ),
       ),
-    ).toEqual({ ok: true, value: "recovered" });
+    ).toBe("resource-provider-failure");
+    expect(
+      (await readdir(roots.coordinationRoot)).some((name) => name.endsWith(".lock")),
+    ).toBeFalse();
 
-    await mkdir(lockPath);
+    await mkdir(lockPath, { mode: 0o700 });
+    await writeFile(path.join(lockPath, "owner.json"), "malformed");
+    const provider = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
+    let called = false;
     const uncertain = await provider.withCoordination(
       { context: "local-machine", locator: lockLocator },
-      () => "must-not-run",
+      () => {
+        called = true;
+      },
     );
     expect(diagnosticCode(uncertain)).toBe("resource-coordination-contended");
+    expect(called).toBeFalse();
     expect((await lstat(lockPath)).isDirectory()).toBeTrue();
+  });
+
+  test("reaps a killed valid owner while concurrent reapers and acquirers fail safe", async () => {
+    const roots = await fixture();
+    const lockLocator = locator("killed-owner");
+    let ready!: () => void;
+    const acquired = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        coordinationChild,
+        roots.workspaceRoot,
+        roots.coordinationRoot,
+        lockLocator,
+      ],
+      ipc(message) {
+        if (isChildMessage(message, "ready")) ready();
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    await within(acquired, 5_000, "killed owner readiness");
+    child.kill();
+    await within(child.exited, 5_000, "killed owner exit");
+    await Bun.sleep(5);
+    const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
+    const abandonedReaping = path.join(roots.coordinationRoot, `${identity}.reaping`);
+    await mkdir(abandonedReaping, { mode: 0o700 });
+    await writeFile(
+      path.join(abandonedReaping, "owner.json"),
+      JSON.stringify({ createdAt: 0, pid: child.pid, token: randomUUID() }),
+      { mode: 0o600 },
+    );
+
+    const first = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
+    const second = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
+    let actionCount = 0;
+    let release!: () => void;
+    let winnerReady!: () => void;
+    const winnerAcquired = new Promise<void>((resolve) => {
+      winnerReady = resolve;
+    });
+    const action = async (): Promise<void> => {
+      actionCount += 1;
+      winnerReady();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    const firstAttempt = first.withCoordination(
+      { context: "local-machine", locator: lockLocator },
+      action,
+    );
+    const secondAttempt = second.withCoordination(
+      { context: "local-machine", locator: lockLocator },
+      action,
+    );
+    await within(winnerAcquired, 5_000, "stale owner recovery");
+    release();
+    const outcomes = await Promise.all([firstAttempt, secondAttempt]);
+    expect(actionCount).toBe(1);
+    expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
+    expect(
+      outcomes.some(
+        (outcome) => !outcome.ok && diagnosticCode(outcome) === "resource-coordination-contended",
+      ),
+    ).toBeTrue();
+  });
+
+  test("cleanup failures leave only ignored artifacts and do not block reacquisition", async () => {
+    const roots = await fixture();
+    const lockLocator = locator("cleanup-failure");
+    const dirty = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: (phase) => {
+        if (phase === "coordination-cleanup") throw new Error("injected cleanup failure");
+      },
+    });
+    expect(
+      await dirty.withCoordination(
+        { context: "local-machine", locator: lockLocator },
+        () => "first",
+      ),
+    ).toEqual({ ok: true, value: "first" });
+    expect(
+      (await readdir(roots.coordinationRoot)).some((name) => name.includes(".released-")),
+    ).toBeTrue();
+
+    const clean = await createLocalResourceProvider(roots);
+    expect(
+      await clean.withCoordination(
+        { context: "local-machine", locator: lockLocator },
+        () => "second",
+      ),
+    ).toEqual({ ok: true, value: "second" });
   });
 });

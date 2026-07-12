@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, opendir, realpath, rename, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, opendir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -28,6 +28,8 @@ import {
 export type LocalResourceFaultPhase =
   | "after-rename"
   | "cleanup"
+  | "coordination-claim"
+  | "coordination-cleanup"
   | "enumerate"
   | "flush"
   | "parent-directory"
@@ -48,6 +50,7 @@ export interface LocalResourceProviderOptions {
   readonly maxEntriesPerDirectory?: number;
   readonly maxPageSize?: number;
   readonly maxReadBytes?: number;
+  readonly maxReplacementBytes?: number;
   readonly staleLockMilliseconds?: number;
 }
 
@@ -88,7 +91,17 @@ interface WalkState {
 }
 
 const processCoordination = new Set<string>();
+export const localResourceProviderCeilings = Object.freeze({
+  maxCursorBytes: 64 * 1024,
+  maxDepth: 256,
+  maxEntriesPerDirectory: 100_000,
+  maxPageSize: 10_000,
+  maxReadBytes: 64 * 1024 * 1024,
+  maxReplacementBytes: 64 * 1024 * 1024,
+  staleLockMilliseconds: 24 * 60 * 60 * 1000,
+});
 const defaultMaxReadBytes = 16 * 1024 * 1024;
+const defaultMaxReplacementBytes = 16 * 1024 * 1024;
 const defaultMaxPageSize = 1000;
 const defaultMaxDepth = 64;
 const defaultMaxEntriesPerDirectory = 10_000;
@@ -162,12 +175,70 @@ function depthBound(value: unknown, maximum: number): Result<number> {
       );
 }
 
-function configuredPositive(value: number | undefined, fallback: number, name: string): number {
+function configuredBound(
+  value: number | undefined,
+  fallback: number,
+  maximum: number,
+  name: string,
+): number {
   const selected = value ?? fallback;
-  if (!Number.isSafeInteger(selected) || selected <= 0) {
-    throw new RangeError(`${name} must be a positive safe integer`);
+  if (!Number.isSafeInteger(selected) || selected <= 0 || selected > maximum) {
+    throw new RangeError(`${name} must be a positive safe integer no greater than ${maximum}`);
   }
   return selected;
+}
+
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)?.get;
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get;
+const typedArrayByteOffset = Object.getOwnPropertyDescriptor(
+  typedArrayPrototype,
+  "byteOffset",
+)?.get;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(
+  typedArrayPrototype,
+  "byteLength",
+)?.get;
+
+function snapshotReplacementBytes(value: unknown, maximum: number): Result<Uint8Array> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    typedArrayTag === undefined ||
+    typedArrayBuffer === undefined ||
+    typedArrayByteOffset === undefined ||
+    typedArrayByteLength === undefined
+  ) {
+    return failure(
+      diagnostic("invalid-replacement-bytes", "Replacement contents must be a genuine Uint8Array"),
+    );
+  }
+  try {
+    if (Reflect.apply(typedArrayTag, value, []) !== "Uint8Array") {
+      return failure(
+        diagnostic(
+          "invalid-replacement-bytes",
+          "Replacement contents must be a genuine Uint8Array",
+        ),
+      );
+    }
+    const buffer = Reflect.apply(typedArrayBuffer, value, []) as ArrayBufferLike;
+    const byteOffset = Reflect.apply(typedArrayByteOffset, value, []) as number;
+    const byteLength = Reflect.apply(typedArrayByteLength, value, []) as number;
+    if (!Number.isSafeInteger(byteLength) || byteLength < 0) throw new TypeError("invalid length");
+    if (byteLength > maximum) {
+      return failure(
+        diagnostic("replacement-too-large", "Replacement exceeds the configured byte limit", {
+          maximum,
+        }),
+      );
+    }
+    return success(new Uint8Array(new Uint8Array(buffer, byteOffset, byteLength)));
+  } catch {
+    return failure(
+      diagnostic("invalid-replacement-bytes", "Replacement contents must be a genuine Uint8Array"),
+    );
+  }
 }
 
 function isWithin(root: string, candidate: string): boolean {
@@ -180,6 +251,15 @@ function isWithin(root: string, candidate: string): boolean {
 
 function locatorSegments(locator: WorkspaceResourceLocator): readonly string[] {
   return locator === "." ? [] : locator.split("/");
+}
+
+function coordinationIdentity(root: string, locator: WorkspaceResourceLocator): string {
+  const absoluteResource = path.resolve(root, ...locatorSegments(locator));
+  const conservativeKey = `${root}\0${absoluteResource}`
+    .normalize("NFC")
+    .toLowerCase()
+    .normalize("NFC");
+  return createHash("sha256").update(conservativeKey).digest("hex");
 }
 
 function resourceKind(stats: Awaited<ReturnType<typeof lstat>>): ResourceKind {
@@ -260,12 +340,38 @@ export async function createLocalResourceProvider(
   const canonicalRoot = await realpath(options.workspaceRoot);
   const rootStats = await lstat(canonicalRoot);
   if (!rootStats.isDirectory()) throw new TypeError("workspaceRoot must identify a directory");
+  const userSuffix = process.platform === "win32" ? "user" : String(process.getuid?.() ?? "user");
   const requestedCoordinationRoot =
-    options.coordinationRoot ?? path.join(tmpdir(), "groma-resource-locks-v1");
+    options.coordinationRoot ?? path.join(tmpdir(), `groma-resource-locks-v1-${userSuffix}`);
+  try {
+    const existing = await lstat(requestedCoordinationRoot);
+    if (existing.isSymbolicLink()) {
+      throw new TypeError("coordinationRoot must not be a symbolic link or junction");
+    }
+  } catch (error) {
+    if (error instanceof TypeError) throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
   await mkdir(requestedCoordinationRoot, { mode: 0o700, recursive: true });
+  let coordinationStats = await lstat(requestedCoordinationRoot);
+  if (coordinationStats.isSymbolicLink() || !coordinationStats.isDirectory()) {
+    throw new TypeError("coordinationRoot must be a non-link directory");
+  }
+  if (process.platform !== "win32") {
+    const currentUser = process.getuid?.();
+    if (currentUser === undefined || coordinationStats.uid !== currentUser) {
+      throw new TypeError("coordinationRoot must be owned by the current user");
+    }
+    if (options.coordinationRoot === undefined) {
+      await chmod(requestedCoordinationRoot, 0o700);
+      coordinationStats = await lstat(requestedCoordinationRoot);
+    }
+    if ((coordinationStats.mode & 0o077) !== 0) {
+      throw new TypeError("coordinationRoot must not grant group or other permissions");
+    }
+  }
   const coordinationRoot = await realpath(requestedCoordinationRoot);
-  const coordinationStats = await lstat(coordinationRoot);
-  if (!coordinationStats.isDirectory() || isWithin(canonicalRoot, coordinationRoot)) {
+  if (isWithin(canonicalRoot, coordinationRoot)) {
     throw new TypeError("coordinationRoot must be a directory outside the canonical workspace");
   }
   return new BunLocalResourceProvider(canonicalRoot, coordinationRoot, options);
@@ -279,6 +385,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
   readonly #maxEntriesPerDirectory: number;
   readonly #maxPageSize: number;
   readonly #maxReadBytes: number;
+  readonly #maxReplacementBytes: number;
   readonly #root: string;
   readonly #stages = new WeakMap<object, StagedRecord>();
   readonly #staleLockMilliseconds: number;
@@ -287,26 +394,46 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     this.#root = root;
     this.#coordinationRoot = coordinationRoot;
     this.#faultInjector = options.faultInjector;
-    this.#maxCursorBytes = configuredPositive(
+    this.#maxCursorBytes = configuredBound(
       options.maxCursorBytes,
       defaultMaxCursorBytes,
+      localResourceProviderCeilings.maxCursorBytes,
       "maxCursorBytes",
     );
-    this.#maxDepth = configuredPositive(options.maxDepth, defaultMaxDepth, "maxDepth");
-    this.#maxEntriesPerDirectory = configuredPositive(
+    this.#maxDepth = configuredBound(
+      options.maxDepth,
+      defaultMaxDepth,
+      localResourceProviderCeilings.maxDepth,
+      "maxDepth",
+    );
+    this.#maxEntriesPerDirectory = configuredBound(
       options.maxEntriesPerDirectory,
       defaultMaxEntriesPerDirectory,
+      localResourceProviderCeilings.maxEntriesPerDirectory,
       "maxEntriesPerDirectory",
     );
-    this.#maxPageSize = configuredPositive(options.maxPageSize, defaultMaxPageSize, "maxPageSize");
-    this.#maxReadBytes = configuredPositive(
+    this.#maxPageSize = configuredBound(
+      options.maxPageSize,
+      defaultMaxPageSize,
+      localResourceProviderCeilings.maxPageSize,
+      "maxPageSize",
+    );
+    this.#maxReadBytes = configuredBound(
       options.maxReadBytes,
       defaultMaxReadBytes,
+      localResourceProviderCeilings.maxReadBytes,
       "maxReadBytes",
     );
-    this.#staleLockMilliseconds = configuredPositive(
+    this.#maxReplacementBytes = configuredBound(
+      options.maxReplacementBytes,
+      defaultMaxReplacementBytes,
+      localResourceProviderCeilings.maxReplacementBytes,
+      "maxReplacementBytes",
+    );
+    this.#staleLockMilliseconds = configuredBound(
       options.staleLockMilliseconds,
       defaultStaleLockMilliseconds,
+      localResourceProviderCeilings.staleLockMilliseconds,
       "staleLockMilliseconds",
     );
   }
@@ -530,12 +657,9 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         diagnostic("invalid-replacement-target", "The workspace root cannot be replaced"),
       );
     }
-    if (!(bytes instanceof Uint8Array)) {
-      return failure(
-        diagnostic("invalid-replacement-bytes", "Replacement contents must be a Uint8Array"),
-      );
-    }
-    const copied = new Uint8Array(bytes);
+    const snapshot = snapshotReplacementBytes(bytes, this.#maxReplacementBytes);
+    if (!snapshot.ok) return snapshot;
+    const copied = snapshot.value;
     let stagePath: string | undefined;
     try {
       const parents = await this.#ensureParentDirectories(locator.value);
@@ -722,11 +846,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         diagnostic("invalid-coordination-action", "Coordination action must be callable"),
       );
     }
-    const identity = createHash("sha256")
-      .update(this.#root)
-      .update("\0")
-      .update(locator.value)
-      .digest("hex");
+    const identity = coordinationIdentity(this.#root, locator.value);
     if (processCoordination.has(identity)) {
       return failure(
         diagnostic(
@@ -1087,59 +1207,148 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
+  async #coordinationPathExists(candidate: string): Promise<boolean> {
+    try {
+      await lstat(candidate);
+      return true;
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") return false;
+      throw error;
+    }
+  }
+
+  async #publishCoordinationDirectory(
+    canonicalPath: string,
+    owner: CoordinationOwner,
+    injectClaim: boolean,
+  ): Promise<Result<void>> {
+    const candidatePath = `${canonicalPath}.claim-${owner.token}-${randomUUID()}`;
+    try {
+      await mkdir(candidatePath, { mode: 0o700 });
+      const encoded = new TextEncoder().encode(JSON.stringify(owner));
+      const ownerHandle = await open(path.join(candidatePath, "owner.json"), "wx", 0o600);
+      try {
+        let offset = 0;
+        while (offset < encoded.byteLength) {
+          const written = await ownerHandle.write(
+            encoded,
+            offset,
+            encoded.byteLength - offset,
+            null,
+          );
+          if (written.bytesWritten <= 0) throw new Error("owner write did not advance");
+          offset += written.bytesWritten;
+        }
+        await ownerHandle.sync();
+      } finally {
+        await ownerHandle.close();
+      }
+      const directoryHandle = await open(candidatePath, constants.O_RDONLY | constants.O_DIRECTORY);
+      try {
+        await directoryHandle.sync();
+      } finally {
+        await directoryHandle.close();
+      }
+      if (injectClaim) await this.#inject("coordination-claim");
+      if (await this.#coordinationPathExists(canonicalPath)) {
+        await this.#bestEffortCoordinationCleanup(candidatePath);
+        return failure(
+          diagnostic("resource-coordination-contended", "Local resource coordination is held"),
+        );
+      }
+      await rename(candidatePath, canonicalPath);
+      return success(undefined);
+    } catch (error) {
+      await this.#bestEffortCoordinationCleanup(candidatePath);
+      if (
+        errorCode(error) === "EEXIST" ||
+        errorCode(error) === "ENOTEMPTY" ||
+        errorCode(error) === "EACCES" ||
+        errorCode(error) === "EPERM"
+      ) {
+        return failure(
+          diagnostic("resource-coordination-contended", "Local resource coordination is held"),
+        );
+      }
+      return failure(resourceError(error, "publish local coordination ownership"));
+    }
+  }
+
+  async #bestEffortCoordinationCleanup(artifactPath: string): Promise<void> {
+    try {
+      await this.#inject("coordination-cleanup");
+    } catch {
+      return;
+    }
+    await rm(artifactPath, { force: true, recursive: true }).catch(() => undefined);
+  }
+
+  async #moveCoordinationDirectory(
+    canonicalPath: string,
+    owner: CoordinationOwner,
+    label: string,
+  ): Promise<Result<string>> {
+    const current = await this.#readOwner(path.join(canonicalPath, "owner.json"));
+    if (current === undefined || current.token !== owner.token) {
+      return failure(
+        diagnostic(
+          "resource-coordination-ownership-lost",
+          "Local coordination ownership could not be verified",
+        ),
+      );
+    }
+    const artifactPath = `${canonicalPath}.${label}-${owner.token}-${randomUUID()}`;
+    try {
+      await rename(canonicalPath, artifactPath);
+      return success(artifactPath);
+    } catch (error) {
+      return failure(resourceError(error, "move local coordination ownership"));
+    }
+  }
+
   async #acquireCoordination(identity: string): Promise<Result<CoordinationOwner>> {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
-    const reaperPath = path.join(this.#coordinationRoot, `${identity}.reap`);
-    const tryCreate = async (): Promise<Result<CoordinationOwner>> => {
-      try {
-        await lstat(reaperPath);
-        return failure(
-          diagnostic(
-            "resource-coordination-contended",
-            "Local coordination cleanup is in progress",
-          ),
-        );
-      } catch (error) {
-        if (errorCode(error) !== "ENOENT")
-          return failure(providerFailure("inspect coordination state"));
-      }
-      try {
-        await mkdir(lockPath, { mode: 0o700 });
-      } catch (error) {
-        if (errorCode(error) === "EEXIST") {
+    const reapingPath = path.join(this.#coordinationRoot, `${identity}.reaping`);
+    try {
+      if (await this.#coordinationPathExists(reapingPath)) {
+        const reapingOwner = await this.#readOwner(path.join(reapingPath, "owner.json"));
+        if (
+          reapingOwner === undefined ||
+          Date.now() - reapingOwner.createdAt < this.#staleLockMilliseconds ||
+          !ownerIsDead(reapingOwner.pid)
+        ) {
           return failure(
-            diagnostic(
-              "resource-coordination-contended",
-              "Local resource coordination is already held",
-            ),
+            diagnostic("resource-coordination-contended", "Local coordination reaping is active"),
           );
         }
-        return failure(resourceError(error, "acquire local coordination"));
-      }
-      try {
-        await lstat(reaperPath);
-        await rm(lockPath, { recursive: true, force: true });
-        return failure(
-          diagnostic("resource-coordination-contended", "Local coordination cleanup won the race"),
+        const staleGuard = await this.#moveCoordinationDirectory(
+          reapingPath,
+          reapingOwner,
+          "quarantine",
         );
-      } catch (error) {
-        if (errorCode(error) !== "ENOENT") {
-          await rm(lockPath, { recursive: true, force: true });
-          return failure(providerFailure("verify coordination ownership"));
+        if (!staleGuard.ok) {
+          return failure(
+            diagnostic("resource-coordination-contended", "Local coordination reaping is active"),
+          );
         }
+        await this.#bestEffortCoordinationCleanup(staleGuard.value);
       }
-      const owner = { createdAt: Date.now(), pid: process.pid, token: randomUUID() };
-      try {
-        await Bun.write(path.join(lockPath, "owner.json"), JSON.stringify(owner));
-        return success(owner);
-      } catch {
-        await rm(lockPath, { recursive: true, force: true });
-        return failure(providerFailure("record coordination ownership"));
+    } catch {
+      return failure(providerFailure("inspect local coordination state"));
+    }
+    const owner = { createdAt: Date.now(), pid: process.pid, token: randomUUID() };
+    const first = await this.#publishCoordinationDirectory(lockPath, owner, true);
+    if (first.ok) {
+      if (await this.#coordinationPathExists(reapingPath)) {
+        const moved = await this.#moveCoordinationDirectory(lockPath, owner, "abandoned");
+        if (moved.ok) await this.#bestEffortCoordinationCleanup(moved.value);
+        return failure(
+          diagnostic("resource-coordination-contended", "Local coordination reaping won the race"),
+        );
       }
-    };
-
-    const first = await tryCreate();
-    if (first.ok || first.diagnostics[0]?.code !== "resource-coordination-contended") return first;
+      return success(owner);
+    }
+    if (first.diagnostics[0]?.code !== "resource-coordination-contended") return first;
     const existing = await this.#readOwner(path.join(lockPath, "owner.json"));
     if (
       existing === undefined ||
@@ -1148,13 +1357,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     ) {
       return first;
     }
-    try {
-      await mkdir(reaperPath, { mode: 0o700 });
-    } catch (error) {
-      return errorCode(error) === "EEXIST"
-        ? first
-        : failure(resourceError(error, "serialize stale coordination cleanup"));
-    }
+    const reaper = { createdAt: Date.now(), pid: process.pid, token: randomUUID() };
+    const guarded = await this.#publishCoordinationDirectory(reapingPath, reaper, false);
+    if (!guarded.ok) return first;
+    let quarantinePath: string | undefined;
     try {
       const confirmed = await this.#readOwner(path.join(lockPath, "owner.json"));
       if (
@@ -1165,31 +1371,25 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       ) {
         return first;
       }
-      await rm(lockPath, { recursive: true, force: true });
-    } catch (error) {
-      return failure(resourceError(error, "remove stale coordination state"));
+      const moved = await this.#moveCoordinationDirectory(lockPath, confirmed, "quarantine");
+      if (!moved.ok) return first;
+      quarantinePath = moved.value;
     } finally {
-      await rm(reaperPath, { recursive: true, force: true }).catch(() => undefined);
+      const releasedGuard = await this.#moveCoordinationDirectory(reapingPath, reaper, "released");
+      if (releasedGuard.ok) await this.#bestEffortCoordinationCleanup(releasedGuard.value);
     }
-    return tryCreate();
+    if (quarantinePath !== undefined) {
+      await this.#bestEffortCoordinationCleanup(quarantinePath);
+      return this.#acquireCoordination(identity);
+    }
+    return first;
   }
 
   async #releaseCoordination(identity: string, owner: CoordinationOwner): Promise<Result<void>> {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
-    const current = await this.#readOwner(path.join(lockPath, "owner.json"));
-    if (current === undefined || current.token !== owner.token) {
-      return failure(
-        diagnostic(
-          "resource-coordination-ownership-lost",
-          "Local coordination ownership could not be verified during release",
-        ),
-      );
-    }
-    try {
-      await rm(lockPath, { recursive: true });
-      return success(undefined);
-    } catch (error) {
-      return failure(resourceError(error, "release local coordination"));
-    }
+    const moved = await this.#moveCoordinationDirectory(lockPath, owner, "released");
+    if (!moved.ok) return moved;
+    await this.#bestEffortCoordinationCleanup(moved.value);
+    return success(undefined);
   }
 }

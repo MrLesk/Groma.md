@@ -46,6 +46,14 @@ failure. On POSIX hosts the descriptor is also opened with `O_NOFOLLOW`; pre/pos
 identity and confinement checks cover platforms whose compatibility layer does not
 offer that flag.
 
+Provider configuration has absolute ceilings so a trusted host typo cannot turn a
+bounded operation into an unsafe allocation. Read and replacement limits default to
+16 MiB and cannot exceed 64 MiB. Page size cannot exceed 10,000, entries per directory
+cannot exceed 100,000, recursion depth cannot exceed 256, cursors cannot exceed 64
+KiB, and stale-lock duration cannot exceed 24 hours. Invalid configuration is rejected
+during provider construction. All read buffers reserve at most one additional byte
+under those ceilings.
+
 ### Enumeration
 
 Recursive enumeration requires all three bounds: page size, maximum relative depth,
@@ -81,30 +89,49 @@ bytes, then restage after restart. Private orphan discovery and cleanup are like
 GROM-14 recovery policy; orphan stages remain invisible and unaddressable through this
 public resource capability.
 
+Replacement bytes are runtime-validated through captured intrinsic TypedArray
+getters, without `instanceof` or caller property reads. Genuine `Uint8Array` instances
+and subclasses are snapshotted; proxies, `DataView`, and other typed arrays are
+rejected without invoking their traps. Oversized input returns
+`replacement-too-large`, and snapshot/allocation failures remain typed results rather
+than rejected promises.
+
 ### Local coordination
 
 Coordination is callback-scoped and supports iteration 1A's same-machine local
-processes. It uses atomic lock-directory creation in a volatile host directory outside
-the canonical workspace, plus an in-process ownership registry. Contention fails
-closed. Shared-filesystem and multi-host contexts return
+processes. Lock identity conservatively NFC-normalizes and case-folds the canonical
+workspace root plus absolute resource identity on every platform. Aliases therefore
+over-contend safely even on case-sensitive filesystems. Shared-filesystem and
+multi-host contexts return
 `unsupported-coordination-context`; hosted or network coordination is not inferred.
 
-Stale cleanup is conservative. A malformed, missing, young, permission-denied, live,
-or PID-reused owner remains contended. An old owner must be proven dead before cleanup
-enters a second atomic reaper directory. Normal acquisition checks that reaper before
-and after creating its lock, so it cannot acquire while stale cleanup is in progress.
-Volatile owner tokens, PIDs, and times never enter `groma/` or Git state.
+The canonical lock directory is never constructed in place. The provider creates a
+unique candidate, exclusive-writes and syncs its owner record, syncs the candidate
+directory, closes every handle, and atomically renames the populated directory to the
+canonical lock name. A populated reaping claim serializes stale recovery. An old owner
+must be proven dead twice before its lock is atomically moved to a unique quarantine,
+freeing the canonical name before best-effort cleanup. Release uses the same
+move-before-cleanup rule, so cleanup failure can leave only ignored unique artifacts
+and cannot strand contention. Malformed, young, permission-denied, live, or PID-reused
+owners remain contended.
+
+The coordination root is outside canonical contents and cannot itself be a symlink or
+junction. POSIX roots must be owned by the current user and grant no group/other bits;
+the provider securely tightens its own user-scoped default to mode `0700`. Windows uses
+the per-user temporary directory and platform ACL behavior; cross-compilation is not a
+claim of native Windows permission verification. Volatile claims, quarantines, owner
+tokens, PIDs, and times never enter `groma/` or Git state.
 
 ## Bun API rationale
 
 Bun documents [`Bun.file` and `Bun.write` as the recommended ordinary file I/O
-APIs](https://bun.com/docs/runtime/file-io), and the provider uses `Bun.write` for its
-small volatile coordination owner record. The same documentation directs operations
+APIs](https://bun.com/docs/runtime/file-io). The same documentation directs operations
 not exposed by those APIs to Bun's `node:fs` compatibility layer. Confined bounded
-reads and durable atomic replacement specifically need `FileHandle.read`, exclusive
-creation, `FileHandle.sync`, `lstat`, `realpath`, `opendir`, and rename-over-target, so
-those operations stay private to the implementation. Bun's current compatibility
-table describes [`node:fs` as implemented and covered by its Node compatibility
+reads, durable atomic replacement, and populated coordination claims specifically need
+`FileHandle.read`, exclusive creation, complete writes, `FileHandle.sync`, directory
+sync, `lstat`, `realpath`, `opendir`, permissions, and atomic rename, so those
+operations stay private to the implementation. Bun's current compatibility table
+describes [`node:fs` as implemented and covered by its Node compatibility
 suite](https://bun.com/docs/runtime/nodejs-compat).
 
 Cross-compilation covers the four promised standalone targets. Runtime tests in this
