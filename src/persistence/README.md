@@ -63,9 +63,10 @@ Provider configuration has absolute ceilings so a trusted host typo cannot turn 
 bounded operation into an unsafe allocation. Read and replacement limits default to
 16 MiB and cannot exceed 64 MiB. Page size cannot exceed 10,000, entries per directory
 cannot exceed 100,000, recursion depth cannot exceed 256, cursors cannot exceed 64
-KiB, and stale-lock duration cannot exceed 24 hours. Invalid configuration is rejected
-during provider construction. All read buffers reserve at most one additional byte
-under those ceilings.
+KiB and default to 16 KiB so two maximum-length locator fields plus cursor framing fit,
+and stale-lock duration cannot exceed 24 hours. Invalid configuration is rejected during
+provider construction. All read buffers reserve at most one additional byte under those
+ceilings.
 
 ### Enumeration
 
@@ -152,8 +153,11 @@ follow that summary diagnostic. A caller must not blindly retry when
 `actionCompleted` is `true`, because the coordinated side effects have already run.
 
 The coordination root is outside canonical contents and cannot itself be a symlink or
-junction. POSIX roots must be owned by the current user and grant no group/other bits;
-the provider securely tightens its own user-scoped default to mode `0700`. A custom
+junction. Before creating it, the provider canonicalizes its existing parent and rejects
+a resulting candidate inside the workspace; custom missing roots therefore require an
+existing parent. The final canonical root is checked again after creation. POSIX roots
+must be owned by the current user, grant owner write and search, and grant no group/other
+bits; the provider securely tightens its own user-scoped default to mode `0700`. A custom
 coordination root is a POSIX-only host option. Windows rejects that option before any
 filesystem access and always uses the provider-created default beneath its per-user
 temporary directory and platform ACL behavior. Cross-compilation is not a claim of

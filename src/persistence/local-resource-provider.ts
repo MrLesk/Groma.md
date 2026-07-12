@@ -124,11 +124,13 @@ const defaultMaxReplacementBytes = 16 * 1024 * 1024;
 const defaultMaxPageSize = 1000;
 const defaultMaxDepth = 64;
 const defaultMaxEntriesPerDirectory = 10_000;
-const defaultMaxCursorBytes = 4096;
+const defaultMaxCursorBytes = 16 * 1024;
 const defaultStaleLockMilliseconds = 5 * 60 * 1000;
 const maximumOwnerBytes = 1024;
 const maximumCoordinationReacquisitionAttempts = 8;
 const writeChunkBytes = 64 * 1024;
+const intrinsicNormalize = String.prototype.normalize;
+const intrinsicToLowerCase = String.prototype.toLowerCase;
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
   return Object.freeze({ code, message, ...(details === undefined ? {} : { details }) });
@@ -275,10 +277,10 @@ function locatorSegments(locator: WorkspaceResourceLocator): readonly string[] {
 
 function coordinationIdentity(root: string, locator: WorkspaceResourceLocator): string {
   const absoluteResource = path.resolve(root, ...locatorSegments(locator));
-  const conservativeKey = `${root}\0${absoluteResource}`
-    .normalize("NFC")
-    .toLowerCase()
-    .normalize("NFC");
+  const joined = `${root}\0${absoluteResource}`;
+  const normalized = Reflect.apply(intrinsicNormalize, joined, ["NFC"]) as string;
+  const lowered = Reflect.apply(intrinsicToLowerCase, normalized, []) as string;
+  const conservativeKey = Reflect.apply(intrinsicNormalize, lowered, ["NFC"]) as string;
   return createHash("sha256").update(conservativeKey).digest("hex");
 }
 
@@ -369,6 +371,14 @@ export async function createLocalResourceProvider(
   const userSuffix = process.platform === "win32" ? "user" : String(process.getuid?.() ?? "user");
   const requestedCoordinationRoot =
     options.coordinationRoot ?? path.join(tmpdir(), `groma-resource-locks-v1-${userSuffix}`);
+  const canonicalCoordinationParent = await realpath(path.dirname(requestedCoordinationRoot));
+  const preflightCoordinationRoot = path.resolve(
+    canonicalCoordinationParent,
+    path.basename(requestedCoordinationRoot),
+  );
+  if (isWithin(canonicalRoot, preflightCoordinationRoot)) {
+    throw new TypeError("coordinationRoot must be a directory outside the canonical workspace");
+  }
   try {
     const existing = await lstat(requestedCoordinationRoot);
     if (existing.isSymbolicLink()) {
@@ -394,6 +404,9 @@ export async function createLocalResourceProvider(
     }
     if ((coordinationStats.mode & 0o077) !== 0) {
       throw new TypeError("coordinationRoot must not grant group or other permissions");
+    }
+    if ((coordinationStats.mode & 0o300) !== 0o300) {
+      throw new TypeError("coordinationRoot must grant owner write and search permissions");
     }
   }
   const coordinationRoot = await realpath(requestedCoordinationRoot);
@@ -1225,7 +1238,15 @@ class BunLocalResourceProvider implements LocalResourceProvider {
   }
 
   #encodeCursor(state: CursorState): Result<ResourceContinuationCursor> {
-    const raw = JSON.stringify(state);
+    const serializableState = Object.assign(Object.create(null) as Record<string, unknown>, {
+      after: state.after,
+      limit: state.limit,
+      locator: state.locator,
+      maxDepth: state.maxDepth,
+      maxEntriesPerDirectory: state.maxEntriesPerDirectory,
+      version: state.version,
+    });
+    const raw = JSON.stringify(serializableState);
     const cursor = `groma-resource-v1.${Buffer.from(raw, "utf8").toString("base64url")}`;
     return Buffer.byteLength(cursor, "utf8") <= this.#maxCursorBytes
       ? success(cursor as ResourceContinuationCursor)
@@ -1349,7 +1370,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const candidatePath = `${canonicalPath}.claim-${owner.token}-${randomUUID()}`;
     try {
       await mkdir(candidatePath, { mode: 0o700 });
-      const encoded = new TextEncoder().encode(JSON.stringify(owner));
+      const serializableOwner = Object.assign(Object.create(null) as Record<string, unknown>, {
+        createdAt: owner.createdAt,
+        pid: owner.pid,
+        token: owner.token,
+      });
+      const encoded = new TextEncoder().encode(JSON.stringify(serializableOwner));
       const ownerHandle = await open(path.join(candidatePath, "owner.json"), "wx", 0o600);
       try {
         let offset = 0;

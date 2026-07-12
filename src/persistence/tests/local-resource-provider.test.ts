@@ -27,6 +27,7 @@ import {
   shouldSyncLocalReplacementDirectory,
 } from "../local-resource-provider.ts";
 import {
+  parseWorkspaceResourceLocator,
   type ResourceEnumerationPage,
   type StagedReplacementHandle,
   type WorkspaceResourceLocator,
@@ -347,6 +348,48 @@ describe("bounded deterministic enumeration", () => {
       "é.md",
     ]);
     expect(pages.every((page) => page.entries.length <= request.limit)).toBeTrue();
+  });
+
+  test("continues a real near-host-limit deep locator with the default cursor budget", async () => {
+    const roots = await fixture();
+    const segments: string[] = [];
+    let current = roots.workspaceRoot;
+    for (let index = 0; index < 40; index += 1) {
+      const segment = `s${String(index).padStart(2, "0")}-${"a".repeat(116)}`;
+      const candidateLocator = [...segments, segment].join("/");
+      if (textEncoder.encode(candidateLocator).byteLength > 3_800) break;
+      const candidate = path.join(current, segment);
+      try {
+        await mkdir(candidate);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENAMETOOLONG") break;
+        throw error;
+      }
+      segments.push(segment);
+      current = candidate;
+    }
+    expect(textEncoder.encode(segments.join("/")).byteLength).toBeGreaterThan(
+      process.platform === "win32" ? 100 : 500,
+    );
+    await writeFile(path.join(current, "a.md"), "a");
+    await writeFile(path.join(current, "b.md"), "b");
+    const provider = await createLocalResourceProvider(roots);
+    const request = {
+      limit: 1,
+      locator: locator(...segments),
+      maxDepth: 0,
+      maxEntriesPerDirectory: 10,
+    };
+
+    const first = await provider.enumerate(request);
+
+    expect(first.ok).toBeTrue();
+    if (!first.ok || first.value.nextCursor === undefined) return;
+    const second = await provider.enumerate({ ...request, cursor: first.value.nextCursor });
+    expect(second.ok).toBeTrue();
+    if (second.ok) {
+      expect(second.value.entries.map((entry) => path.basename(entry.locator))).toEqual(["b.md"]);
+    }
   });
 
   test("reports depth truncation, directory overflow, invalid page bounds, and malformed cursors", async () => {
@@ -935,6 +978,17 @@ describe("same-machine coordination", () => {
     }
   });
 
+  test("rejects a missing in-workspace coordination root before creating it", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const inside = path.join(roots.workspaceRoot, "missing-coordination");
+
+    await expect(
+      createLocalResourceProvider({ coordinationRoot: inside, workspaceRoot: roots.workspaceRoot }),
+    ).rejects.toThrow("must be a directory outside the canonical workspace");
+    await expect(lstat(inside)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   test("rejects permissive custom coordination roots on POSIX", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();
@@ -944,6 +998,22 @@ describe("same-machine coordination", () => {
       await expect(createLocalResourceProvider(roots)).rejects.toThrow(
         "must not grant group or other permissions",
       );
+    } finally {
+      await chmod(coordinationRoot, 0o700);
+    }
+  });
+
+  test("requires owner write and search permissions on POSIX coordination roots", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    try {
+      for (const mode of [0o500, 0o600]) {
+        await chmod(coordinationRoot, mode);
+        await expect(createLocalResourceProvider(roots)).rejects.toThrow(
+          "must grant owner write and search permissions",
+        );
+      }
     } finally {
       await chmod(coordinationRoot, 0o700);
     }
@@ -1066,6 +1136,116 @@ describe("same-machine coordination", () => {
       "resource-provider-failure",
     ]);
     expect(result.diagnostics[1]?.details?.actionCompleted).toBeFalse();
+  });
+
+  test("ignores inherited toJSON for cursors and coordination owners", async () => {
+    const roots = await fixture();
+    await writeFile(path.join(roots.workspaceRoot, "a.md"), "a");
+    await writeFile(path.join(roots.workspaceRoot, "b.md"), "b");
+    const provider = await createLocalResourceProvider(roots);
+    const previous = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+    let calls = 0;
+    let cursorContinued = false;
+    let coordinationSucceeded = false;
+    Object.defineProperty(Object.prototype, "toJSON", {
+      configurable: true,
+      value: () => {
+        calls += 1;
+        throw new Error("inherited toJSON must not run");
+      },
+      writable: true,
+    });
+    try {
+      const request = {
+        limit: 1,
+        locator: locator(),
+        maxDepth: 0,
+        maxEntriesPerDirectory: 10,
+      };
+      const first = await provider.enumerate(request);
+      if (!first.ok || first.value.nextCursor === undefined) {
+        throw new Error("expected a continuation cursor");
+      }
+      const second = await provider.enumerate({ ...request, cursor: first.value.nextCursor });
+      cursorContinued = second.ok;
+      const coordinated = await provider.withCoordination(
+        { context: "local-machine", locator: locator("owner-json") },
+        () => "coordinated",
+      );
+      coordinationSucceeded = coordinated.ok && coordinated.value === "coordinated";
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(Object.prototype, "toJSON");
+      else Object.defineProperty(Object.prototype, "toJSON", previous);
+    }
+
+    expect(calls).toBe(0);
+    expect(cursorContinued).toBeTrue();
+    expect(coordinationSucceeded).toBeTrue();
+  });
+
+  test("uses captured string intrinsics for stage reservation and coordination aliases", async () => {
+    const roots = await fixture();
+    const first = await createLocalResourceProvider(roots);
+    const second = await createLocalResourceProvider(roots);
+    const methods = ["normalize", "startsWith", "toLowerCase"] as const;
+    const previous = methods.map(
+      (name) => [name, Object.getOwnPropertyDescriptor(String.prototype, name)] as const,
+    );
+    let calls = 0;
+    let reservedRejected = false;
+    let aliasContended = false;
+    let holderSucceeded = false;
+    let release: (() => void) | undefined;
+    let held: Promise<Result<void>> | undefined;
+    for (const name of methods) {
+      Object.defineProperty(String.prototype, name, {
+        configurable: true,
+        value: () => {
+          calls += 1;
+          throw new Error(`patched ${name} must not run`);
+        },
+        writable: true,
+      });
+    }
+    try {
+      const reserved = parseWorkspaceResourceLocator(".GrOmA-StAgE-private");
+      reservedRejected =
+        !reserved.ok && reserved.diagnostics[0]?.code === "invalid-resource-locator";
+      let ready!: () => void;
+      const acquired = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      held = first.withCoordination(
+        { context: "local-machine", locator: locator("State.md") },
+        async () => {
+          ready();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        },
+      );
+      await within(acquired, 5_000, "intrinsic alias coordination acquisition");
+      const contended = await second.withCoordination(
+        { context: "local-machine", locator: locator("state.md") },
+        () => undefined,
+      );
+      aliasContended = diagnosticCode(contended) === "resource-coordination-contended";
+      if (release === undefined) throw new Error("coordination holder did not expose release");
+      release();
+      holderSucceeded = (await held).ok;
+    } finally {
+      release?.();
+      if (held !== undefined) await held.catch(() => undefined);
+      for (const [name, descriptor] of previous) {
+        if (descriptor === undefined) Reflect.deleteProperty(String.prototype, name);
+        else Object.defineProperty(String.prototype, name, descriptor);
+      }
+    }
+
+    expect(calls).toBe(0);
+    expect(reservedRejected).toBeTrue();
+    expect(aliasContended).toBeTrue();
+    expect(holderSucceeded).toBeTrue();
   });
 
   test("case-folds and NFC-normalizes conservative coordination aliases", async () => {

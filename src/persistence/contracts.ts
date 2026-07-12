@@ -82,9 +82,14 @@ const reservedWindowsName =
 const forbiddenWindowsCharacters = /[<>:"|?*\\\u0000-\u001f]/;
 const absoluteOrDrivePrefix = /^(?:\/|\\|[a-z]:)/i;
 const intrinsicEncode = TextEncoder.prototype.encode;
+const intrinsicStartsWith = String.prototype.startsWith;
+const intrinsicToLowerCase = String.prototype.toLowerCase;
 
 export function isReservedWorkspaceResourceSegment(value: string): boolean {
-  return value.toLowerCase().startsWith(reservedWorkspaceResourceStagePrefix);
+  const lowered = Reflect.apply(intrinsicToLowerCase, value, []) as string;
+  return Reflect.apply(intrinsicStartsWith, lowered, [
+    reservedWorkspaceResourceStagePrefix,
+  ]) as boolean;
 }
 
 function invalidLocator(reason: string): Result<never> {
