@@ -29,15 +29,20 @@ revisions while omitting transaction resource keys and provider recovery secrets
 Updates, reparenting, and removal require the caller's current component revision;
 stale revisions return an explicit conflict without guessing or overwriting. All
 validation and transaction diagnostics are copied into presentation-neutral outcomes
-with canonical resource details removed.
+with canonical resource details removed. Capability-supplied diagnostic codes are
+exposed only when they are bounded lowercase kebab-case tokens; unsafe codes are
+replaced with application-owned category codes.
 Resource mapping is also a containment boundary: mapper failures become one generic
 component-scoped diagnostic, and mapper messages, details, locators, and keys never
 reach application callers.
 
 Each composition supplies explicit application bounds for component and relationship
-state, relationship mutations, embedded items, diagnostics, and snapshot structural
-depth and values. Construction also enforces absolute ceilings (including snapshot
-retry count), so hostile arrays and payloads fail before unbounded copying, identity
-minting, graph loading, or transaction execution. Auto-generated component IDs are
-minted against the validated current graph, and committed outcomes are accepted only
+state, relationship mutations, embedded items, diagnostics, request-data structural
+depth and values, and snapshot structural depth and values. Create and update mutation
+data—including component items and extensions plus outgoing relationship descriptions
+and extensions—is copied within one total request budget before model, identity, graph,
+provider, or transaction work. Construction also enforces absolute ceilings (including
+snapshot retry count), so hostile arrays and payloads fail before unbounded copying,
+identity minting, graph loading, or transaction execution. Auto-generated component IDs
+are minted against the validated current graph, and committed outcomes are accepted only
 when their affected identity sets exactly match the submitted transaction.

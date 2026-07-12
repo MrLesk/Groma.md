@@ -90,6 +90,8 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
       maxEmbeddedItems: 100,
       maxRelationshipMutations: 100,
       maxRelationships: 1_000,
+      maxRequestDataDepth: 30,
+      maxRequestDataValues: 10_000,
       maxSnapshotStateDepth: 30,
       maxSnapshotStateValues: 100_000,
     },

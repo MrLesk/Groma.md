@@ -49,6 +49,8 @@ export interface ApplicationOperationBounds {
   readonly maxEmbeddedItems: number;
   readonly maxRelationshipMutations: number;
   readonly maxRelationships: number;
+  readonly maxRequestDataDepth: number;
+  readonly maxRequestDataValues: number;
   readonly maxSnapshotStateDepth: number;
   readonly maxSnapshotStateValues: number;
 }

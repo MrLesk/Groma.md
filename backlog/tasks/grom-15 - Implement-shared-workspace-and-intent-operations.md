@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 22:05'
+updated_date: '2026-07-12 22:21'
 labels:
   - operations
 milestone: m-1
@@ -79,4 +79,10 @@ Quality hardening: automatic component identity planning now loads the validated
 ApplicationOperationsOptions now requires explicit bounded ceilings for components, relationships, relationship mutations, embedded items, diagnostic count, and snapshot structural values/depth, while constructor-enforced absolute ceilings also cap snapshot retries. Preflight checks reject hostile arrays, accessors, and proxies before unbounded copying, graph loading, identity generation, or transaction execution as applicable. Both in-memory and official local compositions use bounds compatible with their Standard invariant and store limits.
 
 Superseding validation evidence: focused application+host tests 30 passed with 168 assertions; full bun run check 295 passed with 1,497 assertions; all four packaged targets passed; direct src/application/index.ts compilation passed Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows aarch64; formatting, typecheck, architecture boundaries, build, smoke, and git diff --check passed.
+
+Residual hardening completed: application diagnostics now expose capability/provider codes only when they match a lowercase kebab-case token capped at 128 characters; unsafe initialization, conflict, provider, validation, and indeterminate codes are replaced by stable application-owned category codes while existing message/detail/resource/recovery containment remains intact.
+
+ApplicationOperationBounds now includes explicit maxRequestDataDepth and maxRequestDataValues limits with absolute constructor ceilings. Create and update copy their combined component/patch plus outgoing relationship data through the Core structural GraphData copier before model normalization/patching, identity allocation, graph/provider snapshots, relationship planning, or transaction execution. The shared total budget covers component extensions and embedded items plus relationship descriptions and extensions; hostile proxy inputs remain contained.
+
+Superseding validation evidence: focused application+host tests 35 passed with 231 assertions; full bun run check 300 passed with 1,560 assertions; bun run check:targets verified Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct src/application/index.ts compilation passed those same four targets. Formatting, typecheck, architecture boundaries, build, smoke, git diff --check, diagnostic secrecy review, and no-side-effect budget assertions passed.
 <!-- SECTION:NOTES:END -->

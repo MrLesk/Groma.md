@@ -82,6 +82,8 @@ const absoluteBounds = Object.freeze({
   maxEmbeddedItems: 100_000,
   maxRelationshipMutations: 100_000,
   maxRelationships: 1_000_000,
+  maxRequestDataDepth: 100,
+  maxRequestDataValues: 10_000_000,
   maxSnapshotAttempts: 16,
   maxSnapshotStateDepth: 100,
   maxSnapshotStateValues: 10_000_000,
@@ -840,6 +842,8 @@ interface PlannedRelationshipChanges {
 type DiagnosticCategory = "conflict" | "indeterminate" | "provider" | "validation";
 
 const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
+  "application-request-data-too-large":
+    "Mutation request data exceeds the configured structural budget",
   "component-containment-cycle": "Component containment must remain acyclic",
   "component-has-children": "Component children must be handled explicitly first",
   "component-has-relationships": "Component relationships must be handled explicitly first",
@@ -880,6 +884,15 @@ const safeReceivedTypes = new Set([
 ]);
 const semanticPathPattern =
   /^(?:component|context|finalState|mutation|patch|priorState|request)(?:\.|\[|$)[A-Za-z0-9_.\[\]-]*$/;
+const safeDiagnosticCodePattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+function stableDiagnosticCode(code: string, category: DiagnosticCategory): string {
+  if (code.length <= 128 && safeDiagnosticCodePattern.test(code)) return code;
+  if (category === "conflict") return "application-conflict";
+  if (category === "provider") return "application-provider-failure";
+  if (category === "indeterminate") return "application-indeterminate";
+  return "application-validation-rejected";
+}
 
 function stableDiagnosticMessage(code: string, category: DiagnosticCategory): string {
   if (category === "conflict") return "The operation conflicts with current canonical state";
@@ -917,12 +930,30 @@ function applicationDiagnostic(
   source: Diagnostic,
   category: DiagnosticCategory,
 ): ApplicationDiagnostic {
+  const code = stableDiagnosticCode(source.code, category);
   const details = safeDiagnosticDetails(source.details);
   return Object.freeze({
-    code: source.code,
+    code,
     ...(details === undefined ? {} : { details }),
-    message: stableDiagnosticMessage(source.code, category),
+    message: stableDiagnosticMessage(code, category),
   });
+}
+
+function copyMutationRequestData(
+  value: GraphDataRecord,
+  bounds: ApplicationOperationBounds,
+): Result<GraphDataRecord> {
+  const copied = copyGraphPayload(value, "transaction", {
+    code: "application-request-data-too-large",
+    maximumDepth: bounds.maxRequestDataDepth,
+    maximumValues: bounds.maxRequestDataValues,
+    message: "Mutation request data exceeds the configured structural budget",
+  });
+  if (!copied.ok) return copied;
+  if (typeof copied.value !== "object" || copied.value === null || Array.isArray(copied.value)) {
+    return failure(diagnostic("invalid-application-request", "Mutation request data is malformed"));
+  }
+  return success(copied.value as GraphDataRecord);
 }
 
 function applicationDiagnostics(
@@ -1618,6 +1649,8 @@ export function createApplicationOperations(
     "maxEmbeddedItems",
     "maxRelationshipMutations",
     "maxRelationships",
+    "maxRequestDataDepth",
+    "maxRequestDataValues",
     "maxSnapshotStateDepth",
     "maxSnapshotStateValues",
   ] as const) {
@@ -1708,8 +1741,23 @@ export function createApplicationOperations(
           )
         : success(Object.freeze([]));
     if (!relationships.ok) return rejected(...relationships.diagnostics);
+    const requestData = copyMutationRequestData(
+      Object.freeze({
+        component: validated.value.component as GraphData,
+        relationships: relationships.value as GraphData,
+      }),
+      options.bounds,
+    );
+    if (!requestData.ok) return rejected(...requestData.diagnostics);
+    const copiedComponent = requestData.value.component;
+    const copiedRelationships = requestData.value.relationships;
+    if (!Array.isArray(copiedRelationships)) {
+      return rejected(
+        diagnostic("invalid-application-request", "Created component relationships are malformed"),
+      );
+    }
     const normalized = options.model.normalize(
-      validated.value.component as CreateComponentRequest["component"],
+      copiedComponent as CreateComponentRequest["component"],
     );
     if (!normalized.ok) return rejected(...normalized.diagnostics);
     let current: ReadSnapshot | undefined;
@@ -1768,10 +1816,10 @@ export function createApplicationOperations(
     const relationshipMutations: GraphDataRecord[] = [];
     const affectedRelationships = new Set<string>();
     let graph = added.snapshot;
-    if (relationships.value.length > 0) {
-      for (let index = 0; index < relationships.value.length; index += 1) {
+    if (copiedRelationships.length > 0) {
+      for (let index = 0; index < copiedRelationships.length; index += 1) {
         const planned = relationshipInput(
-          relationships.value[index],
+          copiedRelationships[index],
           component.id,
           graph,
           current,
@@ -1842,6 +1890,18 @@ export function createApplicationOperations(
       options.bounds.maxRelationshipMutations,
     );
     if (!relationshipBound.ok) return rejected(...relationshipBound.diagnostics);
+    const requestData = copyMutationRequestData(
+      Object.freeze({
+        patch: patchValue as GraphData,
+        relationships: (relationshipChanges ?? null) as GraphData,
+      }),
+      options.bounds,
+    );
+    if (!requestData.ok) return rejected(...requestData.diagnostics);
+    const copiedRelationshipChanges =
+      requestData.value.relationships === null
+        ? undefined
+        : (requestData.value.relationships as ComponentRelationshipChanges);
     const mapped = componentResource(id.value, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
     const current = await snapshot(Object.freeze([mapped.value]), options);
@@ -1853,16 +1913,14 @@ export function createApplicationOperations(
     if (current.value.revisions.get(mapped.value) !== expectedRevision.value) {
       return revisionConflict();
     }
-    const copiedPatch = copyGraphPayload(patchValue, "entity");
-    if (!copiedPatch.ok) return rejected(...copiedPatch.diagnostics);
     if (
-      typeof copiedPatch.value !== "object" ||
-      copiedPatch.value === null ||
-      Array.isArray(copiedPatch.value)
+      typeof requestData.value.patch !== "object" ||
+      requestData.value.patch === null ||
+      Array.isArray(requestData.value.patch)
     ) {
       return rejected(diagnostic("invalid-component-patch", "Component patch must be a record"));
     }
-    const patch = copiedPatch.value as GraphDataRecord;
+    const patch = requestData.value.patch as GraphDataRecord;
     if (!allowParent && Object.hasOwn(patch, "parent")) {
       return rejected(
         diagnostic(
@@ -1901,7 +1959,7 @@ export function createApplicationOperations(
     const computed = options.model.parse(computedEntity);
     if (!computed.ok) return rejected(...computed.diagnostics);
     const plannedRelationships = planRelationshipChanges(
-      relationshipChanges,
+      copiedRelationshipChanges,
       id.value,
       current.value,
       options,

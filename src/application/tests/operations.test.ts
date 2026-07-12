@@ -61,6 +61,8 @@ const applicationBounds: ApplicationOperationBounds = Object.freeze({
   maxEmbeddedItems: 100,
   maxRelationshipMutations: 100,
   maxRelationships: 1_000,
+  maxRequestDataDepth: 30,
+  maxRequestDataValues: 10_000,
   maxSnapshotStateDepth: 30,
   maxSnapshotStateValues: 100_000,
 });
@@ -167,11 +169,13 @@ class MutationProvider implements TransactionProvider {
   generation = 0;
   prepares = 0;
   revisions = new Map<ResourceKey, string>();
+  snapshots = 0;
   currentState: StandardModelTransactionState = state([]);
   #pending: ProposedTransaction | undefined;
 
-  snapshot = (resources: readonly ResourceKey[]): TransactionProviderSnapshotInput =>
-    Object.freeze({
+  snapshot = (resources: readonly ResourceKey[]): TransactionProviderSnapshotInput => {
+    this.snapshots += 1;
+    return Object.freeze({
       generation: this.generation,
       revisions: Object.freeze(
         resources.map((key) =>
@@ -180,6 +184,7 @@ class MutationProvider implements TransactionProvider {
       ),
       state: this.currentState,
     });
+  };
 
   prepare = (proposal: ProposedTransaction): TransactionPrepareResultInput => {
     this.prepares += 1;
@@ -491,6 +496,29 @@ describe("application workspace initialization", () => {
     });
     expect((await api.initialize({})).ok).toBe(false);
     expect(invoked).toBe(false);
+  });
+
+  test("replaces unsafe initialization diagnostic codes without leaking them", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    for (const entry of [
+      { expected: "application-conflict", status: "conflict" },
+      { expected: "application-provider-failure", status: "provider-failure" },
+    ] as const) {
+      const result = await operations(new SnapshotFixture(), {
+        diagnostics: [{ code: secret, message: `Initialization exposed ${secret}` }],
+        status: entry.status,
+      }).initialize({});
+      expect(result.ok).toBe(true);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (
+        !result.ok ||
+        result.value.status === "initialized" ||
+        result.value.status === "already-initialized"
+      ) {
+        continue;
+      }
+      expect(result.value.diagnostics[0]?.code).toBe(entry.expected);
+    }
   });
 });
 
@@ -1000,6 +1028,44 @@ describe("application component mutations", () => {
     }
   });
 
+  test("replaces unsafe transaction diagnostic codes with category-owned codes", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    const cases: readonly {
+      readonly expected: string;
+      readonly outcome: TransactionOutcome;
+    }[] = [
+      {
+        expected: "application-conflict",
+        outcome: { diagnostics: [{ code: secret, message: secret }], status: "conflict" },
+      },
+      {
+        expected: "application-provider-failure",
+        outcome: {
+          committed: false,
+          diagnostics: [{ code: secret, message: secret }],
+          phase: "prepare",
+          status: "provider-failure",
+        },
+      },
+      {
+        expected: "application-validation-rejected",
+        outcome: {
+          diagnostics: [{ code: secret, message: secret }],
+          status: "validation-rejected",
+        },
+      },
+    ];
+    for (const entry of cases) {
+      const fixture = mutationOperations(new MutationProvider(), async () => entry.outcome);
+      const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+      expect(result.status).not.toBe("committed");
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (result.status !== "committed") {
+        expect(result.diagnostics[0]?.code).toBe(entry.expected);
+      }
+    }
+  });
+
   test("binds committed affected identity sets exactly to the submitted transaction", async () => {
     const otherEntity = "ent_0000000000000000000000000000000c";
     const otherRelation = "rel_00000000000000000000000000000003";
@@ -1081,6 +1147,16 @@ describe("application operation bounds", () => {
         bounds: { ...applicationBounds, maxComponents: 1_000_001 },
       }),
     ).toThrow("maxComponents");
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 101 },
+      }),
+    ).toThrow("maxRequestDataDepth");
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxRequestDataValues: 10_000_001 },
+      }),
+    ).toThrow("maxRequestDataValues");
   });
 
   test("rejects over-limit snapshot arrays before reading entries", async () => {
@@ -1176,6 +1252,150 @@ describe("application operation bounds", () => {
     expect(relationship.executions()).toBe(0);
   });
 
+  test("bounds create, update, and relationship request depth before side effects", async () => {
+    const cases = [
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 4 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: { "example.dev/deep": { level: { value: true } } },
+          }),
+        name: "create extension depth",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 4 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: { "example.dev/deep": { level: { value: true } } },
+          }),
+        name: "update extension depth",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 5 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {},
+            relationships: [
+              {
+                "example.dev/deep": { level: { value: true } },
+                description: "Bounded relationship",
+                target: ids.target,
+                type: "depends-on",
+              },
+            ],
+          }),
+        name: "relationship extension depth",
+      },
+    ] as const;
+    for (const entry of cases) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(
+        provider,
+        undefined,
+        {
+          nextEntityId: () => {
+            entityCalls += 1;
+            return ids.domain;
+          },
+          nextRelationId: () => {
+            relationCalls += 1;
+            return relationIds.first;
+          },
+        },
+        entry.bounds,
+      );
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(
+        result.status === "validation-rejected" && result.diagnostics[0]?.code,
+        entry.name,
+      ).toBe("application-request-data-too-large");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
+  });
+
+  test("bounds total create, update, and relationship request values before side effects", async () => {
+    const cases = [
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {
+              "example.dev/owner": "architecture",
+              actions: [{ description: "Release safely", id: "deploy" }],
+            },
+          }),
+        name: "create item and extension values",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: {
+              "example.dev/owner": "architecture",
+              outputs: [{ id: "receipts", name: "Receipts" }],
+            },
+          }),
+        name: "update item and extension values",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {},
+            relationships: [
+              {
+                "example.dev/strength": "required",
+                description: "Authenticates through",
+                target: ids.target,
+                type: "depends-on",
+              },
+            ],
+          }),
+        name: "relationship description and extension values",
+      },
+    ] as const;
+    for (const entry of cases) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(
+        provider,
+        undefined,
+        {
+          nextEntityId: () => {
+            entityCalls += 1;
+            return ids.domain;
+          },
+          nextRelationId: () => {
+            relationCalls += 1;
+            return relationIds.first;
+          },
+        },
+        entry.bounds,
+      );
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(
+        result.status === "validation-rejected" && result.diagnostics[0]?.code,
+        entry.name,
+      ).toBe("application-request-data-too-large");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
+  });
+
   test("rejects proxy-shaped component input before identity or execution", async () => {
     let trapped = false;
     let entityCalls = 0;
@@ -1200,6 +1420,54 @@ describe("application operation bounds", () => {
     expect(trapped).toBe(true);
     expect(entityCalls).toBe(0);
     expect(fixture.executions()).toBe(0);
+  });
+
+  test("contains proxy-shaped update and relationship payloads before side effects", async () => {
+    const hostile = () =>
+      new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            throw new Error("proxy trap must stay contained");
+          },
+        },
+      );
+    for (const entry of [
+      {
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: hostile(),
+          }),
+        name: "update patch",
+      },
+      {
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({ component: {}, relationships: [hostile() as never] }),
+        name: "relationship payload",
+      },
+    ] as const) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(provider, undefined, {
+        nextEntityId: () => {
+          entityCalls += 1;
+          return ids.domain;
+        },
+        nextRelationId: () => {
+          relationCalls += 1;
+          return relationIds.first;
+        },
+      });
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
   });
 
   test("rejects over-limit executor diagnostics before reading entries", async () => {
