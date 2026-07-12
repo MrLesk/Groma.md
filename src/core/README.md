@@ -51,7 +51,9 @@ array shapes while exposing every accepted item as recursively readonly canonica
 query data. Structurally data-only interfaces such as Core's `GraphEntity` and
 `GraphRelation` are accepted without requiring an artificial string index signature,
 while mutable results, callable objects, behavior-bearing fields, and noncanonical
-primitive fields are rejected at compile time.
+primitive fields are rejected at compile time. Sparse typed records may use optional
+canonical fields; explicit `undefined` in either required or optional field types is
+still noncanonical.
 
 Cursors carry their format version, graph generation, canonical query context, and
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported

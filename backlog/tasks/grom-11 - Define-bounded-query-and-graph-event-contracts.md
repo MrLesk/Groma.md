@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 02:37'
+updated_date: '2026-07-12 02:39'
 labels:
   - core
   - queries
@@ -61,4 +61,6 @@ Independent quality review found forged-runtime gaps at the public Core boundary
 Final quality typing review aligned the public success contract with runtime behavior. Exact and page items now require canonical GraphData and expose an exported recursive CanonicalQueryData type that preserves inferred record/array shapes while making them deeply readonly. Compile-time assertions reject nested mutation, Date items, and function-bearing records. Task remains In Progress with acceptance criteria unchecked until external review completes.
 
 PR #7 Codex review identified that the first canonical item constraint excluded interface-shaped Core records because they lacked a string index signature. Replaced it with a recursive structural data-only predicate that accepts GraphEntity and GraphRelation directly, preserves branded scalar identities, and rejects callable objects, behavior-bearing fields, invalid primitive unions, and symbol-keyed records. Added compile-time and runtime coverage for direct Core records and readonly nested payload snapshots. Task remains In Progress with acceptance criteria unchecked pending review completion.
+
+Controller inspection found the structural predicate treated omitted sparse fields like explicit undefined. Record-field validation now uses each optional property's required present-value view with a never guard under exactOptionalPropertyTypes. Sparse interfaces with optional canonical fields compile and remain deeply readonly, while required or optional fields explicitly unioned with undefined remain rejected. GraphEntity, GraphRelation, and prior behavior-bearing rejections remain covered. Task stays In Progress with acceptance criteria unchecked.
 <!-- SECTION:NOTES:END -->

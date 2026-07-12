@@ -16,7 +16,11 @@ type CanonicalMemberCheck<T> = T extends GraphDataScalar
     : T extends readonly (infer TItem)[]
       ? IsCanonicalQueryData<TItem>
       : T extends object
-        ? false extends { [TKey in keyof T]-?: IsCanonicalQueryData<T[TKey]> }[keyof T]
+        ? false extends {
+            [TKey in keyof T]-?: [Required<T>[TKey]] extends [never]
+              ? false
+              : IsCanonicalQueryData<Required<T>[TKey]>;
+          }[keyof T]
           ? false
           : true
         : false;

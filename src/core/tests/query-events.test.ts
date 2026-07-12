@@ -86,6 +86,33 @@ function assertCoreQueryRecordTypes(
 
 void assertCoreQueryRecordTypes;
 
+interface SparseQueryRecord {
+  readonly description?: string;
+  readonly id: string;
+  readonly nested?: { readonly labels: readonly string[] };
+}
+
+function assertSparseQueryRecordTypes(
+  contracts: BoundedQueryContracts,
+  sparse: SparseQueryRecord,
+  requiredUndefined: { readonly value: string | undefined },
+  optionalUndefined: { readonly value?: string | undefined },
+): void {
+  const exact = contracts.exact(1, sparse);
+  if (exact.ok) {
+    // @ts-expect-error Canonical sparse result fields remain readonly.
+    exact.value.item.description = "mutation";
+    // @ts-expect-error Nested arrays in optional fields remain deeply readonly.
+    exact.value.item.nested?.labels.push("mutation");
+  }
+  // @ts-expect-error Required fields that permit undefined are not canonical query data.
+  contracts.exact(1, requiredUndefined);
+  // @ts-expect-error Explicit undefined in an optional field remains noncanonical.
+  contracts.exact(1, optionalUndefined);
+}
+
+void assertSparseQueryRecordTypes;
+
 describe("bounded query contracts", () => {
   test("attaches a validated generation to exact reads", () => {
     const contracts = createContracts();
