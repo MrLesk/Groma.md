@@ -1,11 +1,11 @@
 ---
 id: GROM-14
 title: Implement the local transaction journal and recovery
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 20:24'
+updated_date: '2026-07-12 20:39'
 labels:
   - persistence
   - transactions
@@ -18,6 +18,16 @@ dependencies:
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
+modified_files:
+  - src/persistence/README.md
+  - src/persistence/contracts.ts
+  - src/persistence/index.ts
+  - src/persistence/local-resource-provider.ts
+  - src/persistence/local-transaction-journal.ts
+  - src/persistence/tests/fixtures/coordination-child.ts
+  - src/persistence/tests/fixtures/transaction-crash-child.ts
+  - src/persistence/tests/local-resource-provider.test.ts
+  - src/persistence/tests/local-transaction-journal.test.ts
 priority: high
 ordinal: 11000
 ---
@@ -30,13 +40,13 @@ Provide crash-safe multi-resource transactions for the official local host. The 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A transaction records its base generation, target generation, target resources, expected revisions, and staged replacements before any canonical target changes
-- [ ] #2 The committed generation marker advances only when all target resources form the complete new generation
-- [ ] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
-- [ ] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
-- [ ] #5 Journal and staging artifacts contain no volatile metadata that would create canonical Git churn and are cleaned after a confirmed outcome
-- [ ] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
-- [ ] #7 The resulting generation and recovery outcome satisfy the Core transaction-provider contract and leave a future projection watermark integration point
+- [x] #1 A transaction records its base generation, target generation, target resources, expected revisions, and staged replacements before any canonical target changes
+- [x] #2 The committed generation marker advances only when all target resources form the complete new generation
+- [x] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
+- [x] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
+- [x] #5 Journal and staging artifacts contain no volatile metadata that would create canonical Git churn and are cleaned after a confirmed outcome
+- [x] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
+- [x] #7 The resulting generation and recovery outcome satisfy the Core transaction-provider contract and leave a future projection watermark integration point
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -74,4 +84,12 @@ Final specification cleanup fix: token-scoped live preparation records now track
 Startup snapshot lease fix: the journal now retains an opaque snapshot/startup coordination lease in volatile memory when pre-move release fails. The next snapshot atomically takes the retained lease before its first await, so one caller can retry release while a concurrent caller follows normal acquisition and safely contends; confirmed release clears the slot. Added ordinary idle retry and concurrency-barrier regressions, plus the exact real-child case: a durable committing child exit is fully settled by a fresh snapshot, its first release fails, the second snapshot reuses and releases the lease at generation 1 without contention, stage artifacts remain empty, and a subsequent transaction commits generation 2. Existing token-scoped handle cleanup and finish/recover lease retry remain green. Validation: focused journal/provider 107 tests / 574 assertions; full check 260 tests / 1299 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
 
 Final quality hardening: transaction-state target reservation now uses captured String normalize/toLowerCase intrinsics with NFC -> case-fold -> NFC conservative aliasing, matching local coordination semantics. Exact and uppercase generic-adapter aliases are rejected before token/prepared publication; regressions prove both canonical and alias resources remain absent, snapshot stays usable, and later valid work commits. Journal-state publication now tracks same-process staged handles with exact prior/intended bytes and a commit-or-discard disposition. Provider not-committed and thrown pre-move outcomes discard; failed discard remains pending and is retried before any later stage; thrown or uncertain publication with intended bytes visible retains and retries the handle to finish finalization, while divergent readback fails closed. Added typed not-committed, pre-move throw, failed-discard retry, and visible-post-move throw regressions with zero final stage artifacts. Validation: focused journal/provider 112 tests / 604 assertions; full check 265 tests / 1329 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
+
+PR #12 review gates: independent exact-commit specification and code-quality reviews passed at 066b91b. Claude approved with minor non-blocking suggestions after reviewing naming, conceptual simplicity, coherence, and user perspective; suggestions were assessed and intentionally deferred or retained by design. Codex completed with a thumbs-up and no comments or review threads. GitHub Verify quality gates and all four cross-platform binary checks passed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the deterministic local transaction journal and crash-safe Markdown commit path: exact adapter binding, prepared/committing/idle recovery, confirmed replace/delete durability, persistent same-machine leases, bounded cleanup, conservative alias protection, projection-watermark preservation, and real abrupt-process recovery. Verified by 265 tests / 1329 assertions, focused 112 / 604 persistence coverage, independent specification and quality review, Claude approval, Codex thumbs-up, green GitHub CI, and macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 compilation.
+<!-- SECTION:FINAL_SUMMARY:END -->
