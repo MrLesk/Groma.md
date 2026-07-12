@@ -11,6 +11,7 @@ import {
   type GraphData,
   type GraphDataRecord,
   type GraphGeneration,
+  type OpaqueIdSource,
   type ProposedTransaction,
   type ResourceKey,
   type TransactionCommitResultInput,
@@ -28,6 +29,7 @@ import {
 } from "../../standard-model/index.ts";
 import {
   type ApplicationMutationOutcome,
+  type ApplicationOperationBounds,
   createApplicationOperations,
   type ApplicationOperationsOptions,
   type WorkspaceInitializationOutcome,
@@ -53,6 +55,15 @@ const relationIds = {
 } as const;
 
 const model = createStandardModelCapability();
+const applicationBounds: ApplicationOperationBounds = Object.freeze({
+  maxComponents: 1_000,
+  maxDiagnosticCount: 100,
+  maxEmbeddedItems: 100,
+  maxRelationshipMutations: 100,
+  maxRelationships: 1_000,
+  maxSnapshotStateDepth: 30,
+  maxSnapshotStateValues: 100_000,
+});
 
 function component(input: StandardComponentInput) {
   const normalized = model.normalize(input);
@@ -285,12 +296,14 @@ function mutationOperations(
     request: TransactionRequest,
     engine: TransactionEngine,
   ) => Promise<TransactionOutcome>,
+  idSource?: OpaqueIdSource,
+  bounds = applicationBounds,
 ) {
   const semanticInitialization = createStatefulSemanticInitializer();
   let entityCounter = 50;
   let relationCounter = 50;
   const graph = new GraphKernel({
-    idSource: {
+    idSource: idSource ?? {
       nextEntityId: () => `ent_${(entityCounter++).toString(16).padStart(32, "0")}`,
       nextRelationId: () => `rel_${(relationCounter++).toString(16).padStart(32, "0")}`,
     },
@@ -317,6 +330,7 @@ function mutationOperations(
   if (!registered.ok) throw new Error("failed to register test invariant");
   let executions = 0;
   const api = createApplicationOperations({
+    bounds,
     graph,
     initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
@@ -352,6 +366,7 @@ function operations(
   let entityCounter = 100;
   let relationCounter = 100;
   return createApplicationOperations({
+    bounds: applicationBounds,
     graph: new GraphKernel({
       idSource: {
         nextEntityId: () => `ent_${(entityCounter++).toString(16).padStart(32, "0")}`,
@@ -384,7 +399,12 @@ describe("application workspace initialization", () => {
     { generation: generation(1), status: "initialized" },
     { generation: generation(2), status: "already-initialized" },
     {
-      diagnostics: [{ code: "workspace-conflict", message: "Workspace conflicts" }],
+      diagnostics: [
+        {
+          code: "workspace-conflict",
+          message: "The operation conflicts with current canonical state",
+        },
+      ],
       status: "conflict",
     },
   ] as const)("delegates the $status outcome", async (outcome) => {
@@ -621,6 +641,30 @@ function committedRevision(outcome: ApplicationMutationOutcome<unknown>): string
 }
 
 describe("application component mutations", () => {
+  test("mints against canonical state and retries an existing identity before commit", async () => {
+    const provider = new MutationProvider();
+    const existing = "ent_0000000000000000000000000000000a";
+    const fresh = "ent_0000000000000000000000000000000b";
+    provider.currentState = state([component({ id: existing, type: "service" })]);
+    provider.revisions.set(resource(existing), "existing-revision");
+    let calls = 0;
+    const fixture = mutationOperations(provider, undefined, {
+      nextEntityId: () => {
+        calls += 1;
+        return calls === 1 ? existing : fresh;
+      },
+      nextRelationId: () => relationIds.first,
+    });
+    const created = await fixture.api.createComponent({ component: { type: "service" } });
+    expect(created.status).toBe("committed");
+    expect(created.status === "committed" && String(created.value.id)).toBe(fresh);
+    expect(calls).toBe(2);
+
+    const suppliedConflict = await fixture.api.createComponent({ component: { id: existing } });
+    expect(suppliedConflict.status).toBe("conflict");
+    expect(calls).toBe(2);
+  });
+
   test("matches the reusable provider-neutral semantic workflow", async () => {
     const trace = await exerciseApplicationOperations(mutationOperations().api);
     expect(trace).toEqual(expectedApplicationOperationsTrace);
@@ -901,5 +945,281 @@ describe("application component mutations", () => {
     } as never);
     expect(invalid.status).toBe("validation-rejected");
     expect(malformedFixture.executions()).toBe(1);
+  });
+
+  test("sanitizes conflict, provider, validation, and indeterminate capability diagnostics", async () => {
+    const secret = "/private/provider/workspace.md::recovery-secret-token";
+    const diagnostic = {
+      code: "semantic-test-code",
+      details: {
+        id: ids.domain,
+        note: secret,
+        path: secret,
+        resource: secret,
+      },
+      message: `Provider exposed ${secret}`,
+    };
+    const outcomes: readonly { readonly outcome: TransactionOutcome; readonly status: string }[] = [
+      { outcome: { diagnostics: [diagnostic], status: "conflict" }, status: "conflict" },
+      {
+        outcome: {
+          committed: false,
+          diagnostics: [diagnostic],
+          phase: "prepare",
+          status: "provider-failure",
+        },
+        status: "provider-failure",
+      },
+      {
+        outcome: { diagnostics: [diagnostic], status: "validation-rejected" },
+        status: "validation-rejected",
+      },
+      {
+        outcome: {
+          diagnostics: [diagnostic],
+          recovery: {
+            baseGeneration: generation(0),
+            generation: generation(1),
+            resources: [resource(ids.domain)],
+            token: secret,
+          },
+          status: "indeterminate",
+        },
+        status: "indeterminate",
+      },
+    ];
+    for (const entry of outcomes) {
+      const fixture = mutationOperations(new MutationProvider(), async () => entry.outcome);
+      const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+      expect(String(result.status)).toBe(entry.status);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(result.status !== "committed" && result.diagnostics[0]?.code).toBe(
+        "semantic-test-code",
+      );
+      expect(result.status !== "committed" && result.diagnostics[0]?.details?.id).toBe(ids.domain);
+    }
+  });
+
+  test("binds committed affected identity sets exactly to the submitted transaction", async () => {
+    const otherEntity = "ent_0000000000000000000000000000000c";
+    const otherRelation = "rel_00000000000000000000000000000003";
+    const cases = [
+      {
+        entities: [ids.domain],
+        expected: "committed",
+        name: "reordered",
+        relations: [relationIds.second, relationIds.first],
+      },
+      { entities: [], expected: "indeterminate", name: "missing", relations: [] },
+      {
+        entities: [ids.domain, otherEntity],
+        expected: "indeterminate",
+        name: "extra",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [otherEntity],
+        expected: "indeterminate",
+        name: "unrelated",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [ids.domain, ids.domain],
+        expected: "indeterminate",
+        name: "duplicate",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [ids.domain],
+        expected: "indeterminate",
+        name: "extra relation",
+        relations: [relationIds.first, relationIds.second, otherRelation],
+      },
+    ] as const;
+    for (const entry of cases) {
+      const fixture = mutationOperations(new MutationProvider(), async (request) => {
+        const committedGeneration = generation(1);
+        return {
+          event: {
+            affected: { entities: entry.entities, relations: entry.relations },
+            generation: committedGeneration,
+            type: "graph.committed",
+          },
+          generation: committedGeneration,
+          revisions: request.expectedRevisions.map((expected) => ({
+            resource: expected.resource,
+            revision: "committed-fake-revision",
+          })),
+          status: "committed",
+        } as never;
+      });
+      const result = await fixture.api.createComponent({
+        component: { id: ids.domain },
+        relationships: [
+          { id: relationIds.first, target: ids.domain, type: "depends-on" },
+          { id: relationIds.second, target: ids.domain, type: "coordinates-with" },
+        ],
+      });
+      expect(result.status, entry.name).toBe(entry.expected);
+      if (result.status === "committed") {
+        expect(result.affected).toEqual({
+          components: [ids.domain],
+          relationships: [relationIds.first, relationIds.second],
+        });
+      }
+    }
+  });
+});
+
+describe("application operation bounds", () => {
+  test("rejects constructor bounds beyond absolute ceilings", () => {
+    expect(() => operations(new SnapshotFixture(), undefined, { maxSnapshotAttempts: 17 })).toThrow(
+      "maxSnapshotAttempts",
+    );
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxComponents: 1_000_001 },
+      }),
+    ).toThrow("maxComponents");
+  });
+
+  test("rejects over-limit snapshot arrays before reading entries", async () => {
+    let invoked = false;
+    const components = new Array(2);
+    Object.defineProperty(components, "0", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return {};
+      },
+    });
+    const fixture = new SnapshotFixture();
+    fixture.currentState = { components, relationships: [] } as never;
+    const result = await operations(fixture, undefined, {
+      bounds: { ...applicationBounds, maxComponents: 1 },
+    }).listComponents({ limit: 1 });
+    expect(result.ok).toBe(false);
+    expect(invoked).toBe(false);
+
+    let relationshipInvoked = false;
+    const relationships = new Array(2);
+    Object.defineProperty(relationships, "0", {
+      enumerable: true,
+      get: () => {
+        relationshipInvoked = true;
+        return {};
+      },
+    });
+    const relationshipFixture = new SnapshotFixture();
+    relationshipFixture.currentState = { components: [], relationships } as never;
+    const relationshipResult = await operations(relationshipFixture, undefined, {
+      bounds: { ...applicationBounds, maxRelationships: 1 },
+    }).listComponents({ limit: 1 });
+    expect(relationshipResult.ok).toBe(false);
+    expect(relationshipInvoked).toBe(false);
+
+    const structuralFixture = new SnapshotFixture();
+    const structural = await operations(structuralFixture, undefined, {
+      bounds: { ...applicationBounds, maxSnapshotStateDepth: 2, maxSnapshotStateValues: 2 },
+    }).listComponents({ limit: 1 });
+    expect(structural.ok).toBe(false);
+  });
+
+  test("rejects embedded and relationship request overflows before identity or execution", async () => {
+    let entityCalls = 0;
+    const idSource: OpaqueIdSource = {
+      nextEntityId: () => {
+        entityCalls += 1;
+        return ids.domain;
+      },
+      nextRelationId: () => relationIds.first,
+    };
+    let embeddedInvoked = false;
+    const inputs = new Array(2);
+    Object.defineProperty(inputs, "0", {
+      enumerable: true,
+      get: () => {
+        embeddedInvoked = true;
+        return {};
+      },
+    });
+    const embedded = mutationOperations(new MutationProvider(), undefined, idSource, {
+      ...applicationBounds,
+      maxEmbeddedItems: 1,
+    });
+    const embeddedResult = await embedded.api.createComponent({ component: { inputs } as never });
+    expect(embeddedResult.status).toBe("validation-rejected");
+    expect(embeddedInvoked).toBe(false);
+    expect(entityCalls).toBe(0);
+    expect(embedded.executions()).toBe(0);
+
+    let relationshipInvoked = false;
+    const relationships = new Array(2);
+    Object.defineProperty(relationships, "0", {
+      enumerable: true,
+      get: () => {
+        relationshipInvoked = true;
+        return {};
+      },
+    });
+    const relationship = mutationOperations(new MutationProvider(), undefined, idSource, {
+      ...applicationBounds,
+      maxRelationshipMutations: 1,
+    });
+    const relationshipResult = await relationship.api.createComponent({
+      component: {},
+      relationships: relationships as never,
+    });
+    expect(relationshipResult.status).toBe("validation-rejected");
+    expect(relationshipInvoked).toBe(false);
+    expect(entityCalls).toBe(0);
+    expect(relationship.executions()).toBe(0);
+  });
+
+  test("rejects proxy-shaped component input before identity or execution", async () => {
+    let trapped = false;
+    let entityCalls = 0;
+    const componentProxy = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor: () => {
+          trapped = true;
+          throw new Error("proxy trap must stay contained");
+        },
+      },
+    );
+    const fixture = mutationOperations(new MutationProvider(), undefined, {
+      nextEntityId: () => {
+        entityCalls += 1;
+        return ids.domain;
+      },
+      nextRelationId: () => relationIds.first,
+    });
+    const result = await fixture.api.createComponent({ component: componentProxy });
+    expect(result.status).toBe("validation-rejected");
+    expect(trapped).toBe(true);
+    expect(entityCalls).toBe(0);
+    expect(fixture.executions()).toBe(0);
+  });
+
+  test("rejects over-limit executor diagnostics before reading entries", async () => {
+    let invoked = false;
+    const diagnostics = new Array(2);
+    Object.defineProperty(diagnostics, "0", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return {};
+      },
+    });
+    const fixture = mutationOperations(
+      new MutationProvider(),
+      async () => ({ diagnostics, status: "validation-rejected" }) as never,
+      undefined,
+      { ...applicationBounds, maxDiagnosticCount: 1 },
+    );
+    const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+    expect(result.status).toBe("indeterminate");
+    expect(invoked).toBe(false);
   });
 });

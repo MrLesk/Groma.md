@@ -43,7 +43,18 @@ export interface TransactionExecutionCapability {
   execute(request: TransactionRequest): Promise<TransactionOutcome>;
 }
 
+export interface ApplicationOperationBounds {
+  readonly maxComponents: number;
+  readonly maxDiagnosticCount: number;
+  readonly maxEmbeddedItems: number;
+  readonly maxRelationshipMutations: number;
+  readonly maxRelationships: number;
+  readonly maxSnapshotStateDepth: number;
+  readonly maxSnapshotStateValues: number;
+}
+
 export interface ApplicationOperationsOptions {
+  readonly bounds: ApplicationOperationBounds;
   readonly graph: GraphKernel;
   readonly initialization: WorkspaceInitializationCapability;
   readonly maxSnapshotAttempts: number;

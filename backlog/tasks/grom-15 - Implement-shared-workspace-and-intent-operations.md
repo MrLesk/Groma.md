@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 21:38'
+updated_date: '2026-07-12 22:05'
 labels:
   - operations
 milestone: m-1
@@ -73,4 +73,10 @@ Component resource mapping is now a strict diagnostic containment boundary. Ever
 Equivalence evidence now projects complete Standard Model semantics. The reusable trace reads the rich nested service back through getComponent and compares name, type, parent, intent, lifecycle, desired state, all input/output/action IDs, names, descriptions and extension values, component extension values, and both outgoing relationship descriptions and extension values before cleanup. Restart verification projects the same complete semantics for every remaining component, plus hierarchy, stable identities, present revisions, generation 10, and zero relationships.
 
 Superseding validation evidence: focused application+host tests 22 passed with 119 assertions; full bun run check 287 passed with 1,448 assertions; bun run check:targets passed all four targets; direct src/application/index.ts compilation passed Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows aarch64; architecture boundaries, formatting, typecheck, smoke, and git diff --check passed.
+
+Quality hardening: automatic component identity planning now loads the validated canonical snapshot first and asks GraphKernel to mint against that graph, so configured collision retry observes existing identities; supplied identity conflicts remain explicit. Presentation diagnostics now use stable category messages and a bounded semantic-detail whitelist, preventing provider messages, ordinary string details, resource/locator/path text, and recovery tokens from escaping while retaining useful stable codes and opaque component/entity/relation identities. Committed outcomes are accepted only when their normalized affected entity and relation sets exactly equal the submitted transaction; response ordering differences normalize, while missing, extra, unrelated, or duplicate identities fail indeterminate.
+
+ApplicationOperationsOptions now requires explicit bounded ceilings for components, relationships, relationship mutations, embedded items, diagnostic count, and snapshot structural values/depth, while constructor-enforced absolute ceilings also cap snapshot retries. Preflight checks reject hostile arrays, accessors, and proxies before unbounded copying, graph loading, identity generation, or transaction execution as applicable. Both in-memory and official local compositions use bounds compatible with their Standard invariant and store limits.
+
+Superseding validation evidence: focused application+host tests 30 passed with 168 assertions; full bun run check 295 passed with 1,497 assertions; all four packaged targets passed; direct src/application/index.ts compilation passed Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows aarch64; formatting, typecheck, architecture boundaries, build, smoke, and git diff --check passed.
 <!-- SECTION:NOTES:END -->

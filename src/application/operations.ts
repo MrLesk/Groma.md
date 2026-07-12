@@ -12,6 +12,7 @@ import {
   type EntityId,
   type GraphData,
   type GraphDataRecord,
+  type GraphEntity,
   type GraphGeneration,
   type GraphRelation,
   type GraphSnapshot,
@@ -33,6 +34,7 @@ import {
 import type {
   ApplicationDiagnostic,
   ApplicationMutationOutcome,
+  ApplicationOperationBounds,
   ApplicationOperations,
   ApplicationOperationsOptions,
   BoundedPageRequest,
@@ -74,8 +76,27 @@ interface SelectedPage<T> {
 
 type ComponentFilter = (component: StandardComponent) => boolean;
 
+const absoluteBounds = Object.freeze({
+  maxComponents: 1_000_000,
+  maxDiagnosticCount: 1_000,
+  maxEmbeddedItems: 100_000,
+  maxRelationshipMutations: 100_000,
+  maxRelationships: 1_000_000,
+  maxSnapshotAttempts: 16,
+  maxSnapshotStateDepth: 100,
+  maxSnapshotStateValues: 10_000_000,
+});
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function diagnostic(code: string, message: string): Diagnostic {
@@ -116,9 +137,9 @@ function componentResource(
   return resource.ok ? resource : failure(componentResourceDiagnostic(componentId));
 }
 
-function validatePositiveBound(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${name} must be a positive safe integer`);
+function validatePositiveBound(value: number, name: string, maximum: number): void {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
+    throw new RangeError(`${name} must be a positive safe integer no greater than ${maximum}`);
   }
 }
 
@@ -143,8 +164,8 @@ function boundedRequest(value: unknown, subject: string): Result<BoundedPageRequ
   );
 }
 
-function denseArray(value: unknown, subject: string): Result<readonly unknown[]> {
-  const length = inspectIntrinsicArrayLength(value, "invalid-standard-model-state", subject);
+function denseArray(value: unknown, subject: string, maximum: number): Result<readonly unknown[]> {
+  const length = boundedArrayLength(value, subject, maximum);
   if (!length.ok) return length;
   try {
     const keys = Reflect.ownKeys(value as object);
@@ -169,7 +190,179 @@ function denseArray(value: unknown, subject: string): Result<readonly unknown[]>
   }
 }
 
-function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitializationOutcome> {
+function boundedArrayLength(value: unknown, subject: string, maximum: number): Result<number> {
+  const length = inspectIntrinsicArrayLength(value, "invalid-standard-model-state", subject);
+  if (!length.ok) return length;
+  return length.value <= maximum
+    ? length
+    : failure(
+        Object.freeze({
+          code: "application-bound-exceeded",
+          details: Object.freeze({ maximum }),
+          message: `${subject} exceeds the configured item count`,
+        }),
+      );
+}
+
+function preflightEmbeddedItems(value: unknown, maximum: number): Result<void> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return success(undefined);
+  let total = 0;
+  try {
+    for (const field of ["actions", "inputs", "outputs"] as const) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, field);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor) || !descriptor.enumerable) {
+        return failure(
+          diagnostic(
+            "invalid-component-items",
+            `Component ${field} must be an enumerable data property`,
+          ),
+        );
+      }
+      if (descriptor.value === null || descriptor.value === undefined) continue;
+      const length = inspectIntrinsicArrayLength(
+        descriptor.value,
+        "invalid-component-items",
+        `Component ${field}`,
+      );
+      if (!length.ok) return length;
+      if (length.value > maximum - total) {
+        return failure(
+          Object.freeze({
+            code: "application-bound-exceeded",
+            details: Object.freeze({ maximum }),
+            message: "Embedded component items exceed the configured item count",
+          }),
+        );
+      }
+      total += length.value;
+    }
+  } catch {
+    return failure(
+      diagnostic(
+        "invalid-component-items",
+        "Embedded component items could not be inspected safely",
+      ),
+    );
+  }
+  return success(undefined);
+}
+
+function preflightRelationshipChanges(
+  value: ComponentRelationshipChanges | undefined,
+  maximum: number,
+): Result<void> {
+  if (value === undefined) return success(undefined);
+  const envelope = exactRequest(
+    value,
+    [[], ["remove"], ["upsert"], ["remove", "upsert"]],
+    "Relationship changes",
+  );
+  if (!envelope.ok) return envelope;
+  let total = 0;
+  for (const field of ["remove", "upsert"] as const) {
+    if (!(field in envelope.value)) continue;
+    const length = inspectIntrinsicArrayLength(
+      envelope.value[field],
+      "invalid-relationship-changes",
+      `Relationship ${field}`,
+    );
+    if (!length.ok) return length;
+    if (length.value > maximum - total) {
+      return failure(
+        Object.freeze({
+          code: "application-bound-exceeded",
+          details: Object.freeze({ maximum }),
+          message: "Relationship changes exceed the configured mutation count",
+        }),
+      );
+    }
+    total += length.value;
+  }
+  return success(undefined);
+}
+
+function preflightDiagnostics(value: unknown, bounds: ApplicationOperationBounds): Result<void> {
+  const entries = denseArray(value, "Diagnostics", bounds.maxDiagnosticCount);
+  if (!entries.ok) return entries;
+  for (let index = 0; index < entries.value.length; index += 1) {
+    const entry = inspectExactRecord(
+      entries.value[index],
+      [
+        ["code", "message"],
+        ["code", "details", "message"],
+      ],
+      "invalid-diagnostic",
+      "Diagnostic",
+    );
+    if (
+      !entry.ok ||
+      typeof entry.value.code !== "string" ||
+      entry.value.code.length === 0 ||
+      entry.value.code.length > 4_096 ||
+      typeof entry.value.message !== "string" ||
+      entry.value.message.length === 0 ||
+      entry.value.message.length > 4_096
+    ) {
+      return failure(diagnostic("invalid-diagnostic", "Diagnostic scalar fields are malformed"));
+    }
+    if (!("details" in entry.value)) continue;
+    if (
+      typeof entry.value.details !== "object" ||
+      entry.value.details === null ||
+      Array.isArray(entry.value.details)
+    ) {
+      return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+    }
+    try {
+      const keys = Reflect.ownKeys(entry.value.details);
+      if (keys.length > 64) {
+        return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+      }
+      for (let detailIndex = 0; detailIndex < keys.length; detailIndex += 1) {
+        const key = keys[detailIndex];
+        if (typeof key !== "string" || key.length > 4_096) {
+          return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(entry.value.details, key);
+        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+          return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+        }
+        const detail = descriptor.value;
+        if (
+          (typeof detail !== "string" || detail.length > 4_096) &&
+          (typeof detail !== "number" || !Number.isFinite(detail)) &&
+          typeof detail !== "boolean"
+        ) {
+          return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+        }
+      }
+    } catch {
+      return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+    }
+  }
+  return success(undefined);
+}
+
+function validatedInitializationOutcome(
+  value: unknown,
+  bounds: ApplicationOperationBounds,
+): Result<WorkspaceInitializationOutcome> {
+  const raw = inspectExactRecord(
+    value,
+    [
+      ["generation", "status"],
+      ["diagnostics", "status"],
+    ],
+    "invalid-workspace-initialization-outcome",
+    "Workspace initialization outcome",
+  );
+  if (!raw.ok) return raw;
+  if ("diagnostics" in raw.value) {
+    const diagnostics = preflightDiagnostics(raw.value.diagnostics, bounds);
+    if (!diagnostics.ok) return diagnostics;
+  }
   const copied = copyGraphPayload(value, "transaction");
   if (!copied.ok) return copied;
   const record = inspectExactRecord(
@@ -212,7 +405,11 @@ function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitial
       ),
     );
   }
-  const values = denseArray(record.value.diagnostics, "Workspace initialization diagnostics");
+  const values = denseArray(
+    record.value.diagnostics,
+    "Workspace initialization diagnostics",
+    bounds.maxDiagnosticCount,
+  );
   if (!values.ok) return values;
   const diagnostics: Diagnostic[] = [];
   for (let index = 0; index < values.value.length; index += 1) {
@@ -285,11 +482,14 @@ function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitial
       }
       details = Object.freeze(copiedDetails);
     }
-    diagnostics[index] = Object.freeze({
-      code: entry.value.code,
-      ...(details === undefined ? {} : { details }),
-      message: entry.value.message,
-    });
+    diagnostics[index] = applicationDiagnostic(
+      Object.freeze({
+        code: entry.value.code,
+        ...(details === undefined ? {} : { details }),
+        message: entry.value.message,
+      }),
+      record.value.status === "conflict" ? "conflict" : "provider",
+    );
   }
   return success(
     Object.freeze({
@@ -300,7 +500,31 @@ function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitial
 }
 
 function loadState(value: unknown, options: ApplicationOperationsOptions): Result<LoadedState> {
-  const copied = copyGraphPayload(value, "transaction");
+  const rawEnvelope = inspectExactRecord(
+    value,
+    [["components", "relationships"]],
+    "invalid-standard-model-state",
+    "Standard Model transaction state",
+  );
+  if (!rawEnvelope.ok) return rawEnvelope;
+  const rawComponents = boundedArrayLength(
+    rawEnvelope.value.components,
+    "Standard Model transaction state components",
+    options.bounds.maxComponents,
+  );
+  if (!rawComponents.ok) return rawComponents;
+  const rawRelationships = boundedArrayLength(
+    rawEnvelope.value.relationships,
+    "Standard Model transaction state relationships",
+    options.bounds.maxRelationships,
+  );
+  if (!rawRelationships.ok) return rawRelationships;
+  const copied = copyGraphPayload(value, "transaction", {
+    code: "application-snapshot-state-too-large",
+    maximumDepth: options.bounds.maxSnapshotStateDepth,
+    maximumValues: options.bounds.maxSnapshotStateValues,
+    message: "Transaction snapshot state exceeds the configured structural budget",
+  });
   if (!copied.ok) return copied;
   const envelope = inspectExactRecord(
     copied.value,
@@ -312,11 +536,13 @@ function loadState(value: unknown, options: ApplicationOperationsOptions): Resul
   const componentValues = denseArray(
     envelope.value.components,
     "Standard Model transaction state components",
+    options.bounds.maxComponents,
   );
   if (!componentValues.ok) return componentValues;
   const relationshipValues = denseArray(
     envelope.value.relationships,
     "Standard Model transaction state relationships",
+    options.bounds.maxRelationships,
   );
   if (!relationshipValues.ok) return relationshipValues;
 
@@ -408,7 +634,11 @@ async function snapshot(
   if (!inspected.ok) return inspected;
   const generation = parseGraphGeneration(inspected.value.generation);
   if (!generation.ok) return generation;
-  const entries = denseArray(inspected.value.revisions, "Transaction provider revisions");
+  const entries = denseArray(
+    inspected.value.revisions,
+    "Transaction provider revisions",
+    options.bounds.maxComponents,
+  );
   if (!entries.ok) return entries;
   if (entries.value.length !== resources.length) {
     return failure(
@@ -538,7 +768,7 @@ async function componentPage(
 ): Promise<Result<ComponentPage>> {
   for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
     const initial = await snapshot(Object.freeze([]), options);
-    if (!initial.ok) return initial;
+    if (!initial.ok) return readProviderFailure(initial.diagnostics);
     const prepared = options.queries.prepare(initial.value.generation, query, request);
     if (!prepared.ok) return prepared;
     const initialItems = initial.value.components.filter(filter);
@@ -551,7 +781,7 @@ async function componentPage(
       resources[index] = mapped.value;
     }
     const confirmed = await snapshot(Object.freeze(resources), options);
-    if (!confirmed.ok) return confirmed;
+    if (!confirmed.ok) return readProviderFailure(confirmed.diagnostics);
     if (confirmed.value.generation !== initial.value.generation) continue;
 
     const confirmedItems = confirmed.value.components.filter(filter);
@@ -607,27 +837,100 @@ interface PlannedRelationshipChanges {
   readonly mutations: readonly GraphDataRecord[];
 }
 
-function applicationDiagnostic(source: Diagnostic): ApplicationDiagnostic {
-  if (source.details === undefined) {
-    return Object.freeze({ code: source.code, message: source.message });
-  }
-  const details: Record<string, string | number | boolean> = {};
-  for (const [key, value] of Object.entries(source.details)) {
-    const lowered = key.toLowerCase();
-    if (lowered.includes("resource") || lowered.includes("locator")) continue;
-    details[key] = value;
-  }
-  return Object.keys(details).length === 0
-    ? Object.freeze({ code: source.code, message: source.message })
-    : Object.freeze({
-        code: source.code,
-        details: Object.freeze(details),
-        message: source.message,
-      });
+type DiagnosticCategory = "conflict" | "indeterminate" | "provider" | "validation";
+
+const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
+  "component-containment-cycle": "Component containment must remain acyclic",
+  "component-has-children": "Component children must be handled explicitly first",
+  "component-has-relationships": "Component relationships must be handled explicitly first",
+  "component-resource-unavailable": "The component resource could not be resolved",
+  "content-revision-conflict": "The component revision conflicts with canonical state",
+  "explicit-reparent-required": "Structural parent changes require explicit reparenting",
+  "relationship-id-hijack": "The relationship identity belongs to another component",
+  "self-component-parent": "A component cannot be its own structural parent",
+  "unknown-component": "The exact component does not exist",
+  "unknown-component-parent": "The exact component parent does not exist",
+  "unknown-relationship": "The exact relationship does not exist",
+});
+
+const safeIdentityDetailKeys = new Set(["componentId", "id", "parent", "source", "target"]);
+const safeNumericDetailKeys = new Set([
+  "actual",
+  "attempts",
+  "limit",
+  "maximum",
+  "receivedLength",
+  "sourceMessageLength",
+]);
+const safeBooleanDetailKeys = new Set([
+  "actualAbsent",
+  "expectedAbsent",
+  "overwritePrevented",
+  "retryable",
+]);
+const safeReceivedTypes = new Set([
+  "bigint",
+  "boolean",
+  "function",
+  "number",
+  "object",
+  "string",
+  "symbol",
+  "undefined",
+]);
+const semanticPathPattern =
+  /^(?:component|context|finalState|mutation|patch|priorState|request)(?:\.|\[|$)[A-Za-z0-9_.\[\]-]*$/;
+
+function stableDiagnosticMessage(code: string, category: DiagnosticCategory): string {
+  if (category === "conflict") return "The operation conflicts with current canonical state";
+  if (category === "provider") return "The provider could not complete the operation";
+  if (category === "indeterminate") return "The operation commit state is indeterminate";
+  return semanticMessages[code] ?? "The requested semantic operation was rejected";
 }
 
-function applicationDiagnostics(value: unknown): Result<readonly ApplicationDiagnostic[]> {
-  const entries = denseArray(value, "Transaction outcome diagnostics");
+function safeDiagnosticDetails(
+  source: Diagnostic["details"],
+): Readonly<Record<string, string | number | boolean>> | undefined {
+  if (source === undefined) return undefined;
+  const details = Object.create(null) as Record<string, string | number | boolean>;
+  for (const [key, value] of Object.entries(source)) {
+    let safe = false;
+    if (safeIdentityDetailKeys.has(key) && typeof value === "string") {
+      safe = parseEntityId(value).ok || parseRelationId(value).ok;
+    } else if (key === "path" && typeof value === "string") {
+      safe = semanticPathPattern.test(value);
+    } else if (key === "receivedType" && typeof value === "string") {
+      safe = safeReceivedTypes.has(value);
+    } else if (key === "state" && typeof value === "string") {
+      safe = value === "absent" || value === "incompatible" || value === "initialized";
+    } else if (safeNumericDetailKeys.has(key) && typeof value === "number") {
+      safe = Number.isFinite(value);
+    } else if (safeBooleanDetailKeys.has(key) && typeof value === "boolean") {
+      safe = true;
+    }
+    if (safe) Object.defineProperty(details, key, { enumerable: true, value });
+  }
+  return Object.keys(details).length === 0 ? undefined : Object.freeze(details);
+}
+
+function applicationDiagnostic(
+  source: Diagnostic,
+  category: DiagnosticCategory,
+): ApplicationDiagnostic {
+  const details = safeDiagnosticDetails(source.details);
+  return Object.freeze({
+    code: source.code,
+    ...(details === undefined ? {} : { details }),
+    message: stableDiagnosticMessage(source.code, category),
+  });
+}
+
+function applicationDiagnostics(
+  value: unknown,
+  category: DiagnosticCategory,
+  bounds: ApplicationOperationBounds,
+): Result<readonly ApplicationDiagnostic[]> {
+  const entries = denseArray(value, "Transaction outcome diagnostics", bounds.maxDiagnosticCount);
   if (!entries.ok) return entries;
   const diagnostics: ApplicationDiagnostic[] = [];
   for (let index = 0; index < entries.value.length; index += 1) {
@@ -657,7 +960,7 @@ function applicationDiagnostics(value: unknown): Result<readonly ApplicationDiag
           diagnostic("invalid-transaction-outcome", "Transaction diagnostic details are malformed"),
         );
       }
-      const safe: Record<string, string | number | boolean> = {};
+      const safe = Object.create(null) as Record<string, string | number | boolean>;
       for (const [key, detail] of Object.entries(record)) {
         if (
           typeof detail !== "string" &&
@@ -671,33 +974,43 @@ function applicationDiagnostics(value: unknown): Result<readonly ApplicationDiag
             ),
           );
         }
-        const lowered = key.toLowerCase();
-        if (!lowered.includes("resource") && !lowered.includes("locator")) safe[key] = detail;
+        Object.defineProperty(safe, key, { enumerable: true, value: detail });
       }
       if (Object.keys(safe).length > 0) details = Object.freeze(safe);
     }
-    diagnostics[index] = Object.freeze({
-      code: entry.value.code,
-      ...(details === undefined ? {} : { details }),
-      message: entry.value.message,
-    });
+    diagnostics[index] = applicationDiagnostic(
+      Object.freeze({
+        code: entry.value.code,
+        ...(details === undefined ? {} : { details }),
+        message: entry.value.message,
+      }),
+      category,
+    );
   }
   return success(Object.freeze(diagnostics));
 }
 
 function rejected<T>(...diagnostics: readonly Diagnostic[]): ApplicationMutationOutcome<T> {
   return Object.freeze({
-    diagnostics: Object.freeze(diagnostics.map(applicationDiagnostic)),
+    diagnostics: Object.freeze(
+      diagnostics.map((entry) => applicationDiagnostic(entry, "validation")),
+    ),
     status: "validation-rejected" as const,
   });
 }
 
 function snapshotFailure<T>(diagnostics: readonly Diagnostic[]): ApplicationMutationOutcome<T> {
   return Object.freeze({
-    diagnostics: Object.freeze(diagnostics.map(applicationDiagnostic)),
+    diagnostics: Object.freeze(
+      diagnostics.map((entry) => applicationDiagnostic(entry, "provider")),
+    ),
     phase: "snapshot" as const,
     status: "provider-failure" as const,
   });
+}
+
+function readProviderFailure<T>(diagnostics: readonly Diagnostic[]): Result<T> {
+  return failure(...diagnostics.map((entry) => applicationDiagnostic(entry, "provider")));
 }
 
 function revisionConflict<T>(): ApplicationMutationOutcome<T> {
@@ -727,8 +1040,9 @@ function malformedOutcome<T>(): ApplicationMutationOutcome<T> {
 function stringIdentities(
   value: unknown,
   kind: "component" | "relationship",
+  maximum: number,
 ): Result<readonly string[]> {
-  const values = denseArray(value, `Affected ${kind} identities`);
+  const values = denseArray(value, `Affected ${kind} identities`, maximum);
   if (!values.ok) return values;
   const identities: string[] = [];
   for (let index = 0; index < values.value.length; index += 1) {
@@ -753,12 +1067,108 @@ function stringIdentities(
   return success(Object.freeze(identities));
 }
 
+function preflightTransactionOutcome(
+  outcome: unknown,
+  bounds: ApplicationOperationBounds,
+): Result<void> {
+  const envelope = inspectExactRecord(
+    outcome,
+    [
+      ["diagnostics", "status"],
+      ["committed", "diagnostics", "phase", "status"],
+      ["diagnostics", "recovery", "status"],
+      ["event", "generation", "revisions", "status"],
+    ],
+    "invalid-transaction-outcome",
+    "Transaction execution outcome",
+  );
+  if (!envelope.ok) return envelope;
+  if ("diagnostics" in envelope.value) {
+    const diagnostics = preflightDiagnostics(envelope.value.diagnostics, bounds);
+    if (!diagnostics.ok) return diagnostics;
+  }
+  if ("revisions" in envelope.value) {
+    const count = boundedArrayLength(
+      envelope.value.revisions,
+      "Committed revisions",
+      bounds.maxComponents,
+    );
+    if (!count.ok) return count;
+    const event = inspectExactRecord(
+      envelope.value.event,
+      [["affected", "generation", "type"]],
+      "invalid-transaction-outcome",
+      "Committed graph event",
+    );
+    if (!event.ok) return event;
+    const affected = inspectExactRecord(
+      event.value.affected,
+      [["entities", "relations"]],
+      "invalid-transaction-outcome",
+      "Committed affected identities",
+    );
+    if (!affected.ok) return affected;
+    const entities = boundedArrayLength(
+      affected.value.entities,
+      "Committed affected component identities",
+      bounds.maxComponents,
+    );
+    if (!entities.ok) return entities;
+    const relations = boundedArrayLength(
+      affected.value.relations,
+      "Committed affected relationship identities",
+      bounds.maxRelationships,
+    );
+    if (!relations.ok) return relations;
+  }
+  if ("recovery" in envelope.value) {
+    const recovery = inspectExactRecord(
+      envelope.value.recovery,
+      [["baseGeneration", "generation", "resources", "token"]],
+      "invalid-transaction-outcome",
+      "Transaction recovery state",
+    );
+    if (!recovery.ok) return recovery;
+    if (
+      typeof recovery.value.token !== "string" ||
+      recovery.value.token.length === 0 ||
+      recovery.value.token.length > 4_096
+    ) {
+      return failure(diagnostic("invalid-transaction-outcome", "Recovery token is malformed"));
+    }
+    const resources = denseArray(
+      recovery.value.resources,
+      "Transaction recovery resources",
+      bounds.maxComponents,
+    );
+    if (!resources.ok) return resources;
+    for (let index = 0; index < resources.value.length; index += 1) {
+      if (!parseResourceKey(resources.value[index]).ok) {
+        return failure(diagnostic("invalid-transaction-outcome", "Recovery resource is malformed"));
+      }
+    }
+  }
+  return success(undefined);
+}
+
 function mapTransactionOutcome<T>(
   outcome: unknown,
   resourceOwners: ReadonlyMap<ResourceKey, string>,
+  expectedAffected: {
+    readonly components: readonly string[];
+    readonly relationships: readonly string[];
+  },
   value: T,
+  bounds: ApplicationOperationBounds,
 ): ApplicationMutationOutcome<T> {
-  const copied = copyGraphPayload(outcome, "transaction");
+  const preflight = preflightTransactionOutcome(outcome, bounds);
+  if (!preflight.ok) return malformedOutcome();
+  const copied = copyGraphPayload(outcome, "transaction", {
+    code: "application-transaction-outcome-too-large",
+    maximumDepth: bounds.maxSnapshotStateDepth,
+    maximumValues: bounds.maxSnapshotStateValues,
+    message: "Transaction outcome exceeds the configured structural budget",
+  });
   if (!copied.ok) return malformedOutcome();
   const envelope = inspectExactRecord(
     copied.value,
@@ -796,11 +1206,25 @@ function mapTransactionOutcome<T>(
       "Committed affected identities",
     );
     if (!affected.ok) return malformedOutcome();
-    const components = stringIdentities(affected.value.entities, "component");
-    const relationships = stringIdentities(affected.value.relations, "relationship");
+    const components = stringIdentities(affected.value.entities, "component", bounds.maxComponents);
+    const relationships = stringIdentities(
+      affected.value.relations,
+      "relationship",
+      bounds.maxRelationships,
+    );
     if (!components.ok || !relationships.ok) return malformedOutcome();
+    if (
+      !sameStrings(components.value, expectedAffected.components) ||
+      !sameStrings(relationships.value, expectedAffected.relationships)
+    ) {
+      return malformedOutcome();
+    }
 
-    const revisionEntries = denseArray(envelope.value.revisions, "Committed revisions");
+    const revisionEntries = denseArray(
+      envelope.value.revisions,
+      "Committed revisions",
+      bounds.maxComponents,
+    );
     if (!revisionEntries.ok || revisionEntries.value.length !== resourceOwners.size) {
       return malformedOutcome();
     }
@@ -826,8 +1250,8 @@ function mapTransactionOutcome<T>(
     revisions.sort((left, right) => compareText(left.componentId, right.componentId));
     return Object.freeze({
       affected: Object.freeze({
-        components: components.value,
-        relationships: relationships.value,
+        components: expectedAffected.components,
+        relationships: expectedAffected.relationships,
       }),
       generation: generation.value,
       revisions: Object.freeze(revisions),
@@ -837,7 +1261,15 @@ function mapTransactionOutcome<T>(
   }
 
   if (!("diagnostics" in envelope.value)) return malformedOutcome();
-  const diagnostics = applicationDiagnostics(envelope.value.diagnostics);
+  const category: DiagnosticCategory =
+    envelope.value.status === "conflict"
+      ? "conflict"
+      : envelope.value.status === "provider-failure"
+        ? "provider"
+        : envelope.value.status === "indeterminate"
+          ? "indeterminate"
+          : "validation";
+  const diagnostics = applicationDiagnostics(envelope.value.diagnostics, category, bounds);
   if (!diagnostics.ok) return malformedOutcome();
   if (envelope.value.status === "conflict" || envelope.value.status === "validation-rejected") {
     return Object.freeze({ diagnostics: diagnostics.value, status: envelope.value.status });
@@ -870,6 +1302,7 @@ function mapTransactionOutcome<T>(
     const recoveryResources = denseArray(
       recovery.value.resources,
       "Transaction recovery resources",
+      bounds.maxComponents,
     );
     if (!baseGeneration.ok || !recoveryGeneration.ok || !recoveryResources.ok) {
       return malformedOutcome();
@@ -888,6 +1321,21 @@ async function executeMutation<T>(
   value: T,
   options: ApplicationOperationsOptions,
 ): Promise<ApplicationMutationOutcome<T>> {
+  const expectedComponents = stringIdentities(
+    request.affected.entities,
+    "component",
+    options.bounds.maxComponents,
+  );
+  const expectedRelationships = stringIdentities(
+    request.affected.relations,
+    "relationship",
+    options.bounds.maxRelationships,
+  );
+  if (!expectedComponents.ok || !expectedRelationships.ok) return malformedOutcome();
+  const expectedAffected = Object.freeze({
+    components: expectedComponents.value,
+    relationships: expectedRelationships.value,
+  });
   let outcome: TransactionOutcome;
   try {
     outcome = await options.transactionExecution.execute(request);
@@ -902,7 +1350,7 @@ async function executeMutation<T>(
       status: "indeterminate" as const,
     });
   }
-  return mapTransactionOutcome(outcome, resourceOwners, value);
+  return mapTransactionOutcome(outcome, resourceOwners, expectedAffected, value, options.bounds);
 }
 
 function relationshipInput(
@@ -1040,11 +1488,35 @@ function planRelationshipChanges(
     "Relationship changes",
   );
   if (!envelope.ok) return envelope;
+  const removals =
+    "remove" in envelope.value
+      ? denseArray(
+          envelope.value.remove,
+          "Relationship removals",
+          options.bounds.maxRelationshipMutations,
+        )
+      : success(Object.freeze([]));
+  if (!removals.ok) return removals;
+  const upserts =
+    "upsert" in envelope.value
+      ? denseArray(
+          envelope.value.upsert,
+          "Relationship upserts",
+          options.bounds.maxRelationshipMutations,
+        )
+      : success(Object.freeze([]));
+  if (!upserts.ok) return upserts;
+  if (removals.value.length + upserts.value.length > options.bounds.maxRelationshipMutations) {
+    return failure(
+      diagnostic(
+        "application-bound-exceeded",
+        "Relationship changes exceed the configured mutation count",
+      ),
+    );
+  }
   const mutations: GraphDataRecord[] = [];
   const targeted = new Set<string>();
-  if ("remove" in envelope.value) {
-    const removals = denseArray(envelope.value.remove, "Relationship removals");
-    if (!removals.ok) return removals;
+  if (removals.value.length > 0) {
     for (let index = 0; index < removals.value.length; index += 1) {
       const candidate = removals.value[index];
       if (typeof candidate !== "string") {
@@ -1078,9 +1550,7 @@ function planRelationshipChanges(
     }
   }
   let graph = state.graph;
-  if ("upsert" in envelope.value) {
-    const upserts = denseArray(envelope.value.upsert, "Relationship upserts");
-    if (!upserts.ok) return upserts;
+  if (upserts.value.length > 0) {
     for (let index = 0; index < upserts.value.length; index += 1) {
       const planned = relationshipInput(upserts.value[index], source, graph, state, options);
       if (!planned.ok) return planned;
@@ -1137,7 +1607,22 @@ function standardTransactionRequest(
 export function createApplicationOperations(
   options: ApplicationOperationsOptions,
 ): ApplicationOperations {
-  validatePositiveBound(options.maxSnapshotAttempts, "maxSnapshotAttempts");
+  validatePositiveBound(
+    options.maxSnapshotAttempts,
+    "maxSnapshotAttempts",
+    absoluteBounds.maxSnapshotAttempts,
+  );
+  for (const name of [
+    "maxComponents",
+    "maxDiagnosticCount",
+    "maxEmbeddedItems",
+    "maxRelationshipMutations",
+    "maxRelationships",
+    "maxSnapshotStateDepth",
+    "maxSnapshotStateValues",
+  ] as const) {
+    validatePositiveBound(options.bounds[name], name, absoluteBounds[name]);
+  }
 
   const initialize = async (
     request: InitializeWorkspaceRequest,
@@ -1145,7 +1630,10 @@ export function createApplicationOperations(
     const validated = exactRequest(request, [[]], "Workspace initialization request");
     if (!validated.ok) return validated;
     try {
-      return validatedInitializationOutcome(await options.initialization.initialize());
+      return validatedInitializationOutcome(
+        await options.initialization.initialize(),
+        options.bounds,
+      );
     } catch {
       return failure(
         diagnostic("workspace-initialization-failed", "Workspace initialization capability failed"),
@@ -1171,7 +1659,7 @@ export function createApplicationOperations(
     const mapped = componentResource(id.value, options);
     if (!mapped.ok) return mapped;
     const read = await snapshot(Object.freeze([mapped.value]), options);
-    if (!read.ok) return read;
+    if (!read.ok) return readProviderFailure(read.diagnostics);
     const component = componentById(read.value, id.value);
     if (component === undefined) {
       return failure(
@@ -1206,53 +1694,87 @@ export function createApplicationOperations(
       "Create component request",
     );
     if (!validated.ok) return rejected(...validated.diagnostics);
+    const embedded = preflightEmbeddedItems(
+      validated.value.component,
+      options.bounds.maxEmbeddedItems,
+    );
+    if (!embedded.ok) return rejected(...embedded.diagnostics);
+    const relationships =
+      "relationships" in validated.value
+        ? denseArray(
+            validated.value.relationships,
+            "Created component relationships",
+            options.bounds.maxRelationshipMutations,
+          )
+        : success(Object.freeze([]));
+    if (!relationships.ok) return rejected(...relationships.diagnostics);
     const normalized = options.model.normalize(
       validated.value.component as CreateComponentRequest["component"],
     );
     if (!normalized.ok) return rejected(...normalized.diagnostics);
-    const minted = options.graph.addEntity(options.graph.empty(), normalized.value);
-    if (!minted.ok) return rejected(...minted.diagnostics);
-    const component = options.model.parse(minted.value.entity);
-    if (!component.ok) return rejected(...component.diagnostics);
-    const mapped = componentResource(component.value.id, options);
-    if (!mapped.ok) return rejected(...mapped.diagnostics);
-    const current = await snapshot(Object.freeze([mapped.value]), options);
-    if (!current.ok) return snapshotFailure(current.diagnostics);
-    if (
-      componentById(current.value, component.value.id) !== undefined ||
-      current.value.revisions.get(mapped.value) !== null
-    ) {
-      return revisionConflict();
+    let current: ReadSnapshot | undefined;
+    let added: { readonly entity: GraphEntity; readonly snapshot: GraphSnapshot } | undefined;
+    let component: StandardComponent | undefined;
+    let mapped: ResourceKey | undefined;
+    for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
+      const initial = await snapshot(Object.freeze([]), options);
+      if (!initial.ok) return snapshotFailure(initial.diagnostics);
+      const proposed = options.graph.addEntity(initial.value.graph, normalized.value);
+      if (!proposed.ok) {
+        return normalized.value.id === undefined
+          ? rejected(...proposed.diagnostics)
+          : revisionConflict();
+      }
+      const parsed = options.model.parse(proposed.value.entity);
+      if (!parsed.ok) return rejected(...parsed.diagnostics);
+      const resource = componentResource(parsed.value.id, options);
+      if (!resource.ok) return rejected(...resource.diagnostics);
+      const confirmed = await snapshot(Object.freeze([resource.value]), options);
+      if (!confirmed.ok) return snapshotFailure(confirmed.diagnostics);
+      if (confirmed.value.generation !== initial.value.generation) continue;
+      if (
+        componentById(confirmed.value, parsed.value.id) !== undefined ||
+        confirmed.value.revisions.get(resource.value) !== null
+      ) {
+        return revisionConflict();
+      }
+      added = proposed.value;
+      component = parsed.value;
+      current = confirmed.value;
+      mapped = resource.value;
+      break;
     }
     if (
-      component.value.parent !== undefined &&
-      componentById(current.value, component.value.parent) === undefined
+      current === undefined ||
+      component === undefined ||
+      mapped === undefined ||
+      added === undefined
     ) {
+      return Object.freeze({
+        diagnostics: Object.freeze([
+          Object.freeze({
+            code: "snapshot-generation-conflict",
+            message: "The operation conflicts with current canonical state",
+          }),
+        ]),
+        status: "conflict" as const,
+      });
+    }
+    if (component.parent !== undefined && componentById(current, component.parent) === undefined) {
       return rejected(
         diagnostic("unknown-component-parent", "Nested component parent does not exist"),
       );
     }
-    const added = options.graph.addEntity(current.value.graph, {
-      ...normalized.value,
-      id: component.value.id,
-    });
-    if (!added.ok) return rejected(...added.diagnostics);
-
     const relationshipMutations: GraphDataRecord[] = [];
     const affectedRelationships = new Set<string>();
-    let graph = added.value.snapshot;
-    if ("relationships" in validated.value) {
-      const relationships = denseArray(
-        validated.value.relationships,
-        "Created component relationships",
-      );
-      if (!relationships.ok) return rejected(...relationships.diagnostics);
+    let graph = added.snapshot;
+    if (relationships.value.length > 0) {
       for (let index = 0; index < relationships.value.length; index += 1) {
         const planned = relationshipInput(
           relationships.value[index],
-          component.value.id,
+          component.id,
           graph,
-          current.value,
+          current,
           options,
         );
         if (!planned.ok) return rejected(...planned.diagnostics);
@@ -1279,7 +1801,7 @@ export function createApplicationOperations(
       );
     }
     const componentInput = Object.freeze({
-      id: component.value.id,
+      id: component.id,
       ...(normalized.value.payload as GraphDataRecord),
     });
     relationshipMutations.sort((left, right) =>
@@ -1291,17 +1813,12 @@ export function createApplicationOperations(
     const transaction = standardTransactionRequest(
       Object.freeze([Object.freeze({ component: componentInput, type: "create" })]),
       Object.freeze(relationshipMutations),
-      Object.freeze([component.value.id]),
+      Object.freeze([component.id]),
       Object.freeze(Array.from(affectedRelationships)),
-      mapped.value,
+      mapped,
       null,
     );
-    return executeMutation(
-      transaction,
-      new Map([[mapped.value, component.value.id]]),
-      component.value,
-      options,
-    );
+    return executeMutation(transaction, new Map([[mapped, component.id]]), component, options);
   };
 
   const updateExisting = async (
@@ -1318,6 +1835,13 @@ export function createApplicationOperations(
     if (!id.ok) return rejected(...id.diagnostics);
     const expectedRevision = parseContentRevision(expectedRevisionValue);
     if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
+    const embedded = preflightEmbeddedItems(patchValue, options.bounds.maxEmbeddedItems);
+    if (!embedded.ok) return rejected(...embedded.diagnostics);
+    const relationshipBound = preflightRelationshipChanges(
+      relationshipChanges,
+      options.bounds.maxRelationshipMutations,
+    );
+    if (!relationshipBound.ok) return rejected(...relationshipBound.diagnostics);
     const mapped = componentResource(id.value, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
     const current = await snapshot(Object.freeze([mapped.value]), options);

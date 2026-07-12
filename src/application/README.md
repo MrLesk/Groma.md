@@ -33,3 +33,11 @@ with canonical resource details removed.
 Resource mapping is also a containment boundary: mapper failures become one generic
 component-scoped diagnostic, and mapper messages, details, locators, and keys never
 reach application callers.
+
+Each composition supplies explicit application bounds for component and relationship
+state, relationship mutations, embedded items, diagnostics, and snapshot structural
+depth and values. Construction also enforces absolute ceilings (including snapshot
+retry count), so hostile arrays and payloads fail before unbounded copying, identity
+minting, graph loading, or transaction execution. Auto-generated component IDs are
+minted against the validated current graph, and committed outcomes are accepted only
+when their affected identity sets exactly match the submitted transaction.

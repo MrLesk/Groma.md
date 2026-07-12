@@ -84,6 +84,15 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
     maxPageSize: 100,
   });
   const api = createApplicationOperations({
+    bounds: {
+      maxComponents: 1_000,
+      maxDiagnosticCount: 100,
+      maxEmbeddedItems: 100,
+      maxRelationshipMutations: 100,
+      maxRelationships: 1_000,
+      maxSnapshotStateDepth: 30,
+      maxSnapshotStateValues: 100_000,
+    },
     graph,
     initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
