@@ -4,6 +4,50 @@ Official local-resource and canonical persistence providers. Technology-specific
 implementations satisfy capability contracts and never become authoritative outside
 their canonical records.
 
+## Markdown intent store
+
+[`markdown-intent-store.ts`](markdown-intent-store.ts) is the read/codec boundary for
+standard-model intent. It stores one component per canonical resource at
+`groma/intent/<first-two-identity-hex>/<entity-id>.md`; rename and reparent operations
+therefore never change the resource key. Each file owns only that component and its
+outgoing relationships. Relationship sources are implicit, while stable relationship
+IDs, types, targets, descriptions, and namespaced extensions remain explicit.
+
+The `groma/v0.1` frontmatter contains structural metadata, embedded inputs, outputs,
+actions, outgoing relationships, and extensions. For intent-bearing documents, the
+closing frontmatter delimiter is followed by one blank line, the exact `# Intent`
+heading, another blank line, the reversible prose, and one framing newline. The codec
+uses the injected Standard Model capability for every component and relationship
+semantic view, canonicalizes ordering and LF framing, rejects unrepresentable Unicode,
+aliases, tags, duplicate YAML keys, invalid UTF-8, complete conflict blocks, wrong
+schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content revision. It
+parses YAML integer lexemes as BigInt first, converts only values represented exactly
+by a finite JavaScript number, and rejects inexact integers, non-finite overflow, or
+nonzero underflow before Standard Model use. Finite YAML float and exponent scalars
+retain the Standard Model's IEEE Number semantics. When serializing an integer-valued
+finite Number outside the safe-integer range, the codec forces exponent notation so
+its own canonical bytes parse as a float rather than an exact integer lexeme. The store
+never writes timestamps, host paths, evidence, bindings, or derived state.
+
+Complete column-zero Git conflict blocks are rejected symmetrically during serialization
+and decoding; literal documentation must indent or quote its marker lines. Byte inputs,
+including Node Buffers and Uint8Array subclasses, are copied through intrinsic typed-array
+metadata and raw buffers without consulting subclass constructors or species. Returned
+document bytes are always isolated plain Uint8Array copies, so mutations cannot invalidate
+their recorded revision.
+
+Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
+provider continuation pages, accepts only the exact shard/file layout, produces stable
+document/entity/relation order, and diagnoses misplaced or duplicate identities,
+missing parents or relationship targets, and containment cycles. In addition to
+per-document and document-count ceilings, exact retained document bytes have a 128 MiB
+default and 1 GiB absolute bound. A missing intent root is empty only on the first
+enumeration request; disappearance during pagination is an inconsistent load. Non-final
+pages must contain progress entries, and total pages cannot exceed the configured
+document ceiling plus the 256 possible shard directories and one terminal page. This
+API intentionally has no direct write or commit operation; GROM-14 owns transactionally
+coordinated replacement.
+
 ## Local resource capability
 
 [`contracts.ts`](contracts.ts) defines the provider-neutral boundary used by
