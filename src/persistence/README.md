@@ -48,6 +48,44 @@ document ceiling plus the 256 possible shard directories and one terminal page. 
 API intentionally has no direct write or commit operation; GROM-14 owns transactionally
 coordinated replacement.
 
+## Local transaction journal
+
+[`local-transaction-journal.ts`](local-transaction-journal.ts) implements Core's
+model-neutral transaction-provider contract without adding Markdown or filesystem
+policy to Core. A persistence-local adapter loads one semantic snapshot and turns an
+already validated mutation into an exact, sorted set of canonical replacements and
+deletions. The official adapter uses the Standard Model and Markdown intent store;
+future canonical planes can supply the same small adapter contract.
+
+The fixed `groma/transaction-state.json` record is the committed generation marker
+and recovery journal. It has deterministic canonical JSON, explicit byte/target
+bounds, exact SHA-256 revisions, and a `projectionWatermark` field reserved for the
+future disposable projection. Prepared and committing records contain the base and
+target generations, affected identities, expected/result revisions, portable target
+locators, and exact replacement bytes. Their token is derived from that canonical
+evidence. PIDs, UUIDs, clocks, timestamps, and absolute paths never enter the record.
+Idle state retains only the current generation, projection watermark, and one bounded
+settlement receipt, so repeated recovery returns provider-recorded affected identities
+and revisions rather than trusting caller-restored data.
+
+Prepare holds a persistent same-machine lease, writes the complete prepared record,
+and stages every replacement before acknowledging the opaque token; canonical targets
+remain unchanged. Commit durably changes the phase to `committing`, then applies and
+verifies every sorted target. Recovery rolls back only a still-prepared record and
+always rolls a committing record forward by classifying each exact current revision as
+old, new, or divergent. Cleanup of live and target-specific orphan stages must succeed
+while the pending record still retains their locators. Only then is idle state written
+with the new generation, making the generation marker the last canonical change.
+Unknown tokens, malformed state, external divergence, cleanup failure, and lease
+release failure stay indeterminate or fail closed.
+
+Deletion is idempotent. POSIX removals sync the containing directory even when the
+target is already absent, so recovery can reassert deletion durability. Windows keeps
+the same exact old/new classification and atomic file behavior but, like replacement,
+makes no unsupported power-loss directory-durability claim. The journal and provider
+compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;
+cross-compilation is not a substitute for native permission/durability verification.
+
 ## Local resource capability
 
 [`contracts.ts`](contracts.ts) defines the provider-neutral boundary used by
@@ -176,10 +214,12 @@ finalization, target-file sync, parent creation and target-parent directory sync
 after-rename, and cleanup boundaries without adding test behavior to Core.
 
 Handles are live-operation capabilities, not durable journal records. The transaction
-journal implemented by GROM-14 must durably record the target locator and replacement
-bytes, then restage after restart. Private orphan discovery and cleanup are likewise a
-GROM-14 recovery policy; orphan stages remain invisible and unaddressable through this
-public resource capability.
+journal durably records the target locator and replacement bytes, then restages after
+restart. Stage names contain a full target-locator hash, a private PID, and a UUID.
+Target-specific cleanup is bounded by the provider's per-directory entry ceiling and
+removes only stages whose owner process is known dead. A live or PID-reused owner is
+retained conservatively; cleanup never guesses. Orphan stages remain invisible and
+unaddressable through public resource locators.
 
 Replacement bytes are runtime-validated through captured intrinsic TypedArray
 getters, without `instanceof` or caller property reads. Genuine `Uint8Array` instances
@@ -190,8 +230,11 @@ than rejected promises.
 
 ### Local coordination
 
-Coordination is callback-scoped and supports iteration 1A's same-machine local
-processes. Lock identity conservatively NFC-normalizes and case-folds the canonical
+Coordination supports both callback-scoped actions and explicit persistent leases used
+from transaction prepare through commit. Both cover iteration 1A's same-machine local
+processes. Leases are opaque, provider-owned capabilities with idempotent confirmed release;
+they never contain or expose the filesystem owner record. Lock identity conservatively
+NFC-normalizes and case-folds the canonical
 workspace root plus absolute resource identity on every platform. Aliases therefore
 over-contend safely even on case-sensitive filesystems. Shared-filesystem and
 multi-host contexts return
@@ -243,6 +286,14 @@ The coordination guarantee covers process crashes and same-machine concurrency. 
 Windows, atomic publication begins at the rename of the already complete candidate;
 the provider does not claim power-loss directory durability without a supported
 directory flush primitive.
+
+Persistent transaction leases recover immediately after an owner is proven dead:
+the provider reads one exact valid owner, wins the atomic reaping claim, then
+revalidates the same token and proves the PID dead again before quarantine. A live or
+PID-reused owner remains contended. Ordinary callback coordination keeps the older
+stale-age threshold in addition to the same double proof, avoiding a behavior change
+for short scoped locks while allowing transaction startup to settle a crashed writer
+without a five-minute default delay.
 
 ## Bun API rationale
 

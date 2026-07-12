@@ -10,6 +10,7 @@ import {
   type EnumerateResourcesRequest,
   isReservedWorkspaceResourceSegment,
   type LocalCoordinationRequest,
+  type LocalCoordinationLease,
   type LocalResourceProvider,
   parseWorkspaceResourceLocator,
   type ReadResourceRequest,
@@ -37,6 +38,9 @@ export type LocalResourceFaultPhase =
   | "flush"
   | "parent-directory"
   | "read"
+  | "removal-after-unlink"
+  | "removal-parent-directory-sync"
+  | "removal-unlink"
   | "rename"
   | "replacement-after-rename-before-mode"
   | "replacement-parent-creation-sync"
@@ -90,6 +94,14 @@ interface CoordinationOwner {
   readonly token: string;
 }
 
+interface CoordinationLeaseRecord {
+  readonly identity: string;
+  readonly owner: CoordinationOwner;
+  released: boolean;
+}
+
+type CoordinationRecoveryPolicy = "proven-dead" | "stale-age";
+
 interface CursorState {
   readonly after: WorkspaceResourceLocator;
   readonly limit: number;
@@ -108,6 +120,7 @@ interface WalkState {
 }
 
 const processCoordination = new Set<string>();
+const liveStagePaths = new Set<string>();
 const settledStageMutation = Promise.resolve();
 export const localResourceProviderCeilings = Object.freeze({
   maxCursorBytes: 64 * 1024,
@@ -155,6 +168,14 @@ const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
 const intrinsicTest = RegExp.prototype.test;
 const intrinsicUint8ArraySlice = Uint8Array.prototype.slice;
+
+function stageTargetIdentity(locator: WorkspaceResourceLocator): string {
+  return createHash("sha256").update(locator).digest("hex");
+}
+
+function stagePrefix(locator: WorkspaceResourceLocator): string {
+  return `${reservedWorkspaceResourceStagePrefix}${stageTargetIdentity(locator)}-`;
+}
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
   return Object.freeze({ code, message, ...(details === undefined ? {} : { details }) });
@@ -321,6 +342,19 @@ function notCommitted(...diagnostics: readonly Diagnostic[]): ReplacementCommitO
   return Object.freeze({ diagnostics, state: "not-committed" });
 }
 
+function removalIndeterminate(): ReplacementCommitOutcome {
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      diagnostic(
+        "resource-removal-indeterminate",
+        "Resource removal happened but durability finalization or acknowledgement failed",
+        { commitState: "committed-indeterminate" },
+      ),
+    ]),
+    state: "committed-indeterminate",
+  });
+}
+
 async function readBoundedFile(absolutePath: string, maximum: number): Promise<Uint8Array> {
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   const handle = await open(absolutePath, constants.O_RDONLY | noFollow);
@@ -457,6 +491,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
   readonly #maxReadBytes: number;
   readonly #maxReplacementBytes: number;
   readonly #root: string;
+  readonly #leases = new WeakMap<object, CoordinationLeaseRecord>();
   readonly #stages = new WeakMap<object, StagedRecord>();
   readonly #staleLockMilliseconds: number;
 
@@ -753,11 +788,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const candidate = path.join(
           parentPath,
-          `${reservedWorkspaceResourceStagePrefix}${randomUUID()}`,
+          `${stagePrefix(locator.value)}${process.pid}-${randomUUID()}`,
         );
         try {
           const handle = await open(candidate, "wx", 0o600);
           stagePath = candidate;
+          liveStagePaths.add(candidate);
           try {
             let offset = 0;
             let writeBoundaryInjected = false;
@@ -795,7 +831,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       });
       return success(handle);
     } catch {
-      if (stagePath !== undefined) await this.#cleanupPath(stagePath);
+      if (stagePath !== undefined) {
+        liveStagePaths.delete(stagePath);
+        await this.#cleanupPath(stagePath);
+      }
       return failure(
         diagnostic("replacement-stage-failed", "Replacement could not be staged completely", {
           commitState: "not-committed",
@@ -868,6 +907,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         await this.#inject("rename");
         record.intendedTargetMode = targetMode;
         await rename(record.stagePath, record.targetPath);
+        liveStagePaths.delete(record.stagePath);
         record.state = "renamed-pending-finalization";
       } catch (error) {
         return notCommitted(resourceError(error, "commit a staged replacement"));
@@ -983,8 +1023,134 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
     if (record.state !== "staged") return success(undefined);
     const cleanup = await this.#cleanupPath(record.stagePath);
-    if (cleanup.ok) record.state = "discarded";
+    if (cleanup.ok) {
+      liveStagePaths.delete(record.stagePath);
+      record.state = "discarded";
+    }
     return cleanup;
+  }
+
+  async cleanupReplacementStages(locatorInput: WorkspaceResourceLocator): Promise<Result<void>> {
+    const locator = parseWorkspaceResourceLocator(locatorInput);
+    if (!locator.ok) return locator;
+    if (locator.value === ".") {
+      return failure(
+        diagnostic("invalid-replacement-target", "The workspace root has no replacement stages"),
+      );
+    }
+    const target = await this.#resolve(locator.value, true);
+    if (!target.ok) return target;
+    const parentPath = path.dirname(target.value.absolutePath);
+    const prefix = stagePrefix(locator.value);
+    try {
+      const directory = await opendir(parentPath);
+      let encountered = 0;
+      try {
+        while (true) {
+          const entry = await directory.read();
+          if (entry === null) break;
+          encountered += 1;
+          if (encountered > this.#maxEntriesPerDirectory) {
+            return failure(
+              diagnostic(
+                "resource-directory-overflow",
+                "Replacement-stage cleanup exceeded its explicit directory-entry bound",
+                { maximum: this.#maxEntriesPerDirectory },
+              ),
+            );
+          }
+          if (!entry.isFile() || !entry.name.startsWith(prefix)) continue;
+          const candidate = path.join(parentPath, entry.name);
+          if (liveStagePaths.has(candidate)) continue;
+          const suffix = entry.name.slice(prefix.length);
+          const separator = suffix.indexOf("-");
+          const ownerPid = separator < 1 ? Number.NaN : Number(suffix.slice(0, separator));
+          // Malformed ownership and a reused live PID are retained rather than risking deletion
+          // of another process's active stage. A later bounded cleanup can retry.
+          if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0 || !ownerIsDead(ownerPid)) continue;
+          const cleanup = await this.#cleanupPath(candidate);
+          if (!cleanup.ok) return cleanup;
+        }
+      } finally {
+        try {
+          await directory.close();
+        } catch {
+          // Bun closes a directory after the terminal read.
+        }
+      }
+      return success(undefined);
+    } catch (error) {
+      return failure(resourceError(error, "clean up orphaned replacement stages"));
+    }
+  }
+
+  async removeResource(locatorInput: WorkspaceResourceLocator): Promise<ReplacementCommitOutcome> {
+    const locator = parseWorkspaceResourceLocator(locatorInput);
+    if (!locator.ok) return notCommitted(...locator.diagnostics);
+    if (locator.value === ".") {
+      return notCommitted(
+        diagnostic("invalid-removal-target", "The workspace root cannot be removed"),
+      );
+    }
+    let targetPath: string;
+    try {
+      const target = await this.#resolve(locator.value, true);
+      if (!target.ok) return notCommitted(...target.diagnostics);
+      targetPath = target.value.absolutePath;
+      if (target.value.stats === undefined) {
+        try {
+          await this.#finalizeRemovedTarget(path.dirname(targetPath));
+          return Object.freeze({ state: "committed" });
+        } catch {
+          return removalIndeterminate();
+        }
+      }
+      if (target.value.stats.isSymbolicLink() || !target.value.stats.isFile()) {
+        return notCommitted(
+          diagnostic(
+            "resource-unsupported-kind",
+            "Removal targets must be missing or regular files and must not be links",
+          ),
+        );
+      }
+      await this.#inject("removal-unlink");
+      await rm(targetPath);
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") {
+        try {
+          await this.#finalizeRemovedTarget(path.dirname(targetPath!));
+          return Object.freeze({ state: "committed" });
+        } catch {
+          return removalIndeterminate();
+        }
+      }
+      return notCommitted(resourceError(error, "remove a resource"));
+    }
+    try {
+      await this.#finalizeRemovedTarget(path.dirname(targetPath));
+      return Object.freeze({ state: "committed" });
+    } catch {
+      return removalIndeterminate();
+    }
+  }
+
+  async #finalizeRemovedTarget(directoryPath: string): Promise<void> {
+    await this.#finalizeRemovalDirectory(directoryPath);
+    await this.#inject("removal-after-unlink");
+  }
+
+  async #finalizeRemovalDirectory(directoryPath: string): Promise<void> {
+    if (!shouldSyncLocalReplacementDirectory(process.platform)) return;
+    await this.#inject("removal-parent-directory-sync");
+    const directory = await open(
+      directoryPath,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   }
 
   async #serializeStageMutation<T>(record: StagedRecord, operation: () => Promise<T>): Promise<T> {
@@ -1007,6 +1173,45 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     request: LocalCoordinationRequest,
     action: () => T | Promise<T>,
   ): Promise<Result<T>> {
+    if (typeof action !== "function") {
+      return failure(
+        diagnostic("invalid-coordination-action", "Coordination action must be callable"),
+      );
+    }
+    const acquired = await this.#acquireCoordinationLease(request, "stale-age");
+    if (!acquired.ok) return acquired;
+    let actionResult: Result<T>;
+    let actionCompleted = false;
+    try {
+      actionResult = success(await action());
+      actionCompleted = true;
+    } catch {
+      actionResult = failure(
+        diagnostic("coordination-action-failed", "The coordinated action failed"),
+      );
+    }
+    const released = await this.releaseCoordination(acquired.value);
+    if (released.ok) return actionResult;
+    const releaseFailure = diagnostic(
+      "coordination-release-failed",
+      "Local coordination could not be released cleanly",
+      { actionCompleted },
+    );
+    return actionResult.ok
+      ? failure(releaseFailure, ...released.diagnostics)
+      : failure(...actionResult.diagnostics, releaseFailure, ...released.diagnostics);
+  }
+
+  async acquireCoordination(
+    request: LocalCoordinationRequest,
+  ): Promise<Result<LocalCoordinationLease>> {
+    return this.#acquireCoordinationLease(request, "proven-dead");
+  }
+
+  async #acquireCoordinationLease(
+    request: LocalCoordinationRequest,
+    recoveryPolicy: CoordinationRecoveryPolicy,
+  ): Promise<Result<LocalCoordinationLease>> {
     const inspected = inspectExactRecord(
       request,
       [["context", "locator"]],
@@ -1032,11 +1237,6 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         diagnostic("invalid-coordination-context", "Coordination context is not recognized"),
       );
     }
-    if (typeof action !== "function") {
-      return failure(
-        diagnostic("invalid-coordination-action", "Coordination action must be callable"),
-      );
-    }
     const identity = coordinationIdentity(this.#root, locator.value);
     if (processCoordination.has(identity)) {
       return failure(
@@ -1048,30 +1248,50 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
     processCoordination.add(identity);
     try {
-      const acquired = await this.#acquireCoordination(identity);
-      if (!acquired.ok) return acquired;
-      let actionResult: Result<T>;
-      let actionCompleted = false;
-      try {
-        actionResult = success(await action());
-        actionCompleted = true;
-      } catch {
-        actionResult = failure(
-          diagnostic("coordination-action-failed", "The coordinated action failed"),
-        );
+      const acquired = await this.#acquireCoordination(identity, recoveryPolicy);
+      if (!acquired.ok) {
+        processCoordination.delete(identity);
+        return acquired;
       }
-      const released = await this.#releaseCoordination(identity, acquired.value);
-      if (released.ok) return actionResult;
-      const releaseFailure = diagnostic(
-        "coordination-release-failed",
-        "Local coordination could not be released cleanly",
-        { actionCompleted },
-      );
-      return actionResult.ok
-        ? failure(releaseFailure, ...released.diagnostics)
-        : failure(...actionResult.diagnostics, releaseFailure, ...released.diagnostics);
-    } finally {
+      const lease = Object.freeze(Object.create(null)) as LocalCoordinationLease;
+      this.#leases.set(lease as object, {
+        identity,
+        owner: acquired.value,
+        released: false,
+      });
+      return success(lease);
+    } catch (error) {
       processCoordination.delete(identity);
+      return failure(resourceError(error, "acquire local coordination"));
+    }
+  }
+
+  async releaseCoordination(lease: LocalCoordinationLease): Promise<Result<void>> {
+    if (typeof lease !== "object" || lease === null) {
+      return failure(
+        diagnostic(
+          "invalid-coordination-lease",
+          "Coordination lease is not owned by this provider",
+        ),
+      );
+    }
+    const record = this.#leases.get(lease as object);
+    if (record === undefined) {
+      return failure(
+        diagnostic(
+          "invalid-coordination-lease",
+          "Coordination lease is not owned by this provider",
+        ),
+      );
+    }
+    if (record.released) return success(undefined);
+    try {
+      const released = await this.#releaseCoordination(record.identity, record.owner);
+      if (!released.ok) return released;
+      record.released = true;
+      return success(undefined);
+    } finally {
+      processCoordination.delete(record.identity);
     }
   }
 
@@ -1586,6 +1806,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
 
   async #acquireCoordination(
     identity: string,
+    recoveryPolicy: CoordinationRecoveryPolicy,
     staleReplacementCount = 0,
   ): Promise<Result<CoordinationOwner>> {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
@@ -1595,7 +1816,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         const reapingOwner = await this.#readOwner(reapingPath);
         if (
           reapingOwner === undefined ||
-          Date.now() - reapingOwner.createdAt < this.#staleLockMilliseconds ||
+          (recoveryPolicy === "stale-age" &&
+            Date.now() - reapingOwner.createdAt < this.#staleLockMilliseconds) ||
           !ownerIsDead(reapingOwner.pid)
         ) {
           return failure(
@@ -1633,7 +1855,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const existing = await this.#readOwner(lockPath);
     if (
       existing === undefined ||
-      Date.now() - existing.createdAt < this.#staleLockMilliseconds ||
+      (recoveryPolicy === "stale-age" &&
+        Date.now() - existing.createdAt < this.#staleLockMilliseconds) ||
       !ownerIsDead(existing.pid)
     ) {
       return first;
@@ -1647,7 +1870,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       if (
         confirmed === undefined ||
         confirmed.token !== existing.token ||
-        Date.now() - confirmed.createdAt < this.#staleLockMilliseconds ||
+        (recoveryPolicy === "stale-age" &&
+          Date.now() - confirmed.createdAt < this.#staleLockMilliseconds) ||
         !ownerIsDead(confirmed.pid)
       ) {
         return first;
@@ -1676,7 +1900,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           ),
         );
       }
-      return this.#acquireCoordination(identity, nextReplacementCount);
+      return this.#acquireCoordination(identity, recoveryPolicy, nextReplacementCount);
     }
     return first;
   }

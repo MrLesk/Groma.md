@@ -1855,6 +1855,94 @@ describe("same-machine coordination", () => {
     }
   });
 
+  test("reaps a proven-dead persistent lease immediately but preserves callback stale age", async () => {
+    const roots = await fixture();
+
+    const killedHolder = async (
+      heldLocator: WorkspaceResourceLocator,
+      persistent: boolean,
+    ): Promise<void> => {
+      let readyResolve!: () => void;
+      let readyReject!: (error: Error) => void;
+      const ready = new Promise<void>((resolve, reject) => {
+        readyResolve = resolve;
+        readyReject = reject;
+      });
+      const child = Bun.spawn({
+        cmd: [
+          process.execPath,
+          coordinationChild,
+          ...coordinationChildArguments(roots, heldLocator),
+          ...(persistent ? ["--persistent"] : []),
+        ],
+        ipc(message) {
+          if (isChildMessage(message, "ready")) readyResolve();
+          if (isChildMessage(message, "error")) {
+            readyReject(new Error("coordination child reported an error"));
+          }
+        },
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+      try {
+        await within(
+          Promise.race([
+            ready,
+            child.exited.then(async (code) => {
+              const stderr = await new Response(child.stderr).text();
+              throw new Error(`coordination child exited before readiness (${code}): ${stderr}`);
+            }),
+          ]),
+          5_000,
+          "persistent coordination readiness",
+        );
+        child.kill();
+        await within(child.exited, 5_000, "killed coordination holder");
+      } finally {
+        if (child.exitCode === null) {
+          child.kill();
+          await Promise.race([child.exited, Bun.sleep(2_000)]);
+        }
+        try {
+          child.disconnect();
+        } catch {
+          // The killed child may already have closed IPC.
+        }
+        child.unref();
+      }
+    };
+
+    const transaction = locator("transaction");
+    await killedHolder(transaction, true);
+    const persistentProvider = await createLocalResourceProvider(roots);
+    const recovered = await within(
+      persistentProvider.acquireCoordination({
+        context: "local-machine",
+        locator: transaction,
+      }),
+      5_000,
+      "immediate proven-dead lease recovery",
+    );
+    expect(recovered).toMatchObject({ ok: true });
+    if (!recovered.ok) throw new Error("expected persistent lease recovery");
+    expect(await persistentProvider.releaseCoordination(recovered.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    const callback = locator("callback");
+    await killedHolder(callback, false);
+    const callbackProvider = await createLocalResourceProvider(roots);
+    expect(
+      diagnosticCode(
+        await callbackProvider.withCoordination(
+          { context: "local-machine", locator: callback },
+          () => undefined,
+        ),
+      ),
+    ).toBe("resource-coordination-contended");
+  });
+
   test("returns explicit unsupported-context diagnostics", async () => {
     const roots = await fixture();
     const provider = await createLocalResourceProvider(roots);
