@@ -65,6 +65,40 @@ describe("workspace resource locators", () => {
     });
   });
 
+  test("preflights obviously oversized locator inputs before UTF-8 encoding", () => {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "TextEncoder");
+    let constructorCalls = 0;
+    Object.defineProperty(globalThis, "TextEncoder", {
+      configurable: true,
+      value: class {
+        constructor() {
+          constructorCalls += 1;
+          throw new Error("oversized locator must not construct a TextEncoder");
+        }
+      },
+      writable: true,
+    });
+    let parsed;
+    let segmentFactory;
+    let countFactory;
+    try {
+      parsed = parseWorkspaceResourceLocator("a".repeat(1_000_000));
+      segmentFactory = workspaceResourceLocator("a".repeat(1_000_000));
+      countFactory = workspaceResourceLocator(...Array.from({ length: 5_000 }, () => "a"));
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(globalThis, "TextEncoder");
+      else Object.defineProperty(globalThis, "TextEncoder", previous);
+    }
+
+    expect(constructorCalls).toBe(0);
+    for (const result of [parsed, segmentFactory, countFactory]) {
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "invalid-resource-locator" }],
+        ok: false,
+      });
+    }
+  });
+
   test("reserves the provider-owned stage namespace in every segment and casing", () => {
     for (const value of [
       ".groma-stage-deadbeef",

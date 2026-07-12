@@ -979,6 +979,44 @@ describe("staged atomic replacement", () => {
     expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
   });
 
+  for (const phase of ["replacement-parent-directory-sync", "after-rename"] as const) {
+    test(`retries ${phase} without reopening a finalized read-only target`, async () => {
+      if (process.platform === "win32") return;
+      const roots = await fixture();
+      const target = path.join(roots.workspaceRoot, `${phase}.md`);
+      await writeFile(target, "old-complete");
+      await chmod(target, 0o400);
+      let modeFinalizationAttempts = 0;
+      let injected = false;
+      const provider = await createLocalResourceProvider({
+        ...roots,
+        faultInjector: (current) => {
+          if (current === "replacement-after-rename-before-mode") {
+            modeFinalizationAttempts += 1;
+          }
+          if (current === phase && !injected) {
+            injected = true;
+            throw new Error(`injected ${phase}`);
+          }
+        },
+      });
+      const staged = await provider.stageReplacement(
+        locator(`${phase}.md`),
+        textEncoder.encode("new-complete"),
+      );
+      if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+      const first = await provider.commitReplacement(staged.value);
+
+      expect(first.state).toBe("committed-indeterminate");
+      expect(await readFile(target, "utf8")).toBe("new-complete");
+      expect((await lstat(target)).mode & 0o777).toBe(0o400);
+      expect(modeFinalizationAttempts).toBe(1);
+      expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+      expect(modeFinalizationAttempts).toBe(1);
+    });
+  }
+
   test("cleanup failure is reported while discard remains idempotent", async () => {
     const roots = await fixture();
     const target = path.join(roots.workspaceRoot, "state.md");
@@ -1114,6 +1152,26 @@ describe("same-machine coordination", () => {
     expect(await second.withCoordination(request, () => "after")).toEqual({
       ok: true,
       value: "after",
+    });
+  });
+
+  test("forces private coordination modes under a restrictive umask", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const request = { context: "local-machine" as const, locator: locator("restrictive-umask") };
+    const previousUmask = process.umask(0o777);
+    let coordinated: Result<string> | undefined;
+    try {
+      coordinated = await provider.withCoordination(request, () => "coordinated");
+    } finally {
+      process.umask(previousUmask);
+    }
+
+    expect(coordinated).toEqual({ ok: true, value: "coordinated" });
+    expect(await provider.withCoordination(request, () => "released")).toEqual({
+      ok: true,
+      value: "released",
     });
   });
 

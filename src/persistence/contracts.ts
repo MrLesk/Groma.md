@@ -76,6 +76,7 @@ export interface LocalResourceProvider {
 
 const maximumLocatorBytes = 4096;
 const maximumSegmentBytes = 255;
+const maximumFactorySegments = Math.floor((maximumLocatorBytes + 1) / 2);
 export const reservedWorkspaceResourceStagePrefix = ".groma-stage-";
 const reservedWindowsName =
   /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
@@ -120,6 +121,9 @@ function validateSegment(segment: string): Result<string> {
   if (segment === "." || segment === "..") {
     return invalidLocator("dot and traversal segments are not allowed");
   }
+  if (segment.length > maximumSegmentBytes) {
+    return invalidLocator(`segments must not exceed ${maximumSegmentBytes} UTF-8 bytes`);
+  }
   if (isReservedWorkspaceResourceSegment(segment)) {
     return invalidLocator("segments must not use the provider-owned staging namespace");
   }
@@ -147,6 +151,9 @@ export function parseWorkspaceResourceLocator(value: unknown): Result<WorkspaceR
   if (typeof value !== "string") return invalidLocator("expected a string");
   if (value === ".") return success(value as WorkspaceResourceLocator);
   if (value.length === 0) return invalidLocator("the empty string is not a locator");
+  if (value.length > maximumLocatorBytes) {
+    return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
+  }
   if (absoluteOrDrivePrefix.test(value)) {
     return invalidLocator("absolute, UNC, and drive-qualified paths are not allowed");
   }
@@ -165,10 +172,18 @@ export function workspaceResourceLocator(
   ...segments: readonly unknown[]
 ): Result<WorkspaceResourceLocator> {
   if (segments.length === 0) return success("." as WorkspaceResourceLocator);
+  if (segments.length > maximumFactorySegments) {
+    return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
+  }
   const validated: string[] = [];
+  let totalCodeUnits = 0;
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
     if (typeof segment !== "string") return invalidLocator("expected every segment to be a string");
+    totalCodeUnits += (index === 0 ? 0 : 1) + segment.length;
+    if (totalCodeUnits > maximumLocatorBytes) {
+      return invalidLocator(`locators must not exceed ${maximumLocatorBytes} UTF-8 bytes`);
+    }
     if (segment.includes("/")) {
       return invalidLocator("factory segments must not contain resource separators");
     }

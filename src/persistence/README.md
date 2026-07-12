@@ -23,6 +23,10 @@ root token. Individual segments accept Unicode but reject:
 - the case-insensitive `.groma-stage-` provider namespace in every segment;
 - segments and complete locators beyond their explicit UTF-8 budgets.
 
+Obviously impossible UTF-16 lengths are rejected before UTF-8 encoding, and the
+segment factory enforces an incremental total before joining. Inputs within those
+conservative preflights still receive the exact UTF-8 validation.
+
 Capability methods revalidate branded strings at runtime. Absolute resolved paths
 remain private. Resolution walks the workspace-relative chain with `lstat` and
 `realpath`, rejects symbolic links and junctions in capability targets, and verifies
@@ -105,11 +109,13 @@ directory before acknowledging `committed`. Windows receives the corresponding
 Bun/Node `chmod` behavior but no ACL-preservation claim, skips unsupported directory
 sync, and makes no power-loss directory-durability claim. Mode, file-sync, parent-sync,
 or acknowledgement failure is `committed-indeterminate`, and a repeated commit on the
-same handle retries finalization without renaming again. The target therefore exposes
-only the complete prior bytes or complete replacement bytes. Discard and cleanup are
-idempotent. Persistence-local fault injection covers write, flush, rename, post-rename
-mode finalization, parent creation and target-parent directory sync, after-rename, and
-cleanup boundaries without adding test behavior to Core.
+same handle retries finalization without renaming again. Once target mode and file sync
+succeed, that substep is recorded so later directory or acknowledgement retries do not
+reopen a now-read-only target. The target therefore exposes only the complete prior
+bytes or complete replacement bytes. Discard and cleanup are idempotent.
+Persistence-local fault injection covers write, flush, rename, post-rename mode
+finalization, parent creation and target-parent directory sync, after-rename, and cleanup
+boundaries without adding test behavior to Core.
 
 Handles are live-operation capabilities, not durable journal records. The transaction
 journal implemented by GROM-14 must durably record the target locator and replacement
@@ -135,9 +141,11 @@ multi-host contexts return
 
 The canonical lock directory is never constructed in place. The provider creates a
 unique candidate, exclusive-writes and syncs its owner record, closes the owner
-handle, and atomically renames the populated directory to the canonical lock name.
-POSIX additionally opens and syncs the candidate directory before publication;
-Windows deliberately does not attempt unsupported read-only directory-handle flushes.
+handle, and atomically renames the populated directory to the canonical lock name. On
+POSIX, it explicitly restores candidate mode `0700` and owner mode `0600` after
+umask-filtered creation, then opens and syncs the candidate directory before
+publication. Windows retains per-user temporary-directory and ACL behavior and
+deliberately does not attempt unsupported read-only directory-handle flushes.
 A populated reaping claim serializes stale recovery. An old owner
 must be proven dead twice before its lock is atomically moved to a unique quarantine,
 freeing the canonical name before best-effort cleanup. Release uses the same

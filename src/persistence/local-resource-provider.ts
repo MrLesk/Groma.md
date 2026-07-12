@@ -72,6 +72,7 @@ interface StagedRecord {
   readonly stagePath: string;
   readonly targetPath: string;
   state: "committed" | "discarded" | "renamed-pending-finalization" | "staged";
+  targetFileFinalized?: boolean;
 }
 
 interface CoordinationOwner {
@@ -828,8 +829,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       if (record.intendedTargetMode === undefined) {
         throw new Error("replacement target mode was not recorded before rename");
       }
-      await this.#inject("replacement-after-rename-before-mode");
-      await this.#applyReplacementMode(record.targetPath, record.intendedTargetMode);
+      if (record.targetFileFinalized !== true) {
+        await this.#inject("replacement-after-rename-before-mode");
+        await this.#applyReplacementMode(record.targetPath, record.intendedTargetMode);
+        record.targetFileFinalized = true;
+      }
       await this.#syncReplacementDirectory(
         path.dirname(record.targetPath),
         "replacement-parent-directory-sync",
@@ -1361,6 +1365,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const candidatePath = `${canonicalPath}.claim-${owner.token}-${randomUUID()}`;
     try {
       await mkdir(candidatePath, { mode: 0o700 });
+      if (process.platform !== "win32") await chmod(candidatePath, 0o700);
       const serializableOwner = Object.assign(Object.create(null) as Record<string, unknown>, {
         createdAt: owner.createdAt,
         pid: owner.pid,
@@ -1380,6 +1385,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           if (written.bytesWritten <= 0) throw new Error("owner write did not advance");
           offset += written.bytesWritten;
         }
+        if (process.platform !== "win32") await ownerHandle.chmod(0o600);
         await ownerHandle.sync();
       } finally {
         await ownerHandle.close();
