@@ -38,6 +38,7 @@ import {
   workspaceResourceLocator,
   type LocalCoordinationLease,
   type LocalResourceProvider,
+  type ReplacementCommitOutcome,
   type StagedReplacementHandle,
   type WorkspaceResourceLocator,
 } from "./contracts.ts";
@@ -154,6 +155,13 @@ interface LivePreparation {
   stagesCleaned: boolean;
 }
 
+interface PendingJournalStage {
+  action: "commit" | "discard";
+  readonly bytes: Uint8Array;
+  readonly handle: StagedReplacementHandle;
+  readonly previousBytes?: Uint8Array;
+}
+
 class JournalCommitUnconfirmedError extends Error {
   constructor() {
     super("Transaction journal durability was not confirmed by the resource provider");
@@ -163,6 +171,17 @@ class JournalCommitUnconfirmedError extends Error {
 const journalLocatorResult = workspaceResourceLocator("groma", "transaction-state.json");
 if (!journalLocatorResult.ok) throw new Error("invalid built-in transaction-state locator");
 export const localTransactionStateLocator = journalLocatorResult.value;
+
+const intrinsicNormalize = String.prototype.normalize;
+const intrinsicToLowerCase = String.prototype.toLowerCase;
+
+function conservativeLocatorAlias(locator: string): string {
+  const normalized = Reflect.apply(intrinsicNormalize, locator, ["NFC"]) as string;
+  const lowered = Reflect.apply(intrinsicToLowerCase, normalized, []) as string;
+  return Reflect.apply(intrinsicNormalize, lowered, ["NFC"]) as string;
+}
+
+const localTransactionStateAlias = conservativeLocatorAlias(localTransactionStateLocator);
 
 const coordinationLocatorResult = workspaceResourceLocator("groma");
 if (!coordinationLocatorResult.ok)
@@ -871,6 +890,7 @@ export function createLocalTransactionJournal(
 ): TransactionProvider {
   const limits = bounds(options.bounds);
   const live = new Map<string, LivePreparation>();
+  const pendingJournalStages = new Map<StagedReplacementHandle, PendingJournalStage>();
   let retainedSnapshotLease: LocalCoordinationLease | undefined;
   const readExact = async (locator: WorkspaceResourceLocator, maximum = limits.maxJournalBytes) => {
     const read = await options.resources.read({ locator, maxBytes: maximum });
@@ -894,23 +914,132 @@ export function createLocalTransactionJournal(
     if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.message);
     return parsed.value;
   };
+  const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
+    Buffer.from(left).equals(Buffer.from(right));
+  const classifyJournalReadback = async (
+    pending: PendingJournalStage,
+  ): Promise<"intended" | "previous" | "divergent"> => {
+    const current = await readExact(localTransactionStateLocator);
+    if (current.bytes !== undefined && sameBytes(current.bytes, pending.bytes)) return "intended";
+    if (
+      (current.bytes === undefined && pending.previousBytes === undefined) ||
+      (current.bytes !== undefined &&
+        pending.previousBytes !== undefined &&
+        sameBytes(current.bytes, pending.previousBytes))
+    ) {
+      return "previous";
+    }
+    return "divergent";
+  };
+  const discardJournalStage = async (pending: PendingJournalStage): Promise<void> => {
+    pending.action = "discard";
+    const discarded = await options.resources.discardReplacement(pending.handle);
+    if (!discarded.ok) throw new Error(discarded.diagnostics[0]?.message);
+    pendingJournalStages.delete(pending.handle);
+  };
+  const leaveJournalStageUnconfirmed = async (pending: PendingJournalStage): Promise<never> => {
+    let readback: "intended" | "previous" | "divergent";
+    try {
+      readback = await classifyJournalReadback(pending);
+    } catch {
+      pending.action = "commit";
+      throw new JournalCommitUnconfirmedError();
+    }
+    if (readback === "previous") {
+      await discardJournalStage(pending);
+    } else {
+      pending.action = "commit";
+    }
+    throw new JournalCommitUnconfirmedError();
+  };
+  const handleThrownJournalCommit = async (
+    pending: PendingJournalStage,
+    error: unknown,
+  ): Promise<never> => {
+    let readback: "intended" | "previous" | "divergent";
+    try {
+      readback = await classifyJournalReadback(pending);
+    } catch {
+      pending.action = "commit";
+      throw new JournalCommitUnconfirmedError();
+    }
+    if (readback === "previous") {
+      await discardJournalStage(pending);
+      throw error;
+    }
+    pending.action = "commit";
+    throw new JournalCommitUnconfirmedError();
+  };
+  const commitJournalStage = async (
+    pending: PendingJournalStage,
+    recovering: boolean,
+  ): Promise<void> => {
+    let committed: ReplacementCommitOutcome;
+    try {
+      committed = await options.resources.commitReplacement(pending.handle);
+    } catch (error) {
+      return handleThrownJournalCommit(pending, error);
+    }
+    if (committed.state === "committed") {
+      pendingJournalStages.delete(pending.handle);
+      return;
+    }
+    if (committed.state === "not-committed") {
+      if (recovering) return leaveJournalStageUnconfirmed(pending);
+      await discardJournalStage(pending);
+      throw new Error("transaction journal was not committed");
+    }
+    try {
+      committed = await options.resources.commitReplacement(pending.handle);
+    } catch (error) {
+      return handleThrownJournalCommit(pending, error);
+    }
+    if (committed.state === "committed") {
+      pendingJournalStages.delete(pending.handle);
+      return;
+    }
+    return leaveJournalStageUnconfirmed(pending);
+  };
+  const retryPendingJournalStages = async (): Promise<void> => {
+    for (const pending of Array.from(pendingJournalStages.values())) {
+      if (pending.action === "discard") {
+        await discardJournalStage(pending);
+      } else {
+        let readback: "intended" | "previous" | "divergent";
+        try {
+          readback = await classifyJournalReadback(pending);
+        } catch {
+          throw new JournalCommitUnconfirmedError();
+        }
+        if (readback === "divergent") throw new JournalCommitUnconfirmedError();
+        if (readback === "previous") {
+          await discardJournalStage(pending);
+        } else {
+          await commitJournalStage(pending, true);
+        }
+      }
+    }
+  };
   const writeState = async (state: JournalState): Promise<void> => {
     const bytes = encodeState(state);
     if (bytes.byteLength > limits.maxJournalBytes)
       throw new Error("transaction journal exceeds bound");
+    await retryPendingJournalStages();
     const cleaned = await options.resources.cleanupReplacementStages(localTransactionStateLocator);
     if (!cleaned.ok && cleaned.diagnostics[0]?.code !== "resource-missing") {
       throw new Error(cleaned.diagnostics[0]?.message);
     }
+    const previous = await readExact(localTransactionStateLocator);
     const staged = await options.resources.stageReplacement(localTransactionStateLocator, bytes);
     if (!staged.ok) throw new Error(staged.diagnostics[0]?.message);
-    let committed = await options.resources.commitReplacement(staged.value);
-    if (committed.state === "not-committed")
-      throw new Error("transaction journal was not committed");
-    if (committed.state === "committed-indeterminate") {
-      committed = await options.resources.commitReplacement(staged.value);
-      if (committed.state !== "committed") throw new JournalCommitUnconfirmedError();
-    }
+    const pending: PendingJournalStage = {
+      action: "discard",
+      bytes: new Uint8Array(bytes),
+      handle: staged.value,
+      ...(previous.bytes === undefined ? {} : { previousBytes: new Uint8Array(previous.bytes) }),
+    };
+    pendingJournalStages.set(pending.handle, pending);
+    await commitJournalStage(pending, false);
   };
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
     const released = await options.resources.releaseCoordination(lease);
@@ -1175,7 +1304,11 @@ export function createLocalTransactionJournal(
       }
       const targets = storedTargets(materialized.value);
       verifyExpectedTargets(proposal, targets);
-      if (targets.some((target) => target.locator === localTransactionStateLocator)) {
+      if (
+        targets.some(
+          (target) => conservativeLocatorAlias(target.locator) === localTransactionStateAlias,
+        )
+      ) {
         throw new Error("The transaction state resource cannot be a canonical transaction target");
       }
       for (const target of targets) {

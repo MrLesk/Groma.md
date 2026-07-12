@@ -27,6 +27,7 @@ import {
   createMarkdownIntentTransactionAdapter,
   localTransactionStateLocator,
   markdownIntentLocator,
+  parseWorkspaceResourceLocator,
   workspaceResourceLocator,
   type LocalResourceFaultContext,
   type LocalResourceProvider,
@@ -214,6 +215,7 @@ async function crashTransactionProcess(
 interface ProviderOverrides {
   readonly acquireCoordination?: LocalResourceProvider["acquireCoordination"];
   readonly commitReplacement?: LocalResourceProvider["commitReplacement"];
+  readonly discardReplacement?: LocalResourceProvider["discardReplacement"];
   readonly releaseCoordination?: LocalResourceProvider["releaseCoordination"];
   readonly removeResource?: LocalResourceProvider["removeResource"];
   readonly stageReplacement?: LocalResourceProvider["stageReplacement"];
@@ -229,7 +231,8 @@ function providerWithOverrides(
     cleanupReplacementStages: (locator) => base.cleanupReplacementStages(locator),
     commitReplacement: (handle) =>
       (overrides.commitReplacement ?? base.commitReplacement.bind(base))(handle),
-    discardReplacement: (handle) => base.discardReplacement(handle),
+    discardReplacement: (handle) =>
+      (overrides.discardReplacement ?? base.discardReplacement.bind(base))(handle),
     enumerate: (request) => base.enumerate(request),
     read: (request) => base.read(request),
     releaseCoordination: (lease) =>
@@ -257,6 +260,16 @@ function engineFor(provider: ReturnType<typeof createLocalTransactionJournal>) {
   const registered = engine.registerInvariant(createStandardModelInvariant(invariantBounds));
   if (!registered.ok) throw new Error("invariant registration failed");
   return engine;
+}
+
+function journalHarnessFor(resources: LocalResourceProvider) {
+  const model = createStandardModelCapability();
+  const store = createMarkdownIntentStore({ model, resources });
+  const provider = createLocalTransactionJournal({
+    adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+    resources,
+  });
+  return { engine: engineFor(provider), provider, store };
 }
 
 function createRequest() {
@@ -1120,6 +1133,169 @@ describe("local transaction journal", () => {
     });
   }
 
+  for (const failureMode of ["not-committed", "throw"] as const) {
+    test(`discards a journal stage after a pre-move ${failureMode} publication`, async () => {
+      const roots = await workspace();
+      const base = await createLocalResourceProvider(roots);
+      const journalHandles = new WeakSet<object>();
+      let injected = false;
+      const resources = providerWithOverrides(base, {
+        async stageReplacement(locator, bytes) {
+          const staged = await base.stageReplacement(locator, bytes);
+          if (staged.ok && locator === localTransactionStateLocator) {
+            journalHandles.add(staged.value as object);
+          }
+          return staged;
+        },
+        async commitReplacement(handle) {
+          if (!injected && journalHandles.has(handle as object)) {
+            injected = true;
+            if (failureMode === "throw") throw new Error("interrupt journal before rename");
+            return Object.freeze({
+              diagnostics: Object.freeze([
+                Object.freeze({
+                  code: "injected-journal-not-committed",
+                  message: "Injected pre-move journal rejection",
+                }),
+              ]),
+              state: "not-committed" as const,
+            });
+          }
+          return base.commitReplacement(handle);
+        },
+      });
+      const active = journalHarnessFor(resources);
+
+      expect(await active.engine.execute(createRequest())).toMatchObject({
+        status: "provider-failure",
+      });
+      expect(injected).toBeTrue();
+      expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+      expect(
+        await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
+      ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+      expect(await active.engine.execute(createRequest())).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+      expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+    });
+  }
+
+  test("retries a journal discard failure before staging later state", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    const journalHandles = new WeakSet<object>();
+    let rejectedCommit = false;
+    let journalDiscards = 0;
+    const resources = providerWithOverrides(base, {
+      async stageReplacement(locator, bytes) {
+        const staged = await base.stageReplacement(locator, bytes);
+        if (staged.ok && locator === localTransactionStateLocator) {
+          journalHandles.add(staged.value as object);
+        }
+        return staged;
+      },
+      async commitReplacement(handle) {
+        if (!rejectedCommit && journalHandles.has(handle as object)) {
+          rejectedCommit = true;
+          return Object.freeze({
+            diagnostics: Object.freeze([
+              Object.freeze({
+                code: "injected-journal-not-committed",
+                message: "Injected pre-move journal rejection",
+              }),
+            ]),
+            state: "not-committed" as const,
+          });
+        }
+        return base.commitReplacement(handle);
+      },
+      async discardReplacement(handle) {
+        if (journalHandles.has(handle as object)) {
+          journalDiscards += 1;
+          if (journalDiscards === 1) {
+            return failure(
+              Object.freeze({
+                code: "injected-journal-discard-failure",
+                message: "Injected journal discard failure",
+              }),
+            );
+          }
+        }
+        return base.discardReplacement(handle);
+      },
+    });
+    const active = journalHarnessFor(resources);
+
+    expect(await active.engine.execute(createRequest())).toMatchObject({
+      status: "provider-failure",
+    });
+    expect(await stageArtifacts(roots.workspaceRoot)).toHaveLength(1);
+    expect(journalDiscards).toBe(1);
+    expect(await active.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(journalDiscards).toBe(2);
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+  });
+
+  test("does not discard a journal handle when thrown publication bytes are visible", async () => {
+    const roots = await workspace();
+    let interruptedFinalization = false;
+    const base = await createLocalResourceProvider({
+      ...roots,
+      faultInjector(phase, context) {
+        if (
+          !interruptedFinalization &&
+          phase === "replacement-after-rename-before-mode" &&
+          context?.locator === localTransactionStateLocator
+        ) {
+          interruptedFinalization = true;
+          throw new Error("interrupt visible journal finalization");
+        }
+      },
+    });
+    const journalHandles = new WeakSet<object>();
+    let threwAfterMove = false;
+    let journalDiscards = 0;
+    const resources = providerWithOverrides(base, {
+      async stageReplacement(locator, bytes) {
+        const staged = await base.stageReplacement(locator, bytes);
+        if (staged.ok && locator === localTransactionStateLocator) {
+          journalHandles.add(staged.value as object);
+        }
+        return staged;
+      },
+      async commitReplacement(handle) {
+        const committed = await base.commitReplacement(handle);
+        if (!threwAfterMove && journalHandles.has(handle as object)) {
+          threwAfterMove = true;
+          throw new Error("lose the post-move provider response");
+        }
+        return committed;
+      },
+      async discardReplacement(handle) {
+        if (journalHandles.has(handle as object)) journalDiscards += 1;
+        return base.discardReplacement(handle);
+      },
+    });
+    const active = journalHarnessFor(resources);
+
+    expect(await active.engine.execute(createRequest())).toMatchObject({
+      status: "provider-failure",
+    });
+    expect(interruptedFinalization).toBeTrue();
+    expect(threwAfterMove).toBeTrue();
+    expect(journalDiscards).toBe(0);
+    expect(await active.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+  });
+
   test("independently rejects generic adapters that change the expected resource set", async () => {
     const roots = await workspace();
     const resources = await createLocalResourceProvider(roots);
@@ -1192,66 +1368,76 @@ describe("local transaction journal", () => {
     }
   });
 
-  test("rejects the transaction state resource as a canonical target before publication", async () => {
-    const roots = await workspace();
-    const resources = await createLocalResourceProvider(roots);
-    const stateResource = parseResourceKey(localTransactionStateLocator);
-    if (!stateResource.ok) throw new Error("invalid transaction state resource key");
-    const damagingBytes = new TextEncoder().encode("destroy the transaction journal");
-    const damagingRevision = parseContentRevision(
-      `sha256:${createHash("sha256").update(damagingBytes).digest("hex")}`,
-    );
-    if (!damagingRevision.ok) throw new Error("invalid damaging revision");
-    const adapter: CanonicalTransactionAdapter = Object.freeze({
-      load: async () =>
-        success(
-          Object.freeze({
-            resources: Object.freeze([]),
-            state: {},
-          }),
-        ),
-      materialize: () =>
-        success(
-          Object.freeze({
-            state: {},
-            targets: Object.freeze([
-              Object.freeze({
-                expected: null,
-                locator: localTransactionStateLocator,
-                replacement: damagingBytes,
-                resource: stateResource.value,
-                result: damagingRevision.value,
-              }),
-            ]),
-          }),
-        ),
-    });
-    const journal = createLocalTransactionJournal({ adapter, resources });
-    const proposal = {
-      affected: { entities: [], relations: [] },
-      baseGeneration: 0,
-      context: {},
-      expectedRevisions: [{ expected: null, resource: stateResource.value }],
-      generation: 1,
-      mutation: {},
-      priorState: {},
-    } as unknown as ProposedTransaction;
+  for (const aliasCase of [
+    { locator: String(localTransactionStateLocator), name: "exact" },
+    { locator: String(localTransactionStateLocator).toUpperCase(), name: "uppercase alias" },
+  ]) {
+    test(`rejects the ${aliasCase.name} transaction state resource before publication`, async () => {
+      const roots = await workspace();
+      const resources = await createLocalResourceProvider(roots);
+      const stateLocator = parseWorkspaceResourceLocator(aliasCase.locator);
+      if (!stateLocator.ok) throw new Error("invalid transaction state alias locator");
+      const stateResource = parseResourceKey(stateLocator.value);
+      if (!stateResource.ok) throw new Error("invalid transaction state alias resource key");
+      const damagingBytes = new TextEncoder().encode("destroy the transaction journal");
+      const damagingRevision = parseContentRevision(
+        `sha256:${createHash("sha256").update(damagingBytes).digest("hex")}`,
+      );
+      if (!damagingRevision.ok) throw new Error("invalid damaging revision");
+      const adapter: CanonicalTransactionAdapter = Object.freeze({
+        load: async () =>
+          success(
+            Object.freeze({
+              resources: Object.freeze([]),
+              state: {},
+            }),
+          ),
+        materialize: () =>
+          success(
+            Object.freeze({
+              state: {},
+              targets: Object.freeze([
+                Object.freeze({
+                  expected: null,
+                  locator: stateLocator.value,
+                  replacement: damagingBytes,
+                  resource: stateResource.value,
+                  result: damagingRevision.value,
+                }),
+              ]),
+            }),
+          ),
+      });
+      const journal = createLocalTransactionJournal({ adapter, resources });
+      const proposal = {
+        affected: { entities: [], relations: [] },
+        baseGeneration: 0,
+        context: {},
+        expectedRevisions: [{ expected: null, resource: stateResource.value }],
+        generation: 1,
+        mutation: {},
+        priorState: {},
+      } as unknown as ProposedTransaction;
 
-    await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
-    expect(
-      await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
-    ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
-    expect(await journal.snapshot([stateResource.value])).toMatchObject({
-      generation: 0,
-      revisions: [{ resource: stateResource.value, revision: null }],
-    });
+      await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+      expect(
+        await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
+      ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+      expect(
+        await resources.read({ locator: stateLocator.value, maxBytes: 1_000_000 }),
+      ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+      expect(await journal.snapshot([stateResource.value])).toMatchObject({
+        generation: 0,
+        revisions: [{ resource: stateResource.value, revision: null }],
+      });
 
-    const valid = await harness(roots);
-    expect(await valid.engine.execute(createRequest())).toMatchObject({
-      generation: 1,
-      status: "committed",
+      const valid = await harness(roots);
+      expect(await valid.engine.execute(createRequest())).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
     });
-  });
+  }
 
   test("keeps externally divergent committing state indeterminate", async () => {
     const roots = await workspace();

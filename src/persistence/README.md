@@ -61,7 +61,10 @@ proposal's expected revisions, including the same resource and expected value. A
 faulty adapter therefore cannot add, omit, duplicate, or reclassify an unchecked
 resource before journal publication. The fixed transaction-state resource is reserved
 for the journal itself and is rejected as a canonical transaction target even when a
-proposal and adapter agree on it.
+proposal and adapter agree on it. Reservation uses the same conservative locator alias
+key as local coordination: NFC normalization, case folding, then NFC normalization
+through captured string intrinsics. Exact, case-only, and normalization-equivalent
+aliases therefore fail before token or prepared-state publication on every platform.
 
 The fixed `groma/transaction-state.json` record is the committed generation marker
 and recovery journal. It has deterministic canonical JSON, explicit byte/target
@@ -103,6 +106,12 @@ its first asynchronous operation and retries release after settlement; a concurr
 caller cannot share the in-flight lease and instead follows normal contended
 acquisition. Confirmed release clears the retained lease. Nothing volatile enters the
 deterministic transaction-state record.
+Journal publication stages have their own volatile same-process recovery records. A
+provider-confirmed pre-move rejection, or a thrown commit whose exact readback is still
+the previous state or absence, discards the stage. If discard fails, the next journal
+write retries that handle before staging anything new. When thrown or uncertain commit
+readback shows the intended bytes, the handle remains commit-pending and is retried to
+finish durability; it is never discarded as though rename had not occurred.
 Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes
