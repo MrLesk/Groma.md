@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 02:39'
+updated_date: '2026-07-12 02:57'
 labels:
   - core
   - queries
@@ -63,4 +63,6 @@ Final quality typing review aligned the public success contract with runtime beh
 PR #7 Codex review identified that the first canonical item constraint excluded interface-shaped Core records because they lacked a string index signature. Replaced it with a recursive structural data-only predicate that accepts GraphEntity and GraphRelation directly, preserves branded scalar identities, and rejects callable objects, behavior-bearing fields, invalid primitive unions, and symbol-keyed records. Added compile-time and runtime coverage for direct Core records and readonly nested payload snapshots. Task remains In Progress with acceptance criteria unchecked pending review completion.
 
 Controller inspection found the structural predicate treated omitted sparse fields like explicit undefined. Record-field validation now uses each optional property's required present-value view with a never guard under exactOptionalPropertyTypes. Sparse interfaces with optional canonical fields compile and remain deeply readonly, while required or optional fields explicitly unioned with undefined remain rejected. GraphEntity, GraphRelation, and prior behavior-bearing rejections remain covered. Task stays In Progress with acceptance criteria unchecked.
+
+Latest PR #7 Codex review identified three bounded-work gaps. Page item arrays now receive descriptor-only intrinsic dense-array and length preflight, returning overflow before traversing items. Query contexts and anchors now use one descriptor traversal that copies, freezes, key-orders, emits canonical JSON, and decrements exact character budgets recursively so oversized values stop before later descriptors. Cursor binding no longer uses object-level JSON.stringify and ignores inherited Object/Array toJSON pollution. Added overflow-before-getter, budget early-abort, and prototype-pollution continuation regressions. Task remains In Progress with acceptance criteria unchecked.
 <!-- SECTION:NOTES:END -->

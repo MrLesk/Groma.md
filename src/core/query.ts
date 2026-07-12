@@ -1,7 +1,13 @@
 import { parseGraphGeneration, type GraphGeneration } from "./generation.ts";
-import { copyGraphPayload, type GraphData, type GraphDataScalar } from "./payload.ts";
+import {
+  copyCanonicalGraphData,
+  copyGraphPayload,
+  type CanonicalGraphDataCopy,
+  type GraphData,
+  type GraphDataScalar,
+} from "./payload.ts";
 import { failure, type Result, success } from "./result.ts";
-import { inspectExactRecord } from "./runtime.ts";
+import { inspectExactRecord, inspectIntrinsicDenseArrayLength } from "./runtime.ts";
 
 declare const continuationCursorBrand: unique symbol;
 declare const pageLimitBrand: unique symbol;
@@ -100,6 +106,10 @@ interface CursorState {
   readonly version: 1;
 }
 
+interface DecodedCursorState extends CursorState {
+  readonly queryCanonicalJson: string;
+}
+
 const cursorPrefix = "groma.cursor.v1:";
 const cursorStateKeys = ["anchor", "generation", "query", "version"] as const;
 
@@ -109,34 +119,20 @@ function validatePositiveBudget(value: number, name: string): void {
   }
 }
 
-function serializeCanonicalData(value: GraphData): string {
-  return JSON.stringify(value);
+function canonicalQueryContext(value: unknown, maximum: number): Result<CanonicalGraphDataCopy> {
+  return copyCanonicalGraphData(value, "query", {
+    code: "query-context-too-large",
+    maximum,
+    message: `Query context exceeds the configured ${maximum}-character budget`,
+  });
 }
 
-function canonicalQueryContext(value: unknown, maximum: number): Result<GraphData> {
-  const copied = copyGraphPayload(value, "query");
-  if (!copied.ok) return copied;
-  const serialized = serializeCanonicalData(copied.value);
-  return serialized.length <= maximum
-    ? copied
-    : failure({
-        code: "query-context-too-large",
-        message: `Query context exceeds the configured ${maximum}-character budget`,
-        details: { actual: serialized.length, maximum },
-      });
-}
-
-function canonicalAnchor(value: unknown, maximum: number): Result<GraphData> {
-  const copied = copyGraphPayload(value, "query");
-  if (!copied.ok) return copied;
-  const serialized = serializeCanonicalData(copied.value);
-  return serialized.length <= maximum
-    ? copied
-    : failure({
-        code: "continuation-anchor-too-large",
-        message: `Continuation anchor exceeds the configured ${maximum}-character budget`,
-        details: { actual: serialized.length, maximum },
-      });
+function canonicalAnchor(value: unknown, maximum: number): Result<CanonicalGraphDataCopy> {
+  return copyCanonicalGraphData(value, "query", {
+    code: "continuation-anchor-too-large",
+    maximum,
+    message: `Continuation anchor exceeds the configured ${maximum}-character budget`,
+  });
 }
 
 function cursorFailure(code: string, message: string): Result<never> {
@@ -209,16 +205,14 @@ export class BoundedQueryContracts {
         Object.freeze({
           generation: parsedGeneration.value,
           limit: limit.value,
-          query: canonicalQuery.value,
+          query: canonicalQuery.value.value,
         }),
       );
     }
 
     const decoded = this.#decodeCursor(inspectedRequest.value.cursor);
     if (!decoded.ok) return decoded;
-    if (
-      serializeCanonicalData(decoded.value.query) !== serializeCanonicalData(canonicalQuery.value)
-    ) {
+    if (decoded.value.queryCanonicalJson !== canonicalQuery.value.canonicalJson) {
       return cursorFailure(
         "cursor-query-mismatch",
         "Continuation cursor belongs to a different canonical query",
@@ -240,7 +234,7 @@ export class BoundedQueryContracts {
         after: decoded.value.anchor,
         generation: parsedGeneration.value,
         limit: limit.value,
-        query: canonicalQuery.value,
+        query: canonicalQuery.value.value,
       }),
     );
   }
@@ -273,19 +267,21 @@ export class BoundedQueryContracts {
       const after = canonicalAnchor(inspectedPrepared.value.after, this.#maxAnchorCharacters);
       if (!after.ok) return after;
     }
+    const itemArray = inspectIntrinsicDenseArrayLength(items, "invalid-query-items", "Query items");
+    if (!itemArray.ok) return itemArray;
+    if (itemArray.value > limit.value) {
+      return failure({
+        code: "query-page-overflow",
+        message: "Query provider returned more items than the validated page limit",
+        details: { actual: itemArray.value, limit: limit.value },
+      });
+    }
     const copiedItems = copyGraphPayload(items, "query");
     if (!copiedItems.ok) return copiedItems;
     if (!Array.isArray(copiedItems.value)) {
       return failure({
         code: "invalid-query-items",
         message: "Query items must be an intrinsic array of canonical graph data",
-      });
-    }
-    if (copiedItems.value.length > limit.value) {
-      return failure({
-        code: "query-page-overflow",
-        message: "Query provider returned more items than the validated page limit",
-        details: { actual: copiedItems.value.length, limit: limit.value },
       });
     }
     const inspectedState = inspectExactRecord(
@@ -353,18 +349,13 @@ export class BoundedQueryContracts {
 
   #encodeCursor(
     generation: GraphGeneration,
-    query: GraphData,
+    query: CanonicalGraphDataCopy,
     anchorValue: unknown,
   ): Result<ContinuationCursor> {
     const anchor = canonicalAnchor(anchorValue, this.#maxAnchorCharacters);
     if (!anchor.ok) return anchor;
-    const state: CursorState = {
-      anchor: anchor.value,
-      generation,
-      query,
-      version: 1,
-    };
-    const cursor = `${cursorPrefix}${encodeURIComponent(JSON.stringify(state))}`;
+    const canonicalState = `{"anchor":${anchor.value.canonicalJson},"generation":${generation},"query":${query.canonicalJson},"version":1}`;
+    const cursor = `${cursorPrefix}${encodeURIComponent(canonicalState)}`;
     return cursor.length <= this.#maxCursorCharacters
       ? success(cursor as ContinuationCursor)
       : failure({
@@ -374,7 +365,7 @@ export class BoundedQueryContracts {
         });
   }
 
-  #decodeCursor(cursor: unknown): Result<CursorState> {
+  #decodeCursor(cursor: unknown): Result<DecodedCursorState> {
     if (typeof cursor !== "string") {
       return cursorFailure("malformed-continuation-cursor", "Continuation cursor must be a string");
     }
@@ -434,9 +425,10 @@ export class BoundedQueryContracts {
       );
     }
     return success({
-      anchor: anchor.value,
+      anchor: anchor.value.value,
       generation: generation.value,
-      query: query.value,
+      query: query.value.value,
+      queryCanonicalJson: query.value.canonicalJson,
       version: 1,
     });
   }

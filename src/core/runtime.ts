@@ -53,3 +53,43 @@ export function inspectExactRecord(
     return invalidShape(code, subject, "record inspection failed");
   }
 }
+
+export function inspectIntrinsicDenseArrayLength(
+  value: unknown,
+  code: string,
+  subject: string,
+): Result<number> {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+      return invalidShape(code, subject, "expected an intrinsic array");
+    }
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key === "symbol")) {
+      return invalidShape(code, subject, "symbol properties are not allowed");
+    }
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (
+      lengthDescriptor === undefined ||
+      !("value" in lengthDescriptor) ||
+      !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value < 0
+    ) {
+      return invalidShape(code, subject, "array length is not an intrinsic safe data value");
+    }
+    const length = lengthDescriptor.value;
+    const keys = (ownKeys as string[]).sort();
+    if (keys.length !== length + 1 || !keys.includes("length")) {
+      return invalidShape(code, subject, "array must be dense without extra properties");
+    }
+    for (const key of keys) {
+      if (key === "length") continue;
+      const index = Number(key);
+      if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
+        return invalidShape(code, subject, "array indexes are not canonical");
+      }
+    }
+    return success(length);
+  } catch {
+    return invalidShape(code, subject, "array inspection failed");
+  }
+}

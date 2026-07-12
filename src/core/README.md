@@ -41,6 +41,12 @@ cursor. The cursor is self-contained so a later short-lived CLI process can cont
 the page. It is opaque as an API boundary, not encrypted or secret: callers must not
 interpret it, and providers must still treat it as untrusted input.
 
+Canonical JSON is emitted directly from descriptors during the same traversal that
+copies and freezes query data. Character budgets reduce recursively for punctuation,
+sorted keys, and values, so copying stops before inspecting later data once the bound
+is exceeded. The serializer never consults object or array `toJSON` hooks—including
+polluted inherited hooks—and page length is preflighted before any item is traversed.
+
 Exact-read items and page items also cross this boundary as canonical `GraphData`.
 Core defensively copies and deeply freezes them, normalizes negative zero to zero, and
 rejects accessors, `toJSON` hooks, custom collections, iterable or length spoofs, and

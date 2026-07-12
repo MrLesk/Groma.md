@@ -358,14 +358,35 @@ describe("bounded query contracts", () => {
       contracts.page(prepared, iterableLengthSpoof as unknown as readonly number[], {
         hasMore: false,
       }),
-    ).toMatchObject({ diagnostics: [{ code: "unsupported-payload" }], ok: false });
+    ).toMatchObject({ diagnostics: [{ code: "invalid-query-items" }], ok: false });
 
     const extended = [1];
     Object.defineProperty(extended, "reportedLength", { enumerable: true, value: 0 });
     expect(contracts.page(prepared, extended, { hasMore: false })).toMatchObject({
-      diagnostics: [{ code: "unsupported-payload" }],
+      diagnostics: [{ code: "invalid-query-items" }],
       ok: false,
     });
+  });
+
+  test("rejects page overflow before traversing any query item", () => {
+    const contracts = createContracts();
+    const prepared = prepareFirst(contracts, 1, {}, 1);
+    let getterInvoked = false;
+    const first = Object.defineProperty({}, "throwing", {
+      enumerable: true,
+      get: () => {
+        getterInvoked = true;
+        throw new Error("must not inspect an over-limit item");
+      },
+    });
+    const result = contracts.page(prepared, [first, 2] as unknown as readonly GraphData[], {
+      hasMore: false,
+    });
+    expect(result).toMatchObject({
+      diagnostics: [{ code: "query-page-overflow", details: { actual: 2, limit: 1 } }],
+      ok: false,
+    });
+    expect(getterInvoked).toBeFalse();
   });
 
   test("treats prepared query objects as forged runtime input", () => {
@@ -494,6 +515,120 @@ describe("bounded query contracts", () => {
         nextAnchor: 1,
       }),
     ).toMatchObject({ diagnostics: [{ code: "continuation-cursor-too-large" }], ok: false });
+  });
+
+  test("aborts query and anchor copying as soon as canonical JSON exceeds its budget", () => {
+    const contracts = createContracts({
+      maxAnchorCharacters: 8,
+      maxQueryContextCharacters: 8,
+    });
+    let queryGetterInvoked = false;
+    const query = { a: "already too large" } as Record<string, unknown>;
+    Object.defineProperty(query, "z", {
+      enumerable: true,
+      get: () => {
+        queryGetterInvoked = true;
+        throw new Error("query traversal must already have stopped");
+      },
+    });
+    expect(contracts.prepare(1, query, { limit: 1 })).toMatchObject({
+      diagnostics: [{ code: "query-context-too-large" }],
+      ok: false,
+    });
+    expect(queryGetterInvoked).toBeFalse();
+
+    let anchorGetterInvoked = false;
+    const anchor = new Array(2);
+    Object.defineProperty(anchor, "0", { enumerable: true, value: "already too large" });
+    Object.defineProperty(anchor, "1", {
+      enumerable: true,
+      get: () => {
+        anchorGetterInvoked = true;
+        throw new Error("anchor traversal must already have stopped");
+      },
+    });
+    const page = contracts.page(prepareFirst(contracts, 1, {}, 1), [1], {
+      hasMore: true,
+      nextAnchor: anchor,
+    });
+    expect(page).toMatchObject({
+      diagnostics: [{ code: "continuation-anchor-too-large" }],
+      ok: false,
+    });
+    expect(anchorGetterInvoked).toBeFalse();
+  });
+
+  test("ignores inherited toJSON pollution while binding and continuing cursors", () => {
+    const objectToJson = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+    const arrayToJson = Object.getOwnPropertyDescriptor(Array.prototype, "toJSON");
+    let hookInvocations = 0;
+    let firstCursor: ContinuationCursor | undefined;
+    let secondCursor: ContinuationCursor | undefined;
+    let continuedAfter: unknown;
+    try {
+      Object.defineProperty(Object.prototype, "toJSON", {
+        configurable: true,
+        value: () => {
+          hookInvocations += 1;
+          return { polluted: true };
+        },
+      });
+      Object.defineProperty(Array.prototype, "toJSON", {
+        configurable: true,
+        value: () => {
+          hookInvocations += 1;
+          return ["polluted"];
+        },
+      });
+
+      const contracts = createContracts();
+      const firstPrepared = prepareFirst(
+        contracts,
+        6,
+        { order: ["id"], filters: { b: 2, a: 1 } },
+        1,
+      );
+      const firstPage = contracts.page(firstPrepared, [{ id: entity("1") }], {
+        hasMore: true,
+        nextAnchor: { id: entity("1"), sort: ["id"] },
+      });
+      if (!firstPage.ok || firstPage.value.nextCursor === undefined) {
+        throw new Error("expected first cursor");
+      }
+      firstCursor = firstPage.value.nextCursor;
+
+      const secondPrepared = prepareFirst(
+        contracts,
+        6,
+        { filters: { a: 1, b: 2 }, order: ["id"] },
+        1,
+      );
+      const secondPage = contracts.page(secondPrepared, [{ id: entity("1") }], {
+        hasMore: true,
+        nextAnchor: { sort: ["id"], id: entity("1") },
+      });
+      if (!secondPage.ok || secondPage.value.nextCursor === undefined) {
+        throw new Error("expected second cursor");
+      }
+      secondCursor = secondPage.value.nextCursor;
+
+      const continued = contracts.prepare(
+        6,
+        { filters: { a: 1, b: 2 }, order: ["id"] },
+        { cursor: firstCursor, limit: 1 },
+      );
+      if (!continued.ok) throw new Error("expected cursor continuation");
+      continuedAfter = continued.value.after;
+    } finally {
+      if (objectToJson === undefined) delete (Object.prototype as { toJSON?: unknown }).toJSON;
+      else Object.defineProperty(Object.prototype, "toJSON", objectToJson);
+      if (arrayToJson === undefined) delete (Array.prototype as { toJSON?: unknown }).toJSON;
+      else Object.defineProperty(Array.prototype, "toJSON", arrayToJson);
+    }
+
+    expect(hookInvocations).toBe(0);
+    expect(firstCursor).toBe(secondCursor);
+    expect(continuedAfter).toEqual({ id: entity("1"), sort: ["id"] });
   });
 
   test("cursor branding remains an API boundary rather than trusted input", () => {
