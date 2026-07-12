@@ -8,7 +8,7 @@ export interface GraphDataRecord {
 
 export type GraphData = GraphDataScalar | GraphDataRecord | readonly GraphData[];
 
-type PayloadOwner = "entity" | "query" | "relation";
+type PayloadOwner = "entity" | "query" | "relation" | "transaction";
 
 export interface CanonicalGraphDataCopy {
   readonly canonicalJson: string;
@@ -19,6 +19,18 @@ export interface CanonicalGraphDataBudget {
   readonly code: string;
   readonly maximum: number;
   readonly message: string;
+}
+
+export interface GraphDataStructuralBudget {
+  readonly code: string;
+  readonly maximumDepth: number;
+  readonly maximumValues: number;
+  readonly message: string;
+}
+
+interface GraphDataStructuralBudgetState {
+  readonly budget: GraphDataStructuralBudget;
+  remainingValues: number;
 }
 
 const intrinsicCharCodeAt = String.prototype.charCodeAt;
@@ -123,9 +135,17 @@ function copyGraphData(
   owner: PayloadOwner,
   emitCanonicalJson: boolean,
   budget?: CanonicalGraphDataBudget,
+  structuralBudget?: GraphDataStructuralBudget,
+  sharedStructuralState?: GraphDataStructuralBudgetState,
+  rootPath = "$",
 ): Result<CanonicalGraphDataCopy> {
   const activeContainers = new WeakSet<object>();
   const maximum = budget?.maximum ?? Number.POSITIVE_INFINITY;
+  const structuralState =
+    sharedStructuralState ??
+    (structuralBudget === undefined
+      ? undefined
+      : { budget: structuralBudget, remainingValues: structuralBudget.maximumValues });
 
   const tooLarge = (): Result<never> =>
     failure({
@@ -134,11 +154,30 @@ function copyGraphData(
       details: { maximum },
     });
 
+  const tooComplex = (): Result<never> => {
+    const structural = structuralState?.budget;
+    return failure({
+      code: structural?.code ?? "graph-data-structure-too-large",
+      message: structural?.message ?? "Graph data exceeds its structural budget",
+      details: {
+        maximumDepth: structural?.maximumDepth ?? 0,
+        maximumValues: structural?.maximumValues ?? 0,
+      },
+    });
+  };
+
   const copy = (
     value: unknown,
     path: string,
     remaining: number,
+    depth: number,
   ): Result<CanonicalGraphDataCopy> => {
+    if (structuralState !== undefined) {
+      if (depth > structuralState.budget.maximumDepth || structuralState.remainingValues < 1) {
+        return tooComplex();
+      }
+      structuralState.remainingValues -= 1;
+    }
     if (value === null) {
       return !emitCanonicalJson || remaining >= 4
         ? success({ canonicalJson: emitCanonicalJson ? "null" : "", value })
@@ -196,6 +235,9 @@ function copyGraphData(
         return unsupportedPayload(owner, path, "arrays must have an intrinsic data length");
       }
       const arrayLength = lengthDescriptor.value;
+      if (structuralState !== undefined && arrayLength > structuralState.remainingValues) {
+        return tooComplex();
+      }
       if (emitCanonicalJson) {
         if (remaining < 2) return tooLarge();
         if (arrayLength > 0 && arrayLength > (remaining - 1) / 2) return tooLarge();
@@ -248,6 +290,7 @@ function copyGraphData(
             descriptor.value,
             itemPath,
             emitCanonicalJson ? available - 1 : available,
+            depth + 1,
           );
           if (!item.ok) return item;
           copiedItems[index] = item.value.value;
@@ -280,6 +323,9 @@ function copyGraphData(
       if (typeof key === "symbol") {
         return unsupportedPayload(owner, path, "plain records must not contain symbol properties");
       }
+    }
+    if (structuralState !== undefined && ownKeys.length > structuralState.remainingValues) {
+      return tooComplex();
     }
     if (emitCanonicalJson && remaining < 2) return tooLarge();
 
@@ -327,6 +373,7 @@ function copyGraphData(
           descriptor.value,
           pathToValue,
           emitCanonicalJson ? available - 1 : available,
+          depth + 1,
         );
         if (!child.ok) return child;
         Object.defineProperty(copiedRecord, key, {
@@ -351,7 +398,7 @@ function copyGraphData(
   };
 
   try {
-    return copy(payload, "$", maximum);
+    return copy(payload, rootPath, maximum, 1);
   } catch (error) {
     let inspectionError = "unknown inspection failure";
     try {
@@ -371,11 +418,44 @@ export function copyCanonicalGraphData(
   payload: unknown,
   owner: PayloadOwner,
   budget?: CanonicalGraphDataBudget,
+  structuralBudget?: GraphDataStructuralBudget,
 ): Result<CanonicalGraphDataCopy> {
-  return copyGraphData(payload, owner, true, budget);
+  return copyGraphData(payload, owner, true, budget, structuralBudget);
 }
 
-export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<GraphData> {
-  const copied = copyGraphData(payload, owner, false);
+export function copyGraphPayload(
+  payload: unknown,
+  owner: PayloadOwner,
+  structuralBudget?: GraphDataStructuralBudget,
+): Result<GraphData> {
+  const copied = copyGraphData(payload, owner, false, undefined, structuralBudget);
   return copied.ok ? success(copied.value.value) : copied;
+}
+
+export function copyGraphPayloadPair(
+  first: unknown,
+  second: unknown,
+  owner: PayloadOwner,
+  structuralBudget: GraphDataStructuralBudget,
+): Result<readonly [GraphData, GraphData]> {
+  const structuralState: GraphDataStructuralBudgetState = {
+    budget: structuralBudget,
+    remainingValues: structuralBudget.maximumValues,
+  };
+  const payloads = [first, second];
+  const copied: [GraphData, GraphData] = [null, null];
+  for (let index = 0; index < 2; index += 1) {
+    const result = copyGraphData(
+      payloads[index],
+      owner,
+      false,
+      undefined,
+      structuralBudget,
+      structuralState,
+      `$[${index}]`,
+    );
+    if (!result.ok) return result;
+    copied[index] = result.value.value;
+  }
+  return success(Object.freeze(copied));
 }
