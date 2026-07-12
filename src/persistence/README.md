@@ -14,12 +14,14 @@ outgoing relationships. Relationship sources are implicit, while stable relation
 IDs, types, targets, descriptions, and namespaced extensions remain explicit.
 
 The `groma/v0.1` frontmatter contains structural metadata, embedded inputs, outputs,
-actions, outgoing relationships, and extensions. Intent prose is reversible Markdown
-under the exact `# Intent` body heading. The codec uses the injected Standard Model
-capability for every component and relationship semantic view, canonicalizes ordering
-and LF framing, rejects aliases, tags, duplicate YAML keys, invalid UTF-8, conflicts,
-wrong schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content
-revision. It never writes timestamps, host paths, evidence, bindings, or derived state.
+actions, outgoing relationships, and extensions. For intent-bearing documents, the
+closing frontmatter delimiter is followed by one blank line, the exact `# Intent`
+heading, another blank line, the reversible prose, and one framing newline. The codec
+uses the injected Standard Model capability for every component and relationship
+semantic view, canonicalizes ordering and LF framing, rejects unrepresentable Unicode,
+aliases, tags, duplicate YAML keys, invalid UTF-8, complete conflict blocks, wrong
+schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content revision. It
+never writes timestamps, host paths, evidence, bindings, or derived state.
 
 Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
 provider continuation pages, accepts only the exact shard/file layout, produces stable

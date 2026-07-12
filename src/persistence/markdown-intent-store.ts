@@ -40,7 +40,6 @@ const intentRootSegments = ["groma", "intent"] as const;
 const shardPattern = /^[0-9a-f]{2}$/;
 const documentPattern = /^ent_[0-9a-f]{32}\.md$/;
 const extensionPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
-const conflictPattern = /^(?:<<<<<<<|=======|>>>>>>>)(?: |$)/m;
 const textEncoder = new TextEncoder();
 const strictTextDecoder = new TextDecoder("utf-8", { fatal: true });
 const uint8ArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
@@ -111,6 +110,77 @@ function diagnostic(
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function unpairedSurrogateIndex(value: string): number | undefined {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (index + 1 >= value.length) return index;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return index;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return index;
+    }
+  }
+  return undefined;
+}
+
+function validateUnicode(value: unknown, rootPath: string): Result<void> {
+  const pending: { readonly path: string; readonly value: unknown }[] = [{ path: rootPath, value }];
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (typeof current.value === "string") {
+      const index = unpairedSurrogateIndex(current.value);
+      if (index !== undefined) {
+        return failure(
+          diagnostic(
+            "invalid-intent-unicode",
+            "Intent serialization cannot represent an unpaired UTF-16 surrogate losslessly in UTF-8",
+            { index, path: current.path },
+          ),
+        );
+      }
+      continue;
+    }
+    if (typeof current.value !== "object" || current.value === null) continue;
+    if (visited.has(current.value)) continue;
+    visited.add(current.value);
+    for (const key of Reflect.ownKeys(current.value)) {
+      if (typeof key !== "string") continue;
+      const keyIndex = unpairedSurrogateIndex(key);
+      if (keyIndex !== undefined) {
+        return failure(
+          diagnostic(
+            "invalid-intent-unicode",
+            "Intent serialization cannot represent an unpaired UTF-16 surrogate in a key losslessly in UTF-8",
+            { index: keyIndex, path: `${current.path} key` },
+          ),
+        );
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(current.value, key);
+      if (descriptor !== undefined && "value" in descriptor) {
+        pending.push({ path: `${current.path}.${key}`, value: descriptor.value });
+      }
+    }
+  }
+  return success(undefined);
+}
+
+function containsGitConflictBlock(text: string): boolean {
+  let state: "outside" | "ours" | "theirs" = "outside";
+  for (const line of text.split("\n")) {
+    if (state === "outside") {
+      if (/^<<<<<<< .+$/.test(line)) state = "ours";
+    } else if (state === "ours") {
+      if (line === "=======") state = "theirs";
+    } else if (/^>>>>>>> .+$/.test(line)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function exactRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -279,6 +349,10 @@ function encodeDocument(
   front: Record<string, unknown>,
   intent: string | undefined,
 ): Result<Uint8Array> {
+  const frontUnicode = validateUnicode(front, "frontmatter");
+  if (!frontUnicode.ok) return frontUnicode;
+  const intentUnicode = validateUnicode(intent, "intent");
+  if (!intentUnicode.ok) return intentUnicode;
   try {
     const yaml = stringify(front, {
       aliasDuplicateObjects: false,
@@ -286,7 +360,7 @@ function encodeDocument(
       lineWidth: 0,
       minContentWidth: 0,
     });
-    const body = intent === undefined ? "" : `# Intent\n\n${intent}\n`;
+    const body = intent === undefined ? "" : `\n# Intent\n\n${intent}\n`;
     return success(textEncoder.encode(`---\n${yaml}---\n${body}`));
   } catch (error) {
     return failure(
@@ -318,12 +392,12 @@ function parseFraming(text: string): Result<{ readonly body?: string; readonly y
   }
   const suffix = text.slice(closing + 5);
   if (suffix.length === 0) return success({ yaml: text.slice(4, closing + 1) });
-  const heading = "# Intent\n\n";
+  const heading = "\n# Intent\n\n";
   if (!suffix.startsWith(heading) || !suffix.endsWith("\n")) {
     return failure(
       diagnostic(
         "intent-malformed-body",
-        "Intent Markdown body must be exactly '# Intent', a blank line, prose, and one framing newline",
+        "Intent Markdown body must be exactly a blank line, '# Intent', a blank line, prose, and one framing newline",
       ),
     );
   }
@@ -929,7 +1003,7 @@ export function createMarkdownIntentStore(
         }),
       );
     }
-    if (conflictPattern.test(text)) {
+    if (containsGitConflictBlock(text)) {
       return failure(
         diagnostic(
           "intent-conflict-marker",

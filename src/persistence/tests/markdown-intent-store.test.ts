@@ -102,9 +102,37 @@ describe("Markdown intent codec", () => {
     expect(String(encoded.value.locator)).toBe(`groma/intent/00/${source}.md`);
     expect(String(encoded.value.resource)).toBe(String(encoded.value.locator));
     expect(String(encoded.value.revision)).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(decoder.decode(encoded.value.bytes)).toContain(
-      "# Intent\n\nCafé architecture\n\nPreserve **meaning**.\n\n",
-    );
+    expect(decoder.decode(encoded.value.bytes)).toBe(`---
+schema: groma/v0.1
+id: ${source}
+kind: component
+name: Renamable name
+type: service.worker
+parent: ${target}
+actions:
+  - id: a-action
+    name: First
+  - id: z-action
+    description: Second
+    vendor.io/item:
+      a: 1
+      z: 2
+relationships:
+  - id: ${relationId("30")}
+    type: depends-on
+    target: ${target}
+    description: Calls
+    vendor.io/confidence: 0.9
+acme.io/owner: Architecture
+---
+
+# Intent
+
+Café architecture
+
+Preserve **meaning**.
+
+`);
 
     const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
     expect(decoded).toMatchObject({ ok: true });
@@ -230,7 +258,7 @@ describe("Markdown intent codec", () => {
       model: createStandardModelCapability(),
       resources: {} as never,
     });
-    for (const intent of [undefined, "", "line", "line\n", "line\n\n"] as const) {
+    for (const intent of [undefined, "", "line", "line\n", "line\n\n", "=======\n"] as const) {
       const encoded = store.serialize(component(id, intent === undefined ? {} : { intent }), []);
       if (!encoded.ok) throw new Error("expected serialization");
       const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
@@ -257,6 +285,67 @@ describe("Markdown intent codec", () => {
     const canonical = store.serialize(loaded.value.entity, loaded.value.relations);
     if (!canonical.ok) throw new Error("expected serialization");
     expect(canonical.value.revision).not.toBe(loaded.value.revision);
+  });
+
+  test("decodes the architecture-style blank line before the Intent heading", () => {
+    const id = entityId("801");
+    const locator = markdownIntentLocator(id);
+    if (!locator.ok) throw new Error("expected locator");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const decoded = store.decode(
+      locator.value,
+      new TextEncoder().encode(
+        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n---\n\n# Intent\n\nArchitecture prose.\n`,
+      ),
+    );
+    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
+    expect((decoded.value.entity.payload as { readonly intent?: string }).intent).toBe(
+      "Architecture prose.",
+    );
+  });
+
+  test("fails closed on unpaired surrogates anywhere canonical UTF-8 would be lossy", () => {
+    const id = entityId("802");
+    const target = entityId("803");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const nestedKey: Record<string, string> = {};
+    Object.defineProperty(nestedKey, `bad${String.fromCharCode(0xd800)}key`, {
+      enumerable: true,
+      value: "value",
+    });
+    const entities = [
+      component(id, { intent: `before${String.fromCharCode(0xd800)}after` }),
+      component(id, {
+        actions: [{ id: "act", name: `bad${String.fromCharCode(0xdc00)}` }],
+      }),
+      component(id, { "vendor.io/nested": nestedKey }),
+      component(id, {
+        "vendor.io/nested": { value: `bad${String.fromCharCode(0xd800)}` },
+      }),
+    ];
+    for (const entity of entities) {
+      expect(store.serialize(entity, [])).toMatchObject({
+        diagnostics: [{ code: "invalid-intent-unicode" }],
+        ok: false,
+      });
+    }
+    expect(
+      store.serialize(component(id, {}), [
+        {
+          id: relationId("802"),
+          payload: { description: `bad${String.fromCharCode(0xd800)}` },
+          source: id,
+          target,
+          type: "uses",
+        },
+      ]),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-intent-unicode" }], ok: false });
   });
 
   test("keeps stable locators across rename and reparent operations", () => {
@@ -400,7 +489,14 @@ describe("Markdown intent codec", () => {
       resources: {} as never,
     });
     const cases = [
-      ["intent-conflict-marker", `---\nid: ${id}\n<<<<<<< HEAD\n---\n`],
+      [
+        "intent-conflict-marker",
+        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n---\n\n# Intent\n\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n`,
+      ],
+      [
+        "intent-malformed-yaml",
+        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\nname: [unterminated\n---\n`,
+      ],
       [
         "intent-duplicate-yaml-key",
         `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nid: ${id}\n---\n`,
@@ -464,6 +560,55 @@ describe("provider-backed Markdown intent store", () => {
 
     const read = await store.read(childId);
     expect(read).toMatchObject({ ok: true, value: { entity: { id: childId } } });
+  });
+
+  test("round-trips multi-level same-type and mixed-type recursive containment", async () => {
+    const provider = await resources();
+    const store = createMarkdownIntentStore({
+      bounds: { pageSize: 1 },
+      model: createStandardModelCapability(),
+      resources: provider,
+    });
+    const root = entityId("a1");
+    const sameTypeChild = entityId("a2");
+    const mixedTypeGrandchild = entityId("a3");
+    const sameTypeGreatGrandchild = entityId("a4");
+    const hierarchy = [
+      component(root, { name: "Root", type: "service" }),
+      component(sameTypeChild, { name: "Same", parent: root, type: "service" }),
+      component(mixedTypeGrandchild, {
+        name: "Mixed",
+        parent: sameTypeChild,
+        type: "worker",
+      }),
+      component(sameTypeGreatGrandchild, {
+        name: "Same again",
+        parent: mixedTypeGrandchild,
+        type: "worker",
+      }),
+    ];
+    for (const entity of hierarchy) {
+      const encoded = store.serialize(entity, []);
+      if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+      const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
+      if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
+      expect(decoded.value.entity.id).toBe(entity.id);
+      await publish(provider, String(encoded.value.locator), decoder.decode(encoded.value.bytes));
+    }
+    const loaded = await store.load();
+    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+    expect(
+      loaded.value.entities.map((entity) => ({
+        id: entity.id,
+        parent: (entity.payload as { readonly parent?: string }).parent,
+        type: (entity.payload as { readonly type?: string }).type,
+      })),
+    ).toEqual([
+      { id: root, parent: undefined, type: "service" },
+      { id: sameTypeChild, parent: root, type: "service" },
+      { id: mixedTypeGrandchild, parent: sameTypeChild, type: "worker" },
+      { id: sameTypeGreatGrandchild, parent: mixedTypeGrandchild, type: "worker" },
+    ]);
   });
 
   test("treats a missing intent root as empty", async () => {
