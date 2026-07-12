@@ -29,14 +29,23 @@ finite Number outside the safe-integer range, the codec forces exponent notation
 its own canonical bytes parse as a float rather than an exact integer lexeme. The store
 never writes timestamps, host paths, evidence, bindings, or derived state.
 
+Complete column-zero Git conflict blocks are rejected symmetrically during serialization
+and decoding; literal documentation must indent or quote its marker lines. Byte inputs,
+including Node Buffers and Uint8Array subclasses, are copied through intrinsic typed-array
+metadata and raw buffers without consulting subclass constructors or species. Returned
+document bytes are always isolated plain Uint8Array copies, so mutations cannot invalidate
+their recorded revision.
+
 Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
 provider continuation pages, accepts only the exact shard/file layout, produces stable
 document/entity/relation order, and diagnoses misplaced or duplicate identities,
 missing parents or relationship targets, and containment cycles. In addition to
 per-document and document-count ceilings, exact retained document bytes have a 128 MiB
 default and 1 GiB absolute bound. A missing intent root is empty only on the first
-enumeration request; disappearance during pagination is an inconsistent load. This API
-intentionally has no direct write or commit operation; GROM-14 owns transactionally
+enumeration request; disappearance during pagination is an inconsistent load. Non-final
+pages must contain progress entries, and total pages cannot exceed the configured
+document ceiling plus the 256 possible shard directories and one terminal page. This
+API intentionally has no direct write or commit operation; GROM-14 owns transactionally
 coordinated replacement.
 
 ## Local resource capability

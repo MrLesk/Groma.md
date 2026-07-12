@@ -39,15 +39,23 @@ import {
 const schema = "groma/v0.1";
 const intentRootSegments = ["groma", "intent"] as const;
 const shardPattern = /^[0-9a-f]{2}$/;
+const maximumCanonicalShardCount = 256;
 const documentPattern = /^ent_[0-9a-f]{32}\.md$/;
 const extensionPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
 const textEncoder = new TextEncoder();
 const strictTextDecoder = new TextDecoder("utf-8", { fatal: true });
-const uint8ArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype) as object,
+const intrinsicUint8Array = Uint8Array;
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)?.get;
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get;
+const typedArrayByteOffset = Object.getOwnPropertyDescriptor(
+  typedArrayPrototype,
+  "byteOffset",
+)?.get;
+const typedArrayByteLength = Object.getOwnPropertyDescriptor(
+  typedArrayPrototype,
   "byteLength",
 )?.get;
-const intrinsicUint8ArraySlice = Uint8Array.prototype.slice;
 
 export interface MarkdownIntentStoreBounds {
   readonly maxDocumentBytes: number;
@@ -219,20 +227,43 @@ function parseBounds(
 }
 
 function snapshotIntentBytes(value: unknown, maximum: number): Result<Uint8Array> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    typedArrayTag === undefined ||
+    typedArrayBuffer === undefined ||
+    typedArrayByteOffset === undefined ||
+    typedArrayByteLength === undefined
+  ) {
+    return failure(
+      diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
+    );
+  }
   try {
-    if (uint8ArrayByteLengthGetter === undefined) throw new TypeError("missing intrinsic getter");
-    const length = Reflect.apply(uint8ArrayByteLengthGetter, value, []) as number;
-    if (length > maximum) {
+    if (Reflect.apply(typedArrayTag, value, []) !== "Uint8Array") {
+      return failure(
+        diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
+      );
+    }
+    const buffer = Reflect.apply(typedArrayBuffer, value, []) as ArrayBufferLike;
+    const byteOffset = Reflect.apply(typedArrayByteOffset, value, []) as number;
+    const byteLength = Reflect.apply(typedArrayByteLength, value, []) as number;
+    if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+      throw new TypeError("invalid byte length");
+    }
+    if (byteLength > maximum) {
       return failure(
         diagnostic("resource-too-large", "Intent document exceeds its configured byte bound", {
           maximum,
         }),
       );
     }
-    return success(Reflect.apply(intrinsicUint8ArraySlice, value, []) as Uint8Array);
+    return success(
+      new intrinsicUint8Array(new intrinsicUint8Array(buffer, byteOffset, byteLength)),
+    );
   } catch {
     return failure(
-      diagnostic("invalid-intent-bytes", "Intent document bytes must be a Uint8Array"),
+      diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
     );
   }
 }
@@ -382,7 +413,16 @@ function encodeDocument(
       },
     );
     const body = intent === undefined ? "" : `\n# Intent\n\n${intent}\n`;
-    return success(textEncoder.encode(`---\n${yaml}---\n${body}`));
+    const markdown = `---\n${yaml}---\n${body}`;
+    if (containsGitConflictBlock(markdown)) {
+      return failure(
+        diagnostic(
+          "intent-conflict-marker",
+          "Intent contains a complete column-zero Git conflict block; indent or quote marker lines when documenting them literally",
+        ),
+      );
+    }
+    return success(textEncoder.encode(markdown));
   } catch (error) {
     return failure(
       diagnostic(
@@ -925,14 +965,16 @@ export function createMarkdownIntentStore(
     locator: WorkspaceResourceLocator,
     relations: readonly GraphRelation[],
   ): Result<MarkdownIntentDocument> => {
-    const exactBytes = bytes.slice();
+    const snapshot = snapshotIntentBytes(bytes, Number.MAX_SAFE_INTEGER);
+    if (!snapshot.ok) return snapshot;
+    const exactBytes = snapshot.value;
     const contentRevision = revision(exactBytes);
     if (!contentRevision.ok) return contentRevision;
     const key = resource(locator);
     if (!key.ok) return key;
     const document = {
       get bytes(): Uint8Array {
-        return exactBytes.slice();
+        return new intrinsicUint8Array(exactBytes);
       },
       entity,
       locator,
@@ -1168,9 +1210,21 @@ export function createMarkdownIntentStore(
   const load = async (): Promise<Result<MarkdownIntentSnapshot>> => {
     const root = intentRoot();
     const documentEntries: ResourceEntry[] = [];
+    const maximumPages = bounds.maxDocuments + maximumCanonicalShardCount + 1;
+    let pageCount = 0;
     let receivedPage = false;
     let cursor: Parameters<LocalResourceProvider["enumerate"]>[0]["cursor"];
     do {
+      if (pageCount >= maximumPages) {
+        return failure(
+          diagnostic(
+            "intent-page-limit-exceeded",
+            "Intent enumeration exceeded the maximum progress pages allowed by document and shard bounds",
+            { maximum: maximumPages },
+          ),
+        );
+      }
+      pageCount += 1;
       const page = await resources.enumerate({
         ...(cursor === undefined ? {} : { cursor }),
         limit: bounds.pageSize,
@@ -1199,6 +1253,14 @@ export function createMarkdownIntentStore(
         return page;
       }
       receivedPage = true;
+      if (page.value.nextCursor !== undefined && page.value.entries.length === 0) {
+        return failure(
+          diagnostic(
+            "intent-load-inconsistent",
+            "Intent enumeration returned an empty non-final page and made no bounded progress",
+          ),
+        );
+      }
       if (page.value.truncatedByDepth) {
         return failure(
           diagnostic(

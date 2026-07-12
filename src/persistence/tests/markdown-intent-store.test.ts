@@ -241,12 +241,11 @@ Preserve **meaning**.
     );
     const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
     if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect(decoded.value.entity.payload).toMatchObject({
-      "vendor.io/nested": {
-        __proto__: "data, not a prototype",
-        "line\nkey": { a: 1, z: 2 },
-      },
-    });
+    const decodedPayload = decoded.value.entity.payload as Readonly<Record<string, unknown>>;
+    const decodedNested = decodedPayload["vendor.io/nested"] as Readonly<Record<string, unknown>>;
+    expect(Object.hasOwn(decodedNested, "__proto__")).toBeTrue();
+    expect(decodedNested["__proto__"]).toBe("data, not a prototype");
+    expect(decodedNested["line\nkey"]).toEqual({ a: 1, z: 2 });
     const exposed = encoded.value.bytes;
     exposed[0] = 0;
     expect(store.decode(encoded.value.locator, encoded.value.bytes)).toMatchObject({ ok: true });
@@ -551,6 +550,63 @@ vendor.io/nested:
     });
   });
 
+  test("snapshots genuine Uint8Array bytes without species or mutable Buffer views", () => {
+    const id = entityId("851");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const encoded = store.serialize(component(id, { name: "Stable bytes" }), []);
+    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+
+    const bufferInput = Buffer.from(encoded.value.bytes);
+    const decodedBuffer = store.decode(encoded.value.locator, bufferInput);
+    if (!decodedBuffer.ok) throw new Error(decodedBuffer.diagnostics[0]?.message);
+    const revision = decodedBuffer.value.revision;
+    const entity = decodedBuffer.value.entity;
+    const exposed = decodedBuffer.value.bytes;
+    expect(Buffer.isBuffer(exposed)).toBeFalse();
+    exposed[0] = 0;
+    expect(decodedBuffer.value.bytes[0]).toBe("-".charCodeAt(0));
+    expect(decodedBuffer.value.revision).toBe(revision);
+    expect(decodedBuffer.value.entity).toBe(entity);
+    expect(bufferInput[0]).toBe("-".charCodeAt(0));
+
+    let constructorCalls = 0;
+    let speciesReads = 0;
+    class HostileBytes extends Uint8Array {
+      constructor(value: Uint8Array) {
+        super(value);
+        constructorCalls += 1;
+      }
+
+      static get [Symbol.species](): Uint8ArrayConstructor {
+        speciesReads += 1;
+        throw new Error("species must not be read");
+      }
+    }
+    const hostile = new HostileBytes(encoded.value.bytes);
+    constructorCalls = 0;
+    const decodedHostile = store.decode(encoded.value.locator, hostile);
+    expect(decodedHostile).toMatchObject({ ok: true });
+    expect(constructorCalls).toBe(0);
+    expect(speciesReads).toBe(0);
+
+    expect(store.decode(encoded.value.locator, new Float64Array([1]) as never)).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-bytes" }],
+      ok: false,
+    });
+    const proxy = new Proxy(encoded.value.bytes, {
+      get: () => {
+        throw new Error("proxy must not be read");
+      },
+    });
+    expect(store.decode(encoded.value.locator, proxy)).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-bytes" }],
+      ok: false,
+    });
+  });
+
   test("rejects non-outgoing relations and scanner-shaped direct inputs", () => {
     const id = entityId("86");
     const store = createMarkdownIntentStore({
@@ -726,6 +782,16 @@ vendor.io/nested:
       model: createStandardModelCapability(),
       resources: {} as never,
     });
+    const conflict = "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch";
+    expect(store.serialize(component(id, { intent: conflict }), [])).toMatchObject({
+      diagnostics: [{ code: "intent-conflict-marker" }],
+      ok: false,
+    });
+    const separator = store.serialize(component(id, { intent: "=======\n" }), []);
+    if (!separator.ok) throw new Error(separator.diagnostics[0]?.message);
+    expect(store.decode(separator.value.locator, separator.value.bytes)).toMatchObject({
+      ok: true,
+    });
     const cases = [
       [
         "intent-conflict-marker",
@@ -862,6 +928,8 @@ describe("provider-backed Markdown intent store", () => {
 
   test("fails closed if the intent root disappears after a successful enumeration page", async () => {
     let calls = 0;
+    const shard = workspaceResourceLocator("groma", "intent", "00");
+    if (!shard.ok) throw new Error("expected shard locator");
     const scriptedProvider = {
       enumerate: async () => {
         calls += 1;
@@ -869,7 +937,7 @@ describe("provider-backed Markdown intent store", () => {
           ? {
               ok: true as const,
               value: {
-                entries: [],
+                entries: [{ kind: "directory" as const, locator: shard.value }],
                 nextCursor: "scripted-cursor" as never,
                 truncatedByDepth: false,
               },
@@ -889,6 +957,73 @@ describe("provider-backed Markdown intent store", () => {
       ok: false,
     });
     expect(calls).toBe(2);
+  });
+
+  test("rejects repeated or fresh continuation cursors on empty non-final pages", async () => {
+    const shard = workspaceResourceLocator("groma", "intent", "00");
+    if (!shard.ok) throw new Error("expected shard locator");
+    for (const secondCursor of ["cursor-1", "cursor-2"]) {
+      let calls = 0;
+      const scriptedProvider = {
+        enumerate: async () => {
+          calls += 1;
+          return {
+            ok: true as const,
+            value:
+              calls === 1
+                ? {
+                    entries: [{ kind: "directory" as const, locator: shard.value }],
+                    nextCursor: "cursor-1" as never,
+                    truncatedByDepth: false,
+                  }
+                : {
+                    entries: [],
+                    nextCursor: secondCursor as never,
+                    truncatedByDepth: false,
+                  },
+          };
+        },
+      };
+      const store = createMarkdownIntentStore({
+        model: createStandardModelCapability(),
+        resources: scriptedProvider as never,
+      });
+      expect(await store.load()).toMatchObject({
+        diagnostics: [{ code: "intent-load-inconsistent" }],
+        ok: false,
+      });
+      expect(calls).toBe(2);
+    }
+  });
+
+  test("caps progressing enumeration pages by document and canonical shard bounds", async () => {
+    let calls = 0;
+    const scriptedProvider = {
+      enumerate: async () => {
+        const shard = (calls % 256).toString(16).padStart(2, "0");
+        const locator = workspaceResourceLocator("groma", "intent", shard);
+        if (!locator.ok) throw new Error("expected shard locator");
+        calls += 1;
+        return {
+          ok: true as const,
+          value: {
+            entries: [{ kind: "directory" as const, locator: locator.value }],
+            nextCursor: `cursor-${calls}` as never,
+            truncatedByDepth: false,
+          },
+        };
+      },
+    };
+    const store = createMarkdownIntentStore({
+      bounds: { maxDocuments: 0 },
+      model: createStandardModelCapability(),
+      resources: scriptedProvider as never,
+    });
+    expect(await store.load()).toMatchObject({
+      diagnostics: [{ code: "intent-page-limit-exceeded" }],
+      ok: false,
+    });
+    expect(calls).toBe(257);
   });
 
   test("diagnoses duplicate identities before wrong locations", async () => {

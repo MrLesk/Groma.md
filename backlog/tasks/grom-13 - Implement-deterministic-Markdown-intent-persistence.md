@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 13:00'
+updated_date: '2026-07-12 13:18'
 labels:
   - persistence
   - markdown
@@ -63,4 +63,6 @@ Quality hardening follow-up: enabled yaml 2.9 intAsBigInt parsing, converts only
 Final specification numeric/input follow-up: exact integer lexemes outside Number's safe range now convert when finite Number conversion is exactly reversible via BigInt(converted) === original, while inexact or overflowing integer lexemes still fail closed. Finite YAML float/exponent scalars retain Core's IEEE Number semantics, including 9007199254740992 and 1e100; non-finite and nonzero-underflow values remain rejected. Descriptor-inspected entity and relation payloads are now copied through Core before Standard Model calls, so nested accessors/aliases cannot throw or change during serialization. Validation: focused Markdown intent suite 27 passed (119 assertions); bun run typecheck passed; git diff --check passed.
 
 Final numeric emission quality fix: canonical serialization now wraps every finite integer-valued Number outside the safe-integer range in an untagged yaml Scalar with EXP format. This prevents yaml from emitting ambiguous plain integer lexemes while preserving the decoder's strict rejection of user-authored inexact integers. Regressions cover 1000000000000000100, 1.2345678901234568e20, the negative counterpart, nested component/item/relation extensions, no explicit !!float tag, and byte-identical rewrite. Validation: focused Markdown intent suite 27 passed (124 assertions); bun run typecheck passed; git diff --check passed.
+
+Claude/Codex review fixes: serialize now rejects complete column-zero Git conflict blocks with intent-conflict-marker while lone separator prose remains valid. Intent bytes use intrinsic typed-array tag/buffer/offset/length inspection and raw-buffer copies, accepting Buffer/Uint8Array subclasses without species or subclass constructors, rejecting wrong typed arrays/proxies, and returning isolated plain Uint8Array snapshots whose mutation cannot invalidate revisions. The __proto__ regression now proves an own data property survives. Bounded loads reject empty non-final pages and cap pages at maxDocuments + 256 shards + one terminal page. Validation: focused Markdown intent suite 30 passed (144 assertions); bun run typecheck passed; git diff --check passed.
 <!-- SECTION:NOTES:END -->
