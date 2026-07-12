@@ -29,6 +29,8 @@ const knownComponentFields = new Set([
 ]);
 const knownItemFields = new Set(["description", "id", "name"]);
 const knownRelationshipFields = new Set(["description"]);
+const serializedComponentFields = new Set([...knownComponentFields, "extensions", "id", "kind"]);
+const serializedItemFields = new Set([...knownItemFields, "extensions"]);
 const extensionKeyPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
 const openTokenPattern = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 
@@ -183,6 +185,84 @@ function extensionEntries(
     extensions[key] = copied.value;
   }
   return success(Object.freeze(extensions));
+}
+
+function rejectUnknownSerializedFields(
+  record: Readonly<Record<string, unknown>>,
+  knownFields: ReadonlySet<string>,
+  path: string,
+): Result<void> {
+  const unknown = Object.keys(record).find((key) => !knownFields.has(key));
+  return unknown === undefined
+    ? success(undefined)
+    : diagnostic(
+        "unknown-serialized-model-field",
+        `${path}.${unknown} is not part of the public standard-model value`,
+        `${path}.${unknown}`,
+      );
+}
+
+function serializedExtensions(
+  value: unknown,
+  path: string,
+): Result<Readonly<Record<string, GraphData>>> {
+  if (value === undefined) return success(Object.freeze({}));
+  const record = requireRecord(value, path);
+  if (!record.ok) return record;
+  const extensions: Record<string, GraphData> = {};
+  for (const key of Object.keys(record.value).sort()) {
+    if (!extensionKeyPattern.test(key)) {
+      return diagnostic(
+        "invalid-extension-key",
+        `${path}.${key} must be namespaced and cannot collide with standard fields`,
+        `${path}.${key}`,
+      );
+    }
+    extensions[key] = record.value[key] as GraphData;
+  }
+  return success(Object.freeze(extensions));
+}
+
+function serializeItem(value: unknown, path: string): Result<StandardItemInput> {
+  const record = requireRecord(value, path);
+  if (!record.ok) return record;
+  const known = rejectUnknownSerializedFields(record.value, serializedItemFields, path);
+  if (!known.ok) return known;
+  const id = record.value.id;
+  if (typeof id !== "string" || id.length === 0) {
+    return diagnostic(
+      "invalid-standard-item-id",
+      `${path}.id must be a non-empty stable identifier`,
+      `${path}.id`,
+    );
+  }
+  const name = optionalString(record.value, "name", path);
+  if (!name.ok) return name;
+  const description = optionalString(record.value, "description", path);
+  if (!description.ok) return description;
+  const extensions = serializedExtensions(record.value.extensions, `${path}.extensions`);
+  if (!extensions.ok) return extensions;
+  return success(
+    Object.freeze({
+      id,
+      ...(name.value === undefined ? {} : { name: name.value }),
+      ...(description.value === undefined ? {} : { description: description.value }),
+      ...extensions.value,
+    }),
+  );
+}
+
+function serializeItems(value: unknown, path: string): Result<readonly StandardItemInput[]> {
+  if (!Array.isArray(value)) {
+    return diagnostic("invalid-standard-item-list", `${path} must be an array`, path);
+  }
+  const items: StandardItemInput[] = [];
+  for (const [index, item] of value.entries()) {
+    const serialized = serializeItem(item, `${path}[${index}]`);
+    if (!serialized.ok) return serialized;
+    items.push(serialized.value);
+  }
+  return success(Object.freeze(items));
 }
 
 function normalizeItem(value: unknown, path: string): Result<StandardItem> {
@@ -395,15 +475,43 @@ function patch(entity: GraphEntity, changes: StandardComponentPatch): Result<Ent
 }
 
 function serialize(component: StandardComponent): Result<EntityDraft> {
-  if (component.kind !== STANDARD_COMPONENT_KIND) {
+  const copied = copyGraphPayload(component, "entity");
+  if (!copied.ok) return copied;
+  const record = requireRecord(copied.value, "component");
+  if (!record.ok) return record;
+  const known = rejectUnknownSerializedFields(record.value, serializedComponentFields, "component");
+  if (!known.ok) return known;
+  if (record.value.kind !== STANDARD_COMPONENT_KIND) {
     return diagnostic(
       "wrong-standard-model-kind",
       "Only standard components can be serialized by this capability",
       "component.kind",
-      component.kind,
+      typeof record.value.kind === "string" ? record.value.kind : typeof record.value.kind,
     );
   }
-  return normalize({ id: component.id, ...componentPayload(component) });
+  if (typeof record.value.id !== "string") {
+    return diagnostic(
+      "invalid-entity-id",
+      "component.id must be a stable entity identifier",
+      "component.id",
+    );
+  }
+
+  const input: Record<string, unknown> = { id: record.value.id };
+  for (const field of knownComponentFields) {
+    if (field === "inputs" || field === "outputs" || field === "actions") continue;
+    if (record.value[field] !== undefined) input[field] = record.value[field];
+  }
+  for (const field of ["inputs", "outputs", "actions"] as const) {
+    if (record.value[field] === undefined) continue;
+    const items = serializeItems(record.value[field], `component.${field}`);
+    if (!items.ok) return items;
+    input[field] = items.value;
+  }
+  const extensions = serializedExtensions(record.value.extensions, "component.extensions");
+  if (!extensions.ok) return extensions;
+  Object.assign(input, extensions.value);
+  return normalize(input as StandardComponentInput);
 }
 
 function children(
@@ -419,6 +527,7 @@ function children(
 
   const parsedComponents: StandardComponent[] = [];
   for (const entity of entities) {
+    if (entity.kind !== STANDARD_COMPONENT_KIND) continue;
     const component = parse(entity);
     if (!component.ok) return component;
     if (component.value.parent === parentId) parsedComponents.push(component.value);

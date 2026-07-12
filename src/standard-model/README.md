@@ -12,6 +12,8 @@ A missing `parent` makes a component a root. The capability derives deterministi
 direct-child views from a caller-provided, bounded entity collection. Parent
 existence, single-parent transaction guarantees, and cycle prevention belong to the
 separately registered model invariants rather than parsing or Core.
+The bounded collection may be a heterogeneous Core page: non-component entities are
+ignored, while malformed entities that claim the `component` kind are diagnosed.
 
 Ordinary relationships remain Core `GraphRelation` records with Core-owned stable
 identity. The model only derives a read-only semantic view of their description and
@@ -21,3 +23,7 @@ Unknown extension keys use a namespace separator, for example `acme.io/owner` or
 `acme:owner`. They are preserved as canonical Core graph data through normalization,
 parsing, sparse patches, and serialization. Unknown unnamespaced keys are rejected so
 future standard fields cannot silently change meaning.
+
+Parsed values expose extensions as nested read-only maps. Serialization validates
+those public values before flattening extensions back into graph payloads, so an
+extension cannot replace component identity or standard component and item fields.

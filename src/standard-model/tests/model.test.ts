@@ -12,6 +12,7 @@ import {
   createStandardModelCapability,
   STANDARD_COMPONENT_KIND,
   STANDARD_MODEL_CAPABILITY_ID,
+  type StandardComponent,
   type StandardComponentInput,
 } from "../index.ts";
 
@@ -322,6 +323,111 @@ describe("standard v0.1 model", () => {
     });
   });
 
+  test("rejects authority collisions and unsafe extensions during serialization", () => {
+    const model = createStandardModelCapability();
+    const kernel = createKernel();
+    const added = addComponent(kernel, kernel.empty(), {
+      id: componentId(1),
+      name: "Ordering",
+      actions: [{ id: "act_place_order", name: "Place order" }],
+    });
+    const parsed = model.parse(added.entity);
+    if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.message);
+
+    for (const extensions of [
+      { id: componentId(99) },
+      { name: "Shadow name" },
+      { owner: "commerce" },
+    ]) {
+      expect(model.serialize({ ...parsed.value, extensions })).toMatchObject({
+        ok: false,
+        diagnostics: [{ code: "invalid-extension-key" }],
+      });
+    }
+
+    const action = parsed.value.actions?.[0];
+    if (action === undefined) throw new Error("expected action fixture");
+    for (const extensions of [{ id: "act_shadow" }, { name: "Shadow action" }]) {
+      expect(
+        model.serialize({
+          ...parsed.value,
+          actions: [{ ...action, extensions }],
+        }),
+      ).toMatchObject({
+        ok: false,
+        diagnostics: [{ code: "invalid-extension-key" }],
+      });
+    }
+
+    let accessorExecuted = false;
+    const accessorExtensions = Object.defineProperty({}, "acme.io/value", {
+      enumerable: true,
+      get: () => {
+        accessorExecuted = true;
+        throw new Error("extension accessor must not run");
+      },
+    });
+    const unsafe = {
+      ...parsed.value,
+      extensions: accessorExtensions,
+    } as unknown as StandardComponent;
+    let result: ReturnType<typeof model.serialize> | undefined;
+    expect(() => {
+      result = model.serialize(unsafe);
+    }).not.toThrow();
+    expect(accessorExecuted).toBeFalse();
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: "unsupported-payload" }],
+    });
+  });
+
+  test("derives children from heterogeneous pages and validates component records", () => {
+    const model = createStandardModelCapability();
+    const kernel = createKernel();
+    const arbitrary = kernel.addEntity(kernel.empty(), {
+      id: componentId(9),
+      kind: "scanner-observation",
+      payload: { malformedForAComponent: true },
+    });
+    if (!arbitrary.ok) throw new Error(arbitrary.diagnostics[0]?.message);
+    const root = addComponent(kernel, arbitrary.value.snapshot, {
+      id: componentId(1),
+      name: "Shop",
+      type: "domain",
+    });
+    const child = addComponent(kernel, root.snapshot, {
+      id: componentId(2),
+      name: "Orders",
+      parent: componentId(1),
+      type: "component",
+    });
+    const page = kernel.pageEntities(child.snapshot, { limit: 100 });
+    if (!page.ok) throw new Error(page.diagnostics[0]?.message);
+
+    expect(model.children(page.value.items)).toMatchObject({
+      ok: true,
+      value: [{ id: componentId(1), name: "Shop" }],
+    });
+    expect(model.children(page.value.items, componentId(1))).toMatchObject({
+      ok: true,
+      value: [{ id: componentId(2), name: "Orders" }],
+    });
+
+    const malformed = kernel.addEntity(child.snapshot, {
+      id: componentId(3),
+      kind: STANDARD_COMPONENT_KIND,
+      payload: { name: 42 },
+    });
+    if (!malformed.ok) throw new Error(malformed.diagnostics[0]?.message);
+    const malformedPage = kernel.pageEntities(malformed.value.snapshot, { limit: 100 });
+    if (!malformedPage.ok) throw new Error(malformedPage.diagnostics[0]?.message);
+    expect(model.children(malformedPage.value.items)).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: "invalid-standard-model-field" }],
+    });
+  });
+
   test("derives relationship views from Core identity without duplicating authority", () => {
     const model = createStandardModelCapability();
     const kernel = createKernel();
@@ -369,6 +475,19 @@ describe("standard v0.1 model", () => {
     });
     const parsedOrdering = model.parse(ordering.entity);
     expect(parsedOrdering.ok && "relationships" in parsedOrdering.value).toBeFalse();
+
+    const collidingPayload = kernel.addRelation(requiresPayments.value.snapshot, {
+      id: relationshipId(3),
+      type: "informs",
+      source: { expectedKind: "component", id: inventory.entity.id },
+      target: { expectedKind: "component", id: ordering.entity.id },
+      payload: { id: "rel_shadow" },
+    });
+    if (!collidingPayload.ok) throw new Error(collidingPayload.diagnostics[0]?.message);
+    expect(model.relationships([collidingPayload.value.relation])).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: "unknown-standard-model-field" }],
+    });
   });
 
   test("rejects duplicate embedded IDs and non-v0.1 structured vocabulary", () => {

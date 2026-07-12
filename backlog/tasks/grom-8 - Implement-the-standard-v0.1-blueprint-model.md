@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 01:26'
+updated_date: '2026-07-12 01:37'
 labels:
   - model
 milestone: m-1
@@ -53,4 +53,6 @@ Implement the official standard-model plugin contract over the graph kernel. The
 Context-hunter classification: L2 foundational model contract. Reuses Core GraphData, stable EntityId/RelationId, Result diagnostics, and boundary-local test conventions. Architecture decisions: component kind is the graph-level discriminator; model type, lifecycle, and desired state remain open tokens; parent is standard-model structural metadata resolved by later invariants; ordinary relationships retain Core graph identity; global single-parent/acyclic enforcement remains GROM-9.
 
 Implemented the explicit standard-model capability in src/standard-model. Component entities use Core kind component with optional parent payload identity (absence is a root), canonical stable-ID inputs/outputs/actions, open type/lifecycle/desired tokens, sparse null-clearing patches, namespaced extension preservation, deterministic bounded child views, and read-only Core-relation views. Added 9 model tests covering sparse roots, recursive Shopify containment, full Ordering meaning, deterministic normalization, sparse patches, extension round trips, relationship identity, vocabulary limits, and Core independence. Local verification passed: bun run check (36 tests, 124 assertions), bun run check:targets (macOS arm64, Linux x64 baseline, Windows x64 baseline, Windows arm64), immediate bun run smoke, and git diff --check. Acceptance criteria remain unchecked pending independent and external review.
+
+Quality-review corrections: serialize now copies the complete public component value through Core before reading it, validates component and embedded-item public shapes, requires nested extension keys to remain namespaced, and prevents extensions from shadowing identity or standard fields. Added accessor, component id/name collision, item id/name collision, invalid extension, and relationship authority regressions. Child views now ignore non-component records from heterogeneous bounded Core pages while continuing to diagnose malformed component-kind records. Verification passed with 38 tests and 136 assertions plus all four binary targets and immediate native smoke.
 <!-- SECTION:NOTES:END -->
