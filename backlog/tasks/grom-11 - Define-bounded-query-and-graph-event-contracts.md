@@ -1,11 +1,11 @@
 ---
 id: GROM-11
 title: Define bounded query and graph-event contracts
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 04:14'
+updated_date: '2026-07-12 04:32'
 labels:
   - core
   - queries
@@ -28,12 +28,12 @@ Implement the Core contracts shared by short-lived commands and later long-lived
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every collection or traversal query requires a validated positive limit capped by a configured maximum
-- [ ] #2 Result pages carry the graph generation and deterministic ordering needed to continue safely
-- [ ] #3 Continuation cursors are opaque to callers, bound to their query and generation, and rejected when malformed, mismatched, or stale
-- [ ] #4 Committed graph events identify the resulting generation and affected stable identities without exposing provider implementation details
-- [ ] #5 The event contract explicitly signals a generation gap and directs consumers to refetch instead of guessing missed changes
-- [ ] #6 Contract tests cover empty pages, exact-limit pages, continuation, invalid limits, cursor misuse, generation changes, and missed events
+- [x] #1 Every collection or traversal query requires a validated positive limit capped by a configured maximum
+- [x] #2 Result pages carry the graph generation and deterministic ordering needed to continue safely
+- [x] #3 Continuation cursors are opaque to callers, bound to their query and generation, and rejected when malformed, mismatched, or stale
+- [x] #4 Committed graph events identify the resulting generation and affected stable identities without exposing provider implementation details
+- [x] #5 The event contract explicitly signals a generation gap and directs consumers to refetch instead of guessing missed changes
+- [x] #6 Contract tests cover empty pages, exact-limit pages, continuation, invalid limits, cursor misuse, generation changes, and missed events
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -75,4 +75,12 @@ Current-SHA PR #7 review found four canonical-input gaps. Cursor decoding now us
 Independent quality review found two canonicality/ordering gaps. Cursor decode now reconstructs canonical raw state through the same centralized envelope renderer used by encode and requires exact decoded-state equality after shape/version/generation/query/anchor validation; whitespace, top-level or nested key reordering, alternate numeric syntax, and duplicate keys fail malformed. Page overflow remains first, then structural state checks and continuation-anchor canonicalization/cursor precomputation run before item copying; invalid bigint or behavior-bearing anchors cannot traverse item contents, while completed pages skip anchor work. Added full alternative-state and nontraversal regressions. Task remains In Progress with acceptance criteria unchecked.
 
 Latest PR #7 review found mutable String prototype use before cursor decode. Captured intrinsic startsWith and slice beside the URI codecs and now invoke them through Reflect.apply for prefix validation and suffix extraction. A regression patches both methods after module load: valid emitted cursors still continue, malformed envelope/encoding values remain failure Results without throws, and polluted methods receive zero calls. Task remains In Progress with acceptance criteria unchecked.
+
+Final validation passed at fa6f1b9: 70 tests and 291 assertions; formatting, TypeScript, architecture boundaries, native build, smoke test, diff check, and macOS arm64, Linux x64, Windows x64, and Windows arm64 standalone targets. GitHub Actions run 29179423771 passed both quality and cross-platform jobs. Independent specification and repeated quality reviews passed. Claude review returned no written feedback. Codex review findings about bounded preprocessing, canonical cursors, continuation progress, runtime shapes, event canonicality, and mutable method calls were independently verified and addressed. The final three Codex comments require trusted code to poison Object.keys or Array.prototype numeric slots; per the manifesto's trusted-plugin/not-a-sandbox posture they are deliberately non-actionable for this task, and ordinary untrusted data cannot trigger them.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented technology-neutral Core contracts for generation-bearing exact reads, bounded deterministic pages, opaque canonical continuation cursors, committed graph events, and explicit refetch after generation gaps. Hardened all public data boundaries with descriptor-safe validation, immutable snapshots, exact budgets, canonical cursor envelopes/state, non-advancing-anchor rejection, and canonical event sequencing. Verified with 70 tests/291 assertions, full local quality gates, four standalone targets, GitHub Actions, Claude review, Codex review, and independent spec/quality reviews.
+<!-- SECTION:FINAL_SUMMARY:END -->
