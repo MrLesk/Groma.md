@@ -1207,6 +1207,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
     const released = await this.releaseCoordination(acquired.value);
     if (released.ok) return actionResult;
+    // A failed release retains the lease and same-process guard so callers that own
+    // the opaque handle can retry. The callback surface cannot return that handle,
+    // so make one bounded retry before reporting the original release uncertainty.
+    await this.releaseCoordination(acquired.value);
     const releaseFailure = diagnostic(
       "coordination-release-failed",
       "Local coordination could not be released cleanly",
@@ -1300,14 +1304,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     if (record.released) return success(undefined);
-    try {
-      const released = await this.#releaseCoordination(record.identity, record.owner);
-      if (!released.ok) return released;
-      record.released = true;
-      return success(undefined);
-    } finally {
-      processCoordination.delete(record.identity);
-    }
+    const released = await this.#releaseCoordination(record.identity, record.owner);
+    if (!released.ok) return released;
+    record.released = true;
+    processCoordination.delete(record.identity);
+    return success(undefined);
   }
 
   async #resolve(
@@ -1926,14 +1927,13 @@ class BunLocalResourceProvider implements LocalResourceProvider {
 
   async #releaseCoordination(identity: string, owner: CoordinationOwner): Promise<Result<void>> {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
-    const moved = await this.#moveCoordinationDirectory(lockPath, owner, "released");
-    if (!moved.ok) return moved;
     try {
       await this.#inject("coordination-release");
     } catch (error) {
-      await this.#bestEffortCoordinationCleanup(moved.value);
       return failure(resourceError(error, "finalize local coordination release"));
     }
+    const moved = await this.#moveCoordinationDirectory(lockPath, owner, "released");
+    if (!moved.ok) return moved;
     await this.#bestEffortCoordinationCleanup(moved.value);
     return success(undefined);
   }

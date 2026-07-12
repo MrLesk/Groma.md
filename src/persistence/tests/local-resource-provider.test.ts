@@ -1472,6 +1472,37 @@ describe("same-machine coordination", () => {
     });
   });
 
+  test("keeps a persistent lease retryable when release fails before publication", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("coordination-release"),
+    });
+    const competing = await createLocalResourceProvider(roots);
+    const request = { context: "local-machine" as const, locator: locator("release-retry") };
+    const acquired = await provider.acquireCoordination(request);
+    expect(acquired).toMatchObject({ ok: true });
+    if (!acquired.ok) throw new Error("expected persistent lease");
+
+    expect(await provider.releaseCoordination(acquired.value)).toMatchObject({ ok: false });
+    expect(await competing.acquireCoordination(request)).toMatchObject({
+      diagnostics: [{ code: "resource-coordination-contended" }],
+      ok: false,
+    });
+    expect(await provider.releaseCoordination(acquired.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const reacquired = await competing.acquireCoordination(request);
+    expect(reacquired).toMatchObject({ ok: true });
+    if (reacquired.ok) {
+      expect(await competing.releaseCoordination(reacquired.value)).toEqual({
+        ok: true,
+        value: undefined,
+      });
+    }
+  });
+
   test("retains action and release diagnostics when both fail", async () => {
     const roots = await fixture();
     const provider = await createLocalResourceProvider({

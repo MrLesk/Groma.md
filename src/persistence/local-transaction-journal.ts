@@ -93,6 +93,7 @@ export interface MarkdownIntentTransactionAdapterOptions {
 export interface LocalTransactionJournalBounds {
   readonly maxJournalBytes: number;
   readonly maxReplacementBytes: number;
+  readonly maxTargetBytes: number;
   readonly maxTargets: number;
 }
 
@@ -152,6 +153,12 @@ interface LivePreparation {
   readonly lease: LocalCoordinationLease;
 }
 
+class JournalCommitUnconfirmedError extends Error {
+  constructor() {
+    super("Transaction journal durability was not confirmed by the resource provider");
+  }
+}
+
 const journalLocatorResult = workspaceResourceLocator("groma", "transaction-state.json");
 if (!journalLocatorResult.ok) throw new Error("invalid built-in transaction-state locator");
 export const localTransactionStateLocator = journalLocatorResult.value;
@@ -168,11 +175,13 @@ const tokenPattern = /^groma-local-tx-v1:[0-9a-f]{64}$/;
 const defaultBounds: LocalTransactionJournalBounds = Object.freeze({
   maxJournalBytes: 16 * 1024 * 1024,
   maxReplacementBytes: 8 * 1024 * 1024,
+  maxTargetBytes: 16 * 1024 * 1024,
   maxTargets: 10_000,
 });
 const absoluteBounds: LocalTransactionJournalBounds = Object.freeze({
   maxJournalBytes: 64 * 1024 * 1024,
   maxReplacementBytes: 48 * 1024 * 1024,
+  maxTargetBytes: 64 * 1024 * 1024,
   maxTargets: 100_000,
 });
 
@@ -202,7 +211,12 @@ function resourceFromLocator(locator: WorkspaceResourceLocator): ResourceKey {
 
 function bounds(input: Partial<LocalTransactionJournalBounds> | undefined) {
   const selected = { ...defaultBounds, ...input };
-  for (const field of ["maxJournalBytes", "maxReplacementBytes", "maxTargets"] as const) {
+  for (const field of [
+    "maxJournalBytes",
+    "maxReplacementBytes",
+    "maxTargetBytes",
+    "maxTargets",
+  ] as const) {
     if (
       !Number.isSafeInteger(selected[field]) ||
       selected[field] <= 0 ||
@@ -212,6 +226,9 @@ function bounds(input: Partial<LocalTransactionJournalBounds> | undefined) {
         `${field} must be a positive safe integer no greater than ${absoluteBounds[field]}`,
       );
     }
+  }
+  if (selected.maxTargetBytes < selected.maxReplacementBytes) {
+    throw new RangeError("maxTargetBytes must be greater than or equal to maxReplacementBytes");
   }
   return Object.freeze(selected);
 }
@@ -885,20 +902,19 @@ export function createLocalTransactionJournal(
     }
     const staged = await options.resources.stageReplacement(localTransactionStateLocator, bytes);
     if (!staged.ok) throw new Error(staged.diagnostics[0]?.message);
-    const committed = await options.resources.commitReplacement(staged.value);
+    let committed = await options.resources.commitReplacement(staged.value);
     if (committed.state === "not-committed")
       throw new Error("transaction journal was not committed");
     if (committed.state === "committed-indeterminate") {
-      const readback = await readExact(localTransactionStateLocator);
-      if (readback.bytes === undefined || !Buffer.from(readback.bytes).equals(Buffer.from(bytes))) {
-        throw new Error("transaction journal commit is indeterminate");
-      }
+      committed = await options.resources.commitReplacement(staged.value);
+      if (committed.state !== "committed") throw new JournalCommitUnconfirmedError();
     }
   };
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
     const released = await options.resources.releaseCoordination(lease);
+    if (!released.ok) return false;
     live.delete(token);
-    return released.ok;
+    return true;
   };
   const discardLiveStages = async (token: string, state: PendingState): Promise<void> => {
     const preparation = live.get(token);
@@ -946,7 +962,7 @@ export function createLocalTransactionJournal(
   ): Promise<boolean> => {
     const locator = parseWorkspaceResourceLocator(target.locator);
     if (!locator.ok) return false;
-    const current = await readExact(locator.value, limits.maxReplacementBytes);
+    const current = await readExact(locator.value, limits.maxTargetBytes);
     if (current.revision !== target.result && current.revision !== target.expected) return false;
     if (target.replacement === undefined) {
       let removed = await options.resources.removeResource(locator.value);
@@ -969,9 +985,11 @@ export function createLocalTransactionJournal(
       }
       if (committed.state !== "committed") return false;
     }
-    return (await readExact(locator.value, limits.maxReplacementBytes)).revision === target.result;
+    return (await readExact(locator.value, limits.maxTargetBytes)).revision === target.result;
   };
   const rollForward = async (state: PendingState): Promise<TransactionCommitResultInput> => {
+    await writeState(state);
+    await options.faultInjector?.("after-committing-state");
     const preparation = live.get(state.token);
     for (let index = 0; index < state.targets.length; index += 1) {
       if (!(await applyTarget(state.targets[index]!, preparation?.handles[index]))) {
@@ -1057,7 +1075,12 @@ export function createLocalTransactionJournal(
       context: "local-machine",
       locator: transactionCoordinationLocator,
     });
-    if (!acquired.ok) return Object.freeze({ reason: "generation", status: "conflict" });
+    if (!acquired.ok) {
+      if (acquired.diagnostics[0]?.code === "resource-coordination-contended") {
+        return Object.freeze({ reason: "generation", status: "conflict" });
+      }
+      throw new Error(acquired.diagnostics[0]?.message ?? "transaction coordination failed");
+    }
     let token: string | undefined;
     try {
       const prior = await settle(undefined);
@@ -1095,6 +1118,16 @@ export function createLocalTransactionJournal(
       }
       const targets = storedTargets(materialized.value);
       verifyExpectedTargets(proposal, targets);
+      for (const target of targets) {
+        const locator = parseWorkspaceResourceLocator(target.locator);
+        if (!locator.ok) throw new Error(locator.diagnostics[0]?.message);
+        const classified = await readExact(locator.value, limits.maxTargetBytes);
+        if (classified.revision !== target.expected) {
+          const released = await options.resources.releaseCoordination(acquired.value);
+          if (!released.ok) throw new Error(released.diagnostics[0]?.message);
+          return Object.freeze({ reason: "revision", status: "conflict" });
+        }
+      }
       token = tokenFor(proposal.baseGeneration, proposal.generation, proposal.affected, targets);
       const pending: PendingState = Object.freeze({
         affected: proposal.affected,
@@ -1161,10 +1194,12 @@ export function createLocalTransactionJournal(
     try {
       let state = await readState();
       if (state.phase === "idle") {
-        result =
-          state.settlement?.token === token
-            ? settlementResult(state.settlement)
-            : Object.freeze({ status: "indeterminate" });
+        if (state.settlement?.token === token) {
+          await writeState(state);
+          result = settlementResult(state.settlement);
+        } else {
+          result = Object.freeze({ status: "indeterminate" });
+        }
       } else if (state.token !== token) {
         result = Object.freeze({ status: "indeterminate" });
       } else if (recovery && state.phase === "prepared") {
@@ -1172,26 +1207,28 @@ export function createLocalTransactionJournal(
       } else {
         if (state.phase === "prepared") {
           state = Object.freeze({ ...state, phase: "committing" });
-          await writeState(state);
-          await options.faultInjector?.("after-committing-state");
         }
         result = await rollForward(state);
       }
-    } catch {
-      try {
-        const observed = await readState();
-        if (observed.phase === "prepared" && observed.token === token) {
-          result = await rollback(observed);
-        } else if (observed.phase === "committing" && observed.token === token) {
-          result = Object.freeze({ status: "indeterminate" });
-        } else if (observed.phase === "idle" && observed.settlement?.token === token) {
-          result = settlementResult(observed.settlement);
-        } else {
+    } catch (error) {
+      if (error instanceof JournalCommitUnconfirmedError) {
+        result = Object.freeze({ status: "indeterminate" });
+      } else {
+        try {
+          const observed = await readState();
+          if (observed.phase === "prepared" && observed.token === token) {
+            result = await rollback(observed);
+          } else if (observed.phase === "committing" && observed.token === token) {
+            result = Object.freeze({ status: "indeterminate" });
+          } else if (observed.phase === "idle" && observed.settlement?.token === token) {
+            result = settlementResult(observed.settlement);
+          } else {
+            result = Object.freeze({ status: "indeterminate" });
+          }
+        } catch {
+          // Unknown or divergent durable state stays indeterminate.
           result = Object.freeze({ status: "indeterminate" });
         }
-      } catch {
-        // Unknown or divergent durable state stays indeterminate.
-        result = Object.freeze({ status: "indeterminate" });
       }
     }
     if (result.status === "indeterminate") {

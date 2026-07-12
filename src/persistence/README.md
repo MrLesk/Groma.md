@@ -72,6 +72,13 @@ Idle state retains only the current generation, projection watermark, and one bo
 settlement receipt, so repeated recovery returns provider-recorded affected identities
 and revisions rather than trusting caller-restored data.
 
+Journal bounds distinguish aggregate replacement bytes from the maximum bytes needed
+to classify one existing target. `maxTargetBytes` must cover every canonical resource
+that a transaction may replace or delete and cannot be smaller than
+`maxReplacementBytes`. Oversized existing targets fail before prepared state is
+published; official hosts must align this ceiling with the Markdown store and local
+resource provider bounds.
+
 Prepare holds a persistent same-machine lease, writes the complete prepared record,
 and stages every replacement before acknowledging the opaque token; canonical targets
 remain unchanged. Commit durably changes the phase to `committing`, then applies and
@@ -82,6 +89,11 @@ while the pending record still retains their locators. Only then is idle state w
 with the new generation, making the generation marker the last canonical change.
 Unknown tokens, malformed state, external divergence, cleanup failure, and lease
 release failure stay indeterminate or fail closed.
+Journal publication is accepted only after the resource provider confirms
+`committed`; byte readback alone proves visibility, not file and directory durability.
+An indeterminate publication is retried on the same staged handle. Restart re-publishes
+a visible committing record durably before changing any target, and re-publishes a
+visible matching idle settlement before acknowledging it as committed.
 
 Deletion is idempotent. POSIX removals sync the containing directory even when the
 target is already absent, so recovery can reassert deletion durability. Windows keeps
@@ -228,6 +240,10 @@ Target-specific cleanup is bounded by the provider's per-directory entry ceiling
 removes only stages whose owner process is known dead. A live or PID-reused owner is
 retained conservatively; cleanup never guesses. Orphan stages remain invisible and
 unaddressable through public resource locators.
+Persistent lease release is retryable. A failure before the canonical lock is moved
+retains both the provider's same-process guard and the journal's live lease; recovery
+through the same journal retries release. Callback coordination performs one bounded
+release retry because it cannot return the opaque lease handle to its caller.
 
 Replacement bytes are runtime-validated through captured intrinsic TypedArray
 getters, without `instanceof` or caller property reads. Genuine `Uint8Array` instances

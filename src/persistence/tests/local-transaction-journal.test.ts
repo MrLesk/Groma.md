@@ -6,6 +6,7 @@ import path from "node:path";
 
 import {
   TransactionEngine,
+  failure,
   parseContentRevision,
   parseEntityId,
   parseRelationId,
@@ -144,20 +145,33 @@ async function stageArtifacts(directory: string): Promise<string[]> {
   return artifacts;
 }
 
-function forwardingProvider(
+interface ProviderOverrides {
+  readonly acquireCoordination?: LocalResourceProvider["acquireCoordination"];
+  readonly commitReplacement?: LocalResourceProvider["commitReplacement"];
+  readonly releaseCoordination?: LocalResourceProvider["releaseCoordination"];
+  readonly removeResource?: LocalResourceProvider["removeResource"];
+  readonly stageReplacement?: LocalResourceProvider["stageReplacement"];
+}
+
+function providerWithOverrides(
   base: LocalResourceProvider,
-  removeResource: LocalResourceProvider["removeResource"],
+  overrides: ProviderOverrides,
 ): LocalResourceProvider {
   const provider: LocalResourceProvider = {
-    acquireCoordination: (request) => base.acquireCoordination(request),
+    acquireCoordination: (request) =>
+      (overrides.acquireCoordination ?? base.acquireCoordination.bind(base))(request),
     cleanupReplacementStages: (locator) => base.cleanupReplacementStages(locator),
-    commitReplacement: (handle) => base.commitReplacement(handle),
+    commitReplacement: (handle) =>
+      (overrides.commitReplacement ?? base.commitReplacement.bind(base))(handle),
     discardReplacement: (handle) => base.discardReplacement(handle),
     enumerate: (request) => base.enumerate(request),
     read: (request) => base.read(request),
-    releaseCoordination: (lease) => base.releaseCoordination(lease),
-    removeResource,
-    stageReplacement: (locator, bytes) => base.stageReplacement(locator, bytes),
+    releaseCoordination: (lease) =>
+      (overrides.releaseCoordination ?? base.releaseCoordination.bind(base))(lease),
+    removeResource: (locator) =>
+      (overrides.removeResource ?? base.removeResource.bind(base))(locator),
+    stageReplacement: (locator, bytes) =>
+      (overrides.stageReplacement ?? base.stageReplacement.bind(base))(locator, bytes),
     withCoordination(request, action) {
       return base.withCoordination(request, action);
     },
@@ -413,6 +427,7 @@ describe("local transaction journal", () => {
     readonly expectedGeneration: number;
     readonly locator: "journal" | "orders" | "shop";
     readonly mode: "create" | "delete";
+    readonly occurrence: number;
     readonly phase: LocalResourceFaultPhase;
   }[] = [
     {
@@ -420,13 +435,47 @@ describe("local transaction journal", () => {
       expectedGeneration: 0,
       locator: "journal",
       mode: "create",
+      occurrence: 1,
       phase: "after-rename",
     },
     {
       expectedEntities: 2,
       expectedGeneration: 1,
-      locator: "shop",
+      locator: "journal",
       mode: "create",
+      occurrence: 2,
+      phase: "replacement-after-rename-before-mode",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "journal",
+      mode: "create",
+      occurrence: 2,
+      phase: "replacement-target-file-sync",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "journal",
+      mode: "create",
+      occurrence: 2,
+      phase: "replacement-parent-directory-sync",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "journal",
+      mode: "create",
+      occurrence: 2,
+      phase: "after-rename",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "journal",
+      mode: "create",
+      occurrence: 3,
       phase: "replacement-after-rename-before-mode",
     },
     {
@@ -434,6 +483,15 @@ describe("local transaction journal", () => {
       expectedGeneration: 1,
       locator: "shop",
       mode: "create",
+      occurrence: 1,
+      phase: "replacement-after-rename-before-mode",
+    },
+    {
+      expectedEntities: 2,
+      expectedGeneration: 1,
+      locator: "shop",
+      mode: "create",
+      occurrence: 1,
       phase: "replacement-target-file-sync",
     },
     {
@@ -441,6 +499,7 @@ describe("local transaction journal", () => {
       expectedGeneration: 1,
       locator: "shop",
       mode: "create",
+      occurrence: 1,
       phase: "replacement-parent-directory-sync",
     },
     {
@@ -448,6 +507,7 @@ describe("local transaction journal", () => {
       expectedGeneration: 1,
       locator: "shop",
       mode: "create",
+      occurrence: 1,
       phase: "after-rename",
     },
     {
@@ -455,6 +515,7 @@ describe("local transaction journal", () => {
       expectedGeneration: 2,
       locator: "orders",
       mode: "delete",
+      occurrence: 1,
       phase: "removal-parent-directory-sync",
     },
     {
@@ -462,12 +523,13 @@ describe("local transaction journal", () => {
       expectedGeneration: 2,
       locator: "orders",
       mode: "delete",
+      occurrence: 1,
       phase: "removal-after-unlink",
     },
   ];
 
   for (const crashCase of processCrashCases) {
-    test(`recovers a real process exit at ${crashCase.phase} for ${crashCase.locator}`, async () => {
+    test(`recovers a real process exit at ${crashCase.phase} for ${crashCase.locator} occurrence ${crashCase.occurrence}`, async () => {
       const roots = await workspace();
       if (crashCase.mode === "delete") {
         const initial = await harness(roots);
@@ -500,6 +562,7 @@ describe("local transaction journal", () => {
           crashCase.mode,
           crashCase.phase,
           String(faultLocator),
+          String(crashCase.occurrence),
         ],
         ipc(message) {
           if (typeof message !== "object" || message === null || !("type" in message)) return;
@@ -658,7 +721,207 @@ describe("local transaction journal", () => {
       resources,
     });
     await expect(oversized.snapshot([])).rejects.toThrow("byte bound");
+    expect(() =>
+      createLocalTransactionJournal({
+        adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+        bounds: { maxReplacementBytes: 9, maxTargetBytes: 8 },
+        resources,
+      }),
+    ).toThrow("maxTargetBytes");
   });
+
+  test("reports non-contention coordination acquisition failures as provider failures", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    let acquisitions = 0;
+    const resources = providerWithOverrides(base, {
+      async acquireCoordination(request) {
+        acquisitions += 1;
+        if (acquisitions === 2) {
+          return failure(
+            Object.freeze({
+              code: "resource-provider-failure",
+              message: "Injected coordination I/O failure",
+            }),
+          );
+        }
+        return base.acquireCoordination(request);
+      },
+    });
+    const model = createStandardModelCapability();
+    const store = createMarkdownIntentStore({ model, resources });
+    const journal = createLocalTransactionJournal({
+      adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+      resources,
+    });
+    const engine = engineFor(journal);
+
+    expect(await engine.execute(createRequest())).toMatchObject({
+      committed: false,
+      phase: "prepare",
+      status: "provider-failure",
+    });
+    expect(acquisitions).toBe(2);
+  });
+
+  for (const operation of ["delete", "replace"] as const) {
+    test(`rejects an oversized existing target before publishing prepared state for ${operation}`, async () => {
+      const roots = await workspace();
+      const resources = await createLocalResourceProvider(roots);
+      const locator = workspaceResourceLocator("groma", `oversized-${operation}.md`);
+      if (!locator.ok) throw new Error("invalid oversized target locator");
+      const resource = parseResourceKey(locator.value);
+      if (!resource.ok) throw new Error("invalid oversized target resource");
+      const previous = new TextEncoder().encode("0123456789abcdefX");
+      await seed(resources, locator.value, previous);
+      const previousRevision = parseContentRevision(
+        `sha256:${createHash("sha256").update(previous).digest("hex")}`,
+      );
+      const replacement = new TextEncoder().encode("small");
+      const replacementRevision = parseContentRevision(
+        `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
+      );
+      if (!previousRevision.ok || !replacementRevision.ok) {
+        throw new Error("invalid oversized target revisions");
+      }
+      const adapter: CanonicalTransactionAdapter = Object.freeze({
+        load: async () =>
+          success(
+            Object.freeze({
+              resources: Object.freeze([
+                Object.freeze({
+                  locator: locator.value,
+                  resource: resource.value,
+                  revision: previousRevision.value,
+                }),
+              ]),
+              state: {},
+            }),
+          ),
+        materialize: () =>
+          success(
+            Object.freeze({
+              state: {},
+              targets: Object.freeze([
+                Object.freeze({
+                  expected: previousRevision.value,
+                  locator: locator.value,
+                  ...(operation === "replace" ? { replacement } : {}),
+                  resource: resource.value,
+                  result: operation === "replace" ? replacementRevision.value : null,
+                }),
+              ]),
+            }),
+          ),
+      });
+      const journal = createLocalTransactionJournal({
+        adapter,
+        bounds: { maxReplacementBytes: 8, maxTargetBytes: 16 },
+        resources,
+      });
+      const proposal = {
+        affected: { entities: [], relations: [] },
+        baseGeneration: 0,
+        context: {},
+        expectedRevisions: [{ expected: previousRevision.value, resource: resource.value }],
+        generation: 1,
+        mutation: {},
+        priorState: {},
+      } as unknown as ProposedTransaction;
+
+      await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+      expect(
+        await resources.read({ locator: localTransactionStateLocator, maxBytes: 1_000_000 }),
+      ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+      const unchanged = await resources.read({ locator: locator.value, maxBytes: 100 });
+      expect(unchanged).toMatchObject({ ok: true });
+      if (unchanged.ok) expect(unchanged.value.bytes).toEqual(previous);
+    });
+  }
+
+  for (const publication of [
+    { expectedTargetCommits: 0, journalOrdinal: 2, phase: "committing" },
+    { expectedTargetCommits: 2, journalOrdinal: 3, phase: "idle" },
+  ] as const) {
+    test(`requires confirmed journal durability before acknowledging ${publication.phase} publication`, async () => {
+      const roots = await workspace();
+      const base = await createLocalResourceProvider(roots);
+      const handles = new WeakMap<
+        object,
+        { readonly journalOrdinal?: number; readonly locator: string }
+      >();
+      let journalStages = 0;
+      let targetCommits = 0;
+      let injectUncertainty = true;
+      const resources = providerWithOverrides(base, {
+        async stageReplacement(locator, bytes) {
+          const staged = await base.stageReplacement(locator, bytes);
+          if (staged.ok) {
+            const isJournal = locator === localTransactionStateLocator;
+            handles.set(staged.value as object, {
+              ...(isJournal ? { journalOrdinal: (journalStages += 1) } : {}),
+              locator: String(locator),
+            });
+          }
+          return staged;
+        },
+        async commitReplacement(handle) {
+          const actual = await base.commitReplacement(handle);
+          const tracked = handles.get(handle as object);
+          if (tracked?.locator !== String(localTransactionStateLocator)) {
+            targetCommits += 1;
+            return actual;
+          }
+          if (injectUncertainty && tracked.journalOrdinal === publication.journalOrdinal) {
+            return Object.freeze({
+              diagnostics: Object.freeze([
+                Object.freeze({
+                  code: "injected-journal-indeterminate",
+                  message: "Injected journal durability uncertainty",
+                }),
+              ]),
+              state: "committed-indeterminate" as const,
+            });
+          }
+          return actual;
+        },
+      });
+      const model = createStandardModelCapability();
+      const store = createMarkdownIntentStore({ model, resources });
+      const journal = createLocalTransactionJournal({
+        adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+        resources,
+      });
+      const engine = engineFor(journal);
+
+      const outcome = await engine.execute(createRequest());
+      expect(journalStages).toBeGreaterThanOrEqual(publication.journalOrdinal);
+      expect(outcome.status).toBe("indeterminate");
+      if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+      expect(targetCommits).toBe(publication.expectedTargetCommits);
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+            "utf8",
+          ),
+        ),
+      ).toMatchObject({ phase: publication.phase });
+
+      injectUncertainty = false;
+      expect(await engine.recover(outcome.recovery)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+      expect(targetCommits).toBe(2);
+      const loaded = await store.load();
+      expect(loaded).toMatchObject({ ok: true });
+      if (loaded.ok) {
+        expect(loaded.value.entities).toHaveLength(2);
+        expect(loaded.value.relations).toHaveLength(1);
+      }
+    });
+  }
 
   test("independently rejects generic adapters that change the expected resource set", async () => {
     const roots = await workspace();
@@ -845,6 +1108,10 @@ describe("local transaction journal", () => {
     expect(releaseFault).toBeTrue();
     expect(outcome.status).toBe("indeterminate");
     if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+    expect(await active.engine.recover(outcome.recovery)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
     const restarted = await harness(roots);
     expect(await restarted.engine.recover(outcome.recovery)).toMatchObject({
       generation: 1,
@@ -921,21 +1188,26 @@ describe("local transaction journal", () => {
       const base = await createLocalResourceProvider(roots);
       let forceIndeterminate = true;
       let removalCalls = 0;
-      const resources = forwardingProvider(base, async (locator) => {
-        removalCalls += 1;
-        const actual = await base.removeResource(locator);
-        if (forceIndeterminate && (mode === "retry-remains-indeterminate" || removalCalls === 1)) {
-          return Object.freeze({
-            diagnostics: Object.freeze([
-              {
-                code: "injected-removal-indeterminate",
-                message: "Injected deletion acknowledgement uncertainty",
-              },
-            ]),
-            state: "committed-indeterminate" as const,
-          });
-        }
-        return actual;
+      const resources = providerWithOverrides(base, {
+        async removeResource(locator) {
+          removalCalls += 1;
+          const actual = await base.removeResource(locator);
+          if (
+            forceIndeterminate &&
+            (mode === "retry-remains-indeterminate" || removalCalls === 1)
+          ) {
+            return Object.freeze({
+              diagnostics: Object.freeze([
+                {
+                  code: "injected-removal-indeterminate",
+                  message: "Injected deletion acknowledgement uncertainty",
+                },
+              ]),
+              state: "committed-indeterminate" as const,
+            });
+          }
+          return actual;
+        },
       });
       const model = createStandardModelCapability();
       const store = createMarkdownIntentStore({ model, resources });

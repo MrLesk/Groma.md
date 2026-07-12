@@ -19,19 +19,30 @@ import {
 } from "../../local-transaction-journal.ts";
 import { createMarkdownIntentStore, markdownIntentLocator } from "../../markdown-intent-store.ts";
 
-const [workspaceRoot, coordinationRootInput, mode, faultPhaseInput, faultLocator] =
-  process.argv.slice(2);
+const [
+  workspaceRoot,
+  coordinationRootInput,
+  mode,
+  faultPhaseInput,
+  faultLocator,
+  faultOccurrenceInput,
+] = process.argv.slice(2);
 if (
   workspaceRoot === undefined ||
   coordinationRootInput === undefined ||
   (mode !== "create" && mode !== "delete") ||
   faultPhaseInput === undefined ||
-  faultLocator === undefined
+  faultLocator === undefined ||
+  faultOccurrenceInput === undefined
 ) {
   throw new Error("transaction crash fixture received invalid arguments");
 }
 
 const faultPhase = faultPhaseInput as LocalResourceFaultPhase;
+const faultOccurrence = Number(faultOccurrenceInput);
+if (!Number.isSafeInteger(faultOccurrence) || faultOccurrence <= 0) {
+  throw new Error("transaction crash fixture received an invalid fault occurrence");
+}
 const entityId = (value: number) => {
   const parsed = parseEntityId(`ent_${value.toString(16).padStart(32, "0")}`);
   if (!parsed.ok) throw new Error("invalid fixture entity ID");
@@ -51,12 +62,14 @@ const resourceFor = (id: ReturnType<typeof entityId>): ResourceKey => {
 };
 
 let armed = false;
+let matchingOccurrences = 0;
 const resources = await createLocalResourceProvider({
   workspaceRoot,
   ...(coordinationRootInput === "-" ? {} : { coordinationRoot: coordinationRootInput }),
   faultInjector(phase, context) {
     if (armed && phase === faultPhase && String(context?.locator) === faultLocator) {
-      process.exit(86);
+      matchingOccurrences += 1;
+      if (matchingOccurrences === faultOccurrence) process.exit(86);
     }
   },
 });

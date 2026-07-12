@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 14:26'
+updated_date: '2026-07-12 19:32'
 labels:
   - persistence
   - transactions
@@ -62,4 +62,8 @@ Implemented the persistence-local canonical adapter and official Markdown intent
 Persistent transaction leases now use immediate recovery only after the exact owner token is revalidated and its PID is proven dead twice; ordinary callback coordination retains the stale-age threshold. Added a real killed-child regression for both policies. Final pre-review validation: full check passes 233 tests / 1101 assertions; focused persistence passes 80 tests / 376 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
 
 Specification-review fixes: the journal now independently verifies an exact resource/expected-revision bijection against every generic adapter materialization before publishing prepared state; deletion retries committed-indeterminate and requires confirmed commit plus exact absence readback; resource fault injection carries the portable locator. Added damaging fake-adapter cases, one-shot/repeated indeterminate deletion recovery, and a no-cleanup child-process matrix that exits at journal after-rename, target rename-before-mode, target file sync, target parent sync, target after-rename acknowledgement, removal parent sync, and removal after-unlink acknowledgement. Fresh default-stale providers recover the proven-dead lease promptly, expose only complete old/new graphs, clean stages, and accept subsequent transactions. Validation: full check 243 tests / 1185 assertions; focused journal/provider 90 tests / 460 assertions; four binary targets and four direct journal targets pass.
+
+Quality-review corrections: journal publication now retries the same staged handle and requires provider-confirmed durability; every committing record is durably re-published before target changes and matching idle settlement is re-published before committed acknowledgement. Added maxTargetBytes as a separate pre-prepare classification bound, correct provider-failure classification for non-contention acquisition faults, and retryable pre-move lease release that retains the process guard/live journal lease. Added occurrence-aware real-process crashes for committing and idle journal publication plus fake-provider, oversized delete/replace, provider-failure, and same-process release-recovery regressions. Focused journal/resource suite passes 101 tests / 531 assertions; full matrix pending.
+
+Post-correction validation: focused journal/resource suite 101 tests / 531 assertions; full check 254 tests / 1256 assertions including formatting, typecheck, boundaries, build, and smoke; check:targets passes macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct local-transaction-journal compilation passes all four targets. Ready for exact-commit specification and quality re-review.
 <!-- SECTION:NOTES:END -->
