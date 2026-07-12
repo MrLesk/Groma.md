@@ -680,6 +680,46 @@ describe("standard model transaction invariant", () => {
     }
   });
 
+  test("preserves safe model field paths and length-adapts oversized source paths", () => {
+    const invalidType = validate({
+      mutation: {
+        components: [{ component: { id: entityId(1), type: "Not Valid" }, type: "create" }],
+        relationships: [],
+      },
+    });
+    expect(invalidType).toMatchObject([
+      {
+        code: "invalid-standard-model-token",
+        details: {
+          id: entityId(1),
+          path: "mutation.components[0]",
+          sourcePath: "component.type",
+        },
+      },
+    ]);
+
+    const oversizedKey = "x".repeat(5_000);
+    const invalidExtension = validate({
+      mutation: {
+        components: [{ component: { [oversizedKey]: true, id: entityId(1) }, type: "create" }],
+        relationships: [],
+      },
+    });
+    expect(invalidExtension).toMatchObject([
+      {
+        code: "unknown-standard-model-field",
+        details: {
+          id: entityId(1),
+          path: "mutation.components[0]",
+        },
+      },
+    ]);
+    expect(invalidExtension[0]!.details).not.toHaveProperty("sourcePath");
+    const sourcePathLength = invalidExtension[0]!.details?.sourcePathLength;
+    expect(typeof sourcePathLength).toBe("number");
+    if (typeof sourcePathLength === "number") expect(sourcePathLength).toBeGreaterThan(5_000);
+  });
+
   test("does not invoke accessors and does not retain mutable mutation aliases", () => {
     let accessorCalled = false;
     const payload = Object.defineProperty({}, "name", {
@@ -798,7 +838,53 @@ class InvariantProvider implements TransactionProvider {
   }
 }
 
-function registeredEngine(provider: InvariantProvider): TransactionEngine {
+class CommittingInvariantProvider implements TransactionProvider {
+  commitCalls = 0;
+  prepareCalls = 0;
+  recoverCalls = 0;
+  snapshotCalls = 0;
+  prepared?: ProposedTransaction;
+
+  constructor(readonly state: unknown) {}
+
+  snapshot(resources: readonly ResourceKey[]) {
+    this.snapshotCalls += 1;
+    return {
+      generation: 1,
+      revisions: resources.map((resource) => ({ resource, revision: "revision-1" })),
+      state: this.state,
+    };
+  }
+
+  prepare(proposal: ProposedTransaction) {
+    this.prepareCalls += 1;
+    this.prepared = proposal;
+    return { status: "prepared" as const, token: "standard-model-prepared" };
+  }
+
+  commit(token: string) {
+    this.commitCalls += 1;
+    if (token !== "standard-model-prepared" || this.prepared === undefined) {
+      throw new Error("unexpected commit token");
+    }
+    return {
+      affected: this.prepared.affected,
+      generation: this.prepared.generation,
+      revisions: this.prepared.expectedRevisions.map((entry) => ({
+        resource: entry.resource,
+        revision: "revision-2",
+      })),
+      status: "committed" as const,
+    };
+  }
+
+  recover() {
+    this.recoverCalls += 1;
+    return { status: "not-committed" as const };
+  }
+}
+
+function registeredEngine(provider: TransactionProvider): TransactionEngine {
   const engine = new TransactionEngine({
     maxAffectedIdentities: 20,
     maxRequestDataDepth: 32,
@@ -861,6 +947,63 @@ describe("shared transaction registration", () => {
     expect(surfaced).toEqual(direct);
     expect(directProvider.prepareCalls).toBe(0);
     expect(hostProvider.prepareCalls).toBe(0);
+  });
+
+  test("commits one fully valid Standard Model batch through the registered engine", async () => {
+    const provider = new CommittingInvariantProvider({
+      components: [component(entityId(1), { name: "Shop", type: "domain" })],
+      relationships: [],
+    });
+    const result = await registeredEngine(provider).execute(
+      engineRequest(
+        {
+          components: [
+            { id: entityId(1), patch: { intent: "Own commerce." }, type: "patch" },
+            {
+              component: {
+                id: entityId(2),
+                name: "Orders",
+                parent: entityId(1),
+                type: "service",
+              },
+              type: "create",
+            },
+          ],
+          relationships: [
+            {
+              relationship: relationship(relationId(1), entityId(1), entityId(2), {
+                payload: { description: "Shop requires Orders." },
+              }),
+              type: "upsert",
+            },
+          ],
+        },
+        {
+          entities: [entityId(2), entityId(1)],
+          relations: [relationId(1)],
+        },
+      ),
+    );
+
+    expect(result as unknown).toEqual({
+      event: {
+        affected: {
+          entities: [entityId(1), entityId(2)],
+          relations: [relationId(1)],
+        },
+        generation: 2,
+        type: "graph.committed",
+      },
+      generation: 2,
+      revisions: [{ resource: "components", revision: "revision-2" }],
+      status: "committed",
+    });
+    expect({
+      commit: provider.commitCalls,
+      prepare: provider.prepareCalls,
+      recover: provider.recoverCalls,
+      snapshot: provider.snapshotCalls,
+    }).toEqual({ commit: 1, prepare: 1, recover: 0, snapshot: 1 });
   });
 
   test("registered engines bind create, patch, remove, upsert, and relation removal to affected", async () => {
@@ -990,5 +1133,52 @@ describe("shared transaction registration", () => {
       expect(result).not.toMatchObject({ diagnostics: [{ code: "invalid-invariant-result" }] });
       expect(provider.prepareCalls).toBe(0);
     }
+  });
+
+  test("registered engines retain safe source paths and adapt oversized ones", async () => {
+    const invalidTypeProvider = new InvariantProvider({ components: [], relationships: [] });
+    const invalidType = await registeredEngine(invalidTypeProvider).execute(
+      engineRequest(
+        {
+          components: [{ component: { id: entityId(1), type: "Not Valid" }, type: "create" }],
+          relationships: [],
+        },
+        { entities: [entityId(1)], relations: [] },
+      ),
+    );
+    expect(invalidType).toMatchObject({
+      diagnostics: [
+        {
+          code: "invalid-standard-model-token",
+          details: { sourcePath: "component.type" },
+        },
+      ],
+      status: "validation-rejected",
+    });
+
+    const oversizedKey = "x".repeat(5_000);
+    const invalidExtensionProvider = new InvariantProvider({ components: [], relationships: [] });
+    const invalidExtension = await registeredEngine(invalidExtensionProvider).execute(
+      engineRequest(
+        {
+          components: [{ component: { [oversizedKey]: true, id: entityId(1) }, type: "create" }],
+          relationships: [],
+        },
+        { entities: [entityId(1)], relations: [] },
+      ),
+    );
+    expect(invalidExtension).toMatchObject({
+      diagnostics: [
+        {
+          code: "unknown-standard-model-field",
+          details: { sourcePathLength: expect.any(Number) },
+        },
+      ],
+      status: "validation-rejected",
+    });
+    if (invalidExtension.status !== "validation-rejected") {
+      throw new Error("expected validation rejection");
+    }
+    expect(invalidExtension.diagnostics[0]!.details).not.toHaveProperty("sourcePath");
   });
 });

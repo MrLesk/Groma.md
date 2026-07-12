@@ -237,7 +237,7 @@ function annotate(
       const sourcePath = source.details.path;
       const sourceValue = source.details.value;
       const sourceReason = source.details.reason;
-      if (typeof sourcePath === "string") details.sourcePathLength = sourcePath.length;
+      if (typeof sourcePath === "string") details.sourcePath = sourcePath;
       if (typeof sourceValue === "string") details.sourceValueLength = sourceValue.length;
       if (typeof sourceReason === "string") details.sourceReasonLength = sourceReason.length;
     }

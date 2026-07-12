@@ -44,10 +44,10 @@ empty model batch may therefore still declare affected identities.
 
 Invariant diagnostics preserve stable Standard Model codes while adapting unsafe
 model prose to Core's exported transaction diagnostic limit. They expose bounded
-envelope paths, stable IDs when available, and length/type metadata instead of
-copying untrusted oversized identifiers, tokens, kinds, or extension keys. Final
-parent, cycle, and relationship checks run in stable identity order; a containment
-cycle is represented by its smallest stable ID.
+envelope paths, safe model field paths, stable IDs when available, and length/type
+metadata instead of copying untrusted oversized identifiers, tokens, kinds, or
+extension keys. Final parent, cycle, and relationship checks run in stable identity
+order; a containment cycle is represented by its smallest stable ID.
 
 Pinned component IDs are validated, sorted, unique, and resolvable in the prior or
 proposed graph in 1A, but do not yet change mutation authority. Evidence ownership
