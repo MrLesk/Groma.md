@@ -30,6 +30,8 @@ export type LocalResourceFaultPhase =
   | "cleanup"
   | "coordination-claim"
   | "coordination-cleanup"
+  | "coordination-reacquire"
+  | "coordination-release"
   | "enumerate"
   | "flush"
   | "parent-directory"
@@ -116,6 +118,7 @@ const defaultMaxEntriesPerDirectory = 10_000;
 const defaultMaxCursorBytes = 4096;
 const defaultStaleLockMilliseconds = 5 * 60 * 1000;
 const maximumOwnerBytes = 1024;
+const maximumCoordinationReacquisitionAttempts = 8;
 const writeChunkBytes = 64 * 1024;
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
@@ -500,6 +503,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             ),
           );
         }
+        // The probe byte detects growth after stat without silently returning truncated contents.
         const buffer = new Uint8Array(maxBytes.value + 1);
         let total = 0;
         while (total < buffer.byteLength) {
@@ -870,20 +874,32 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     processCoordination.add(identity);
-    const acquired = await this.#acquireCoordination(identity);
-    if (!acquired.ok) {
-      processCoordination.delete(identity);
-      return acquired;
-    }
-    let result: Result<T>;
     try {
-      result = success(await action());
-    } catch {
-      result = failure(providerFailure("run a coordinated action"));
+      const acquired = await this.#acquireCoordination(identity);
+      if (!acquired.ok) return acquired;
+      let actionResult: Result<T>;
+      let actionCompleted = false;
+      try {
+        actionResult = success(await action());
+        actionCompleted = true;
+      } catch {
+        actionResult = failure(
+          diagnostic("coordination-action-failed", "The coordinated action failed"),
+        );
+      }
+      const released = await this.#releaseCoordination(identity, acquired.value);
+      if (released.ok) return actionResult;
+      const releaseFailure = diagnostic(
+        "coordination-release-failed",
+        "Local coordination could not be released cleanly",
+        { actionCompleted },
+      );
+      return actionResult.ok
+        ? failure(releaseFailure, ...released.diagnostics)
+        : failure(...actionResult.diagnostics, releaseFailure, ...released.diagnostics);
+    } finally {
+      processCoordination.delete(identity);
     }
-    const released = await this.#releaseCoordination(identity, acquired.value);
-    processCoordination.delete(identity);
-    return released.ok ? result : released;
   }
 
   async #resolve(
@@ -1325,7 +1341,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
-  async #acquireCoordination(identity: string): Promise<Result<CoordinationOwner>> {
+  async #acquireCoordination(
+    identity: string,
+    staleReplacementCount = 0,
+  ): Promise<Result<CoordinationOwner>> {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
     const reapingPath = path.join(this.#coordinationRoot, `${identity}.reaping`);
     try {
@@ -1399,7 +1418,22 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
     if (quarantinePath !== undefined) {
       await this.#bestEffortCoordinationCleanup(quarantinePath);
-      return this.#acquireCoordination(identity);
+      const nextReplacementCount = staleReplacementCount + 1;
+      try {
+        await this.#inject("coordination-reacquire");
+      } catch (error) {
+        return failure(resourceError(error, "prepare another local coordination attempt"));
+      }
+      if (nextReplacementCount >= maximumCoordinationReacquisitionAttempts) {
+        return failure(
+          diagnostic(
+            "resource-coordination-retry-exhausted",
+            "Local coordination changed repeatedly while stale ownership was replaced",
+            { maximumAttempts: maximumCoordinationReacquisitionAttempts },
+          ),
+        );
+      }
+      return this.#acquireCoordination(identity, nextReplacementCount);
     }
     return first;
   }
@@ -1408,6 +1442,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const lockPath = path.join(this.#coordinationRoot, `${identity}.lock`);
     const moved = await this.#moveCoordinationDirectory(lockPath, owner, "released");
     if (!moved.ok) return moved;
+    try {
+      await this.#inject("coordination-release");
+    } catch (error) {
+      await this.#bestEffortCoordinationCleanup(moved.value);
+      return failure(resourceError(error, "finalize local coordination release"));
+    }
     await this.#bestEffortCoordinationCleanup(moved.value);
     return success(undefined);
   }

@@ -168,7 +168,7 @@ describe("bounded local resource reads", () => {
 
     for (const [name, maximum] of cases) {
       for (const value of [0, -1, 1.5, Number.NaN, maximum + 1, Number.MAX_SAFE_INTEGER]) {
-        expect(createLocalResourceProvider({ ...roots, [name]: value })).rejects.toThrow(
+        await expect(createLocalResourceProvider({ ...roots, [name]: value })).rejects.toThrow(
           `${name} must be a positive safe integer`,
         );
       }
@@ -227,6 +227,15 @@ describe("bounded local resource reads", () => {
     expect(diagnosticCode(await failed.read({ locator: locator("large.md"), maxBytes: 16 }))).toBe(
       "resource-provider-failure",
     );
+  });
+
+  test("rejects read limits above the provider bound", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({ ...roots, maxReadBytes: 4 });
+
+    expect(
+      diagnosticCode(await provider.read({ locator: locator("anything.md"), maxBytes: 5 })),
+    ).toBe("invalid-read-byte-limit");
   });
 
   test("does not follow a symlink that escapes the workspace", async () => {
@@ -394,6 +403,16 @@ describe("bounded deterministic enumeration", () => {
         }),
       ),
     ).toBe("malformed-resource-cursor");
+    expect(
+      diagnosticCode(
+        await provider.enumerate({
+          limit: 4,
+          locator: locator(),
+          maxDepth: -1,
+          maxEntriesPerDirectory: 10,
+        }),
+      ),
+    ).toBe("invalid-enumeration-depth");
   });
 
   test("lists links but never traverses through them", async () => {
@@ -757,7 +776,7 @@ describe("same-machine coordination", () => {
     const coordinationRoot = requiredCoordinationRoot(roots);
     await chmod(coordinationRoot, 0o777);
     try {
-      expect(createLocalResourceProvider(roots)).rejects.toThrow(
+      await expect(createLocalResourceProvider(roots)).rejects.toThrow(
         "must not grant group or other permissions",
       );
     } finally {
@@ -771,7 +790,7 @@ describe("same-machine coordination", () => {
     const coordinationRoot = requiredCoordinationRoot(roots);
     await chown(coordinationRoot, 1, 1);
     try {
-      expect(createLocalResourceProvider(roots)).rejects.toThrow(
+      await expect(createLocalResourceProvider(roots)).rejects.toThrow(
         "must be owned by the current user",
       );
     } finally {
@@ -801,6 +820,82 @@ describe("same-machine coordination", () => {
       ok: true,
       value: "after",
     });
+  });
+
+  test("distinguishes action failure and releases coordination after one callback", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const request = { context: "local-machine" as const, locator: locator("action-failure") };
+    let callCount = 0;
+
+    const result = await provider.withCoordination(request, () => {
+      callCount += 1;
+      throw new Error("action failed");
+    });
+
+    expect(callCount).toBe(1);
+    expect(result.ok).toBeFalse();
+    if (result.ok) return;
+    expect(result.diagnostics.map(({ code }) => code)).toEqual(["coordination-action-failed"]);
+    expect(await provider.withCoordination(request, () => "after")).toEqual({
+      ok: true,
+      value: "after",
+    });
+  });
+
+  test("reports completed action separately from release failure", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("coordination-release"),
+    });
+    const request = { context: "local-machine" as const, locator: locator("release-failure") };
+    let callCount = 0;
+
+    const result = await provider.withCoordination(request, () => {
+      callCount += 1;
+      return "completed";
+    });
+
+    expect(callCount).toBe(1);
+    expect(result.ok).toBeFalse();
+    if (result.ok) return;
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      "coordination-release-failed",
+      "resource-provider-failure",
+    ]);
+    expect(result.diagnostics[0]?.details?.actionCompleted).toBeTrue();
+    expect(await provider.withCoordination(request, () => "after")).toEqual({
+      ok: true,
+      value: "after",
+    });
+  });
+
+  test("retains action and release diagnostics when both fail", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("coordination-release"),
+    });
+    let callCount = 0;
+
+    const result = await provider.withCoordination(
+      { context: "local-machine", locator: locator("combined-failure") },
+      () => {
+        callCount += 1;
+        throw new Error("action failed");
+      },
+    );
+
+    expect(callCount).toBe(1);
+    expect(result.ok).toBeFalse();
+    if (result.ok) return;
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      "coordination-action-failed",
+      "coordination-release-failed",
+      "resource-provider-failure",
+    ]);
+    expect(result.diagnostics[1]?.details?.actionCompleted).toBeFalse();
   });
 
   test("case-folds and NFC-normalizes conservative coordination aliases", async () => {
@@ -1032,6 +1127,56 @@ describe("same-machine coordination", () => {
         (outcome) => !outcome.ok && diagnosticCode(outcome) === "resource-coordination-contended",
       ),
     ).toBeTrue();
+  });
+
+  test("bounds repeated stale-owner reacquisition", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    const lockLocator = locator("reacquisition-bound");
+    const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
+    const lockPath = path.join(coordinationRoot, `${identity}.lock`);
+    const departed = Bun.spawn({
+      cmd: [process.execPath, "-e", "await Bun.sleep(10_000)"],
+      stderr: "ignore",
+      stdout: "ignore",
+    });
+    const deadPid = departed.pid;
+    departed.kill();
+    await departed.exited;
+    await Bun.sleep(5);
+
+    const writeStaleOwner = async (): Promise<void> => {
+      await mkdir(lockPath, { mode: 0o700 });
+      await writeFile(
+        path.join(lockPath, "owner.json"),
+        JSON.stringify({ createdAt: 0, pid: deadPid, token: randomUUID() }),
+        { mode: 0o600 },
+      );
+    };
+    await writeStaleOwner();
+    let replacementCount = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      staleLockMilliseconds: 1,
+      faultInjector: async (phase) => {
+        if (phase !== "coordination-reacquire") return;
+        replacementCount += 1;
+        await writeStaleOwner();
+      },
+    });
+    let actionCount = 0;
+
+    const result = await provider.withCoordination(
+      { context: "local-machine", locator: lockLocator },
+      () => {
+        actionCount += 1;
+      },
+    );
+
+    expect(diagnosticCode(result)).toBe("resource-coordination-retry-exhausted");
+    expect(replacementCount).toBe(8);
+    expect(actionCount).toBe(0);
   });
 
   test("cleanup failures leave only ignored artifacts and do not block reacquisition", async () => {

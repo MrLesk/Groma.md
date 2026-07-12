@@ -29,6 +29,13 @@ remain private. Resolution walks the workspace-relative chain with `lstat` and
 that canonical paths remain under the selected workspace. Enumeration may report a
 link entry but never traverses it.
 
+These checks revalidate the namespace they observe, but portable Bun/Node APIs cannot
+fully close the `lstat`-to-`opendir` enumeration window or the resolve-to-`rename`
+replacement window without directory-handle-relative `openat`/`O_NOFOLLOW` operations.
+The provider rejects observed links and revalidates before sensitive operations; it
+assumes no hostile process is concurrently mutating the workspace filesystem
+namespace.
+
 Staging owns first-time workspace initialization. It creates a missing parent chain
 one segment at a time, handles a concurrent creator through `EEXIST`, and then
 revalidates every segment with `lstat` and `realpath` as an in-workspace, non-link
@@ -115,7 +122,16 @@ must be proven dead twice before its lock is atomically moved to a unique quaran
 freeing the canonical name before best-effort cleanup. Release uses the same
 move-before-cleanup rule, so cleanup failure can leave only ignored unique artifacts
 and cannot strand contention. Malformed, young, permission-denied, live, or PID-reused
-owners remain contended.
+owners remain contended. Stale replacement reacquisition is capped; repeated namespace
+replacement returns `resource-coordination-retry-exhausted` instead of recursing
+without bound.
+
+If the callback throws, coordination returns `coordination-action-failed`. If release
+then fails, `coordination-release-failed` includes `details.actionCompleted`: `true`
+means the callback completed successfully and its value is withheld under fail-closed
+semantics, while `false` means the callback also failed. Underlying release diagnostics
+follow that summary diagnostic. A caller must not blindly retry when
+`actionCompleted` is `true`, because the coordinated side effects have already run.
 
 The coordination root is outside canonical contents and cannot itself be a symlink or
 junction. POSIX roots must be owned by the current user and grant no group/other bits;
