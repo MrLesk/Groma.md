@@ -48,6 +48,13 @@ export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<
     }
 
     if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) {
+        return unsupportedPayload(
+          owner,
+          path,
+          "arrays must use the intrinsic Array prototype without subclasses or custom prototypes",
+        );
+      }
       const ownKeys = Reflect.ownKeys(value);
       const symbolKey = ownKeys.find((key) => typeof key === "symbol");
       if (symbolKey !== undefined) {

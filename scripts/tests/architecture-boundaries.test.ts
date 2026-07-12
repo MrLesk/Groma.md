@@ -86,6 +86,38 @@ describe("architecture boundary checker", () => {
     expect(await checkArchitectureBoundaries(sourceRoot)).toHaveLength(4);
   });
 
+  test("rejects unverifiable dynamic dependencies without matching unrelated calls", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": [
+        'const moduleName = "../host/index.ts";',
+        "void import(moduleName);",
+        "void require(moduleName);",
+        "void require?.(moduleName);",
+        "void load(moduleName);",
+        "void loader.require(moduleName);",
+        "void require.resolve(moduleName);",
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/index.ts",
+        reason:
+          "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
+      },
+      {
+        file: "core/index.ts",
+        reason:
+          "Require dependency must use a string literal so its architectural boundary can be verified",
+      },
+      {
+        file: "core/index.ts",
+        reason:
+          "Require dependency must use a string literal so its architectural boundary can be verified",
+      },
+    ]);
+  });
+
   test("rejects unresolved relative imports and source outside a boundary", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": 'import "./missing.ts";',

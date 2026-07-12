@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 23:58'
+updated_date: '2026-07-12 00:15'
 labels:
   - core
   - graph
@@ -36,15 +36,16 @@ Create the smallest Core graph foundation needed by 1A: stable opaque identity, 
 - [x] #7 Tests are organized in boundary-local tests directories so production module roots remain readable as each subsystem grows
 - [ ] #8 Entity and relation payloads are defensively copied into deeply immutable data values so caller-owned aliases cannot mutate any existing snapshot
 - [ ] #9 Bulk load validates into one local graph state and creates one snapshot without per-item map copies, with representative scale coverage
+- [ ] #10 Payload validation rejects Array subclasses and arrays with custom prototypes according to the documented canonical graph data contract
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Define and document the graph payload data contract, then defensively clone and deeply freeze entity and relation payloads at every mutation and load boundary.
-2. Refactor bulk load to validate entities and relations into one local state and create one snapshot while preserving existing fail-closed diagnostics.
-3. Add regression tests for draft and resolved payload aliasing, unsupported mutable payload shapes, update isolation, and a representative large bulk load.
-4. Run the full quality, architecture, and cross-target verification gates and require fresh spec and quality approval.
+2. Reject unsupported behavior-bearing shapes, including Array subclasses and arrays with custom prototypes, with actionable diagnostics.
+3. Refactor bulk load to validate entities and relations into one local state and create one snapshot while preserving fail-closed diagnostics.
+4. Add regression and representative-scale coverage, run all local and cross-target gates, and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,6 +70,10 @@ Validation after the move: targeted tests 18 pass; architecture boundaries pass;
 GitHub Actions run 29169983659 passed after the test layout change: Cross-platform binaries 9s and Quality gates 10s.
 
 Reopened during mainline restoration after independent quality review reproduced mutable caller-owned payload aliases and quadratic bulk loading. The correction will enforce defensively copied immutable data payloads, build one validated snapshot per bulk load, retain representative scale coverage, and resolve the target-verifier artifact and support-policy inconsistencies.
+
+Fresh quality review found that Array.isArray alone admits subclasses and custom-prototype arrays despite the documented plain-array payload contract. The correction will require the intrinsic Array prototype and add regression coverage.
+
+Payload validation now requires Array.prototype exactly, rejecting both Array subclasses and manually replaced prototypes with unsupported-payload diagnostics. Focused graph tests and the full quality and target gates pass; acceptance criteria remain unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

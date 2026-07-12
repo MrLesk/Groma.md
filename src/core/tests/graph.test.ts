@@ -225,6 +225,10 @@ describe("graph kernel", () => {
       enumerable: true,
       get: () => "value",
     });
+    class CustomArray extends Array<string> {}
+    const arraySubclass = new CustomArray("value");
+    const customPrototypeArray = ["value"];
+    Object.setPrototypeOf(customPrototypeArray, null);
 
     for (const [payload, path] of [
       [{ nested: undefined }, "$.nested"],
@@ -233,6 +237,8 @@ describe("graph kernel", () => {
       [cyclic, "$.self"],
       [sparse, "$[0]"],
       [accessor, "$.computed"],
+      [{ nested: arraySubclass }, "$.nested"],
+      [{ nested: customPrototypeArray }, "$.nested"],
     ] as const) {
       expect(kernel.addEntity(kernel.empty(), { kind: "component", payload })).toMatchObject({
         diagnostics: [{ code: "unsupported-payload", details: { path } }],

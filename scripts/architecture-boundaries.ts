@@ -63,16 +63,33 @@ function stringLiteralValue(value: unknown): string | undefined {
   return typeof value.value === "string" ? value.value : undefined;
 }
 
-function collectModuleSpecifiers(sourceText: string): string[] {
+type UnverifiableDependency = "dynamic import" | "require";
+
+interface CollectedDependencies {
+  readonly specifiers: readonly string[];
+  readonly unverifiable: readonly UnverifiableDependency[];
+}
+
+function collectModuleDependencies(sourceText: string): CollectedDependencies {
   const syntaxTree: unknown = parse(sourceText, {
     plugins: ["typescript", "jsx"],
     sourceType: "unambiguous",
   });
   const specifiers: string[] = [];
+  const unverifiable: UnverifiableDependency[] = [];
 
   function addStringLiteral(value: unknown): void {
     const specifier = stringLiteralValue(value);
     if (specifier !== undefined) {
+      specifiers.push(specifier);
+    }
+  }
+
+  function addRuntimeDependency(value: unknown, kind: UnverifiableDependency): void {
+    const specifier = stringLiteralValue(value);
+    if (specifier === undefined) {
+      unverifiable.push(kind);
+    } else {
       specifiers.push(specifier);
     }
   }
@@ -96,7 +113,7 @@ function collectModuleSpecifiers(sourceText: string): string[] {
     ) {
       addStringLiteral(value.source);
     } else if (value.type === "ImportExpression") {
-      addStringLiteral(value.source);
+      addRuntimeDependency(value.source, "dynamic import");
     } else if (value.type === "TSImportType") {
       addStringLiteral(value.source ?? value.argument);
     } else if (value.type === "TSImportEqualsDeclaration") {
@@ -104,14 +121,17 @@ function collectModuleSpecifiers(sourceText: string): string[] {
       if (isAstNode(moduleReference) && moduleReference.type === "TSExternalModuleReference") {
         addStringLiteral(moduleReference.expression);
       }
-    } else if (value.type === "CallExpression") {
+    } else if (value.type === "CallExpression" || value.type === "OptionalCallExpression") {
       const callee = value.callee;
       const isDynamicImport = isAstNode(callee) && callee.type === "Import";
       const isRequire =
         isAstNode(callee) && callee.type === "Identifier" && callee.name === "require";
       if (isDynamicImport || isRequire) {
         const argumentsList = value.arguments;
-        addStringLiteral(Array.isArray(argumentsList) ? argumentsList[0] : undefined);
+        addRuntimeDependency(
+          Array.isArray(argumentsList) ? argumentsList[0] : undefined,
+          isDynamicImport ? "dynamic import" : "require",
+        );
       }
     }
 
@@ -121,7 +141,7 @@ function collectModuleSpecifiers(sourceText: string): string[] {
   }
 
   visit(syntaxTree);
-  return specifiers.sort();
+  return { specifiers: specifiers.sort(), unverifiable: unverifiable.sort() };
 }
 
 async function pathExists(file: string): Promise<boolean> {
@@ -189,9 +209,9 @@ export async function checkArchitectureBoundaries(
     }
 
     const isTest = /\.(?:test|spec)\.tsx?$/.test(file);
-    let specifiers: string[];
+    let dependencies: CollectedDependencies;
     try {
-      specifiers = collectModuleSpecifiers(await readFile(file, "utf8"));
+      dependencies = collectModuleDependencies(await readFile(file, "utf8"));
     } catch (error) {
       violations.push({
         file: displayFile,
@@ -200,7 +220,15 @@ export async function checkArchitectureBoundaries(
       continue;
     }
 
-    for (const specifier of specifiers) {
+    for (const kind of dependencies.unverifiable) {
+      const dependencyLabel = kind === "dynamic import" ? "Dynamic import" : "Require";
+      violations.push({
+        file: displayFile,
+        reason: `${dependencyLabel} dependency must use a string literal so its architectural boundary can be verified`,
+      });
+    }
+
+    for (const specifier of dependencies.specifiers) {
       if (!specifier.startsWith(".")) {
         if (isTest && specifier === "bun:test") {
           continue;

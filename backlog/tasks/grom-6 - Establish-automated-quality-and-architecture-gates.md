@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-11 23:58'
+updated_date: '2026-07-12 00:15'
 labels:
   - tooling
   - ci
@@ -35,15 +35,16 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [x] #5 A failing test, type error, formatting change, boundary violation, or binary smoke failure causes a nonzero check result
 - [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
 - [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
+- [ ] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the existing four-target single-runner verification.
-2. Ensure check:targets does not leave an incompatible final artifact on the current host.
-3. Align DEVELOPMENT.md support wording with the approved distinction between cross-compilation artifact verification and host-compatible runtime smoke coverage.
-4. Run local and cross-target gates and require fresh review.
+1. Preserve the existing four-target single-runner verification and restore a host-compatible artifact afterward.
+2. Distinguish cross-compiled artifact coverage from compatible-host runtime smoke coverage in development guidance.
+3. Reject non-literal dynamic import and require expressions in constrained layers without treating unrelated calls as dependencies.
+4. Add focused boundary fixtures, run local and cross-target gates, and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -72,6 +73,10 @@ Added check:targets, which sequentially cross-compiles macOS arm64, Linux x64 ba
 GitHub Actions run 29168888457 passed from a clean checkout after the correction: Quality gates 8s and Cross-platform binaries 13s. The single Ubuntu runner cross-compiled macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; verified exactly one expected artifact after each build; and executed version/help for Linux x64.
 
 Reopened during mainline restoration after independent quality review found that check:targets leaves the final Windows ARM64 artifact in dist on non-Windows hosts and one support-policy sentence still implies native runtime smoke for every target.
+
+Fresh quality review found that non-literal dynamic import and require expressions are currently ignored, allowing constrained layers to hide unverifiable dependencies. The correction will fail closed only for actual import and require forms and add focused fixtures.
+
+Implemented fail-closed collection for non-literal dynamic import and bare require calls. Focused fixtures confirm both violations while unrelated loader, member require, and require.resolve calls remain ignored. Local focused tests and the full quality and target gates pass; acceptance criteria remain unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
