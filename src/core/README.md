@@ -46,6 +46,8 @@ copies and freezes query data. Character budgets reduce recursively for punctuat
 sorted keys, and values, so copying stops before inspecting later data once the bound
 is exceeded. The serializer never consults object or array `toJSON` hooks—including
 polluted inherited hooks—and page length is preflighted before any item is traversed.
+The shared payload walker has a separate copy-only mode for graph and model data; it
+performs the same validation and freezing without constructing or discarding JSON.
 
 Exact-read items and page items also cross this boundary as canonical `GraphData`.
 Core defensively copies and deeply freezes them, normalizes negative zero to zero, and

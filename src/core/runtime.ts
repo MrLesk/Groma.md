@@ -25,20 +25,38 @@ export function inspectExactRecord(
       return invalidShape(code, subject, "expected the intrinsic Object prototype or null");
     }
     const ownKeys = Reflect.ownKeys(value);
-    if (ownKeys.some((key) => typeof key === "symbol")) {
-      return invalidShape(code, subject, "symbol properties are not allowed");
+    for (let index = 0; index < ownKeys.length; index += 1) {
+      if (typeof ownKeys[index] === "symbol") {
+        return invalidShape(code, subject, "symbol properties are not allowed");
+      }
     }
-    const keys = (ownKeys as string[]).sort();
-    const accepted = acceptedKeySets.some((keySet) => {
-      const expected = [...keySet].sort();
-      return expected.length === keys.length && expected.every((key, index) => key === keys[index]);
-    });
+    const keys = ownKeys as string[];
+    let accepted = false;
+    for (let setIndex = 0; setIndex < acceptedKeySets.length && !accepted; setIndex += 1) {
+      const expected = acceptedKeySets[setIndex]!;
+      if (expected.length !== keys.length) continue;
+      accepted = true;
+      for (let keyIndex = 0; keyIndex < expected.length; keyIndex += 1) {
+        let found = false;
+        for (let actualIndex = 0; actualIndex < keys.length; actualIndex += 1) {
+          if (keys[actualIndex] === expected[keyIndex]) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          accepted = false;
+          break;
+        }
+      }
+    }
     if (!accepted) {
       return invalidShape(code, subject, "record keys do not match the public contract exactly");
     }
 
     const inspected: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of keys) {
+    for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index]!;
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
         return invalidShape(code, subject, `${key} must be an enumerable data property`);
@@ -54,7 +72,7 @@ export function inspectExactRecord(
   }
 }
 
-export function inspectIntrinsicDenseArrayLength(
+export function inspectIntrinsicArrayLength(
   value: unknown,
   code: string,
   subject: string,
@@ -62,10 +80,6 @@ export function inspectIntrinsicDenseArrayLength(
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
       return invalidShape(code, subject, "expected an intrinsic array");
-    }
-    const ownKeys = Reflect.ownKeys(value);
-    if (ownKeys.some((key) => typeof key === "symbol")) {
-      return invalidShape(code, subject, "symbol properties are not allowed");
     }
     const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
     if (
@@ -76,19 +90,7 @@ export function inspectIntrinsicDenseArrayLength(
     ) {
       return invalidShape(code, subject, "array length is not an intrinsic safe data value");
     }
-    const length = lengthDescriptor.value;
-    const keys = (ownKeys as string[]).sort();
-    if (keys.length !== length + 1 || !keys.includes("length")) {
-      return invalidShape(code, subject, "array must be dense without extra properties");
-    }
-    for (const key of keys) {
-      if (key === "length") continue;
-      const index = Number(key);
-      if (!Number.isSafeInteger(index) || index < 0 || index >= length || String(index) !== key) {
-        return invalidShape(code, subject, "array indexes are not canonical");
-      }
-    }
-    return success(length);
+    return success(lengthDescriptor.value);
   } catch {
     return invalidShape(code, subject, "array inspection failed");
   }

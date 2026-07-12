@@ -7,7 +7,7 @@ import {
   type GraphDataScalar,
 } from "./payload.ts";
 import { failure, type Result, success } from "./result.ts";
-import { inspectExactRecord, inspectIntrinsicDenseArrayLength } from "./runtime.ts";
+import { inspectExactRecord, inspectIntrinsicArrayLength } from "./runtime.ts";
 
 declare const continuationCursorBrand: unique symbol;
 declare const pageLimitBrand: unique symbol;
@@ -111,7 +111,6 @@ interface DecodedCursorState extends CursorState {
 }
 
 const cursorPrefix = "groma.cursor.v1:";
-const cursorStateKeys = ["anchor", "generation", "query", "version"] as const;
 
 function validatePositiveBudget(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -141,11 +140,21 @@ function cursorFailure(code: string, message: string): Result<never> {
 
 function isExactCursorShape(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const keys = Object.keys(value).sort();
-  return (
-    keys.length === cursorStateKeys.length &&
-    keys.every((key, index) => key === cursorStateKeys[index])
-  );
+  const keys = Object.keys(value);
+  if (keys.length !== 4) return false;
+  let anchor = false;
+  let generation = false;
+  let query = false;
+  let version = false;
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    if (key === "anchor") anchor = true;
+    else if (key === "generation") generation = true;
+    else if (key === "query") query = true;
+    else if (key === "version") version = true;
+    else return false;
+  }
+  return anchor && generation && query && version;
 }
 
 export class BoundedQueryContracts {
@@ -267,7 +276,7 @@ export class BoundedQueryContracts {
       const after = canonicalAnchor(inspectedPrepared.value.after, this.#maxAnchorCharacters);
       if (!after.ok) return after;
     }
-    const itemArray = inspectIntrinsicDenseArrayLength(items, "invalid-query-items", "Query items");
+    const itemArray = inspectIntrinsicArrayLength(items, "invalid-query-items", "Query items");
     if (!itemArray.ok) return itemArray;
     if (itemArray.value > limit.value) {
       return failure({

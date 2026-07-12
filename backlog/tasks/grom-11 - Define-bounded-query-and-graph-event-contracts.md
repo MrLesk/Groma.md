@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 02:57'
+updated_date: '2026-07-12 03:20'
 labels:
   - core
   - queries
@@ -65,4 +65,6 @@ PR #7 Codex review identified that the first canonical item constraint excluded 
 Controller inspection found the structural predicate treated omitted sparse fields like explicit undefined. Record-field validation now uses each optional property's required present-value view with a never guard under exactOptionalPropertyTypes. Sparse interfaces with optional canonical fields compile and remain deeply readonly, while required or optional fields explicitly unioned with undefined remain rejected. GraphEntity, GraphRelation, and prior behavior-bearing rejections remain covered. Task stays In Progress with acceptance criteria unchecked.
 
 Latest PR #7 Codex review identified three bounded-work gaps. Page item arrays now receive descriptor-only intrinsic dense-array and length preflight, returning overflow before traversing items. Query contexts and anchors now use one descriptor traversal that copies, freezes, key-orders, emits canonical JSON, and decrements exact character budgets recursively so oversized values stop before later descriptors. Cursor binding no longer uses object-level JSON.stringify and ignores inherited Object/Array toJSON pollution. Added overflow-before-getter, budget early-abort, and prototype-pollution continuation regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Current-SHA PR #7 review found four preprocessing bounds. Page overflow now checks only intrinsic prototype and safe length descriptor before any ownKeys/index work; within-limit canonical copy retains full density/descriptor validation. Canonical records apply a key-count/minimum-value/quoted-key lower bound before custom deterministic sorting or value reads. String quoting is incremental and stops at the exact remaining character boundary, including escape and surrogate costs. The shared payload walker now has copy-only and canonical-emission modes, so graph/model payload copying constructs no JSON while cursor data remains one-pass budgeted. Canonical emission uses captured string/number intrinsics and no mutable array sort/join methods. Added proxy ownKeys, sort/getter, large-string boundary, copy-only instrumentation, and expanded pollution regressions. Task remains In Progress with acceptance criteria unchecked.
 <!-- SECTION:NOTES:END -->

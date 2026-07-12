@@ -21,34 +21,89 @@ export interface CanonicalGraphDataBudget {
   readonly message: string;
 }
 
-function quoteJsonString(value: string): string {
-  let quoted = '"';
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code === 0x22) quoted += '\\"';
-    else if (code === 0x5c) quoted += "\\\\";
-    else if (code === 0x08) quoted += "\\b";
-    else if (code === 0x09) quoted += "\\t";
-    else if (code === 0x0a) quoted += "\\n";
-    else if (code === 0x0c) quoted += "\\f";
-    else if (code === 0x0d) quoted += "\\r";
-    else if (code <= 0x1f || (code >= 0xd800 && code <= 0xdfff)) {
-      const next = index + 1 < value.length ? value.charCodeAt(index + 1) : -1;
-      if (code >= 0xd800 && code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
-        quoted += value[index]! + value[index + 1]!;
-        index += 1;
-      } else {
-        quoted += `\\u${code.toString(16).padStart(4, "0")}`;
-      }
-    } else quoted += value[index]!;
-  }
-  return `${quoted}"`;
+const intrinsicCharCodeAt = String.prototype.charCodeAt;
+const intrinsicNumberToString = Number.prototype.toString;
+const hexDigits = "0123456789abcdef";
+
+interface QuotedJsonString {
+  readonly length: number;
+  readonly text: string;
 }
 
-function payloadPath(parent: string, key: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
-    ? `${parent}.${key}`
-    : `${parent}[${quoteJsonString(key)}]`;
+function charCodeAt(value: string, index: number): number {
+  return Reflect.apply(intrinsicCharCodeAt, value, [index]);
+}
+
+function quoteJsonString(
+  value: string,
+  maximum: number,
+  emit: boolean,
+): QuotedJsonString | undefined {
+  if (maximum < 2) return undefined;
+  let length = 1;
+  let text = emit ? '"' : "";
+
+  for (let index = 0; index < value.length; index += 1) {
+    const code = charCodeAt(value, index);
+    let fragment: string;
+    if (code === 0x22) fragment = '\\"';
+    else if (code === 0x5c) fragment = "\\\\";
+    else if (code === 0x08) fragment = "\\b";
+    else if (code === 0x09) fragment = "\\t";
+    else if (code === 0x0a) fragment = "\\n";
+    else if (code === 0x0c) fragment = "\\f";
+    else if (code === 0x0d) fragment = "\\r";
+    else if (code <= 0x1f || (code >= 0xd800 && code <= 0xdfff)) {
+      const next = index + 1 < value.length ? charCodeAt(value, index + 1) : -1;
+      if (code >= 0xd800 && code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+        fragment = value[index]! + value[index + 1]!;
+        index += 1;
+      } else {
+        fragment = `\\u${hexDigits[(code >> 12) & 0xf]}${hexDigits[(code >> 8) & 0xf]}${hexDigits[(code >> 4) & 0xf]}${hexDigits[code & 0xf]}`;
+      }
+    } else fragment = value[index]!;
+
+    if (length + fragment.length + 1 > maximum) return undefined;
+    length += fragment.length;
+    if (emit) text += fragment;
+  }
+
+  length += 1;
+  if (emit) text += '"';
+  return { length, text };
+}
+
+function payloadPath(parent: string, key: string, quotedKey?: string): string {
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) return `${parent}.${key}`;
+  return `${parent}[${quotedKey ?? key}]`;
+}
+
+function sortedStrings(values: readonly string[]): string[] {
+  let source = new Array<string>(values.length);
+  for (let index = 0; index < values.length; index += 1) source[index] = values[index]!;
+  let target = new Array<string>(values.length);
+
+  for (let width = 1; width < values.length; width *= 2) {
+    for (let start = 0; start < values.length; start += width * 2) {
+      const proposedMiddle = start + width;
+      const proposedEnd = start + width * 2;
+      const middle = proposedMiddle < values.length ? proposedMiddle : values.length;
+      const end = proposedEnd < values.length ? proposedEnd : values.length;
+      let left = start;
+      let right = middle;
+      let output = start;
+      while (left < middle && right < end) {
+        if (source[left]! <= source[right]!) target[output++] = source[left++]!;
+        else target[output++] = source[right++]!;
+      }
+      while (left < middle) target[output++] = source[left++]!;
+      while (right < end) target[output++] = source[right++]!;
+    }
+    const previous = source;
+    source = target;
+    target = previous;
+  }
+  return source;
 }
 
 function unsupportedPayload<T = never>(
@@ -63,9 +118,10 @@ function unsupportedPayload<T = never>(
   });
 }
 
-export function copyCanonicalGraphData(
+function copyGraphData(
   payload: unknown,
   owner: PayloadOwner,
+  emitCanonicalJson: boolean,
   budget?: CanonicalGraphDataBudget,
 ): Result<CanonicalGraphDataCopy> {
   const activeContainers = new WeakSet<object>();
@@ -84,23 +140,30 @@ export function copyCanonicalGraphData(
     remaining: number,
   ): Result<CanonicalGraphDataCopy> => {
     if (value === null) {
-      return remaining >= 4 ? success({ canonicalJson: "null", value }) : tooLarge();
+      return !emitCanonicalJson || remaining >= 4
+        ? success({ canonicalJson: emitCanonicalJson ? "null" : "", value })
+        : tooLarge();
     }
     if (typeof value === "boolean") {
-      const canonicalJson = value ? "true" : "false";
-      return remaining >= canonicalJson.length ? success({ canonicalJson, value }) : tooLarge();
+      const canonicalJson = emitCanonicalJson ? (value ? "true" : "false") : "";
+      return !emitCanonicalJson || remaining >= canonicalJson.length
+        ? success({ canonicalJson, value })
+        : tooLarge();
     }
     if (typeof value === "string") {
-      const canonicalJson = quoteJsonString(value);
-      return remaining >= canonicalJson.length ? success({ canonicalJson, value }) : tooLarge();
+      if (!emitCanonicalJson) return success({ canonicalJson: "", value });
+      const quoted = quoteJsonString(value, remaining, true);
+      return quoted === undefined ? tooLarge() : success({ canonicalJson: quoted.text, value });
     }
     if (typeof value === "number") {
       if (!Number.isFinite(value)) {
         return unsupportedPayload(owner, path, "numbers must be finite");
       }
       const normalized = Object.is(value, -0) ? 0 : value;
-      const canonicalJson = String(normalized);
-      return remaining >= canonicalJson.length
+      const canonicalJson = emitCanonicalJson
+        ? Reflect.apply(intrinsicNumberToString, normalized, [])
+        : "";
+      return !emitCanonicalJson || remaining >= canonicalJson.length
         ? success({ canonicalJson, value: normalized })
         : tooLarge();
     }
@@ -134,35 +197,37 @@ export function copyCanonicalGraphData(
         return unsupportedPayload(owner, path, "arrays must have an intrinsic data length");
       }
       const arrayLength = lengthDescriptor.value;
-      const symbolKey = ownKeys.find((key) => typeof key === "symbol");
-      if (symbolKey !== undefined) {
-        return unsupportedPayload(owner, path, "arrays must not contain symbol properties");
-      }
-      const extraKey = ownKeys.find((key) => {
-        if (key === "length" || typeof key !== "string") return false;
+      for (let keyIndex = 0; keyIndex < ownKeys.length; keyIndex += 1) {
+        const key = ownKeys[keyIndex]!;
+        if (typeof key === "symbol") {
+          return unsupportedPayload(owner, path, "arrays must not contain symbol properties");
+        }
+        if (key === "length") continue;
         const index = Number(key);
-        return (
-          !Number.isSafeInteger(index) || index < 0 || index >= arrayLength || String(index) !== key
-        );
-      });
-      if (extraKey !== undefined) {
-        return unsupportedPayload(
-          owner,
-          payloadPath(path, String(extraKey)),
-          "arrays must not contain named or non-index properties",
-        );
+        if (
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          index >= arrayLength ||
+          String(index) !== key
+        ) {
+          return unsupportedPayload(
+            owner,
+            payloadPath(path, key),
+            "arrays must not contain named or non-index properties",
+          );
+        }
       }
-      if (remaining < 2) return tooLarge();
+      if (emitCanonicalJson && remaining < 2) return tooLarge();
 
       activeContainers.add(value);
       try {
         const copiedItems: GraphData[] = [];
-        const canonicalParts = ["["];
-        let available = remaining - 1;
+        let canonicalJson = emitCanonicalJson ? "[" : "";
+        let available = emitCanonicalJson ? remaining - 1 : remaining;
         for (let index = 0; index < arrayLength; index += 1) {
-          if (index > 0) {
+          if (emitCanonicalJson && index > 0) {
             if (available < 1) return tooLarge();
-            canonicalParts.push(",");
+            canonicalJson += ",";
             available -= 1;
           }
           const itemPath = `${path}[${index}]`;
@@ -177,18 +242,23 @@ export function copyCanonicalGraphData(
               "array entries must be ordinary enumerable data values",
             );
           }
-          const item = copy(descriptor.value, itemPath, available - 1);
+          const item = copy(
+            descriptor.value,
+            itemPath,
+            emitCanonicalJson ? available - 1 : available,
+          );
           if (!item.ok) return item;
-          copiedItems.push(item.value.value);
-          canonicalParts.push(item.value.canonicalJson);
-          available -= item.value.canonicalJson.length;
+          copiedItems[index] = item.value.value;
+          if (emitCanonicalJson) {
+            canonicalJson += item.value.canonicalJson;
+            available -= item.value.canonicalJson.length;
+          }
         }
-        if (available < 1) return tooLarge();
-        canonicalParts.push("]");
-        return success({
-          canonicalJson: canonicalParts.join(""),
-          value: Object.freeze(copiedItems),
-        });
+        if (emitCanonicalJson) {
+          if (available < 1) return tooLarge();
+          canonicalJson += "]";
+        }
+        return success({ canonicalJson, value: Object.freeze(copiedItems) });
       } finally {
         activeContainers.delete(value);
       }
@@ -203,27 +273,46 @@ export function copyCanonicalGraphData(
       );
     }
     const ownKeys = Reflect.ownKeys(value);
-    const symbolKey = ownKeys.find((key) => typeof key === "symbol");
-    if (symbolKey !== undefined) {
-      return unsupportedPayload(owner, path, "plain records must not contain symbol properties");
+    for (let keyIndex = 0; keyIndex < ownKeys.length; keyIndex += 1) {
+      const key = ownKeys[keyIndex]!;
+      if (typeof key === "symbol") {
+        return unsupportedPayload(owner, path, "plain records must not contain symbol properties");
+      }
     }
-    if (remaining < 2) return tooLarge();
+    if (emitCanonicalJson && remaining < 2) return tooLarge();
+
+    const keys = ownKeys as string[];
+    const quotedKeys: Record<string, string> = Object.create(null) as Record<string, string>;
+    if (emitCanonicalJson) {
+      const commaCharacters = keys.length > 0 ? keys.length - 1 : 0;
+      const minimum = 2 + commaCharacters + keys.length * 4;
+      if (minimum > remaining) return tooLarge();
+      let extraKeyCharacters = remaining - minimum;
+      for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+        const key = keys[keyIndex]!;
+        const quoted = quoteJsonString(key, extraKeyCharacters + 2, true);
+        if (quoted === undefined) return tooLarge();
+        quotedKeys[key] = quoted.text;
+        extraKeyCharacters -= quoted.length - 2;
+      }
+    }
+    const sortedKeys = sortedStrings(keys);
 
     activeContainers.add(value);
     try {
       const copiedRecord: Record<string, GraphData> = {};
-      const canonicalParts = ["{"];
-      const keys = (ownKeys as string[]).sort();
-      let available = remaining - 1;
-      for (let index = 0; index < keys.length; index += 1) {
-        const key = keys[index]!;
-        const keyJson = quoteJsonString(key);
-        const prefix = `${index > 0 ? "," : ""}${keyJson}:`;
-        if (available - 1 < prefix.length) return tooLarge();
-        canonicalParts.push(prefix);
-        available -= prefix.length;
+      let canonicalJson = emitCanonicalJson ? "{" : "";
+      let available = emitCanonicalJson ? remaining - 1 : remaining;
+      for (let index = 0; index < sortedKeys.length; index += 1) {
+        const key = sortedKeys[index]!;
+        if (emitCanonicalJson) {
+          const prefix = `${index > 0 ? "," : ""}${quotedKeys[key]}:`;
+          if (available - 1 < prefix.length) return tooLarge();
+          canonicalJson += prefix;
+          available -= prefix.length;
+        }
 
-        const pathToValue = payloadPath(path, key);
+        const pathToValue = payloadPath(path, key, emitCanonicalJson ? quotedKeys[key] : undefined);
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
           return unsupportedPayload(
@@ -232,7 +321,11 @@ export function copyCanonicalGraphData(
             "record properties must be ordinary enumerable data values, not accessors",
           );
         }
-        const child = copy(descriptor.value, pathToValue, available - 1);
+        const child = copy(
+          descriptor.value,
+          pathToValue,
+          emitCanonicalJson ? available - 1 : available,
+        );
         if (!child.ok) return child;
         Object.defineProperty(copiedRecord, key, {
           configurable: true,
@@ -240,15 +333,16 @@ export function copyCanonicalGraphData(
           value: child.value.value,
           writable: true,
         });
-        canonicalParts.push(child.value.canonicalJson);
-        available -= child.value.canonicalJson.length;
+        if (emitCanonicalJson) {
+          canonicalJson += child.value.canonicalJson;
+          available -= child.value.canonicalJson.length;
+        }
       }
-      if (available < 1) return tooLarge();
-      canonicalParts.push("}");
-      return success({
-        canonicalJson: canonicalParts.join(""),
-        value: Object.freeze(copiedRecord),
-      });
+      if (emitCanonicalJson) {
+        if (available < 1) return tooLarge();
+        canonicalJson += "}";
+      }
+      return success({ canonicalJson, value: Object.freeze(copiedRecord) });
     } finally {
       activeContainers.delete(value);
     }
@@ -271,7 +365,15 @@ export function copyCanonicalGraphData(
   }
 }
 
+export function copyCanonicalGraphData(
+  payload: unknown,
+  owner: PayloadOwner,
+  budget?: CanonicalGraphDataBudget,
+): Result<CanonicalGraphDataCopy> {
+  return copyGraphData(payload, owner, true, budget);
+}
+
 export function copyGraphPayload(payload: unknown, owner: PayloadOwner): Result<GraphData> {
-  const copied = copyCanonicalGraphData(payload, owner);
+  const copied = copyGraphData(payload, owner, false);
   return copied.ok ? success(copied.value.value) : copied;
 }

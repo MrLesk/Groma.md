@@ -8,7 +8,7 @@ import {
 import type { GraphEntity, GraphRelation } from "../graph.ts";
 import { parseGraphGeneration } from "../generation.ts";
 import { parseEntityId, parseRelationId } from "../identity.ts";
-import type { GraphData } from "../payload.ts";
+import { copyCanonicalGraphData, copyGraphPayload, type GraphData } from "../payload.ts";
 import { BoundedQueryContracts, type ContinuationCursor } from "../query.ts";
 
 const entity = (suffix: string): string => `ent_${suffix.padStart(32, "0")}`;
@@ -363,7 +363,7 @@ describe("bounded query contracts", () => {
     const extended = [1];
     Object.defineProperty(extended, "reportedLength", { enumerable: true, value: 0 });
     expect(contracts.page(prepared, extended, { hasMore: false })).toMatchObject({
-      diagnostics: [{ code: "invalid-query-items" }],
+      diagnostics: [{ code: "unsupported-payload" }],
       ok: false,
     });
   });
@@ -387,6 +387,24 @@ describe("bounded query contracts", () => {
       ok: false,
     });
     expect(getterInvoked).toBeFalse();
+  });
+
+  test("rejects page overflow before enumerating array keys", () => {
+    const contracts = createContracts();
+    const prepared = prepareFirst(contracts, 1, {}, 1);
+    let ownKeysInvocations = 0;
+    const items = new Proxy([1, 2], {
+      ownKeys: () => {
+        ownKeysInvocations += 1;
+        throw new Error("overflow must not enumerate array keys");
+      },
+    });
+    expect(() => contracts.page(prepared, items, { hasMore: false })).not.toThrow();
+    expect(contracts.page(prepared, items, { hasMore: false })).toMatchObject({
+      diagnostics: [{ code: "query-page-overflow", details: { actual: 2, limit: 1 } }],
+      ok: false,
+    });
+    expect(ownKeysInvocations).toBe(0);
   });
 
   test("treats prepared query objects as forged runtime input", () => {
@@ -558,9 +576,121 @@ describe("bounded query contracts", () => {
     expect(anchorGetterInvoked).toBeFalse();
   });
 
+  test("rejects impossible flat-record budgets before sorting keys or reading values", () => {
+    const originalSort = Object.getOwnPropertyDescriptor(Array.prototype, "sort");
+    if (originalSort === undefined || typeof originalSort.value !== "function") {
+      throw new Error("expected intrinsic Array.prototype.sort");
+    }
+    let sortInvocations = 0;
+    let getterInvocations = 0;
+    const query: Record<string, unknown> = {};
+    for (let index = 0; index < 200; index += 1) {
+      Object.defineProperty(query, `key${index}`, {
+        enumerable: true,
+        get: () => {
+          getterInvocations += 1;
+          throw new Error("record budget must fail before value inspection");
+        },
+      });
+    }
+
+    let result: ReturnType<BoundedQueryContracts["prepare"]> | undefined;
+    try {
+      Object.defineProperty(Array.prototype, "sort", {
+        configurable: true,
+        value: function (...args: unknown[]) {
+          sortInvocations += 1;
+          return Reflect.apply(originalSort.value as (...values: unknown[]) => unknown, this, args);
+        },
+      });
+      result = createContracts({ maxQueryContextCharacters: 8 }).prepare(1, query, { limit: 1 });
+    } finally {
+      Object.defineProperty(Array.prototype, "sort", originalSort);
+    }
+
+    expect(result).toMatchObject({
+      diagnostics: [{ code: "query-context-too-large" }],
+      ok: false,
+    });
+    expect(sortInvocations).toBe(0);
+    expect(getterInvocations).toBe(0);
+  });
+
+  test("quotes canonical strings incrementally with exact escape and surrogate budgets", () => {
+    const source = `"\n😀\ud800`;
+    const expected = '"' + '\\"' + "\\n" + "😀" + "\\ud800" + '"';
+    const exact = copyCanonicalGraphData(source, "query", {
+      code: "test-budget",
+      maximum: expected.length,
+      message: "test budget exceeded",
+    });
+    expect(exact).toMatchObject({
+      ok: true,
+      value: { canonicalJson: expected, value: source },
+    });
+    expect(
+      copyCanonicalGraphData(source, "query", {
+        code: "test-budget",
+        maximum: expected.length - 1,
+        message: "test budget exceeded",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "test-budget" }], ok: false });
+    expect(
+      copyCanonicalGraphData("x".repeat(1_000_000), "query", {
+        code: "test-budget",
+        maximum: 8,
+        message: "test budget exceeded",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "test-budget" }], ok: false });
+  });
+
+  test("copy-only graph data validation performs no canonical string rendering", () => {
+    const charCodeAt = Object.getOwnPropertyDescriptor(String.prototype, "charCodeAt");
+    const numberToString = Object.getOwnPropertyDescriptor(Number.prototype, "toString");
+    if (
+      charCodeAt === undefined ||
+      typeof charCodeAt.value !== "function" ||
+      numberToString === undefined ||
+      typeof numberToString.value !== "function"
+    ) {
+      throw new Error("expected intrinsic string and number methods");
+    }
+    let serializerInvocations = 0;
+    let copied: ReturnType<typeof copyGraphPayload> | undefined;
+    try {
+      Object.defineProperty(String.prototype, "charCodeAt", {
+        configurable: true,
+        value: () => {
+          serializerInvocations += 1;
+          throw new Error("copy-only mode must not quote strings");
+        },
+      });
+      Object.defineProperty(Number.prototype, "toString", {
+        configurable: true,
+        value: () => {
+          serializerInvocations += 1;
+          throw new Error("copy-only mode must not render numbers");
+        },
+      });
+      copied = copyGraphPayload({ nested: ["text", 42] }, "query");
+    } finally {
+      Object.defineProperty(String.prototype, "charCodeAt", charCodeAt);
+      Object.defineProperty(Number.prototype, "toString", numberToString);
+    }
+
+    expect(serializerInvocations).toBe(0);
+    expect(copied).toEqual({ ok: true, value: { nested: ["text", 42] } });
+    if (copied?.ok) {
+      expect(Object.isFrozen(copied.value)).toBeTrue();
+      expect(Object.isFrozen((copied.value as { nested: readonly GraphData[] }).nested)).toBeTrue();
+    }
+  });
+
   test("ignores inherited toJSON pollution while binding and continuing cursors", () => {
     const objectToJson = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
     const arrayToJson = Object.getOwnPropertyDescriptor(Array.prototype, "toJSON");
+    const charCodeAt = Object.getOwnPropertyDescriptor(String.prototype, "charCodeAt");
+    const numberToString = Object.getOwnPropertyDescriptor(Number.prototype, "toString");
     let hookInvocations = 0;
     let firstCursor: ContinuationCursor | undefined;
     let secondCursor: ContinuationCursor | undefined;
@@ -578,6 +708,20 @@ describe("bounded query contracts", () => {
         value: () => {
           hookInvocations += 1;
           return ["polluted"];
+        },
+      });
+      Object.defineProperty(String.prototype, "charCodeAt", {
+        configurable: true,
+        value: () => {
+          hookInvocations += 1;
+          throw new Error("canonical serializer must use the captured intrinsic");
+        },
+      });
+      Object.defineProperty(Number.prototype, "toString", {
+        configurable: true,
+        value: () => {
+          hookInvocations += 1;
+          throw new Error("canonical serializer must use the captured intrinsic");
         },
       });
 
@@ -624,6 +768,11 @@ describe("bounded query contracts", () => {
       else Object.defineProperty(Object.prototype, "toJSON", objectToJson);
       if (arrayToJson === undefined) delete (Array.prototype as { toJSON?: unknown }).toJSON;
       else Object.defineProperty(Array.prototype, "toJSON", arrayToJson);
+      if (charCodeAt !== undefined)
+        Object.defineProperty(String.prototype, "charCodeAt", charCodeAt);
+      if (numberToString !== undefined) {
+        Object.defineProperty(Number.prototype, "toString", numberToString);
+      }
     }
 
     expect(hookInvocations).toBe(0);
