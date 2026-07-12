@@ -15,6 +15,9 @@ execution, resource-mapping, graph, query, Standard Model, and workspace-initial
 capabilities. Page reads confirm resource revisions in a second snapshot and retry a
 configured number of times if the generation changes; empty canonical state remains a
 valid empty graph because bootstrap representation belongs to the host.
+The injected initializer is responsible for atomically establishing that minimal
+canonical workspace, recognizing compatible prior initialization, and preserving any
+conflicting existing state without overwrite.
 
 Mutations use the same injected transaction execution capability. Component creation
 supports supplied or minted identities and outgoing ordinary relationships; updates
@@ -27,3 +30,6 @@ Updates, reparenting, and removal require the caller's current component revisio
 stale revisions return an explicit conflict without guessing or overwriting. All
 validation and transaction diagnostics are copied into presentation-neutral outcomes
 with canonical resource details removed.
+Resource mapping is also a containment boundary: mapper failures become one generic
+component-scoped diagnostic, and mapper messages, details, locators, and keys never
+reach application callers.

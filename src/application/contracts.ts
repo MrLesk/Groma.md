@@ -24,7 +24,11 @@ export type WorkspaceInitializationOutcome =
   | { readonly diagnostics: readonly Diagnostic[]; readonly status: "conflict" }
   | { readonly diagnostics: readonly Diagnostic[]; readonly status: "provider-failure" };
 
-/** Host-supplied atomic bootstrap; application code does not own a configuration format. */
+/**
+ * Host-supplied atomic bootstrap. Implementations must establish the minimal canonical
+ * workspace exactly once, report compatible prior initialization, and never overwrite
+ * existing or conflicting state. Application code does not own a configuration format.
+ */
 export interface WorkspaceInitializationCapability {
   initialize(): Promise<WorkspaceInitializationOutcome>;
 }

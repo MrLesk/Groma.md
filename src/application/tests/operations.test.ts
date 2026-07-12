@@ -4,6 +4,7 @@ import {
   BoundedQueryContracts,
   GraphKernel,
   TransactionEngine,
+  failure,
   parseGraphGeneration,
   parseResourceKey,
   success,
@@ -32,6 +33,7 @@ import {
   type WorkspaceInitializationOutcome,
 } from "../index.ts";
 import {
+  createStatefulSemanticInitializer,
   exerciseApplicationOperations,
   expectedApplicationOperationsTrace,
 } from "./conformance.ts";
@@ -284,6 +286,7 @@ function mutationOperations(
     engine: TransactionEngine,
   ) => Promise<TransactionOutcome>,
 ) {
+  const semanticInitialization = createStatefulSemanticInitializer();
   let entityCounter = 50;
   let relationCounter = 50;
   const graph = new GraphKernel({
@@ -315,12 +318,7 @@ function mutationOperations(
   let executions = 0;
   const api = createApplicationOperations({
     graph,
-    initialization: {
-      initialize: async () => ({
-        generation: generation(provider.generation),
-        status: "initialized",
-      }),
-    },
+    initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
     model,
     queries: new BoundedQueryContracts({
@@ -340,7 +338,7 @@ function mutationOperations(
     },
     transactionProvider: provider,
   });
-  return { api, executions: () => executions, provider };
+  return { api, executions: () => executions, initialization: semanticInitialization, provider };
 }
 
 function operations(
@@ -414,6 +412,65 @@ describe("application workspace initialization", () => {
     Object.defineProperty(accessor, "value", { enumerable: true, get: () => 1 });
     expect((await api.initialize(accessor)).ok).toBe(false);
     expect(calls).toBe(0);
+  });
+
+  test("atomically initializes absent semantic state and reports compatible repetition", async () => {
+    const semantic = createStatefulSemanticInitializer();
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: semantic.capability,
+    });
+    const first = await api.initialize({});
+    const second = await api.initialize({});
+    expect(first.ok && first.value.status).toBe("initialized");
+    expect(second.ok && second.value.status).toBe("already-initialized");
+    expect(semantic.snapshot()).toEqual({
+      components: [],
+      generation: 0,
+      relationships: [],
+      state: "initialized",
+    });
+  });
+
+  test("preserves conflicting semantic state and copies typed diagnostic details", async () => {
+    const semantic = createStatefulSemanticInitializer("conflicting");
+    const before = JSON.stringify(semantic.snapshot());
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: semantic.capability,
+    });
+    const result = await api.initialize({});
+    expect(result.ok && result.value.status).toBe("conflict");
+    if (!result.ok || result.value.status !== "conflict") return;
+    expect(result.value.diagnostics[0]?.details).toEqual({
+      attempts: 1,
+      overwritePrevented: true,
+      state: "incompatible",
+    });
+    expect(Object.isFrozen(result.value.diagnostics[0]?.details)).toBe(true);
+    expect(JSON.stringify(semantic.snapshot())).toBe(before);
+    expect(semantic.snapshot().sentinel).toBe("preserve-incompatible-workspace");
+  });
+
+  test("rejects accessor-bearing initialization diagnostic details without invoking them", async () => {
+    let invoked = false;
+    const details = {};
+    Object.defineProperty(details, "secret", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return "hidden";
+      },
+    });
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: {
+        initialize: async () =>
+          ({
+            diagnostics: [{ code: "conflict", details, message: "Conflict" }],
+            status: "conflict",
+          }) as never,
+      },
+    });
+    expect((await api.initialize({})).ok).toBe(false);
+    expect(invoked).toBe(false);
   });
 });
 
@@ -527,6 +584,32 @@ describe("application component reads", () => {
     const page = await operations(fixture).listComponents({ limit: 5 });
     expect(page.ok && page.value.items).toEqual([]);
     expect(page.ok && Number(page.value.generation)).toBe(1);
+  });
+
+  test("contains mapper failure secrets for exact, page, and mutation operations", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    const api = operations(new SnapshotFixture(), undefined, {
+      resourceMapper: {
+        resourceForComponent: () =>
+          failure({
+            code: "mapper-secret",
+            details: { locator: secret },
+            message: `Cannot map ${secret}`,
+          }),
+      },
+    });
+    const exact = await api.getComponent({ id: ids.domain, relationships: { limit: 1 } });
+    const page = await api.listComponents({ limit: 1 });
+    const mutation = await api.createComponent({
+      component: { id: "ent_00000000000000000000000000000009" },
+    });
+    for (const outcome of [exact, page, mutation]) {
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+      expect(JSON.stringify(outcome)).not.toContain("mapper-secret");
+      const diagnostics = "diagnostics" in outcome ? outcome.diagnostics : [];
+      expect(diagnostics[0]?.code).toBe("component-resource-unavailable");
+      expect(diagnostics[0]?.details).toHaveProperty("componentId");
+    }
   });
 });
 

@@ -3,7 +3,14 @@ import type {
   ApplicationOperations,
   ComponentPage,
   ExactComponentRead,
+  WorkspaceInitializationCapability,
 } from "../index.ts";
+import { parseGraphGeneration, type GraphData } from "../../core/index.ts";
+import type {
+  StandardComponent,
+  StandardItem,
+  StandardRelationship,
+} from "../../standard-model/index.ts";
 
 export const conformanceIds = Object.freeze({
   module: "ent_00000000000000000000000000000069",
@@ -16,20 +23,156 @@ export const conformanceIds = Object.freeze({
   sibling: "rel_000000000000000000000000000000ca",
 } as const);
 
+export type SemanticInitializationMode = "absent" | "conflicting";
+
+export interface SemanticInitializationSnapshot {
+  readonly components: readonly [];
+  readonly generation?: number;
+  readonly relationships: readonly [];
+  readonly sentinel?: string;
+  readonly state: "absent" | "conflicting" | "initialized";
+}
+
+export function createStatefulSemanticInitializer(mode: SemanticInitializationMode = "absent"): {
+  readonly capability: WorkspaceInitializationCapability;
+  readonly snapshot: () => SemanticInitializationSnapshot;
+} {
+  const generation = parseGraphGeneration(0);
+  if (!generation.ok) throw new Error("Semantic initializer generation is invalid");
+  let state: SemanticInitializationSnapshot = Object.freeze(
+    mode === "conflicting"
+      ? {
+          components: Object.freeze([] as const),
+          relationships: Object.freeze([] as const),
+          sentinel: "preserve-incompatible-workspace",
+          state: "conflicting" as const,
+        }
+      : {
+          components: Object.freeze([] as const),
+          relationships: Object.freeze([] as const),
+          state: "absent" as const,
+        },
+  );
+  const capability: WorkspaceInitializationCapability = Object.freeze({
+    initialize: async () => {
+      if (state.state === "conflicting") {
+        return Object.freeze({
+          diagnostics: Object.freeze([
+            Object.freeze({
+              code: "workspace-initialization-conflict",
+              details: Object.freeze({
+                attempts: 1,
+                overwritePrevented: true,
+                state: "incompatible",
+              }),
+              message: "Existing workspace state is incompatible with initialization",
+            }),
+          ]),
+          status: "conflict" as const,
+        });
+      }
+      if (state.state === "initialized") {
+        return Object.freeze({
+          generation: generation.value,
+          status: "already-initialized" as const,
+        });
+      }
+      state = Object.freeze({
+        components: Object.freeze([] as const),
+        generation: Number(generation.value),
+        relationships: Object.freeze([] as const),
+        state: "initialized" as const,
+      });
+      return Object.freeze({ generation: generation.value, status: "initialized" as const });
+    },
+  });
+  return Object.freeze({ capability, snapshot: () => state });
+}
+
+export interface StandardItemTrace {
+  readonly description?: string;
+  readonly extensions: Readonly<Record<string, GraphData>>;
+  readonly id: string;
+  readonly name?: string;
+}
+
+export interface ComponentSemanticsTrace {
+  readonly actions?: readonly StandardItemTrace[];
+  readonly desired?: string;
+  readonly extensions: Readonly<Record<string, GraphData>>;
+  readonly id: string;
+  readonly inputs?: readonly StandardItemTrace[];
+  readonly intent?: string;
+  readonly lifecycle?: string;
+  readonly name?: string;
+  readonly outputs?: readonly StandardItemTrace[];
+  readonly parent?: string;
+  readonly type?: string;
+}
+
+export interface RelationshipSemanticsTrace {
+  readonly description?: string;
+  readonly extensions: Readonly<Record<string, GraphData>>;
+  readonly id: string;
+  readonly source: string;
+  readonly target: string;
+  readonly type: string;
+}
+
+function extensions(
+  value: Readonly<Record<string, GraphData>>,
+): Readonly<Record<string, GraphData>> {
+  const copied: Record<string, GraphData> = {};
+  for (const key of Object.keys(value).sort()) copied[key] = value[key]!;
+  return copied;
+}
+
+function item(item: StandardItem): StandardItemTrace {
+  return {
+    ...(item.description === undefined ? {} : { description: item.description }),
+    extensions: extensions(item.extensions),
+    id: item.id,
+    ...(item.name === undefined ? {} : { name: item.name }),
+  };
+}
+
+export function projectComponentSemantics(component: StandardComponent): ComponentSemanticsTrace {
+  return {
+    ...(component.actions === undefined ? {} : { actions: component.actions.map(item) }),
+    ...(component.desired === undefined ? {} : { desired: component.desired }),
+    extensions: extensions(component.extensions),
+    id: component.id,
+    ...(component.inputs === undefined ? {} : { inputs: component.inputs.map(item) }),
+    ...(component.intent === undefined ? {} : { intent: component.intent }),
+    ...(component.lifecycle === undefined ? {} : { lifecycle: component.lifecycle }),
+    ...(component.name === undefined ? {} : { name: component.name }),
+    ...(component.outputs === undefined ? {} : { outputs: component.outputs.map(item) }),
+    ...(component.parent === undefined ? {} : { parent: component.parent }),
+    ...(component.type === undefined ? {} : { type: component.type }),
+  };
+}
+
+export function projectRelationshipSemantics(
+  relationship: StandardRelationship,
+): RelationshipSemanticsTrace {
+  return {
+    ...(relationship.description === undefined ? {} : { description: relationship.description }),
+    extensions: extensions(relationship.extensions),
+    id: relationship.id,
+    source: relationship.source,
+    target: relationship.target,
+    type: relationship.type,
+  };
+}
+
 export interface ApplicationOperationsTrace {
   readonly final: {
-    readonly components: readonly {
-      readonly extensionKeys: readonly string[];
-      readonly id: string;
-      readonly intent?: string;
-      readonly parent?: string;
-      readonly type?: string;
-    }[];
+    readonly components: readonly ComponentSemanticsTrace[];
     readonly generation: number;
     readonly relationshipCount: number;
     readonly revisionsPresent: boolean;
   };
-  readonly initialization: string;
+  readonly initialization: readonly string[];
   readonly mutations: readonly {
     readonly generation?: number;
     readonly id: string;
@@ -47,11 +190,8 @@ export interface ApplicationOperationsTrace {
     readonly rootIds: readonly string[];
   };
   readonly richRead: {
-    readonly actionIds: readonly string[];
-    readonly extensionKeys: readonly string[];
-    readonly inputIds: readonly string[];
-    readonly intent?: string;
-    readonly outputIds: readonly string[];
+    readonly component: ComponentSemanticsTrace;
+    readonly relationships: readonly RelationshipSemanticsTrace[];
     readonly revisionPresent: boolean;
   };
   readonly stale: {
@@ -64,28 +204,84 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
   final: {
     components: [
       {
-        extensionKeys: ["example.dev/owner"],
+        actions: [
+          {
+            description: "Review architecture",
+            extensions: { "example.dev/cadence": "continuous" },
+            id: "review",
+            name: "Review",
+          },
+        ],
+        desired: "active",
+        extensions: { "example.dev/owner": "architecture" },
         id: conformanceIds.rootA,
+        inputs: [
+          {
+            description: "Observed facts",
+            extensions: { "example.dev/source": "scanner" },
+            id: "evidence",
+            name: "Evidence",
+          },
+        ],
         intent: "Own commerce architecture.",
+        lifecycle: "active",
+        name: "Commerce",
+        outputs: [
+          {
+            description: "Architectural decisions",
+            extensions: { "example.dev/format": "record" },
+            id: "decisions",
+            name: "Decisions",
+          },
+        ],
         type: "domain",
       },
-      { extensionKeys: [], id: conformanceIds.rootB, type: "domain" },
+      { extensions: {}, id: conformanceIds.rootB, type: "domain" },
       {
-        extensionKeys: [],
+        actions: [
+          {
+            description: "Submit an order",
+            extensions: { "example.dev/channel": "web" },
+            id: "submit",
+            name: "Submit",
+          },
+        ],
+        desired: "evolving",
+        extensions: { "example.dev/team": "commerce" },
         id: conformanceIds.serviceA,
+        inputs: [
+          {
+            description: "Current cart",
+            extensions: { "example.dev/format": "json" },
+            id: "cart",
+            name: "Cart",
+          },
+        ],
         intent: "Coordinate checkout.",
+        lifecycle: "active",
+        name: "Checkout",
+        outputs: [
+          {
+            description: "Accepted order",
+            extensions: { "example.dev/durability": "canonical" },
+            id: "order",
+            name: "Order",
+          },
+        ],
         parent: conformanceIds.rootA,
         type: "service",
       },
       {
-        extensionKeys: ["example.dev/tier"],
+        extensions: { "example.dev/tier": 1 },
         id: conformanceIds.serviceB,
         intent: "Provide identity services.",
+        name: "Identity",
+        outputs: [{ extensions: {}, id: "identity", name: "Identity" }],
         parent: conformanceIds.rootB,
         type: "service",
       },
       {
-        extensionKeys: [],
+        extensions: {},
         id: conformanceIds.nestedService,
         parent: conformanceIds.serviceA,
         type: "service",
@@ -95,7 +291,7 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
     relationshipCount: 0,
     revisionsPresent: true,
   },
-  initialization: "initialized",
+  initialization: ["initialized", "already-initialized"],
   mutations: [
     { generation: 1, id: "create-root-a", revisionPresent: true, status: "committed" },
     { generation: 2, id: "create-root-b", revisionPresent: true, status: "committed" },
@@ -136,11 +332,58 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
     rootIds: [conformanceIds.rootA, conformanceIds.rootB],
   },
   richRead: {
-    actionIds: ["review"],
-    extensionKeys: ["example.dev/owner"],
-    inputIds: ["evidence"],
-    intent: "Own commerce architecture.",
-    outputIds: ["decisions"],
+    component: {
+      actions: [
+        {
+          description: "Submit an order",
+          extensions: { "example.dev/channel": "web" },
+          id: "submit",
+          name: "Submit",
+        },
+      ],
+      desired: "evolving",
+      extensions: { "example.dev/team": "commerce" },
+      id: conformanceIds.serviceA,
+      inputs: [
+        {
+          description: "Current cart",
+          extensions: { "example.dev/format": "json" },
+          id: "cart",
+          name: "Cart",
+        },
+      ],
+      intent: "Coordinate checkout.",
+      lifecycle: "active",
+      name: "Checkout",
+      outputs: [
+        {
+          description: "Accepted order",
+          extensions: { "example.dev/durability": "canonical" },
+          id: "order",
+          name: "Order",
+        },
+      ],
+      parent: conformanceIds.rootA,
+      type: "service",
+    },
+    relationships: [
+      {
+        description: "Cross-branch dependency",
+        extensions: { "example.dev/rationale": "boundary" },
+        id: conformanceIds.crossBranch,
+        source: conformanceIds.serviceA,
+        target: conformanceIds.rootB,
+        type: "depends-on",
+      },
+      {
+        description: "Coordinate identity",
+        extensions: { "example.dev/strength": "required" },
+        id: conformanceIds.sibling,
+        source: conformanceIds.serviceA,
+        target: conformanceIds.serviceB,
+        type: "coordinates-with",
+      },
+    ],
     revisionPresent: true,
   },
   stale: { status: "conflict", unchangedIntent: "Provide identity services." },
@@ -191,6 +434,7 @@ export async function exerciseApplicationOperations(
   api: ApplicationOperations,
 ): Promise<ApplicationOperationsTrace> {
   const initialization = read(await api.initialize({}), "initialize");
+  const repeatedInitialization = read(await api.initialize({}), "repeat initialize");
   const mutations: {
     generation?: number;
     id: string;
@@ -211,19 +455,40 @@ export async function exerciseApplicationOperations(
     return result;
   }
 
-  const rootA = record(
+  record(
     "create-root-a",
     await api.createComponent({
       component: {
         "example.dev/owner": "architecture",
-        actions: [{ id: "review", description: "Review architecture" }],
+        actions: [
+          {
+            "example.dev/cadence": "continuous",
+            description: "Review architecture",
+            id: "review",
+            name: "Review",
+          },
+        ],
         desired: "active",
         id: conformanceIds.rootA,
-        inputs: [{ id: "evidence", name: "Evidence" }],
+        inputs: [
+          {
+            "example.dev/source": "scanner",
+            description: "Observed facts",
+            id: "evidence",
+            name: "Evidence",
+          },
+        ],
         intent: "Own commerce architecture.",
         lifecycle: "active",
         name: "Commerce",
-        outputs: [{ id: "decisions", name: "Decisions" }],
+        outputs: [
+          {
+            "example.dev/format": "record",
+            description: "Architectural decisions",
+            id: "decisions",
+            name: "Decisions",
+          },
+        ],
         type: "domain",
       },
     }),
@@ -247,13 +512,42 @@ export async function exerciseApplicationOperations(
     "create-service-a",
     await api.createComponent({
       component: {
+        "example.dev/team": "commerce",
+        actions: [
+          {
+            "example.dev/channel": "web",
+            description: "Submit an order",
+            id: "submit",
+            name: "Submit",
+          },
+        ],
+        desired: "evolving",
         id: conformanceIds.serviceA,
+        inputs: [
+          {
+            "example.dev/format": "json",
+            description: "Current cart",
+            id: "cart",
+            name: "Cart",
+          },
+        ],
         intent: "Coordinate checkout.",
+        lifecycle: "active",
+        name: "Checkout",
+        outputs: [
+          {
+            "example.dev/durability": "canonical",
+            description: "Accepted order",
+            id: "order",
+            name: "Order",
+          },
+        ],
         parent: conformanceIds.rootA,
         type: "service",
       },
       relationships: [
         {
+          "example.dev/rationale": "boundary",
           description: "Cross-branch dependency",
           id: conformanceIds.crossBranch,
           target: conformanceIds.rootB,
@@ -261,6 +555,7 @@ export async function exerciseApplicationOperations(
         },
         {
           "example.dev/strength": "required",
+          description: "Coordinate identity",
           id: conformanceIds.sibling,
           target: conformanceIds.serviceB,
           type: "coordinates-with",
@@ -387,18 +682,12 @@ export async function exerciseApplicationOperations(
 
   return {
     final: {
-      components: finalPage.items.map(({ component }) => ({
-        extensionKeys: Object.keys(component.extensions).sort(),
-        id: component.id,
-        ...(component.intent === undefined ? {} : { intent: component.intent }),
-        ...(component.parent === undefined ? {} : { parent: component.parent }),
-        ...(component.type === undefined ? {} : { type: component.type }),
-      })),
+      components: finalPage.items.map(({ component }) => projectComponentSemantics(component)),
       generation: Number(finalPage.generation),
       relationshipCount: finalRelationRead.relationships.items.length,
       revisionsPresent: finalPage.items.every((item) => item.revision.length > 0),
     },
-    initialization: initialization.status,
+    initialization: [initialization.status, repeatedInitialization.status],
     mutations,
     pages: {
       allHasMore: allPages.map((page) => page.hasMore),
@@ -413,12 +702,11 @@ export async function exerciseApplicationOperations(
       rootIds: [...rootFirst.items, ...rootSecond.items].map((item) => item.component.id),
     },
     richRead: {
-      actionIds: rootA.value.actions?.map((item) => item.id) ?? [],
-      extensionKeys: Object.keys(rootA.value.extensions).sort(),
-      inputIds: rootA.value.inputs?.map((item) => item.id) ?? [],
-      ...(rootA.value.intent === undefined ? {} : { intent: rootA.value.intent }),
-      outputIds: rootA.value.outputs?.map((item) => item.id) ?? [],
-      revisionPresent: revision(rootA).length > 0,
+      component: projectComponentSemantics(exactFirst.item.component),
+      relationships: [exactFirst, exactSecond].flatMap((entry) =>
+        entry.relationships.items.map((view) => projectRelationshipSemantics(view.relationship)),
+      ),
+      revisionPresent: exactFirst.item.revision.length > 0,
     },
     stale: {
       ...(unchanged.item.component.intent === undefined

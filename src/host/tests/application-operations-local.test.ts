@@ -6,15 +6,16 @@ import path from "node:path";
 import { createApplicationOperations } from "../../application/index.ts";
 import {
   conformanceIds,
+  createStatefulSemanticInitializer,
   exerciseApplicationOperations,
   expectedApplicationOperationsTrace,
+  projectComponentSemantics,
 } from "../../application/tests/conformance.ts";
 import {
   BoundedQueryContracts,
   GraphKernel,
   TransactionEngine,
   parseEntityId,
-  parseGraphGeneration,
   parseResourceKey,
 } from "../../core/index.ts";
 import {
@@ -72,8 +73,7 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
     }),
   );
   if (!registered.ok) throw new Error("Standard Model invariant registration failed");
-  const initialGeneration = parseGraphGeneration(0);
-  if (!initialGeneration.ok) throw new Error("Initial graph generation is invalid");
+  const semanticInitialization = createStatefulSemanticInitializer();
   let entityCounter = 1_000;
   let relationCounter = 1_000;
   const graph = new GraphKernel({
@@ -85,9 +85,7 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
   });
   const api = createApplicationOperations({
     graph,
-    initialization: {
-      initialize: async () => ({ generation: initialGeneration.value, status: "initialized" }),
-    },
+    initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
     model,
     queries: new BoundedQueryContracts({
@@ -107,7 +105,7 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
     transactionExecution: engine,
     transactionProvider: provider,
   });
-  return { api, provider, resources, store };
+  return { api, initialization: semanticInitialization, provider, resources, store };
 }
 
 describe("official local application operations composition", () => {
@@ -116,6 +114,12 @@ describe("official local application operations composition", () => {
     const first = await composition(workspace);
     const trace = await exerciseApplicationOperations(first.api);
     expect(trace).toEqual(expectedApplicationOperationsTrace);
+    expect(first.initialization.snapshot()).toEqual({
+      components: [],
+      generation: 0,
+      relationships: [],
+      state: "initialized",
+    });
 
     const restarted = await composition(workspace);
     const finalPage = await restarted.api.listComponents({ limit: 20 });
@@ -123,13 +127,9 @@ describe("official local application operations composition", () => {
     if (!finalPage.ok) return;
     expect(Number(finalPage.value.generation)).toBe(trace.final.generation);
     expect(finalPage.value.items.every((item) => item.revision.length > 0)).toBe(true);
-    const restartedComponents = finalPage.value.items.map(({ component }) => ({
-      extensionKeys: Object.keys(component.extensions).sort(),
-      id: String(component.id),
-      ...(component.intent === undefined ? {} : { intent: component.intent }),
-      ...(component.parent === undefined ? {} : { parent: String(component.parent) }),
-      ...(component.type === undefined ? {} : { type: component.type }),
-    }));
+    const restartedComponents = finalPage.value.items.map(({ component }) =>
+      projectComponentSemantics(component),
+    );
     expect(JSON.stringify(restartedComponents)).toBe(JSON.stringify(trace.final.components));
     expect(finalPage.value.items.map((item) => String(item.component.id))).toEqual([
       conformanceIds.rootA,

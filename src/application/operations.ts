@@ -82,6 +82,40 @@ function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
 
+function componentResourceDiagnostic(componentId: string): Diagnostic {
+  return Object.freeze({
+    code: "component-resource-unavailable",
+    details: Object.freeze({ componentId }),
+    message: "The canonical resource for the component could not be resolved",
+  });
+}
+
+function componentResource(
+  componentId: string,
+  options: ApplicationOperationsOptions,
+): Result<ResourceKey> {
+  let value: unknown;
+  try {
+    value = options.resourceMapper.resourceForComponent(componentId);
+  } catch {
+    return failure(componentResourceDiagnostic(componentId));
+  }
+  const result = inspectExactRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-component-resource-result",
+    "Component resource mapping result",
+  );
+  if (!result.ok || result.value.ok !== true) {
+    return failure(componentResourceDiagnostic(componentId));
+  }
+  const resource = parseResourceKey(result.value.value);
+  return resource.ok ? resource : failure(componentResourceDiagnostic(componentId));
+}
+
 function validatePositiveBound(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name} must be a positive safe integer`);
@@ -184,14 +218,21 @@ function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitial
   for (let index = 0; index < values.value.length; index += 1) {
     const entry = inspectExactRecord(
       values.value[index],
-      [["code", "message"]],
+      [
+        ["code", "message"],
+        ["code", "details", "message"],
+      ],
       "invalid-workspace-initialization-outcome",
       "Workspace initialization diagnostic",
     );
     if (
       !entry.ok ||
       typeof entry.value.code !== "string" ||
-      typeof entry.value.message !== "string"
+      entry.value.code.length === 0 ||
+      entry.value.code.length > 4_096 ||
+      typeof entry.value.message !== "string" ||
+      entry.value.message.length === 0 ||
+      entry.value.message.length > 4_096
     ) {
       return failure(
         diagnostic(
@@ -200,7 +241,55 @@ function validatedInitializationOutcome(value: unknown): Result<WorkspaceInitial
         ),
       );
     }
-    diagnostics[index] = diagnostic(entry.value.code, entry.value.message);
+    let details: Readonly<Record<string, string | number | boolean>> | undefined;
+    if ("details" in entry.value) {
+      if (
+        typeof entry.value.details !== "object" ||
+        entry.value.details === null ||
+        Array.isArray(entry.value.details)
+      ) {
+        return failure(
+          diagnostic(
+            "invalid-workspace-initialization-outcome",
+            "Workspace initialization diagnostic details are malformed",
+          ),
+        );
+      }
+      const entries = Object.entries(entry.value.details);
+      if (entries.length > 64) {
+        return failure(
+          diagnostic(
+            "invalid-workspace-initialization-outcome",
+            "Workspace initialization diagnostic details are malformed",
+          ),
+        );
+      }
+      const copiedDetails = Object.create(null) as Record<string, string | number | boolean>;
+      for (let detailIndex = 0; detailIndex < entries.length; detailIndex += 1) {
+        const [key, detail] = entries[detailIndex]!;
+        if (
+          key.length > 4_096 ||
+          (typeof detail !== "string" &&
+            (typeof detail !== "number" || !Number.isFinite(detail)) &&
+            typeof detail !== "boolean") ||
+          (typeof detail === "string" && detail.length > 4_096)
+        ) {
+          return failure(
+            diagnostic(
+              "invalid-workspace-initialization-outcome",
+              "Workspace initialization diagnostic details are malformed",
+            ),
+          );
+        }
+        Object.defineProperty(copiedDetails, key, { enumerable: true, value: detail });
+      }
+      details = Object.freeze(copiedDetails);
+    }
+    diagnostics[index] = Object.freeze({
+      code: entry.value.code,
+      ...(details === undefined ? {} : { details }),
+      message: entry.value.message,
+    });
   }
   return success(
     Object.freeze({
@@ -457,9 +546,7 @@ async function componentPage(
     if (!initialPage.ok) return initialPage;
     const resources: ResourceKey[] = [];
     for (let index = 0; index < initialPage.value.items.length; index += 1) {
-      const mapped = options.resourceMapper.resourceForComponent(
-        initialPage.value.items[index]!.id,
-      );
+      const mapped = componentResource(initialPage.value.items[index]!.id, options);
       if (!mapped.ok) return mapped;
       resources[index] = mapped.value;
     }
@@ -1081,7 +1168,7 @@ export function createApplicationOperations(
       "Outgoing relationship page request",
     );
     if (!relationshipsRequest.ok) return relationshipsRequest;
-    const mapped = options.resourceMapper.resourceForComponent(id.value);
+    const mapped = componentResource(id.value, options);
     if (!mapped.ok) return mapped;
     const read = await snapshot(Object.freeze([mapped.value]), options);
     if (!read.ok) return read;
@@ -1127,7 +1214,7 @@ export function createApplicationOperations(
     if (!minted.ok) return rejected(...minted.diagnostics);
     const component = options.model.parse(minted.value.entity);
     if (!component.ok) return rejected(...component.diagnostics);
-    const mapped = options.resourceMapper.resourceForComponent(component.value.id);
+    const mapped = componentResource(component.value.id, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
     const current = await snapshot(Object.freeze([mapped.value]), options);
     if (!current.ok) return snapshotFailure(current.diagnostics);
@@ -1231,7 +1318,7 @@ export function createApplicationOperations(
     if (!id.ok) return rejected(...id.diagnostics);
     const expectedRevision = parseContentRevision(expectedRevisionValue);
     if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
-    const mapped = options.resourceMapper.resourceForComponent(id.value);
+    const mapped = componentResource(id.value, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
     const current = await snapshot(Object.freeze([mapped.value]), options);
     if (!current.ok) return snapshotFailure(current.diagnostics);
@@ -1387,7 +1474,7 @@ export function createApplicationOperations(
     if (!id.ok) return rejected(...id.diagnostics);
     const expectedRevision = parseContentRevision(validated.value.expectedRevision);
     if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
-    const mapped = options.resourceMapper.resourceForComponent(id.value);
+    const mapped = componentResource(id.value, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
     const current = await snapshot(Object.freeze([mapped.value]), options);
     if (!current.ok) return snapshotFailure(current.diagnostics);

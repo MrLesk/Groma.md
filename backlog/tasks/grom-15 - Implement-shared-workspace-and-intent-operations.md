@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 21:22'
+updated_date: '2026-07-12 21:38'
 labels:
   - operations
 milestone: m-1
@@ -65,4 +65,12 @@ Implementation completed in three reviewable slices. The application boundary no
 A reusable provider-neutral conformance workflow exercises two roots, recursive same- and mixed-type containment, sparse and rich meaning, namespaced extensions and items, a cross-branch outgoing relation, all page families and continuation, sparse update, valid reparent, stale conflict/no change, explicit relationship cleanup, and leaf removal. The same normalized trace passes with the in-memory TransactionEngine plus registered Standard invariant and with the official local composition of LocalResourceProvider, MarkdownIntentStore, MarkdownIntentTransactionAdapter, LocalTransactionJournal, TransactionEngine, graph/query contracts, and Standard invariant. A fresh composition over the same local workspace confirms generation 10, identical five-component semantics and hierarchy, stable IDs, present revisions, zero remaining relationships, and five canonical Markdown documents. The workspace initializer remains an injected semantic test capability; no production configuration bytes or GROM-16 format were introduced.
 
 Validation evidence: focused application+host tests 18 passed with 96 assertions; full bun run check 283 passed with 1,425 assertions including format, typecheck, architecture boundaries, build, and smoke; bun run check:targets verified Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; direct src/application/index.ts compilation succeeded for bun-darwin-arm64, bun-linux-x64-baseline, bun-windows-x64-baseline, and bun-windows-aarch64. git diff --check and cumulative application-boundary import/leak review passed.
+
+Specification-gap closure: initialization conformance now uses a reusable stateful atomic semantic fixture. It transitions absent state to a minimal empty canonical semantic workspace at generation 0, reports already-initialized on repetition, and reports conflict while preserving an incompatible sentinel unchanged. Both in-memory and official local-composition workflows exercise initialized then already-initialized; application tests separately prove conflict non-overwrite. The production capability remains representation-neutral and its contract now requires atomic establishment and preservation of conflicts.
+
+Component resource mapping is now a strict diagnostic containment boundary. Every exact, page, create, update, reparent, and remove mapping call validates the capability result and replaces any failure, malformed result, or throw with one generic component-scoped diagnostic. Mapper messages, details, resource keys, and locators cannot escape. Initialization outcome validation now copies bounded optional Diagnostic details containing string, finite-number, and boolean scalars while rejecting malformed or accessor-bearing details without invocation.
+
+Equivalence evidence now projects complete Standard Model semantics. The reusable trace reads the rich nested service back through getComponent and compares name, type, parent, intent, lifecycle, desired state, all input/output/action IDs, names, descriptions and extension values, component extension values, and both outgoing relationship descriptions and extension values before cleanup. Restart verification projects the same complete semantics for every remaining component, plus hierarchy, stable identities, present revisions, generation 10, and zero relationships.
+
+Superseding validation evidence: focused application+host tests 22 passed with 119 assertions; full bun run check 287 passed with 1,448 assertions; bun run check:targets passed all four targets; direct src/application/index.ts compilation passed Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows aarch64; architecture boundaries, formatting, typecheck, smoke, and git diff --check passed.
 <!-- SECTION:NOTES:END -->
