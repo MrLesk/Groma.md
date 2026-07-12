@@ -99,7 +99,7 @@ async function harness(
   resourceFaultInjector?: (
     phase: LocalResourceFaultPhase,
     context?: LocalResourceFaultContext,
-  ) => void,
+  ) => void | Promise<void>,
   defaultStalePolicy = false,
 ) {
   const resources = await createLocalResourceProvider({
@@ -739,6 +739,120 @@ describe("local transaction journal", () => {
     expect(settled.generation).toBe(1);
     expect(settled.revisions.filter((entry) => entry.revision !== null)).toHaveLength(2);
     expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+  });
+
+  test("reuses an idle snapshot lease after a one-shot release failure", async () => {
+    const roots = await workspace();
+    let releaseCalls = 0;
+    const active = await harness(roots, undefined, (phase) => {
+      if (phase !== "coordination-release") return;
+      releaseCalls += 1;
+      if (releaseCalls === 1) throw new Error("interrupt idle snapshot lease release");
+    });
+
+    await expect(active.provider.snapshot([])).rejects.toThrow();
+    expect(releaseCalls).toBe(1);
+    expect(await active.provider.snapshot([])).toMatchObject({ generation: 0 });
+    expect(releaseCalls).toBe(2);
+  });
+
+  test("does not share a retained snapshot lease with a concurrent caller", async () => {
+    const roots = await workspace();
+    let releaseCalls = 0;
+    let holdRead = false;
+    let readHeld = false;
+    let readStartedResolve!: () => void;
+    let releaseReadResolve!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      readStartedResolve = resolve;
+    });
+    const releaseRead = new Promise<void>((resolve) => {
+      releaseReadResolve = resolve;
+    });
+    const active = await harness(roots, undefined, async (phase) => {
+      if (phase === "coordination-release") {
+        releaseCalls += 1;
+        if (releaseCalls === 1) throw new Error("retain the idle snapshot lease");
+      }
+      if (holdRead && !readHeld && phase === "read") {
+        readHeld = true;
+        readStartedResolve();
+        await releaseRead;
+      }
+    });
+    await expect(active.provider.snapshot([])).rejects.toThrow();
+
+    holdRead = true;
+    const retry = active.provider.snapshot([]);
+    await within(readStarted, 5_000, "retained snapshot lease handoff");
+    try {
+      await expect(active.provider.snapshot([])).rejects.toThrow();
+    } finally {
+      releaseReadResolve();
+    }
+    expect(await retry).toMatchObject({ generation: 0 });
+    expect(releaseCalls).toBe(2);
+  });
+
+  test("retains the startup lease when release fails after child-process recovery", async () => {
+    const roots = await workspace();
+    await crashTransactionProcess(roots, "create", "after-rename", localTransactionStateLocator, 2);
+
+    let releaseCalls = 0;
+    const restarted = await harness(
+      roots,
+      undefined,
+      (phase) => {
+        if (phase !== "coordination-release") return;
+        releaseCalls += 1;
+        if (releaseCalls === 1) throw new Error("interrupt startup lease release");
+      },
+      true,
+    );
+    const requested = [resourceFor(entityId(1)), resourceFor(entityId(2))];
+    await expect(restarted.provider.snapshot(requested)).rejects.toThrow();
+    expect(releaseCalls).toBe(1);
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ generation: 1, phase: "idle" });
+
+    const settled = await restarted.provider.snapshot(requested);
+    expect(settled.generation).toBe(1);
+    expect(settled.revisions.filter((entry) => entry.revision !== null)).toHaveLength(2);
+    expect(releaseCalls).toBe(2);
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+
+    const loaded = await restarted.store.load();
+    if (!loaded.ok) throw new Error("expected recovered startup graph");
+    const shopDocument = loaded.value.documents.find(
+      (document) => document.entity.id === entityId(1),
+    );
+    if (shopDocument === undefined) throw new Error("recovered startup graph is missing Shop");
+    expect(
+      await restarted.engine.execute({
+        affected: { entities: [entityId(1)], relations: [] },
+        context: {
+          ownership: { owner: "curated", plane: "intent" },
+          pinnedComponentIds: [],
+        },
+        expectedRevisions: [{ expected: shopDocument.revision, resource: shopDocument.resource }],
+        mutation: {
+          components: [
+            {
+              id: entityId(1),
+              patch: { intent: "Continue after startup lease recovery." },
+              type: "patch",
+            },
+          ],
+          relationships: [],
+        },
+      }),
+    ).toMatchObject({ generation: 2, status: "committed" });
   });
 
   test("rejects optimistic races and preserves a projection watermark through settlement", async () => {

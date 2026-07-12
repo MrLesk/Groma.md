@@ -97,6 +97,12 @@ discarded through that token record before recovery returns indeterminate, inclu
 the snapshot/startup path. Successfully discarded handle slots are cleared, but the
 record survives a cleanup failure for retry; handle-only records are removed after
 confirmed cleanup, while lease-bearing records remain until lease release succeeds.
+Snapshot/startup coordination likewise retains an opaque lease in volatile journal
+state when pre-move release fails. The next snapshot atomically takes that lease before
+its first asynchronous operation and retries release after settlement; a concurrent
+caller cannot share the in-flight lease and instead follows normal contended
+acquisition. Confirmed release clears the retained lease. Nothing volatile enters the
+deterministic transaction-state record.
 Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes

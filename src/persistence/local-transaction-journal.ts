@@ -871,6 +871,7 @@ export function createLocalTransactionJournal(
 ): TransactionProvider {
   const limits = bounds(options.bounds);
   const live = new Map<string, LivePreparation>();
+  let retainedSnapshotLease: LocalCoordinationLease | undefined;
   const readExact = async (locator: WorkspaceResourceLocator, maximum = limits.maxJournalBytes) => {
     const read = await options.resources.read({ locator, maxBytes: maximum });
     if (!read.ok) {
@@ -1063,15 +1064,45 @@ export function createLocalTransactionJournal(
     if (state.phase === "prepared") return rollback(state);
     return rollForward(state);
   };
-
-  const snapshot = async (
-    requested: readonly ResourceKey[],
-  ): Promise<TransactionProviderSnapshotInput> => {
+  const retainSnapshotLease = (lease: LocalCoordinationLease): void => {
+    if (retainedSnapshotLease === undefined || retainedSnapshotLease === lease) {
+      retainedSnapshotLease = lease;
+      return;
+    }
+    throw new Error("Multiple local transaction snapshot leases could not be released");
+  };
+  const acquireSnapshotLease = async (): Promise<LocalCoordinationLease> => {
+    const retained = retainedSnapshotLease;
+    if (retained !== undefined) {
+      retainedSnapshotLease = undefined;
+      return retained;
+    }
     const acquired = await options.resources.acquireCoordination({
       context: "local-machine",
       locator: transactionCoordinationLocator,
     });
     if (!acquired.ok) throw new Error(acquired.diagnostics[0]?.message);
+    return acquired.value;
+  };
+  const releaseSnapshotLease = async (lease: LocalCoordinationLease): Promise<void> => {
+    let released: Result<void>;
+    try {
+      released = await options.resources.releaseCoordination(lease);
+    } catch (error) {
+      retainSnapshotLease(lease);
+      throw error;
+    }
+    if (!released.ok) {
+      retainSnapshotLease(lease);
+      throw new Error(released.diagnostics[0]?.message);
+    }
+    if (retainedSnapshotLease === lease) retainedSnapshotLease = undefined;
+  };
+
+  const snapshot = async (
+    requested: readonly ResourceKey[],
+  ): Promise<TransactionProviderSnapshotInput> => {
+    const lease = await acquireSnapshotLease();
     try {
       const settled = await settle(undefined);
       if (settled?.status === "indeterminate")
@@ -1092,8 +1123,7 @@ export function createLocalTransactionJournal(
         state: loaded.value.state,
       });
     } finally {
-      const released = await options.resources.releaseCoordination(acquired.value);
-      if (!released.ok) throw new Error(released.diagnostics[0]?.message);
+      await releaseSnapshotLease(lease);
     }
   };
 
