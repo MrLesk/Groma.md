@@ -18,9 +18,11 @@ import path from "node:path";
 
 import type { Result } from "../../core/result.ts";
 import {
+  allowsCustomLocalCoordinationRoot,
   type LocalResourceFaultPhase,
   createLocalResourceProvider,
   localResourceProviderCeilings,
+  shouldSyncLocalCoordinationDirectory,
 } from "../local-resource-provider.ts";
 import {
   type ResourceEnumerationPage,
@@ -40,14 +42,38 @@ afterEach(async () => {
   );
 });
 
-async function fixture(): Promise<{ coordinationRoot: string; workspaceRoot: string }> {
+interface TestRoots {
+  readonly coordinationRoot?: string;
+  readonly workspaceRoot: string;
+}
+
+async function fixture(): Promise<TestRoots> {
   const root = await mkdtemp(path.join(tmpdir(), "groma-resource-provider-"));
   temporaryRoots.push(root);
   const workspaceRoot = path.join(root, "workspace");
-  const coordinationRoot = path.join(root, "coordination");
   await mkdir(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
+  const coordinationRoot = path.join(root, "coordination");
   await mkdir(coordinationRoot, { mode: 0o700 });
   return { coordinationRoot, workspaceRoot };
+}
+
+function requiredCoordinationRoot(roots: TestRoots): string {
+  if (roots.coordinationRoot === undefined) {
+    throw new Error("test requires a custom coordination root");
+  }
+  return roots.coordinationRoot;
+}
+
+function coordinationChildArguments(
+  roots: TestRoots,
+  resourceLocator: WorkspaceResourceLocator,
+): string[] {
+  return [
+    roots.workspaceRoot,
+    resourceLocator,
+    ...(roots.coordinationRoot === undefined ? [] : [roots.coordinationRoot]),
+  ];
 }
 
 async function coordinationHash(
@@ -694,6 +720,15 @@ describe("staged atomic replacement", () => {
 });
 
 describe("same-machine coordination", () => {
+  test("keeps Windows directory-sync and custom-root policy explicit", () => {
+    expect(shouldSyncLocalCoordinationDirectory("win32")).toBeFalse();
+    expect(allowsCustomLocalCoordinationRoot("win32")).toBeFalse();
+    for (const platform of ["darwin", "linux"] as const) {
+      expect(shouldSyncLocalCoordinationDirectory(platform)).toBeTrue();
+      expect(allowsCustomLocalCoordinationRoot(platform)).toBeTrue();
+    }
+  });
+
   test("rejects a volatile coordination path that resolves into canonical contents", async () => {
     const roots = await fixture();
     const linkedCoordination = path.join(path.dirname(roots.workspaceRoot), "linked-coordination");
@@ -715,26 +750,28 @@ describe("same-machine coordination", () => {
   test("rejects permissive custom coordination roots on POSIX", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();
-    await chmod(roots.coordinationRoot, 0o777);
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    await chmod(coordinationRoot, 0o777);
     try {
       expect(createLocalResourceProvider(roots)).rejects.toThrow(
         "must not grant group or other permissions",
       );
     } finally {
-      await chmod(roots.coordinationRoot, 0o700);
+      await chmod(coordinationRoot, 0o700);
     }
   });
 
   test("rejects a custom coordination root owned by another POSIX user when testable", async () => {
     if (process.platform === "win32" || process.getuid?.() !== 0) return;
     const roots = await fixture();
-    await chown(roots.coordinationRoot, 1, 1);
+    const coordinationRoot = requiredCoordinationRoot(roots);
+    await chown(coordinationRoot, 1, 1);
     try {
       expect(createLocalResourceProvider(roots)).rejects.toThrow(
         "must be owned by the current user",
       );
     } finally {
-      await chown(roots.coordinationRoot, 0, 0);
+      await chown(coordinationRoot, 0, 0);
     }
   });
 
@@ -814,9 +851,7 @@ describe("same-machine coordination", () => {
       cmd: [
         process.execPath,
         coordinationChild,
-        roots.workspaceRoot,
-        roots.coordinationRoot,
-        childLocator,
+        ...coordinationChildArguments(roots, childLocator),
       ],
       ipc(message) {
         if (isChildMessage(message, "ready")) readyResolve();
@@ -895,10 +930,12 @@ describe("same-machine coordination", () => {
   });
 
   test("never publishes an incomplete claim and keeps malformed external locks contended", async () => {
+    if (process.platform === "win32") return;
     const roots = await fixture();
+    const coordinationRoot = requiredCoordinationRoot(roots);
     const lockLocator = locator("transaction");
     const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
-    const lockPath = path.join(roots.coordinationRoot, `${identity}.lock`);
+    const lockPath = path.join(coordinationRoot, `${identity}.lock`);
     const interrupted = await createLocalResourceProvider({
       ...roots,
       faultInjector: injectedOnce("coordination-claim"),
@@ -911,9 +948,7 @@ describe("same-machine coordination", () => {
         ),
       ),
     ).toBe("resource-provider-failure");
-    expect(
-      (await readdir(roots.coordinationRoot)).some((name) => name.endsWith(".lock")),
-    ).toBeFalse();
+    expect((await readdir(coordinationRoot)).some((name) => name.endsWith(".lock"))).toBeFalse();
 
     await mkdir(lockPath, { mode: 0o700 });
     await writeFile(path.join(lockPath, "owner.json"), "malformed");
@@ -938,13 +973,7 @@ describe("same-machine coordination", () => {
       ready = resolve;
     });
     const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        coordinationChild,
-        roots.workspaceRoot,
-        roots.coordinationRoot,
-        lockLocator,
-      ],
+      cmd: [process.execPath, coordinationChild, ...coordinationChildArguments(roots, lockLocator)],
       ipc(message) {
         if (isChildMessage(message, "ready")) ready();
       },
@@ -956,13 +985,15 @@ describe("same-machine coordination", () => {
     await within(child.exited, 5_000, "killed owner exit");
     await Bun.sleep(5);
     const identity = await coordinationHash(roots.workspaceRoot, lockLocator);
-    const abandonedReaping = path.join(roots.coordinationRoot, `${identity}.reaping`);
-    await mkdir(abandonedReaping, { mode: 0o700 });
-    await writeFile(
-      path.join(abandonedReaping, "owner.json"),
-      JSON.stringify({ createdAt: 0, pid: child.pid, token: randomUUID() }),
-      { mode: 0o600 },
-    );
+    if (roots.coordinationRoot !== undefined) {
+      const abandonedReaping = path.join(roots.coordinationRoot, `${identity}.reaping`);
+      await mkdir(abandonedReaping, { mode: 0o700 });
+      await writeFile(
+        path.join(abandonedReaping, "owner.json"),
+        JSON.stringify({ createdAt: 0, pid: child.pid, token: randomUUID() }),
+        { mode: 0o600 },
+      );
+    }
 
     const first = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
     const second = await createLocalResourceProvider({ ...roots, staleLockMilliseconds: 1 });
@@ -1000,6 +1031,7 @@ describe("same-machine coordination", () => {
   });
 
   test("cleanup failures leave only ignored artifacts and do not block reacquisition", async () => {
+    if (process.platform === "win32") return;
     const roots = await fixture();
     const lockLocator = locator("cleanup-failure");
     const dirty = await createLocalResourceProvider({
@@ -1014,9 +1046,11 @@ describe("same-machine coordination", () => {
         () => "first",
       ),
     ).toEqual({ ok: true, value: "first" });
-    expect(
-      (await readdir(roots.coordinationRoot)).some((name) => name.includes(".released-")),
-    ).toBeTrue();
+    if (roots.coordinationRoot !== undefined) {
+      expect(
+        (await readdir(roots.coordinationRoot)).some((name) => name.includes(".released-")),
+      ).toBeTrue();
+    }
 
     const clean = await createLocalResourceProvider(roots);
     expect(

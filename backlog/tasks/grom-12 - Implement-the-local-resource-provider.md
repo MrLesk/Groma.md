@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 07:53'
+updated_date: '2026-07-12 08:04'
 labels:
   - persistence
   - resources
@@ -15,6 +15,11 @@ dependencies:
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
+modified_files:
+  - src/persistence/README.md
+  - src/persistence/local-resource-provider.ts
+  - src/persistence/tests/fixtures/coordination-child.ts
+  - src/persistence/tests/local-resource-provider.test.ts
 priority: high
 ordinal: 9000
 ---
@@ -68,4 +73,6 @@ Coordination identity now uses a conservative NFC-normalized and case-folded can
 Coordination roots now reject symlinks and workspace redirection. POSIX roots require current-user ownership and no group or other bits, while the user-scoped default is tightened to mode 0700. Windows uses the per-user temporary root and platform ACL behavior without a native-runtime claim. Documentation records all ceilings, byte validation, aliasing, claim/quarantine behavior, and root security.
 
 Quality validation: focused persistence tests pass 37 tests and 172 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 154 repository tests and 714 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The final persistence entry directly cross-compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. The killed-owner concurrent recovery test also passed ten repeated runs. git diff --check passes. Windows and Linux remain cross-compilation results rather than native runtime claims.
+
+Windows final policy correction: owner-record exclusive write, sync, and close remain all-platform, while candidate-directory open and sync are now POSIX-only. Windows retains atomic candidate-directory rename publication and rejects any custom coordinationRoot before workspace or coordination filesystem access, always selecting the provider default beneath the per-user temporary directory. Documentation limits the guarantee to process-crash and same-machine concurrency safety and makes no Windows power-loss directory-durability claim. Tests encode the platform policy structurally, omit custom coordination roots from Windows fixtures and child IPC, and keep POSIX root permission and owner coverage conditional. Validation: focused persistence tests pass 38 tests and 178 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 155 repository tests and 720 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows results remain cross-compilation only, not native runtime claims.
 <!-- SECTION:NOTES:END -->

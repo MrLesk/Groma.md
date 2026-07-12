@@ -6,9 +6,9 @@ function send(message: unknown): void {
   process.send(message);
 }
 
-const [workspaceRoot, coordinationRoot, locatorInput] = process.argv.slice(2);
-if (workspaceRoot === undefined || coordinationRoot === undefined || locatorInput === undefined) {
-  throw new Error("coordination fixture requires workspace, coordination, and locator arguments");
+const [workspaceRoot, locatorInput, coordinationRoot] = process.argv.slice(2);
+if (workspaceRoot === undefined || locatorInput === undefined) {
+  throw new Error("coordination fixture requires workspace and locator arguments");
 }
 
 const locator = parseWorkspaceResourceLocator(locatorInput);
@@ -31,7 +31,10 @@ const onMessage = (message: unknown): void => {
 process.on("message", onMessage);
 
 try {
-  const provider = await createLocalResourceProvider({ coordinationRoot, workspaceRoot });
+  const provider = await createLocalResourceProvider({
+    workspaceRoot,
+    ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
+  });
   const result = await provider.withCoordination(
     { context: "local-machine", locator: locator.value },
     async () => {

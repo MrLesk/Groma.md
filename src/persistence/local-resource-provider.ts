@@ -42,7 +42,7 @@ export type LocalResourceFaultInjector = (phase: LocalResourceFaultPhase) => voi
 export interface LocalResourceProviderOptions {
   /** Absolute host configuration. It is never returned through capability results. */
   readonly workspaceRoot: string;
-  /** Absolute volatile host location used for cross-process coordination. */
+  /** Absolute POSIX-only volatile host location. Windows always uses the per-user default. */
   readonly coordinationRoot?: string;
   readonly faultInjector?: LocalResourceFaultInjector;
   readonly maxCursorBytes?: number;
@@ -100,6 +100,14 @@ export const localResourceProviderCeilings = Object.freeze({
   maxReplacementBytes: 64 * 1024 * 1024,
   staleLockMilliseconds: 24 * 60 * 60 * 1000,
 });
+
+export function allowsCustomLocalCoordinationRoot(platform: NodeJS.Platform): boolean {
+  return platform !== "win32";
+}
+
+export function shouldSyncLocalCoordinationDirectory(platform: NodeJS.Platform): boolean {
+  return platform !== "win32";
+}
 const defaultMaxReadBytes = 16 * 1024 * 1024;
 const defaultMaxReplacementBytes = 16 * 1024 * 1024;
 const defaultMaxPageSize = 1000;
@@ -328,6 +336,12 @@ function ownerIsDead(pid: number): boolean {
 export async function createLocalResourceProvider(
   options: LocalResourceProviderOptions,
 ): Promise<LocalResourceProvider> {
+  if (
+    options.coordinationRoot !== undefined &&
+    !allowsCustomLocalCoordinationRoot(process.platform)
+  ) {
+    throw new TypeError("Windows local coordination does not accept a custom root");
+  }
   if (typeof options.workspaceRoot !== "string" || !path.isAbsolute(options.workspaceRoot)) {
     throw new TypeError("workspaceRoot must be an absolute host path");
   }
@@ -1243,11 +1257,16 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       } finally {
         await ownerHandle.close();
       }
-      const directoryHandle = await open(candidatePath, constants.O_RDONLY | constants.O_DIRECTORY);
-      try {
-        await directoryHandle.sync();
-      } finally {
-        await directoryHandle.close();
+      if (shouldSyncLocalCoordinationDirectory(process.platform)) {
+        const directoryHandle = await open(
+          candidatePath,
+          constants.O_RDONLY | constants.O_DIRECTORY,
+        );
+        try {
+          await directoryHandle.sync();
+        } finally {
+          await directoryHandle.close();
+        }
       }
       if (injectClaim) await this.#inject("coordination-claim");
       if (await this.#coordinationPathExists(canonicalPath)) {

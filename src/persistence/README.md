@@ -106,9 +106,11 @@ multi-host contexts return
 `unsupported-coordination-context`; hosted or network coordination is not inferred.
 
 The canonical lock directory is never constructed in place. The provider creates a
-unique candidate, exclusive-writes and syncs its owner record, syncs the candidate
-directory, closes every handle, and atomically renames the populated directory to the
-canonical lock name. A populated reaping claim serializes stale recovery. An old owner
+unique candidate, exclusive-writes and syncs its owner record, closes the owner
+handle, and atomically renames the populated directory to the canonical lock name.
+POSIX additionally opens and syncs the candidate directory before publication;
+Windows deliberately does not attempt unsupported read-only directory-handle flushes.
+A populated reaping claim serializes stale recovery. An old owner
 must be proven dead twice before its lock is atomically moved to a unique quarantine,
 freeing the canonical name before best-effort cleanup. Release uses the same
 move-before-cleanup rule, so cleanup failure can leave only ignored unique artifacts
@@ -117,10 +119,17 @@ owners remain contended.
 
 The coordination root is outside canonical contents and cannot itself be a symlink or
 junction. POSIX roots must be owned by the current user and grant no group/other bits;
-the provider securely tightens its own user-scoped default to mode `0700`. Windows uses
-the per-user temporary directory and platform ACL behavior; cross-compilation is not a
-claim of native Windows permission verification. Volatile claims, quarantines, owner
-tokens, PIDs, and times never enter `groma/` or Git state.
+the provider securely tightens its own user-scoped default to mode `0700`. A custom
+coordination root is a POSIX-only host option. Windows rejects that option before any
+filesystem access and always uses the provider-created default beneath its per-user
+temporary directory and platform ACL behavior. Cross-compilation is not a claim of
+native Windows permission verification. Volatile claims, quarantines, owner tokens,
+PIDs, and times never enter `groma/` or Git state.
+
+The coordination guarantee covers process crashes and same-machine concurrency. On
+Windows, atomic publication begins at the rename of the already complete candidate;
+the provider does not claim power-loss directory durability without a supported
+directory flush primitive.
 
 ## Bun API rationale
 
@@ -128,8 +137,8 @@ Bun documents [`Bun.file` and `Bun.write` as the recommended ordinary file I/O
 APIs](https://bun.com/docs/runtime/file-io). The same documentation directs operations
 not exposed by those APIs to Bun's `node:fs` compatibility layer. Confined bounded
 reads, durable atomic replacement, and populated coordination claims specifically need
-`FileHandle.read`, exclusive creation, complete writes, `FileHandle.sync`, directory
-sync, `lstat`, `realpath`, `opendir`, permissions, and atomic rename, so those
+`FileHandle.read`, exclusive creation, complete writes, `FileHandle.sync`, POSIX
+directory sync, `lstat`, `realpath`, `opendir`, permissions, and atomic rename, so those
 operations stay private to the implementation. Bun's current compatibility table
 describes [`node:fs` as implemented and covered by its Node compatibility
 suite](https://bun.com/docs/runtime/nodejs-compat).
