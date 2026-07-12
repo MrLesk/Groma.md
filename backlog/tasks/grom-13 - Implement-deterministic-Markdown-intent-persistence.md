@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 12:32'
+updated_date: '2026-07-12 12:47'
 labels:
   - persistence
   - markdown
@@ -57,4 +57,6 @@ Context-hunter classification: L2 canonical-format and public persistence-contra
 Implemented the deterministic Markdown intent codec and bounded provider-backed reader/loader. The public boundary exposes serialize/decode/read/load only, routes component and relationship semantics through the injected Standard Model capability, uses stable-ID shards and exact SHA-256 byte revisions, preserves namespaced extensions, and diagnoses malformed YAML/UTF-8/framing, conflicts, wrong schema/kind/location, duplicates, missing references, cycles, bounds, and unexpected layout. Updated persistence exports/README and the ARCHITECTURE example. Validation: focused Markdown intent suite 19 passed (71 assertions); bun run check 204 passed (924 assertions); bun run check:targets passed all 4 targets; direct persistence-index compilation passed darwin-arm64, linux-x64-baseline, windows-x64-baseline, and windows-arm64; git diff --check passed.
 
 Specification follow-up: serialization now rejects unpaired UTF-16 surrogates anywhere in intent/frontmatter/nested GraphData with invalid-intent-unicode before UTF-8 encoding; Git conflict diagnostics require a complete ordered conflict block so legitimate separator prose round-trips; canonical intent-bearing framing now matches the architecture example with one blank line between the closing delimiter and # Intent. Added a full canonical-byte golden, explicit malformed-YAML coverage, and four-level same-type/mixed-type containment through provider load. Validation: focused Markdown intent suite 22 passed (88 assertions); bun run typecheck passed; git diff --check passed.
+
+Quality hardening follow-up: enabled yaml 2.9 intAsBigInt parsing, converts only exact safe integers, and rejects unsafe integer/float-integer, non-finite overflow/NaN, and underflowed numeric values before Standard Model use, including nested component/item/relation extensions. Added maxTotalDocumentBytes with a 128 MiB default and 1 GiB absolute ceiling, incremental exact-byte accounting before decode/retention, and intent-total-byte-limit-exceeded. Direct entity/relation serialization now snapshots descriptor-inspected exact records and arrays without invoking accessors; proxy inspection failures remain typed Results. Missing intent root is empty only on the first enumeration request; disappearance after a successful page returns intent-load-inconsistent. Validation: focused Markdown intent suite 26 passed (113 assertions); bun run typecheck passed; git diff --check passed.
 <!-- SECTION:NOTES:END -->

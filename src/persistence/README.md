@@ -21,14 +21,19 @@ uses the injected Standard Model capability for every component and relationship
 semantic view, canonicalizes ordering and LF framing, rejects unrepresentable Unicode,
 aliases, tags, duplicate YAML keys, invalid UTF-8, complete conflict blocks, wrong
 schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content revision. It
-never writes timestamps, host paths, evidence, bindings, or derived state.
+parses YAML integers as BigInt first, converts only exact safe integers, and rejects
+unsafe, non-finite, overflowed, or underflowed numeric values before Standard Model
+use. It never writes timestamps, host paths, evidence, bindings, or derived state.
 
 Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
 provider continuation pages, accepts only the exact shard/file layout, produces stable
 document/entity/relation order, and diagnoses misplaced or duplicate identities,
-missing parents or relationship targets, and containment cycles. A missing intent root
-is an empty store. This API intentionally has no direct write or commit operation;
-GROM-14 owns transactionally coordinated replacement.
+missing parents or relationship targets, and containment cycles. In addition to
+per-document and document-count ceilings, exact retained document bytes have a 128 MiB
+default and 1 GiB absolute bound. A missing intent root is empty only on the first
+enumeration request; disappearance during pagination is an inconsistent load. This API
+intentionally has no direct write or commit operation; GROM-14 owns transactionally
+coordinated replacement.
 
 ## Local resource capability
 

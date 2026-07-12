@@ -348,6 +348,88 @@ Preserve **meaning**.
     ).toMatchObject({ diagnostics: [{ code: "invalid-intent-unicode" }], ok: false });
   });
 
+  test("preserves safe YAML integers across nested component, item, and relation extensions", () => {
+    const id = entityId("804");
+    const target = entityId("805");
+    const locator = markdownIntentLocator(id);
+    if (!locator.ok) throw new Error("expected locator");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const decoded = store.decode(
+      locator.value,
+      new TextEncoder().encode(`---
+schema: groma/v0.1
+id: ${id}
+kind: component
+actions:
+  - id: act
+    vendor.io/nested:
+      count: 7
+relationships:
+  - id: ${relationId("804")}
+    type: uses
+    target: ${target}
+    vendor.io/nested:
+      count: 9
+vendor.io/nested:
+  count: 42
+---
+`),
+    );
+    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
+    expect(decoded.value.entity.payload).toMatchObject({
+      actions: [{ id: "act", "vendor.io/nested": { count: 7 } }],
+      "vendor.io/nested": { count: 42 },
+    });
+    expect(decoded.value.relations).toMatchObject([
+      { payload: { "vendor.io/nested": { count: 9 } } },
+    ]);
+    const canonical = store.serialize(decoded.value.entity, decoded.value.relations);
+    if (!canonical.ok) throw new Error(canonical.diagnostics[0]?.message);
+    const reloaded = store.decode(canonical.value.locator, canonical.value.bytes);
+    if (!reloaded.ok) throw new Error(reloaded.diagnostics[0]?.message);
+    expect(reloaded.value.entity).toEqual(decoded.value.entity);
+    expect(reloaded.value.relations).toEqual(decoded.value.relations);
+  });
+
+  test("rejects unsafe, non-finite, and underflowed YAML numbers before model use", () => {
+    const id = entityId("806");
+    const target = entityId("807");
+    const locator = markdownIntentLocator(id);
+    if (!locator.ok) throw new Error("expected locator");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const cases = [
+      ["intent-unsafe-integer", "vendor.io/value: 9007199254740993"],
+      [
+        "intent-unsafe-integer",
+        "actions:\n  - id: act\n    vendor.io/nested:\n      value: 9007199254740993",
+      ],
+      [
+        "intent-unsafe-integer",
+        `relationships:\n  - id: ${relationId("806")}\n    type: uses\n    target: ${target}\n    vendor.io/nested:\n      value: 9007199254740993`,
+      ],
+      ["intent-unsafe-number", "vendor.io/value: 9007199254740993.0"],
+      ["intent-non-finite-number", "vendor.io/value: 1e999"],
+      ["intent-non-finite-number", "vendor.io/value: .nan"],
+      ["intent-number-underflow", "vendor.io/value: 1e-999"],
+    ] as const;
+    for (const [code, fields] of cases) {
+      expect(
+        store.decode(
+          locator.value,
+          new TextEncoder().encode(
+            `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n${fields}\n---\n`,
+          ),
+        ),
+      ).toMatchObject({ diagnostics: [{ code }], ok: false });
+    }
+  });
+
   test("keeps stable locators across rename and reparent operations", () => {
     const id = entityId("81");
     const store = createMarkdownIntentStore({
@@ -447,6 +529,79 @@ Preserve **meaning**.
         { stableKey: "scanner-relationship", targetStableKey: "other" } as never,
       ]),
     ).toMatchObject({ diagnostics: [{ code: "invalid-intent-relation" }], ok: false });
+  });
+
+  test("rejects accessor and proxy entity or relation records without reading getters", () => {
+    const id = entityId("808");
+    const target = entityId("809");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    let getterReads = 0;
+    const accessorEntity = { kind: "component", payload: {} } as Record<string, unknown>;
+    Object.defineProperty(accessorEntity, "id", {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        return getterReads % 2 === 0 ? id : target;
+      },
+    });
+    expect(store.serialize(accessorEntity as never, [])).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-entity" }],
+      ok: false,
+    });
+    expect(getterReads).toBe(0);
+
+    const accessorRelation = {
+      payload: {},
+      source: id,
+      target,
+      type: "uses",
+    } as Record<string, unknown>;
+    Object.defineProperty(accessorRelation, "id", {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        throw new Error("must not run");
+      },
+    });
+    expect(store.serialize(component(id, {}), [accessorRelation as never])).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-relation" }],
+      ok: false,
+    });
+    expect(getterReads).toBe(0);
+
+    const accessorArray: GraphRelation[] = [];
+    Object.defineProperty(accessorArray, "0", {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        throw new Error("must not run");
+      },
+    });
+    expect(store.serialize(component(id, {}), accessorArray)).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-relations" }],
+      ok: false,
+    });
+    expect(getterReads).toBe(0);
+
+    const throwingProxy = new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          throw new Error("proxy trap");
+        },
+      },
+    );
+    expect(store.serialize(throwingProxy as never, [])).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-entity" }],
+      ok: false,
+    });
+    expect(store.serialize(component(id, {}), [throwingProxy as never])).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-relation" }],
+      ok: false,
+    });
   });
 
   test("rejects duplicate relationship identities in direct serialize and decode calls", () => {
@@ -622,6 +777,37 @@ describe("provider-backed Markdown intent store", () => {
     });
   });
 
+  test("fails closed if the intent root disappears after a successful enumeration page", async () => {
+    let calls = 0;
+    const scriptedProvider = {
+      enumerate: async () => {
+        calls += 1;
+        return calls === 1
+          ? {
+              ok: true as const,
+              value: {
+                entries: [],
+                nextCursor: "scripted-cursor" as never,
+                truncatedByDepth: false,
+              },
+            }
+          : {
+              diagnostics: [{ code: "resource-missing", message: "Intent root disappeared" }],
+              ok: false as const,
+            };
+      },
+    };
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: scriptedProvider as never,
+    });
+    expect(await store.load()).toMatchObject({
+      diagnostics: [{ code: "intent-load-inconsistent" }],
+      ok: false,
+    });
+    expect(calls).toBe(2);
+  });
+
   test("diagnoses duplicate identities before wrong locations", async () => {
     const provider = await resources();
     const store = createMarkdownIntentStore({
@@ -785,8 +971,10 @@ describe("provider-backed Markdown intent store", () => {
     const model = createStandardModelCapability();
     const writer = createMarkdownIntentStore({ model, resources: provider });
     const encoded = writer.serialize(component(entityId("f0"), { intent: "too large" }), []);
-    if (!encoded.ok) throw new Error("expected serialization");
+    const second = writer.serialize(component(entityId("f1"), { intent: "also retained" }), []);
+    if (!encoded.ok || !second.ok) throw new Error("expected serialization");
     await publish(provider, String(encoded.value.locator), decoder.decode(encoded.value.bytes));
+    await publish(provider, String(second.value.locator), decoder.decode(second.value.bytes));
     const byteBounded = createMarkdownIntentStore({
       bounds: { maxDocumentBytes: 32 },
       model,
@@ -805,5 +993,25 @@ describe("provider-backed Markdown intent store", () => {
       diagnostics: [{ code: "intent-document-limit-exceeded" }],
       ok: false,
     });
+    const totalBounded = createMarkdownIntentStore({
+      bounds: {
+        maxTotalDocumentBytes: encoded.value.bytes.byteLength + second.value.bytes.byteLength - 1,
+      },
+      model,
+      resources: provider,
+    });
+    expect(await totalBounded.load()).toMatchObject({
+      diagnostics: [{ code: "intent-total-byte-limit-exceeded" }],
+      ok: false,
+    });
+    for (const maxTotalDocumentBytes of [0, Number.MAX_SAFE_INTEGER]) {
+      expect(() =>
+        createMarkdownIntentStore({
+          bounds: { maxTotalDocumentBytes },
+          model,
+          resources: provider,
+        }),
+      ).toThrow("maxTotalDocumentBytes must be a safe integer");
+    }
   });
 });

@@ -19,6 +19,7 @@ import {
   type Result,
 } from "../core/index.ts";
 import { copyGraphPayload } from "../core/payload.ts";
+import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
@@ -52,6 +53,7 @@ export interface MarkdownIntentStoreBounds {
   readonly maxDocumentBytes: number;
   readonly maxDocuments: number;
   readonly maxEntriesPerDirectory: number;
+  readonly maxTotalDocumentBytes: number;
   readonly pageSize: number;
 }
 
@@ -90,12 +92,14 @@ const defaultBounds: MarkdownIntentStoreBounds = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
   maxDocuments: 100_000,
   maxEntriesPerDirectory: 10_000,
+  maxTotalDocumentBytes: 128 * 1024 * 1024,
   pageSize: 1_000,
 });
 const absoluteBounds: MarkdownIntentStoreBounds = Object.freeze({
   maxDocumentBytes: 64 * 1024 * 1024,
   maxDocuments: 1_000_000,
   maxEntriesPerDirectory: 100_000,
+  maxTotalDocumentBytes: 1024 * 1024 * 1024,
   pageSize: 10_000,
 });
 const relationTypePattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
@@ -197,6 +201,7 @@ function parseBounds(
     "maxDocumentBytes",
     "maxDocuments",
     "maxEntriesPerDirectory",
+    "maxTotalDocumentBytes",
     "pageSize",
   ] as const) {
     const minimum = field === "maxDocuments" ? 0 : 1;
@@ -404,10 +409,64 @@ function parseFraming(text: string): Result<{ readonly body?: string; readonly y
   return success({ body: suffix.slice(heading.length, -1), yaml: text.slice(4, closing + 1) });
 }
 
+function validateYamlNumbers(document: ReturnType<typeof parseDocument>): Result<void> {
+  let invalid: Diagnostic | undefined;
+  visit(document, {
+    Scalar: (_key, node) => {
+      if (typeof node.value === "bigint") {
+        if (
+          node.value < BigInt(Number.MIN_SAFE_INTEGER) ||
+          node.value > BigInt(Number.MAX_SAFE_INTEGER)
+        ) {
+          invalid = diagnostic(
+            "intent-unsafe-integer",
+            "Intent YAML integer exceeds JavaScript's exact safe-integer range",
+            { value: node.source ?? String(node.value) },
+          );
+          return visit.BREAK;
+        }
+        node.value = Number(node.value);
+        return;
+      }
+      if (typeof node.value !== "number") return;
+      if (!Number.isFinite(node.value)) {
+        invalid = diagnostic(
+          "intent-non-finite-number",
+          "Intent YAML numbers must be finite and must not overflow",
+          { value: node.source ?? String(node.value) },
+        );
+        return visit.BREAK;
+      }
+      if (Number.isInteger(node.value) && !Number.isSafeInteger(node.value)) {
+        invalid = diagnostic(
+          "intent-unsafe-number",
+          "Intent YAML floating-point value resolves outside JavaScript's exact safe-integer range",
+          { value: node.source ?? String(node.value) },
+        );
+        return visit.BREAK;
+      }
+      if (node.value === 0 && node.source !== undefined) {
+        const mantissa = node.source.split(/[eE]/u, 1)[0] ?? "";
+        if (/[1-9]/u.test(mantissa)) {
+          invalid = diagnostic(
+            "intent-number-underflow",
+            "Intent YAML floating-point value underflows to zero and cannot round-trip losslessly",
+            { value: node.source },
+          );
+          return visit.BREAK;
+        }
+      }
+      if (Object.is(node.value, -0)) node.value = 0;
+    },
+  });
+  return invalid === undefined ? success(undefined) : failure(invalid);
+}
+
 function yamlRecord(source: string): Result<Readonly<Record<string, unknown>>> {
   let document: ReturnType<typeof parseDocument>;
   try {
     document = parseDocument(source, {
+      intAsBigInt: true,
       logLevel: "silent",
       prettyErrors: false,
       schema: "core",
@@ -467,6 +526,9 @@ function yamlRecord(source: string): Result<Readonly<Record<string, unknown>>> {
       ),
     );
   }
+
+  const numbers = validateYamlNumbers(document);
+  if (!numbers.ok) return numbers;
 
   let value: unknown;
   try {
@@ -868,39 +930,60 @@ export function createMarkdownIntentStore(
   };
 
   const validateRelations = (input: readonly GraphRelation[]): Result<readonly GraphRelation[]> => {
-    if (!Array.isArray(input)) {
-      return failure(
-        diagnostic(
-          "invalid-intent-relations",
-          "Intent serialization requires an array of graph relationships, not scanner observations",
-        ),
-      );
-    }
+    const length = inspectIntrinsicArrayLength(
+      input,
+      "invalid-intent-relations",
+      "Intent serialization relationships",
+    );
+    if (!length.ok) return length;
     const validated: GraphRelation[] = [];
-    for (const [index, value] of input.entries()) {
-      if (!exactRecord(value)) {
-        return failure(
-          diagnostic("invalid-intent-relation", `relations[${index}] must be a graph relation`),
-        );
-      }
-      const fields = Object.keys(value).sort(compareText);
-      if (fields.join(",") !== "id,payload,source,target,type") {
+    for (let index = 0; index < length.value; index += 1) {
+      let value: unknown;
+      try {
+        const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
+        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+          return failure(
+            diagnostic(
+              "invalid-intent-relations",
+              `relations[${index}] must be an enumerable data property`,
+            ),
+          );
+        }
+        value = descriptor.value;
+      } catch {
         return failure(
           diagnostic(
-            "invalid-intent-relation",
-            `relations[${index}] must contain exactly id, payload, source, target, and type`,
+            "invalid-intent-relations",
+            `relations[${index}] could not be inspected safely`,
           ),
         );
       }
-      const id = typeof value.id === "string" ? parseRelationId(value.id) : parseRelationId("");
+      const inspected = inspectExactRecord(
+        value,
+        [["id", "payload", "source", "target", "type"]],
+        "invalid-intent-relation",
+        `Intent relationship at index ${index}`,
+      );
+      if (!inspected.ok) return inspected;
+      const id =
+        typeof inspected.value.id === "string"
+          ? parseRelationId(inspected.value.id)
+          : parseRelationId("");
       if (!id.ok) return id;
       const source =
-        typeof value.source === "string" ? parseEntityId(value.source) : parseEntityId("");
+        typeof inspected.value.source === "string"
+          ? parseEntityId(inspected.value.source)
+          : parseEntityId("");
       if (!source.ok) return source;
       const target =
-        typeof value.target === "string" ? parseEntityId(value.target) : parseEntityId("");
+        typeof inspected.value.target === "string"
+          ? parseEntityId(inspected.value.target)
+          : parseEntityId("");
       if (!target.ok) return target;
-      if (typeof value.type !== "string" || !relationTypePattern.test(value.type)) {
+      if (
+        typeof inspected.value.type !== "string" ||
+        !relationTypePattern.test(inspected.value.type)
+      ) {
         return failure(
           diagnostic(
             "invalid-relation-type",
@@ -910,10 +993,10 @@ export function createMarkdownIntentStore(
       }
       validated.push({
         id: id.value,
-        payload: value.payload as GraphData,
+        payload: inspected.value.payload as GraphData,
         source: source.value,
         target: target.value,
-        type: value.type,
+        type: inspected.value.type,
       });
     }
     const views = model.relationships(validated);
@@ -925,20 +1008,29 @@ export function createMarkdownIntentStore(
     entity: GraphEntity,
     relations: readonly GraphRelation[],
   ): Result<MarkdownIntentDocument> => {
-    if (
-      !exactRecord(entity) ||
-      Object.keys(entity).sort(compareText).join(",") !== "id,kind,payload"
-    ) {
+    const inspected = inspectExactRecord(
+      entity,
+      [["id", "kind", "payload"]],
+      "invalid-intent-entity",
+      "Intent serialization entity",
+    );
+    if (!inspected.ok) return inspected;
+    const entityId =
+      typeof inspected.value.id === "string"
+        ? parseEntityId(inspected.value.id)
+        : parseEntityId("");
+    if (!entityId.ok) return entityId;
+    if (typeof inspected.value.kind !== "string") {
       return failure(
-        diagnostic(
-          "invalid-intent-entity",
-          "Intent serialization requires a GraphEntity with exactly id, kind, and payload, not a scanner observation",
-        ),
+        diagnostic("invalid-intent-entity", "Intent GraphEntity kind must be a string"),
       );
     }
-    const entityId = typeof entity.id === "string" ? parseEntityId(entity.id) : parseEntityId("");
-    if (!entityId.ok) return entityId;
-    const component = model.parse(entity);
+    const sanitizedEntity = Object.freeze({
+      id: entityId.value,
+      kind: inspected.value.kind,
+      payload: inspected.value.payload as GraphData,
+    });
+    const component = model.parse(sanitizedEntity);
     if (!component.ok) return component;
     const componentDraft = model.serialize(component.value);
     if (!componentDraft.ok) return componentDraft;
@@ -1058,6 +1150,7 @@ export function createMarkdownIntentStore(
   const load = async (): Promise<Result<MarkdownIntentSnapshot>> => {
     const root = intentRoot();
     const documentEntries: ResourceEntry[] = [];
+    let receivedPage = false;
     let cursor: Parameters<LocalResourceProvider["enumerate"]>[0]["cursor"];
     do {
       const page = await resources.enumerate({
@@ -1068,7 +1161,7 @@ export function createMarkdownIntentStore(
         maxEntriesPerDirectory: bounds.maxEntriesPerDirectory,
       });
       if (!page.ok) {
-        if (page.diagnostics[0]?.code === "resource-missing") {
+        if (!receivedPage && page.diagnostics[0]?.code === "resource-missing") {
           return success(
             Object.freeze({
               documents: Object.freeze([]),
@@ -1077,8 +1170,17 @@ export function createMarkdownIntentStore(
             }),
           );
         }
+        if (receivedPage && page.diagnostics[0]?.code === "resource-missing") {
+          return failure(
+            diagnostic(
+              "intent-load-inconsistent",
+              "Intent root disappeared during paginated enumeration; retry the bounded load",
+            ),
+          );
+        }
         return page;
       }
+      receivedPage = true;
       if (page.value.truncatedByDepth) {
         return failure(
           diagnostic(
@@ -1107,6 +1209,7 @@ export function createMarkdownIntentStore(
     } while (cursor !== undefined);
 
     const documents: MarkdownIntentDocument[] = [];
+    let totalDocumentBytes = 0;
     for (const entry of documentEntries.sort((left, right) =>
       compareText(left.locator, right.locator),
     )) {
@@ -1115,7 +1218,19 @@ export function createMarkdownIntentStore(
         maxBytes: bounds.maxDocumentBytes,
       });
       if (!loaded.ok) return loaded;
-      const document = decode(entry.locator, loaded.value.bytes);
+      const exactBytes = snapshotIntentBytes(loaded.value.bytes, bounds.maxDocumentBytes);
+      if (!exactBytes.ok) return exactBytes;
+      if (exactBytes.value.byteLength > bounds.maxTotalDocumentBytes - totalDocumentBytes) {
+        return failure(
+          diagnostic(
+            "intent-total-byte-limit-exceeded",
+            "Intent store documents exceed the configured aggregate retained-byte bound",
+            { maximum: bounds.maxTotalDocumentBytes },
+          ),
+        );
+      }
+      totalDocumentBytes += exactBytes.value.byteLength;
+      const document = decode(entry.locator, exactBytes.value);
       if (!document.ok) return document;
       documents.push(document.value);
     }
