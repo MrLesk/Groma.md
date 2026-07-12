@@ -366,7 +366,23 @@ describe("bounded query contracts", () => {
       diagnostics: [{ code: "unexpected-continuation-anchor" }],
       ok: false,
     });
+    expect(contracts.page(prepared, [item], { hasMore: true, nextAnchor: 1n })).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload" }],
+      ok: false,
+    });
+    let anchorGetterInvocations = 0;
+    const behaviorAnchor = Object.defineProperty({}, "value", {
+      enumerable: true,
+      get: () => {
+        anchorGetterInvocations += 1;
+        throw new Error("behavior-bearing anchor must fail safely");
+      },
+    });
+    expect(
+      contracts.page(prepared, [item], { hasMore: true, nextAnchor: behaviorAnchor }),
+    ).toMatchObject({ diagnostics: [{ code: "unsupported-payload" }], ok: false });
     expect(itemOwnKeysInvocations).toBe(0);
+    expect(anchorGetterInvocations).toBe(0);
   });
 
   test("validates intrinsic item arrays by copied contents rather than spoofable length or iteration", () => {
@@ -499,8 +515,19 @@ describe("bounded query contracts", () => {
     if (!first.ok || first.value.nextCursor === undefined) throw new Error("expected cursor");
     const prefix = "groma.cursor.v1:";
     const suffix = first.value.nextCursor.slice(prefix.length);
-    const rawEnvelope = `${prefix}${decodeURIComponent(suffix)}`;
+    const canonicalRawState = decodeURIComponent(suffix);
+    const rawEnvelope = `${prefix}${canonicalRawState}`;
     const alternateEscapes = `${prefix}${suffix.replace("%7B", "%7b")}`;
+    const noncanonicalStates = [
+      canonicalRawState.replace('{"anchor":', '{ "anchor":'),
+      `{"query":{"kind":"component","order":"id"},"anchor":"${entity("1")}","generation":7,"version":1}`,
+      canonicalRawState.replace('"generation":7', '"generation":7.0'),
+      canonicalRawState.replace(
+        '{"kind":"component","order":"id"}',
+        '{"order":"id","kind":"component"}',
+      ),
+      canonicalRawState.replace(',"version":1}', ',"version":1,"version":1}'),
+    ];
 
     for (const cursor of [
       "",
@@ -512,6 +539,7 @@ describe("bounded query contracts", () => {
       42 as unknown as string,
       rawEnvelope,
       alternateEscapes,
+      ...noncanonicalStates.map((state) => `${prefix}${encodeURIComponent(state)}`),
     ]) {
       expect(() => contracts.prepare(7, query, { cursor, limit: 1 })).not.toThrow();
       expect(contracts.prepare(7, query, { cursor, limit: 1 })).toMatchObject({
@@ -525,6 +553,11 @@ describe("bounded query contracts", () => {
       diagnostics: [{ code: "malformed-continuation-cursor" }],
       ok: false,
     });
+    expect(contracts.prepare(7, query, { cursor: first.value.nextCursor, limit: 1 })).toMatchObject(
+      {
+        ok: true,
+      },
+    );
 
     const unsupported = `groma.cursor.v1:${encodeURIComponent(
       JSON.stringify({

@@ -118,6 +118,43 @@ const cursorAfterQuery = ',"version":1}';
 const intrinsicEncodeURIComponent = globalThis.encodeURIComponent;
 const intrinsicDecodeURIComponent = globalThis.decodeURIComponent;
 
+interface CursorRawStateParts {
+  readonly anchorCanonicalJson: string;
+  readonly generationJson: string;
+  readonly queryCanonicalJson: string;
+}
+
+function cursorRawStateParts(
+  anchorCanonicalJson: string,
+  generation: GraphGeneration,
+  queryCanonicalJson: string,
+): CursorRawStateParts {
+  return { anchorCanonicalJson, generationJson: `${generation}`, queryCanonicalJson };
+}
+
+function cursorRawStateFits(parts: CursorRawStateParts, maximum: number): boolean {
+  let remaining = maximum;
+  const consume = (length: number): boolean => {
+    if (length > remaining) return false;
+    remaining -= length;
+    return true;
+  };
+  return (
+    consume(cursorPrefix.length) &&
+    consume(cursorBeforeAnchor.length) &&
+    consume(parts.anchorCanonicalJson.length) &&
+    consume(cursorBeforeGeneration.length) &&
+    consume(parts.generationJson.length) &&
+    consume(cursorBeforeQuery.length) &&
+    consume(parts.queryCanonicalJson.length) &&
+    consume(cursorAfterQuery.length)
+  );
+}
+
+function renderCursorRawState(parts: CursorRawStateParts): string {
+  return `${cursorBeforeAnchor}${parts.anchorCanonicalJson}${cursorBeforeGeneration}${parts.generationJson}${cursorBeforeQuery}${parts.queryCanonicalJson}${cursorAfterQuery}`;
+}
+
 function validatePositiveBudget(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name} must be a positive safe integer`);
@@ -325,6 +362,22 @@ export class BoundedQueryContracts {
         message: "A completed page must not provide a continuation anchor",
       });
     }
+    let nextCursor: Result<ContinuationCursor> | undefined;
+    if (inspectedState.value.hasMore) {
+      const nextAnchor = canonicalAnchor(
+        inspectedState.value.nextAnchor,
+        this.#maxAnchorCharacters,
+      );
+      if (!nextAnchor.ok) return nextAnchor;
+      if (nextAnchor.value.canonicalJson === previousAnchorCanonicalJson) {
+        return failure({
+          code: "non-advancing-continuation-anchor",
+          message: "Continuation anchor must advance beyond the previous page anchor",
+        });
+      }
+      nextCursor = this.#encodeCursor(generation.value, query.value, nextAnchor.value);
+      if (!nextCursor.ok) return nextCursor;
+    }
     const copiedItems = copyGraphPayload(items, "query");
     if (!copiedItems.ok) return copiedItems;
     if (!Array.isArray(copiedItems.value)) {
@@ -333,16 +386,6 @@ export class BoundedQueryContracts {
         message: "Query items must be an intrinsic array of canonical graph data",
       });
     }
-
-    const nextCursor = inspectedState.value.hasMore
-      ? this.#encodeCursor(
-          generation.value,
-          query.value,
-          inspectedState.value.nextAnchor,
-          previousAnchorCanonicalJson,
-        )
-      : undefined;
-    if (nextCursor !== undefined && !nextCursor.ok) return nextCursor;
     return success(
       Object.freeze({
         generation: generation.value,
@@ -372,43 +415,17 @@ export class BoundedQueryContracts {
   #encodeCursor(
     generation: GraphGeneration,
     query: CanonicalGraphDataCopy,
-    anchorValue: unknown,
-    previousAnchorCanonicalJson: string | undefined,
+    anchor: CanonicalGraphDataCopy,
   ): Result<ContinuationCursor> {
-    const anchor = canonicalAnchor(anchorValue, this.#maxAnchorCharacters);
-    if (!anchor.ok) return anchor;
-    if (anchor.value.canonicalJson === previousAnchorCanonicalJson) {
-      return failure({
-        code: "non-advancing-continuation-anchor",
-        message: "Continuation anchor must advance beyond the previous page anchor",
-      });
-    }
-    const generationJson = `${generation}`;
-    let remainingRawCharacters = this.#maxCursorCharacters;
-    const consumeRawCharacters = (length: number): boolean => {
-      if (length > remainingRawCharacters) {
-        return false;
-      }
-      remainingRawCharacters -= length;
-      return true;
-    };
-    if (
-      !consumeRawCharacters(cursorPrefix.length) ||
-      !consumeRawCharacters(cursorBeforeAnchor.length) ||
-      !consumeRawCharacters(anchor.value.canonicalJson.length) ||
-      !consumeRawCharacters(cursorBeforeGeneration.length) ||
-      !consumeRawCharacters(generationJson.length) ||
-      !consumeRawCharacters(cursorBeforeQuery.length) ||
-      !consumeRawCharacters(query.canonicalJson.length) ||
-      !consumeRawCharacters(cursorAfterQuery.length)
-    ) {
+    const parts = cursorRawStateParts(anchor.canonicalJson, generation, query.canonicalJson);
+    if (!cursorRawStateFits(parts, this.#maxCursorCharacters)) {
       return failure({
         code: "continuation-cursor-too-large",
         message: `Continuation cursor exceeds the configured ${this.#maxCursorCharacters}-character budget`,
         details: { maximum: this.#maxCursorCharacters },
       });
     }
-    const canonicalState = `${cursorBeforeAnchor}${anchor.value.canonicalJson}${cursorBeforeGeneration}${generationJson}${cursorBeforeQuery}${query.canonicalJson}${cursorAfterQuery}`;
+    const canonicalState = renderCursorRawState(parts);
     const encodedState = Reflect.apply(intrinsicEncodeURIComponent, undefined, [canonicalState]);
     const cursor = `${cursorPrefix}${encodedState}`;
     return cursor.length <= this.#maxCursorCharacters
@@ -438,9 +455,10 @@ export class BoundedQueryContracts {
     }
 
     const suffix = cursor.slice(cursorPrefix.length);
+    let decodedState: string;
     let parsed: unknown;
     try {
-      const decodedState = Reflect.apply(intrinsicDecodeURIComponent, undefined, [suffix]);
+      decodedState = Reflect.apply(intrinsicDecodeURIComponent, undefined, [suffix]);
       const canonicalSuffix = Reflect.apply(intrinsicEncodeURIComponent, undefined, [decodedState]);
       if (canonicalSuffix !== suffix) {
         return cursorFailure(
@@ -486,6 +504,15 @@ export class BoundedQueryContracts {
       return cursorFailure(
         "malformed-continuation-cursor",
         "Continuation cursor contains an invalid continuation anchor",
+      );
+    }
+    const canonicalState = renderCursorRawState(
+      cursorRawStateParts(anchor.value.canonicalJson, generation.value, query.value.canonicalJson),
+    );
+    if (canonicalState !== decodedState) {
+      return cursorFailure(
+        "malformed-continuation-cursor",
+        "Continuation cursor state is not in canonical form",
       );
     }
     return success({

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 03:55'
+updated_date: '2026-07-12 04:00'
 labels:
   - core
   - queries
@@ -71,4 +71,6 @@ Current-SHA PR #7 review found four preprocessing bounds. Page overflow now chec
 Current-SHA PR #7 review found four continuation-boundary issues. Canonical arrays now reject an impossible minimum size after prototype/length inspection but before ownKeys, while copy-only and feasible canonical values still receive full validation. Cursor creation preflights exact raw envelope length before construction/encoding and retains final encoded-length enforcement for Unicode expansion. Committed-event validation and deterministic sorting no longer call mutable Array sort/some/includes methods. Continued pages reject a next anchor canonically equal to the prior after anchor with non-advancing-continuation-anchor, preventing infinite loops while preserving first-page and advancing anchors. Added Proxy, encoding, prototype-pollution, and structural anchor regressions. Task remains In Progress with acceptance criteria unchecked.
 
 Current-SHA PR #7 review found four canonical-input gaps. Cursor decoding now uses captured URI intrinsics and accepts only suffixes that round-trip to Groma's exact percent encoding before JSON parsing, so raw/lowercase/alternate envelopes and tight-budget bypasses fail malformed. Event sequencing now compares descriptor-validated affected arrays to canonical factory output and rejects unsorted or duplicate forged events instead of normalizing them. Page state and anchor-shape rules now run after safe length/overflow preflight but before item copying, so invalid state never traverses item contents. Global URI mutation isolation and all cases have regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Independent quality review found two canonicality/ordering gaps. Cursor decode now reconstructs canonical raw state through the same centralized envelope renderer used by encode and requires exact decoded-state equality after shape/version/generation/query/anchor validation; whitespace, top-level or nested key reordering, alternate numeric syntax, and duplicate keys fail malformed. Page overflow remains first, then structural state checks and continuation-anchor canonicalization/cursor precomputation run before item copying; invalid bigint or behavior-bearing anchors cannot traverse item contents, while completed pages skip anchor work. Added full alternative-state and nontraversal regressions. Task remains In Progress with acceptance criteria unchecked.
 <!-- SECTION:NOTES:END -->

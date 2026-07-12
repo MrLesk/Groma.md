@@ -71,12 +71,14 @@ Cursors carry their format version, graph generation, canonical query context, a
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
 formats, noncanonical percent encoding, changed query context, and stale generations.
 URI encoding and decoding use captured intrinsics, so later global mutation cannot
-alter accepted envelopes. Completed pages—including a page whose item count exactly
-equals its limit—have no cursor unless the provider explicitly knows that more results
-exist. A continued page cannot issue a cursor with an anchor canonically equal to its
-previous anchor; providers must advance or return an explicit failure instead of
-creating an infinite continuation loop. Invalid page state is rejected before item
-contents are traversed.
+alter accepted envelopes. After decoding, Core reconstructs the complete canonical
+state and requires byte-for-byte equality, rejecting whitespace, reordered keys,
+alternate number forms, and duplicate JSON keys. Completed pages—including a page
+whose item count exactly equals its limit—have no cursor unless the provider explicitly
+knows that more results exist. A continued page cannot issue a cursor with an anchor
+canonically equal to its previous anchor; providers must advance or return an explicit
+failure instead of creating an infinite continuation loop. Invalid page state and
+invalid continuation anchors are rejected before item contents are traversed.
 
 `graph.committed` events contain only the resulting generation and sorted,
 deduplicated stable entity and relation identities. Event consumers accept exactly
