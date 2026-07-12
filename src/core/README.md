@@ -102,11 +102,12 @@ those values into one complete proposal.
 Registered invariants run synchronously in deterministic registration order. Every
 invariant receives the same proposal object, including prior state and ownership
 context, and all diagnostics are aggregated before provider preparation begins. An
-invariant cannot write or short-circuit later invariants. A provider's `prepare`
-capability stages the complete proposal without changing canonical state and must
-atomically recheck both the base generation and every expected revision. This second
-check, rather than the preliminary snapshot alone, closes the concurrent-writer
-window.
+invariant cannot begin provider preparation or commit through the proposal, and a
+failing or throwing invariant does not short-circuit later invariants. A provider's
+`prepare` capability stages the complete proposal without changing canonical state
+and must atomically recheck both the base generation and every expected revision.
+This second check, rather than the preliminary snapshot alone, closes the
+concurrent-writer window.
 
 Commit results distinguish validation rejection, optimistic conflict, provider
 failure known not to have committed, and an indeterminate result that requires
@@ -118,9 +119,10 @@ from the provider's durable preparation evidence; caller-restored data cannot ch
 the event contents.
 
 Confirmed durable success advances exactly one generation and returns one canonical
-`graph.committed` event value plus the resulting content revisions. Core returns the
-event but does not publish it, keeping transport failures outside the durability
-decision. Provider recovery is idempotent and may classify repeated calls with the
-same committed result; the application or durable journal settles that result and
-routes its single event once. Filesystems, Markdown, journals, and surface concerns
-remain provider or application responsibilities.
+`graph.committed` event value plus the resulting content revisions. Core publishes
+the event in the committed outcome but does not dispatch it through a transport,
+keeping transport failures outside the durability decision. Provider recovery is
+idempotent and may classify repeated calls with the same committed result; the
+application or durable journal settles that result and routes its single event once.
+Filesystems, Markdown, journals, and surface concerns remain provider or application
+responsibilities.
