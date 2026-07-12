@@ -1,11 +1,11 @@
 ---
 id: GROM-9
 title: Enforce standard-model invariants
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 06:34'
+updated_date: '2026-07-12 06:35'
 labels:
   - model
   - invariants
@@ -28,13 +28,13 @@ Register model-specific invariant checks at the transaction boundary so no curre
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every semantic mutation is checked for a valid component type, zero or one valid component parent, relationship targets, entity-kind compatibility, and stable embedded-item identity
-- [ ] #2 Root components may omit a parent, non-root components resolve exactly one parent, and parents may contain children of the same or different types
-- [ ] #3 Self-parenting, containment cycles, multiple structural parents, ambiguous identities, and ambiguous relationship targets fail closed with actionable diagnostics
-- [ ] #4 Removing or reparenting a component fails unless the same atomic transaction leaves every child and relationship valid
-- [ ] #5 Sparse updates preserve omitted curated fields and cannot silently erase existing intent or containment
-- [ ] #6 The invariant contract can receive prior state and ownership context so later evidence and pinned-boundary protections do not require a new mutation path
-- [ ] #7 Tests prove that identical invariants govern direct operation calls and host or CLI initiated mutations
+- [x] #1 Every semantic mutation is checked for a valid component type, zero or one valid component parent, relationship targets, entity-kind compatibility, and stable embedded-item identity
+- [x] #2 Root components may omit a parent, non-root components resolve exactly one parent, and parents may contain children of the same or different types
+- [x] #3 Self-parenting, containment cycles, multiple structural parents, ambiguous identities, and ambiguous relationship targets fail closed with actionable diagnostics
+- [x] #4 Removing or reparenting a component fails unless the same atomic transaction leaves every child and relationship valid
+- [x] #5 Sparse updates preserve omitted curated fields and cannot silently erase existing intent or containment
+- [x] #6 The invariant contract can receive prior state and ownership context so later evidence and pinned-boundary protections do not require a new mutation path
+- [x] #7 Tests prove that identical invariants govern direct operation calls and host or CLI initiated mutations
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,4 +63,12 @@ Final implementer verification after the compile-time GraphData envelope test an
 Quality-review follow-up: bound all five mutation target kinds to the matching Core affected identity collection while allowing justified affected supersets, including empty model batches. Exported Core's 4096-character transaction diagnostic contract and adapted Standard diagnostics to fixed codes/messages plus bounded outer paths, stable IDs, and type/length metadata; oversized raw IDs, kinds, tokens, and extension keys no longer collapse to invalid-invariant-result. Final parent, cycle, and endpoint diagnostics now iterate stable identity order, with the smallest cycle ID as canonical representative. Verification: focused 19 tests/97 assertions; full check 114 tests/531 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed.
 
 Claude review follow-up: safe Standard Model source field paths now survive diagnostic adaptation as sourcePath, while oversized extension-derived paths are converted by the existing sanitizer to sourcePathLength without retaining raw keys. Added direct and registered-engine regressions for both cases. Added a registered TransactionEngine happy path covering patch, recursive component create, relationship upsert, confirmed commit/event, and exact snapshot/prepare/commit/recovery call behavior. Verification: focused 22 tests/108 assertions; full check 117 tests/542 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed.
+
+Final review follow-up preserved safe model source paths while length-adapting oversized user-derived paths, and added a registered-engine committed-path regression. Final verification: focused 22 tests/108 assertions; full 117 tests/542 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed. GitHub Actions run 29182856148 passed quality gates and cross-platform binaries. Independent specification and quality reviews passed. Claude found no correctness bugs; its actionable diagnostics and happy-path test suggestions were implemented, while broader helper consolidation was kept out of scope. Codex completed review with thumbs-up and no comments or threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented one bounded Standard Model invariant over the Core transaction engine. It validates recursive single-parent containment, ordinary relationships, stable embedded identity, sparse patches, atomic reparenting/removal, ownership and pinned context, affected identities, and deterministic actionable diagnostics through the same direct and host/CLI transaction path. Verified with 117 tests/542 assertions, all local gates, four cross-compiled targets, GitHub CI, independent reviews, Claude review, and Codex acceptance.
+<!-- SECTION:FINAL_SUMMARY:END -->
