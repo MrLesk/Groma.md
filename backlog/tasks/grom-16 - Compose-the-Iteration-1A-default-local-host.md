@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 22:52'
+updated_date: '2026-07-12 23:00'
 labels:
   - host
   - bootstrap
@@ -59,4 +59,6 @@ Context-hunter classification: L2 host lifecycle and composition boundary. Disco
 Frozen 1A decisions: process context supplies one absolute workspace root (the CLI may choose cwd in GROM-17); discovery does not search ancestors in this task. The only initialization marker is groma/groma.yaml with a minimal strict groma/v0.1 workspace document. No plugin/package fields are interpreted or executed in 1A. A successful initializer establishes or recognizes that marker and completes the journal snapshot/recovery handshake before the host exposes semantic operations, allowing safe same-session promotion without treating a missing workspace as an empty graph.
 
 Implemented and focused-tested the strict local workspace capability: exact one-line groma/v0.1 discovery, path-free typed missing/conflict/recovery diagnostics, same-machine staged atomic initialization, idempotent same-session recovery promotion, bounded malformed recovery rejection, and deterministic coordination release on failure.
+
+Moved the real local application stack into the default bootstrap registry and migrated the existing application conformance/restart test onto it. The registry exposes named, frozen capability identities; aligns graph/query/model/store/journal/application bounds; injects host entropy and the selected surface; and keeps application/Core contracts unchanged. Strengthened snapshot recovery validation against malformed or structurally unbounded provider state.
 <!-- SECTION:NOTES:END -->

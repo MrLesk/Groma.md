@@ -38,7 +38,11 @@ function provider(
   return { snapshot };
 }
 
-const emptySnapshot = () => ({ generation: 0, revisions: [], state: {} });
+const emptySnapshot = () => ({
+  generation: 0,
+  revisions: [],
+  state: { components: [], relationships: [] },
+});
 
 describe("local workspace capability", () => {
   test("keeps initialization available without creating workspace files on discovery", async () => {
@@ -167,7 +171,7 @@ describe("local workspace capability", () => {
           { resource: "a", revision: null },
           { resource: "b", revision: null },
         ],
-        state: {},
+        state: { components: [], relationships: [] },
       })),
       resources,
     });

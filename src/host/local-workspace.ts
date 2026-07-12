@@ -4,16 +4,20 @@ import type {
 } from "../application/index.ts";
 import {
   failure,
+  parseEntityId,
+  parseRelationId,
   success,
   type Diagnostic,
   type Result,
   type TransactionProvider,
 } from "../core/index.ts";
+import { copyGraphPayload } from "../core/payload.ts";
 import {
   workspaceResourceLocator,
   type LocalCoordinationLease,
   type LocalResourceProvider,
 } from "../persistence/index.ts";
+import { STANDARD_COMPONENT_KIND } from "../standard-model/index.ts";
 import type {
   WorkspaceAccessCapability,
   WorkspaceRecoveryReport,
@@ -30,6 +34,8 @@ const canonicalBytes = new TextEncoder().encode(defaultWorkspaceDocument);
 export interface LocalWorkspaceBounds {
   readonly maxConfigurationBytes: number;
   readonly maxSnapshotResources: number;
+  readonly maxSnapshotStateDepth: number;
+  readonly maxSnapshotStateValues: number;
 }
 
 export interface LocalWorkspaceCapabilityOptions {
@@ -42,6 +48,8 @@ export interface LocalWorkspaceCapabilityOptions {
 const defaultBounds: LocalWorkspaceBounds = Object.freeze({
   maxConfigurationBytes: 4_096,
   maxSnapshotResources: 100_000,
+  maxSnapshotStateDepth: 30,
+  maxSnapshotStateValues: 100_000,
 });
 
 function diagnostic(code: string, message: string): Diagnostic {
@@ -62,6 +70,8 @@ function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): Local
   for (const [name, maximum] of [
     ["maxConfigurationBytes", 64 * 1024],
     ["maxSnapshotResources", 1_000_000],
+    ["maxSnapshotStateDepth", 100],
+    ["maxSnapshotStateValues", 1_000_000],
   ] as const) {
     const value = selected[name];
     if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
@@ -81,7 +91,7 @@ function sameBytes(value: Uint8Array): boolean {
 
 function validSnapshot(
   value: unknown,
-  maximumResources: number,
+  bounds: LocalWorkspaceBounds,
 ): value is {
   readonly generation: number;
   readonly revisions: readonly unknown[];
@@ -90,13 +100,75 @@ function validSnapshot(
   if (typeof value !== "object" || value === null) return false;
   try {
     const candidate = value as Record<string, unknown>;
-    return (
-      Number.isSafeInteger(candidate.generation) &&
-      (candidate.generation as number) >= 0 &&
-      Array.isArray(candidate.revisions) &&
-      candidate.revisions.length <= maximumResources &&
-      Object.hasOwn(candidate, "state")
-    );
+    if (
+      !Number.isSafeInteger(candidate.generation) ||
+      (candidate.generation as number) < 0 ||
+      !Array.isArray(candidate.revisions) ||
+      candidate.revisions.length !== 0 ||
+      !Object.hasOwn(candidate, "state")
+    ) {
+      return false;
+    }
+    const copied = copyGraphPayload(candidate.state, "transaction", {
+      code: "invalid-workspace-recovery",
+      maximumDepth: bounds.maxSnapshotStateDepth,
+      maximumValues: bounds.maxSnapshotStateValues,
+      message: "Workspace recovery state exceeds its configured bound",
+    });
+    if (
+      !copied.ok ||
+      typeof copied.value !== "object" ||
+      copied.value === null ||
+      Array.isArray(copied.value)
+    ) {
+      return false;
+    }
+    const state = copied.value as Readonly<Record<string, unknown>>;
+    const keys = Object.keys(state);
+    if (keys.length !== 2 || !keys.includes("components") || !keys.includes("relationships")) {
+      return false;
+    }
+    const components = state.components;
+    const relationships = state.relationships;
+    if (
+      !Array.isArray(components) ||
+      !Array.isArray(relationships) ||
+      components.length > bounds.maxSnapshotResources ||
+      relationships.length > bounds.maxSnapshotResources
+    ) {
+      return false;
+    }
+    for (const component of components) {
+      if (
+        typeof component !== "object" ||
+        component === null ||
+        Array.isArray(component) ||
+        component.kind !== STANDARD_COMPONENT_KIND ||
+        typeof component.id !== "string" ||
+        !parseEntityId(component.id).ok ||
+        !Object.hasOwn(component, "payload")
+      ) {
+        return false;
+      }
+    }
+    for (const relationship of relationships) {
+      if (
+        typeof relationship !== "object" ||
+        relationship === null ||
+        Array.isArray(relationship) ||
+        typeof relationship.id !== "string" ||
+        !parseRelationId(relationship.id).ok ||
+        typeof relationship.source !== "string" ||
+        !parseEntityId(relationship.source).ok ||
+        typeof relationship.target !== "string" ||
+        !parseEntityId(relationship.target).ok ||
+        typeof relationship.type !== "string" ||
+        !Object.hasOwn(relationship, "payload")
+      ) {
+        return false;
+      }
+    }
+    return true;
   } catch {
     return false;
   }
@@ -107,6 +179,7 @@ export async function createLocalWorkspaceCapability(
 ): Promise<WorkspaceAccessCapability> {
   const bounds = validateBounds(options.bounds);
   let current: WorkspaceStatus;
+  let recoveredGeneration = 0;
 
   const inspect = async (): Promise<WorkspaceStatus> => {
     try {
@@ -140,14 +213,17 @@ export async function createLocalWorkspaceCapability(
       );
     }
     if (current.state === "conflict") return failure(current.diagnostic);
-    if (current.state === "ready") return success({ generation: 0, status: "completed" });
+    if (current.state === "ready") {
+      return success({ generation: recoveredGeneration, status: "completed" });
+    }
     try {
       const snapshot = await options.transactionProvider.snapshot(Object.freeze([]));
-      if (!validSnapshot(snapshot, bounds.maxSnapshotResources)) {
+      if (!validSnapshot(snapshot, bounds)) {
         return failure(
           diagnostic("invalid-workspace-recovery", "Workspace recovery returned malformed state"),
         );
       }
+      recoveredGeneration = snapshot.generation;
       current = Object.freeze({ state: "ready" });
       return success(Object.freeze({ generation: snapshot.generation, status: "completed" }));
     } catch {
@@ -165,7 +241,10 @@ export async function createLocalWorkspaceCapability(
       });
     }
     if (current.state === "ready") {
-      return Object.freeze({ generation: 0 as never, status: "already-initialized" });
+      return Object.freeze({
+        generation: recoveredGeneration as never,
+        status: "already-initialized",
+      });
     }
 
     const previouslyConfigured = current.state === "configured";
