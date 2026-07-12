@@ -71,223 +71,124 @@ describe("architecture boundary checker", () => {
     ]);
   });
 
-  test("checks exports, dynamic imports, import types, and require calls", async () => {
+  test("checks every literal module form while preserving other-layer require analysis", async () => {
     const sourceRoot = await createSourceFixture({
+      "cli/index.ts": "export {};",
       "core/index.ts": [
         'export * from "../host/index.ts";',
         'const dynamicHost = import("../host/index.ts");',
         'type Host = import("../host/index.ts").Host;',
-        'const requiredHost = require("../host/index.ts");',
-        "void dynamicHost; void requiredHost;",
+        "void dynamicHost;",
       ].join("\n"),
       "host/index.ts": "export interface Host {}",
+      "persistence/index.ts": 'void require("../cli/index.ts");',
     });
 
-    expect(await checkArchitectureBoundaries(sourceRoot)).toHaveLength(4);
+    const violations = await checkArchitectureBoundaries(sourceRoot);
+    expect(violations).toHaveLength(4);
+    expect(violations.map((violation) => violation.specifier)).toEqual([
+      "../host/index.ts",
+      "../host/index.ts",
+      "../host/index.ts",
+      "../cli/index.ts",
+    ]);
   });
 
-  test("rejects unverifiable dynamic dependencies without matching unrelated calls", async () => {
+  test("keeps dynamic imports fail closed and reserves constrained require calls", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": [
         'const moduleName = "../host/index.ts";',
         "void import(moduleName);",
         "void require(moduleName);",
-        "void require?.(moduleName);",
-        "void load(moduleName);",
         "void loader.require(moduleName);",
-        "void require.resolve(moduleName);",
+        "void load(moduleName);",
       ].join("\n"),
+      "host/index.ts": ['const moduleName = "node:fs";', "void require(moduleName);"].join("\n"),
     });
 
     expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/index.ts",
+        reason:
+          "core production code reserves bare require identifiers; use ESM imports or an injected capability",
+      },
       {
         file: "core/index.ts",
         reason:
           "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
       },
       {
-        file: "core/index.ts",
-        reason:
-          "Require dependency must use a string literal so its architectural boundary can be verified",
-      },
-      {
-        file: "core/index.ts",
+        file: "host/index.ts",
         reason:
           "Require dependency must use a string literal so its architectural boundary can be verified",
       },
     ]);
   });
 
-  test("rejects direct ambient require with literal and non-literal dependencies", async () => {
+  test("reserves every bare require syntax in constrained production layers", async () => {
     const sourceRoot = await createSourceFixture({
-      "core/index.ts": [
-        'const moduleName = "node:fs";',
-        'void require("node:fs");',
-        "void require(moduleName);",
+      "application/type-only.ts": 'import type { X as require } from "./types.ts";',
+      "application/types.ts": "export interface X {}",
+      "core/alias.ts": "const load = require; void load;",
+      "core/ambient-namespace.ts": "declare namespace require { const value: number; }",
+      "core/computed-key.ts": "void registry[require];",
+      "core/default-parameter.ts": [
+        "function run(value = require): void {",
+        "  var require = value;",
+        "  void require;",
+        "}",
+        "void run;",
       ].join("\n"),
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
-      {
-        file: "core/index.ts",
-        reason:
-          "Require dependency must use a string literal so its architectural boundary can be verified",
-      },
-      {
-        file: "core/index.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-    ]);
-  });
-
-  test("rejects ambient require aliases and other escaping references", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/index.ts": ["const load = require;", "consume(require);", 'void load("node:fs");'].join(
-        "\n",
-      ),
+      "core/direct-literal.ts": 'void require("node:fs");',
+      "core/direct-nonliteral.ts": "void require(moduleName);",
+      "core/member-object.ts": 'void require.resolve("node:fs");',
+      "core/runtime-namespace.ts": "namespace require { export const value = 1; }",
+      "core/static-block.ts": "class Holder { static { var require = 1; void require; } }",
+      "standard-model/local-function.ts": [
+        "function require(value: string): string { return value; }",
+        'void require("local");',
+      ].join("\n"),
     });
 
     const violations = await checkArchitectureBoundaries(sourceRoot);
-    expect(violations).toHaveLength(2);
-    expect(violations.map((violation) => violation.reason)).toEqual([
-      "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
-      "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
+    expect(violations.map((violation) => violation.file)).toEqual([
+      "application/type-only.ts",
+      "core/alias.ts",
+      "core/ambient-namespace.ts",
+      "core/computed-key.ts",
+      "core/default-parameter.ts",
+      "core/direct-literal.ts",
+      "core/direct-nonliteral.ts",
+      "core/member-object.ts",
+      "core/runtime-namespace.ts",
+      "core/static-block.ts",
+      "standard-model/local-function.ts",
     ]);
+    expect(violations.every((violation) => violation.specifier === undefined)).toBeTrue();
+    expect(
+      violations.every((violation) =>
+        violation.reason.endsWith(
+          "production code reserves bare require identifiers; use ESM imports or an injected capability",
+        ),
+      ),
+    ).toBeTrue();
   });
 
-  test("does not treat a lexically shadowed local require as a module dependency", async () => {
+  test("allows require property tokens, unrelated calls, and compatible-layer literals", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": [
-        "function useLocalRequire(): void {",
-        "  function require(value: string): string { return value; }",
-        '  require("node:fs");',
-        "  const load = require;",
-        '  load("node:http");',
-        "}",
-        "void useLocalRequire;",
+        "interface Loader { require(value: string): string; }",
+        "const loader = { require: (value: string): string => value };",
+        "const { require: load } = loader;",
+        'void loader.require("value");',
+        'void load("value");',
+        'void unrelated("value");',
       ].join("\n"),
+      "host/index.ts": 'void require("node:http");',
+      "persistence/index.ts": 'void require("node:fs");',
     });
 
     expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
-  });
-
-  test("ignores non-computed member require access and unrelated calls", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/index.ts": [
-        'const moduleName = "node:fs";',
-        "void load(moduleName);",
-        "void loader.require(moduleName);",
-        "void require.resolve(moduleName);",
-      ].join("\n"),
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
-  });
-
-  test("does not treat type-only imports as runtime require bindings", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/declaration-type.ts": [
-        'import type { X as require } from "./types.ts";',
-        'void require("node:fs");',
-      ].join("\n"),
-      "core/import-equals-type.ts": [
-        'import type require = require("./types.ts");',
-        'void require("node:fs");',
-      ].join("\n"),
-      "core/runtime.ts": [
-        'import { X as require } from "./types.ts";',
-        'void require("node:http");',
-      ].join("\n"),
-      "core/specifier-type.ts": [
-        'import { type X as require } from "./types.ts";',
-        'void require("node:fs");',
-      ].join("\n"),
-      "core/types.ts": "export const X = (value: string): string => value;",
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
-      {
-        file: "core/declaration-type.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-      {
-        file: "core/import-equals-type.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-      {
-        file: "core/specifier-type.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-    ]);
-  });
-
-  test("distinguishes runtime namespaces from ambient namespace declarations", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/ambient.ts": [
-        "declare namespace require { const value: number; }",
-        'void require("node:fs");',
-      ].join("\n"),
-      "core/runtime.ts": [
-        "namespace require { export const value = 1; }",
-        'void require("node:http");',
-      ].join("\n"),
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
-      {
-        file: "core/ambient.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-    ]);
-  });
-
-  test("keeps inner runtime and ambient namespace require declarations namespace-local", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/ambient-inner.ts": [
-        "declare namespace holder { var require: (value: string) => string; }",
-        'void require("node:http");',
-      ].join("\n"),
-      "core/runtime-inner.ts": [
-        "namespace holder { export var require = (value: string): string => value; }",
-        'void require("node:fs");',
-      ].join("\n"),
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
-      {
-        file: "core/ambient-inner.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:http",
-      },
-      {
-        file: "core/runtime-inner.ts",
-        reason: "core production code cannot import external modules",
-        specifier: "node:fs",
-      },
-    ]);
-  });
-
-  test("treats computed ambient require member keys as value escapes", async () => {
-    const sourceRoot = await createSourceFixture({
-      "core/index.ts": [
-        "void registry[require];",
-        "void loader.require;",
-        'void require.resolve("node:fs");',
-      ].join("\n"),
-    });
-
-    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
-      {
-        file: "core/index.ts",
-        reason:
-          "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
-      },
-    ]);
   });
 
   test("rejects unresolved relative imports and source outside a boundary", async () => {

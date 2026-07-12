@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-12 00:42'
+updated_date: '2026-07-12 00:54'
 labels:
   - tooling
   - ci
@@ -36,8 +36,7 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
 - [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
 - [ ] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
-- [ ] #9 Architecture boundary analysis rejects ambient require aliases and escaping references while direct ambient calls remain validated and lexically shadowed local require bindings are not treated as module dependencies
-- [ ] #10 Require scope analysis distinguishes type-only imports and ambient namespaces from runtime imports and namespaces, and treats computed ambient require member keys as value escapes while preserving the non-computed member policy
+- [ ] #9 Constrained production layers reserve every bare require identifier and report one fail-closed boundary violation per file, while syntax-aware fixtures prove non-computed require property names and unrelated calls remain allowed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -45,10 +44,10 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 <!-- SECTION:PLAN:BEGIN -->
 1. Preserve four-target verification and restore a host-compatible artifact afterward.
 2. Keep cross-compiled artifact coverage distinct from compatible-host runtime smoke coverage.
-3. Track lexical runtime bindings so ambient require calls and escapes fail closed while shadowed local require values remain ordinary local code.
-4. Exclude type-only imports from runtime bindings; give runtime namespace bodies their own var-hoisting boundary; collect no runtime bindings inside ambient namespaces.
-5. Treat computed member keys using ambient require as value escapes while preserving the non-computed member policy.
-6. Add exact regression fixtures, run local and cross-target gates, and require fresh review.
+3. In Core, standard-model, and application production files, reserve every bare identifier named require and report at most one violation per file.
+4. Keep non-computed require property names and unrelated calls allowed; preserve existing dynamic-import and module-specifier validation.
+5. Retain direct require dependency analysis for less-constrained layers without lexical scope modeling.
+6. Replace lexical fixtures with comprehensive reserved-identifier policy fixtures, run all local and cross-target gates, and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -93,6 +92,10 @@ Implemented the delta distinctions using inspected Babel fields only: declaratio
 Spec re-review found that var declarations inside both runtime and ambient namespace bodies currently hoist through the namespace block into program scope. The correction will make namespace bodies var-hoisting boundaries and suppress runtime-binding collection throughout ambient namespace contents.
 
 Namespace scope correction implemented: every TSModuleDeclaration body is now a function-style var-hoisting boundary, so runtime namespace var bindings remain namespace-local; ambient namespace traversal creates scopes but records no runtime bindings at any nesting level. Exact runtime and declare namespace inner-var regressions pass alongside all 13 boundary fixtures, 33 full tests, quality gates, four-target verification, immediate native smoke, and diff check. Acceptance criteria remain unchecked pending external review.
+
+The lexical require approach failed repeated edge-case review and is deliberately replaced under the manifesto simplicity principle. Because the constrained TypeScript/Bun stack is ESM, require is now a reserved bare identifier in Core, standard-model, and application production code. One syntax-aware violation per file replaces scope and dataflow inference; non-computed property tokens remain allowed.
+
+Reserved-bare-require policy implemented. The checker records one boolean per constrained production file, skips direct require dependency duplication there, preserves static/dynamic import diagnostics, and keeps direct require analysis in host/persistence. Syntax-aware property filtering allows non-computed property tokens while rejecting require.resolve through its bare object identifier. The lexical checker fell from 517 to 338 lines and its fixtures from 311 to 212 lines, a combined 278-line reduction. Seven focused fixtures, 27 full tests, quality gates, four-target verification, immediate native smoke, and diff check pass. Replacement AC remains unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

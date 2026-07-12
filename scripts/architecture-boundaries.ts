@@ -63,244 +63,67 @@ function stringLiteralValue(value: unknown): string | undefined {
   return typeof value.value === "string" ? value.value : undefined;
 }
 
-interface LexicalScope {
-  readonly bindings: Set<string>;
-  readonly kind: "block" | "function";
-  readonly parent?: LexicalScope;
-}
-
-const functionNodeTypes = new Set([
-  "ArrowFunctionExpression",
+const propertyKeyNodeTypes = new Set([
   "ClassMethod",
   "ClassPrivateMethod",
-  "FunctionDeclaration",
-  "FunctionExpression",
+  "ClassProperty",
+  "ClassAccessorProperty",
+  "ImportAttribute",
   "ObjectMethod",
-]);
-const blockScopeNodeTypes = new Set([
-  "BlockStatement",
-  "CatchClause",
-  "ForInStatement",
-  "ForOfStatement",
-  "ForStatement",
-  "StaticBlock",
-  "SwitchStatement",
+  "ObjectProperty",
+  "TSEnumMember",
+  "TSMethodSignature",
+  "TSPropertySignature",
 ]);
 
-function identifierName(value: unknown): string | undefined {
-  return isAstNode(value) && value.type === "Identifier" && typeof value.name === "string"
-    ? value.name
-    : undefined;
-}
-
-function addPatternBindings(pattern: unknown, scope: LexicalScope): void {
-  if (!isAstNode(pattern)) return;
-
-  const name = identifierName(pattern);
-  if (name !== undefined) {
-    scope.bindings.add(name);
-    return;
-  }
-
-  if (pattern.type === "AssignmentPattern") {
-    addPatternBindings(pattern.left, scope);
-  } else if (pattern.type === "RestElement") {
-    addPatternBindings(pattern.argument, scope);
-  } else if (pattern.type === "TSParameterProperty") {
-    addPatternBindings(pattern.parameter, scope);
-  } else if (pattern.type === "ArrayPattern" && Array.isArray(pattern.elements)) {
-    for (const element of pattern.elements) addPatternBindings(element, scope);
-  } else if (pattern.type === "ObjectPattern" && Array.isArray(pattern.properties)) {
-    for (const property of pattern.properties) {
-      if (!isAstNode(property)) continue;
-      addPatternBindings(
-        property.type === "RestElement" ? property.argument : property.value,
-        scope,
-      );
-    }
-  }
-}
-
-function nearestFunctionScope(scope: LexicalScope): LexicalScope {
-  let current = scope;
-  while (current.kind !== "function" && current.parent !== undefined) {
-    current = current.parent;
-  }
-  return current;
-}
-
-function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScope> {
-  const scopes = new WeakMap<AstNode, LexicalScope>();
-  const rootScope: LexicalScope = { bindings: new Set(), kind: "function" };
-
-  function collect(value: unknown, currentScope: LexicalScope, ambientContext = false): void {
-    if (Array.isArray(value)) {
-      for (const item of value) collect(item, currentScope, ambientContext);
-      return;
-    }
-    if (!isAstNode(value)) return;
-
-    let nodeScope = currentScope;
-    if (value.type === "Program") {
-      nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
-    } else if (functionNodeTypes.has(value.type)) {
-      if (!ambientContext && value.type === "FunctionDeclaration") {
-        addPatternBindings(value.id, currentScope);
-      }
-      nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
-      if (!ambientContext && value.type === "FunctionExpression") {
-        addPatternBindings(value.id, nodeScope);
-      }
-      if (!ambientContext && Array.isArray(value.params)) {
-        for (const parameter of value.params) addPatternBindings(parameter, nodeScope);
-      }
-    } else if (value.type === "ClassDeclaration" || value.type === "ClassExpression") {
-      if (!ambientContext && value.type === "ClassDeclaration") {
-        addPatternBindings(value.id, currentScope);
-      }
-      nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
-      if (!ambientContext) addPatternBindings(value.id, nodeScope);
-    } else if (value.type === "TSModuleDeclaration") {
-      const moduleIsAmbient = ambientContext || value.declare === true || value.kind === "global";
-      if (!moduleIsAmbient) addPatternBindings(value.id, currentScope);
-      nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
-      ambientContext = moduleIsAmbient;
-    } else if (blockScopeNodeTypes.has(value.type)) {
-      nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
-      if (!ambientContext && value.type === "CatchClause") {
-        addPatternBindings(value.param, nodeScope);
-      }
-    }
-    scopes.set(value, nodeScope);
-
-    if (
-      !ambientContext &&
-      value.type === "VariableDeclaration" &&
-      Array.isArray(value.declarations)
-    ) {
-      const bindingScope = value.kind === "var" ? nearestFunctionScope(nodeScope) : nodeScope;
-      for (const declaration of value.declarations) {
-        if (isAstNode(declaration)) addPatternBindings(declaration.id, bindingScope);
-      }
-    } else if (
-      !ambientContext &&
-      value.type === "ImportDeclaration" &&
-      value.importKind !== "type" &&
-      Array.isArray(value.specifiers)
-    ) {
-      for (const specifier of value.specifiers) {
-        if (isAstNode(specifier) && specifier.importKind !== "type") {
-          addPatternBindings(specifier.local, nodeScope);
-        }
-      }
-    } else if (
-      !ambientContext &&
-      value.type === "TSImportEqualsDeclaration" &&
-      value.importKind !== "type"
-    ) {
-      addPatternBindings(value.id, nodeScope);
-    } else if (!ambientContext && value.type === "TSDeclareFunction") {
-      addPatternBindings(value.id, nodeScope);
-    } else if (!ambientContext && value.type === "TSEnumDeclaration") {
-      addPatternBindings(value.id, nodeScope);
-    }
-
-    for (const child of Object.values(value)) collect(child, nodeScope, ambientContext);
-  }
-
-  collect(syntaxTree, rootScope);
-  return scopes;
-}
-
-function hasLexicalBinding(scope: LexicalScope | undefined, name: string): boolean {
-  let current = scope;
-  while (current !== undefined) {
-    if (current.bindings.has(name)) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
-function isReferencedValue(
+function isBareRequireIdentifier(
   node: AstNode,
   parent: AstNode | undefined,
   grandparent: AstNode | undefined,
 ): boolean {
-  if (parent === undefined) return false;
-  if (parent.type.startsWith("TS")) {
-    return (
-      [
-        "TSAsExpression",
-        "TSInstantiationExpression",
-        "TSNonNullExpression",
-        "TSSatisfiesExpression",
-      ].includes(parent.type) && parent.expression === node
-    );
-  }
+  if (node.type !== "Identifier" || node.name !== "require") return false;
+  if (parent === undefined) return true;
 
-  switch (parent.type) {
-    case "MemberExpression":
-    case "OptionalMemberExpression":
-      return parent.property === node && parent.computed === true;
-    case "VariableDeclarator":
-      return parent.init === node;
-    case "ClassMethod":
-    case "ClassPrivateMethod":
-    case "ObjectMethod":
-      return parent.key === node ? parent.computed === true : false;
-    case "ObjectProperty":
-      if (parent.key === node) return parent.computed === true;
-      return grandparent?.type !== "ObjectPattern";
-    case "ClassProperty":
-    case "ClassAccessorProperty":
-      return parent.key === node ? parent.computed === true : true;
-    case "ClassPrivateProperty":
-      return parent.key !== node;
-    case "ClassDeclaration":
-    case "ClassExpression":
-      return parent.superClass === node;
-    case "AssignmentExpression":
-    case "AssignmentPattern":
-      return parent.right === node;
-    case "LabeledStatement":
-    case "CatchClause":
-    case "RestElement":
-    case "BreakStatement":
-    case "ContinueStatement":
-    case "FunctionDeclaration":
-    case "FunctionExpression":
-    case "ImportDefaultSpecifier":
-    case "ImportNamespaceSpecifier":
-    case "ImportSpecifier":
-    case "ImportAttribute":
-    case "MetaProperty":
-    case "ObjectPattern":
-    case "ArrayPattern":
-      return false;
-    case "ExportSpecifier":
-      return grandparent?.source === undefined && parent.local === node;
-    case "TSEnumMember":
-      return parent.id !== node;
-    default:
-      return true;
+  if (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") {
+    return parent.property !== node || parent.computed === true;
   }
+  if (propertyKeyNodeTypes.has(parent.type) && parent.key === node) {
+    return parent.computed === true;
+  }
+  if (
+    parent.type === "PrivateName" ||
+    (parent.type === "TSQualifiedName" && parent.right === node)
+  ) {
+    return false;
+  }
+  if (parent.type === "ImportSpecifier") {
+    return parent.local === node;
+  }
+  if (parent.type === "ExportSpecifier") {
+    return grandparent?.source == null && parent.local === node;
+  }
+  return true;
 }
 
-type UnverifiableDependency = "dynamic import" | "require" | "require escape";
+type UnverifiableDependency = "dynamic import" | "require";
 
 interface CollectedDependencies {
+  readonly hasReservedRequire: boolean;
   readonly specifiers: readonly string[];
   readonly unverifiable: readonly UnverifiableDependency[];
 }
 
-function collectModuleDependencies(sourceText: string): CollectedDependencies {
+function collectModuleDependencies(
+  sourceText: string,
+  reserveBareRequire: boolean,
+): CollectedDependencies {
   const syntaxTree: unknown = parse(sourceText, {
     plugins: ["typescript", "jsx"],
     sourceType: "unambiguous",
   });
-  const scopes = collectLexicalScopes(syntaxTree);
   const specifiers: string[] = [];
   const unverifiable: UnverifiableDependency[] = [];
+  let hasReservedRequire = false;
 
   function addStringLiteral(value: unknown): void {
     const specifier = stringLiteralValue(value);
@@ -349,11 +172,8 @@ function collectModuleDependencies(sourceText: string): CollectedDependencies {
       const callee = value.callee;
       const isDynamicImport = isAstNode(callee) && callee.type === "Import";
       const isRequire =
-        isAstNode(callee) &&
-        callee.type === "Identifier" &&
-        callee.name === "require" &&
-        !hasLexicalBinding(scopes.get(callee), "require");
-      if (isDynamicImport || isRequire) {
+        isAstNode(callee) && callee.type === "Identifier" && callee.name === "require";
+      if (isDynamicImport || (isRequire && !reserveBareRequire)) {
         const argumentsList = value.arguments;
         addRuntimeDependency(
           Array.isArray(argumentsList) ? argumentsList[0] : undefined,
@@ -362,17 +182,8 @@ function collectModuleDependencies(sourceText: string): CollectedDependencies {
       }
     }
 
-    if (
-      value.type === "Identifier" &&
-      value.name === "require" &&
-      !hasLexicalBinding(scopes.get(value), "require") &&
-      isReferencedValue(value, parent, grandparent)
-    ) {
-      const isDirectCall =
-        parent !== undefined &&
-        (parent.type === "CallExpression" || parent.type === "OptionalCallExpression") &&
-        parent.callee === value;
-      if (!isDirectCall) unverifiable.push("require escape");
+    if (reserveBareRequire && isBareRequireIdentifier(value, parent, grandparent)) {
+      hasReservedRequire = true;
     }
 
     for (const child of Object.values(value)) {
@@ -381,7 +192,11 @@ function collectModuleDependencies(sourceText: string): CollectedDependencies {
   }
 
   visit(syntaxTree);
-  return { specifiers: specifiers.sort(), unverifiable: unverifiable.sort() };
+  return {
+    hasReservedRequire,
+    specifiers: specifiers.sort(),
+    unverifiable: unverifiable.sort(),
+  };
 }
 
 async function pathExists(file: string): Promise<boolean> {
@@ -449,9 +264,11 @@ export async function checkArchitectureBoundaries(
     }
 
     const isTest = /\.(?:test|spec)\.tsx?$/.test(file);
+    const reserveBareRequire =
+      !isTest && layersWithoutProductionExternalDependencies.has(importerLayer);
     let dependencies: CollectedDependencies;
     try {
-      dependencies = collectModuleDependencies(await readFile(file, "utf8"));
+      dependencies = collectModuleDependencies(await readFile(file, "utf8"), reserveBareRequire);
     } catch (error) {
       violations.push({
         file: displayFile,
@@ -460,13 +277,17 @@ export async function checkArchitectureBoundaries(
       continue;
     }
 
+    if (dependencies.hasReservedRequire) {
+      violations.push({
+        file: displayFile,
+        reason: `${importerLayer} production code reserves bare require identifiers; use ESM imports or an injected capability`,
+      });
+    }
+
     for (const kind of dependencies.unverifiable) {
       violations.push({
         file: displayFile,
-        reason:
-          kind === "require escape"
-            ? "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified"
-            : `${kind === "dynamic import" ? "Dynamic import" : "Require"} dependency must use a string literal so its architectural boundary can be verified`,
+        reason: `${kind === "dynamic import" ? "Dynamic import" : "Require"} dependency must use a string literal so its architectural boundary can be verified`,
       });
     }
 
