@@ -1,11 +1,11 @@
 ---
 id: GROM-12
 title: Implement the local resource provider
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 11:25'
+updated_date: '2026-07-12 11:34'
 labels:
   - persistence
   - resources
@@ -34,13 +34,13 @@ Implement the official Bun-backed local resource capability used by configuratio
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Callers use typed resource locators and capability methods rather than Bun file APIs or raw filesystem paths outside the provider
-- [ ] #2 Workspace-scoped locators reject traversal or resolution outside the selected workspace boundary
-- [ ] #3 Reads distinguish missing, unreadable, malformed-locator, and provider-failure outcomes
-- [ ] #4 Enumeration requires explicit bounds, returns deterministic order, and reports truncation or continuation without silently loading an unbounded tree
-- [ ] #5 Atomic replacement never exposes a partially written target and preserves either the prior or replacement bytes across injected failures
-- [ ] #6 Local coordination supports the documented 1A host contexts and returns an explicit unsupported diagnostic elsewhere
-- [ ] #7 Temporary-directory tests cover Unicode paths, interrupted writes, concurrent coordination, traversal attempts, ordering, and bounds
+- [x] #1 Callers use typed resource locators and capability methods rather than Bun file APIs or raw filesystem paths outside the provider
+- [x] #2 Workspace-scoped locators reject traversal or resolution outside the selected workspace boundary
+- [x] #3 Reads distinguish missing, unreadable, malformed-locator, and provider-failure outcomes
+- [x] #4 Enumeration requires explicit bounds, returns deterministic order, and reports truncation or continuation without silently loading an unbounded tree
+- [x] #5 Atomic replacement never exposes a partially written target and preserves either the prior or replacement bytes across injected failures
+- [x] #6 Local coordination supports the documented 1A host contexts and returns an explicit unsupported diagnostic elsewhere
+- [x] #7 Temporary-directory tests cover Unicode paths, interrupted writes, concurrent coordination, traversal attempts, ordering, and bounds
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -97,4 +97,12 @@ Newest Codex review corrections: cursor decoding now uses a captured String slic
 Latest security review corrections: provider initialization now records whether the coordination root existed before mkdir. POSIX roots observed as missing, whether custom or default, are chmod-repaired to 0700 before ownership and permission validation; existing custom roots remain strictly validated without mutation, existing defaults retain secure tightening, and Windows retains its per-user ACL policy. Missing custom-root creation under umask 0777 now proves mode 0700 and successful coordination. Replacement parent creation records successful mkdir calls and, after type validation, ORs owner 0700 into each new POSIX directory actual mode before descending and revalidating; group, other, and special bits are preserved. Regressions prove a three-level umask-0777 chain remains usable at 0700 and umask-0000 parents retain 0777. Coordination owner reads now accept an artifact directory path, lstat that parent as a real non-link directory, and only then inspect bounded owner.json. Symlinked stale-valid .lock and .reaping artifacts remain intact and contended with callbacks uncalled; documentation retains the unavoidable lstat-to-read namespace race assumption and records all mode policies. Validation: focused persistence tests pass 65 tests and 302 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 182 repository tests and 844 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows remain cross-compilation only, not native runtime claims.
 
 Latest concurrency review correction: every valid staged replacement record now owns a non-rejecting mutation tail. commitReplacement and discardReplacement install their queue position synchronously, await the prior tail, run the existing state transition, and settle plus reset the tail in finally, so invocation order serializes commit/commit and commit/discard without changing finalization retry or abandonment semantics. Deterministic fault gates prove two overlapping commits perform one rename and both return committed, commit-first overlap publishes complete replacement bytes that later discard cannot remove, and discard-first overlap removes only the private stage so the later commit remains not-committed with prior bytes intact. Tests use rename and cleanup gates rather than sleeps. Documentation records per-handle FIFO mutation behavior. Validation: focused persistence tests pass 68 tests and 311 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 185 repository tests and 853 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows remain cross-compilation only, not native runtime claims.
+
+Final acceptance at implementation head 32b018a58422a9fee406a16f0457a4113c5fbc21: independent specification and quality reviews passed with no findings. Claude reviewed PR #10 for naming, simplicity, and caller perspective; independently justified feedback was applied. Codex completed successive exact-head reviews and accepted the final implementation with a thumbs-up reaction. GitHub Actions run 29190817697 passed Quality gates and Cross-platform binaries. Focused persistence validation passed 68 tests and 311 assertions; bun run check passed 185 tests and 853 assertions plus formatting, strict TypeScript, architecture boundaries, native build, and smoke; bun run check:targets and direct persistence compilation passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. Linux and Windows remain cross-compilation results rather than native runtime claims. git diff --check passed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the Bun local resource provider behind typed persistence capabilities: portable confined locators, bounded reads and deterministic paged enumeration, private staged atomic replacement with truthful retry/abandon outcomes, and same-machine coordination with fail-closed recovery. Hardened Unicode and Windows portability, restrictive-umask behavior, symlink and namespace races, process concurrency, input bounds, and runtime intrinsic stability. Verified by 185 tests/853 assertions, four standalone targets, direct persistence compiles, independent spec/quality review, Claude review, Codex acceptance, and green CI.
+<!-- SECTION:FINAL_SUMMARY:END -->
