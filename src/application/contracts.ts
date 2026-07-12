@@ -1,0 +1,112 @@
+import type {
+  BoundedQueryContracts,
+  ContinuationCursor,
+  Diagnostic,
+  GraphGeneration,
+  GraphKernel,
+  ResourceKey,
+  Result,
+  TransactionOutcome,
+  TransactionProvider,
+  TransactionRequest,
+} from "../core/index.ts";
+import type {
+  StandardComponent,
+  StandardModelCapability,
+  StandardRelationship,
+} from "../standard-model/index.ts";
+
+export type WorkspaceInitializationOutcome =
+  | { readonly generation: GraphGeneration; readonly status: "initialized" }
+  | { readonly generation: GraphGeneration; readonly status: "already-initialized" }
+  | { readonly diagnostics: readonly Diagnostic[]; readonly status: "conflict" }
+  | { readonly diagnostics: readonly Diagnostic[]; readonly status: "provider-failure" };
+
+/** Host-supplied atomic bootstrap; application code does not own a configuration format. */
+export interface WorkspaceInitializationCapability {
+  initialize(): Promise<WorkspaceInitializationOutcome>;
+}
+
+/** Maps semantic identity to an opaque transaction resource without exposing its locator. */
+export interface ComponentResourceMapper {
+  resourceForComponent(id: string): Result<ResourceKey>;
+}
+
+/** Structural execution seam implemented by Core's TransactionEngine. */
+export interface TransactionExecutionCapability {
+  execute(request: TransactionRequest): Promise<TransactionOutcome>;
+}
+
+export interface ApplicationOperationsOptions {
+  readonly graph: GraphKernel;
+  readonly initialization: WorkspaceInitializationCapability;
+  readonly maxSnapshotAttempts: number;
+  readonly model: StandardModelCapability;
+  readonly queries: BoundedQueryContracts;
+  readonly resourceMapper: ComponentResourceMapper;
+  readonly transactionExecution: TransactionExecutionCapability;
+  readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
+}
+
+export interface InitializeWorkspaceRequest {}
+
+export interface BoundedPageRequest {
+  readonly cursor?: ContinuationCursor | string;
+  readonly limit: number;
+}
+
+export interface GetComponentRequest {
+  readonly id: string;
+  readonly relationships: BoundedPageRequest;
+}
+
+export interface ListComponentsRequest extends BoundedPageRequest {}
+
+export interface ListRootComponentsRequest extends BoundedPageRequest {}
+
+export interface ListChildComponentsRequest extends BoundedPageRequest {
+  readonly parent: string;
+}
+
+export interface ComponentRevision {
+  readonly componentId: string;
+  readonly revision: string;
+}
+
+export interface ComponentView {
+  readonly component: StandardComponent;
+  readonly revision: string;
+}
+
+export interface RelationshipView {
+  readonly relationship: StandardRelationship;
+  readonly revision: string;
+}
+
+export interface RelationshipPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly RelationshipView[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
+export interface ExactComponentRead {
+  readonly generation: GraphGeneration;
+  readonly item: ComponentView;
+  readonly relationships: RelationshipPage;
+}
+
+export interface ComponentPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly ComponentView[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
+export interface ApplicationOperations {
+  initialize(request: InitializeWorkspaceRequest): Promise<Result<WorkspaceInitializationOutcome>>;
+  getComponent(request: GetComponentRequest): Promise<Result<ExactComponentRead>>;
+  listComponents(request: ListComponentsRequest): Promise<Result<ComponentPage>>;
+  listRoots(request: ListRootComponentsRequest): Promise<Result<ComponentPage>>;
+  listChildren(request: ListChildComponentsRequest): Promise<Result<ComponentPage>>;
+}
