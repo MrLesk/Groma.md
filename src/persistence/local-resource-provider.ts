@@ -70,6 +70,7 @@ interface ResolvedResource {
 interface StagedRecord {
   intendedTargetMode?: number;
   readonly locator: WorkspaceResourceLocator;
+  mutationTail: Promise<void>;
   readonly stagePath: string;
   readonly targetPath: string;
   state:
@@ -107,6 +108,7 @@ interface WalkState {
 }
 
 const processCoordination = new Set<string>();
+const settledStageMutation = Promise.resolve();
 export const localResourceProviderCeilings = Object.freeze({
   maxCursorBytes: 64 * 1024,
   maxDepth: 256,
@@ -786,6 +788,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       const handle = Object.freeze(Object.create(null)) as StagedReplacementHandle;
       this.#stages.set(handle as object, {
         locator: locator.value,
+        mutationTail: settledStageMutation,
         stagePath,
         state: "staged",
         targetPath: target.value.absolutePath,
@@ -819,6 +822,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         ),
       );
     }
+    return this.#serializeStageMutation(record, () => this.#commitReplacementRecord(record));
+  }
+
+  async #commitReplacementRecord(record: StagedRecord): Promise<ReplacementCommitOutcome> {
     if (record.state === "committed") return Object.freeze({ state: "committed" });
     if (record.state === "finalization-abandoned") {
       return Object.freeze({
@@ -957,6 +964,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         ),
       );
     }
+    return this.#serializeStageMutation(record, () => this.#discardReplacementRecord(record));
+  }
+
+  async #discardReplacementRecord(record: StagedRecord): Promise<Result<void>> {
     if (record.state === "renamed-pending-finalization") {
       const retained = record.targetFinalizationHandle;
       if (retained !== undefined) {
@@ -974,6 +985,22 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const cleanup = await this.#cleanupPath(record.stagePath);
     if (cleanup.ok) record.state = "discarded";
     return cleanup;
+  }
+
+  async #serializeStageMutation<T>(record: StagedRecord, operation: () => Promise<T>): Promise<T> {
+    const predecessor = record.mutationTail;
+    let settle!: () => void;
+    const current = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    record.mutationTail = current;
+    try {
+      await predecessor;
+      return await operation();
+    } finally {
+      settle();
+      if (record.mutationTail === current) record.mutationTail = settledStageMutation;
+    }
   }
 
   async withCoordination<T>(

@@ -874,6 +874,118 @@ describe("staged atomic replacement", () => {
     });
   });
 
+  test("serializes overlapping commits on one staged handle", async () => {
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "concurrent-commits.md");
+    await writeFile(target, "old-complete");
+    let entered!: () => void;
+    const renameEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const renameReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let renameAttempts = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "rename") return;
+        renameAttempts += 1;
+        if (renameAttempts !== 1) return;
+        entered();
+        await renameReleased;
+      },
+    });
+    const staged = await provider.stageReplacement(
+      locator("concurrent-commits.md"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    const first = provider.commitReplacement(staged.value);
+    await within(renameEntered, 5_000, "first overlapping commit");
+    const second = provider.commitReplacement(staged.value);
+    release();
+    const outcomes = await Promise.all([first, second]);
+
+    expect(outcomes.map((outcome) => outcome.state)).toEqual(["committed", "committed"]);
+    expect(renameAttempts).toBe(1);
+    expect(await readFile(target, "utf8")).toBe("new-complete");
+  });
+
+  test("preserves commit-first ordering against overlapping discard", async () => {
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "commit-first.md");
+    await writeFile(target, "old-complete");
+    let entered!: () => void;
+    const renameEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const renameReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "rename") return;
+        entered();
+        await renameReleased;
+      },
+    });
+    const staged = await provider.stageReplacement(
+      locator("commit-first.md"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    const committed = provider.commitReplacement(staged.value);
+    await within(renameEntered, 5_000, "commit-first mutation");
+    const discarded = provider.discardReplacement(staged.value);
+    release();
+
+    expect((await committed).state).toBe("committed");
+    expect(await discarded).toEqual({ ok: true, value: undefined });
+    expect(await readFile(target, "utf8")).toBe("new-complete");
+  });
+
+  test("preserves discard-first ordering against overlapping commit", async () => {
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "discard-first.md");
+    await writeFile(target, "old-complete");
+    let entered!: () => void;
+    const cleanupEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const cleanupReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "cleanup") return;
+        entered();
+        await cleanupReleased;
+      },
+    });
+    const staged = await provider.stageReplacement(
+      locator("discard-first.md"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    const discarded = provider.discardReplacement(staged.value);
+    await within(cleanupEntered, 5_000, "discard-first mutation");
+    const committed = provider.commitReplacement(staged.value);
+    release();
+
+    expect(await discarded).toEqual({ ok: true, value: undefined });
+    expect((await committed).state).toBe("not-committed");
+    expect(await readFile(target, "utf8")).toBe("old-complete");
+  });
+
   test("keeps stages private and applies POSIX target creation modes only at commit", async () => {
     if (process.platform === "win32") return;
     const roots = await fixture();

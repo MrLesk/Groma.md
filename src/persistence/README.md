@@ -122,7 +122,11 @@ therefore exposes only complete prior or replacement bytes. Discard before renam
 removes the private stage. Discard after rename cannot undo publication: it closes any
 retained finalization handle, records finalization as abandoned, and makes every later
 commit return the same committed-indeterminate abandonment diagnostic without reopening
-the target. Repeated discard remains idempotent.
+the target. Repeated discard remains idempotent. Commit and discard mutations on the
+same live staged handle are serialized in invocation order. Concurrent duplicate commits
+therefore observe the first operation's resulting state, while commit/discard overlap
+cannot delete a replacement whose earlier commit is already publishing or publish a
+stage whose earlier discard is already removing it.
 Persistence-local fault injection covers write, flush, rename, post-rename mode
 finalization, target-file sync, parent creation and target-parent directory sync,
 after-rename, and cleanup boundaries without adding test behavior to Core.
