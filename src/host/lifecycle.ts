@@ -1,4 +1,10 @@
-import { type Diagnostic } from "../core/index.ts";
+import {
+  failure,
+  parseGraphGeneration,
+  success,
+  type Diagnostic,
+  type Result,
+} from "../core/index.ts";
 import type {
   HostComposition,
   HostRunOutcome,
@@ -7,6 +13,7 @@ import type {
   HostSurfaceSession,
 } from "./contracts.ts";
 import type { HostBootstrapRegistry, HostProcessContext } from "./contracts.ts";
+import { copyHostDiagnostics, inspectHostRecord } from "./runtime-validation.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -16,6 +23,55 @@ export interface RunHostOptions {
 
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
+}
+
+type ValidatedRecoveryOutcome =
+  | { readonly diagnostics: readonly Diagnostic[]; readonly state: "failed" }
+  | { readonly generation: number; readonly state: "completed" };
+
+function validatedRecoveryOutcome(value: unknown): Result<ValidatedRecoveryOutcome> {
+  const result = inspectHostRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-host-recovery-result",
+    "Workspace recovery result",
+  );
+  if (!result.ok) return result;
+  if (result.value.ok === false) {
+    const diagnostics = copyHostDiagnostics(
+      result.value.diagnostics,
+      100,
+      "invalid-host-recovery-result",
+    );
+    return diagnostics.ok
+      ? success(Object.freeze({ diagnostics: diagnostics.value, state: "failed" }))
+      : diagnostics;
+  }
+  if (result.value.ok !== true) {
+    return failure(
+      diagnostic("invalid-host-recovery-result", "Workspace recovery result status is malformed"),
+    );
+  }
+  const report = inspectHostRecord(
+    result.value.value,
+    [["generation", "status"]],
+    "invalid-host-recovery-result",
+    "Workspace recovery report",
+  );
+  if (!report.ok || report.value.status !== "completed") {
+    return failure(
+      diagnostic("invalid-host-recovery-result", "Workspace recovery report is malformed"),
+    );
+  }
+  const generation = parseGraphGeneration(report.value.generation);
+  return generation.ok
+    ? success(Object.freeze({ generation: generation.value, state: "completed" }))
+    : failure(
+        diagnostic("invalid-host-recovery-result", "Workspace recovery generation is malformed"),
+      );
 }
 
 function isSession(value: unknown): value is HostSurfaceSession {
@@ -164,9 +220,22 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
           } else if (workspaceStatus.state === "ready") {
             recovery = "completed";
           } else {
-            const recovered = await composition.workspace.recover();
+            const recovered = validatedRecoveryOutcome(await composition.workspace.recover());
             if (!recovered.ok) {
-              outcome = { diagnostics: recovered.diagnostics, status: "startup-failure" };
+              outcome = {
+                diagnostics: [
+                  diagnostic(
+                    "invalid-host-recovery-result",
+                    "Workspace recovery capability returned a malformed result",
+                  ),
+                ],
+                status: "startup-failure",
+              };
+            } else if (recovered.value.state === "failed") {
+              outcome = {
+                diagnostics: recovered.value.diagnostics,
+                status: "startup-failure",
+              };
             } else {
               recovery = "completed";
             }

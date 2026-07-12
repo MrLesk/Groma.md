@@ -162,6 +162,63 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
+  test("rejects malformed and hostile recovery success reports before dispatch", async () => {
+    let getterCalls = 0;
+    const accessorReport = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(accessorReport, "generation", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return 0;
+      },
+    });
+    Object.defineProperty(accessorReport, "status", {
+      enumerable: true,
+      value: "completed",
+    });
+    const values: unknown[] = [
+      { ok: true, value: null },
+      { ok: true, value: accessorReport },
+      { ok: true, value: new Proxy({ generation: 0, status: "completed" }, {}) },
+      { ok: true, value: { extra: true, generation: 0, status: "completed" } },
+      { ok: true, value: { generation: Number.NaN, status: "completed" } },
+      new Proxy({ ok: true, value: { generation: 0, status: "completed" } }, {}),
+    ];
+
+    for (const value of values) {
+      const signal = signals();
+      let starts = 0;
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            {
+              start: () => {
+                starts += 1;
+                return { completion: Promise.resolve(), stop: async () => {} };
+              },
+            },
+            workspace({ state: "configured" }, async () => value as never),
+          ),
+        ),
+        signalSource: signal.source,
+      });
+
+      expect(outcome).toEqual({
+        diagnostics: [
+          {
+            code: "invalid-host-recovery-result",
+            message: "Workspace recovery capability returned a malformed result",
+          },
+        ],
+        status: "startup-failure",
+      });
+      expect(starts).toBe(0);
+      expect(signal.unsubscribes()).toBe(1);
+    }
+    expect(getterCalls).toBe(0);
+  });
+
   test("a process signal stops active work once and awaits cleanup", async () => {
     const completion = deferred<void>();
     const started = deferred<void>();

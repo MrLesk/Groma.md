@@ -35,7 +35,13 @@ interprets nor executes it.
 Discovery is bounded and read-only. A missing marker leaves initialization available
 and does not create a journal or canonical intent files. Initialization takes a
 same-machine coordination lease, stages copied canonical bytes, publishes atomically,
-and preserves incompatible state. A compatible marker is idempotent.
+and preserves incompatible state. Publication is accepted only after the resource
+provider returns an exact, structurally valid `committed` outcome and exact marker
+readback succeeds. Thrown, malformed, or `committed-indeterminate` outcomes retain the
+original staged handle and coordination lease for a later commit retry; marker
+visibility alone never promotes the session. A confirmed `not-committed` outcome is
+discarded to a confirmed result before the handle is cleared. A compatible marker is
+idempotent.
 
 ## Workspace and recovery gate
 
@@ -51,6 +57,10 @@ Ready startup completes recovery before calling `surface.start`. Missing-workspa
 startup dispatches with recovery marked `not-required` so the surface can offer
 initialization. Successful initialization performs the same recovery handshake and
 promotes the existing workspace session to ready without reconstructing the host.
+Provider snapshots are copied once from exact data properties into bounded canonical
+state before the host records their generation. The lifecycle independently validates
+the exact recovery `Result` and report at runtime, rejecting accessors, proxies, extra
+keys, unsafe generations, and malformed success values before surface dispatch.
 
 ## Lifecycle
 

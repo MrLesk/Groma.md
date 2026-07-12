@@ -139,6 +139,7 @@ export function createDefaultBootstrapRegistry(
       let operations: ApplicationOperations | undefined;
       const workspace = await createLocalWorkspaceCapability({
         bounds: {
+          maxProviderDiagnostics: defaultHostBounds.maxDiagnosticCount,
           maxSnapshotResources: Math.max(
             defaultHostBounds.maxComponents,
             defaultHostBounds.maxRelationships,

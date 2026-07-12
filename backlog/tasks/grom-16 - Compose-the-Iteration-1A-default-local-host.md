@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 23:05'
+updated_date: '2026-07-12 23:27'
 labels:
   - host
   - bootstrap
@@ -65,4 +65,6 @@ Moved the real local application stack into the default bootstrap registry and m
 Implemented the injected host lifecycle: cancellation/signals are installed before composition; ready workspaces recover before dispatch; missing workspaces dispatch only the workspace gate; active sessions stop exactly once with awaited cleanup; listeners unsubscribe on all exits. Deterministic tests cover normal, signal, startup cancellation, recovery cancellation/failure, surface failure, malformed capabilities, interrupted initialization publication, bounded hostile recovery, and forbidden server/React/plugin-loading paths. Documented the exact 1A marker, registry seam, workspace gate, and lifecycle.
 
 Self-review closed the retryable coordination-release edge: initialization now retains an opaque lease after release failure, blocks promotion, and retries release before later recovery/initialization. Fault-injection proves the diagnostic stays path-free and the same session reaches ready after deterministic release.
+
+Specification-review correction: initialization publication now validates exact replacement outcomes and provider diagnostics, retains the original handle plus coordination lease across thrown, malformed, indeterminate, or unconfirmed-readback outcomes, retries that handle from initialize/recover, and confirms discard before clearing not-committed state. Snapshot input and lifecycle recovery Results/reports are copied from exact bounded data properties into frozen canonical values; hostile accessors, proxies, extra keys, unsafe generations, and malformed successes fail closed before readiness or dispatch. A real replacement-parent-directory-sync fault regression proves same-handle retry and delayed recovery promotion.
 <!-- SECTION:NOTES:END -->

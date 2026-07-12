@@ -190,18 +190,72 @@ describe("local workspace capability", () => {
       defaultWorkspaceDocument,
     );
     const resources = await createLocalResourceProvider(roots);
+    let generationGetterCalls = 0;
     const hostile = Object.create(null) as Record<string, unknown>;
-    Object.defineProperty(hostile, "generation", { get: () => 0 });
-    Object.defineProperty(hostile, "revisions", {
+    Object.defineProperty(hostile, "generation", {
+      enumerable: true,
       get: () => {
-        throw new Error(roots.workspaceRoot);
+        generationGetterCalls += 1;
+        return generationGetterCalls;
       },
     });
-    Object.defineProperty(hostile, "state", { get: () => ({}) });
+    Object.defineProperty(hostile, "revisions", { enumerable: true, value: [] });
+    Object.defineProperty(hostile, "state", {
+      enumerable: true,
+      value: { components: [], relationships: [] },
+    });
     const outcomes: unknown[] = [
       null,
       { generation: 0, revisions: [], state: {} },
       hostile,
+      new Proxy(emptySnapshot(), {}),
+      {
+        extra: true,
+        generation: 0,
+        revisions: [],
+        state: { components: [], relationships: [] },
+      },
+      {
+        generation: 0,
+        revisions: [],
+        state: new Proxy({ components: [], relationships: [] }, {}),
+      },
+      {
+        generation: 0,
+        revisions: [],
+        state: { components: new Proxy([], {}), relationships: [] },
+      },
+      {
+        generation: 0,
+        revisions: [],
+        state: {
+          components: [
+            new Proxy(
+              {
+                id: "ent_00000000000000000000000000000001",
+                kind: "component",
+                payload: {},
+              },
+              {},
+            ),
+          ],
+          relationships: [],
+        },
+      },
+      {
+        generation: 0,
+        revisions: [],
+        state: {
+          components: [
+            {
+              id: "ent_00000000000000000000000000000001",
+              kind: "component",
+              payload: new Proxy({}, {}),
+            },
+          ],
+          relationships: [],
+        },
+      },
       emptySnapshot(),
     ];
     const workspace = await createLocalWorkspaceCapability({
@@ -210,13 +264,19 @@ describe("local workspace capability", () => {
       resources,
     });
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 9; attempt += 1) {
       expect(await workspace.recover()).toMatchObject({
         diagnostics: [{ code: "invalid-workspace-recovery" }],
         ok: false,
       });
     }
-    expect(await workspace.recover()).toMatchObject({ ok: true });
+    const recovered = await workspace.recover();
+    expect(recovered).toEqual({
+      ok: true,
+      value: { generation: 0, status: "completed" },
+    });
+    expect(recovered.ok && Object.isFrozen(recovered.value)).toBeTrue();
+    expect(generationGetterCalls).toBe(0);
     await expect(
       createLocalWorkspaceCapability({
         bounds: { maxSnapshotStateValues: 1_000_001 },
@@ -227,16 +287,30 @@ describe("local workspace capability", () => {
     ).rejects.toThrow("maxSnapshotStateValues");
   });
 
-  test("recognizes an atomically committed marker after an interrupted commit report", async () => {
+  test("retries the same committed handle after an interrupted commit report", async () => {
     const roots = await temporaryWorkspace();
     const base = await createLocalResourceProvider(roots);
     let releases = 0;
+    let commits = 0;
+    let stages = 0;
+    const handles: unknown[] = [];
     const resources = new Proxy(base, {
       get(target, property) {
         if (property === "commitReplacement") {
           return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            await target.commitReplacement(...args);
-            throw new Error(roots.workspaceRoot);
+            commits += 1;
+            handles.push(args[0]);
+            if (commits === 1) {
+              await target.commitReplacement(...args);
+              throw new Error(roots.workspaceRoot);
+            }
+            return target.commitReplacement(...args);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
           };
         }
         if (property === "releaseCoordination") {
@@ -255,11 +329,261 @@ describe("local workspace capability", () => {
       resources,
     });
 
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(workspace.status()).not.toEqual({ state: "ready" });
     expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
     expect(releases).toBe(1);
+    expect(commits).toBe(2);
+    expect(stages).toBe(1);
+    expect(handles[0]).toBe(handles[1]);
     expect(await readFile(path.join(roots.workspaceRoot, "groma", "groma.yaml"), "utf8")).toBe(
       defaultWorkspaceDocument,
     );
+  });
+
+  test("retains a committed handle until exact marker readback is confirmed", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let commits = 0;
+    let reads = 0;
+    let stages = 0;
+    const handles: unknown[] = [];
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "read") {
+          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
+            reads += 1;
+            if (reads === 3) {
+              return {
+                diagnostics: [{ code: "private-readback-failure", message: roots.workspaceRoot }],
+                ok: false,
+              };
+            }
+            return target.read(...args);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            commits += 1;
+            handles.push(args[0]);
+            return target.commitReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(workspace.status()).not.toEqual({ state: "ready" });
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(stages).toBe(1);
+    expect(commits).toBe(2);
+    expect(handles[0]).toBe(handles[1]);
+  });
+
+  test("retries one staged handle across thrown, malformed, and indeterminate publication", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let commits = 0;
+    let getterCalls = 0;
+    let snapshots = 0;
+    let stages = 0;
+    const handles: unknown[] = [];
+    const accessorOutcome = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(accessorOutcome, "state", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return "committed";
+      },
+    });
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            commits += 1;
+            handles.push(args[0]);
+            if (commits === 1) throw new Error(roots.workspaceRoot);
+            if (commits === 2) return null;
+            if (commits === 3) return accessorOutcome;
+            if (commits === 4) return new Proxy({ state: "committed" }, {});
+            if (commits === 5) {
+              return {
+                diagnostics: [
+                  {
+                    code: "private-indeterminate",
+                    details: { commitState: "committed-indeterminate" },
+                    message: roots.workspaceRoot,
+                  },
+                ],
+                state: "committed-indeterminate",
+              };
+            }
+            if (commits === 6) {
+              return { diagnostics: [{ code: "bad" }], state: "committed" };
+            }
+            return target.commitReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => {
+        snapshots += 1;
+        return emptySnapshot();
+      }),
+      resources,
+    });
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+      expect(workspace.status()).not.toEqual({ state: "ready" });
+      expect(snapshots).toBe(0);
+    }
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(stages).toBe(1);
+    expect(commits).toBe(7);
+    expect(getterCalls).toBe(0);
+    expect(handles.every((handle) => handle === handles[0])).toBeTrue();
+    expect(snapshots).toBe(1);
+  });
+
+  test("confirms discard before clearing a rejected publication", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let commits = 0;
+    let discards = 0;
+    let stages = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            commits += 1;
+            if (commits === 1) {
+              return {
+                diagnostics: [{ code: "rejected", message: "not committed" }],
+                state: "not-committed",
+              };
+            }
+            return target.commitReplacement(...args);
+          };
+        }
+        if (property === "discardReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["discardReplacement"]>) => {
+            discards += 1;
+            if (discards === 1) {
+              return {
+                diagnostics: [{ code: "private-cleanup-failure", message: roots.workspaceRoot }],
+                ok: false,
+              };
+            }
+            return target.discardReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(stages).toBe(1);
+    expect(commits).toBe(1);
+    expect(discards).toBe(2);
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(stages).toBe(2);
+    expect(commits).toBe(2);
+  });
+
+  test("confirms real directory durability by retrying the same local-provider handle", async () => {
+    if (process.platform === "win32") return;
+    const roots = await temporaryWorkspace();
+    let injected = false;
+    const base = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: (phase) => {
+        if (phase === "replacement-parent-directory-sync" && !injected) {
+          injected = true;
+          throw new Error("injected directory sync failure");
+        }
+      },
+    });
+    let commits = 0;
+    let snapshots = 0;
+    let stages = 0;
+    const handles: unknown[] = [];
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            commits += 1;
+            handles.push(args[0]);
+            return target.commitReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => {
+        snapshots += 1;
+        return emptySnapshot();
+      }),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(workspace.status()).not.toEqual({ state: "ready" });
+    expect(stages).toBe(1);
+    expect(commits).toBe(1);
+    expect(snapshots).toBe(0);
+    expect(await workspace.recover()).toMatchObject({ ok: true });
+    expect(stages).toBe(1);
+    expect(commits).toBe(2);
+    expect(handles[0]).toBe(handles[1]);
+    expect(snapshots).toBe(1);
+    expect(workspace.status()).toEqual({ state: "ready" });
+    expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
   });
 
   test("releases initialization coordination when staging fails", async () => {
@@ -338,7 +662,7 @@ describe("local workspace capability", () => {
       status: "provider-failure",
     });
     expect(workspace.status()).toEqual({ state: "configured" });
-    expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
     expect(workspace.status()).toEqual({ state: "ready" });
     expect(releases).toBe(2);
   });

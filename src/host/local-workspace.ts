@@ -5,6 +5,7 @@ import type {
 import {
   failure,
   parseEntityId,
+  parseGraphGeneration,
   parseRelationId,
   success,
   type Diagnostic,
@@ -24,6 +25,12 @@ import type {
   WorkspaceRecoveryReport,
   WorkspaceStatus,
 } from "./contracts.ts";
+import {
+  copyHostDiagnostics,
+  inspectHostDenseArray,
+  inspectHostRecord,
+  isHostProxy,
+} from "./runtime-validation.ts";
 
 const locator = workspaceResourceLocator("groma", "groma.yaml");
 if (!locator.ok) throw new Error("invalid built-in workspace configuration locator");
@@ -34,6 +41,7 @@ const canonicalBytes = new TextEncoder().encode(defaultWorkspaceDocument);
 
 export interface LocalWorkspaceBounds {
   readonly maxConfigurationBytes: number;
+  readonly maxProviderDiagnostics: number;
   readonly maxSnapshotResources: number;
   readonly maxSnapshotStateDepth: number;
   readonly maxSnapshotStateValues: number;
@@ -48,6 +56,7 @@ export interface LocalWorkspaceCapabilityOptions {
 
 const defaultBounds: LocalWorkspaceBounds = Object.freeze({
   maxConfigurationBytes: 4_096,
+  maxProviderDiagnostics: 100,
   maxSnapshotResources: 100_000,
   maxSnapshotStateDepth: 30,
   maxSnapshotStateValues: 100_000,
@@ -82,6 +91,7 @@ function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): Local
   const selected = { ...defaultBounds, ...input };
   for (const [name, maximum] of [
     ["maxConfigurationBytes", 64 * 1024],
+    ["maxProviderDiagnostics", 1_000],
     ["maxSnapshotResources", 1_000_000],
     ["maxSnapshotStateDepth", 100],
     ["maxSnapshotStateValues", 1_000_000],
@@ -94,6 +104,72 @@ function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): Local
   return Object.freeze(selected);
 }
 
+type ValidatedCommitState = "committed" | "committed-indeterminate" | "not-committed";
+
+function validatedCommitState(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+): Result<ValidatedCommitState> {
+  const outcome = inspectHostRecord(
+    value,
+    [["state"], ["diagnostics", "state"]],
+    "invalid-workspace-publication",
+    "Workspace configuration publication outcome",
+  );
+  if (!outcome.ok) return outcome;
+  if (Object.hasOwn(outcome.value, "diagnostics")) {
+    const diagnostics = copyHostDiagnostics(
+      outcome.value.diagnostics,
+      bounds.maxProviderDiagnostics,
+      "invalid-workspace-publication",
+    );
+    if (!diagnostics.ok) return diagnostics;
+  }
+  if (
+    outcome.value.state !== "committed" &&
+    outcome.value.state !== "committed-indeterminate" &&
+    outcome.value.state !== "not-committed"
+  ) {
+    return failure(
+      diagnostic("invalid-workspace-publication", "Workspace publication state is malformed"),
+    );
+  }
+  return success(outcome.value.state);
+}
+
+function validatedVoidResult(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  subject: string,
+): Result<"failed" | "succeeded"> {
+  const outcome = inspectHostRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-workspace-provider-result",
+    subject,
+  );
+  if (!outcome.ok) return outcome;
+  if (outcome.value.ok === true) {
+    return outcome.value.value === undefined
+      ? success("succeeded")
+      : failure(diagnostic("invalid-workspace-provider-result", `${subject} success is malformed`));
+  }
+  if (outcome.value.ok !== false) {
+    return failure(
+      diagnostic("invalid-workspace-provider-result", `${subject} status is malformed`),
+    );
+  }
+  const diagnostics = copyHostDiagnostics(
+    outcome.value.diagnostics,
+    bounds.maxProviderDiagnostics,
+    "invalid-workspace-provider-result",
+  );
+  return diagnostics.ok ? success("failed") : diagnostics;
+}
+
 function sameBytes(value: Uint8Array): boolean {
   if (value.byteLength !== canonicalBytes.byteLength) return false;
   for (let index = 0; index < value.byteLength; index += 1) {
@@ -102,89 +178,140 @@ function sameBytes(value: Uint8Array): boolean {
   return true;
 }
 
-function validSnapshot(
+interface CanonicalWorkspaceSnapshot {
+  readonly generation: number;
+  readonly state: Readonly<Record<string, unknown>>;
+}
+
+function canonicalSnapshot(
   value: unknown,
   bounds: LocalWorkspaceBounds,
-): value is {
-  readonly generation: number;
-  readonly revisions: readonly unknown[];
-  readonly state: unknown;
-} {
-  if (typeof value !== "object" || value === null) return false;
-  try {
-    const candidate = value as Record<string, unknown>;
+): Result<CanonicalWorkspaceSnapshot> {
+  const snapshot = inspectHostRecord(
+    value,
+    [["generation", "revisions", "state"]],
+    "invalid-workspace-recovery",
+    "Workspace recovery snapshot",
+  );
+  if (!snapshot.ok) return snapshot;
+  const generation = parseGraphGeneration(snapshot.value.generation);
+  if (!generation.ok) {
+    return failure(
+      diagnostic("invalid-workspace-recovery", "Workspace recovery generation is malformed"),
+    );
+  }
+  const revisions = inspectHostDenseArray(
+    snapshot.value.revisions,
+    bounds.maxSnapshotResources,
+    "invalid-workspace-recovery",
+    "Workspace recovery revisions",
+  );
+  if (!revisions.ok || revisions.value.length !== 0) {
+    return failure(
+      diagnostic("invalid-workspace-recovery", "Workspace recovery returned unexpected revisions"),
+    );
+  }
+  const state = inspectHostRecord(
+    snapshot.value.state,
+    [["components", "relationships"]],
+    "invalid-workspace-recovery",
+    "Workspace recovery state",
+  );
+  if (!state.ok) return state;
+  const components = inspectHostDenseArray(
+    state.value.components,
+    bounds.maxSnapshotResources,
+    "invalid-workspace-recovery",
+    "Workspace recovery components",
+  );
+  if (!components.ok) return components;
+  const relationships = inspectHostDenseArray(
+    state.value.relationships,
+    bounds.maxSnapshotResources,
+    "invalid-workspace-recovery",
+    "Workspace recovery relationships",
+  );
+  if (!relationships.ok) return relationships;
+  const canonicalComponents = new Array<Record<string, unknown>>(components.value.length);
+  for (let index = 0; index < components.value.length; index += 1) {
+    const component = inspectHostRecord(
+      components.value[index],
+      [["id", "kind", "payload"]],
+      "invalid-workspace-recovery",
+      "Workspace recovery component",
+    );
     if (
-      !Number.isSafeInteger(candidate.generation) ||
-      (candidate.generation as number) < 0 ||
-      !Array.isArray(candidate.revisions) ||
-      candidate.revisions.length !== 0 ||
-      !Object.hasOwn(candidate, "state")
+      !component.ok ||
+      component.value.kind !== STANDARD_COMPONENT_KIND ||
+      typeof component.value.id !== "string" ||
+      !parseEntityId(component.value.id).ok ||
+      isHostProxy(component.value.payload)
     ) {
-      return false;
+      return failure(
+        diagnostic("invalid-workspace-recovery", "Workspace recovery component is malformed"),
+      );
     }
-    const copied = copyGraphPayload(candidate.state, "transaction", {
+    canonicalComponents[index] = Object.freeze({
+      id: component.value.id,
+      kind: component.value.kind,
+      payload: component.value.payload,
+    });
+  }
+  const canonicalRelationships = new Array<Record<string, unknown>>(relationships.value.length);
+  for (let index = 0; index < relationships.value.length; index += 1) {
+    const relationship = inspectHostRecord(
+      relationships.value[index],
+      [["id", "payload", "source", "target", "type"]],
+      "invalid-workspace-recovery",
+      "Workspace recovery relationship",
+    );
+    if (
+      !relationship.ok ||
+      typeof relationship.value.id !== "string" ||
+      !parseRelationId(relationship.value.id).ok ||
+      typeof relationship.value.source !== "string" ||
+      !parseEntityId(relationship.value.source).ok ||
+      typeof relationship.value.target !== "string" ||
+      !parseEntityId(relationship.value.target).ok ||
+      typeof relationship.value.type !== "string" ||
+      isHostProxy(relationship.value.payload)
+    ) {
+      return failure(
+        diagnostic("invalid-workspace-recovery", "Workspace recovery relationship is malformed"),
+      );
+    }
+    canonicalRelationships[index] = Object.freeze({
+      id: relationship.value.id,
+      payload: relationship.value.payload,
+      source: relationship.value.source,
+      target: relationship.value.target,
+      type: relationship.value.type,
+    });
+  }
+  const copied = copyGraphPayload(
+    Object.freeze({
+      components: Object.freeze(canonicalComponents),
+      relationships: Object.freeze(canonicalRelationships),
+    }),
+    "transaction",
+    {
       code: "invalid-workspace-recovery",
       maximumDepth: bounds.maxSnapshotStateDepth,
       maximumValues: bounds.maxSnapshotStateValues,
       message: "Workspace recovery state exceeds its configured bound",
-    });
-    if (
-      !copied.ok ||
-      typeof copied.value !== "object" ||
-      copied.value === null ||
-      Array.isArray(copied.value)
-    ) {
-      return false;
-    }
-    const state = copied.value as Readonly<Record<string, unknown>>;
-    const keys = Object.keys(state);
-    if (keys.length !== 2 || !keys.includes("components") || !keys.includes("relationships")) {
-      return false;
-    }
-    const components = state.components;
-    const relationships = state.relationships;
-    if (
-      !Array.isArray(components) ||
-      !Array.isArray(relationships) ||
-      components.length > bounds.maxSnapshotResources ||
-      relationships.length > bounds.maxSnapshotResources
-    ) {
-      return false;
-    }
-    for (const component of components) {
-      if (
-        typeof component !== "object" ||
-        component === null ||
-        Array.isArray(component) ||
-        component.kind !== STANDARD_COMPONENT_KIND ||
-        typeof component.id !== "string" ||
-        !parseEntityId(component.id).ok ||
-        !Object.hasOwn(component, "payload")
-      ) {
-        return false;
-      }
-    }
-    for (const relationship of relationships) {
-      if (
-        typeof relationship !== "object" ||
-        relationship === null ||
-        Array.isArray(relationship) ||
-        typeof relationship.id !== "string" ||
-        !parseRelationId(relationship.id).ok ||
-        typeof relationship.source !== "string" ||
-        !parseEntityId(relationship.source).ok ||
-        typeof relationship.target !== "string" ||
-        !parseEntityId(relationship.target).ok ||
-        typeof relationship.type !== "string" ||
-        !Object.hasOwn(relationship, "payload")
-      ) {
-        return false;
-      }
-    }
-    return true;
-  } catch {
-    return false;
+    },
+  );
+  if (!copied.ok || typeof copied.value !== "object" || copied.value === null) {
+    return failure(
+      diagnostic("invalid-workspace-recovery", "Workspace recovery state is malformed"),
+    );
   }
+  return success(
+    Object.freeze({
+      generation: generation.value,
+      state: copied.value as Readonly<Record<string, unknown>>,
+    }),
+  );
 }
 
 export async function createLocalWorkspaceCapability(
@@ -192,15 +319,24 @@ export async function createLocalWorkspaceCapability(
 ): Promise<WorkspaceAccessCapability> {
   const bounds = validateBounds(options.bounds);
   let current: WorkspaceStatus;
+  let configurationPublishedBySession = false;
+  let pendingPublication:
+    { action: "commit" | "discard"; readonly handle: StagedReplacementHandle } | undefined;
   let recoveredGeneration = 0;
   let retainedInitializationLease: LocalCoordinationLease | undefined;
 
   const releaseRetainedInitializationLease = async (): Promise<Result<void>> => {
+    if (pendingPublication !== undefined) return failure(providerFailure());
     const retained = retainedInitializationLease;
     if (retained === undefined) return success(undefined);
     try {
-      const released = await options.resources.releaseCoordination(retained);
-      if (!released.ok) return failure(providerFailure());
+      const raw = await options.resources.releaseCoordination(retained);
+      const released = validatedVoidResult(
+        raw,
+        bounds,
+        "Workspace initialization coordination release",
+      );
+      if (!released.ok || released.value !== "succeeded") return failure(providerFailure());
       retainedInitializationLease = undefined;
       return success(undefined);
     } catch {
@@ -236,7 +372,54 @@ export async function createLocalWorkspaceCapability(
 
   current = await inspect();
 
+  const settlePendingPublication = async (): Promise<
+    Result<"committed" | "discarded" | "none">
+  > => {
+    const pending = pendingPublication;
+    if (pending === undefined) return success("none");
+    if (pending.action === "discard") {
+      try {
+        const raw = await options.resources.discardReplacement(pending.handle);
+        const discarded = validatedVoidResult(raw, bounds, "Workspace publication discard");
+        if (!discarded.ok || discarded.value !== "succeeded") return failure(providerFailure());
+      } catch {
+        return failure(providerFailure());
+      }
+      pendingPublication = undefined;
+      current = await inspect();
+      const released = await releaseRetainedInitializationLease();
+      return released.ok ? success("discarded") : released;
+    }
+
+    let state: Result<ValidatedCommitState>;
+    try {
+      state = validatedCommitState(
+        await options.resources.commitReplacement(pending.handle),
+        bounds,
+      );
+    } catch {
+      return failure(providerFailure());
+    }
+    if (!state.ok || state.value === "committed-indeterminate") {
+      return failure(providerFailure());
+    }
+    if (state.value === "not-committed") {
+      pendingPublication = { action: "discard", handle: pending.handle };
+      return settlePendingPublication();
+    }
+
+    const observed = await inspect();
+    if (observed.state !== "configured") return failure(providerFailure());
+    current = observed;
+    configurationPublishedBySession = true;
+    pendingPublication = undefined;
+    const released = await releaseRetainedInitializationLease();
+    return released.ok ? success("committed") : released;
+  };
+
   const recover = async (): Promise<Result<WorkspaceRecoveryReport>> => {
+    const settled = await settlePendingPublication();
+    if (!settled.ok) return settled;
     const released = await releaseRetainedInitializationLease();
     if (!released.ok) return released;
     if (current.state === "missing") {
@@ -249,15 +432,22 @@ export async function createLocalWorkspaceCapability(
       return success({ generation: recoveredGeneration, status: "completed" });
     }
     try {
-      const snapshot = await options.transactionProvider.snapshot(Object.freeze([]));
-      if (!validSnapshot(snapshot, bounds)) {
+      const snapshot = canonicalSnapshot(
+        await options.transactionProvider.snapshot(Object.freeze([])),
+        bounds,
+      );
+      if (!snapshot.ok) {
         return failure(
           diagnostic("invalid-workspace-recovery", "Workspace recovery returned malformed state"),
         );
       }
-      recoveredGeneration = snapshot.generation;
+      const report = Object.freeze({
+        generation: snapshot.value.generation,
+        status: "completed" as const,
+      });
+      recoveredGeneration = report.generation;
       current = Object.freeze({ state: "ready" });
-      return success(Object.freeze({ generation: snapshot.generation, status: "completed" }));
+      return success(report);
     } catch {
       return failure(
         diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
@@ -266,6 +456,13 @@ export async function createLocalWorkspaceCapability(
   };
 
   const initialize = async (): Promise<WorkspaceInitializationOutcome> => {
+    const settled = await settlePendingPublication();
+    if (!settled.ok || settled.value === "discarded") {
+      return Object.freeze({
+        diagnostics: Object.freeze([providerFailure()]),
+        status: "provider-failure",
+      });
+    }
     const retainedRelease = await releaseRetainedInitializationLease();
     if (!retainedRelease.ok) {
       return Object.freeze({
@@ -283,88 +480,76 @@ export async function createLocalWorkspaceCapability(
       });
     }
 
-    const previouslyConfigured = current.state === "configured";
-    if (!previouslyConfigured) {
-      let lease: LocalCoordinationLease | undefined;
-      let pendingStage: StagedReplacementHandle | undefined;
-      let outcome: WorkspaceInitializationOutcome | undefined;
+    if (current.state === "missing") {
       try {
         const acquired = await options.resources.acquireCoordination({
           context: "local-machine",
           locator: workspaceConfigurationLocator,
         });
         if (!acquired.ok) {
-          outcome = Object.freeze({
+          return Object.freeze({
             diagnostics: Object.freeze([providerFailure()]),
             status: "provider-failure",
           });
-        } else {
-          lease = acquired.value;
-          current = await inspect();
-          if (current.state === "missing") {
-            const staged = await options.resources.stageReplacement(
-              workspaceConfigurationLocator,
-              canonicalBytes.slice(),
-            );
-            if (!staged.ok) throw new Error("configuration staging failed");
-            pendingStage = staged.value;
-            const committed = await options.resources.commitReplacement(staged.value);
-            if (committed.state === "not-committed") {
-              await options.resources.discardReplacement(staged.value);
-              pendingStage = undefined;
-              throw new Error("configuration commit failed");
-            }
-            pendingStage = undefined;
-            current = await inspect();
-          }
-          if (current.state === "conflict") {
-            outcome = initializationFailure(current);
-          } else if (current.state !== "configured") {
-            throw new Error("configuration was not established");
-          }
         }
+        retainedInitializationLease = acquired.value;
+        current = await inspect();
       } catch {
-        if (pendingStage !== undefined) {
-          current = await inspect();
-          if (current.state !== "configured") {
-            try {
-              await options.resources.discardReplacement(pendingStage);
-            } catch {
-              // The host-owned diagnostic below remains stable and path-free.
-            }
-            outcome = Object.freeze({
-              diagnostics: Object.freeze([providerFailure()]),
+        return Object.freeze({
+          diagnostics: Object.freeze([providerFailure()]),
+          status: "provider-failure",
+        });
+      }
+
+      if (current.state === "missing") {
+        try {
+          const staged = await options.resources.stageReplacement(
+            workspaceConfigurationLocator,
+            canonicalBytes.slice(),
+          );
+          if (!staged.ok) {
+            const released = await releaseRetainedInitializationLease();
+            return Object.freeze({
+              diagnostics: released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
               status: "provider-failure",
             });
           }
-          pendingStage = undefined;
-        } else {
-          outcome = Object.freeze({
+          pendingPublication = { action: "commit", handle: staged.value };
+        } catch {
+          const released = await releaseRetainedInitializationLease();
+          return Object.freeze({
+            diagnostics: released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
+            status: "provider-failure",
+          });
+        }
+        const published = await settlePendingPublication();
+        if (!published.ok || published.value !== "committed") {
+          return Object.freeze({
             diagnostics: Object.freeze([providerFailure()]),
             status: "provider-failure",
           });
         }
-      } finally {
-        if (lease !== undefined) {
+      } else {
+        const released = await releaseRetainedInitializationLease();
+        if (!released.ok) {
+          return Object.freeze({
+            diagnostics: released.diagnostics,
+            status: "provider-failure",
+          });
+        }
+        if (current.state === "conflict") return initializationFailure(current);
+        if (current.state !== "configured") {
           try {
-            const released = await options.resources.releaseCoordination(lease);
-            if (!released.ok) {
-              retainedInitializationLease = lease;
-              outcome = Object.freeze({
-                diagnostics: Object.freeze([providerFailure()]),
-                status: "provider-failure",
-              });
-            }
+            current = await inspect();
           } catch {
-            retainedInitializationLease = lease;
-            outcome = Object.freeze({
-              diagnostics: Object.freeze([providerFailure()]),
-              status: "provider-failure",
-            });
+            // The path-free provider failure below is the only exposed diagnostic.
           }
+          return Object.freeze({
+            diagnostics: Object.freeze([providerFailure()]),
+            status: "provider-failure",
+          });
         }
       }
-      if (outcome !== undefined) return outcome;
     }
 
     const recovered = await recover();
@@ -373,7 +558,7 @@ export async function createLocalWorkspaceCapability(
     }
     return Object.freeze({
       generation: recovered.value.generation as never,
-      status: previouslyConfigured ? "already-initialized" : "initialized",
+      status: configurationPublishedBySession ? "initialized" : "already-initialized",
     });
   };
 
