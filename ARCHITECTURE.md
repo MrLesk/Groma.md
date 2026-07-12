@@ -955,17 +955,18 @@ The component boundaries express ownership:
 - **Notifications** owns delivery of customer communications.
 
 The following is an illustrative v0.1 Ordering component nested beneath a Commerce
-root component of type `domain`. Example IDs are placeholders, not canonical IDs for
-the future Groma self-blueprint.
+root component of type `domain`. Its valid opaque IDs are examples, not canonical IDs
+for the future Groma self-blueprint. The file lives at
+`groma/intent/00/ent_00000000000000000000000000000010.md`.
 
 ```md
 ---
 schema: groma/v0.1
-id: cmp_example_ordering
+id: ent_00000000000000000000000000000010
 kind: component
 name: Ordering
 type: service
-parent: cmp_example_commerce
+parent: ent_00000000000000000000000000000001
 
 desired: present
 lifecycle: active
@@ -1031,24 +1032,29 @@ actions:
       Incorporate relevant payment and fulfillment changes into the order lifecycle.
 
 relationships:
-  - type: requires
-    target: cmp_example_pricing
+  - id: rel_00000000000000000000000000000101
+    type: requires
+    target: ent_00000000000000000000000000000020
     description: Uses an authoritative price for the purchase.
 
-  - type: requires
-    target: cmp_example_inventory
+  - id: rel_00000000000000000000000000000102
+    type: requires
+    target: ent_00000000000000000000000000000021
     description: Requires products to be reserved before acceptance.
 
-  - type: requires
-    target: cmp_example_payments
+  - id: rel_00000000000000000000000000000103
+    type: requires
+    target: ent_00000000000000000000000000000022
     description: Requires an acceptable payment state before acceptance.
 
-  - type: informs
-    target: cmp_example_fulfillment
+  - id: rel_00000000000000000000000000000104
+    type: informs
+    target: ent_00000000000000000000000000000023
     description: Provides accepted orders for fulfillment.
 
-  - type: informs
-    target: cmp_example_notifications
+  - id: rel_00000000000000000000000000000105
+    type: informs
+    target: ent_00000000000000000000000000000024
     description: Provides customer-relevant order lifecycle changes.
 ---
 
@@ -1079,6 +1085,11 @@ commitments permit it.
   acceptable payment state.
 - Meaningful lifecycle changes are available to downstream components.
 ```
+
+The relationship source is implicit in the owning component file. Everything after
+the exact `# Intent` heading and blank line is the component's reversible intent
+string; the behavioral notes and guarantees above are therefore prose, not additional
+frontmatter schema.
 
 The structured frontmatter remains limited to intent-adjacent identity, inputs,
 outputs, actions, and relationships. The richer concepts are represented without

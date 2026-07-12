@@ -4,6 +4,30 @@ Official local-resource and canonical persistence providers. Technology-specific
 implementations satisfy capability contracts and never become authoritative outside
 their canonical records.
 
+## Markdown intent store
+
+[`markdown-intent-store.ts`](markdown-intent-store.ts) is the read/codec boundary for
+standard-model intent. It stores one component per canonical resource at
+`groma/intent/<first-two-identity-hex>/<entity-id>.md`; rename and reparent operations
+therefore never change the resource key. Each file owns only that component and its
+outgoing relationships. Relationship sources are implicit, while stable relationship
+IDs, types, targets, descriptions, and namespaced extensions remain explicit.
+
+The `groma/v0.1` frontmatter contains structural metadata, embedded inputs, outputs,
+actions, outgoing relationships, and extensions. Intent prose is reversible Markdown
+under the exact `# Intent` body heading. The codec uses the injected Standard Model
+capability for every component and relationship semantic view, canonicalizes ordering
+and LF framing, rejects aliases, tags, duplicate YAML keys, invalid UTF-8, conflicts,
+wrong schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content
+revision. It never writes timestamps, host paths, evidence, bindings, or derived state.
+
+Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
+provider continuation pages, accepts only the exact shard/file layout, produces stable
+document/entity/relation order, and diagnoses misplaced or duplicate identities,
+missing parents or relationship targets, and containment cycles. A missing intent root
+is an empty store. This API intentionally has no direct write or commit operation;
+GROM-14 owns transactionally coordinated replacement.
+
 ## Local resource capability
 
 [`contracts.ts`](contracts.ts) defines the provider-neutral boundary used by
