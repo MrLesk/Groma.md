@@ -1,0 +1,1493 @@
+import { describe, expect, test } from "bun:test";
+
+import {
+  BoundedQueryContracts,
+  GraphKernel,
+  TransactionEngine,
+  failure,
+  parseGraphGeneration,
+  parseResourceKey,
+  success,
+  type GraphData,
+  type GraphDataRecord,
+  type GraphGeneration,
+  type OpaqueIdSource,
+  type ProposedTransaction,
+  type ResourceKey,
+  type TransactionCommitResultInput,
+  type TransactionOutcome,
+  type TransactionPrepareResultInput,
+  type TransactionProvider,
+  type TransactionRequest,
+  type TransactionProviderSnapshotInput,
+} from "../../core/index.ts";
+import {
+  createStandardModelCapability,
+  createStandardModelInvariant,
+  type StandardComponentInput,
+  type StandardModelTransactionState,
+} from "../../standard-model/index.ts";
+import {
+  type ApplicationMutationOutcome,
+  type ApplicationOperationBounds,
+  createApplicationOperations,
+  type ApplicationOperationsOptions,
+  type WorkspaceInitializationOutcome,
+} from "../index.ts";
+import {
+  createStatefulSemanticInitializer,
+  exerciseApplicationOperations,
+  expectedApplicationOperationsTrace,
+} from "./conformance.ts";
+
+const ids = {
+  domain: "ent_00000000000000000000000000000001",
+  service: "ent_00000000000000000000000000000002",
+  module: "ent_00000000000000000000000000000003",
+  nestedService: "ent_00000000000000000000000000000004",
+  secondRoot: "ent_00000000000000000000000000000005",
+  target: "ent_00000000000000000000000000000006",
+} as const;
+
+const relationIds = {
+  first: "rel_00000000000000000000000000000001",
+  second: "rel_00000000000000000000000000000002",
+} as const;
+
+const model = createStandardModelCapability();
+const applicationBounds: ApplicationOperationBounds = Object.freeze({
+  maxComponents: 1_000,
+  maxDiagnosticCount: 100,
+  maxEmbeddedItems: 100,
+  maxRelationshipMutations: 100,
+  maxRelationships: 1_000,
+  maxRequestDataDepth: 30,
+  maxRequestDataValues: 10_000,
+  maxSnapshotStateDepth: 30,
+  maxSnapshotStateValues: 100_000,
+});
+
+function component(input: StandardComponentInput) {
+  const normalized = model.normalize(input);
+  if (!normalized.ok || normalized.value.id === undefined) throw new Error("invalid fixture");
+  return Object.freeze({
+    id: normalized.value.id,
+    kind: normalized.value.kind,
+    payload: normalized.value.payload as GraphData,
+  });
+}
+
+function state(
+  components: readonly ReturnType<typeof component>[],
+  relationships: StandardModelTransactionState["relationships"] = [],
+): StandardModelTransactionState {
+  return Object.freeze({
+    components: Object.freeze([...components]),
+    relationships: Object.freeze([...relationships]),
+  });
+}
+
+const richState = state(
+  [
+    component({ id: ids.domain, name: "Commerce", type: "domain" }),
+    component({
+      "example.dev/owner": "architecture",
+      actions: [{ id: "deploy", description: "Release safely" }],
+      desired: "active",
+      id: ids.service,
+      inputs: [{ id: "orders", name: "Orders" }],
+      intent: "Own the order lifecycle.",
+      lifecycle: "active",
+      name: "Ordering",
+      outputs: [{ id: "receipts", name: "Receipts" }],
+      parent: ids.domain,
+      type: "service",
+    }),
+    component({ id: ids.module, name: "Checkout", parent: ids.service, type: "module" }),
+    component({
+      id: ids.nestedService,
+      name: "Worker",
+      parent: ids.module,
+      type: "service",
+    }),
+    component({ id: ids.secondRoot, name: "Platform", type: "domain" }),
+    component({ id: ids.target, name: "Identity", parent: ids.secondRoot, type: "service" }),
+  ],
+  [
+    {
+      id: relationIds.first,
+      payload: { description: "Authenticates through" },
+      source: ids.service,
+      target: ids.target,
+      type: "depends-on",
+    },
+    {
+      id: relationIds.second,
+      payload: { "example.dev/strength": "required" },
+      source: ids.service,
+      target: ids.module,
+      type: "coordinates-with",
+    },
+  ],
+);
+
+function resource(id: string): ResourceKey {
+  const parsed = parseResourceKey(`opaque-resource:${id}`);
+  if (!parsed.ok) throw new Error("invalid resource fixture");
+  return parsed.value;
+}
+
+function generation(value: number): GraphGeneration {
+  const parsed = parseGraphGeneration(value);
+  if (!parsed.ok) throw new Error("invalid generation fixture");
+  return parsed.value;
+}
+
+class SnapshotFixture {
+  generation = 1;
+  readonly requested: readonly ResourceKey[][] = [];
+  sequence: number[] = [];
+  currentState: StandardModelTransactionState = richState;
+
+  snapshot = (resources: readonly ResourceKey[]): TransactionProviderSnapshotInput => {
+    (this.requested as ResourceKey[][]).push([...resources]);
+    const generation = this.sequence.shift() ?? this.generation;
+    return Object.freeze({
+      generation,
+      revisions: Object.freeze(
+        resources.map((key) =>
+          Object.freeze({ resource: key, revision: `revision:${String(key).slice(-32)}` }),
+        ),
+      ),
+      state: this.currentState,
+    });
+  };
+}
+
+class MutationProvider implements TransactionProvider {
+  commits = 0;
+  generation = 0;
+  prepares = 0;
+  revisions = new Map<ResourceKey, string>();
+  snapshots = 0;
+  currentState: StandardModelTransactionState = state([]);
+  #pending: ProposedTransaction | undefined;
+
+  snapshot = (resources: readonly ResourceKey[]): TransactionProviderSnapshotInput => {
+    this.snapshots += 1;
+    return Object.freeze({
+      generation: this.generation,
+      revisions: Object.freeze(
+        resources.map((key) =>
+          Object.freeze({ resource: key, revision: this.revisions.get(key) ?? null }),
+        ),
+      ),
+      state: this.currentState,
+    });
+  };
+
+  prepare = (proposal: ProposedTransaction): TransactionPrepareResultInput => {
+    this.prepares += 1;
+    if (proposal.baseGeneration !== this.generation) {
+      return Object.freeze({ reason: "generation", status: "conflict" });
+    }
+    for (const expected of proposal.expectedRevisions) {
+      if ((this.revisions.get(expected.resource) ?? null) !== expected.expected) {
+        return Object.freeze({ reason: "revision", status: "conflict" });
+      }
+    }
+    this.#pending = proposal;
+    return Object.freeze({ status: "prepared", token: `memory-token-${this.prepares}` });
+  };
+
+  commit = (_token: string): TransactionCommitResultInput => {
+    const proposal = this.#pending;
+    if (proposal === undefined) return Object.freeze({ status: "not-committed" });
+    this.#pending = undefined;
+    const mutation = proposal.mutation as {
+      readonly components: readonly GraphDataRecord[];
+      readonly relationships: readonly GraphDataRecord[];
+    };
+    const components = new Map(
+      this.currentState.components.map((entry) => [entry.id, entry] as const),
+    );
+    const relationships = new Map(
+      this.currentState.relationships.map((entry) => [entry.id, entry] as const),
+    );
+    for (const change of mutation.components) {
+      if (change.type === "create") {
+        const input = change.component as GraphDataRecord;
+        const normalized = model.normalize(input);
+        if (!normalized.ok || normalized.value.id === undefined) throw new Error("invalid create");
+        components.set(
+          normalized.value.id,
+          Object.freeze({
+            id: normalized.value.id,
+            kind: normalized.value.kind,
+            payload: normalized.value.payload as GraphData,
+          }),
+        );
+      } else if (change.type === "patch") {
+        const id = String(change.id);
+        const existing = components.get(id);
+        if (existing === undefined) throw new Error("missing patch target");
+        const patched = model.patch(existing as never, change.patch as never);
+        if (!patched.ok) throw new Error("invalid patch");
+        components.set(
+          id,
+          Object.freeze({
+            id,
+            kind: patched.value.kind,
+            payload: patched.value.payload as GraphData,
+          }),
+        );
+      } else if (change.type === "remove") {
+        components.delete(String(change.id));
+      }
+    }
+    for (const change of mutation.relationships) {
+      if (change.type === "upsert") {
+        const relationship = change.relationship as GraphDataRecord;
+        relationships.set(
+          String(relationship.id),
+          Object.freeze({
+            id: String(relationship.id),
+            payload: relationship.payload as GraphData,
+            source: String(relationship.source),
+            target: String(relationship.target),
+            type: String(relationship.type),
+          }),
+        );
+      } else if (change.type === "remove") {
+        relationships.delete(String(change.id));
+      }
+    }
+    this.currentState = Object.freeze({
+      components: Object.freeze(
+        Array.from(components.values()).sort((left, right) =>
+          left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+        ),
+      ) as StandardModelTransactionState["components"],
+      relationships: Object.freeze(
+        Array.from(relationships.values()).sort((left, right) =>
+          left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+        ),
+      ) as StandardModelTransactionState["relationships"],
+    });
+    this.generation = proposal.generation;
+    const confirmed = proposal.expectedRevisions.map((expected) => {
+      const componentId = String(expected.resource).slice("opaque-resource:".length);
+      const stillExists = components.has(componentId);
+      const revision = stillExists ? `committed-revision-${this.generation}-${componentId}` : null;
+      if (revision === null) this.revisions.delete(expected.resource);
+      else this.revisions.set(expected.resource, revision);
+      return Object.freeze({ resource: expected.resource, revision });
+    });
+    this.commits += 1;
+    return Object.freeze({
+      affected: proposal.affected,
+      generation: proposal.generation,
+      revisions: Object.freeze(confirmed),
+      status: "committed",
+    });
+  };
+
+  recover = (): TransactionCommitResultInput => Object.freeze({ status: "not-committed" });
+}
+
+function mutationOperations(
+  provider = new MutationProvider(),
+  executeOverride?: (
+    request: TransactionRequest,
+    engine: TransactionEngine,
+  ) => Promise<TransactionOutcome>,
+  idSource?: OpaqueIdSource,
+  bounds = applicationBounds,
+) {
+  const semanticInitialization = createStatefulSemanticInitializer();
+  let entityCounter = 50;
+  let relationCounter = 50;
+  const graph = new GraphKernel({
+    idSource: idSource ?? {
+      nextEntityId: () => `ent_${(entityCounter++).toString(16).padStart(32, "0")}`,
+      nextRelationId: () => `rel_${(relationCounter++).toString(16).padStart(32, "0")}`,
+    },
+    maxPageSize: 100,
+  });
+  const engine = new TransactionEngine({
+    maxAffectedIdentities: 100,
+    maxRequestDataDepth: 20,
+    maxRequestDataValues: 10_000,
+    maxSnapshotStateDepth: 20,
+    maxSnapshotStateValues: 10_000,
+    provider,
+  });
+  const registered = engine.registerInvariant(
+    createStandardModelInvariant({
+      maxComponentMutations: 100,
+      maxComponents: 1_000,
+      maxOwnerCharacters: 100,
+      maxPinnedComponentIds: 100,
+      maxRelationshipMutations: 100,
+      maxRelationships: 1_000,
+    }),
+  );
+  if (!registered.ok) throw new Error("failed to register test invariant");
+  let executions = 0;
+  const api = createApplicationOperations({
+    bounds,
+    graph,
+    initialization: semanticInitialization.capability,
+    maxSnapshotAttempts: 3,
+    model,
+    queries: new BoundedQueryContracts({
+      maxAnchorCharacters: 256,
+      maxCursorCharacters: 2_048,
+      maxPageSize: 10,
+      maxQueryContextCharacters: 512,
+    }),
+    resourceMapper: { resourceForComponent: (id) => success(resource(id)) },
+    transactionExecution: {
+      execute: (request) => {
+        executions += 1;
+        return executeOverride === undefined
+          ? engine.execute(request)
+          : executeOverride(request, engine);
+      },
+    },
+    transactionProvider: provider,
+  });
+  return { api, executions: () => executions, initialization: semanticInitialization, provider };
+}
+
+function operations(
+  fixture: SnapshotFixture,
+  initializationOutcome: WorkspaceInitializationOutcome = {
+    generation: generation(0),
+    status: "initialized",
+  },
+  overrides: Partial<ApplicationOperationsOptions> = {},
+) {
+  let entityCounter = 100;
+  let relationCounter = 100;
+  return createApplicationOperations({
+    bounds: applicationBounds,
+    graph: new GraphKernel({
+      idSource: {
+        nextEntityId: () => `ent_${(entityCounter++).toString(16).padStart(32, "0")}`,
+        nextRelationId: () => `rel_${(relationCounter++).toString(16).padStart(32, "0")}`,
+      },
+      maxPageSize: 100,
+    }),
+    initialization: { initialize: async () => initializationOutcome },
+    maxSnapshotAttempts: 3,
+    model,
+    queries: new BoundedQueryContracts({
+      maxAnchorCharacters: 256,
+      maxCursorCharacters: 2_048,
+      maxPageSize: 10,
+      maxQueryContextCharacters: 512,
+    }),
+    resourceMapper: { resourceForComponent: (id) => success(resource(id)) },
+    transactionExecution: {
+      execute: async () => {
+        throw new Error("read slice must not execute transactions");
+      },
+    },
+    transactionProvider: fixture,
+    ...overrides,
+  });
+}
+
+describe("application workspace initialization", () => {
+  test.each<WorkspaceInitializationOutcome>([
+    { generation: generation(1), status: "initialized" },
+    { generation: generation(2), status: "already-initialized" },
+    {
+      diagnostics: [
+        {
+          code: "workspace-conflict",
+          message: "The operation conflicts with current canonical state",
+        },
+      ],
+      status: "conflict",
+    },
+  ] as const)("delegates the $status outcome", async (outcome) => {
+    const result = await operations(new SnapshotFixture(), outcome).initialize({});
+    expect(result).toEqual(success(outcome));
+    if (result.ok) expect(Object.isFrozen(result.value)).toBe(true);
+  });
+
+  test("rejects non-empty or accessor-bearing requests before delegation", async () => {
+    let calls = 0;
+    const api = operations(
+      new SnapshotFixture(),
+      { generation: generation(0), status: "initialized" },
+      {
+        initialization: {
+          initialize: async () => {
+            calls += 1;
+            return { generation: generation(0), status: "initialized" };
+          },
+        },
+      },
+    );
+    expect((await api.initialize({ unexpected: true } as never)).ok).toBe(false);
+    const accessor = {};
+    Object.defineProperty(accessor, "value", { enumerable: true, get: () => 1 });
+    expect((await api.initialize(accessor)).ok).toBe(false);
+    expect(calls).toBe(0);
+  });
+
+  test("atomically initializes absent semantic state and reports compatible repetition", async () => {
+    const semantic = createStatefulSemanticInitializer();
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: semantic.capability,
+    });
+    const first = await api.initialize({});
+    const second = await api.initialize({});
+    expect(first.ok && first.value.status).toBe("initialized");
+    expect(second.ok && second.value.status).toBe("already-initialized");
+    expect(semantic.snapshot()).toEqual({
+      components: [],
+      generation: 0,
+      relationships: [],
+      state: "initialized",
+    });
+  });
+
+  test("preserves conflicting semantic state and copies typed diagnostic details", async () => {
+    const semantic = createStatefulSemanticInitializer("conflicting");
+    const before = JSON.stringify(semantic.snapshot());
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: semantic.capability,
+    });
+    const result = await api.initialize({});
+    expect(result.ok && result.value.status).toBe("conflict");
+    if (!result.ok || result.value.status !== "conflict") return;
+    expect(result.value.diagnostics[0]?.details).toEqual({
+      attempts: 1,
+      overwritePrevented: true,
+      state: "incompatible",
+    });
+    expect(Object.isFrozen(result.value.diagnostics[0]?.details)).toBe(true);
+    expect(JSON.stringify(semantic.snapshot())).toBe(before);
+    expect(semantic.snapshot().sentinel).toBe("preserve-incompatible-workspace");
+  });
+
+  test("rejects accessor-bearing initialization diagnostic details without invoking them", async () => {
+    let invoked = false;
+    const details = {};
+    Object.defineProperty(details, "secret", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return "hidden";
+      },
+    });
+    const api = operations(new SnapshotFixture(), undefined, {
+      initialization: {
+        initialize: async () =>
+          ({
+            diagnostics: [{ code: "conflict", details, message: "Conflict" }],
+            status: "conflict",
+          }) as never,
+      },
+    });
+    expect((await api.initialize({})).ok).toBe(false);
+    expect(invoked).toBe(false);
+  });
+
+  test("replaces unsafe initialization diagnostic codes without leaking them", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    for (const entry of [
+      { expected: "application-conflict", status: "conflict" },
+      { expected: "application-provider-failure", status: "provider-failure" },
+    ] as const) {
+      const result = await operations(new SnapshotFixture(), {
+        diagnostics: [{ code: secret, message: `Initialization exposed ${secret}` }],
+        status: entry.status,
+      }).initialize({});
+      expect(result.ok).toBe(true);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (
+        !result.ok ||
+        result.value.status === "initialized" ||
+        result.value.status === "already-initialized"
+      ) {
+        continue;
+      }
+      expect(result.value.diagnostics[0]?.code).toBe(entry.expected);
+    }
+  });
+});
+
+describe("application component reads", () => {
+  test("reads sparse and rich exact components with bounded outgoing relationships", async () => {
+    const fixture = new SnapshotFixture();
+    const api = operations(fixture);
+    const rich = await api.getComponent({ id: ids.service, relationships: { limit: 1 } });
+    expect(rich.ok).toBe(true);
+    if (!rich.ok) return;
+    expect(rich.value.item.component.intent).toBe("Own the order lifecycle.");
+    expect(rich.value.item.component.extensions).toEqual({
+      "example.dev/owner": "architecture",
+    });
+    expect(rich.value.relationships.items.map((item) => String(item.relationship.id))).toEqual([
+      relationIds.first,
+    ]);
+    expect(rich.value.relationships.hasMore).toBe(true);
+    expect(rich.value.relationships.nextCursor).toBeDefined();
+    expect(rich.value.item.revision).toStartWith("revision:");
+
+    const next = await api.getComponent({
+      id: ids.service,
+      relationships: { cursor: rich.value.relationships.nextCursor!, limit: 1 },
+    });
+    expect(next.ok && String(next.value.relationships.items[0]?.relationship.id)).toBe(
+      relationIds.second,
+    );
+    const sparse = await api.getComponent({ id: ids.domain, relationships: { limit: 2 } });
+    expect(sparse.ok && sparse.value.item.component.intent).toBeUndefined();
+    expect(fixture.requested.every((request) => request.length === 1)).toBe(true);
+  });
+
+  test("lists all, multiple roots, and recursive same/mixed-type children deterministically", async () => {
+    const api = operations(new SnapshotFixture());
+    const all = await api.listComponents({ limit: 10 });
+    expect(all.ok && all.value.items.map((item) => String(item.component.id))).toEqual(
+      Object.values(ids),
+    );
+    const roots = await api.listRoots({ limit: 10 });
+    expect(roots.ok && roots.value.items.map((item) => String(item.component.id))).toEqual([
+      ids.domain,
+      ids.secondRoot,
+    ]);
+    const domainChildren = await api.listChildren({ limit: 10, parent: ids.domain });
+    expect(
+      domainChildren.ok && domainChildren.value.items.map((item) => String(item.component.id)),
+    ).toEqual([ids.service]);
+    const serviceChildren = await api.listChildren({ limit: 10, parent: ids.service });
+    expect(serviceChildren.ok && serviceChildren.value.items[0]?.component.type).toBe("module");
+    const moduleChildren = await api.listChildren({ limit: 10, parent: ids.module });
+    expect(moduleChildren.ok && moduleChildren.value.items[0]?.component.type).toBe("service");
+  });
+
+  test("binds continuation cursors to query and generation", async () => {
+    const fixture = new SnapshotFixture();
+    const api = operations(fixture);
+    const first = await api.listComponents({ limit: 2 });
+    expect(first.ok && first.value.hasMore).toBe(true);
+    if (!first.ok || first.value.nextCursor === undefined) return;
+    const next = await api.listComponents({ cursor: first.value.nextCursor, limit: 2 });
+    expect(next.ok && next.value.items.map((item) => String(item.component.id))).toEqual([
+      ids.module,
+      ids.nestedService,
+    ]);
+    const wrongQuery = await api.listRoots({ cursor: first.value.nextCursor, limit: 2 });
+    expect(wrongQuery.ok ? "" : wrongQuery.diagnostics[0]?.code).toBe("cursor-query-mismatch");
+    fixture.generation = 2;
+    const stale = await api.listComponents({ cursor: first.value.nextCursor, limit: 2 });
+    expect(stale.ok ? "" : stale.diagnostics[0]?.code).toBe("stale-cursor");
+  });
+
+  test("retries a page when generation changes and fails after the configured bound", async () => {
+    const retry = new SnapshotFixture();
+    retry.sequence = [1, 2, 2, 2];
+    const recovered = await operations(retry).listRoots({ limit: 2 });
+    expect(recovered.ok && Number(recovered.value.generation)).toBe(2);
+    expect(retry.requested).toHaveLength(4);
+
+    const racing = new SnapshotFixture();
+    racing.sequence = [1, 2, 3, 4, 5, 6];
+    const exhausted = await operations(racing).listRoots({ limit: 2 });
+    expect(exhausted.ok ? "" : exhausted.diagnostics[0]?.code).toBe("snapshot-generation-conflict");
+  });
+
+  test("rejects malformed request and provider state without leaking resource keys", async () => {
+    const fixture = new SnapshotFixture();
+    const api = operations(fixture);
+    const malformedRequest = await api.getComponent({ id: ids.domain } as never);
+    expect(malformedRequest.ok ? "" : malformedRequest.diagnostics[0]?.code).toBe(
+      "invalid-application-request",
+    );
+    fixture.currentState = { components: [], relationships: [], unexpected: true } as never;
+    const malformedState = await api.listComponents({ limit: 2 });
+    expect(malformedState.ok).toBe(false);
+    expect(JSON.stringify(malformedState)).not.toContain("opaque-resource:");
+
+    const missing = new SnapshotFixture();
+    missing.currentState = state([]);
+    const notFound = await operations(missing).getComponent({
+      id: ids.domain,
+      relationships: { limit: 1 },
+    });
+    expect(notFound.ok ? "" : notFound.diagnostics[0]?.code).toBe("unknown-component");
+    expect(JSON.stringify(notFound)).not.toContain("opaque-resource:");
+  });
+
+  test("accepts an uninitialized empty state as an empty bounded graph", async () => {
+    const fixture = new SnapshotFixture();
+    fixture.currentState = state([]);
+    const page = await operations(fixture).listComponents({ limit: 5 });
+    expect(page.ok && page.value.items).toEqual([]);
+    expect(page.ok && Number(page.value.generation)).toBe(1);
+  });
+
+  test("contains mapper failure secrets for exact, page, and mutation operations", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    const api = operations(new SnapshotFixture(), undefined, {
+      resourceMapper: {
+        resourceForComponent: () =>
+          failure({
+            code: "mapper-secret",
+            details: { locator: secret },
+            message: `Cannot map ${secret}`,
+          }),
+      },
+    });
+    const exact = await api.getComponent({ id: ids.domain, relationships: { limit: 1 } });
+    const page = await api.listComponents({ limit: 1 });
+    const mutation = await api.createComponent({
+      component: { id: "ent_00000000000000000000000000000009" },
+    });
+    for (const outcome of [exact, page, mutation]) {
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+      expect(JSON.stringify(outcome)).not.toContain("mapper-secret");
+      const diagnostics = "diagnostics" in outcome ? outcome.diagnostics : [];
+      expect(diagnostics[0]?.code).toBe("component-resource-unavailable");
+      expect(diagnostics[0]?.details).toHaveProperty("componentId");
+    }
+  });
+});
+
+function committedRevision(outcome: ApplicationMutationOutcome<unknown>): string {
+  if (outcome.status !== "committed" || outcome.revisions[0]?.revision === null) {
+    throw new Error(`expected committed mutation, received ${outcome.status}`);
+  }
+  return outcome.revisions[0]!.revision;
+}
+
+describe("application component mutations", () => {
+  test("mints against canonical state and retries an existing identity before commit", async () => {
+    const provider = new MutationProvider();
+    const existing = "ent_0000000000000000000000000000000a";
+    const fresh = "ent_0000000000000000000000000000000b";
+    provider.currentState = state([component({ id: existing, type: "service" })]);
+    provider.revisions.set(resource(existing), "existing-revision");
+    let calls = 0;
+    const fixture = mutationOperations(provider, undefined, {
+      nextEntityId: () => {
+        calls += 1;
+        return calls === 1 ? existing : fresh;
+      },
+      nextRelationId: () => relationIds.first,
+    });
+    const created = await fixture.api.createComponent({ component: { type: "service" } });
+    expect(created.status).toBe("committed");
+    expect(created.status === "committed" && String(created.value.id)).toBe(fresh);
+    expect(calls).toBe(2);
+
+    const suppliedConflict = await fixture.api.createComponent({ component: { id: existing } });
+    expect(suppliedConflict.status).toBe("conflict");
+    expect(calls).toBe(2);
+  });
+
+  test("matches the reusable provider-neutral semantic workflow", async () => {
+    const trace = await exerciseApplicationOperations(mutationOperations().api);
+    expect(trace).toEqual(expectedApplicationOperationsTrace);
+  });
+
+  test("creates rich roots and nested components with supplied and minted stable identities", async () => {
+    const fixture = mutationOperations();
+    const root = await fixture.api.createComponent({
+      component: {
+        "example.dev/owner": "architecture",
+        actions: [{ id: "review", description: "Review changes" }],
+        desired: "active",
+        id: ids.domain,
+        inputs: [{ id: "plans", name: "Plans" }],
+        intent: "Own commerce architecture.",
+        lifecycle: "active",
+        name: "Commerce",
+        outputs: [{ id: "decisions", name: "Decisions" }],
+        type: "domain",
+      },
+    });
+    expect(root.status).toBe("committed");
+    if (root.status !== "committed") return;
+    expect(String(root.value.id)).toBe(ids.domain);
+    expect(root.value.extensions).toEqual({ "example.dev/owner": "architecture" });
+    expect(root.revisions).toEqual([
+      { componentId: ids.domain, revision: committedRevision(root) },
+    ]);
+
+    const nested = await fixture.api.createComponent({
+      component: { intent: "Process orders.", parent: ids.domain, type: "service" },
+      relationships: [
+        {
+          "example.dev/criticality": "high",
+          description: "Belongs to the domain",
+          target: ids.domain,
+          type: "depends-on",
+        },
+      ],
+    });
+    expect(nested.status).toBe("committed");
+    if (nested.status !== "committed") return;
+    expect(String(nested.value.id)).toBe("ent_00000000000000000000000000000032");
+    expect(nested.affected.relationships).toHaveLength(1);
+    expect(fixture.executions()).toBe(2);
+    expect(fixture.provider.commits).toBe(2);
+    expect(fixture.provider.prepares).toBe(2);
+
+    const read = await fixture.api.getComponent({
+      id: nested.value.id,
+      relationships: { limit: 5 },
+    });
+    expect(read.ok && read.value.relationships.items[0]?.relationship.description).toBe(
+      "Belongs to the domain",
+    );
+  });
+
+  test("rejects stale revisions without executing and applies sparse fields, items, and extensions", async () => {
+    const fixture = mutationOperations();
+    const created = await fixture.api.createComponent({
+      component: { id: ids.service, name: "Old", type: "service" },
+    });
+    const revision = committedRevision(created);
+    const executions = fixture.executions();
+    const stale = await fixture.api.updateComponent({
+      expectedRevision: "stale-revision",
+      id: ids.service,
+      patch: { name: "Ignored" },
+    });
+    expect(stale.status).toBe("conflict");
+    expect(fixture.executions()).toBe(executions);
+    expect(fixture.provider.commits).toBe(1);
+
+    const updated = await fixture.api.updateComponent({
+      expectedRevision: revision,
+      id: ids.service,
+      patch: {
+        "example.dev/tier": 1,
+        actions: [{ id: "ship", name: "Ship" }],
+        intent: "Updated intent.",
+        name: null,
+      },
+    });
+    expect(updated.status).toBe("committed");
+    if (updated.status !== "committed") return;
+    expect(updated.value.name).toBeUndefined();
+    expect(updated.value.intent).toBe("Updated intent.");
+    expect(updated.value.actions?.[0]?.id).toBe("ship");
+    expect(updated.value.extensions).toEqual({ "example.dev/tier": 1 });
+  });
+
+  test("adds, updates, removes outgoing relationships and rejects identity hijacking", async () => {
+    const fixture = mutationOperations();
+    const source = await fixture.api.createComponent({ component: { id: ids.domain } });
+    const target = await fixture.api.createComponent({ component: { id: ids.target } });
+    const other = await fixture.api.createComponent({ component: { id: ids.secondRoot } });
+    const added = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(source),
+      id: ids.domain,
+      patch: {},
+      relationships: {
+        upsert: [
+          {
+            description: "Initial",
+            id: relationIds.first,
+            target: ids.target,
+            type: "depends-on",
+          },
+        ],
+      },
+    });
+    expect(added.status).toBe("committed");
+    if (added.status !== "committed") return;
+
+    const hijack = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(target),
+      id: ids.target,
+      patch: {},
+      relationships: {
+        upsert: [{ id: relationIds.first, target: ids.secondRoot, type: "depends-on" }],
+      },
+    });
+    expect(hijack.status).toBe("validation-rejected");
+    expect(hijack.status === "validation-rejected" && hijack.diagnostics[0]?.code).toBe(
+      "relationship-id-hijack",
+    );
+
+    const changed = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(added),
+      id: ids.domain,
+      patch: {},
+      relationships: {
+        upsert: [
+          {
+            description: "Changed",
+            id: relationIds.first,
+            target: ids.secondRoot,
+            type: "coordinates-with",
+          },
+        ],
+      },
+    });
+    expect(changed.status).toBe("committed");
+    if (changed.status !== "committed") return;
+    const changedRead = await fixture.api.getComponent({
+      id: ids.domain,
+      relationships: { limit: 5 },
+    });
+    expect(
+      changedRead.ok && String(changedRead.value.relationships.items[0]?.relationship.target),
+    ).toBe(ids.secondRoot);
+
+    const removed = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(changed),
+      id: ids.domain,
+      patch: {},
+      relationships: { remove: [relationIds.first] },
+    });
+    expect(removed.status).toBe("committed");
+    const finalRead = await fixture.api.getComponent({
+      id: ids.domain,
+      relationships: { limit: 5 },
+    });
+    expect(finalRead.ok && finalRead.value.relationships.items).toEqual([]);
+    expect(other.status).toBe("committed");
+  });
+
+  test("reparents explicitly and leaves cycle rejection to the registered invariant", async () => {
+    const fixture = mutationOperations();
+    const root = await fixture.api.createComponent({ component: { id: ids.domain } });
+    const child = await fixture.api.createComponent({
+      component: { id: ids.service, parent: ids.domain },
+    });
+    const rootChild = await fixture.api.reparentComponent({
+      expectedRevision: committedRevision(child),
+      id: ids.service,
+      parent: null,
+    });
+    expect(rootChild.status === "committed" && rootChild.value.parent).toBeUndefined();
+    const nestedAgain = await fixture.api.reparentComponent({
+      expectedRevision: committedRevision(rootChild),
+      id: ids.service,
+      parent: ids.domain,
+    });
+    expect(nestedAgain.status).toBe("committed");
+
+    const cycle = await fixture.api.reparentComponent({
+      expectedRevision: committedRevision(root),
+      id: ids.domain,
+      parent: ids.service,
+    });
+    expect(cycle.status).toBe("validation-rejected");
+    expect(cycle.status === "validation-rejected" && cycle.diagnostics[0]?.code).toBe(
+      "component-containment-cycle",
+    );
+    expect(fixture.provider.commits).toBe(4);
+    expect(fixture.provider.prepares).toBe(4);
+  });
+
+  test("removes only a relation-free leaf after explicit cleanup", async () => {
+    const fixture = mutationOperations();
+    const root = await fixture.api.createComponent({ component: { id: ids.domain } });
+    const child = await fixture.api.createComponent({
+      component: { id: ids.service, parent: ids.domain },
+    });
+    const target = await fixture.api.createComponent({
+      component: { id: ids.target },
+      relationships: [{ id: relationIds.first, target: ids.domain, type: "depends-on" }],
+    });
+    const hasChild = await fixture.api.removeComponent({
+      expectedRevision: committedRevision(root),
+      id: ids.domain,
+    });
+    expect(hasChild.status === "validation-rejected" && hasChild.diagnostics[0]?.code).toBe(
+      "component-has-children",
+    );
+    const reparented = await fixture.api.reparentComponent({
+      expectedRevision: committedRevision(child),
+      id: ids.service,
+      parent: null,
+    });
+    expect(reparented.status).toBe("committed");
+    const incident = await fixture.api.removeComponent({
+      expectedRevision: committedRevision(root),
+      id: ids.domain,
+    });
+    expect(incident.status === "validation-rejected" && incident.diagnostics[0]?.code).toBe(
+      "component-has-relationships",
+    );
+    const cleaned = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(target),
+      id: ids.target,
+      patch: {},
+      relationships: { remove: [relationIds.first] },
+    });
+    expect(cleaned.status).toBe("committed");
+    const removed = await fixture.api.removeComponent({
+      expectedRevision: committedRevision(root),
+      id: ids.domain,
+    });
+    expect(removed.status).toBe("committed");
+    if (removed.status !== "committed") return;
+    expect(removed.value).toBe(ids.domain);
+    expect(removed.revisions).toEqual([{ componentId: ids.domain, revision: null }]);
+  });
+
+  test("scrubs resource diagnostics and fails closed on malformed transaction outcomes", async () => {
+    const conflictProvider = new MutationProvider();
+    let changed = false;
+    const conflictFixture = mutationOperations(conflictProvider, async (request, engine) => {
+      if (!changed) {
+        changed = true;
+        for (const entry of request.expectedRevisions) {
+          conflictProvider.revisions.set(entry.resource as ResourceKey, "raced-revision");
+        }
+      }
+      return engine.execute(request);
+    });
+    const conflict = await conflictFixture.api.createComponent({ component: { id: ids.domain } });
+    expect(conflict.status).toBe("conflict");
+    expect(JSON.stringify(conflict)).not.toContain("opaque-resource:");
+
+    const malformedFixture = mutationOperations(
+      new MutationProvider(),
+      async () => ({ status: "impossible" }) as never,
+    );
+    const malformed = await malformedFixture.api.createComponent({
+      component: { id: ids.domain },
+    });
+    expect(malformed.status).toBe("indeterminate");
+    expect(JSON.stringify(malformed)).not.toContain("opaque-resource:");
+
+    const invalid = await malformedFixture.api.updateComponent({
+      expectedRevision: "revision",
+      id: ids.domain,
+      patch: {},
+      unexpected: true,
+    } as never);
+    expect(invalid.status).toBe("validation-rejected");
+    expect(malformedFixture.executions()).toBe(1);
+  });
+
+  test("sanitizes conflict, provider, validation, and indeterminate capability diagnostics", async () => {
+    const secret = "/private/provider/workspace.md::recovery-secret-token";
+    const diagnostic = {
+      code: "semantic-test-code",
+      details: {
+        id: ids.domain,
+        note: secret,
+        path: secret,
+        resource: secret,
+      },
+      message: `Provider exposed ${secret}`,
+    };
+    const outcomes: readonly { readonly outcome: TransactionOutcome; readonly status: string }[] = [
+      { outcome: { diagnostics: [diagnostic], status: "conflict" }, status: "conflict" },
+      {
+        outcome: {
+          committed: false,
+          diagnostics: [diagnostic],
+          phase: "prepare",
+          status: "provider-failure",
+        },
+        status: "provider-failure",
+      },
+      {
+        outcome: { diagnostics: [diagnostic], status: "validation-rejected" },
+        status: "validation-rejected",
+      },
+      {
+        outcome: {
+          diagnostics: [diagnostic],
+          recovery: {
+            baseGeneration: generation(0),
+            generation: generation(1),
+            resources: [resource(ids.domain)],
+            token: secret,
+          },
+          status: "indeterminate",
+        },
+        status: "indeterminate",
+      },
+    ];
+    for (const entry of outcomes) {
+      const fixture = mutationOperations(new MutationProvider(), async () => entry.outcome);
+      const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+      expect(String(result.status)).toBe(entry.status);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(result.status !== "committed" && result.diagnostics[0]?.code).toBe(
+        "semantic-test-code",
+      );
+      expect(result.status !== "committed" && result.diagnostics[0]?.details?.id).toBe(ids.domain);
+    }
+  });
+
+  test("replaces unsafe transaction diagnostic codes with category-owned codes", async () => {
+    const secret = "/private/workspace/groma/intent/secret.md";
+    const cases: readonly {
+      readonly expected: string;
+      readonly outcome: TransactionOutcome;
+    }[] = [
+      {
+        expected: "application-conflict",
+        outcome: { diagnostics: [{ code: secret, message: secret }], status: "conflict" },
+      },
+      {
+        expected: "application-provider-failure",
+        outcome: {
+          committed: false,
+          diagnostics: [{ code: secret, message: secret }],
+          phase: "prepare",
+          status: "provider-failure",
+        },
+      },
+      {
+        expected: "application-validation-rejected",
+        outcome: {
+          diagnostics: [{ code: secret, message: secret }],
+          status: "validation-rejected",
+        },
+      },
+    ];
+    for (const entry of cases) {
+      const fixture = mutationOperations(new MutationProvider(), async () => entry.outcome);
+      const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+      expect(result.status).not.toBe("committed");
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (result.status !== "committed") {
+        expect(result.diagnostics[0]?.code).toBe(entry.expected);
+      }
+    }
+  });
+
+  test("binds committed affected identity sets exactly to the submitted transaction", async () => {
+    const otherEntity = "ent_0000000000000000000000000000000c";
+    const otherRelation = "rel_00000000000000000000000000000003";
+    const cases = [
+      {
+        entities: [ids.domain],
+        expected: "committed",
+        name: "reordered",
+        relations: [relationIds.second, relationIds.first],
+      },
+      { entities: [], expected: "indeterminate", name: "missing", relations: [] },
+      {
+        entities: [ids.domain, otherEntity],
+        expected: "indeterminate",
+        name: "extra",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [otherEntity],
+        expected: "indeterminate",
+        name: "unrelated",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [ids.domain, ids.domain],
+        expected: "indeterminate",
+        name: "duplicate",
+        relations: [relationIds.first, relationIds.second],
+      },
+      {
+        entities: [ids.domain],
+        expected: "indeterminate",
+        name: "extra relation",
+        relations: [relationIds.first, relationIds.second, otherRelation],
+      },
+    ] as const;
+    for (const entry of cases) {
+      const fixture = mutationOperations(new MutationProvider(), async (request) => {
+        const committedGeneration = generation(1);
+        return {
+          event: {
+            affected: { entities: entry.entities, relations: entry.relations },
+            generation: committedGeneration,
+            type: "graph.committed",
+          },
+          generation: committedGeneration,
+          revisions: request.expectedRevisions.map((expected) => ({
+            resource: expected.resource,
+            revision: "committed-fake-revision",
+          })),
+          status: "committed",
+        } as never;
+      });
+      const result = await fixture.api.createComponent({
+        component: { id: ids.domain },
+        relationships: [
+          { id: relationIds.first, target: ids.domain, type: "depends-on" },
+          { id: relationIds.second, target: ids.domain, type: "coordinates-with" },
+        ],
+      });
+      expect(result.status, entry.name).toBe(entry.expected);
+      if (result.status === "committed") {
+        expect(result.affected).toEqual({
+          components: [ids.domain],
+          relationships: [relationIds.first, relationIds.second],
+        });
+      }
+    }
+  });
+});
+
+describe("application operation bounds", () => {
+  test("rejects constructor bounds beyond absolute ceilings", () => {
+    expect(() => operations(new SnapshotFixture(), undefined, { maxSnapshotAttempts: 17 })).toThrow(
+      "maxSnapshotAttempts",
+    );
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxComponents: 1_000_001 },
+      }),
+    ).toThrow("maxComponents");
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 101 },
+      }),
+    ).toThrow("maxRequestDataDepth");
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxRequestDataValues: 10_000_001 },
+      }),
+    ).toThrow("maxRequestDataValues");
+  });
+
+  test("rejects over-limit snapshot arrays before reading entries", async () => {
+    let invoked = false;
+    const components = new Array(2);
+    Object.defineProperty(components, "0", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return {};
+      },
+    });
+    const fixture = new SnapshotFixture();
+    fixture.currentState = { components, relationships: [] } as never;
+    const result = await operations(fixture, undefined, {
+      bounds: { ...applicationBounds, maxComponents: 1 },
+    }).listComponents({ limit: 1 });
+    expect(result.ok).toBe(false);
+    expect(invoked).toBe(false);
+
+    let relationshipInvoked = false;
+    const relationships = new Array(2);
+    Object.defineProperty(relationships, "0", {
+      enumerable: true,
+      get: () => {
+        relationshipInvoked = true;
+        return {};
+      },
+    });
+    const relationshipFixture = new SnapshotFixture();
+    relationshipFixture.currentState = { components: [], relationships } as never;
+    const relationshipResult = await operations(relationshipFixture, undefined, {
+      bounds: { ...applicationBounds, maxRelationships: 1 },
+    }).listComponents({ limit: 1 });
+    expect(relationshipResult.ok).toBe(false);
+    expect(relationshipInvoked).toBe(false);
+
+    const structuralFixture = new SnapshotFixture();
+    const structural = await operations(structuralFixture, undefined, {
+      bounds: { ...applicationBounds, maxSnapshotStateDepth: 2, maxSnapshotStateValues: 2 },
+    }).listComponents({ limit: 1 });
+    expect(structural.ok).toBe(false);
+  });
+
+  test("rejects embedded and relationship request overflows before identity or execution", async () => {
+    let entityCalls = 0;
+    const idSource: OpaqueIdSource = {
+      nextEntityId: () => {
+        entityCalls += 1;
+        return ids.domain;
+      },
+      nextRelationId: () => relationIds.first,
+    };
+    let embeddedInvoked = false;
+    const inputs = new Array(2);
+    Object.defineProperty(inputs, "0", {
+      enumerable: true,
+      get: () => {
+        embeddedInvoked = true;
+        return {};
+      },
+    });
+    const embedded = mutationOperations(new MutationProvider(), undefined, idSource, {
+      ...applicationBounds,
+      maxEmbeddedItems: 1,
+    });
+    const embeddedResult = await embedded.api.createComponent({ component: { inputs } as never });
+    expect(embeddedResult.status).toBe("validation-rejected");
+    expect(embeddedInvoked).toBe(false);
+    expect(entityCalls).toBe(0);
+    expect(embedded.executions()).toBe(0);
+
+    let relationshipInvoked = false;
+    const relationships = new Array(2);
+    Object.defineProperty(relationships, "0", {
+      enumerable: true,
+      get: () => {
+        relationshipInvoked = true;
+        return {};
+      },
+    });
+    const relationship = mutationOperations(new MutationProvider(), undefined, idSource, {
+      ...applicationBounds,
+      maxRelationshipMutations: 1,
+    });
+    const relationshipResult = await relationship.api.createComponent({
+      component: {},
+      relationships: relationships as never,
+    });
+    expect(relationshipResult.status).toBe("validation-rejected");
+    expect(relationshipInvoked).toBe(false);
+    expect(entityCalls).toBe(0);
+    expect(relationship.executions()).toBe(0);
+  });
+
+  test("bounds create, update, and relationship request depth before side effects", async () => {
+    const cases = [
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 4 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: { "example.dev/deep": { level: { value: true } } },
+          }),
+        name: "create extension depth",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 4 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: { "example.dev/deep": { level: { value: true } } },
+          }),
+        name: "update extension depth",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataDepth: 5 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {},
+            relationships: [
+              {
+                "example.dev/deep": { level: { value: true } },
+                description: "Bounded relationship",
+                target: ids.target,
+                type: "depends-on",
+              },
+            ],
+          }),
+        name: "relationship extension depth",
+      },
+    ] as const;
+    for (const entry of cases) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(
+        provider,
+        undefined,
+        {
+          nextEntityId: () => {
+            entityCalls += 1;
+            return ids.domain;
+          },
+          nextRelationId: () => {
+            relationCalls += 1;
+            return relationIds.first;
+          },
+        },
+        entry.bounds,
+      );
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(
+        result.status === "validation-rejected" && result.diagnostics[0]?.code,
+        entry.name,
+      ).toBe("application-request-data-too-large");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
+  });
+
+  test("bounds total create, update, and relationship request values before side effects", async () => {
+    const cases = [
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {
+              "example.dev/owner": "architecture",
+              actions: [{ description: "Release safely", id: "deploy" }],
+            },
+          }),
+        name: "create item and extension values",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: {
+              "example.dev/owner": "architecture",
+              outputs: [{ id: "receipts", name: "Receipts" }],
+            },
+          }),
+        name: "update item and extension values",
+      },
+      {
+        bounds: { ...applicationBounds, maxRequestDataValues: 7 },
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({
+            component: {},
+            relationships: [
+              {
+                "example.dev/strength": "required",
+                description: "Authenticates through",
+                target: ids.target,
+                type: "depends-on",
+              },
+            ],
+          }),
+        name: "relationship description and extension values",
+      },
+    ] as const;
+    for (const entry of cases) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(
+        provider,
+        undefined,
+        {
+          nextEntityId: () => {
+            entityCalls += 1;
+            return ids.domain;
+          },
+          nextRelationId: () => {
+            relationCalls += 1;
+            return relationIds.first;
+          },
+        },
+        entry.bounds,
+      );
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(
+        result.status === "validation-rejected" && result.diagnostics[0]?.code,
+        entry.name,
+      ).toBe("application-request-data-too-large");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
+  });
+
+  test("rejects proxy-shaped component input before identity or execution", async () => {
+    let trapped = false;
+    let entityCalls = 0;
+    const componentProxy = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor: () => {
+          trapped = true;
+          throw new Error("proxy trap must stay contained");
+        },
+      },
+    );
+    const fixture = mutationOperations(new MutationProvider(), undefined, {
+      nextEntityId: () => {
+        entityCalls += 1;
+        return ids.domain;
+      },
+      nextRelationId: () => relationIds.first,
+    });
+    const result = await fixture.api.createComponent({ component: componentProxy });
+    expect(result.status).toBe("validation-rejected");
+    expect(trapped).toBe(true);
+    expect(entityCalls).toBe(0);
+    expect(fixture.executions()).toBe(0);
+  });
+
+  test("contains proxy-shaped update and relationship payloads before side effects", async () => {
+    const hostile = () =>
+      new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            throw new Error("proxy trap must stay contained");
+          },
+        },
+      );
+    for (const entry of [
+      {
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.updateComponent({
+            expectedRevision: "revision",
+            id: ids.domain,
+            patch: hostile(),
+          }),
+        name: "update patch",
+      },
+      {
+        invoke: (api: ReturnType<typeof mutationOperations>["api"]) =>
+          api.createComponent({ component: {}, relationships: [hostile() as never] }),
+        name: "relationship payload",
+      },
+    ] as const) {
+      let entityCalls = 0;
+      let relationCalls = 0;
+      const provider = new MutationProvider();
+      const fixture = mutationOperations(provider, undefined, {
+        nextEntityId: () => {
+          entityCalls += 1;
+          return ids.domain;
+        },
+        nextRelationId: () => {
+          relationCalls += 1;
+          return relationIds.first;
+        },
+      });
+      const result = await entry.invoke(fixture.api);
+      expect(result.status, entry.name).toBe("validation-rejected");
+      expect(entityCalls, entry.name).toBe(0);
+      expect(relationCalls, entry.name).toBe(0);
+      expect(provider.snapshots, entry.name).toBe(0);
+      expect(fixture.executions(), entry.name).toBe(0);
+    }
+  });
+
+  test("rejects over-limit executor diagnostics before reading entries", async () => {
+    let invoked = false;
+    const diagnostics = new Array(2);
+    Object.defineProperty(diagnostics, "0", {
+      enumerable: true,
+      get: () => {
+        invoked = true;
+        return {};
+      },
+    });
+    const fixture = mutationOperations(
+      new MutationProvider(),
+      async () => ({ diagnostics, status: "validation-rejected" }) as never,
+      undefined,
+      { ...applicationBounds, maxDiagnosticCount: 1 },
+    );
+    const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+    expect(result.status).toBe("indeterminate");
+    expect(invoked).toBe(false);
+  });
+});

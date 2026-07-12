@@ -2,3 +2,47 @@
 
 Presentation-neutral semantic operations shared by CLI, service, and web surfaces.
 Operations depend on capabilities and never call storage implementations directly.
+
+`createApplicationOperations` is the shared entry point. Its read surface currently
+provides atomic workspace initialization, exact component reads with bounded outgoing
+relationships, and deterministic bounded pages for all components, roots, and direct
+children. Every page is bound to a graph generation and query context through Core's
+opaque continuation cursor contract.
+
+Application code sees stable component identities and content revisions, but never a
+canonical resource locator. A host injects the transaction snapshot, transaction
+execution, resource-mapping, graph, query, Standard Model, and workspace-initializer
+capabilities. Page reads confirm resource revisions in a second snapshot and retry a
+configured number of times if the generation changes; empty canonical state remains a
+valid empty graph because bootstrap representation belongs to the host.
+The injected initializer is responsible for atomically establishing that minimal
+canonical workspace, recognizing compatible prior initialization, and preserving any
+conflicting existing state without overwrite.
+
+Mutations use the same injected transaction execution capability. Component creation
+supports supplied or minted identities and outgoing ordinary relationships; updates
+are sparse and may explicitly upsert or remove only relationships owned by their
+source component. Reparenting is a separate operation, and removal fails closed until
+children and every incident relationship have been handled explicitly. Mutation
+outcomes retain semantic generations, affected stable identities, and component
+revisions while omitting transaction resource keys and provider recovery secrets.
+Updates, reparenting, and removal require the caller's current component revision;
+stale revisions return an explicit conflict without guessing or overwriting. All
+validation and transaction diagnostics are copied into presentation-neutral outcomes
+with canonical resource details removed. Capability-supplied diagnostic codes are
+exposed only when they are bounded lowercase kebab-case tokens; unsafe codes are
+replaced with application-owned category codes.
+Resource mapping is also a containment boundary: mapper failures become one generic
+component-scoped diagnostic, and mapper messages, details, locators, and keys never
+reach application callers.
+
+Each composition supplies explicit application bounds for component and relationship
+state, relationship mutations, embedded items, diagnostics, request-data structural
+depth and values, and snapshot structural depth and values. Create and update mutation
+data—including component items and extensions plus outgoing relationship descriptions
+and extensions—is copied within one total request budget before model, identity, graph,
+provider, or transaction work. Construction also enforces absolute ceilings (including
+snapshot retry count), so hostile arrays and payloads fail before unbounded copying,
+identity minting, graph loading, or transaction execution. Auto-generated component IDs
+are minted against the validated current graph, and committed outcomes are accepted only
+when their affected identity sets exactly match the submitted transaction.
