@@ -1,11 +1,11 @@
 ---
 id: GROM-6
 title: Establish automated quality and architecture gates
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-11 21:30'
+updated_date: '2026-07-11 23:58'
 labels:
   - tooling
   - ci
@@ -34,16 +34,16 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [x] #4 CI compiles the single-file executable for every target in the documented 1A support matrix and smoke-tests every runnable host target
 - [x] #5 A failing test, type error, formatting change, boundary violation, or binary smoke failure causes a nonzero check result
 - [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
+- [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the existing local quality and architecture gates.
-2. Make compiled output naming and artifact verification portable across Unix executables and Windows .exe files.
-3. Add a single-runner target verifier that cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 sequentially.
-4. Verify exactly one correctly named artifact for every target and execute version/help only for the target compatible with the current host.
-5. Document the distinction between cross-compilation coverage and native runtime smoke coverage, then require the single CI target job to pass before re-finalizing GROM-6.
+1. Preserve the existing four-target single-runner verification.
+2. Ensure check:targets does not leave an incompatible final artifact on the current host.
+3. Align DEVELOPMENT.md support wording with the approved distinction between cross-compilation artifact verification and host-compatible runtime smoke coverage.
+4. Run local and cross-target gates and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -70,6 +70,8 @@ Implemented a portable build and verification path following Bun 1.3.14 current 
 Added check:targets, which sequentially cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 on one machine; verifies exactly one correctly named artifact after each build; and executes version/help only for the target matching the current host. Local macOS run verified all four artifacts and executed macOS arm64. Full bun run check passes with 10 tests.
 
 GitHub Actions run 29168888457 passed from a clean checkout after the correction: Quality gates 8s and Cross-platform binaries 13s. The single Ubuntu runner cross-compiled macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; verified exactly one expected artifact after each build; and executed version/help for Linux x64.
+
+Reopened during mainline restoration after independent quality review found that check:targets leaves the final Windows ARM64 artifact in dist on non-Windows hosts and one support-policy sentence still implies native runtime smoke for every target.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

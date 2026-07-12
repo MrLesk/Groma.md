@@ -1,11 +1,11 @@
 ---
 id: GROM-7
 title: Implement the technology-neutral graph kernel
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 22:08'
+updated_date: '2026-07-11 23:58'
 labels:
   - core
   - graph
@@ -34,16 +34,17 @@ Create the smallest Core graph foundation needed by 1A: stable opaque identity, 
 - [x] #5 Core graph tests cover identity stability across rename and move simulations, invalid relations, deterministic order, and bound enforcement
 - [x] #6 The graph kernel has no imports from the standard model, Bun, local resources, Markdown, the host, or CLI code
 - [x] #7 Tests are organized in boundary-local tests directories so production module roots remain readable as each subsystem grows
+- [ ] #8 Entity and relation payloads are defensively copied into deeply immutable data values so caller-owned aliases cannot mutate any existing snapshot
+- [ ] #9 Bulk load validates into one local graph state and creates one snapshot without per-item map copies, with representative scale coverage
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the implemented graph identity, relation, diagnostic, and bounded-read contracts.
-2. Move Core tests into src/core/tests, CLI tests into src/cli/tests, and tooling tests into scripts/tests without changing behavior.
-3. Update relative imports and document the boundary-local test convention.
-4. Run targeted tests, the architecture checker, the full local gate, and four-target cross-compilation.
-5. Require the ready GROM-7 PR checks to pass before re-finalizing the task.
+1. Define and document the graph payload data contract, then defensively clone and deeply freeze entity and relation payloads at every mutation and load boundary.
+2. Refactor bulk load to validate entities and relations into one local state and create one snapshot while preserving existing fail-closed diagnostics.
+3. Add regression tests for draft and resolved payload aliasing, unsupported mutable payload shapes, update isolation, and a representative large bulk load.
+4. Run the full quality, architecture, and cross-target verification gates and require fresh spec and quality approval.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -66,6 +67,8 @@ Moved all current tests into owner-local directories: src/core/tests, src/cli/te
 Validation after the move: targeted tests 18 pass; architecture boundaries pass; full bun run check passes; check:targets cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 and executes the local macOS target.
 
 GitHub Actions run 29169983659 passed after the test layout change: Cross-platform binaries 9s and Quality gates 10s.
+
+Reopened during mainline restoration after independent quality review reproduced mutable caller-owned payload aliases and quadratic bulk loading. The correction will enforce defensively copied immutable data payloads, build one validated snapshot per bulk load, retain representative scale coverage, and resolve the target-verifier artifact and support-policy inconsistencies.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

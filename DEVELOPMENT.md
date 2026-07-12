@@ -102,7 +102,8 @@ bun run build -- --target=bun-windows-arm64
 ```
 
 Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a target
-requires compilation and runtime smoke coverage, not only a successful cross-compile.
+requires cross-compiled artifact verification. Runtime smoke coverage is recorded
+separately and runs only on a compatible CI or local host.
 
 ## Continuous Verification
 
@@ -116,7 +117,8 @@ can run.
 `bun run check:targets` uses the same rule locally: it cross-compiles every target and
 smoke-tests the target matching the current operating system and architecture. A
 successful cross-compile is not described as native runtime verification for a
-different operating system.
+different operating system. After verifying the matrix, it restores a native artifact
+so `bun run smoke` can run immediately.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
 retaining their release tags as comments for review. Setup Bun reads the exact Bun

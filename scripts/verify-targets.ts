@@ -61,4 +61,8 @@ for (const target of targets) {
   ]);
 }
 
-console.log(`Verified ${targets.length} standalone executable targets.`);
+await run([process.execPath, "run", "scripts/build.ts"]);
+
+console.log(
+  `Verified ${targets.length} standalone executable targets and restored the native artifact.`,
+);

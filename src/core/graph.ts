@@ -5,7 +5,10 @@ import {
   type OpaqueIdSource,
   type RelationId,
 } from "./identity.ts";
+import { copyGraphPayload, type GraphData } from "./payload.ts";
 import { failure, type Diagnostic, type Result, success } from "./result.ts";
+
+export type { GraphData, GraphDataRecord, GraphDataScalar } from "./payload.ts";
 
 const snapshotBrand: unique symbol = Symbol("GraphSnapshot");
 
@@ -15,16 +18,16 @@ export interface GraphSnapshot {
   readonly [snapshotBrand]: true;
 }
 
-export interface GraphEntity<TPayload = unknown> {
+export interface GraphEntity {
   readonly id: EntityId;
   readonly kind: string;
-  readonly payload: TPayload;
+  readonly payload: GraphData;
 }
 
-export interface EntityDraft<TPayload = unknown> {
+export interface EntityDraft {
   readonly id?: string;
   readonly kind: string;
-  readonly payload: TPayload;
+  readonly payload: unknown;
 }
 
 export interface EntityReference {
@@ -32,20 +35,20 @@ export interface EntityReference {
   readonly expectedKind?: string;
 }
 
-export interface GraphRelation<TPayload = unknown> {
+export interface GraphRelation {
   readonly id: RelationId;
   readonly type: string;
   readonly source: EntityId;
   readonly target: EntityId;
-  readonly payload: TPayload;
+  readonly payload: GraphData;
 }
 
-export interface RelationDraft<TPayload = unknown> {
+export interface RelationDraft {
   readonly id?: string;
   readonly type: string;
   readonly source: EntityReference;
   readonly target: EntityReference;
-  readonly payload: TPayload;
+  readonly payload: unknown;
 }
 
 export interface GraphPage<TItem, TAfter extends string> {
@@ -127,12 +130,43 @@ function compareIdentity(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function freezeEntity<TPayload>(entity: GraphEntity<TPayload>): GraphEntity<TPayload> {
+function freezeEntity(entity: GraphEntity): GraphEntity {
   return Object.freeze(entity);
 }
 
-function freezeRelation<TPayload>(relation: GraphRelation<TPayload>): GraphRelation<TPayload> {
+function freezeRelation(relation: GraphRelation): GraphRelation {
   return Object.freeze(relation);
+}
+
+function resolveEntityFrom(
+  entities: ReadonlyMap<EntityId, GraphEntity>,
+  reference: EntityReference,
+): Result<GraphEntity> {
+  if (reference.expectedKind !== undefined) {
+    const kindDiagnostic = validateToken(reference.expectedKind, "entity kind");
+    if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
+  }
+  const identity = parseEntityId(reference.id);
+  if (!identity.ok) return identity;
+
+  const entity = entities.get(identity.value);
+  if (entity === undefined) {
+    return failure({
+      code: "unknown-entity",
+      message: "No entity exists for the exact stable identity",
+      details: { id: reference.id },
+    });
+  }
+
+  if (reference.expectedKind !== undefined && entity.kind !== reference.expectedKind) {
+    return failure({
+      code: "wrong-entity-kind",
+      message: "Entity exists but does not have the required kind",
+      details: { actual: entity.kind, expected: reference.expectedKind, id: entity.id },
+    });
+  }
+
+  return success(entity);
 }
 
 export class GraphKernel {
@@ -162,39 +196,74 @@ export class GraphKernel {
     entities: readonly EntityDraft[],
     relations: readonly RelationDraft[],
   ): Result<GraphSnapshot> {
-    let snapshot = this.empty();
+    const loadedEntities = new Map<EntityId, GraphEntity>();
+    const loadedRelations = new Map<RelationId, GraphRelation>();
 
-    for (const entity of entities) {
-      if (entity.id === undefined) {
+    for (const draft of entities) {
+      if (draft.id === undefined) {
         return failure({
           code: "missing-persisted-identity",
           message: "Loaded entities must already have stable identities",
         });
       }
-      const added = this.addEntity(snapshot, entity);
-      if (!added.ok) return added;
-      snapshot = added.value.snapshot;
+      const kindDiagnostic = validateToken(draft.kind, "entity kind");
+      if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
+      const identity = parseEntityId(draft.id);
+      if (!identity.ok) return identity;
+      if (loadedEntities.has(identity.value)) {
+        return failure({
+          code: "ambiguous-entity-identity",
+          message: "Entity identity occurs more than once and cannot be resolved safely",
+          details: { id: identity.value },
+        });
+      }
+      const payload = copyGraphPayload(draft.payload, "entity");
+      if (!payload.ok) return payload;
+      const entity = freezeEntity({ id: identity.value, kind: draft.kind, payload: payload.value });
+      loadedEntities.set(entity.id, entity);
     }
 
-    for (const relation of relations) {
-      if (relation.id === undefined) {
+    for (const draft of relations) {
+      if (draft.id === undefined) {
         return failure({
           code: "missing-persisted-identity",
           message: "Loaded relations must already have stable identities",
         });
       }
-      const added = this.addRelation(snapshot, relation);
-      if (!added.ok) return added;
-      snapshot = added.value.snapshot;
+      const typeDiagnostic = validateToken(draft.type, "relation type");
+      if (typeDiagnostic !== undefined) return failure(typeDiagnostic);
+      const source = resolveEntityFrom(loadedEntities, draft.source);
+      if (!source.ok) return source;
+      const target = resolveEntityFrom(loadedEntities, draft.target);
+      if (!target.ok) return target;
+      const identity = parseRelationId(draft.id);
+      if (!identity.ok) return identity;
+      if (loadedRelations.has(identity.value)) {
+        return failure({
+          code: "ambiguous-relation-identity",
+          message: "Relation identity occurs more than once and cannot be resolved safely",
+          details: { id: identity.value },
+        });
+      }
+      const payload = copyGraphPayload(draft.payload, "relation");
+      if (!payload.ok) return payload;
+      const relation = freezeRelation({
+        id: identity.value,
+        payload: payload.value,
+        source: source.value.id,
+        target: target.value.id,
+        type: draft.type,
+      });
+      loadedRelations.set(relation.id, relation);
     }
 
-    return success(snapshot);
+    return success(makeSnapshot({ entities: loadedEntities, relations: loadedRelations }));
   }
 
-  addEntity<TPayload>(
+  addEntity(
     snapshot: GraphSnapshot,
-    draft: EntityDraft<TPayload>,
-  ): Result<{ readonly snapshot: GraphSnapshot; readonly entity: GraphEntity<TPayload> }> {
+    draft: EntityDraft,
+  ): Result<{ readonly snapshot: GraphSnapshot; readonly entity: GraphEntity }> {
     const state = stateFor(snapshot);
     const kindDiagnostic = validateToken(draft.kind, "entity kind");
     if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
@@ -211,38 +280,42 @@ export class GraphKernel {
       });
     }
 
-    const entity = freezeEntity({ id: identity.value, kind: draft.kind, payload: draft.payload });
+    const payload = copyGraphPayload(draft.payload, "entity");
+    if (!payload.ok) return payload;
+    const entity = freezeEntity({ id: identity.value, kind: draft.kind, payload: payload.value });
     const entities = new Map(state.entities);
     entities.set(entity.id, entity);
     return success({ entity, snapshot: makeSnapshot({ entities, relations: state.relations }) });
   }
 
-  updateEntity<TPayload>(
+  updateEntity(
     snapshot: GraphSnapshot,
     reference: EntityReference,
-    payload: TPayload,
-  ): Result<{ readonly snapshot: GraphSnapshot; readonly entity: GraphEntity<TPayload> }> {
+    payload: unknown,
+  ): Result<{ readonly snapshot: GraphSnapshot; readonly entity: GraphEntity }> {
     const resolved = this.resolveEntity(snapshot, reference);
     if (!resolved.ok) return resolved;
 
     const state = stateFor(snapshot);
-    const entity = freezeEntity({ ...resolved.value, payload });
+    const copiedPayload = copyGraphPayload(payload, "entity");
+    if (!copiedPayload.ok) return copiedPayload;
+    const entity = freezeEntity({ ...resolved.value, payload: copiedPayload.value });
     const entities = new Map(state.entities);
     entities.set(entity.id, entity);
     return success({ entity, snapshot: makeSnapshot({ entities, relations: state.relations }) });
   }
 
-  addRelation<TPayload>(
+  addRelation(
     snapshot: GraphSnapshot,
-    draft: RelationDraft<TPayload>,
-  ): Result<{ readonly snapshot: GraphSnapshot; readonly relation: GraphRelation<TPayload> }> {
+    draft: RelationDraft,
+  ): Result<{ readonly snapshot: GraphSnapshot; readonly relation: GraphRelation }> {
     const state = stateFor(snapshot);
     const typeDiagnostic = validateToken(draft.type, "relation type");
     if (typeDiagnostic !== undefined) return failure(typeDiagnostic);
 
-    const source = this.resolveEntity(snapshot, draft.source);
+    const source = resolveEntityFrom(state.entities, draft.source);
     if (!source.ok) return source;
-    const target = this.resolveEntity(snapshot, draft.target);
+    const target = resolveEntityFrom(state.entities, draft.target);
     if (!target.ok) return target;
 
     const identity =
@@ -256,9 +329,11 @@ export class GraphKernel {
       });
     }
 
+    const payload = copyGraphPayload(draft.payload, "relation");
+    if (!payload.ok) return payload;
     const relation = freezeRelation({
       id: identity.value,
-      payload: draft.payload,
+      payload: payload.value,
       source: source.value.id,
       target: target.value.id,
       type: draft.type,
@@ -269,31 +344,7 @@ export class GraphKernel {
   }
 
   resolveEntity(snapshot: GraphSnapshot, reference: EntityReference): Result<GraphEntity> {
-    if (reference.expectedKind !== undefined) {
-      const kindDiagnostic = validateToken(reference.expectedKind, "entity kind");
-      if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
-    }
-    const identity = parseEntityId(reference.id);
-    if (!identity.ok) return identity;
-
-    const entity = stateFor(snapshot).entities.get(identity.value);
-    if (entity === undefined) {
-      return failure({
-        code: "unknown-entity",
-        message: "No entity exists for the exact stable identity",
-        details: { id: reference.id },
-      });
-    }
-
-    if (reference.expectedKind !== undefined && entity.kind !== reference.expectedKind) {
-      return failure({
-        code: "wrong-entity-kind",
-        message: "Entity exists but does not have the required kind",
-        details: { actual: entity.kind, expected: reference.expectedKind, id: entity.id },
-      });
-    }
-
-    return success(entity);
+    return resolveEntityFrom(stateFor(snapshot).entities, reference);
   }
 
   resolveRelation(snapshot: GraphSnapshot, id: string): Result<GraphRelation> {

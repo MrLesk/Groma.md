@@ -63,6 +63,218 @@ describe("graph kernel", () => {
     });
   });
 
+  test("copies and deeply freezes entity and relation draft payloads", () => {
+    const kernel = createKernel();
+    const entityDraft = { details: { labels: ["original"] } };
+    const first = addEntity(kernel, kernel.empty(), "component", entityDraft);
+    const second = addEntity(kernel, first.snapshot, "component", {});
+    const relationDraft = { evidence: [{ source: "scanner" }] };
+    const related = kernel.addRelation(second.snapshot, {
+      payload: relationDraft,
+      source: { id: first.entity.id },
+      target: { id: second.entity.id },
+      type: "observes",
+    });
+    if (!related.ok) throw new Error(related.diagnostics[0]?.message);
+
+    entityDraft.details.labels.push("caller mutation");
+    relationDraft.evidence[0]!.source = "caller mutation";
+
+    expect(kernel.resolveEntity(related.value.snapshot, { id: first.entity.id })).toMatchObject({
+      ok: true,
+      value: { payload: { details: { labels: ["original"] } } },
+    });
+    expect(kernel.resolveRelation(related.value.snapshot, related.value.relation.id)).toMatchObject(
+      {
+        ok: true,
+        value: { payload: { evidence: [{ source: "scanner" }] } },
+      },
+    );
+    const entityPayload = first.entity.payload as unknown as {
+      readonly details: { readonly labels: readonly string[] };
+    };
+    const relationPayload = related.value.relation.payload as unknown as {
+      readonly evidence: readonly { readonly source: string }[];
+    };
+    expect(Object.isFrozen(entityPayload)).toBeTrue();
+    expect(Object.isFrozen(entityPayload.details)).toBeTrue();
+    expect(Object.isFrozen(entityPayload.details.labels)).toBeTrue();
+    expect(Object.isFrozen(relationPayload.evidence[0]!)).toBeTrue();
+  });
+
+  test("returned payloads cannot mutate snapshots through resolve, page, or traversal", () => {
+    const kernel = createKernel();
+    const first = addEntity(kernel, kernel.empty(), "component", {
+      details: { labels: ["stable"] },
+    });
+    const second = addEntity(kernel, first.snapshot, "component", {});
+    const related = kernel.addRelation(second.snapshot, {
+      payload: { reasons: ["stable"] },
+      source: { id: first.entity.id },
+      target: { id: second.entity.id },
+      type: "requires",
+    });
+    if (!related.ok) throw new Error(related.diagnostics[0]?.message);
+
+    const resolved = kernel.resolveEntity(related.value.snapshot, { id: first.entity.id });
+    const entityPage = kernel.pageEntities(related.value.snapshot, { limit: 3 });
+    const traversal = kernel.traverseRelations(related.value.snapshot, {
+      direction: "outgoing",
+      entity: { id: first.entity.id },
+      limit: 3,
+    });
+    if (!resolved.ok || !entityPage.ok || !traversal.ok) throw new Error("expected graph reads");
+
+    const resolvedPayload = resolved.value.payload as unknown as {
+      details: { labels: string[] };
+    };
+    const pagedPayload = entityPage.value.items[0]!.payload as unknown as {
+      details: { labels: string[] };
+    };
+    const traversedPayload = traversal.value.items[0]!.payload as unknown as {
+      reasons: string[];
+    };
+    expect(() => resolvedPayload.details.labels.push("mutation")).toThrow();
+    expect(() => {
+      pagedPayload.details = { labels: ["mutation"] };
+    }).toThrow();
+    expect(() => traversedPayload.reasons.push("mutation")).toThrow();
+
+    expect(kernel.resolveEntity(related.value.snapshot, { id: first.entity.id })).toMatchObject({
+      ok: true,
+      value: { payload: { details: { labels: ["stable"] } } },
+    });
+    expect(kernel.resolveRelation(related.value.snapshot, related.value.relation.id)).toMatchObject(
+      {
+        ok: true,
+        value: { payload: { reasons: ["stable"] } },
+      },
+    );
+  });
+
+  test("keeps old and updated snapshots isolated from caller-owned payloads", () => {
+    const kernel = createKernel();
+    const originalDraft = { name: "Original", nested: { version: 1 } };
+    const created = addEntity(kernel, kernel.empty(), "component", originalDraft);
+    const updateDraft = { name: "Updated", nested: { version: 2 } };
+    const updated = kernel.updateEntity(created.snapshot, { id: created.entity.id }, updateDraft);
+    if (!updated.ok) throw new Error(updated.diagnostics[0]?.message);
+
+    originalDraft.nested.version = 99;
+    updateDraft.nested.version = 99;
+
+    expect(kernel.resolveEntity(created.snapshot, { id: created.entity.id })).toMatchObject({
+      ok: true,
+      value: { payload: { name: "Original", nested: { version: 1 } } },
+    });
+    expect(kernel.resolveEntity(updated.value.snapshot, { id: created.entity.id })).toMatchObject({
+      ok: true,
+      value: { payload: { name: "Updated", nested: { version: 2 } } },
+    });
+  });
+
+  test("copies loaded entity and relation payloads into an isolated snapshot", () => {
+    const kernel = createKernel();
+    const entityPayload = { labels: ["loaded"] };
+    const relationPayload = { confidence: { value: 1 } };
+    const loaded = kernel.load(
+      [
+        {
+          id: "ent_00000000000000000000000000000001",
+          kind: "component",
+          payload: entityPayload,
+        },
+        {
+          id: "ent_00000000000000000000000000000002",
+          kind: "component",
+          payload: {},
+        },
+      ],
+      [
+        {
+          id: "rel_00000000000000000000000000000001",
+          payload: relationPayload,
+          source: { id: "ent_00000000000000000000000000000001" },
+          target: { id: "ent_00000000000000000000000000000002" },
+          type: "requires",
+        },
+      ],
+    );
+    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+
+    entityPayload.labels.push("caller mutation");
+    relationPayload.confidence.value = 99;
+
+    expect(
+      kernel.resolveEntity(loaded.value, {
+        id: "ent_00000000000000000000000000000001",
+      }),
+    ).toMatchObject({ ok: true, value: { payload: { labels: ["loaded"] } } });
+    expect(
+      kernel.resolveRelation(loaded.value, "rel_00000000000000000000000000000001"),
+    ).toMatchObject({ ok: true, value: { payload: { confidence: { value: 1 } } } });
+  });
+
+  test("rejects unsupported or behavior-bearing payload shapes with diagnostics", () => {
+    const kernel = createKernel();
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const sparse = new Array(2);
+    sparse[1] = "value";
+    const accessor = Object.defineProperty({}, "computed", {
+      enumerable: true,
+      get: () => "value",
+    });
+
+    for (const [payload, path] of [
+      [{ nested: undefined }, "$.nested"],
+      [{ nested: Number.NaN }, "$.nested"],
+      [{ nested: new Date(0) }, "$.nested"],
+      [cyclic, "$.self"],
+      [sparse, "$[0]"],
+      [accessor, "$.computed"],
+    ] as const) {
+      expect(kernel.addEntity(kernel.empty(), { kind: "component", payload })).toMatchObject({
+        diagnostics: [{ code: "unsupported-payload", details: { path } }],
+        ok: false,
+      });
+    }
+
+    const first = addEntity(kernel, kernel.empty(), "component", {});
+    expect(
+      kernel.addRelation(first.snapshot, {
+        payload: () => "behavior",
+        source: { id: first.entity.id },
+        target: { id: first.entity.id },
+        type: "requires",
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload", details: { owner: "relation", path: "$" } }],
+      ok: false,
+    });
+    expect(
+      kernel.updateEntity(first.snapshot, { id: first.entity.id }, { value: Infinity }),
+    ).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload", details: { owner: "entity", path: "$.value" } }],
+      ok: false,
+    });
+    expect(
+      kernel.load(
+        [
+          {
+            id: "ent_00000000000000000000000000000001",
+            kind: "component",
+            payload: { value: 1n },
+          },
+        ],
+        [],
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload", details: { owner: "entity", path: "$.value" } }],
+      ok: false,
+    });
+  });
+
   test("fails closed for malformed, dangling, wrong-kind, and ambiguous references", () => {
     const kernel = createKernel();
     const group = addEntity(kernel, kernel.empty(), "group", { name: "Commerce" });
@@ -194,5 +406,36 @@ describe("graph kernel", () => {
         limit: 1,
       }),
     ).toMatchObject({ diagnostics: [{ code: "invalid-traversal-direction" }], ok: false });
+  });
+
+  test("loads a representative large graph as one validated snapshot", () => {
+    const entityCount = 10_000;
+    const id = (prefix: "ent" | "rel", value: number): string =>
+      `${prefix}_${value.toString(16).padStart(32, "0")}`;
+    const entities = Array.from({ length: entityCount }, (_, index) => ({
+      id: id("ent", index + 1),
+      kind: "component",
+      payload: { index, tags: ["bulk", "fixture"] },
+    }));
+    const relations = Array.from({ length: entityCount - 1 }, (_, index) => ({
+      id: id("rel", index + 1),
+      payload: { index },
+      source: { expectedKind: "component", id: id("ent", index + 1) },
+      target: { expectedKind: "component", id: id("ent", index + 2) },
+      type: "precedes",
+    }));
+
+    const kernel = createKernel(10);
+    const loaded = kernel.load(entities, relations);
+    expect(loaded.ok).toBeTrue();
+    if (!loaded.ok) return;
+    expect(loaded.value).toMatchObject({
+      entityCount,
+      relationCount: entityCount - 1,
+    });
+    expect(kernel.resolveEntity(loaded.value, { id: id("ent", entityCount) })).toMatchObject({
+      ok: true,
+      value: { payload: { index: entityCount - 1, tags: ["bulk", "fixture"] } },
+    });
   });
 });
