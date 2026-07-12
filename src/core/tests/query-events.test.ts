@@ -6,6 +6,7 @@ import {
   type GraphCommittedEvent,
 } from "../events.ts";
 import { parseGraphGeneration } from "../generation.ts";
+import type { GraphData } from "../payload.ts";
 import { BoundedQueryContracts, type ContinuationCursor } from "../query.ts";
 
 const entity = (suffix: string): string => `ent_${suffix.padStart(32, "0")}`;
@@ -34,6 +35,27 @@ function prepareFirst(
   return prepared.value;
 }
 
+function assertCanonicalQueryResultTypes(contracts: BoundedQueryContracts): void {
+  const exact = contracts.exact(1, { nested: { labels: ["read-only"] } });
+  if (exact.ok) {
+    // @ts-expect-error Canonical nested arrays are deeply readonly.
+    exact.value.item.nested.labels.push("mutation");
+  }
+  const page = contracts.page(prepareFirst(contracts, 1, {}, 1), [{ labels: ["read-only"] }], {
+    hasMore: false,
+  });
+  if (page.ok) {
+    // @ts-expect-error Canonical page item arrays are deeply readonly.
+    page.value.items[0]?.labels.push("mutation");
+  }
+  // @ts-expect-error Date is behavior-bearing rather than canonical GraphData.
+  contracts.exact(1, new Date(0));
+  // @ts-expect-error Function-bearing records are not canonical GraphData.
+  contracts.page(prepareFirst(contracts), [{ behavior: () => "unsafe" }], { hasMore: false });
+}
+
+void assertCanonicalQueryResultTypes;
+
 describe("bounded query contracts", () => {
   test("attaches a validated generation to exact reads", () => {
     const contracts = createContracts();
@@ -61,7 +83,9 @@ describe("bounded query contracts", () => {
     if (!exact.ok) throw new Error(exact.diagnostics[0]?.message);
     exactDraft.nested.labels.push("caller mutation");
     expect(exact.value.item).toEqual({ nested: { labels: ["exact"] } });
-    expect(() => exact.value.item.nested.labels.push("result mutation")).toThrow();
+    expect(() =>
+      (exact.value.item.nested.labels as unknown as string[]).push("result mutation"),
+    ).toThrow();
 
     const pageDraft = { nested: { labels: ["page"] } };
     const page = contracts.page(prepareFirst(contracts, 1, {}, 1), [pageDraft], {
@@ -70,9 +94,11 @@ describe("bounded query contracts", () => {
     if (!page.ok) throw new Error(page.diagnostics[0]?.message);
     pageDraft.nested.labels.push("caller mutation");
     expect(page.value.items).toEqual([{ nested: { labels: ["page"] } }]);
-    expect(() => page.value.items[0]!.nested.labels.push("result mutation")).toThrow();
+    expect(() =>
+      (page.value.items[0]!.nested.labels as unknown as string[]).push("result mutation"),
+    ).toThrow();
 
-    expect(contracts.exact(1, { behavior: () => "unsafe" })).toMatchObject({
+    expect(contracts.exact(1, { behavior: () => "unsafe" } as unknown as GraphData)).toMatchObject({
       diagnostics: [{ code: "unsupported-payload" }],
       ok: false,
     });

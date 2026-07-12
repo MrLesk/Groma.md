@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 02:13'
+updated_date: '2026-07-12 02:20'
 labels:
   - core
   - queries
@@ -57,4 +57,6 @@ Context-hunter classification: L2 foundational Core contract. Reuses Core stable
 Implemented provider-neutral query and event contracts in Core: branded safe graph generations; generation-bearing exact reads and bounded pages; self-contained canonical GraphData cursors with explicit character budgets and fail-closed version/query/generation validation; deterministic committed events; and contiguous-generation/refetch sequencing. Added 13 boundary-local contract tests covering 46 assertions. Full local quality gate passes with 51 tests total. Acceptance criteria remain unchecked pending independent and external review.
 
 Independent quality review found forged-runtime gaps at the public Core boundary. Hardened exact reads, bounded pages, prepared queries, requests, page state, event factories, and event sequencing with descriptor-safe exact-shape validation and throw-free failure results. Query items are now canonical GraphData snapshots that are defensively copied and deeply frozen; negative zero normalizes to zero before provider exposure or cursor binding. Added adversarial regressions for iterable/length spoofs, accessors, behavior-bearing and noncanonical prepared values, invalid state shapes, affected/event shape forgery, coercible identities, numeric binding collisions, and mutable aliases. Focused suite now has 18 tests and 86 assertions; full quality gate has 56 tests and 222 assertions. Acceptance criteria remain unchecked pending repeat independent and external review.
+
+Final quality typing review aligned the public success contract with runtime behavior. Exact and page items now require canonical GraphData and expose an exported recursive CanonicalQueryData type that preserves inferred record/array shapes while making them deeply readonly. Compile-time assertions reject nested mutation, Date items, and function-bearing records. Task remains In Progress with acceptance criteria unchecked until external review completes.
 <!-- SECTION:NOTES:END -->

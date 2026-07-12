@@ -1,5 +1,10 @@
 import { parseGraphGeneration, type GraphGeneration } from "./generation.ts";
-import { copyGraphPayload, type GraphData } from "./payload.ts";
+import {
+  copyGraphPayload,
+  type GraphData,
+  type GraphDataRecord,
+  type GraphDataScalar,
+} from "./payload.ts";
 import { failure, type Result, success } from "./result.ts";
 import { inspectExactRecord } from "./runtime.ts";
 
@@ -8,6 +13,14 @@ declare const pageLimitBrand: unique symbol;
 
 export type ContinuationCursor = string & { readonly [continuationCursorBrand]: true };
 export type PageLimit = number & { readonly [pageLimitBrand]: true };
+
+export type CanonicalQueryData<T extends GraphData> = T extends GraphDataScalar
+  ? T
+  : T extends readonly (infer TItem extends GraphData)[]
+    ? readonly CanonicalQueryData<TItem>[]
+    : T extends GraphDataRecord
+      ? { readonly [TKey in keyof T]: CanonicalQueryData<T[TKey]> }
+      : never;
 
 export interface BoundedQueryRequest {
   readonly cursor?: ContinuationCursor | string;
@@ -28,15 +41,15 @@ export interface PreparedBoundedQuery {
   readonly query: GraphData;
 }
 
-export interface ExactGraphRead<T> {
+export interface ExactGraphRead<T extends GraphData> {
   readonly generation: GraphGeneration;
-  readonly item: T;
+  readonly item: CanonicalQueryData<T>;
 }
 
-export interface GraphQueryPage<T> {
+export interface GraphQueryPage<T extends GraphData> {
   readonly generation: GraphGeneration;
   readonly hasMore: boolean;
-  readonly items: readonly T[];
+  readonly items: readonly CanonicalQueryData<T>[];
   readonly nextCursor?: ContinuationCursor;
 }
 
@@ -121,7 +134,7 @@ export class BoundedQueryContracts {
     this.#maxQueryContextCharacters = options.maxQueryContextCharacters;
   }
 
-  exact<T>(generation: number, item: T): Result<ExactGraphRead<T>> {
+  exact<T extends GraphData>(generation: number, item: T): Result<ExactGraphRead<T>> {
     const parsedGeneration = parseGraphGeneration(generation);
     if (!parsedGeneration.ok) return parsedGeneration;
     const copiedItem = copyGraphPayload(item, "query");
@@ -129,7 +142,7 @@ export class BoundedQueryContracts {
     return success(
       Object.freeze({
         generation: parsedGeneration.value,
-        item: copiedItem.value as T,
+        item: copiedItem.value as CanonicalQueryData<T>,
       }),
     );
   }
@@ -194,7 +207,7 @@ export class BoundedQueryContracts {
     );
   }
 
-  page<T>(
+  page<T extends GraphData>(
     prepared: PreparedBoundedQuery,
     items: readonly T[],
     state: QueryPageState,
@@ -278,7 +291,7 @@ export class BoundedQueryContracts {
       Object.freeze({
         generation: generation.value,
         hasMore: inspectedState.value.hasMore,
-        items: copiedItems.value as readonly T[],
+        items: copiedItems.value as readonly CanonicalQueryData<T>[],
         ...(nextCursor?.ok ? { nextCursor: nextCursor.value } : {}),
       }),
     );

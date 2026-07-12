@@ -46,7 +46,9 @@ Core defensively copies and deeply freezes them, normalizes negative zero to zer
 rejects accessors, `toJSON` hooks, custom collections, iterable or length spoofs, and
 other behavior-bearing values. Requests, prepared query values, page state, events,
 and affected-identity arrays are descriptor-validated at runtime even when their
-TypeScript types were forged.
+TypeScript types were forged. The public success types preserve useful record and
+array shapes while exposing every accepted item as recursively readonly canonical
+query data; mutable or behavior-bearing item types are rejected at compile time too.
 
 Cursors carry their format version, graph generation, canonical query context, and
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
