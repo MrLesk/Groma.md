@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rm,
   symlink,
@@ -29,6 +30,7 @@ import {
 const temporaryRoots: string[] = [];
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const coordinationChild = path.join(import.meta.dir, "fixtures", "coordination-child.ts");
 
 afterEach(async () => {
   await Promise.all(
@@ -64,6 +66,24 @@ function injectedOnce(phase: LocalResourceFaultPhase, code?: string) {
       throw Object.assign(new Error(`injected ${phase}`), code === undefined ? {} : { code });
     }
   };
+}
+
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function isChildMessage(message: unknown, type: string): boolean {
+  return (
+    typeof message === "object" && message !== null && "type" in message && message.type === type
+  );
 }
 
 async function collectPages(
@@ -355,6 +375,135 @@ describe("bounded deterministic enumeration", () => {
 });
 
 describe("staged atomic replacement", () => {
+  test("creates and revalidates several missing Unicode parent directories", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const target = locator("groma", "設計", "コンポーネント", "state.md");
+
+    const staged = await provider.stageReplacement(target, textEncoder.encode("initialized"));
+    expect(staged.ok).toBeTrue();
+    if (!staged.ok) return;
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+
+    const read = await provider.read({ locator: target, maxBytes: 32 });
+    expect(read.ok).toBeTrue();
+    if (read.ok) expect(textDecoder.decode(read.value.bytes)).toBe("initialized");
+  });
+
+  test("handles concurrent creation of the same missing parent chain", async () => {
+    const roots = await fixture();
+    const first = await createLocalResourceProvider(roots);
+    const second = await createLocalResourceProvider(roots);
+
+    const [firstStage, secondStage] = await Promise.all([
+      first.stageReplacement(
+        locator("groma", "components", "first.md"),
+        textEncoder.encode("first"),
+      ),
+      second.stageReplacement(
+        locator("groma", "components", "second.md"),
+        textEncoder.encode("second"),
+      ),
+    ]);
+
+    expect(firstStage.ok).toBeTrue();
+    expect(secondStage.ok).toBeTrue();
+    if (!firstStage.ok || !secondStage.ok) return;
+    expect((await first.commitReplacement(firstStage.value)).state).toBe("committed");
+    expect((await second.commitReplacement(secondStage.value)).state).toBe("committed");
+  });
+
+  test("fails closed for existing, linked, and concurrently swapped parent paths", async () => {
+    const roots = await fixture();
+    await writeFile(path.join(roots.workspaceRoot, "blocked"), "not a directory");
+    const outside = path.join(path.dirname(roots.workspaceRoot), "outside-parents");
+    await mkdir(outside);
+    try {
+      await symlink(outside, path.join(roots.workspaceRoot, "linked"), "dir");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+      throw error;
+    }
+    const provider = await createLocalResourceProvider(roots);
+
+    expect(
+      diagnosticCode(
+        await provider.stageReplacement(
+          locator("blocked", "state.md"),
+          textEncoder.encode("blocked"),
+        ),
+      ),
+    ).toBe("resource-unsupported-kind");
+    expect(
+      diagnosticCode(
+        await provider.stageReplacement(
+          locator("linked", "state.md"),
+          textEncoder.encode("linked"),
+        ),
+      ),
+    ).toBe("resource-unsupported-kind");
+
+    let swapped = false;
+    const swappingProvider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "parent-directory" || swapped) return;
+        swapped = true;
+        const parent = path.join(roots.workspaceRoot, "groma");
+        await rm(parent, { recursive: true });
+        await symlink(outside, parent, "dir");
+      },
+    });
+    expect(
+      diagnosticCode(
+        await swappingProvider.stageReplacement(
+          locator("groma", "nested", "state.md"),
+          textEncoder.encode("swapped"),
+        ),
+      ),
+    ).toBe("resource-unsupported-kind");
+  });
+
+  test("keeps live and orphan stage siblings invisible and unaddressable across providers", async () => {
+    const roots = await fixture();
+    const targetPath = path.join(roots.workspaceRoot, "state.md");
+    await writeFile(targetPath, "prior");
+    const owner = await createLocalResourceProvider(roots);
+    const observer = await createLocalResourceProvider(roots);
+    const staged = await owner.stageReplacement(
+      locator("state.md"),
+      textEncoder.encode("replacement"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+    const stageName = (await readdir(roots.workspaceRoot)).find((name) =>
+      name.toLowerCase().startsWith(".groma-stage-"),
+    );
+    if (stageName === undefined) throw new Error("expected an internal stage sibling");
+    const forgedStageLocator = stageName as WorkspaceResourceLocator;
+
+    const page = await observer.enumerate({
+      limit: 10,
+      locator: locator(),
+      maxDepth: 0,
+      maxEntriesPerDirectory: 10,
+    });
+    expect(page.ok).toBeTrue();
+    if (page.ok) {
+      expect(page.value.entries.map((entry) => String(entry.locator))).toEqual(["state.md"]);
+    }
+    expect(diagnosticCode(await observer.read({ locator: forgedStageLocator, maxBytes: 64 }))).toBe(
+      "invalid-resource-locator",
+    );
+    expect(
+      diagnosticCode(
+        await observer.stageReplacement(forgedStageLocator, textEncoder.encode("tampered")),
+      ),
+    ).toBe("invalid-resource-locator");
+
+    expect((await owner.commitReplacement(staged.value)).state).toBe("committed");
+    expect(await readFile(targetPath, "utf8")).toBe("replacement");
+  });
+
   test("commits complete copied bytes and keeps handles provider-owned", async () => {
     const roots = await fixture();
     const target = path.join(roots.workspaceRoot, "state.md");
@@ -501,6 +650,83 @@ describe("same-machine coordination", () => {
       ok: true,
       value: "after",
     });
+  });
+
+  test("fails closed while a real child process holds the same local lock", async () => {
+    const roots = await fixture();
+    const lockLocator = locator("cross-process-transaction");
+    let readyResolve!: () => void;
+    let readyReject!: (error: Error) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      readyResolve = resolve;
+      readyReject = reject;
+    });
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        coordinationChild,
+        roots.workspaceRoot,
+        roots.coordinationRoot,
+        lockLocator,
+      ],
+      ipc(message) {
+        if (isChildMessage(message, "ready")) readyResolve();
+        if (isChildMessage(message, "error")) {
+          readyReject(new Error("coordination child reported an error"));
+        }
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    try {
+      await within(
+        Promise.race([
+          ready,
+          child.exited.then(async (code) => {
+            const stderr = await new Response(child.stderr).text();
+            throw new Error(`coordination child exited before readiness (${code}): ${stderr}`);
+          }),
+        ]),
+        5_000,
+        "child coordination readiness",
+      );
+      const provider = await createLocalResourceProvider(roots);
+      let called = false;
+
+      const contended = await provider.withCoordination(
+        { context: "local-machine", locator: lockLocator },
+        () => {
+          called = true;
+        },
+      );
+
+      expect(diagnosticCode(contended)).toBe("resource-coordination-contended");
+      expect(called).toBeFalse();
+      child.send({ type: "release" });
+      expect(await within(child.exited, 5_000, "child coordination release")).toBe(0);
+      expect(
+        await provider.withCoordination(
+          { context: "local-machine", locator: lockLocator },
+          () => "released",
+        ),
+      ).toEqual({ ok: true, value: "released" });
+    } finally {
+      if (child.exitCode === null) {
+        try {
+          child.send({ type: "release" });
+        } catch {
+          // The IPC channel may already be closed.
+        }
+        child.kill();
+        await Promise.race([child.exited, Bun.sleep(2_000)]);
+      }
+      try {
+        child.disconnect();
+      } catch {
+        // The child may have already closed the IPC channel while exiting.
+      }
+      child.unref();
+    }
   });
 
   test("returns explicit unsupported-context diagnostics", async () => {

@@ -58,4 +58,15 @@ describe("workspace resource locators", () => {
     expect(parseWorkspaceResourceLocator({ toString: () => "safe" }).ok).toBeFalse();
     expect(workspaceResourceLocator("a".repeat(256)).ok).toBeFalse();
   });
+
+  test("reserves the provider-owned stage namespace in every segment and casing", () => {
+    for (const value of [
+      ".groma-stage-deadbeef",
+      ".GROMA-STAGE-deadbeef",
+      "groma/.groma-stage-deadbeef/state.md",
+    ]) {
+      expect(parseWorkspaceResourceLocator(value).ok).toBeFalse();
+    }
+    expect(workspaceResourceLocator(".GrOmA-StAgE-deadbeef").ok).toBeFalse();
+  });
 });

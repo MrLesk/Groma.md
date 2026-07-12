@@ -20,6 +20,7 @@ root token. Individual segments accept Unicode but reject:
 - `/` or `\` separator injection;
 - Windows alternate-data-stream colons, reserved device names, trailing dots/spaces,
   control characters, and other non-portable filename characters;
+- the case-insensitive `.groma-stage-` provider namespace in every segment;
 - segments and complete locators beyond their explicit UTF-8 budgets.
 
 Capability methods revalidate branded strings at runtime. Absolute resolved paths
@@ -27,6 +28,12 @@ remain private. Resolution walks the workspace-relative chain with `lstat` and
 `realpath`, rejects symbolic links and junctions in capability targets, and verifies
 that canonical paths remain under the selected workspace. Enumeration may report a
 link entry but never traverses it.
+
+Staging owns first-time workspace initialization. It creates a missing parent chain
+one segment at a time, handles a concurrent creator through `EEXIST`, and then
+revalidates every segment with `lstat` and `realpath` as an in-workspace, non-link
+directory. Configuration and canonical stores therefore do not need raw filesystem
+bootstrap access.
 
 ### Reads
 
@@ -49,6 +56,11 @@ depth truncation and use an opaque cursor bound to the locator and every request
 bound. Malformed, stale, mismatched, and oversized cursors and directory overflow are
 diagnostic outcomes rather than implicit truncation.
 
+Provider-owned `.groma-stage-` siblings count toward the raw per-directory scan cap
+but are omitted from public pages. Because the locator parser reserves that namespace
+case-insensitively, reads and replacements cannot address a live or orphan stage even
+through a forged branded string.
+
 ### Atomic replacement
 
 Replacement is deliberately staged and committed in two calls. Staging copies caller
@@ -62,6 +74,12 @@ acknowledgement, the result is `committed-indeterminate`. The target therefore e
 only the complete prior bytes or complete replacement bytes. Discard and cleanup are
 idempotent. Persistence-local fault injection covers write, flush, rename,
 after-rename, and cleanup boundaries without adding test behavior to Core.
+
+Handles are live-operation capabilities, not durable journal records. The transaction
+journal implemented by GROM-14 must durably record the target locator and replacement
+bytes, then restage after restart. Private orphan discovery and cleanup are likewise a
+GROM-14 recovery policy; orphan stages remain invisible and unaddressable through this
+public resource capability.
 
 ### Local coordination
 
@@ -80,14 +98,14 @@ Volatile owner tokens, PIDs, and times never enter `groma/` or Git state.
 ## Bun API rationale
 
 Bun documents [`Bun.file` and `Bun.write` as the recommended ordinary file I/O
-APIs](https://bun.sh/docs/runtime/file-io), and the provider uses `Bun.write` for its
+APIs](https://bun.com/docs/runtime/file-io), and the provider uses `Bun.write` for its
 small volatile coordination owner record. The same documentation directs operations
 not exposed by those APIs to Bun's `node:fs` compatibility layer. Confined bounded
 reads and durable atomic replacement specifically need `FileHandle.read`, exclusive
 creation, `FileHandle.sync`, `lstat`, `realpath`, `opendir`, and rename-over-target, so
 those operations stay private to the implementation. Bun's current compatibility
 table describes [`node:fs` as implemented and covered by its Node compatibility
-suite](https://bun.sh/docs/runtime/nodejs-compat).
+suite](https://bun.com/docs/runtime/nodejs-compat).
 
 Cross-compilation covers the four promised standalone targets. Runtime tests in this
 repository verify the current host only; successful Windows or Linux cross-compilation

@@ -76,11 +76,16 @@ export interface LocalResourceProvider {
 
 const maximumLocatorBytes = 4096;
 const maximumSegmentBytes = 255;
+export const reservedWorkspaceResourceStagePrefix = ".groma-stage-";
 const reservedWindowsName =
   /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
 const forbiddenWindowsCharacters = /[<>:"|?*\\\u0000-\u001f]/;
 const absoluteOrDrivePrefix = /^(?:\/|\\|[a-z]:)/i;
 const intrinsicEncode = TextEncoder.prototype.encode;
+
+export function isReservedWorkspaceResourceSegment(value: string): boolean {
+  return value.toLowerCase().startsWith(reservedWorkspaceResourceStagePrefix);
+}
 
 function invalidLocator(reason: string): Result<never> {
   return failure({
@@ -109,6 +114,9 @@ function validateSegment(segment: string): Result<string> {
   if (segment.length === 0) return invalidLocator("segments must not be empty");
   if (segment === "." || segment === "..") {
     return invalidLocator("dot and traversal segments are not allowed");
+  }
+  if (isReservedWorkspaceResourceSegment(segment)) {
+    return invalidLocator("segments must not use the provider-owned staging namespace");
   }
   if (segment.endsWith(".") || segment.endsWith(" ")) {
     return invalidLocator("segments must not end with a dot or space");

@@ -8,6 +8,7 @@ import { failure, type Diagnostic, type Result, success } from "../core/result.t
 import { inspectExactRecord } from "../core/runtime.ts";
 import {
   type EnumerateResourcesRequest,
+  isReservedWorkspaceResourceSegment,
   type LocalCoordinationRequest,
   type LocalResourceProvider,
   parseWorkspaceResourceLocator,
@@ -18,13 +19,21 @@ import {
   type ResourceEntry,
   type ResourceEnumerationPage,
   type ResourceKind,
+  reservedWorkspaceResourceStagePrefix,
   type StagedReplacementHandle,
   type WorkspaceResourceLocator,
   workspaceResourceLocator,
 } from "./contracts.ts";
 
 export type LocalResourceFaultPhase =
-  "after-rename" | "cleanup" | "enumerate" | "flush" | "read" | "rename" | "write";
+  | "after-rename"
+  | "cleanup"
+  | "enumerate"
+  | "flush"
+  | "parent-directory"
+  | "read"
+  | "rename"
+  | "write";
 
 export type LocalResourceFaultInjector = (phase: LocalResourceFaultPhase) => void | Promise<void>;
 
@@ -529,6 +538,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const copied = new Uint8Array(bytes);
     let stagePath: string | undefined;
     try {
+      const parents = await this.#ensureParentDirectories(locator.value);
+      if (!parents.ok) return parents;
       const target = await this.#resolve(locator.value, true);
       if (!target.ok) return target;
       if (target.value.stats !== undefined && !target.value.stats.isFile()) {
@@ -541,7 +552,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       }
       const parentPath = path.dirname(target.value.absolutePath);
       for (let attempt = 0; attempt < 8; attempt += 1) {
-        const candidate = path.join(parentPath, `.groma-stage-${randomUUID()}`);
+        const candidate = path.join(
+          parentPath,
+          `${reservedWorkspaceResourceStagePrefix}${randomUUID()}`,
+        );
         try {
           const handle = await open(candidate, "wx", 0o600);
           stagePath = candidate;
@@ -811,6 +825,51 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     return failure(providerFailure("resolve a resource"));
   }
 
+  async #ensureParentDirectories(locator: WorkspaceResourceLocator): Promise<Result<void>> {
+    const segments = locatorSegments(locator);
+    let current = this.#root;
+    for (let index = 0; index < segments.length - 1; index += 1) {
+      current = path.join(current, segments[index]!);
+      try {
+        await mkdir(current);
+      } catch (error) {
+        if (errorCode(error) !== "EEXIST") {
+          return failure(resourceError(error, "create a resource parent directory"));
+        }
+      }
+      await this.#inject("parent-directory");
+      let stats: Awaited<ReturnType<typeof lstat>>;
+      try {
+        stats = await lstat(current);
+      } catch (error) {
+        return failure(resourceError(error, "validate a resource parent directory"));
+      }
+      if (stats.isSymbolicLink() || !stats.isDirectory()) {
+        return failure(
+          diagnostic(
+            "resource-unsupported-kind",
+            "Replacement parent paths must be directories and must not be links",
+          ),
+        );
+      }
+      let canonical: string;
+      try {
+        canonical = await realpath(current);
+      } catch (error) {
+        return failure(resourceError(error, "validate a resource parent directory"));
+      }
+      if (!isWithin(this.#root, canonical)) {
+        return failure(
+          diagnostic(
+            "resource-outside-workspace",
+            "Replacement parent resolved outside the workspace boundary",
+          ),
+        );
+      }
+    }
+    return success(undefined);
+  }
+
   async #walkDirectory(
     absoluteDirectory: string,
     directoryLocator: WorkspaceResourceLocator,
@@ -823,12 +882,13 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     if (state.stopped) return success(undefined);
     const dir = await opendir(absoluteDirectory);
     const names: string[] = [];
+    let encountered = 0;
     try {
       while (true) {
         const entry = await dir.read();
         if (entry === null) break;
-        names.push(entry.name);
-        if (names.length > directoryLimit) {
+        encountered += 1;
+        if (encountered > directoryLimit) {
           return failure(
             diagnostic(
               "resource-directory-overflow",
@@ -837,6 +897,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             ),
           );
         }
+        if (!isReservedWorkspaceResourceSegment(entry.name)) names.push(entry.name);
       }
     } finally {
       try {
