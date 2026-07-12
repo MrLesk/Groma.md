@@ -195,7 +195,9 @@ type ConfirmedProviderResult =
   | { readonly status: "indeterminate" }
   | { readonly status: "not-committed" };
 
-const maximumOpaqueCharacters = 4_096;
+export const TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS = 4_096;
+
+const maximumOpaqueCharacters = TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS;
 const maximumRevisionCount = 10_000;
 const maximumInvariantDiagnosticCount = 1_000;
 const maximumInvariantDetailCount = 64;

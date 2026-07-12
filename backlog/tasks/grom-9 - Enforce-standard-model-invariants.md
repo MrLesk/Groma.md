@@ -1,10 +1,11 @@
 ---
 id: GROM-9
 title: Enforce standard-model invariants
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 01:50'
+updated_date: '2026-07-12 06:35'
 labels:
   - model
   - invariants
@@ -27,27 +28,47 @@ Register model-specific invariant checks at the transaction boundary so no curre
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every semantic mutation is checked for a valid component type, zero or one valid component parent, relationship targets, entity-kind compatibility, and stable embedded-item identity
-- [ ] #2 Root components may omit a parent, non-root components resolve exactly one parent, and parents may contain children of the same or different types
-- [ ] #3 Self-parenting, containment cycles, multiple structural parents, ambiguous identities, and ambiguous relationship targets fail closed with actionable diagnostics
-- [ ] #4 Removing or reparenting a component fails unless the same atomic transaction leaves every child and relationship valid
-- [ ] #5 Sparse updates preserve omitted curated fields and cannot silently erase existing intent or containment
-- [ ] #6 The invariant contract can receive prior state and ownership context so later evidence and pinned-boundary protections do not require a new mutation path
-- [ ] #7 Tests prove that identical invariants govern direct operation calls and host or CLI initiated mutations
+- [x] #1 Every semantic mutation is checked for a valid component type, zero or one valid component parent, relationship targets, entity-kind compatibility, and stable embedded-item identity
+- [x] #2 Root components may omit a parent, non-root components resolve exactly one parent, and parents may contain children of the same or different types
+- [x] #3 Self-parenting, containment cycles, multiple structural parents, ambiguous identities, and ambiguous relationship targets fail closed with actionable diagnostics
+- [x] #4 Removing or reparenting a component fails unless the same atomic transaction leaves every child and relationship valid
+- [x] #5 Sparse updates preserve omitted curated fields and cannot silently erase existing intent or containment
+- [x] #6 The invariant contract can receive prior state and ownership context so later evidence and pinned-boundary protections do not require a new mutation path
+- [x] #7 Tests prove that identical invariants govern direct operation calls and host or CLI initiated mutations
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define the invariant registration and diagnostic contracts against proposed and prior graph state.
-2. Implement standard-model type, single-parent, acyclic-containment, identity, and ordinary-relation checks.
-3. Reserve explicit ownership and conceptual-boundary context without adding scan behavior.
-4. Exercise valid root creation, recursive nesting, atomic reparenting, and invalid cycles, multiple parents, partial removals, or ambiguous mutations.
-5. Verify all mutation callers share the same invariant path.
+1. Define a canonical Standard Model transaction envelope over the generic Core proposal: prior complete component/relation state, batched component create/patch/remove mutations, batched ordinary-relationship upsert/remove mutations, and explicit ownership/pinned-boundary context reserved for later evidence policy.
+2. Build one registered Standard Model invariant that descriptor-validates the proposal envelope, rejects ambiguous or duplicate identities/mutation targets, and applies the complete batch in memory using the existing v0.1 normalize/parse/patch/relationship rules so sparse omissions preserve prior curated fields.
+3. Validate the complete resulting graph after the batch: every entity is a valid component; roots omit parent; every present parent resolves to exactly one component; same-type and mixed-type nesting are allowed; self-parenting and cycles fail; every relationship identity/type/source/target/payload is valid and targets components; embedded item identities remain stable and unique.
+4. Make component removal and reparenting atomic by validating children and ordinary relationships only against the final proposed graph. Reject partial removal, dangling children/relations, duplicate structural mutations, ambiguous state, and wrong-kind targets with actionable stable-ID diagnostics.
+5. Preserve one semantic path by exposing a factory compatible with Core TransactionEngine.registerInvariant; prove direct operations and host/CLI-style wrappers invoke the same invariant. Validate ownership and pinned-boundary context shape without implementing scanners or reconciliation in Iteration 1A.
+6. Add boundary-local tests for valid multiple roots, recursive same/mixed types, sparse patch preservation, atomic reparent/remove, valid cross-tree relationships, invalid tokens/parents/cycles/multiple mutations/ambiguous IDs/dangling or wrong-kind relations/embedded IDs/context, and shared transaction-path enforcement.
+7. Run focused/full quality gates and all four standalone targets, independent specification and quality reviews, then publish a ready task-linked PR and complete Claude/Codex review gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Dependency corrected before execution: standard-model invariants register against the transaction boundary owned by GROM-10, so GROM-10 must land before GROM-9.
+
+Context-hunter classification: L2 Standard Model semantic boundary. Reuse createStandardModelCapability normalization/patching and the generic Core ProposedTransaction/TransactionInvariant contracts. The invariant must interpret one complete batched mutation over one complete prior state, then validate the final graph so atomic reparenting/removal works and sparse omissions cannot erase intent. Ownership and pinned-boundary context are explicit forward-compatible data only; scanner/reconciliation behavior remains out of scope. Core remains model-neutral.
+
+Implemented the GraphData-compatible Standard Model transaction envelopes and registered invariant factory. The bounded invariant safely validates context/state/mutation runtime shapes, reuses Standard Model normalize/parse/patch/relationship semantics, applies complete batches before final containment and endpoint validation, fails closed on ambiguous identities, and preserves the single Core TransactionEngine registration path. Pinned IDs are reserved context in 1A: sorted/unique and resolvable across prior or proposed state, without scanner/reconciliation authority policy. Added 14 focused tests including recursive containment, atomic reparent/removal, sparse preservation, relationship compatibility, cycles/ambiguity, unsafe shapes/bounds, and identical direct versus host-style engine rejection. Verification: focused 14 tests/40 assertions; full check 108 tests/472 assertions; all four standalone targets passed.
+
+Final implementer verification after the compile-time GraphData envelope test and duplicate-relationship case: focused 14 tests/40 assertions; full check 109 tests/474 assertions; typecheck, formatting, architecture boundaries, native build/smoke, diff check, and macOS arm64/Linux x64 baseline/Windows x64 baseline/Windows arm64 target verification all passed.
+
+Quality-review follow-up: bound all five mutation target kinds to the matching Core affected identity collection while allowing justified affected supersets, including empty model batches. Exported Core's 4096-character transaction diagnostic contract and adapted Standard diagnostics to fixed codes/messages plus bounded outer paths, stable IDs, and type/length metadata; oversized raw IDs, kinds, tokens, and extension keys no longer collapse to invalid-invariant-result. Final parent, cycle, and endpoint diagnostics now iterate stable identity order, with the smallest cycle ID as canonical representative. Verification: focused 19 tests/97 assertions; full check 114 tests/531 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed.
+
+Claude review follow-up: safe Standard Model source field paths now survive diagnostic adaptation as sourcePath, while oversized extension-derived paths are converted by the existing sanitizer to sourcePathLength without retaining raw keys. Added direct and registered-engine regressions for both cases. Added a registered TransactionEngine happy path covering patch, recursive component create, relationship upsert, confirmed commit/event, and exact snapshot/prepare/commit/recovery call behavior. Verification: focused 22 tests/108 assertions; full check 117 tests/542 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed.
+
+Final review follow-up preserved safe model source paths while length-adapting oversized user-derived paths, and added a registered-engine committed-path regression. Final verification: focused 22 tests/108 assertions; full 117 tests/542 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed. GitHub Actions run 29182856148 passed quality gates and cross-platform binaries. Independent specification and quality reviews passed. Claude found no correctness bugs; its actionable diagnostics and happy-path test suggestions were implemented, while broader helper consolidation was kept out of scope. Codex completed review with thumbs-up and no comments or threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented one bounded Standard Model invariant over the Core transaction engine. It validates recursive single-parent containment, ordinary relationships, stable embedded identity, sparse patches, atomic reparenting/removal, ownership and pinned context, affected identities, and deterministic actionable diagnostics through the same direct and host/CLI transaction path. Verified with 117 tests/542 assertions, all local gates, four cross-compiled targets, GitHub CI, independent reviews, Claude review, and Codex acceptance.
+<!-- SECTION:FINAL_SUMMARY:END -->
