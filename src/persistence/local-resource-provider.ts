@@ -853,12 +853,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       await this.#applyReplacementMode(stagePath, 0o600);
       return true;
     } catch {
-      try {
-        await rm(stagePath, { force: true });
-        return false;
-      } catch {
-        return true;
-      }
+      await rm(stagePath, { force: true }).catch(() => undefined);
+      return false;
     }
   }
 

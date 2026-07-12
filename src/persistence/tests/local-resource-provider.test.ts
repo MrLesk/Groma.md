@@ -772,6 +772,33 @@ describe("staged atomic replacement", () => {
     expect((await provider.discardReplacement(staged.value)).ok).toBeTrue();
   });
 
+  test("invalidates a stage when private-mode restoration and removal both fail", async () => {
+    const roots = await fixture();
+    let stagePath: string | undefined;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: async (phase) => {
+        if (phase !== "rename" || stagePath === undefined) return;
+        await rm(stagePath);
+        await mkdir(stagePath);
+        await writeFile(path.join(stagePath, "blocker"), "not removable as a file");
+        throw new Error("injected rename failure");
+      },
+    });
+    const staged = await provider.stageReplacement(locator("state.md"), textEncoder.encode("new"));
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+    const stageName = (await readdir(roots.workspaceRoot)).find((name) =>
+      name.startsWith(".groma-stage-"),
+    );
+    if (stageName === undefined) throw new Error("expected the private stage");
+    stagePath = path.join(roots.workspaceRoot, stageName);
+
+    expect((await provider.commitReplacement(staged.value)).state).toBe("not-committed");
+    expect((await provider.commitReplacement(staged.value)).diagnostics?.[0]?.code).toBe(
+      "replacement-discarded",
+    );
+  });
+
   test("after-rename failure reports committed-indeterminate with complete new bytes", async () => {
     const roots = await fixture();
     const target = path.join(roots.workspaceRoot, "state.md");
