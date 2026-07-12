@@ -1,10 +1,5 @@
 import { parseGraphGeneration, type GraphGeneration } from "./generation.ts";
-import {
-  copyGraphPayload,
-  type GraphData,
-  type GraphDataRecord,
-  type GraphDataScalar,
-} from "./payload.ts";
+import { copyGraphPayload, type GraphData, type GraphDataScalar } from "./payload.ts";
 import { failure, type Result, success } from "./result.ts";
 import { inspectExactRecord } from "./runtime.ts";
 
@@ -14,13 +9,49 @@ declare const pageLimitBrand: unique symbol;
 export type ContinuationCursor = string & { readonly [continuationCursorBrand]: true };
 export type PageLimit = number & { readonly [pageLimitBrand]: true };
 
-export type CanonicalQueryData<T extends GraphData> = T extends GraphDataScalar
+type CanonicalMemberCheck<T> = T extends GraphDataScalar
+  ? true
+  : T extends CallableFunction
+    ? false
+    : T extends readonly (infer TItem)[]
+      ? IsCanonicalQueryData<TItem>
+      : T extends object
+        ? false extends { [TKey in keyof T]-?: IsCanonicalQueryData<T[TKey]> }[keyof T]
+          ? false
+          : true
+        : false;
+
+type HasUnsupportedSymbolKey<T> = T extends GraphDataScalar
+  ? false
+  : T extends readonly unknown[]
+    ? false
+    : T extends object
+      ? Extract<keyof T, symbol> extends never
+        ? false
+        : true
+      : false;
+
+type IsCanonicalQueryData<T> = true extends (T extends unknown ? HasUnsupportedSymbolKey<T> : never)
+  ? false
+  : [T] extends [GraphData]
+    ? true
+    : false extends (T extends unknown ? CanonicalMemberCheck<T> : never)
+      ? false
+      : true;
+
+type RequireCanonicalQueryData<T> = IsCanonicalQueryData<T> extends true ? unknown : never;
+
+export type CanonicalQueryData<T> = T extends GraphDataScalar
   ? T
-  : T extends readonly (infer TItem extends GraphData)[]
+  : T extends readonly (infer TItem)[]
     ? readonly CanonicalQueryData<TItem>[]
-    : T extends GraphDataRecord
-      ? { readonly [TKey in keyof T]: CanonicalQueryData<T[TKey]> }
-      : never;
+    : T extends CallableFunction
+      ? never
+      : T extends object
+        ? string extends keyof T
+          ? GraphData
+          : { readonly [TKey in keyof T]: CanonicalQueryData<T[TKey]> }
+        : never;
 
 export interface BoundedQueryRequest {
   readonly cursor?: ContinuationCursor | string;
@@ -41,12 +72,12 @@ export interface PreparedBoundedQuery {
   readonly query: GraphData;
 }
 
-export interface ExactGraphRead<T extends GraphData> {
+export interface ExactGraphRead<T> {
   readonly generation: GraphGeneration;
   readonly item: CanonicalQueryData<T>;
 }
 
-export interface GraphQueryPage<T extends GraphData> {
+export interface GraphQueryPage<T> {
   readonly generation: GraphGeneration;
   readonly hasMore: boolean;
   readonly items: readonly CanonicalQueryData<T>[];
@@ -134,7 +165,10 @@ export class BoundedQueryContracts {
     this.#maxQueryContextCharacters = options.maxQueryContextCharacters;
   }
 
-  exact<T extends GraphData>(generation: number, item: T): Result<ExactGraphRead<T>> {
+  exact<T>(
+    generation: number,
+    item: T & RequireCanonicalQueryData<NoInfer<T>>,
+  ): Result<ExactGraphRead<T>> {
     const parsedGeneration = parseGraphGeneration(generation);
     if (!parsedGeneration.ok) return parsedGeneration;
     const copiedItem = copyGraphPayload(item, "query");
@@ -207,9 +241,9 @@ export class BoundedQueryContracts {
     );
   }
 
-  page<T extends GraphData>(
+  page<T>(
     prepared: PreparedBoundedQuery,
-    items: readonly T[],
+    items: readonly T[] & RequireCanonicalQueryData<NoInfer<T>>,
     state: QueryPageState,
   ): Result<GraphQueryPage<T>> {
     const inspectedPrepared = inspectExactRecord(

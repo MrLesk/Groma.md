@@ -5,7 +5,9 @@ import {
   sequenceGraphCommittedEvent,
   type GraphCommittedEvent,
 } from "../events.ts";
+import type { GraphEntity, GraphRelation } from "../graph.ts";
 import { parseGraphGeneration } from "../generation.ts";
+import { parseEntityId, parseRelationId } from "../identity.ts";
 import type { GraphData } from "../payload.ts";
 import { BoundedQueryContracts, type ContinuationCursor } from "../query.ts";
 
@@ -52,9 +54,37 @@ function assertCanonicalQueryResultTypes(contracts: BoundedQueryContracts): void
   contracts.exact(1, new Date(0));
   // @ts-expect-error Function-bearing records are not canonical GraphData.
   contracts.page(prepareFirst(contracts), [{ behavior: () => "unsafe" }], { hasMore: false });
+  // @ts-expect-error Undefined fields are not canonical query data.
+  contracts.exact(1, { value: undefined });
+  // @ts-expect-error Bigint fields are not canonical query data.
+  contracts.exact(1, { value: 1n });
+  const symbolKey = Symbol("behavior");
+  // @ts-expect-error Symbol-keyed records are not canonical query data.
+  contracts.exact(1, { [symbolKey]: "unsafe" });
 }
 
 void assertCanonicalQueryResultTypes;
+
+function assertCoreQueryRecordTypes(
+  contracts: BoundedQueryContracts,
+  graphEntity: GraphEntity,
+  graphRelation: GraphRelation,
+): void {
+  contracts.exact(1, graphEntity);
+  contracts.page(prepareFirst(contracts), [graphRelation], { hasMore: false });
+
+  const typedEntity = contracts.exact(1, {
+    id: graphEntity.id,
+    kind: graphEntity.kind,
+    payload: { nested: { labels: ["read-only"] } },
+  });
+  if (typedEntity.ok) {
+    // @ts-expect-error Canonical Core-record payloads are deeply readonly.
+    typedEntity.value.item.payload.nested.labels.push("mutation");
+  }
+}
+
+void assertCoreQueryRecordTypes;
 
 describe("bounded query contracts", () => {
   test("attaches a validated generation to exact reads", () => {
@@ -102,6 +132,53 @@ describe("bounded query contracts", () => {
       diagnostics: [{ code: "unsupported-payload" }],
       ok: false,
     });
+  });
+
+  test("accepts typed Core graph records directly and snapshots their payloads", () => {
+    const contracts = createContracts();
+    const entityId = parseEntityId(entity("1"));
+    const sourceId = parseEntityId(entity("2"));
+    const relationId = parseRelationId(relation("1"));
+    if (!entityId.ok || !sourceId.ok || !relationId.ok) throw new Error("expected valid IDs");
+
+    const entityPayload = { nested: { labels: ["entity"] } };
+    const relationPayload = { nested: { labels: ["relation"] } };
+    const graphEntity: GraphEntity = {
+      id: entityId.value,
+      kind: "component",
+      payload: entityPayload,
+    };
+    const graphRelation: GraphRelation = {
+      id: relationId.value,
+      payload: relationPayload,
+      source: sourceId.value,
+      target: entityId.value,
+      type: "requires",
+    };
+    const exact = contracts.exact(1, graphEntity);
+    const page = contracts.page(prepareFirst(contracts, 1, {}, 1), [graphRelation], {
+      hasMore: false,
+    });
+    if (!exact.ok || !page.ok) throw new Error("expected canonical Core records");
+
+    entityPayload.nested.labels.push("caller mutation");
+    relationPayload.nested.labels.push("caller mutation");
+    expect(exact.value.item).toEqual({
+      id: entityId.value,
+      kind: "component",
+      payload: { nested: { labels: ["entity"] } },
+    });
+    expect(page.value.items[0]).toEqual({
+      id: relationId.value,
+      payload: { nested: { labels: ["relation"] } },
+      source: sourceId.value,
+      target: entityId.value,
+      type: "requires",
+    });
+    const exactPayload = exact.value.item.payload as {
+      readonly nested: { readonly labels: readonly string[] };
+    };
+    expect(Object.isFrozen(exactPayload.nested.labels)).toBeTrue();
   });
 
   test("creates empty and exact-limit completed pages without cursors", () => {
