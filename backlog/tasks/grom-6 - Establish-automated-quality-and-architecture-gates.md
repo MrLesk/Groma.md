@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-12 00:15'
+updated_date: '2026-07-12 00:31'
 labels:
   - tooling
   - ci
@@ -36,6 +36,7 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 - [x] #6 One CI runner cross-compiles macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verifies one correctly named artifact per target, and smoke-tests the host-runnable Linux build
 - [ ] #7 After cross-target verification, the host-compatible standalone artifact remains available for an immediate smoke command
 - [ ] #8 Constrained layers fail closed on non-literal dynamic import and require expressions as unverifiable dependencies, with focused fixture coverage
+- [ ] #9 Architecture boundary analysis rejects ambient require aliases and escaping references while direct ambient calls remain validated and lexically shadowed local require bindings are not treated as module dependencies
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -43,8 +44,9 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 <!-- SECTION:PLAN:BEGIN -->
 1. Preserve the existing four-target single-runner verification and restore a host-compatible artifact afterward.
 2. Distinguish cross-compiled artifact coverage from compatible-host runtime smoke coverage in development guidance.
-3. Reject non-literal dynamic import and require expressions in constrained layers without treating unrelated calls as dependencies.
-4. Add focused boundary fixtures, run local and cross-target gates, and require fresh review.
+3. Track lexical value bindings so ambient require calls and escapes fail closed while shadowed local require functions remain ordinary local code.
+4. Add focused fixtures for ambient aliasing, direct literal and non-literal calls, lexical shadowing, and unrelated member calls.
+5. Run local and cross-target gates and require fresh review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -77,6 +79,10 @@ Reopened during mainline restoration after independent quality review found that
 Fresh quality review found that non-literal dynamic import and require expressions are currently ignored, allowing constrained layers to hide unverifiable dependencies. The correction will fail closed only for actual import and require forms and add focused fixtures.
 
 Implemented fail-closed collection for non-literal dynamic import and bare require calls. Focused fixtures confirm both violations while unrelated loader, member require, and require.resolve calls remain ignored. Local focused tests and the full quality and target gates pass; acceptance criteria remain unchecked pending external review.
+
+Final quality review found that ambient require can escape through an alias while lexically shadowed local require functions are falsely classified. The correction will add lexical value-binding awareness, reject ambient require used as a value, and preserve ignored member and unrelated calls.
+
+Implemented a focused two-pass lexical scope map for runtime TypeScript bindings. Unbound ambient require calls retain literal and non-literal dependency checks; any other referenced ambient require value fails closed at the escape, while local shadowing, member access, and unrelated calls are excluded. Nine focused boundary fixtures, 29 full tests, all quality gates, four-target verification, and immediate native smoke pass. New acceptance criteria remain unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

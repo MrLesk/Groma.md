@@ -118,6 +118,73 @@ describe("architecture boundary checker", () => {
     ]);
   });
 
+  test("rejects direct ambient require with literal and non-literal dependencies", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": [
+        'const moduleName = "node:fs";',
+        'void require("node:fs");',
+        "void require(moduleName);",
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/index.ts",
+        reason:
+          "Require dependency must use a string literal so its architectural boundary can be verified",
+      },
+      {
+        file: "core/index.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+    ]);
+  });
+
+  test("rejects ambient require aliases and other escaping references", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": ["const load = require;", "consume(require);", 'void load("node:fs");'].join(
+        "\n",
+      ),
+    });
+
+    const violations = await checkArchitectureBoundaries(sourceRoot);
+    expect(violations).toHaveLength(2);
+    expect(violations.map((violation) => violation.reason)).toEqual([
+      "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
+      "Ambient require cannot be aliased or used as a value because its dependencies cannot be verified",
+    ]);
+  });
+
+  test("does not treat a lexically shadowed local require as a module dependency", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": [
+        "function useLocalRequire(): void {",
+        "  function require(value: string): string { return value; }",
+        '  require("node:fs");',
+        "  const load = require;",
+        '  load("node:http");',
+        "}",
+        "void useLocalRequire;",
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
+  });
+
+  test("ignores member require access and unrelated calls", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": [
+        'const moduleName = "node:fs";',
+        "void load(moduleName);",
+        "void loader.require(moduleName);",
+        "void require.resolve(moduleName);",
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
+  });
+
   test("rejects unresolved relative imports and source outside a boundary", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": 'import "./missing.ts";',
