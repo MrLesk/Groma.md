@@ -72,7 +72,12 @@ interface StagedRecord {
   readonly locator: WorkspaceResourceLocator;
   readonly stagePath: string;
   readonly targetPath: string;
-  state: "committed" | "discarded" | "renamed-pending-finalization" | "staged";
+  state:
+    | "committed"
+    | "discarded"
+    | "finalization-abandoned"
+    | "renamed-pending-finalization"
+    | "staged";
   targetFinalizationHandle?: Awaited<ReturnType<typeof open>>;
   targetFileFinalized?: boolean;
   targetModeApplied?: boolean;
@@ -136,13 +141,18 @@ const writeChunkBytes = 64 * 1024;
 const exactOwnerToken = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const intrinsicTextDecoder = new TextDecoder();
 const intrinsicTextEncoder = new TextEncoder();
+const intrinsicArrayPush = Array.prototype.push;
+const intrinsicArraySlice = Array.prototype.slice;
+const intrinsicArraySort = Array.prototype.sort;
 const intrinsicDecode = TextDecoder.prototype.decode;
 const intrinsicEncode = TextEncoder.prototype.encode;
 const intrinsicNormalize = String.prototype.normalize;
+const intrinsicStringSlice = String.prototype.slice;
 const intrinsicSplit = String.prototype.split;
 const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
 const intrinsicTest = RegExp.prototype.test;
+const intrinsicUint8ArraySlice = Uint8Array.prototype.slice;
 
 function diagnostic(code: string, message: string, details?: Diagnostic["details"]): Diagnostic {
   return Object.freeze({ code, message, ...(details === undefined ? {} : { details }) });
@@ -322,7 +332,7 @@ async function readBoundedFile(absolutePath: string, maximum: number): Promise<U
     }
     if (total > maximum)
       throw Object.assign(new Error("bounded file overflow"), { code: "ETOOLARGE" });
-    return buffer.slice(0, total);
+    return Reflect.apply(intrinsicUint8ArraySlice, buffer, [0, total]) as Uint8Array;
   } finally {
     await handle.close();
   }
@@ -573,7 +583,8 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             ),
           );
         }
-        return success(Object.freeze({ bytes: buffer.slice(0, total) }));
+        const bytes = Reflect.apply(intrinsicUint8ArraySlice, buffer, [0, total]) as Uint8Array;
+        return success(Object.freeze({ bytes }));
       } finally {
         await handle.close();
       }
@@ -670,10 +681,13 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         );
       }
       const hasMore = state.collected.length > limit.value;
-      const entries = state.collected.slice(0, limit.value);
+      const entries = Reflect.apply(intrinsicArraySlice, state.collected, [
+        0,
+        limit.value,
+      ]) as ResourceEntry[];
       let nextCursor: ResourceContinuationCursor | undefined;
       if (hasMore) {
-        const anchor = entries.at(-1)?.locator;
+        const anchor = entries[entries.length - 1]?.locator;
         if (anchor === undefined) {
           return failure(providerFailure("create an enumeration continuation"));
         }
@@ -801,6 +815,18 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     if (record.state === "committed") return Object.freeze({ state: "committed" });
+    if (record.state === "finalization-abandoned") {
+      return Object.freeze({
+        diagnostics: Object.freeze([
+          diagnostic(
+            "replacement-finalization-abandoned",
+            "Replacement was renamed and its durability finalization was explicitly abandoned",
+            { commitState: "committed-indeterminate" },
+          ),
+        ]),
+        state: "committed-indeterminate",
+      });
+    }
     if (record.state === "discarded") {
       return notCommitted(
         diagnostic("replacement-discarded", "Replacement handle has already been discarded"),
@@ -925,6 +951,19 @@ class BunLocalResourceProvider implements LocalResourceProvider {
           "Replacement handle is not owned by this provider",
         ),
       );
+    }
+    if (record.state === "renamed-pending-finalization") {
+      const retained = record.targetFinalizationHandle;
+      if (retained !== undefined) {
+        try {
+          await retained.close();
+        } catch (error) {
+          return failure(resourceError(error, "abandon replacement finalization"));
+        }
+        delete record.targetFinalizationHandle;
+      }
+      record.state = "finalization-abandoned";
+      return success(undefined);
     }
     if (record.state !== "staged") return success(undefined);
     const cleanup = await this.#cleanupPath(record.stagePath);
@@ -1158,7 +1197,9 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             ),
           );
         }
-        if (!isReservedWorkspaceResourceSegment(entry.name)) names.push(entry.name);
+        if (!isReservedWorkspaceResourceSegment(entry.name)) {
+          Reflect.apply(intrinsicArrayPush, names, [entry.name]);
+        }
       }
     } finally {
       try {
@@ -1167,7 +1208,9 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         // Bun closes a Dir after the terminal read; explicit close remains portable cleanup.
       }
     }
-    names.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    Reflect.apply(intrinsicArraySort, names, [
+      (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0),
+    ]);
     for (let index = 0; index < names.length; index += 1) {
       const name = names[index]!;
       const locatorResult =
@@ -1206,7 +1249,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             (Reflect.apply(intrinsicStartsWith, state.after, [`${entry.locator}/`]) as boolean);
         }
       } else {
-        state.collected.push(entry);
+        Reflect.apply(intrinsicArrayPush, state.collected, [entry]);
         if (state.collected.length > pageLimit) {
           state.stopped = true;
           return success(undefined);
@@ -1293,7 +1336,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     try {
-      const suffix = value.slice(prefix.length);
+      const suffix = Reflect.apply(intrinsicStringSlice, value, [prefix.length]) as string;
       const decoded = Buffer.from(suffix, "base64url").toString("utf8");
       if (Buffer.from(decoded, "utf8").toString("base64url") !== suffix)
         throw new Error("noncanonical");

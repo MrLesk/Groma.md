@@ -83,6 +83,8 @@ const reservedWindowsName =
 const forbiddenWindowsCharacters = /[<>:"|?*\\\u0000-\u001f]/;
 const absoluteOrDrivePrefix = /^(?:\/|\\|[a-z]:)/i;
 const intrinsicTextEncoder = new TextEncoder();
+const intrinsicArrayJoin = Array.prototype.join;
+const intrinsicArrayPush = Array.prototype.push;
 const intrinsicEncode = TextEncoder.prototype.encode;
 const intrinsicCharCodeAt = String.prototype.charCodeAt;
 const intrinsicEndsWith = String.prototype.endsWith;
@@ -200,7 +202,8 @@ export function workspaceResourceLocator(
     }
     const parsed = validateSegment(segment);
     if (!parsed.ok) return parsed;
-    validated.push(parsed.value);
+    Reflect.apply(intrinsicArrayPush, validated, [parsed.value]);
   }
-  return parseWorkspaceResourceLocator(validated.join("/"));
+  const locator = Reflect.apply(intrinsicArrayJoin, validated, ["/"]) as string;
+  return parseWorkspaceResourceLocator(locator);
 }

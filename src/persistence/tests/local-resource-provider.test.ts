@@ -1021,6 +1021,54 @@ describe("staged atomic replacement", () => {
     });
   }
 
+  test("closes and abandons retained finalization on discard after rename", async () => {
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "state.md");
+    const movedTarget = path.join(roots.workspaceRoot, "moved-state.md");
+    await writeFile(target, "old-complete");
+    let targetSyncAttempts = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: (phase) => {
+        if (phase !== "replacement-target-file-sync") return;
+        targetSyncAttempts += 1;
+        if (targetSyncAttempts === 1) throw new Error("injected target-file sync failure");
+      },
+    });
+    const staged = await provider.stageReplacement(
+      locator("state.md"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed-indeterminate");
+    expect(await readFile(target, "utf8")).toBe("new-complete");
+    expect(await provider.discardReplacement(staged.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(await provider.discardReplacement(staged.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    await rename(target, movedTarget);
+    const abandoned = {
+      diagnostics: [
+        {
+          code: "replacement-finalization-abandoned",
+          details: { commitState: "committed-indeterminate" },
+          message:
+            "Replacement was renamed and its durability finalization was explicitly abandoned",
+        },
+      ],
+      state: "committed-indeterminate",
+    } as const;
+    expect(await provider.commitReplacement(staged.value)).toEqual(abandoned);
+    expect(await provider.commitReplacement(staged.value)).toEqual(abandoned);
+    expect(targetSyncAttempts).toBe(1);
+    expect(await readFile(movedTarget, "utf8")).toBe("new-complete");
+  });
+
   test("cleanup failure is reported while discard remains idempotent", async () => {
     const roots = await fixture();
     const target = path.join(roots.workspaceRoot, "state.md");
@@ -1312,6 +1360,7 @@ describe("same-machine coordination", () => {
       "endsWith",
       "includes",
       "normalize",
+      "slice",
       "split",
       "startsWith",
       "toLowerCase",
@@ -1319,6 +1368,12 @@ describe("same-machine coordination", () => {
     const previousStrings = methods.map(
       (name) => [name, Object.getOwnPropertyDescriptor(String.prototype, name)] as const,
     );
+    const arrayMethods = ["join", "push", "slice", "sort"] as const;
+    const previousArrays = arrayMethods.map(
+      (name) => [name, Object.getOwnPropertyDescriptor(Array.prototype, name)] as const,
+    );
+    const uint8ArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+    const previousUint8ArraySlice = Object.getOwnPropertyDescriptor(uint8ArrayPrototype, "slice");
     const previousTest = Object.getOwnPropertyDescriptor(RegExp.prototype, "test");
     const textDecoderPrototype = TextDecoder.prototype;
     const textEncoderPrototype = TextEncoder.prototype;
@@ -1331,7 +1386,7 @@ describe("same-machine coordination", () => {
     let forbiddenRejected = false;
     let reservedRejected = false;
     let readSucceeded = false;
-    let cursorContinued = false;
+    let cursorOrderPreserved = false;
     let aliasContended = false;
     let holderSucceeded = false;
     let release: (() => void) | undefined;
@@ -1347,6 +1402,26 @@ describe("same-machine coordination", () => {
           writable: true,
         });
       }
+      for (const name of arrayMethods) {
+        Object.defineProperty(Array.prototype, name, {
+          configurable: true,
+          value: () => {
+            calls += 1;
+            throw new Error(`patched Array ${name} must not run`);
+          },
+          writable: true,
+        });
+      }
+      if (previousUint8ArraySlice === undefined) {
+        throw new Error("expected Uint8Array slice descriptor");
+      }
+      Object.defineProperty(uint8ArrayPrototype, "slice", {
+        ...previousUint8ArraySlice,
+        value: () => {
+          calls += 1;
+          throw new Error("patched Uint8Array slice must not run");
+        },
+      });
       Object.defineProperty(RegExp.prototype, "test", {
         configurable: true,
         value: () => {
@@ -1403,7 +1478,13 @@ describe("same-machine coordination", () => {
         ...request,
         cursor: firstPage.value.nextCursor,
       });
-      cursorContinued = secondPage.ok;
+      cursorOrderPreserved =
+        firstPage.value.entries.length === 2 &&
+        firstPage.value.entries[0]?.locator === "base/resume" &&
+        firstPage.value.entries[1]?.locator === "base/resume/a.md" &&
+        secondPage.ok &&
+        secondPage.value.entries.length === 1 &&
+        secondPage.value.entries[0]?.locator === "base/resume/b.md";
       let ready!: () => void;
       const acquired = new Promise<void>((resolve) => {
         ready = resolve;
@@ -1433,6 +1514,15 @@ describe("same-machine coordination", () => {
         if (descriptor === undefined) Reflect.deleteProperty(String.prototype, name);
         else Object.defineProperty(String.prototype, name, descriptor);
       }
+      for (const [name, descriptor] of previousArrays) {
+        if (descriptor === undefined) Reflect.deleteProperty(Array.prototype, name);
+        else Object.defineProperty(Array.prototype, name, descriptor);
+      }
+      if (previousUint8ArraySlice === undefined) {
+        Reflect.deleteProperty(uint8ArrayPrototype, "slice");
+      } else {
+        Object.defineProperty(uint8ArrayPrototype, "slice", previousUint8ArraySlice);
+      }
       if (previousTest === undefined) Reflect.deleteProperty(RegExp.prototype, "test");
       else Object.defineProperty(RegExp.prototype, "test", previousTest);
       if (previousDecode === undefined) Reflect.deleteProperty(textDecoderPrototype, "decode");
@@ -1450,7 +1540,7 @@ describe("same-machine coordination", () => {
     expect(forbiddenRejected).toBeTrue();
     expect(reservedRejected).toBeTrue();
     expect(readSucceeded).toBeTrue();
-    expect(cursorContinued).toBeTrue();
+    expect(cursorOrderPreserved).toBeTrue();
     expect(aliasContended).toBeTrue();
     expect(holderSucceeded).toBeTrue();
   });
