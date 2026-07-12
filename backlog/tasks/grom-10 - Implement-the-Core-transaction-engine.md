@@ -1,11 +1,11 @@
 ---
 id: GROM-10
 title: Implement the Core transaction engine
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 05:24'
+updated_date: '2026-07-12 05:35'
 labels:
   - core
   - transactions
@@ -28,12 +28,12 @@ Implement deterministic semantic transactions with expected revisions, registere
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A mutation can carry expected content revisions and returns a conflict without writing when any expectation is stale
-- [ ] #2 All registered invariants run against the complete proposed transaction before a store commit begins
-- [ ] #3 A successful transaction advances the graph generation exactly once and publishes one typed committed event after durable success
-- [ ] #4 Validation, conflict, provider failure, and indeterminate recovery outcomes are distinct typed diagnostics and never report a partial success
-- [ ] #5 Core defines storage preparation, commit, and recovery contracts without importing local-resource, Markdown, or journal implementations
-- [ ] #6 Fault-injecting provider tests cover rejection before prepare, failure during commit, recovery reporting, event ordering, and concurrent stale revisions
+- [x] #1 A mutation can carry expected content revisions and returns a conflict without writing when any expectation is stale
+- [x] #2 All registered invariants run against the complete proposed transaction before a store commit begins
+- [x] #3 A successful transaction advances the graph generation exactly once and publishes one typed committed event after durable success
+- [x] #4 Validation, conflict, provider failure, and indeterminate recovery outcomes are distinct typed diagnostics and never report a partial success
+- [x] #5 Core defines storage preparation, commit, and recovery contracts without importing local-resource, Markdown, or journal implementations
+- [x] #6 Fault-injecting provider tests cover rejection before prepare, failure during commit, recovery reporting, event ordering, and concurrent stale revisions
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -58,4 +58,12 @@ Context-hunter classification: L2 foundational Core transaction boundary. GROM-1
 Implemented the Core transaction engine and technology-neutral provider protocol. Requests, provider snapshots, proposals, invariant diagnostics, prepare/commit responses, and recovery receipts are runtime-validated and defensively frozen. Provider prepare atomically rechecks base generation and revisions; committed and recovered events derive from provider-confirmed durable evidence. Added a fault-injecting provider suite covering stale expectations, full proposal invariant order/aggregation, concurrent prepare races, known and uncertain commit failures, all recovery outcomes, event ordering, forged shapes/accessors, immutable aliases, recovery forgery, and repeated idempotent recovery.
 
 Quality-review hardening: bound provider result fields exactly to their status; malformed commit or recovery confirmations remain indeterminate. Added required configurable limits for affected identities, shared request GraphData depth/value occurrences, and independent snapshot-state depth/value occurrences. Structural copying counts repeated DAG paths, preflights dense arrays and affected-ID arrays before key enumeration when over limit, and preserves existing payload behavior when no structural budget is supplied. Invariant diagnostic details reject nested or oversized values descriptor-first. Added constructor, exact/N+1, deep-chain, shared-DAG, freezing, status-variant, and Proxy regressions. Verification: focused transaction suite 25 tests/143 assertions; full 95 tests/434 assertions; bun run check; all four standalone targets; git diff --check.
+
+Final validation passed at dd4bda9: 25 focused transaction tests with 143 assertions and 95 full tests with 434 assertions; formatting, TypeScript, architecture boundaries, native build, smoke test, diff check, and macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 targets. GitHub Actions run 29181257524 passed both jobs. Independent specification and quality reviews passed. Claude returned no written feedback. Codex completed PR #8 with a thumbs-up and no comments or review threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the technology-neutral Core transaction engine with expected revisions, complete immutable proposals, deterministic invariant aggregation, atomic provider prepare conflicts, exact generation advancement, canonical committed events, and explicit provider-failure/indeterminate recovery outcomes. Added required structural budgets for affected identities, request data, and provider snapshot state; recovery derives event identities from durable provider evidence. Verified with 25 focused tests/143 assertions, 95 total tests/434 assertions, full quality gates, four standalone targets, GitHub Actions, Claude/Codex, and independent spec/quality reviews.
+<!-- SECTION:FINAL_SUMMARY:END -->
