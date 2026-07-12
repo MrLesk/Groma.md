@@ -3,6 +3,7 @@ import { failure, type Diagnostic, type Result, success } from "../core/result.t
 declare const workspaceResourceLocatorBrand: unique symbol;
 declare const resourceContinuationCursorBrand: unique symbol;
 declare const stagedReplacementHandleBrand: unique symbol;
+declare const localCoordinationLeaseBrand: unique symbol;
 
 export type WorkspaceResourceLocator = string & {
   readonly [workspaceResourceLocatorBrand]: true;
@@ -14,6 +15,10 @@ export type ResourceContinuationCursor = string & {
 
 export interface StagedReplacementHandle {
   readonly [stagedReplacementHandleBrand]: true;
+}
+
+export interface LocalCoordinationLease {
+  readonly [localCoordinationLeaseBrand]: true;
 }
 
 export type ResourceKind = "directory" | "file" | "link" | "other";
@@ -68,6 +73,10 @@ export interface LocalResourceProvider {
   ): Promise<Result<StagedReplacementHandle>>;
   commitReplacement(handle: StagedReplacementHandle): Promise<ReplacementCommitOutcome>;
   discardReplacement(handle: StagedReplacementHandle): Promise<Result<void>>;
+  acquireCoordination(request: LocalCoordinationRequest): Promise<Result<LocalCoordinationLease>>;
+  releaseCoordination(lease: LocalCoordinationLease): Promise<Result<void>>;
+  cleanupReplacementStages(locator: WorkspaceResourceLocator): Promise<Result<void>>;
+  removeResource(locator: WorkspaceResourceLocator): Promise<ReplacementCommitOutcome>;
   withCoordination<T>(
     request: LocalCoordinationRequest,
     action: () => T | Promise<T>,

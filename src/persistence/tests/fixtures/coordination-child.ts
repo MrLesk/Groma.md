@@ -6,7 +6,10 @@ function send(message: unknown): void {
   process.send(message);
 }
 
-const [workspaceRoot, locatorInput, coordinationRoot] = process.argv.slice(2);
+const arguments_ = process.argv.slice(2);
+const persistent = arguments_.at(-1) === "--persistent";
+if (persistent) arguments_.pop();
+const [workspaceRoot, locatorInput, coordinationRoot] = arguments_;
 if (workspaceRoot === undefined || locatorInput === undefined) {
   throw new Error("coordination fixture requires workspace and locator arguments");
 }
@@ -35,13 +38,24 @@ try {
     workspaceRoot,
     ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
   });
-  const result = await provider.withCoordination(
-    { context: "local-machine", locator: locator.value },
-    async () => {
-      send({ type: "ready" });
-      await released;
-    },
-  );
+  const result = persistent
+    ? await (async () => {
+        const acquired = await provider.acquireCoordination({
+          context: "local-machine",
+          locator: locator.value,
+        });
+        if (!acquired.ok) return acquired;
+        send({ type: "ready" });
+        await released;
+        return provider.releaseCoordination(acquired.value);
+      })()
+    : await provider.withCoordination(
+        { context: "local-machine", locator: locator.value },
+        async () => {
+          send({ type: "ready" });
+          await released;
+        },
+      );
   send({
     ...(result.ok ? {} : { code: result.diagnostics[0]?.code }),
     ok: result.ok,
