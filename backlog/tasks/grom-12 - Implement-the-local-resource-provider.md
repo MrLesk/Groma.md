@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 08:33'
+updated_date: '2026-07-12 08:54'
 labels:
   - persistence
   - resources
@@ -16,8 +16,10 @@ references:
   - MANIFESTO.md
   - ARCHITECTURE.md
 modified_files:
+  - src/persistence/contracts.ts
   - src/persistence/README.md
   - src/persistence/local-resource-provider.ts
+  - src/persistence/tests/contracts.test.ts
   - src/persistence/tests/fixtures/coordination-child.ts
   - src/persistence/tests/local-resource-provider.test.ts
 priority: high
@@ -79,4 +81,6 @@ Windows final policy correction: owner-record exclusive write, sync, and close r
 Claude review cleanup: every rejects assertion in the persistence provider test is now awaited, including configuration ceilings and POSIX coordination-root permission and ownership checks. Coordination callback exceptions now return coordination-action-failed. Release failures return coordination-release-failed with actionCompleted and preserve underlying release diagnostics; combined failures retain both outcomes, and tests prove each callback runs exactly once. Stale-owner replacement reacquisition is capped at eight attempts with resource-coordination-retry-exhausted and a deterministic repeated-replacement probe. Direct request tests cover read byte limits above the configured provider bound and negative enumeration depth. Documentation records callback and release semantics plus the residual lstat-to-opendir and resolve-to-rename race windows and the non-hostile namespace-mutation assumption. Validation: focused persistence tests pass 43 tests and 196 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 160 repository tests and 738 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows remain cross-compilation only, not native runtime claims.
 
 Codex review corrections: same-process coordination now uses a callback readiness promise before contention, with no timing sleep. Replacement stages remain private mode 0600 while awaiting commit; commit re-resolves the target, applies its current permission and executable bits through the open stage handle or uses 0666 masked by the current umask for a missing target, syncs, closes, and renames. Windows retains Bun and Node chmod semantics without an ACL-preservation claim. Rename success now transitions to renamed-pending-finalization. POSIX syncs the target parent directory before committed acknowledgement, while Windows skips unsupported directory sync; parent-sync and after-rename failures return committed-indeterminate and repeated commit retries finalization to committed. Enumeration re-resolves the expected non-link directory at every walk entry and immediately before depth-limit inspection; a deterministic namespace-swap test proves outside entries are never returned. Validation: focused persistence tests pass 46 tests and 214 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 163 repository tests and 756 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows remain cross-compilation only, not native runtime claims.
+
+Fresh Codex review corrections: replacement publication now renames the still-private mode-0600 sibling before any mode widening. The freshly resolved prior target mode or masked-0666 missing-target policy is stored on the handle record; renamed-pending-finalization then applies that mode through the target handle, syncs the target file, syncs the POSIX parent directory, and acknowledges. A deterministic post-rename pre-mode fault proves complete new bytes remain mode 0600 with committed-indeterminate, and retry restores the intended mode and reaches committed. Pre-rename rename failure leaves the stage private and not committed, so obsolete private-mode restoration machinery and its controller regression were removed. First-time parent creation now tracks successful mkdir calls and POSIX-syncs each containing directory top-down after confinement validation; a fault regression aborts staging before a target exists, and the successful Unicode chain proves all three new ancestors are synced. Windows skips unsupported directory sync. The locator factory now passes its joined segments through the parser so the 4096-byte total UTF-8 ceiling matches parsed runtime input; many individually valid segments above the total budget are rejected. Validation: focused persistence tests pass 48 tests and 223 assertions. bun run check passes formatting, strict TypeScript, architectural boundaries, all 165 repository tests and 765 assertions, native build, and smoke. bun run check:targets passes all four promised targets. The persistence entry directly compiles for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check passes. Linux and Windows remain cross-compilation only, not native runtime claims.
 <!-- SECTION:NOTES:END -->

@@ -40,8 +40,12 @@ namespace.
 Staging owns first-time workspace initialization. It creates a missing parent chain
 one segment at a time, handles a concurrent creator through `EEXIST`, and then
 revalidates every segment with `lstat` and `realpath` as an in-workspace, non-link
-directory. Configuration and canonical stores therefore do not need raw filesystem
-bootstrap access.
+directory. On POSIX, each newly created ancestor is made durable immediately by
+syncing its containing directory in top-down order. Syncing only the eventual target
+parent after file rename is insufficient when one or more ancestor directory entries
+were also created for the first time. Windows skips unsupported directory sync and
+retains only the documented atomic-rename/process-crash guarantee. Configuration and
+canonical stores therefore do not need raw filesystem bootstrap access.
 
 ### Reads
 
@@ -85,21 +89,23 @@ filesystem), completely writes it through a bounded loop, calls `FileHandle.sync
 and closes the handle. The sibling remains mode `0600` while it awaits commit. The
 provider-owned opaque handle contains no path.
 
-Commit revalidates confinement and the current target. Immediately before rename it
-opens the private stage, applies the existing target's POSIX permission and executable
-bits, syncs that metadata, closes the handle, and atomically renames the sibling over
-the target. A missing target uses normal file-creation policy: mode `0666` masked by
-the process umask. Windows receives the corresponding Bun/Node `chmod` behavior; this
-does not claim preservation of Windows ACLs.
+Commit revalidates confinement and the current target, records the existing target's
+POSIX permission and executable bits, and atomically renames the still-`0600` sibling
+over the target. A missing target records normal file-creation policy: mode `0666`
+masked by the process umask. Keeping the sibling private through rename avoids exposing
+uncommitted bytes if the process crashes before publication.
 
-Before rename, failures are `not-committed`. After rename, POSIX syncs the target
-parent directory before acknowledging `committed`; Windows skips unsupported directory
-sync and makes no power-loss directory-durability claim. Parent-sync or acknowledgement
-failure is `committed-indeterminate`, and a repeated commit on the same handle retries
-finalization without renaming again. The target therefore exposes only the complete
-prior bytes or complete replacement bytes. Discard and cleanup are idempotent.
-Persistence-local fault injection covers write, flush, rename, parent-directory sync,
-after-rename, and cleanup boundaries without adding test behavior to Core.
+Before rename, failures are `not-committed`. After rename, finalization opens the
+target, applies the recorded mode, syncs the file, and on POSIX syncs the target parent
+directory before acknowledging `committed`. Windows receives the corresponding
+Bun/Node `chmod` behavior but no ACL-preservation claim, skips unsupported directory
+sync, and makes no power-loss directory-durability claim. Mode, file-sync, parent-sync,
+or acknowledgement failure is `committed-indeterminate`, and a repeated commit on the
+same handle retries finalization without renaming again. The target therefore exposes
+only the complete prior bytes or complete replacement bytes. Discard and cleanup are
+idempotent. Persistence-local fault injection covers write, flush, rename, post-rename
+mode finalization, parent creation and target-parent directory sync, after-rename, and
+cleanup boundaries without adding test behavior to Core.
 
 Handles are live-operation capabilities, not durable journal records. The transaction
 journal implemented by GROM-14 must durably record the target locator and replacement

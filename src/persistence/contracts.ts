@@ -171,5 +171,5 @@ export function workspaceResourceLocator(
     if (!parsed.ok) return parsed;
     validated.push(parsed.value);
   }
-  return success(validated.join("/") as WorkspaceResourceLocator);
+  return parseWorkspaceResourceLocator(validated.join("/"));
 }

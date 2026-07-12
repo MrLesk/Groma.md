@@ -57,6 +57,12 @@ describe("workspace resource locators", () => {
   test("rejects malformed runtime values and bounded segment overflows", () => {
     expect(parseWorkspaceResourceLocator({ toString: () => "safe" }).ok).toBeFalse();
     expect(workspaceResourceLocator("a".repeat(256)).ok).toBeFalse();
+    expect(
+      workspaceResourceLocator(...Array.from({ length: 300 }, () => "valid-segment")),
+    ).toMatchObject({
+      diagnostics: [{ code: "invalid-resource-locator" }],
+      ok: false,
+    });
   });
 
   test("reserves the provider-owned stage namespace in every segment and casing", () => {

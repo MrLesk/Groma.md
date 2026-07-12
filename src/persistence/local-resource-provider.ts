@@ -38,6 +38,8 @@ export type LocalResourceFaultPhase =
   | "parent-directory"
   | "read"
   | "rename"
+  | "replacement-after-rename-before-mode"
+  | "replacement-parent-creation-sync"
   | "replacement-parent-directory-sync"
   | "write";
 
@@ -65,6 +67,7 @@ interface ResolvedResource {
 }
 
 interface StagedRecord {
+  intendedTargetMode?: number;
   readonly locator: WorkspaceResourceLocator;
   readonly stagePath: string;
   readonly targetPath: string;
@@ -797,27 +800,23 @@ class BunLocalResourceProvider implements LocalResourceProvider {
               ? Number(target.value.stats.mode & 0o777n)
               : target.value.stats.mode & 0o777;
         await this.#inject("rename");
-        await this.#applyReplacementMode(record.stagePath, targetMode);
+        record.intendedTargetMode = targetMode;
         await rename(record.stagePath, record.targetPath);
         record.state = "renamed-pending-finalization";
       } catch (error) {
-        if (!(await this.#restorePrivateStage(record.stagePath))) record.state = "discarded";
         return notCommitted(resourceError(error, "commit a staged replacement"));
       }
     }
     try {
-      if (shouldSyncLocalReplacementDirectory(process.platform)) {
-        await this.#inject("replacement-parent-directory-sync");
-        const parentHandle = await open(
-          path.dirname(record.targetPath),
-          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-        );
-        try {
-          await parentHandle.sync();
-        } finally {
-          await parentHandle.close();
-        }
+      if (record.intendedTargetMode === undefined) {
+        throw new Error("replacement target mode was not recorded before rename");
       }
+      await this.#inject("replacement-after-rename-before-mode");
+      await this.#applyReplacementMode(record.targetPath, record.intendedTargetMode);
+      await this.#syncReplacementDirectory(
+        path.dirname(record.targetPath),
+        "replacement-parent-directory-sync",
+      );
       await this.#inject("after-rename");
       record.state = "committed";
       return Object.freeze({ state: "committed" });
@@ -835,12 +834,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
-  async #applyReplacementMode(stagePath: string, mode: number): Promise<void> {
+  async #applyReplacementMode(targetPath: string, mode: number): Promise<void> {
     const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-    const handle = await open(stagePath, constants.O_RDWR | noFollow);
+    const handle = await open(targetPath, constants.O_RDWR | noFollow);
     try {
       const stats = await handle.stat();
-      if (!stats.isFile()) throw new Error("replacement stage is not a regular file");
+      if (!stats.isFile()) throw new Error("replacement target is not a regular file");
       await handle.chmod(mode);
       await handle.sync();
     } finally {
@@ -848,13 +847,20 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     }
   }
 
-  async #restorePrivateStage(stagePath: string): Promise<boolean> {
+  async #syncReplacementDirectory(
+    directoryPath: string,
+    phase: "replacement-parent-creation-sync" | "replacement-parent-directory-sync",
+  ): Promise<void> {
+    if (!shouldSyncLocalReplacementDirectory(process.platform)) return;
+    await this.#inject(phase);
+    const handle = await open(
+      directoryPath,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
     try {
-      await this.#applyReplacementMode(stagePath, 0o600);
-      return true;
-    } catch {
-      await rm(stagePath, { force: true }).catch(() => undefined);
-      return false;
+      await handle.sync();
+    } finally {
+      await handle.close();
     }
   }
 
@@ -1032,8 +1038,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     let current = this.#root;
     for (let index = 0; index < segments.length - 1; index += 1) {
       current = path.join(current, segments[index]!);
+      let created = false;
       try {
         await mkdir(current);
+        created = true;
       } catch (error) {
         if (errorCode(error) !== "EEXIST") {
           return failure(resourceError(error, "create a resource parent directory"));
@@ -1066,6 +1074,12 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             "resource-outside-workspace",
             "Replacement parent resolved outside the workspace boundary",
           ),
+        );
+      }
+      if (created) {
+        await this.#syncReplacementDirectory(
+          path.dirname(current),
+          "replacement-parent-creation-sync",
         );
       }
     }

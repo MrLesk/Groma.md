@@ -541,17 +541,42 @@ describe("staged atomic replacement", () => {
 
   test("creates and revalidates several missing Unicode parent directories", async () => {
     const roots = await fixture();
-    const provider = await createLocalResourceProvider(roots);
+    let parentCreationSyncCount = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: (phase) => {
+        if (phase === "replacement-parent-creation-sync") parentCreationSyncCount += 1;
+      },
+    });
     const target = locator("groma", "設計", "コンポーネント", "state.md");
 
     const staged = await provider.stageReplacement(target, textEncoder.encode("initialized"));
     expect(staged.ok).toBeTrue();
     if (!staged.ok) return;
+    expect(parentCreationSyncCount).toBe(process.platform === "win32" ? 0 : 3);
     expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
 
     const read = await provider.read({ locator: target, maxBytes: 32 });
     expect(read.ok).toBeTrue();
     if (read.ok) expect(textDecoder.decode(read.value.bytes)).toBe("initialized");
+  });
+
+  test("aborts staging when a newly created ancestor cannot be made durable", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const targetPath = path.join(roots.workspaceRoot, "groma", "nested", "state.md");
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("replacement-parent-creation-sync"),
+    });
+
+    const staged = await provider.stageReplacement(
+      locator("groma", "nested", "state.md"),
+      textEncoder.encode("new"),
+    );
+
+    expect(diagnosticCode(staged)).toBe("replacement-stage-failed");
+    await expect(lstat(targetPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("handles concurrent creation of the same missing parent chain", async () => {
@@ -772,33 +797,6 @@ describe("staged atomic replacement", () => {
     expect((await provider.discardReplacement(staged.value)).ok).toBeTrue();
   });
 
-  test("invalidates a stage when private-mode restoration and removal both fail", async () => {
-    const roots = await fixture();
-    let stagePath: string | undefined;
-    const provider = await createLocalResourceProvider({
-      ...roots,
-      faultInjector: async (phase) => {
-        if (phase !== "rename" || stagePath === undefined) return;
-        await rm(stagePath);
-        await mkdir(stagePath);
-        await writeFile(path.join(stagePath, "blocker"), "not removable as a file");
-        throw new Error("injected rename failure");
-      },
-    });
-    const staged = await provider.stageReplacement(locator("state.md"), textEncoder.encode("new"));
-    if (!staged.ok) throw new Error("staging failed unexpectedly");
-    const stageName = (await readdir(roots.workspaceRoot)).find((name) =>
-      name.startsWith(".groma-stage-"),
-    );
-    if (stageName === undefined) throw new Error("expected the private stage");
-    stagePath = path.join(roots.workspaceRoot, stageName);
-
-    expect((await provider.commitReplacement(staged.value)).state).toBe("not-committed");
-    expect((await provider.commitReplacement(staged.value)).diagnostics?.[0]?.code).toBe(
-      "replacement-discarded",
-    );
-  });
-
   test("after-rename failure reports committed-indeterminate with complete new bytes", async () => {
     const roots = await fixture();
     const target = path.join(roots.workspaceRoot, "state.md");
@@ -818,6 +816,31 @@ describe("staged atomic replacement", () => {
     expect(outcome.state).toBe("committed-indeterminate");
     expect(await readFile(target, "utf8")).toBe("new-complete");
     expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+  });
+
+  test("keeps renamed bytes private until retry finalizes the intended mode", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const target = path.join(roots.workspaceRoot, "executable.sh");
+    await writeFile(target, "old-complete");
+    await chmod(target, 0o754);
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      faultInjector: injectedOnce("replacement-after-rename-before-mode"),
+    });
+    const staged = await provider.stageReplacement(
+      locator("executable.sh"),
+      textEncoder.encode("new-complete"),
+    );
+    if (!staged.ok) throw new Error("staging failed unexpectedly");
+
+    const first = await provider.commitReplacement(staged.value);
+
+    expect(first.state).toBe("committed-indeterminate");
+    expect(await readFile(target, "utf8")).toBe("new-complete");
+    expect((await lstat(target)).mode & 0o777).toBe(0o600);
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+    expect((await lstat(target)).mode & 0o777).toBe(0o754);
   });
 
   test("retries POSIX parent-directory durability after an indeterminate commit", async () => {
