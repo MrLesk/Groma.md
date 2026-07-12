@@ -3,40 +3,55 @@ import {
   parseContentRevision,
   parseEntityId,
   parseGraphGeneration,
+  parseRelationId,
   parseResourceKey,
   success,
   type ContentRevision,
   type Diagnostic,
   type EntityDraft,
+  type EntityId,
+  type GraphData,
+  type GraphDataRecord,
   type GraphGeneration,
   type GraphRelation,
   type GraphSnapshot,
   type PreparedBoundedQuery,
   type ResourceKey,
   type Result,
+  type TransactionOutcome,
+  type TransactionRequest,
 } from "../core/index.ts";
 import { copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
+  type StandardComponentPatch,
   type StandardModelTransactionState,
   type StandardRelationship,
 } from "../standard-model/index.ts";
 import type {
+  ApplicationDiagnostic,
+  ApplicationMutationOutcome,
   ApplicationOperations,
   ApplicationOperationsOptions,
   BoundedPageRequest,
   ComponentPage,
+  ComponentRelationshipChanges,
+  ComponentRelationshipInput,
   ComponentView,
+  CreateComponentRequest,
   ExactComponentRead,
   GetComponentRequest,
   InitializeWorkspaceRequest,
   ListChildComponentsRequest,
   ListComponentsRequest,
   ListRootComponentsRequest,
+  RemoveComponentRequest,
+  ReparentComponentRequest,
   RelationshipPage,
   RelationshipView,
+  UpdateComponentRequest,
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
 
@@ -491,6 +506,547 @@ async function componentPage(
   );
 }
 
+const extensionKeyPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
+const relationTypePattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+
+interface PlannedRelationship {
+  readonly graph: GraphSnapshot;
+  readonly relation: GraphRelation;
+  readonly view: StandardRelationship;
+}
+
+interface PlannedRelationshipChanges {
+  readonly affected: readonly string[];
+  readonly mutations: readonly GraphDataRecord[];
+}
+
+function applicationDiagnostic(source: Diagnostic): ApplicationDiagnostic {
+  if (source.details === undefined) {
+    return Object.freeze({ code: source.code, message: source.message });
+  }
+  const details: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(source.details)) {
+    const lowered = key.toLowerCase();
+    if (lowered.includes("resource") || lowered.includes("locator")) continue;
+    details[key] = value;
+  }
+  return Object.keys(details).length === 0
+    ? Object.freeze({ code: source.code, message: source.message })
+    : Object.freeze({
+        code: source.code,
+        details: Object.freeze(details),
+        message: source.message,
+      });
+}
+
+function applicationDiagnostics(value: unknown): Result<readonly ApplicationDiagnostic[]> {
+  const entries = denseArray(value, "Transaction outcome diagnostics");
+  if (!entries.ok) return entries;
+  const diagnostics: ApplicationDiagnostic[] = [];
+  for (let index = 0; index < entries.value.length; index += 1) {
+    const entry = inspectExactRecord(
+      entries.value[index],
+      [
+        ["code", "message"],
+        ["code", "details", "message"],
+      ],
+      "invalid-transaction-outcome",
+      "Transaction outcome diagnostic",
+    );
+    if (
+      !entry.ok ||
+      typeof entry.value.code !== "string" ||
+      typeof entry.value.message !== "string"
+    ) {
+      return failure(
+        diagnostic("invalid-transaction-outcome", "Transaction diagnostics are malformed"),
+      );
+    }
+    let details: Readonly<Record<string, string | number | boolean>> | undefined;
+    if ("details" in entry.value) {
+      const record = entry.value.details;
+      if (typeof record !== "object" || record === null || Array.isArray(record)) {
+        return failure(
+          diagnostic("invalid-transaction-outcome", "Transaction diagnostic details are malformed"),
+        );
+      }
+      const safe: Record<string, string | number | boolean> = {};
+      for (const [key, detail] of Object.entries(record)) {
+        if (
+          typeof detail !== "string" &&
+          typeof detail !== "number" &&
+          typeof detail !== "boolean"
+        ) {
+          return failure(
+            diagnostic(
+              "invalid-transaction-outcome",
+              "Transaction diagnostic details are malformed",
+            ),
+          );
+        }
+        const lowered = key.toLowerCase();
+        if (!lowered.includes("resource") && !lowered.includes("locator")) safe[key] = detail;
+      }
+      if (Object.keys(safe).length > 0) details = Object.freeze(safe);
+    }
+    diagnostics[index] = Object.freeze({
+      code: entry.value.code,
+      ...(details === undefined ? {} : { details }),
+      message: entry.value.message,
+    });
+  }
+  return success(Object.freeze(diagnostics));
+}
+
+function rejected<T>(...diagnostics: readonly Diagnostic[]): ApplicationMutationOutcome<T> {
+  return Object.freeze({
+    diagnostics: Object.freeze(diagnostics.map(applicationDiagnostic)),
+    status: "validation-rejected" as const,
+  });
+}
+
+function snapshotFailure<T>(diagnostics: readonly Diagnostic[]): ApplicationMutationOutcome<T> {
+  return Object.freeze({
+    diagnostics: Object.freeze(diagnostics.map(applicationDiagnostic)),
+    phase: "snapshot" as const,
+    status: "provider-failure" as const,
+  });
+}
+
+function revisionConflict<T>(): ApplicationMutationOutcome<T> {
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      Object.freeze({
+        code: "content-revision-conflict",
+        message: "Component content revision does not match the expected value",
+      }),
+    ]),
+    status: "conflict" as const,
+  });
+}
+
+function malformedOutcome<T>(): ApplicationMutationOutcome<T> {
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      Object.freeze({
+        code: "invalid-transaction-outcome",
+        message: "Transaction execution returned an outcome that could not be trusted",
+      }),
+    ]),
+    status: "indeterminate" as const,
+  });
+}
+
+function stringIdentities(
+  value: unknown,
+  kind: "component" | "relationship",
+): Result<readonly string[]> {
+  const values = denseArray(value, `Affected ${kind} identities`);
+  if (!values.ok) return values;
+  const identities: string[] = [];
+  for (let index = 0; index < values.value.length; index += 1) {
+    const candidate = values.value[index];
+    if (typeof candidate !== "string") {
+      return failure(
+        diagnostic("invalid-transaction-outcome", `Affected ${kind} identity is malformed`),
+      );
+    }
+    const parsed = kind === "component" ? parseEntityId(candidate) : parseRelationId(candidate);
+    if (!parsed.ok) return parsed;
+    identities[index] = parsed.value;
+  }
+  identities.sort(compareText);
+  for (let index = 1; index < identities.length; index += 1) {
+    if (identities[index - 1] === identities[index]) {
+      return failure(
+        diagnostic("invalid-transaction-outcome", `Affected ${kind} identities are ambiguous`),
+      );
+    }
+  }
+  return success(Object.freeze(identities));
+}
+
+function mapTransactionOutcome<T>(
+  outcome: unknown,
+  resourceOwners: ReadonlyMap<ResourceKey, string>,
+  value: T,
+): ApplicationMutationOutcome<T> {
+  const copied = copyGraphPayload(outcome, "transaction");
+  if (!copied.ok) return malformedOutcome();
+  const envelope = inspectExactRecord(
+    copied.value,
+    [
+      ["diagnostics", "status"],
+      ["committed", "diagnostics", "phase", "status"],
+      ["diagnostics", "recovery", "status"],
+      ["event", "generation", "revisions", "status"],
+    ],
+    "invalid-transaction-outcome",
+    "Transaction execution outcome",
+  );
+  if (!envelope.ok || typeof envelope.value.status !== "string") return malformedOutcome();
+
+  if (envelope.value.status === "committed") {
+    if (!("event" in envelope.value) || !("generation" in envelope.value)) {
+      return malformedOutcome();
+    }
+    const generation = parseGraphGeneration(envelope.value.generation);
+    if (!generation.ok) return malformedOutcome();
+    const event = inspectExactRecord(
+      envelope.value.event,
+      [["affected", "generation", "type"]],
+      "invalid-transaction-outcome",
+      "Committed graph event",
+    );
+    if (!event.ok || event.value.type !== "graph.committed") return malformedOutcome();
+    const eventGeneration = parseGraphGeneration(event.value.generation);
+    if (!eventGeneration.ok || eventGeneration.value !== generation.value)
+      return malformedOutcome();
+    const affected = inspectExactRecord(
+      event.value.affected,
+      [["entities", "relations"]],
+      "invalid-transaction-outcome",
+      "Committed affected identities",
+    );
+    if (!affected.ok) return malformedOutcome();
+    const components = stringIdentities(affected.value.entities, "component");
+    const relationships = stringIdentities(affected.value.relations, "relationship");
+    if (!components.ok || !relationships.ok) return malformedOutcome();
+
+    const revisionEntries = denseArray(envelope.value.revisions, "Committed revisions");
+    if (!revisionEntries.ok || revisionEntries.value.length !== resourceOwners.size) {
+      return malformedOutcome();
+    }
+    const revisions = [];
+    const received = new Set<ResourceKey>();
+    for (let index = 0; index < revisionEntries.value.length; index += 1) {
+      const entry = inspectExactRecord(
+        revisionEntries.value[index],
+        [["resource", "revision"]],
+        "invalid-transaction-outcome",
+        "Committed revision",
+      );
+      if (!entry.ok) return malformedOutcome();
+      const resource = parseResourceKey(entry.value.resource);
+      const revision =
+        entry.value.revision === null ? success(null) : parseContentRevision(entry.value.revision);
+      if (!resource.ok || !revision.ok || received.has(resource.value)) return malformedOutcome();
+      const componentId = resourceOwners.get(resource.value);
+      if (componentId === undefined) return malformedOutcome();
+      received.add(resource.value);
+      revisions[index] = Object.freeze({ componentId, revision: revision.value });
+    }
+    revisions.sort((left, right) => compareText(left.componentId, right.componentId));
+    return Object.freeze({
+      affected: Object.freeze({
+        components: components.value,
+        relationships: relationships.value,
+      }),
+      generation: generation.value,
+      revisions: Object.freeze(revisions),
+      status: "committed" as const,
+      value,
+    });
+  }
+
+  if (!("diagnostics" in envelope.value)) return malformedOutcome();
+  const diagnostics = applicationDiagnostics(envelope.value.diagnostics);
+  if (!diagnostics.ok) return malformedOutcome();
+  if (envelope.value.status === "conflict" || envelope.value.status === "validation-rejected") {
+    return Object.freeze({ diagnostics: diagnostics.value, status: envelope.value.status });
+  }
+  if (envelope.value.status === "provider-failure") {
+    if (envelope.value.committed !== false) return malformedOutcome();
+    const phase = envelope.value.phase;
+    if (phase !== "commit" && phase !== "prepare" && phase !== "recovery" && phase !== "snapshot") {
+      return malformedOutcome();
+    }
+    return Object.freeze({ diagnostics: diagnostics.value, phase, status: "provider-failure" });
+  }
+  if (envelope.value.status === "indeterminate") {
+    if (!("recovery" in envelope.value)) return malformedOutcome();
+    const recovery = inspectExactRecord(
+      envelope.value.recovery,
+      [["baseGeneration", "generation", "resources", "token"]],
+      "invalid-transaction-outcome",
+      "Transaction recovery state",
+    );
+    if (
+      !recovery.ok ||
+      typeof recovery.value.token !== "string" ||
+      recovery.value.token.length === 0
+    ) {
+      return malformedOutcome();
+    }
+    const baseGeneration = parseGraphGeneration(recovery.value.baseGeneration);
+    const recoveryGeneration = parseGraphGeneration(recovery.value.generation);
+    const recoveryResources = denseArray(
+      recovery.value.resources,
+      "Transaction recovery resources",
+    );
+    if (!baseGeneration.ok || !recoveryGeneration.ok || !recoveryResources.ok) {
+      return malformedOutcome();
+    }
+    for (let index = 0; index < recoveryResources.value.length; index += 1) {
+      if (!parseResourceKey(recoveryResources.value[index]).ok) return malformedOutcome();
+    }
+    return Object.freeze({ diagnostics: diagnostics.value, status: "indeterminate" });
+  }
+  return malformedOutcome();
+}
+
+async function executeMutation<T>(
+  request: TransactionRequest,
+  resourceOwners: ReadonlyMap<ResourceKey, string>,
+  value: T,
+  options: ApplicationOperationsOptions,
+): Promise<ApplicationMutationOutcome<T>> {
+  let outcome: TransactionOutcome;
+  try {
+    outcome = await options.transactionExecution.execute(request);
+  } catch {
+    return Object.freeze({
+      diagnostics: Object.freeze([
+        Object.freeze({
+          code: "transaction-execution-failed",
+          message: "Transaction execution failed with an unknown commit state",
+        }),
+      ]),
+      status: "indeterminate" as const,
+    });
+  }
+  return mapTransactionOutcome(outcome, resourceOwners, value);
+}
+
+function relationshipInput(
+  value: unknown,
+  source: EntityId,
+  graph: GraphSnapshot,
+  state: LoadedState,
+  options: ApplicationOperationsOptions,
+): Result<PlannedRelationship> {
+  const copied = copyGraphPayload(value, "relation");
+  if (!copied.ok) return copied;
+  if (typeof copied.value !== "object" || copied.value === null || Array.isArray(copied.value)) {
+    return failure(
+      diagnostic("invalid-relationship-input", "Component relationship must be a plain record"),
+    );
+  }
+  const record = copied.value as GraphDataRecord;
+  const keys = Object.keys(record);
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index]!;
+    if (
+      key !== "description" &&
+      key !== "id" &&
+      key !== "target" &&
+      key !== "type" &&
+      !extensionKeyPattern.test(key)
+    ) {
+      return failure(
+        diagnostic(
+          "unknown-relationship-field",
+          "Relationship fields must be standard fields or namespaced extensions",
+        ),
+      );
+    }
+  }
+  if (typeof record.target !== "string") {
+    return failure(
+      diagnostic("invalid-entity-id", "Relationship target must be a stable identity"),
+    );
+  }
+  const target = parseEntityId(record.target);
+  if (!target.ok) return target;
+  const resolvedTarget = options.graph.resolveEntity(graph, {
+    expectedKind: STANDARD_COMPONENT_KIND,
+    id: target.value,
+  });
+  if (!resolvedTarget.ok) return resolvedTarget;
+  if (typeof record.type !== "string" || !relationTypePattern.test(record.type)) {
+    return failure(
+      diagnostic("invalid-relation-type", "Relationship type must be a lowercase graph token"),
+    );
+  }
+  if (record.description !== undefined && typeof record.description !== "string") {
+    return failure(
+      diagnostic("invalid-relationship-description", "Relationship description must be a string"),
+    );
+  }
+  const payload: Record<string, GraphData> = {};
+  for (const key of keys.sort(compareText)) {
+    if (key === "id" || key === "target" || key === "type") continue;
+    payload[key] = record[key]!;
+  }
+
+  const existing =
+    typeof record.id === "string"
+      ? state.relationships.find((relationship) => relationship.id === record.id)
+      : undefined;
+  let relation: GraphRelation;
+  let nextGraph = graph;
+  if (existing !== undefined) {
+    if (existing.source !== source) {
+      return failure(
+        diagnostic(
+          "relationship-id-hijack",
+          "An existing relationship identity belongs to a different source component",
+        ),
+      );
+    }
+    const id = parseRelationId(record.id as string);
+    if (!id.ok) return id;
+    relation = Object.freeze({
+      id: id.value,
+      payload,
+      source,
+      target: target.value,
+      type: record.type,
+    });
+  } else {
+    if (record.id !== undefined && typeof record.id !== "string") {
+      return failure(
+        diagnostic("invalid-relation-id", "Relationship identity must be a string when supplied"),
+      );
+    }
+    const added = options.graph.addRelation(graph, {
+      ...(record.id === undefined ? {} : { id: record.id as string }),
+      payload,
+      source: { expectedKind: STANDARD_COMPONENT_KIND, id: source },
+      target: { expectedKind: STANDARD_COMPONENT_KIND, id: target.value },
+      type: record.type,
+    });
+    if (!added.ok) return added;
+    relation = added.value.relation;
+    nextGraph = added.value.snapshot;
+  }
+  const viewed = options.model.relationships(Object.freeze([relation]));
+  if (!viewed.ok) return viewed;
+  return success(Object.freeze({ graph: nextGraph, relation, view: viewed.value[0]! }));
+}
+
+function relationshipMutation(relation: GraphRelation): GraphDataRecord {
+  return Object.freeze({
+    relationship: Object.freeze({
+      id: relation.id,
+      payload: relation.payload,
+      source: relation.source,
+      target: relation.target,
+      type: relation.type,
+    }),
+    type: "upsert",
+  });
+}
+
+function planRelationshipChanges(
+  value: ComponentRelationshipChanges | undefined,
+  source: EntityId,
+  state: LoadedState,
+  options: ApplicationOperationsOptions,
+): Result<PlannedRelationshipChanges> {
+  if (value === undefined) {
+    return success(Object.freeze({ affected: Object.freeze([]), mutations: Object.freeze([]) }));
+  }
+  const envelope = exactRequest(
+    value,
+    [[], ["remove"], ["upsert"], ["remove", "upsert"]],
+    "Relationship changes",
+  );
+  if (!envelope.ok) return envelope;
+  const mutations: GraphDataRecord[] = [];
+  const targeted = new Set<string>();
+  if ("remove" in envelope.value) {
+    const removals = denseArray(envelope.value.remove, "Relationship removals");
+    if (!removals.ok) return removals;
+    for (let index = 0; index < removals.value.length; index += 1) {
+      const candidate = removals.value[index];
+      if (typeof candidate !== "string") {
+        return failure(
+          diagnostic("invalid-relation-id", "Relationship removal requires a stable identity"),
+        );
+      }
+      const id = parseRelationId(candidate);
+      if (!id.ok) return id;
+      if (targeted.has(id.value)) {
+        return failure(
+          diagnostic("ambiguous-relationship-mutation", "Relationship is targeted more than once"),
+        );
+      }
+      const existing = state.relationships.find((relationship) => relationship.id === id.value);
+      if (existing === undefined) {
+        return failure(
+          diagnostic("unknown-relationship", "Relationship removal target does not exist"),
+        );
+      }
+      if (existing.source !== source) {
+        return failure(
+          diagnostic(
+            "relationship-id-hijack",
+            "Only the source component may remove an outgoing relationship",
+          ),
+        );
+      }
+      targeted.add(id.value);
+      mutations.push(Object.freeze({ id: id.value, type: "remove" }));
+    }
+  }
+  let graph = state.graph;
+  if ("upsert" in envelope.value) {
+    const upserts = denseArray(envelope.value.upsert, "Relationship upserts");
+    if (!upserts.ok) return upserts;
+    for (let index = 0; index < upserts.value.length; index += 1) {
+      const planned = relationshipInput(upserts.value[index], source, graph, state, options);
+      if (!planned.ok) return planned;
+      if (targeted.has(planned.value.relation.id)) {
+        return failure(
+          diagnostic("ambiguous-relationship-mutation", "Relationship is targeted more than once"),
+        );
+      }
+      targeted.add(planned.value.relation.id);
+      graph = planned.value.graph;
+      mutations.push(relationshipMutation(planned.value.relation));
+    }
+  }
+  mutations.sort((left, right) => {
+    const leftId =
+      "id" in left ? String(left.id) : String((left.relationship as GraphDataRecord).id);
+    const rightId =
+      "id" in right ? String(right.id) : String((right.relationship as GraphDataRecord).id);
+    return compareText(leftId, rightId);
+  });
+  return success(
+    Object.freeze({
+      affected: Object.freeze(Array.from(targeted).sort(compareText)),
+      mutations: Object.freeze(mutations),
+    }),
+  );
+}
+
+function standardTransactionRequest(
+  componentMutations: readonly GraphDataRecord[],
+  relationshipMutations: readonly GraphDataRecord[],
+  affectedComponents: readonly string[],
+  affectedRelationships: readonly string[],
+  resource: ResourceKey,
+  expectedRevision: ContentRevision | null,
+): TransactionRequest {
+  return Object.freeze({
+    affected: Object.freeze({
+      entities: Object.freeze([...affectedComponents].sort(compareText)),
+      relations: Object.freeze([...affectedRelationships].sort(compareText)),
+    }),
+    context: Object.freeze({
+      ownership: Object.freeze({ owner: "groma.application", plane: "intent" }),
+      pinnedComponentIds: Object.freeze([]),
+    }),
+    expectedRevisions: Object.freeze([Object.freeze({ expected: expectedRevision, resource })]),
+    mutation: Object.freeze({
+      components: Object.freeze(componentMutations),
+      relationships: Object.freeze(relationshipMutations),
+    }),
+  });
+}
+
 export function createApplicationOperations(
   options: ApplicationOperationsOptions,
 ): ApplicationOperations {
@@ -554,6 +1110,325 @@ export function createApplicationOperations(
     return exact.ok ? success(exact.value.item as ExactComponentRead) : exact;
   };
 
+  const createComponent = async (
+    request: CreateComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>> => {
+    const validated = exactRequest(
+      request,
+      [["component"], ["component", "relationships"]],
+      "Create component request",
+    );
+    if (!validated.ok) return rejected(...validated.diagnostics);
+    const normalized = options.model.normalize(
+      validated.value.component as CreateComponentRequest["component"],
+    );
+    if (!normalized.ok) return rejected(...normalized.diagnostics);
+    const minted = options.graph.addEntity(options.graph.empty(), normalized.value);
+    if (!minted.ok) return rejected(...minted.diagnostics);
+    const component = options.model.parse(minted.value.entity);
+    if (!component.ok) return rejected(...component.diagnostics);
+    const mapped = options.resourceMapper.resourceForComponent(component.value.id);
+    if (!mapped.ok) return rejected(...mapped.diagnostics);
+    const current = await snapshot(Object.freeze([mapped.value]), options);
+    if (!current.ok) return snapshotFailure(current.diagnostics);
+    if (
+      componentById(current.value, component.value.id) !== undefined ||
+      current.value.revisions.get(mapped.value) !== null
+    ) {
+      return revisionConflict();
+    }
+    if (
+      component.value.parent !== undefined &&
+      componentById(current.value, component.value.parent) === undefined
+    ) {
+      return rejected(
+        diagnostic("unknown-component-parent", "Nested component parent does not exist"),
+      );
+    }
+    const added = options.graph.addEntity(current.value.graph, {
+      ...normalized.value,
+      id: component.value.id,
+    });
+    if (!added.ok) return rejected(...added.diagnostics);
+
+    const relationshipMutations: GraphDataRecord[] = [];
+    const affectedRelationships = new Set<string>();
+    let graph = added.value.snapshot;
+    if ("relationships" in validated.value) {
+      const relationships = denseArray(
+        validated.value.relationships,
+        "Created component relationships",
+      );
+      if (!relationships.ok) return rejected(...relationships.diagnostics);
+      for (let index = 0; index < relationships.value.length; index += 1) {
+        const planned = relationshipInput(
+          relationships.value[index],
+          component.value.id,
+          graph,
+          current.value,
+          options,
+        );
+        if (!planned.ok) return rejected(...planned.diagnostics);
+        if (affectedRelationships.has(planned.value.relation.id)) {
+          return rejected(
+            diagnostic(
+              "ambiguous-relationship-mutation",
+              "Created relationship identity is duplicated",
+            ),
+          );
+        }
+        affectedRelationships.add(planned.value.relation.id);
+        relationshipMutations.push(relationshipMutation(planned.value.relation));
+        graph = planned.value.graph;
+      }
+    }
+    if (
+      typeof normalized.value.payload !== "object" ||
+      normalized.value.payload === null ||
+      Array.isArray(normalized.value.payload)
+    ) {
+      return rejected(
+        diagnostic("invalid-standard-model-value", "Normalized component payload is malformed"),
+      );
+    }
+    const componentInput = Object.freeze({
+      id: component.value.id,
+      ...(normalized.value.payload as GraphDataRecord),
+    });
+    relationshipMutations.sort((left, right) =>
+      compareText(
+        String((left.relationship as GraphDataRecord).id),
+        String((right.relationship as GraphDataRecord).id),
+      ),
+    );
+    const transaction = standardTransactionRequest(
+      Object.freeze([Object.freeze({ component: componentInput, type: "create" })]),
+      Object.freeze(relationshipMutations),
+      Object.freeze([component.value.id]),
+      Object.freeze(Array.from(affectedRelationships)),
+      mapped.value,
+      null,
+    );
+    return executeMutation(
+      transaction,
+      new Map([[mapped.value, component.value.id]]),
+      component.value,
+      options,
+    );
+  };
+
+  const updateExisting = async (
+    idValue: unknown,
+    expectedRevisionValue: unknown,
+    patchValue: unknown,
+    relationshipChanges: ComponentRelationshipChanges | undefined,
+    allowParent: boolean,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>> => {
+    if (typeof idValue !== "string") {
+      return rejected(diagnostic("invalid-entity-id", "Component identity must be a string"));
+    }
+    const id = parseEntityId(idValue);
+    if (!id.ok) return rejected(...id.diagnostics);
+    const expectedRevision = parseContentRevision(expectedRevisionValue);
+    if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
+    const mapped = options.resourceMapper.resourceForComponent(id.value);
+    if (!mapped.ok) return rejected(...mapped.diagnostics);
+    const current = await snapshot(Object.freeze([mapped.value]), options);
+    if (!current.ok) return snapshotFailure(current.diagnostics);
+    const component = componentById(current.value, id.value);
+    if (component === undefined) {
+      return rejected(diagnostic("unknown-component", "Component mutation target does not exist"));
+    }
+    if (current.value.revisions.get(mapped.value) !== expectedRevision.value) {
+      return revisionConflict();
+    }
+    const copiedPatch = copyGraphPayload(patchValue, "entity");
+    if (!copiedPatch.ok) return rejected(...copiedPatch.diagnostics);
+    if (
+      typeof copiedPatch.value !== "object" ||
+      copiedPatch.value === null ||
+      Array.isArray(copiedPatch.value)
+    ) {
+      return rejected(diagnostic("invalid-component-patch", "Component patch must be a record"));
+    }
+    const patch = copiedPatch.value as GraphDataRecord;
+    if (!allowParent && Object.hasOwn(patch, "parent")) {
+      return rejected(
+        diagnostic(
+          "explicit-reparent-required",
+          "Structural parent changes must use the reparent operation",
+        ),
+      );
+    }
+    if (allowParent && patch.parent !== null) {
+      if (typeof patch.parent !== "string") {
+        return rejected(
+          diagnostic(
+            "invalid-component-parent",
+            "Component parent must be a stable identity or null",
+          ),
+        );
+      }
+      const parent = parseEntityId(patch.parent);
+      if (!parent.ok) return rejected(...parent.diagnostics);
+      if (componentById(current.value, parent.value) === undefined) {
+        return rejected(diagnostic("unknown-component-parent", "Reparent target does not exist"));
+      }
+    }
+    const entity = options.graph.resolveEntity(current.value.graph, {
+      expectedKind: STANDARD_COMPONENT_KIND,
+      id: id.value,
+    });
+    if (!entity.ok) return rejected(...entity.diagnostics);
+    const patched = options.model.patch(entity.value, patch as StandardComponentPatch);
+    if (!patched.ok) return rejected(...patched.diagnostics);
+    const computedEntity = Object.freeze({
+      id: id.value,
+      kind: STANDARD_COMPONENT_KIND,
+      payload: patched.value.payload as GraphData,
+    });
+    const computed = options.model.parse(computedEntity);
+    if (!computed.ok) return rejected(...computed.diagnostics);
+    const plannedRelationships = planRelationshipChanges(
+      relationshipChanges,
+      id.value,
+      current.value,
+      options,
+    );
+    if (!plannedRelationships.ok) return rejected(...plannedRelationships.diagnostics);
+    const patchKeys = Object.keys(patch);
+    if (patchKeys.length === 0 && plannedRelationships.value.mutations.length === 0) {
+      return rejected(diagnostic("empty-component-mutation", "Component update has no changes"));
+    }
+    const componentMutations =
+      patchKeys.length === 0
+        ? Object.freeze([])
+        : Object.freeze([
+            Object.freeze({ id: id.value, patch: patch as GraphDataRecord, type: "patch" }),
+          ]);
+    const transaction = standardTransactionRequest(
+      componentMutations,
+      plannedRelationships.value.mutations,
+      Object.freeze([id.value]),
+      plannedRelationships.value.affected,
+      mapped.value,
+      expectedRevision.value,
+    );
+    return executeMutation(
+      transaction,
+      new Map([[mapped.value, id.value]]),
+      computed.value,
+      options,
+    );
+  };
+
+  const updateComponent = async (
+    request: UpdateComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>> => {
+    const validated = exactRequest(
+      request,
+      [
+        ["expectedRevision", "id", "patch"],
+        ["expectedRevision", "id", "patch", "relationships"],
+      ],
+      "Update component request",
+    );
+    if (!validated.ok) return rejected(...validated.diagnostics);
+    return updateExisting(
+      validated.value.id,
+      validated.value.expectedRevision,
+      validated.value.patch,
+      "relationships" in validated.value
+        ? (validated.value.relationships as ComponentRelationshipChanges)
+        : undefined,
+      false,
+    );
+  };
+
+  const reparentComponent = async (
+    request: ReparentComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>> => {
+    const validated = exactRequest(
+      request,
+      [["expectedRevision", "id", "parent"]],
+      "Reparent component request",
+    );
+    if (!validated.ok) return rejected(...validated.diagnostics);
+    if (validated.value.parent !== null && typeof validated.value.parent !== "string") {
+      return rejected(
+        diagnostic(
+          "invalid-component-parent",
+          "Component parent must be a stable identity or null",
+        ),
+      );
+    }
+    return updateExisting(
+      validated.value.id,
+      validated.value.expectedRevision,
+      Object.freeze({ parent: validated.value.parent }),
+      undefined,
+      true,
+    );
+  };
+
+  const removeComponent = async (
+    request: RemoveComponentRequest,
+  ): Promise<ApplicationMutationOutcome<string>> => {
+    const validated = exactRequest(
+      request,
+      [["expectedRevision", "id"]],
+      "Remove component request",
+    );
+    if (!validated.ok) return rejected(...validated.diagnostics);
+    if (typeof validated.value.id !== "string") {
+      return rejected(diagnostic("invalid-entity-id", "Component identity must be a string"));
+    }
+    const id = parseEntityId(validated.value.id);
+    if (!id.ok) return rejected(...id.diagnostics);
+    const expectedRevision = parseContentRevision(validated.value.expectedRevision);
+    if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
+    const mapped = options.resourceMapper.resourceForComponent(id.value);
+    if (!mapped.ok) return rejected(...mapped.diagnostics);
+    const current = await snapshot(Object.freeze([mapped.value]), options);
+    if (!current.ok) return snapshotFailure(current.diagnostics);
+    const component = componentById(current.value, id.value);
+    if (component === undefined) {
+      return rejected(diagnostic("unknown-component", "Component removal target does not exist"));
+    }
+    if (current.value.revisions.get(mapped.value) !== expectedRevision.value) {
+      return revisionConflict();
+    }
+    if (current.value.components.some((candidate) => candidate.parent === id.value)) {
+      return rejected(
+        diagnostic(
+          "component-has-children",
+          "Component children must be explicitly reparented or removed first",
+        ),
+      );
+    }
+    if (
+      current.value.relationships.some(
+        (relationship) => relationship.source === id.value || relationship.target === id.value,
+      )
+    ) {
+      return rejected(
+        diagnostic(
+          "component-has-relationships",
+          "Incident relationships must be explicitly removed first",
+        ),
+      );
+    }
+    const transaction = standardTransactionRequest(
+      Object.freeze([Object.freeze({ id: id.value, type: "remove" })]),
+      Object.freeze([]),
+      Object.freeze([id.value]),
+      Object.freeze([]),
+      mapped.value,
+      expectedRevision.value,
+    );
+    return executeMutation(transaction, new Map([[mapped.value, id.value]]), id.value, options);
+  };
+
   const listComponents = async (request: ListComponentsRequest): Promise<Result<ComponentPage>> => {
     const validated = boundedRequest(request, "List components request");
     return validated.ok
@@ -614,5 +1489,15 @@ export function createApplicationOperations(
       : pageRequest;
   };
 
-  return Object.freeze({ getComponent, initialize, listChildren, listComponents, listRoots });
+  return Object.freeze({
+    createComponent,
+    getComponent,
+    initialize,
+    listChildren,
+    listComponents,
+    listRoots,
+    removeComponent,
+    reparentComponent,
+    updateComponent,
+  });
 }

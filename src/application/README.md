@@ -15,3 +15,11 @@ execution, resource-mapping, graph, query, Standard Model, and workspace-initial
 capabilities. Page reads confirm resource revisions in a second snapshot and retry a
 configured number of times if the generation changes; empty canonical state remains a
 valid empty graph because bootstrap representation belongs to the host.
+
+Mutations use the same injected transaction execution capability. Component creation
+supports supplied or minted identities and outgoing ordinary relationships; updates
+are sparse and may explicitly upsert or remove only relationships owned by their
+source component. Reparenting is a separate operation, and removal fails closed until
+children and every incident relationship have been handled explicitly. Mutation
+outcomes retain semantic generations, affected stable identities, and component
+revisions while omitting transaction resource keys and provider recovery secrets.

@@ -12,6 +12,8 @@ import type {
 } from "../core/index.ts";
 import type {
   StandardComponent,
+  StandardComponentInput,
+  StandardComponentPatch,
   StandardModelCapability,
   StandardRelationship,
 } from "../standard-model/index.ts";
@@ -70,8 +72,75 @@ export interface ListChildComponentsRequest extends BoundedPageRequest {
 
 export interface ComponentRevision {
   readonly componentId: string;
-  readonly revision: string;
+  readonly revision: string | null;
 }
+
+export interface ComponentRelationshipInput {
+  readonly description?: string;
+  readonly id?: string;
+  readonly target: string;
+  readonly type: string;
+  readonly [field: string]: unknown;
+}
+
+export interface CreateComponentRequest {
+  readonly component: StandardComponentInput;
+  readonly relationships?: readonly ComponentRelationshipInput[];
+}
+
+export interface ComponentRelationshipChanges {
+  readonly remove?: readonly string[];
+  readonly upsert?: readonly ComponentRelationshipInput[];
+}
+
+export interface UpdateComponentRequest {
+  readonly expectedRevision: string;
+  readonly id: string;
+  readonly patch: StandardComponentPatch;
+  readonly relationships?: ComponentRelationshipChanges;
+}
+
+export interface ReparentComponentRequest {
+  readonly expectedRevision: string;
+  readonly id: string;
+  readonly parent: string | null;
+}
+
+export interface RemoveComponentRequest {
+  readonly expectedRevision: string;
+  readonly id: string;
+}
+
+export interface ApplicationDiagnostic {
+  readonly code: string;
+  readonly details?: Readonly<Record<string, string | number | boolean>>;
+  readonly message: string;
+}
+
+export type ApplicationMutationOutcome<T> =
+  | {
+      readonly affected: {
+        readonly components: readonly string[];
+        readonly relationships: readonly string[];
+      };
+      readonly generation: GraphGeneration;
+      readonly revisions: readonly ComponentRevision[];
+      readonly status: "committed";
+      readonly value: T;
+    }
+  | {
+      readonly diagnostics: readonly ApplicationDiagnostic[];
+      readonly status: "conflict" | "validation-rejected";
+    }
+  | {
+      readonly diagnostics: readonly ApplicationDiagnostic[];
+      readonly phase: "commit" | "prepare" | "recovery" | "snapshot";
+      readonly status: "provider-failure";
+    }
+  | {
+      readonly diagnostics: readonly ApplicationDiagnostic[];
+      readonly status: "indeterminate";
+    };
 
 export interface ComponentView {
   readonly component: StandardComponent;
@@ -109,4 +178,14 @@ export interface ApplicationOperations {
   listComponents(request: ListComponentsRequest): Promise<Result<ComponentPage>>;
   listRoots(request: ListRootComponentsRequest): Promise<Result<ComponentPage>>;
   listChildren(request: ListChildComponentsRequest): Promise<Result<ComponentPage>>;
+  createComponent(
+    request: CreateComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>>;
+  updateComponent(
+    request: UpdateComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>>;
+  reparentComponent(
+    request: ReparentComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>>;
+  removeComponent(request: RemoveComponentRequest): Promise<ApplicationMutationOutcome<string>>;
 }
