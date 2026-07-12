@@ -339,6 +339,36 @@ describe("bounded query contracts", () => {
     expect(anchorGetterInvoked).toBeFalse();
   });
 
+  test("rejects invalid page state before traversing item contents", () => {
+    const contracts = createContracts();
+    const prepared = prepareFirst(contracts, 1, {}, 1);
+    let itemOwnKeysInvocations = 0;
+    const item = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          itemOwnKeysInvocations += 1;
+          throw new Error("invalid state must fail before item traversal");
+        },
+      },
+    ) as unknown as GraphData;
+
+    expect(contracts.page(prepared, [item], { hasMore: true })).toMatchObject({
+      diagnostics: [{ code: "missing-continuation-anchor" }],
+      ok: false,
+    });
+    expect(
+      contracts.page(prepared, [item], {
+        hasMore: "yes",
+      } as unknown as { hasMore: boolean }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-query-page-state" }], ok: false });
+    expect(contracts.page(prepared, [item], { hasMore: false, nextAnchor: 1 })).toMatchObject({
+      diagnostics: [{ code: "unexpected-continuation-anchor" }],
+      ok: false,
+    });
+    expect(itemOwnKeysInvocations).toBe(0);
+  });
+
   test("validates intrinsic item arrays by copied contents rather than spoofable length or iteration", () => {
     const contracts = createContracts();
     const prepared = prepareFirst(contracts, 1, {}, 1);
@@ -467,6 +497,10 @@ describe("bounded query contracts", () => {
       nextAnchor: entity("1"),
     });
     if (!first.ok || first.value.nextCursor === undefined) throw new Error("expected cursor");
+    const prefix = "groma.cursor.v1:";
+    const suffix = first.value.nextCursor.slice(prefix.length);
+    const rawEnvelope = `${prefix}${decodeURIComponent(suffix)}`;
+    const alternateEscapes = `${prefix}${suffix.replace("%7B", "%7b")}`;
 
     for (const cursor of [
       "",
@@ -476,6 +510,8 @@ describe("bounded query contracts", () => {
       `groma.cursor.v1:${encodeURIComponent("not json")}`,
       "x".repeat(2_049),
       42 as unknown as string,
+      rawEnvelope,
+      alternateEscapes,
     ]) {
       expect(() => contracts.prepare(7, query, { cursor, limit: 1 })).not.toThrow();
       expect(contracts.prepare(7, query, { cursor, limit: 1 })).toMatchObject({
@@ -483,6 +519,12 @@ describe("bounded query contracts", () => {
         ok: false,
       });
     }
+
+    const rawBudget = createContracts({ maxCursorCharacters: rawEnvelope.length });
+    expect(rawBudget.prepare(7, query, { cursor: rawEnvelope, limit: 1 })).toMatchObject({
+      diagnostics: [{ code: "malformed-continuation-cursor" }],
+      ok: false,
+    });
 
     const unsupported = `groma.cursor.v1:${encodeURIComponent(
       JSON.stringify({
@@ -706,30 +748,63 @@ describe("bounded query contracts", () => {
 
   test("preflights raw cursor size before encoding and still catches Unicode expansion", () => {
     const encodeDescriptor = Object.getOwnPropertyDescriptor(globalThis, "encodeURIComponent");
-    if (encodeDescriptor === undefined || typeof encodeDescriptor.value !== "function") {
-      throw new Error("expected global encodeURIComponent");
+    const decodeDescriptor = Object.getOwnPropertyDescriptor(globalThis, "decodeURIComponent");
+    if (
+      encodeDescriptor === undefined ||
+      typeof encodeDescriptor.value !== "function" ||
+      decodeDescriptor === undefined ||
+      typeof decodeDescriptor.value !== "function"
+    ) {
+      throw new Error("expected global URI codecs");
     }
-    let encodeInvocations = 0;
+    let globalCodecInvocations = 0;
     let impossible: ReturnType<BoundedQueryContracts["page"]> | undefined;
+    let isolatedContinuation: ReturnType<BoundedQueryContracts["prepare"]> | undefined;
     const tiny = createContracts({ maxCursorCharacters: 1 });
     const tinyPrepared = prepareFirst(tiny, 1, {}, 1);
+    const isolated = createContracts();
+    const isolatedPrepared = prepareFirst(isolated, 1, { label: "isolated" }, 1);
     try {
       Object.defineProperty(globalThis, "encodeURIComponent", {
         configurable: true,
         value: () => {
-          encodeInvocations += 1;
-          throw new Error("raw cursor lower bound must fail before encoding");
+          globalCodecInvocations += 1;
+          throw new Error("cursor encoding must use the captured intrinsic");
+        },
+      });
+      Object.defineProperty(globalThis, "decodeURIComponent", {
+        configurable: true,
+        value: () => {
+          globalCodecInvocations += 1;
+          throw new Error("cursor decoding must use the captured intrinsic");
         },
       });
       impossible = tiny.page(tinyPrepared, [1], { hasMore: true, nextAnchor: 1 });
+      const isolatedPage = isolated.page(isolatedPrepared, [1], {
+        hasMore: true,
+        nextAnchor: { id: 1 },
+      });
+      if (!isolatedPage.ok || isolatedPage.value.nextCursor === undefined) {
+        throw new Error("expected isolated cursor");
+      }
+      isolatedContinuation = isolated.prepare(
+        1,
+        { label: "isolated" },
+        {
+          cursor: isolatedPage.value.nextCursor,
+          limit: 1,
+        },
+      );
     } finally {
       Object.defineProperty(globalThis, "encodeURIComponent", encodeDescriptor);
+      Object.defineProperty(globalThis, "decodeURIComponent", decodeDescriptor);
     }
     expect(impossible).toMatchObject({
       diagnostics: [{ code: "continuation-cursor-too-large" }],
       ok: false,
     });
-    expect(encodeInvocations).toBe(0);
+    expect(isolatedContinuation).toMatchObject({ ok: true, value: { after: { id: 1 } } });
+    expect(globalCodecInvocations).toBe(0);
 
     const prefix = "groma.cursor.v1:";
     const roomy = createContracts({ maxCursorCharacters: 4_096 });
@@ -1056,6 +1131,20 @@ describe("committed graph event contracts", () => {
     expect(
       sequenceGraphCommittedEvent(1, {
         affected: { entities: [Symbol("id")], relations: [] },
+        generation: 2,
+        type: "graph.committed",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
+    expect(
+      sequenceGraphCommittedEvent(1, {
+        affected: { entities: [entity("2"), entity("1")], relations: [] },
+        generation: 2,
+        type: "graph.committed",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-graph-event" }], ok: false });
+    expect(
+      sequenceGraphCommittedEvent(1, {
+        affected: { entities: [entity("1"), entity("1")], relations: [] },
         generation: 2,
         type: "graph.committed",
       }),

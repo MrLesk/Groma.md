@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 03:37'
+updated_date: '2026-07-12 03:55'
 labels:
   - core
   - queries
@@ -69,4 +69,6 @@ Latest PR #7 Codex review identified three bounded-work gaps. Page item arrays n
 Current-SHA PR #7 review found four preprocessing bounds. Page overflow now checks only intrinsic prototype and safe length descriptor before any ownKeys/index work; within-limit canonical copy retains full density/descriptor validation. Canonical records apply a key-count/minimum-value/quoted-key lower bound before custom deterministic sorting or value reads. String quoting is incremental and stops at the exact remaining character boundary, including escape and surrogate costs. The shared payload walker now has copy-only and canonical-emission modes, so graph/model payload copying constructs no JSON while cursor data remains one-pass budgeted. Canonical emission uses captured string/number intrinsics and no mutable array sort/join methods. Added proxy ownKeys, sort/getter, large-string boundary, copy-only instrumentation, and expanded pollution regressions. Task remains In Progress with acceptance criteria unchecked.
 
 Current-SHA PR #7 review found four continuation-boundary issues. Canonical arrays now reject an impossible minimum size after prototype/length inspection but before ownKeys, while copy-only and feasible canonical values still receive full validation. Cursor creation preflights exact raw envelope length before construction/encoding and retains final encoded-length enforcement for Unicode expansion. Committed-event validation and deterministic sorting no longer call mutable Array sort/some/includes methods. Continued pages reject a next anchor canonically equal to the prior after anchor with non-advancing-continuation-anchor, preventing infinite loops while preserving first-page and advancing anchors. Added Proxy, encoding, prototype-pollution, and structural anchor regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Current-SHA PR #7 review found four canonical-input gaps. Cursor decoding now uses captured URI intrinsics and accepts only suffixes that round-trip to Groma's exact percent encoding before JSON parsing, so raw/lowercase/alternate envelopes and tight-budget bypasses fail malformed. Event sequencing now compares descriptor-validated affected arrays to canonical factory output and rejects unsorted or duplicate forged events instead of normalizing them. Page state and anchor-shape rules now run after safe length/overflow preflight but before item copying, so invalid state never traverses item contents. Global URI mutation isolation and all cases have regressions. Task remains In Progress with acceptance criteria unchecked.
 <!-- SECTION:NOTES:END -->

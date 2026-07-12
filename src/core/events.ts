@@ -215,6 +215,14 @@ function inspectIdentityArray(
   }
 }
 
+function sameIdentityOrder(input: readonly string[], canonical: readonly string[]): boolean {
+  if (input.length !== canonical.length) return false;
+  for (let index = 0; index < input.length; index += 1) {
+    if (input[index] !== canonical[index]) return false;
+  }
+  return true;
+}
+
 export function sequenceGraphCommittedEvent(
   currentGenerationValue: unknown,
   event: unknown,
@@ -241,11 +249,28 @@ export function sequenceGraphCommittedEvent(
     "Committed event affected identities",
   );
   if (!affected.ok) return affected;
+  const inputEntities = inspectIdentityArray(affected.value.entities, true, "entity");
+  const inputRelations = inspectIdentityArray(affected.value.relations, true, "relation");
+  if (!inputEntities.ok || !inputRelations.ok) {
+    return failure({
+      code: "invalid-graph-event",
+      message: "Committed graph event contains invalid affected identity arrays",
+    });
+  }
   const validatedEvent = createGraphCommittedEvent(inspectedEvent.value.generation, affected.value);
   if (!validatedEvent.ok) {
     return failure({
       code: "invalid-graph-event",
       message: "Committed graph event contains invalid affected identities or generation",
+    });
+  }
+  if (
+    !sameIdentityOrder(inputEntities.value, validatedEvent.value.affected.entities) ||
+    !sameIdentityOrder(inputRelations.value, validatedEvent.value.affected.relations)
+  ) {
+    return failure({
+      code: "invalid-graph-event",
+      message: "Committed graph event affected identities must already be sorted and deduplicated",
     });
   }
   const receivedGeneration = parseGraphGeneration(validatedEvent.value.generation);

@@ -69,15 +69,20 @@ still noncanonical.
 
 Cursors carry their format version, graph generation, canonical query context, and
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
-formats, changed query context, and stale generations. Completed pages—including a
-page whose item count exactly equals its limit—have no cursor unless the provider
-explicitly knows that more results exist. A continued page cannot issue a cursor with
-an anchor canonically equal to its previous anchor; providers must advance or return
-an explicit failure instead of creating an infinite continuation loop.
+formats, noncanonical percent encoding, changed query context, and stale generations.
+URI encoding and decoding use captured intrinsics, so later global mutation cannot
+alter accepted envelopes. Completed pages—including a page whose item count exactly
+equals its limit—have no cursor unless the provider explicitly knows that more results
+exist. A continued page cannot issue a cursor with an anchor canonically equal to its
+previous anchor; providers must advance or return an explicit failure instead of
+creating an infinite continuation loop. Invalid page state is rejected before item
+contents are traversed.
 
 `graph.committed` events contain only the resulting generation and sorted,
 deduplicated stable entity and relation identities. Event consumers accept exactly
 the next generation. A missed, duplicate, or reversed event yields an explicit
 `refetch-required` result; consumers never infer changes across a generation gap.
+Forged events whose affected arrays are valid but unsorted or duplicated are rejected
+rather than normalized during consumption.
 Provider-specific storage, projection, or transport details do not enter these
 contracts.

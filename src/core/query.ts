@@ -115,6 +115,8 @@ const cursorBeforeAnchor = '{"anchor":';
 const cursorBeforeGeneration = ',"generation":';
 const cursorBeforeQuery = ',"query":';
 const cursorAfterQuery = ',"version":1}';
+const intrinsicEncodeURIComponent = globalThis.encodeURIComponent;
+const intrinsicDecodeURIComponent = globalThis.decodeURIComponent;
 
 function validatePositiveBudget(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -291,14 +293,6 @@ export class BoundedQueryContracts {
         details: { actual: itemArray.value, limit: limit.value },
       });
     }
-    const copiedItems = copyGraphPayload(items, "query");
-    if (!copiedItems.ok) return copiedItems;
-    if (!Array.isArray(copiedItems.value)) {
-      return failure({
-        code: "invalid-query-items",
-        message: "Query items must be an intrinsic array of canonical graph data",
-      });
-    }
     const inspectedState = inspectExactRecord(
       state,
       [["hasMore"], ["hasMore", "nextAnchor"]],
@@ -313,7 +307,7 @@ export class BoundedQueryContracts {
       });
     }
     const hasAnchor = "nextAnchor" in inspectedState.value;
-    if (inspectedState.value.hasMore && copiedItems.value.length === 0) {
+    if (inspectedState.value.hasMore && itemArray.value === 0) {
       return failure({
         code: "invalid-query-page",
         message: "An empty page cannot claim that more items are available",
@@ -329,6 +323,14 @@ export class BoundedQueryContracts {
       return failure({
         code: "unexpected-continuation-anchor",
         message: "A completed page must not provide a continuation anchor",
+      });
+    }
+    const copiedItems = copyGraphPayload(items, "query");
+    if (!copiedItems.ok) return copiedItems;
+    if (!Array.isArray(copiedItems.value)) {
+      return failure({
+        code: "invalid-query-items",
+        message: "Query items must be an intrinsic array of canonical graph data",
       });
     }
 
@@ -407,7 +409,8 @@ export class BoundedQueryContracts {
       });
     }
     const canonicalState = `${cursorBeforeAnchor}${anchor.value.canonicalJson}${cursorBeforeGeneration}${generationJson}${cursorBeforeQuery}${query.canonicalJson}${cursorAfterQuery}`;
-    const cursor = `${cursorPrefix}${encodeURIComponent(canonicalState)}`;
+    const encodedState = Reflect.apply(intrinsicEncodeURIComponent, undefined, [canonicalState]);
+    const cursor = `${cursorPrefix}${encodedState}`;
     return cursor.length <= this.#maxCursorCharacters
       ? success(cursor as ContinuationCursor)
       : failure({
@@ -434,9 +437,18 @@ export class BoundedQueryContracts {
       );
     }
 
+    const suffix = cursor.slice(cursorPrefix.length);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(decodeURIComponent(cursor.slice(cursorPrefix.length)));
+      const decodedState = Reflect.apply(intrinsicDecodeURIComponent, undefined, [suffix]);
+      const canonicalSuffix = Reflect.apply(intrinsicEncodeURIComponent, undefined, [decodedState]);
+      if (canonicalSuffix !== suffix) {
+        return cursorFailure(
+          "malformed-continuation-cursor",
+          "Continuation cursor does not use the canonical encoded envelope",
+        );
+      }
+      parsed = JSON.parse(decodedState);
     } catch {
       return cursorFailure(
         "malformed-continuation-cursor",
