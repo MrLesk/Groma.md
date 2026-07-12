@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   TransactionEngine,
+  TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS,
+  type AffectedIdentityInput,
   type GraphData,
   type ProposedTransaction,
   type ResourceKey,
@@ -47,13 +49,31 @@ function relationship(
 
 function proposal(
   overrides: {
+    readonly affected?: unknown;
     readonly context?: unknown;
     readonly mutation?: unknown;
     readonly priorState?: unknown;
   } = {},
 ): ProposedTransaction {
+  const mutation = overrides.mutation ?? { components: [], relationships: [] };
+  const mutationRecord = mutation as {
+    readonly components?: readonly Record<string, unknown>[];
+    readonly relationships?: readonly Record<string, unknown>[];
+  };
+  const inferredAffected = {
+    entities: (mutationRecord.components ?? []).flatMap((entry) => {
+      if (typeof entry.id === "string") return [entry.id];
+      const created = entry.component as { readonly id?: unknown } | undefined;
+      return typeof created?.id === "string" ? [created.id] : [];
+    }),
+    relations: (mutationRecord.relationships ?? []).flatMap((entry) => {
+      if (typeof entry.id === "string") return [entry.id];
+      const upserted = entry.relationship as { readonly id?: unknown } | undefined;
+      return typeof upserted?.id === "string" ? [upserted.id] : [];
+    }),
+  };
   return {
-    affected: { entities: [], relations: [] },
+    affected: overrides.affected ?? inferredAffected,
     baseGeneration: 1,
     context: overrides.context ?? {
       ownership: { owner: "curated", plane: "intent" },
@@ -61,7 +81,7 @@ function proposal(
     },
     expectedRevisions: [],
     generation: 2,
-    mutation: overrides.mutation ?? { components: [], relationships: [] },
+    mutation,
     priorState: overrides.priorState ?? { components: [], relationships: [] },
   } as unknown as ProposedTransaction;
 }
@@ -91,6 +111,73 @@ describe("standard model transaction invariant", () => {
     const mutation: StandardModelTransactionMutation = { components: [], relationships: [] };
     const values: readonly GraphData[] = [context, state, mutation];
     expect(values).toHaveLength(3);
+  });
+
+  test("requires all five mutation targets in affected identities while allowing supersets", () => {
+    const first = component(entityId(1));
+    const second = component(entityId(2));
+    const existingRelationship = relationship(relationId(1), entityId(1), entityId(2));
+    const cases = [
+      {
+        mutation: {
+          components: [{ component: { id: entityId(3) }, type: "create" }],
+          relationships: [],
+        },
+        priorState: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [{ id: entityId(1), patch: { name: "Updated" }, type: "patch" }],
+          relationships: [],
+        },
+        priorState: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [{ id: entityId(1), type: "remove" }],
+          relationships: [{ id: relationId(1), type: "remove" }],
+        },
+        priorState: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [],
+          relationships: [
+            {
+              relationship: relationship(relationId(2), entityId(1), entityId(2)),
+              type: "upsert",
+            },
+          ],
+        },
+        priorState: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: { components: [], relationships: [{ id: relationId(1), type: "remove" }] },
+        priorState: { components: [first, second], relationships: [existingRelationship] },
+      },
+    ];
+
+    for (const input of cases) {
+      expect(
+        validate({
+          affected: { entities: [], relations: [] },
+          mutation: input.mutation,
+          priorState: input.priorState,
+        }),
+      ).toMatchObject([
+        {
+          code: "mutation-target-not-affected",
+          details: { path: expect.stringContaining("mutation.") },
+        },
+      ]);
+    }
+
+    expect(
+      validate({
+        affected: { entities: [entityId(8)], relations: [relationId(8)] },
+        mutation: { components: [], relationships: [] },
+      }),
+    ).toEqual([]);
   });
 
   test("accepts multiple roots and recursive same-type or mixed-type children", () => {
@@ -524,6 +611,75 @@ describe("standard model transaction invariant", () => {
     expect(ownKeysCalled).toBeFalse();
   });
 
+  test("keeps direct diagnostics bounded for oversized IDs, tokens, kinds, and extension keys", () => {
+    const oversized = "x".repeat(5_000);
+    const oversizedInvalidToken = `${oversized} INVALID`;
+    const cases = [
+      {
+        code: "invalid-entity-id",
+        mutation: {
+          components: [{ component: { id: oversized }, type: "create" }],
+          relationships: [],
+        },
+        priorState: { components: [], relationships: [] },
+      },
+      {
+        code: "invalid-standard-model-token",
+        mutation: {
+          components: [
+            { component: { id: entityId(1), type: oversizedInvalidToken }, type: "create" },
+          ],
+          relationships: [],
+        },
+        priorState: { components: [], relationships: [] },
+      },
+      {
+        code: "wrong-standard-model-kind",
+        mutation: { components: [], relationships: [] },
+        priorState: { components: [component(entityId(1), {}, oversized)], relationships: [] },
+      },
+      {
+        code: "invalid-relation-type",
+        mutation: {
+          components: [],
+          relationships: [
+            {
+              relationship: relationship(relationId(1), entityId(1), entityId(2), {
+                type: oversizedInvalidToken,
+              }),
+              type: "upsert",
+            },
+          ],
+        },
+        priorState: {
+          components: [component(entityId(1)), component(entityId(2))],
+          relationships: [],
+        },
+      },
+      {
+        code: "unknown-standard-model-field",
+        mutation: {
+          components: [{ component: { [oversized]: true, id: entityId(1) }, type: "create" }],
+          relationships: [],
+        },
+        priorState: { components: [], relationships: [] },
+      },
+    ];
+
+    for (const input of cases) {
+      const diagnostics = validate(input);
+      expect(diagnostics).toMatchObject([{ code: input.code }]);
+      expect(diagnostics[0]!.message.length).toBeLessThanOrEqual(
+        TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS,
+      );
+      for (const value of Object.values(diagnostics[0]!.details ?? {})) {
+        if (typeof value === "string") {
+          expect(value.length).toBeLessThanOrEqual(TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS);
+        }
+      }
+    }
+  });
+
   test("does not invoke accessors and does not retain mutable mutation aliases", () => {
     let accessorCalled = false;
     const payload = Object.defineProperty({}, "name", {
@@ -556,19 +712,75 @@ describe("standard model transaction invariant", () => {
     mutablePatch.name = "After";
     expect(invariant.validate(input)).toEqual([]);
   });
+
+  test("selects final graph diagnostics in stable identity order", () => {
+    const cycle = [
+      component(entityId(1), { parent: entityId(3) }),
+      component(entityId(2), { parent: entityId(1) }),
+      component(entityId(3), { parent: entityId(2) }),
+    ];
+    const firstCycle = validate({ priorState: { components: cycle, relationships: [] } });
+    const permutedCycle = validate({
+      priorState: { components: [cycle[2], cycle[0], cycle[1]], relationships: [] },
+    });
+    expect(firstCycle).toEqual(permutedCycle);
+    expect(firstCycle).toMatchObject([
+      { code: "component-containment-cycle", details: { id: entityId(1) } },
+    ]);
+
+    const invalidParents = [
+      component(entityId(2), { parent: entityId(8) }),
+      component(entityId(1), { parent: entityId(9) }),
+    ];
+    const firstMissingParent = validate({
+      priorState: { components: invalidParents, relationships: [] },
+    });
+    expect(firstMissingParent).toEqual(
+      validate({
+        priorState: { components: invalidParents.toReversed(), relationships: [] },
+      }),
+    );
+    expect(firstMissingParent).toMatchObject([
+      { code: "unknown-component-parent", details: { id: entityId(1) } },
+    ]);
+
+    const validComponent = component(entityId(1));
+    const invalidRelationships = [
+      relationship(relationId(2), entityId(1), entityId(8)),
+      relationship(relationId(1), entityId(9), entityId(1)),
+    ];
+    const firstMissingEndpoint = validate({
+      priorState: { components: [validComponent], relationships: invalidRelationships },
+    });
+    expect(firstMissingEndpoint).toEqual(
+      validate({
+        priorState: {
+          components: [validComponent],
+          relationships: invalidRelationships.toReversed(),
+        },
+      }),
+    );
+    expect(firstMissingEndpoint).toMatchObject([
+      { code: "invalid-relationship-source", details: { id: relationId(1) } },
+    ]);
+  });
 });
 
 class InvariantProvider implements TransactionProvider {
   prepareCalls = 0;
 
+  constructor(
+    readonly state: unknown = {
+      components: [component(entityId(1), { parent: entityId(2) }), component(entityId(2), {})],
+      relationships: [],
+    },
+  ) {}
+
   snapshot(resources: readonly ResourceKey[]) {
     return {
       generation: 1,
       revisions: resources.map((resource) => ({ resource, revision: "revision-1" })),
-      state: {
-        components: [component(entityId(1), { parent: entityId(2) }), component(entityId(2), {})],
-        relationships: [],
-      },
+      state: this.state,
     };
   }
 
@@ -615,6 +827,21 @@ function invalidCycleRequest() {
   };
 }
 
+function engineRequest(
+  mutation: unknown,
+  affected: AffectedIdentityInput = { entities: [], relations: [] },
+) {
+  return {
+    affected,
+    context: {
+      ownership: { owner: "curated", plane: "intent" },
+      pinnedComponentIds: [],
+    },
+    expectedRevisions: [{ expected: "revision-1", resource: "components" }],
+    mutation,
+  };
+}
+
 describe("shared transaction registration", () => {
   test("direct and host/CLI-style calls use the same registration and reject identically", async () => {
     const directProvider = new InvariantProvider();
@@ -634,5 +861,134 @@ describe("shared transaction registration", () => {
     expect(surfaced).toEqual(direct);
     expect(directProvider.prepareCalls).toBe(0);
     expect(hostProvider.prepareCalls).toBe(0);
+  });
+
+  test("registered engines bind create, patch, remove, upsert, and relation removal to affected", async () => {
+    const first = component(entityId(1));
+    const second = component(entityId(2));
+    const existingRelationship = relationship(relationId(1), entityId(1), entityId(2));
+    const cases = [
+      {
+        mutation: {
+          components: [{ component: { id: entityId(3) }, type: "create" }],
+          relationships: [],
+        },
+        state: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [{ id: entityId(1), patch: { name: "Updated" }, type: "patch" }],
+          relationships: [],
+        },
+        state: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [{ id: entityId(1), type: "remove" }],
+          relationships: [{ id: relationId(1), type: "remove" }],
+        },
+        state: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: {
+          components: [],
+          relationships: [
+            {
+              relationship: relationship(relationId(2), entityId(1), entityId(2)),
+              type: "upsert",
+            },
+          ],
+        },
+        state: { components: [first, second], relationships: [existingRelationship] },
+      },
+      {
+        mutation: { components: [], relationships: [{ id: relationId(1), type: "remove" }] },
+        state: { components: [first, second], relationships: [existingRelationship] },
+      },
+    ];
+
+    for (const input of cases) {
+      const provider = new InvariantProvider(input.state);
+      const result = await registeredEngine(provider).execute(engineRequest(input.mutation));
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "mutation-target-not-affected" }],
+        status: "validation-rejected",
+      });
+      expect(provider.prepareCalls).toBe(0);
+    }
+  });
+
+  test("preserves actionable Standard codes for oversized invalid user values", async () => {
+    const oversized = "x".repeat(5_000);
+    const oversizedInvalidToken = `${oversized} INVALID`;
+    const cases = [
+      {
+        affected: { entities: [], relations: [] },
+        code: "invalid-entity-id",
+        mutation: {
+          components: [{ component: { id: oversized }, type: "create" }],
+          relationships: [],
+        },
+        state: { components: [], relationships: [] },
+      },
+      {
+        affected: { entities: [entityId(1)], relations: [] },
+        code: "invalid-standard-model-token",
+        mutation: {
+          components: [
+            { component: { id: entityId(1), type: oversizedInvalidToken }, type: "create" },
+          ],
+          relationships: [],
+        },
+        state: { components: [], relationships: [] },
+      },
+      {
+        affected: { entities: [], relations: [] },
+        code: "wrong-standard-model-kind",
+        mutation: { components: [], relationships: [] },
+        state: { components: [component(entityId(1), {}, oversized)], relationships: [] },
+      },
+      {
+        affected: { entities: [], relations: [relationId(1)] },
+        code: "invalid-relation-type",
+        mutation: {
+          components: [],
+          relationships: [
+            {
+              relationship: relationship(relationId(1), entityId(1), entityId(2), {
+                type: oversizedInvalidToken,
+              }),
+              type: "upsert",
+            },
+          ],
+        },
+        state: {
+          components: [component(entityId(1)), component(entityId(2))],
+          relationships: [],
+        },
+      },
+      {
+        affected: { entities: [entityId(1)], relations: [] },
+        code: "unknown-standard-model-field",
+        mutation: {
+          components: [{ component: { [oversized]: true, id: entityId(1) }, type: "create" }],
+          relationships: [],
+        },
+        state: { components: [], relationships: [] },
+      },
+    ];
+
+    for (const input of cases) {
+      const provider = new InvariantProvider(input.state);
+      const result = await registeredEngine(provider).execute(
+        engineRequest(input.mutation, input.affected),
+      );
+      expect(result).toMatchObject({
+        diagnostics: [{ code: input.code }],
+        status: "validation-rejected",
+      });
+      expect(result).not.toMatchObject({ diagnostics: [{ code: "invalid-invariant-result" }] });
+      expect(provider.prepareCalls).toBe(0);
+    }
   });
 });

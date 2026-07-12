@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 05:56'
+updated_date: '2026-07-12 06:18'
 labels:
   - model
   - invariants
@@ -59,4 +59,6 @@ Context-hunter classification: L2 Standard Model semantic boundary. Reuse create
 Implemented the GraphData-compatible Standard Model transaction envelopes and registered invariant factory. The bounded invariant safely validates context/state/mutation runtime shapes, reuses Standard Model normalize/parse/patch/relationship semantics, applies complete batches before final containment and endpoint validation, fails closed on ambiguous identities, and preserves the single Core TransactionEngine registration path. Pinned IDs are reserved context in 1A: sorted/unique and resolvable across prior or proposed state, without scanner/reconciliation authority policy. Added 14 focused tests including recursive containment, atomic reparent/removal, sparse preservation, relationship compatibility, cycles/ambiguity, unsafe shapes/bounds, and identical direct versus host-style engine rejection. Verification: focused 14 tests/40 assertions; full check 108 tests/472 assertions; all four standalone targets passed.
 
 Final implementer verification after the compile-time GraphData envelope test and duplicate-relationship case: focused 14 tests/40 assertions; full check 109 tests/474 assertions; typecheck, formatting, architecture boundaries, native build/smoke, diff check, and macOS arm64/Linux x64 baseline/Windows x64 baseline/Windows arm64 target verification all passed.
+
+Quality-review follow-up: bound all five mutation target kinds to the matching Core affected identity collection while allowing justified affected supersets, including empty model batches. Exported Core's 4096-character transaction diagnostic contract and adapted Standard diagnostics to fixed codes/messages plus bounded outer paths, stable IDs, and type/length metadata; oversized raw IDs, kinds, tokens, and extension keys no longer collapse to invalid-invariant-result. Final parent, cycle, and endpoint diagnostics now iterate stable identity order, with the smallest cycle ID as canonical representative. Verification: focused 19 tests/97 assertions; full check 114 tests/531 assertions; formatting, typecheck, architecture boundaries, native build/smoke, diff check, and all four standalone targets passed.
 <!-- SECTION:NOTES:END -->

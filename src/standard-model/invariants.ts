@@ -12,6 +12,7 @@ import {
   type Result,
   failure,
   success,
+  TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS,
   type TransactionInvariant,
 } from "../core/index.ts";
 import { copyGraphPayload } from "../core/payload.ts";
@@ -124,16 +125,43 @@ interface ParsedState {
   readonly relationships: Map<RelationId, GraphRelation>;
 }
 
+interface MutationTargets {
+  readonly components: ReadonlyMap<EntityId, string>;
+  readonly relationships: ReadonlyMap<RelationId, string>;
+}
+
 const relationTypePattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const diagnosticCodePattern = /^[a-z][a-z0-9-]{0,127}$/;
+const diagnosticDetailKeyPattern = /^[A-Za-z][A-Za-z0-9]{0,127}$/;
+const fallbackDiagnosticCode = "invalid-standard-model-value";
+const fallbackDiagnosticMessage = "The Standard Model rejected a transaction value";
 
 function diagnostic(
   code: string,
   message: string,
   details?: Readonly<Record<string, string | number | boolean>>,
 ): Diagnostic {
-  return details === undefined
-    ? Object.freeze({ code, message })
-    : Object.freeze({ code, details: Object.freeze({ ...details }), message });
+  const safeCode = diagnosticCodePattern.test(code) ? code : fallbackDiagnosticCode;
+  const safeMessage =
+    message.length > 0 && message.length <= TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS
+      ? message
+      : fallbackDiagnosticMessage;
+  if (details === undefined) return Object.freeze({ code: safeCode, message: safeMessage });
+
+  const safeDetails: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (!diagnosticDetailKeyPattern.test(key)) continue;
+    if (typeof value !== "string" || value.length <= TRANSACTION_DIAGNOSTIC_MAX_CHARACTERS) {
+      safeDetails[key] = value;
+    } else {
+      safeDetails[`${key}Length`] = value.length;
+    }
+  }
+  return Object.freeze({
+    code: safeCode,
+    details: Object.freeze(safeDetails),
+    message: safeMessage,
+  });
 }
 
 function validatePositiveBound(value: number, name: string): void {
@@ -201,17 +229,22 @@ function annotate(
   const annotated = new Array<Diagnostic>(diagnostics.length);
   for (let index = 0; index < diagnostics.length; index += 1) {
     const source = diagnostics[index]!;
-    const details: Record<string, string | number | boolean> = {};
+    const details: Record<string, string | number | boolean> = {
+      path,
+      sourceMessageLength: source.message.length,
+    };
     if (source.details !== undefined) {
-      for (const [key, value] of Object.entries(source.details)) {
-        details[key === "path" ? "sourcePath" : key] = value;
-      }
+      const sourcePath = source.details.path;
+      const sourceValue = source.details.value;
+      const sourceReason = source.details.reason;
+      if (typeof sourcePath === "string") details.sourcePathLength = sourcePath.length;
+      if (typeof sourceValue === "string") details.sourceValueLength = sourceValue.length;
+      if (typeof sourceReason === "string") details.sourceReasonLength = sourceReason.length;
     }
-    details.path = path;
     if (id !== undefined) details.id = id;
     annotated[index] = diagnostic(
       source.code,
-      `${path}${id === undefined ? "" : ` (${id})`}: ${source.message}`,
+      "The Standard Model rejected a value at the transaction boundary",
       details,
     );
   }
@@ -221,21 +254,41 @@ function annotate(
 function parseEntityIdentity(value: unknown, path: string): Result<EntityId> {
   if (typeof value !== "string") {
     return failure(
-      diagnostic("invalid-entity-id", `${path} must be a stable entity identifier`, { path }),
+      diagnostic("invalid-entity-id", "A stable entity identifier is required", {
+        path,
+        receivedType: typeof value,
+      }),
     );
   }
   const parsed = parseEntityId(value);
-  return parsed.ok ? parsed : failure(...annotate(parsed.diagnostics, path, value));
+  return parsed.ok
+    ? parsed
+    : failure(
+        diagnostic("invalid-entity-id", "The entity identifier is not a valid opaque ID", {
+          path,
+          receivedLength: value.length,
+        }),
+      );
 }
 
 function parseRelationIdentity(value: unknown, path: string): Result<RelationId> {
   if (typeof value !== "string") {
     return failure(
-      diagnostic("invalid-relation-id", `${path} must be a stable relation identifier`, { path }),
+      diagnostic("invalid-relation-id", "A stable relation identifier is required", {
+        path,
+        receivedType: typeof value,
+      }),
     );
   }
   const parsed = parseRelationId(value);
-  return parsed.ok ? parsed : failure(...annotate(parsed.diagnostics, path, value));
+  return parsed.ok
+    ? parsed
+    : failure(
+        diagnostic("invalid-relation-id", "The relation identifier is not a valid opaque ID", {
+          path,
+          receivedLength: value.length,
+        }),
+      );
 }
 
 function parseComponentRecord(
@@ -253,14 +306,20 @@ function parseComponentRecord(
   const id = parseEntityIdentity(record.value.id, `${path}.id`);
   if (!id.ok) return id;
   if (record.value.kind !== STANDARD_COMPONENT_KIND) {
+    const kindDetails: Record<string, string | number | boolean> = {
+      expected: STANDARD_COMPONENT_KIND,
+      id: id.value,
+      path: `${path}.kind`,
+    };
+    if (typeof record.value.kind === "string")
+      kindDetails.receivedLength = record.value.kind.length;
+    else kindDetails.receivedType = typeof record.value.kind;
     return failure(
-      diagnostic("wrong-standard-model-kind", `${path}.kind must be ${STANDARD_COMPONENT_KIND}`, {
-        actual:
-          typeof record.value.kind === "string" ? record.value.kind : typeof record.value.kind,
-        expected: STANDARD_COMPONENT_KIND,
-        id: id.value,
-        path: `${path}.kind`,
-      }),
+      diagnostic(
+        "wrong-standard-model-kind",
+        "A Standard Model component record must use the component graph kind",
+        kindDetails,
+      ),
     );
   }
   const payload = copyGraphPayload(record.value.payload, "entity");
@@ -293,11 +352,18 @@ function parseRelationshipRecord(
   const target = parseEntityIdentity(record.value.target, `${path}.target`);
   if (!target.ok) return target;
   if (typeof record.value.type !== "string" || !relationTypePattern.test(record.value.type)) {
+    const typeDetails: Record<string, string | number | boolean> = {
+      id: id.value,
+      path: `${path}.type`,
+    };
+    if (typeof record.value.type === "string")
+      typeDetails.receivedLength = record.value.type.length;
+    else typeDetails.receivedType = typeof record.value.type;
     return failure(
       diagnostic(
         "invalid-relation-type",
-        `${path}.type must be a lowercase dotted or dashed graph relation token`,
-        { id: id.value, path: `${path}.type` },
+        "A relationship type must be a lowercase dotted or dashed graph token",
+        typeDetails,
       ),
     );
   }
@@ -452,10 +518,10 @@ function applyComponentMutations(
   components: Map<EntityId, GraphEntity>,
   maximum: number,
   model: StandardModelCapability,
-): Result<void> {
+): Result<ReadonlyMap<EntityId, string>> {
   const mutations = inspectDenseArray(value, maximum, "mutation.components");
   if (!mutations.ok) return mutations;
-  const targets = new Set<EntityId>();
+  const targets = new Map<EntityId, string>();
   for (let index = 0; index < mutations.value.length; index += 1) {
     const path = `mutation.components[${index}]`;
     const record = inspectExactRecord(
@@ -514,7 +580,7 @@ function applyComponentMutations(
         ),
       );
     }
-    targets.add(target.value);
+    targets.set(target.value, path);
 
     if (record.value.type === "create") {
       if (components.has(target.value)) {
@@ -568,7 +634,7 @@ function applyComponentMutations(
       }),
     );
   }
-  return success(undefined);
+  return success(targets);
 }
 
 function applyRelationshipMutations(
@@ -576,10 +642,10 @@ function applyRelationshipMutations(
   relationships: Map<RelationId, GraphRelation>,
   maximum: number,
   model: StandardModelCapability,
-): Result<void> {
+): Result<ReadonlyMap<RelationId, string>> {
   const mutations = inspectDenseArray(value, maximum, "mutation.relationships");
   if (!mutations.ok) return mutations;
-  const targets = new Set<RelationId>();
+  const targets = new Map<RelationId, string>();
   for (let index = 0; index < mutations.value.length; index += 1) {
     const path = `mutation.relationships[${index}]`;
     const record = inspectExactRecord(
@@ -625,7 +691,7 @@ function applyRelationshipMutations(
         ),
       );
     }
-    targets.add(target.value);
+    targets.set(target.value, path);
 
     if (upsert !== undefined) {
       relationships.set(target.value, upsert);
@@ -639,7 +705,7 @@ function applyRelationshipMutations(
       );
     }
   }
-  return success(undefined);
+  return success(targets);
 }
 
 function parseMutation(
@@ -647,7 +713,7 @@ function parseMutation(
   state: ParsedState,
   options: StandardModelInvariantOptions,
   model: StandardModelCapability,
-): Result<void> {
+): Result<MutationTargets> {
   const envelope = inspectExactRecord(
     value,
     [["components", "relationships"]],
@@ -662,12 +728,52 @@ function parseMutation(
     model,
   );
   if (!components.ok) return components;
-  return applyRelationshipMutations(
+  const relationships = applyRelationshipMutations(
     envelope.value.relationships,
     state.relationships,
     options.maxRelationshipMutations,
     model,
   );
+  if (!relationships.ok) return relationships;
+  return success({ components: components.value, relationships: relationships.value });
+}
+
+function sortedIdentities<T extends string>(values: Iterable<T>): readonly T[] {
+  const result = Array.from(values);
+  result.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  return Object.freeze(result);
+}
+
+function validateAffectedTargets(
+  proposal: ProposedTransaction,
+  targets: MutationTargets,
+): readonly Diagnostic[] {
+  const affectedComponents = new Set<EntityId>(proposal.affected.entities);
+  for (const id of sortedIdentities(targets.components.keys())) {
+    if (!affectedComponents.has(id)) {
+      return Object.freeze([
+        diagnostic(
+          "mutation-target-not-affected",
+          "Every component mutation target must be declared in affected.entities",
+          { id, path: targets.components.get(id) ?? "mutation.components" },
+        ),
+      ]);
+    }
+  }
+
+  const affectedRelationships = new Set<RelationId>(proposal.affected.relations);
+  for (const id of sortedIdentities(targets.relationships.keys())) {
+    if (!affectedRelationships.has(id)) {
+      return Object.freeze([
+        diagnostic(
+          "mutation-target-not-affected",
+          "Every relationship mutation target must be declared in affected.relations",
+          { id, path: targets.relationships.get(id) ?? "mutation.relationships" },
+        ),
+      ]);
+    }
+  }
+  return Object.freeze([]);
 }
 
 function validateFinalGraph(
@@ -675,7 +781,9 @@ function validateFinalGraph(
   model: StandardModelCapability,
 ): readonly Diagnostic[] {
   const parents = new Map<EntityId, EntityId | undefined>();
-  for (const [id, entity] of state.components) {
+  const componentIds = sortedIdentities(state.components.keys());
+  for (const id of componentIds) {
+    const entity = state.components.get(id)!;
     const parsed = model.parse(entity);
     if (!parsed.ok) return annotate(parsed.diagnostics, "finalState.components", id);
     const parent = parsed.value.parent;
@@ -701,15 +809,21 @@ function validateFinalGraph(
   }
 
   const visit = new Map<EntityId, 1 | 2>();
-  for (const id of state.components.keys()) {
+  for (const id of componentIds) {
     if (visit.get(id) === 2) continue;
     const trail: EntityId[] = [];
     let current: EntityId | undefined = id;
     while (current !== undefined && visit.get(current) !== 2) {
       if (visit.get(current) === 1) {
+        let cycleStart = 0;
+        while (cycleStart < trail.length && trail[cycleStart] !== current) cycleStart += 1;
+        let representative = current;
+        for (let index = cycleStart; index < trail.length; index += 1) {
+          if (trail[index]! < representative) representative = trail[index]!;
+        }
         return Object.freeze([
           diagnostic("component-containment-cycle", "Component containment must be acyclic", {
-            id: current,
+            id: representative,
             path: "finalState.components.parent",
           }),
         ]);
@@ -721,7 +835,8 @@ function validateFinalGraph(
     for (let index = trail.length - 1; index >= 0; index -= 1) visit.set(trail[index]!, 2);
   }
 
-  for (const relationship of state.relationships.values()) {
+  for (const id of sortedIdentities(state.relationships.keys())) {
+    const relationship = state.relationships.get(id)!;
     if (!state.components.has(relationship.source)) {
       return Object.freeze([
         diagnostic(
@@ -784,6 +899,8 @@ function validateProposal(
   const knownComponentIds = new Set<EntityId>(state.value.components.keys());
   const mutation = parseMutation(proposal.mutation, state.value, options, model);
   if (!mutation.ok) return mutation.diagnostics;
+  const affected = validateAffectedTargets(proposal, mutation.value);
+  if (affected.length > 0) return affected;
   if (state.value.components.size > options.maxComponents) {
     return Object.freeze([
       diagnostic(

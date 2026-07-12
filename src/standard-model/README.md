@@ -37,6 +37,18 @@ removal atomic while preserving omitted fields through the model's sparse patch.
 
 The invariant factory requires explicit collection and owner-string bounds so a host
 can align model work with its `TransactionEngine` request and snapshot budgets.
+Every create, patch, remove, relationship upsert, and relationship remove target must
+also appear in the Core transaction's matching `affected` identity collection. The
+collection may contain additional identities for provider-owned side effects, and an
+empty model batch may therefore still declare affected identities.
+
+Invariant diagnostics preserve stable Standard Model codes while adapting unsafe
+model prose to Core's exported transaction diagnostic limit. They expose bounded
+envelope paths, stable IDs when available, and length/type metadata instead of
+copying untrusted oversized identifiers, tokens, kinds, or extension keys. Final
+parent, cycle, and relationship checks run in stable identity order; a containment
+cycle is represented by its smallest stable ID.
+
 Pinned component IDs are validated, sorted, unique, and resolvable in the prior or
 proposed graph in 1A, but do not yet change mutation authority. Evidence ownership
 and pinned-boundary protection policy begin with reconciliation; retaining this
