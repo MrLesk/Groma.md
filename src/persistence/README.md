@@ -21,9 +21,11 @@ uses the injected Standard Model capability for every component and relationship
 semantic view, canonicalizes ordering and LF framing, rejects unrepresentable Unicode,
 aliases, tags, duplicate YAML keys, invalid UTF-8, complete conflict blocks, wrong
 schemas and kinds, and hashes the exact UTF-8 bytes as a `sha256:` content revision. It
-parses YAML integers as BigInt first, converts only exact safe integers, and rejects
-unsafe, non-finite, overflowed, or underflowed numeric values before Standard Model
-use. It never writes timestamps, host paths, evidence, bindings, or derived state.
+parses YAML integer lexemes as BigInt first, converts only values represented exactly
+by a finite JavaScript number, and rejects inexact integers, non-finite overflow, or
+nonzero underflow before Standard Model use. Finite YAML float and exponent scalars
+retain the Standard Model's IEEE Number semantics. The store never writes timestamps,
+host paths, evidence, bindings, or derived state.
 
 Provider-backed `read` and `load` operations are bounded. Whole-store loading follows
 provider continuation pages, accepts only the exact shard/file layout, produces stable

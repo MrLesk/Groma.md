@@ -394,6 +394,28 @@ vendor.io/nested:
     expect(reloaded.value.relations).toEqual(decoded.value.relations);
   });
 
+  test("round-trips finite GraphData numbers beyond the safe-integer range", () => {
+    const id = entityId("8051");
+    const values = {
+      exactNegativeInteger: -9_007_199_254_740_992,
+      exactPositiveInteger: 9_007_199_254_740_992,
+      largeNegativeExponent: -1e100,
+      largePositiveExponent: 1e100,
+    };
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const encoded = store.serialize(component(id, { "vendor.io/numbers": values }), []);
+    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
+    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
+    expect(decoded.value.entity.payload).toMatchObject({ "vendor.io/numbers": values });
+    const rewritten = store.serialize(decoded.value.entity, decoded.value.relations);
+    if (!rewritten.ok) throw new Error(rewritten.diagnostics[0]?.message);
+    expect(rewritten.value.bytes).toEqual(encoded.value.bytes);
+  });
+
   test("rejects unsafe, non-finite, and underflowed YAML numbers before model use", () => {
     const id = entityId("806");
     const target = entityId("807");
@@ -413,7 +435,7 @@ vendor.io/nested:
         "intent-unsafe-integer",
         `relationships:\n  - id: ${relationId("806")}\n    type: uses\n    target: ${target}\n    vendor.io/nested:\n      value: 9007199254740993`,
       ],
-      ["intent-unsafe-number", "vendor.io/value: 9007199254740993.0"],
+      ["intent-unsafe-integer", `vendor.io/value: 1${"0".repeat(400)}`],
       ["intent-non-finite-number", "vendor.io/value: 1e999"],
       ["intent-non-finite-number", "vendor.io/value: .nan"],
       ["intent-number-underflow", "vendor.io/value: 1e-999"],
@@ -553,6 +575,20 @@ vendor.io/nested:
     });
     expect(getterReads).toBe(0);
 
+    const accessorEntityPayload: Record<string, unknown> = {};
+    Object.defineProperty(accessorEntityPayload, "name", {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        return getterReads % 2 === 0 ? "Second" : "First";
+      },
+    });
+    expect(store.serialize(component(id, accessorEntityPayload as never), [])).toMatchObject({
+      diagnostics: [{ code: "unsupported-payload" }],
+      ok: false,
+    });
+    expect(getterReads).toBe(0);
+
     const accessorRelation = {
       payload: {},
       source: id,
@@ -570,6 +606,27 @@ vendor.io/nested:
       diagnostics: [{ code: "invalid-intent-relation" }],
       ok: false,
     });
+    expect(getterReads).toBe(0);
+
+    const accessorRelationPayload: Record<string, unknown> = {};
+    Object.defineProperty(accessorRelationPayload, "description", {
+      enumerable: true,
+      get: () => {
+        getterReads += 1;
+        throw new Error("must not run");
+      },
+    });
+    expect(
+      store.serialize(component(id, {}), [
+        {
+          id: relationId("808"),
+          payload: accessorRelationPayload as never,
+          source: id,
+          target,
+          type: "uses",
+        },
+      ]),
+    ).toMatchObject({ diagnostics: [{ code: "unsupported-payload" }], ok: false });
     expect(getterReads).toBe(0);
 
     const accessorArray: GraphRelation[] = [];

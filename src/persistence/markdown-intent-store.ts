@@ -414,18 +414,24 @@ function validateYamlNumbers(document: ReturnType<typeof parseDocument>): Result
   visit(document, {
     Scalar: (_key, node) => {
       if (typeof node.value === "bigint") {
-        if (
-          node.value < BigInt(Number.MIN_SAFE_INTEGER) ||
-          node.value > BigInt(Number.MAX_SAFE_INTEGER)
-        ) {
+        const converted = Number(node.value);
+        let exact = false;
+        if (Number.isFinite(converted)) {
+          try {
+            exact = BigInt(converted) === node.value;
+          } catch {
+            exact = false;
+          }
+        }
+        if (!exact) {
           invalid = diagnostic(
             "intent-unsafe-integer",
-            "Intent YAML integer exceeds JavaScript's exact safe-integer range",
+            "Intent YAML integer cannot be represented exactly as a finite JavaScript number",
             { value: node.source ?? String(node.value) },
           );
           return visit.BREAK;
         }
-        node.value = Number(node.value);
+        node.value = converted;
         return;
       }
       if (typeof node.value !== "number") return;
@@ -433,14 +439,6 @@ function validateYamlNumbers(document: ReturnType<typeof parseDocument>): Result
         invalid = diagnostic(
           "intent-non-finite-number",
           "Intent YAML numbers must be finite and must not overflow",
-          { value: node.source ?? String(node.value) },
-        );
-        return visit.BREAK;
-      }
-      if (Number.isInteger(node.value) && !Number.isSafeInteger(node.value)) {
-        invalid = diagnostic(
-          "intent-unsafe-number",
-          "Intent YAML floating-point value resolves outside JavaScript's exact safe-integer range",
           { value: node.source ?? String(node.value) },
         );
         return visit.BREAK;
@@ -991,9 +989,11 @@ export function createMarkdownIntentStore(
           ),
         );
       }
+      const payload = copyGraphPayload(inspected.value.payload, "relation");
+      if (!payload.ok) return payload;
       validated.push({
         id: id.value,
-        payload: inspected.value.payload as GraphData,
+        payload: payload.value,
         source: source.value,
         target: target.value,
         type: inspected.value.type,
@@ -1025,10 +1025,12 @@ export function createMarkdownIntentStore(
         diagnostic("invalid-intent-entity", "Intent GraphEntity kind must be a string"),
       );
     }
+    const payload = copyGraphPayload(inspected.value.payload, "entity");
+    if (!payload.ok) return payload;
     const sanitizedEntity = Object.freeze({
       id: entityId.value,
       kind: inspected.value.kind,
-      payload: inspected.value.payload as GraphData,
+      payload: payload.value,
     });
     const component = model.parse(sanitizedEntity);
     if (!component.ok) return component;
