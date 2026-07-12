@@ -729,22 +729,26 @@ describe("same-machine coordination", () => {
     }
   });
 
-  test("rejects a volatile coordination path that resolves into canonical contents", async () => {
+  test("rejects Windows custom roots before I/O and POSIX coordination redirection", async () => {
     const roots = await fixture();
     const linkedCoordination = path.join(path.dirname(roots.workspaceRoot), "linked-coordination");
-    try {
-      await symlink(roots.workspaceRoot, linkedCoordination, "dir");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EPERM") return;
-      throw error;
-    }
 
-    expect(
-      createLocalResourceProvider({
-        coordinationRoot: linkedCoordination,
-        workspaceRoot: roots.workspaceRoot,
-      }),
-    ).rejects.toThrow("must not be a symbolic link or junction");
+    if (process.platform === "win32") {
+      await expect(
+        createLocalResourceProvider({
+          coordinationRoot: linkedCoordination,
+          workspaceRoot: path.join(roots.workspaceRoot, "missing-workspace"),
+        }),
+      ).rejects.toThrow("Windows local coordination does not accept a custom root");
+    } else {
+      await symlink(roots.workspaceRoot, linkedCoordination, "dir");
+      await expect(
+        createLocalResourceProvider({
+          coordinationRoot: linkedCoordination,
+          workspaceRoot: roots.workspaceRoot,
+        }),
+      ).rejects.toThrow("must not be a symbolic link or junction");
+    }
   });
 
   test("rejects permissive custom coordination roots on POSIX", async () => {
