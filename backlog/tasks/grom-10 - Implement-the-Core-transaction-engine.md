@@ -4,13 +4,14 @@ title: Implement the Core transaction engine
 status: To Do
 assignee: []
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 17:36'
+updated_date: '2026-07-12 01:50'
 labels:
   - core
   - transactions
 milestone: m-1
 dependencies:
   - GROM-7
+  - GROM-11
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
@@ -43,3 +44,9 @@ Implement deterministic semantic transactions with expected revisions, registere
 4. Publish events only after confirmed durable success and expose explicit recovery states.
 5. Add an in-memory fault-injecting provider test suite and verify technology neutrality.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Dependency corrected before execution: the transaction engine publishes the committed-event contract owned by GROM-11, so GROM-11 must land first to avoid a competing event model.
+<!-- SECTION:NOTES:END -->

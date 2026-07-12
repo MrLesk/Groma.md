@@ -1,10 +1,11 @@
 ---
 id: GROM-11
 title: Define bounded query and graph-event contracts
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-11 22:39'
+updated_date: '2026-07-12 04:32'
 labels:
   - core
   - queries
@@ -27,26 +28,59 @@ Implement the Core contracts shared by short-lived commands and later long-lived
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every collection or traversal query requires a validated positive limit capped by a configured maximum
-- [ ] #2 Result pages carry the graph generation and deterministic ordering needed to continue safely
-- [ ] #3 Continuation cursors are opaque to callers, bound to their query and generation, and rejected when malformed, mismatched, or stale
-- [ ] #4 Committed graph events identify the resulting generation and affected stable identities without exposing provider implementation details
-- [ ] #5 The event contract explicitly signals a generation gap and directs consumers to refetch instead of guessing missed changes
-- [ ] #6 Contract tests cover empty pages, exact-limit pages, continuation, invalid limits, cursor misuse, generation changes, and missed events
+- [x] #1 Every collection or traversal query requires a validated positive limit capped by a configured maximum
+- [x] #2 Result pages carry the graph generation and deterministic ordering needed to continue safely
+- [x] #3 Continuation cursors are opaque to callers, bound to their query and generation, and rejected when malformed, mismatched, or stale
+- [x] #4 Committed graph events identify the resulting generation and affected stable identities without exposing provider implementation details
+- [x] #5 The event contract explicitly signals a generation gap and directs consumers to refetch instead of guessing missed changes
+- [x] #6 Contract tests cover empty pages, exact-limit pages, continuation, invalid limits, cursor misuse, generation changes, and missed events
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define exact-read, bounded-page, cursor, graph-generation, and typed-event contracts.
-2. Add validation for bounds and opaque cursor context.
-3. Define deterministic continuation and generation-gap recovery semantics.
-4. Supply reusable contract fixtures without implementing the 1B projection index.
-5. Test pagination, cursor invalidation, event order, and recovery signals.
+1. Define branded nonnegative graph generations, exact read results, validated bounded query requests, deterministic generation-bearing pages, opaque continuation cursors, and committed/gap event types in Core.
+2. Canonicalize a technology-neutral query context and encode cursor state containing version, generation, query binding, and deterministic continuation anchor without exposing provider internals through the public type.
+3. Validate positive capped limits and fail closed on malformed cursors, wrong query binding, and stale generation before a provider continues a page.
+4. Define committed events with sorted affected entity/relation identities and an event-sequence helper that emits an explicit refetch-required generation gap instead of inferring missed changes.
+5. Add boundary-local contract tests for exact reads, empty/exact-limit/continued pages, invalid bounds, cursor misuse/staleness, deterministic event identities, contiguous events, duplicates/out-of-order events, and generation gaps.
+6. Run focused tests, full quality and four-target gates, independent reviews, then publish a ready task-linked PR and complete Claude/Codex review gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Reviewed for GROM-19: recursive containment remains Standard Model policy. GROM-11 intentionally keeps Core query and event contracts generic; model and application layers interpret bounded relation traversal as parent or child hierarchy.
+
+Context-hunter classification: L2 foundational Core contract. Reuses Core stable IDs, canonical GraphData copying, Result diagnostics, and bounded graph conventions. This task defines portable contracts and deterministic helpers only; the fast projection provider remains 1B. Cursor opacity is an API boundary rather than secrecy, and cursor state is self-contained so short-lived CLI processes can continue pages.
+
+Implemented provider-neutral query and event contracts in Core: branded safe graph generations; generation-bearing exact reads and bounded pages; self-contained canonical GraphData cursors with explicit character budgets and fail-closed version/query/generation validation; deterministic committed events; and contiguous-generation/refetch sequencing. Added 13 boundary-local contract tests covering 46 assertions. Full local quality gate passes with 51 tests total. Acceptance criteria remain unchecked pending independent and external review.
+
+Independent quality review found forged-runtime gaps at the public Core boundary. Hardened exact reads, bounded pages, prepared queries, requests, page state, event factories, and event sequencing with descriptor-safe exact-shape validation and throw-free failure results. Query items are now canonical GraphData snapshots that are defensively copied and deeply frozen; negative zero normalizes to zero before provider exposure or cursor binding. Added adversarial regressions for iterable/length spoofs, accessors, behavior-bearing and noncanonical prepared values, invalid state shapes, affected/event shape forgery, coercible identities, numeric binding collisions, and mutable aliases. Focused suite now has 18 tests and 86 assertions; full quality gate has 56 tests and 222 assertions. Acceptance criteria remain unchecked pending repeat independent and external review.
+
+Final quality typing review aligned the public success contract with runtime behavior. Exact and page items now require canonical GraphData and expose an exported recursive CanonicalQueryData type that preserves inferred record/array shapes while making them deeply readonly. Compile-time assertions reject nested mutation, Date items, and function-bearing records. Task remains In Progress with acceptance criteria unchecked until external review completes.
+
+PR #7 Codex review identified that the first canonical item constraint excluded interface-shaped Core records because they lacked a string index signature. Replaced it with a recursive structural data-only predicate that accepts GraphEntity and GraphRelation directly, preserves branded scalar identities, and rejects callable objects, behavior-bearing fields, invalid primitive unions, and symbol-keyed records. Added compile-time and runtime coverage for direct Core records and readonly nested payload snapshots. Task remains In Progress with acceptance criteria unchecked pending review completion.
+
+Controller inspection found the structural predicate treated omitted sparse fields like explicit undefined. Record-field validation now uses each optional property's required present-value view with a never guard under exactOptionalPropertyTypes. Sparse interfaces with optional canonical fields compile and remain deeply readonly, while required or optional fields explicitly unioned with undefined remain rejected. GraphEntity, GraphRelation, and prior behavior-bearing rejections remain covered. Task stays In Progress with acceptance criteria unchecked.
+
+Latest PR #7 Codex review identified three bounded-work gaps. Page item arrays now receive descriptor-only intrinsic dense-array and length preflight, returning overflow before traversing items. Query contexts and anchors now use one descriptor traversal that copies, freezes, key-orders, emits canonical JSON, and decrements exact character budgets recursively so oversized values stop before later descriptors. Cursor binding no longer uses object-level JSON.stringify and ignores inherited Object/Array toJSON pollution. Added overflow-before-getter, budget early-abort, and prototype-pollution continuation regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Current-SHA PR #7 review found four preprocessing bounds. Page overflow now checks only intrinsic prototype and safe length descriptor before any ownKeys/index work; within-limit canonical copy retains full density/descriptor validation. Canonical records apply a key-count/minimum-value/quoted-key lower bound before custom deterministic sorting or value reads. String quoting is incremental and stops at the exact remaining character boundary, including escape and surrogate costs. The shared payload walker now has copy-only and canonical-emission modes, so graph/model payload copying constructs no JSON while cursor data remains one-pass budgeted. Canonical emission uses captured string/number intrinsics and no mutable array sort/join methods. Added proxy ownKeys, sort/getter, large-string boundary, copy-only instrumentation, and expanded pollution regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Current-SHA PR #7 review found four continuation-boundary issues. Canonical arrays now reject an impossible minimum size after prototype/length inspection but before ownKeys, while copy-only and feasible canonical values still receive full validation. Cursor creation preflights exact raw envelope length before construction/encoding and retains final encoded-length enforcement for Unicode expansion. Committed-event validation and deterministic sorting no longer call mutable Array sort/some/includes methods. Continued pages reject a next anchor canonically equal to the prior after anchor with non-advancing-continuation-anchor, preventing infinite loops while preserving first-page and advancing anchors. Added Proxy, encoding, prototype-pollution, and structural anchor regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Current-SHA PR #7 review found four canonical-input gaps. Cursor decoding now uses captured URI intrinsics and accepts only suffixes that round-trip to Groma's exact percent encoding before JSON parsing, so raw/lowercase/alternate envelopes and tight-budget bypasses fail malformed. Event sequencing now compares descriptor-validated affected arrays to canonical factory output and rejects unsorted or duplicate forged events instead of normalizing them. Page state and anchor-shape rules now run after safe length/overflow preflight but before item copying, so invalid state never traverses item contents. Global URI mutation isolation and all cases have regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Independent quality review found two canonicality/ordering gaps. Cursor decode now reconstructs canonical raw state through the same centralized envelope renderer used by encode and requires exact decoded-state equality after shape/version/generation/query/anchor validation; whitespace, top-level or nested key reordering, alternate numeric syntax, and duplicate keys fail malformed. Page overflow remains first, then structural state checks and continuation-anchor canonicalization/cursor precomputation run before item copying; invalid bigint or behavior-bearing anchors cannot traverse item contents, while completed pages skip anchor work. Added full alternative-state and nontraversal regressions. Task remains In Progress with acceptance criteria unchecked.
+
+Latest PR #7 review found mutable String prototype use before cursor decode. Captured intrinsic startsWith and slice beside the URI codecs and now invoke them through Reflect.apply for prefix validation and suffix extraction. A regression patches both methods after module load: valid emitted cursors still continue, malformed envelope/encoding values remain failure Results without throws, and polluted methods receive zero calls. Task remains In Progress with acceptance criteria unchecked.
+
+Final validation passed at fa6f1b9: 70 tests and 291 assertions; formatting, TypeScript, architecture boundaries, native build, smoke test, diff check, and macOS arm64, Linux x64, Windows x64, and Windows arm64 standalone targets. GitHub Actions run 29179423771 passed both quality and cross-platform jobs. Independent specification and repeated quality reviews passed. Claude review returned no written feedback. Codex review findings about bounded preprocessing, canonical cursors, continuation progress, runtime shapes, event canonicality, and mutable method calls were independently verified and addressed. The final three Codex comments require trusted code to poison Object.keys or Array.prototype numeric slots; per the manifesto's trusted-plugin/not-a-sandbox posture they are deliberately non-actionable for this task, and ordinary untrusted data cannot trigger them.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented technology-neutral Core contracts for generation-bearing exact reads, bounded deterministic pages, opaque canonical continuation cursors, committed graph events, and explicit refetch after generation gaps. Hardened all public data boundaries with descriptor-safe validation, immutable snapshots, exact budgets, canonical cursor envelopes/state, non-advancing-anchor rejection, and canonical event sequencing. Verified with 70 tests/291 assertions, full local quality gates, four standalone targets, GitHub Actions, Claude review, Codex review, and independent spec/quality reviews.
+<!-- SECTION:FINAL_SUMMARY:END -->
