@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:33'
-updated_date: '2026-07-12 00:38'
+updated_date: '2026-07-12 00:42'
 labels:
   - tooling
   - ci
@@ -46,8 +46,8 @@ Make the 1A correctness claims continuously verifiable. Add fast local and GitHu
 1. Preserve four-target verification and restore a host-compatible artifact afterward.
 2. Keep cross-compiled artifact coverage distinct from compatible-host runtime smoke coverage.
 3. Track lexical runtime bindings so ambient require calls and escapes fail closed while shadowed local require values remain ordinary local code.
-4. Exclude declaration-level and specifier-level type-only imports from runtime bindings; include non-declare identifier namespaces; exclude ambient declarations.
-5. Treat computed member keys using ambient require as value escapes while ignoring non-computed require properties and require member access under the current policy.
+4. Exclude type-only imports from runtime bindings; give runtime namespace bodies their own var-hoisting boundary; collect no runtime bindings inside ambient namespaces.
+5. Treat computed member keys using ambient require as value escapes while preserving the non-computed member policy.
 6. Add exact regression fixtures, run local and cross-target gates, and require fresh review.
 <!-- SECTION:PLAN:END -->
 
@@ -89,6 +89,10 @@ Implemented a focused two-pass lexical scope map for runtime TypeScript bindings
 Delta spec review found three remaining scope distinctions: type-only imports incorrectly shadow ambient require, runtime namespaces do not shadow it, and computed member keys using require are ignored. Babel AST inspection confirmed importKind at both declaration and specifier levels, declare on ambient TSModuleDeclaration nodes, and computed MemberExpression property shape.
 
 Implemented the delta distinctions using inspected Babel fields only: declaration/specifier/import-equals importKind controls runtime import bindings; non-declare TSModuleDeclaration identifier namespaces bind in a namespace-local scope while declare/global ambient contexts propagate without runtime bindings; computed member properties are referenced values while non-computed properties and require member objects remain ignored. Twelve focused fixtures, 32 full tests, typecheck, all quality gates, four-target verification, immediate native smoke, and diff check pass. Acceptance criteria remain unchecked pending external review.
+
+Spec re-review found that var declarations inside both runtime and ambient namespace bodies currently hoist through the namespace block into program scope. The correction will make namespace bodies var-hoisting boundaries and suppress runtime-binding collection throughout ambient namespace contents.
+
+Namespace scope correction implemented: every TSModuleDeclaration body is now a function-style var-hoisting boundary, so runtime namespace var bindings remain namespace-local; ambient namespace traversal creates scopes but records no runtime bindings at any nesting level. Exact runtime and declare namespace inner-var regressions pass alongside all 13 boundary fixtures, 33 full tests, quality gates, four-target verification, immediate native smoke, and diff check. Acceptance criteria remain unchecked pending external review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

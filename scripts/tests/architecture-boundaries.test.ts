@@ -246,6 +246,32 @@ describe("architecture boundary checker", () => {
     ]);
   });
 
+  test("keeps inner runtime and ambient namespace require declarations namespace-local", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/ambient-inner.ts": [
+        "declare namespace holder { var require: (value: string) => string; }",
+        'void require("node:http");',
+      ].join("\n"),
+      "core/runtime-inner.ts": [
+        "namespace holder { export var require = (value: string): string => value; }",
+        'void require("node:fs");',
+      ].join("\n"),
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/ambient-inner.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:http",
+      },
+      {
+        file: "core/runtime-inner.ts",
+        reason: "core production code cannot import external modules",
+        specifier: "node:fs",
+      },
+    ]);
+  });
+
   test("treats computed ambient require member keys as value escapes", async () => {
     const sourceRoot = await createSourceFixture({
       "core/index.ts": [

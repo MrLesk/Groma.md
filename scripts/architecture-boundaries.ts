@@ -144,39 +144,46 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
     if (value.type === "Program") {
       nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
     } else if (functionNodeTypes.has(value.type)) {
-      if (value.type === "FunctionDeclaration") {
+      if (!ambientContext && value.type === "FunctionDeclaration") {
         addPatternBindings(value.id, currentScope);
       }
       nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
-      if (value.type === "FunctionExpression") {
+      if (!ambientContext && value.type === "FunctionExpression") {
         addPatternBindings(value.id, nodeScope);
       }
-      if (Array.isArray(value.params)) {
+      if (!ambientContext && Array.isArray(value.params)) {
         for (const parameter of value.params) addPatternBindings(parameter, nodeScope);
       }
     } else if (value.type === "ClassDeclaration" || value.type === "ClassExpression") {
-      if (value.type === "ClassDeclaration") {
+      if (!ambientContext && value.type === "ClassDeclaration") {
         addPatternBindings(value.id, currentScope);
       }
       nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
-      addPatternBindings(value.id, nodeScope);
+      if (!ambientContext) addPatternBindings(value.id, nodeScope);
     } else if (value.type === "TSModuleDeclaration") {
       const moduleIsAmbient = ambientContext || value.declare === true || value.kind === "global";
       if (!moduleIsAmbient) addPatternBindings(value.id, currentScope);
-      nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
+      nodeScope = { bindings: new Set(), kind: "function", parent: currentScope };
       ambientContext = moduleIsAmbient;
     } else if (blockScopeNodeTypes.has(value.type)) {
       nodeScope = { bindings: new Set(), kind: "block", parent: currentScope };
-      if (value.type === "CatchClause") addPatternBindings(value.param, nodeScope);
+      if (!ambientContext && value.type === "CatchClause") {
+        addPatternBindings(value.param, nodeScope);
+      }
     }
     scopes.set(value, nodeScope);
 
-    if (value.type === "VariableDeclaration" && Array.isArray(value.declarations)) {
+    if (
+      !ambientContext &&
+      value.type === "VariableDeclaration" &&
+      Array.isArray(value.declarations)
+    ) {
       const bindingScope = value.kind === "var" ? nearestFunctionScope(nodeScope) : nodeScope;
       for (const declaration of value.declarations) {
         if (isAstNode(declaration)) addPatternBindings(declaration.id, bindingScope);
       }
     } else if (
+      !ambientContext &&
       value.type === "ImportDeclaration" &&
       value.importKind !== "type" &&
       Array.isArray(value.specifiers)
@@ -186,11 +193,15 @@ function collectLexicalScopes(syntaxTree: unknown): WeakMap<AstNode, LexicalScop
           addPatternBindings(specifier.local, nodeScope);
         }
       }
-    } else if (value.type === "TSImportEqualsDeclaration" && value.importKind !== "type") {
+    } else if (
+      !ambientContext &&
+      value.type === "TSImportEqualsDeclaration" &&
+      value.importKind !== "type"
+    ) {
       addPatternBindings(value.id, nodeScope);
-    } else if (value.type === "TSDeclareFunction") {
+    } else if (!ambientContext && value.type === "TSDeclareFunction") {
       addPatternBindings(value.id, nodeScope);
-    } else if (value.type === "TSEnumDeclaration") {
+    } else if (!ambientContext && value.type === "TSEnumDeclaration") {
       addPatternBindings(value.id, nodeScope);
     }
 
