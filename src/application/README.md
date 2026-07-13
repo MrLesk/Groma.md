@@ -62,9 +62,12 @@ decoder exact-inspects component, item, extension, and relationship records; bin
 identities, kinds, types, and endpoints back to the resolved graph; rejects proxies before
 reflection; applies the embedded-item bound independently to each component across its
 combined inputs, outputs, and actions; and retains one aggregate structural budget over
-the complete snapshot and canonical model-success envelope. It then uses
-Core's graph-data copier to create the only values that may escape, with every nested
-array, item, extension, component, and relationship application-owned and frozen.
+the complete snapshot and canonical model-success envelope. Nested component, item, and
+relationship extension values are copied immediately when their containing model value is
+accepted, before payload equality checks or any later model capability call can mutate a
+retained alias. It then uses Core's graph-data copier to create the only values that may
+escape, with every nested array, item, extension, component, and relationship
+application-owned and frozen.
 Malformed native-Promise model outputs are observed with module-captured Promise and
 reflection intrinsics. Observation temporarily shadows and then exactly restores a safe
 own constructor descriptor using a private frozen species carrier, so hostile own or

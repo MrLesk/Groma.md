@@ -493,7 +493,9 @@ function modelExtensions(
       }
       const valid = preflightModelGraphData(descriptor.value, 1, remaining, active, context);
       if (!valid.ok) return valid;
-      Object.defineProperty(extensions, key, { enumerable: true, value: descriptor.value });
+      const copied = copyBoundaryGraphData(descriptor.value, context);
+      if (!copied.ok) return copied;
+      Object.defineProperty(extensions, key, { enumerable: true, value: copied.value });
     }
     return success(Object.freeze(extensions));
   } catch {

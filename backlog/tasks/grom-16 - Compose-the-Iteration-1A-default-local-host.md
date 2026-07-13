@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 09:18'
+updated_date: '2026-07-13 09:45'
 labels:
   - host
   - bootstrap
@@ -125,4 +125,8 @@ Final Claude correction implemented without commit: external HostProcessContext 
 Focused follow-up: added objective coverage that a required callable isProxy detector throwing on runtime object input yields frozen generic application-snapshot-decode-failed diagnostics, leaks no secret, and performs zero downstream mapping or transaction execution. Reflowed the corresponding application README paragraph without semantic change. Validation: application operations 67 tests / 660 assertions; format check, typecheck, and git diff --check pass.
 
 Final listener-return quality correction: HostProcessContext cancellation addEventListener/removeEventListener remain strict synchronous void contracts. Any non-undefined return is immediately malformed; safely observable native Promises receive captured intrinsic settlement handlers first but are never awaited, so rejected returns are contained and resolving or permanently pending returns cannot hang runHost. Registration non-void returns stable host-startup-failed and still attempts removal; removal non-void returns host-cancellation-cleanup-failed without skipping exactly-once process-signal unsubscribe, whose failure retains final precedence. Regressions cover rejected registration with hostile own then, rejected removal Promise subclass with hostile species, zero unhandled rejections/secret leakage/descriptor drift, and resolving/pending returns for both methods. Validation: lifecycle 36 tests / 230 assertions; full host 70 tests / 621 assertions; format check, typecheck, and git diff --check pass.
+
+Final model-output alias review plan: reproduce cross-component mutation of shared nested parse output, then deep-copy accepted component item and extension GraphData at each per-component validation boundary before equality checks and before later model calls. Preserve existing proxy detection, per-component embedded-item count, aggregate structural budgets, exact payload binding, and canonical provenance. Separately test whether snapshot depth uses an observably inconsistent baseline; leave it unchanged if the same public bound is already internally consistent.
+
+Final model-output alias correction: each validated nested component, item, or relationship extension GraphData value is now copied immediately through the existing decoder proxy-aware structural boundary before payload equality and before any later Standard Model call. A deterministic two-component regression first reproduced the bug as an ok:true secret-bearing result when parse(B) mutated parse(A) aliases; it now preserves A original values as frozen alias-free output with no secret. Claude depth-baseline note was assessed as non-actionable: preflight depth 1 intentionally accounts for the containing model/entity slot omitted when a fragment copier starts at root 0, while complete snapshot and final canonical model envelopes enforce the aggregate bound from root 0; changing the fragment baseline would broaden contextual acceptance without fixing a demonstrated same-envelope inconsistency. Validation: operations 68 tests / 668 assertions; complete application+host 139 tests / 1292 assertions; format check, typecheck, architecture boundaries, and git diff --check pass.
 <!-- SECTION:NOTES:END -->

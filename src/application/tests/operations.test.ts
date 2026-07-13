@@ -1751,6 +1751,73 @@ describe("application component reads", () => {
     expect(Object.isFrozen(copied.inputs?.[0]?.extensions["example.dev/item"])).toBeTrue();
   });
 
+  test("owns nested component model values before later model calls can mutate them", () => {
+    const secret = "/private/later-model-mutation";
+    const sharedComponentExtension = { label: "safe" };
+    const sharedItemExtension = { enabled: true as boolean | string };
+    const currentState = state([
+      component({
+        "example.dev/component": { label: "safe" },
+        id: ids.domain,
+        inputs: [{ "example.dev/item": { enabled: true }, id: "orders" }],
+      }),
+      component({ id: ids.service }),
+    ]);
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const mutatingModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: (entity: GraphEntity) => {
+        const parsed = model.parse(entity);
+        if (!parsed.ok) return parsed;
+        if (entity.id === ids.domain) {
+          return success({
+            ...parsed.value,
+            extensions: { "example.dev/component": sharedComponentExtension },
+            inputs: [
+              {
+                ...parsed.value.inputs?.[0],
+                extensions: { "example.dev/item": sharedItemExtension },
+              },
+            ],
+          } as never);
+        }
+        sharedComponentExtension.label = secret;
+        sharedItemExtension.enabled = secret;
+        return parsed;
+      },
+    });
+    const decoded = createApplicationSnapshotStateDecoder({
+      bounds: applicationBounds,
+      graph,
+      isProxy: doesNotRecognizeProxy,
+      model: mutatingModel,
+    }).decode(currentState);
+
+    expect(JSON.stringify(decoded)).not.toContain(secret);
+    expect(decoded.ok).toBeTrue();
+    if (!decoded.ok) return;
+    const first = decoded.value.components.find((entry) => entry.id === ids.domain)!;
+    expect(first.extensions).toEqual({ "example.dev/component": { label: "safe" } });
+    expect(first.inputs?.[0]?.extensions).toEqual({
+      "example.dev/item": { enabled: true },
+    });
+    expect(Object.isFrozen(first.extensions["example.dev/component"])).toBeTrue();
+    expect(Object.isFrozen(first.inputs?.[0]?.extensions["example.dev/item"])).toBeTrue();
+
+    sharedComponentExtension.label = "changed-again";
+    sharedItemExtension.enabled = false;
+    expect(first.extensions).toEqual({ "example.dev/component": { label: "safe" } });
+    expect(first.inputs?.[0]?.extensions).toEqual({
+      "example.dev/item": { enabled: true },
+    });
+  });
+
   test("binds every component view field exactly to its graph payload", async () => {
     for (const field of [
       "name",
