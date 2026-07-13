@@ -1,11 +1,11 @@
 ---
 id: GROM-18
 title: Verify and package the complete Iteration 1A walking skeleton
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 14:29'
+updated_date: '2026-07-13 14:35'
 labels:
   - integration
   - verification
@@ -67,4 +67,12 @@ Exact-worktree validation: bun ci confirmed the locked dependency graph with no 
 Claude review on PR #16: the default Fable invocation hit the monthly spend cap, so the required review completed with Claude Sonnet. Its independently verified actionable finding was that root tests/iteration-1a files were outside tsconfig include and therefore escaped tsc; tsconfig now includes tests/**/*.ts, all resulting unknown-value narrowing and optional stdin errors are fixed, and the Windows crash filter now explains the provider directory-sync policy. The CI-timeout observation is non-actionable because the exact GitHub quality job completed in 55 seconds against a 10-minute limit. PTY coverage remains intentionally native POSIX while Windows receives deterministic non-PTY and unit coverage. Post-Claude validation: tsc includes the root verification sources; bun run check passes 446 tests / 2,926 assertions plus the complete compiled-binary and crash suite; all four targets and compatible-host workflow pass.
 
 Codex review correction: all four independently verified P2 findings were actionable. The Linux PTY verifier now POSIX-quotes the command and proves it with an executable symlink whose path contains spaces and an apostrophe. Semantically identical non-empty component patches are rejected before transaction execution, and the black-box suite compares the complete groma tree byte-for-byte so generation and journal state cannot churn. A fresh ab intent shard now reaches replacement-parent-creation-sync, expanding real-process coverage to 16 crash points. The terminal fixture creates 11 direct children and asserts the bounded children truncation marker. Exact post-correction validation: bun ci made no changes; bun run check passed formatting, strict types, architecture boundaries, 447 tests / 2,935 assertions, the native standalone build and smoke, the compiled-binary workflow, bounded PTY rendering, malformed-state containment, and all 16 crash/recovery cases; bun run check:targets passed Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 artifact verification plus the compatible-host workflow; git diff --check passes.
+
+External gates on implementation head b17f534: GitHub Verify run 29258176691 passed Quality gates in 49 seconds and Cross-platform binaries in 23 seconds. Codex reviewed that exact head, raised no further findings, and replaced its in-progress eyes reaction with approval at 2026-07-13 14:34 UTC. The four earlier actionable threads were each answered with the corresponding b17f534 correction and resolved.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivered the complete Iteration 1A release gate and standalone packaging path. One reusable Bun compiler produces the native artifact and all four promised cross-compiled targets. The public compiled CLI now has black-box coverage for recursive architecture modeling, rich and sparse intent, relationships, paging, exact reads, stable identity through rename and reparent, semantic no-op byte stability, deterministic noninteractive behavior, truly bounded PTY hierarchy output, failure atomicity, malformed state, and 16 real-process crash/recovery boundaries. Production crash controls remain absent; verification uses a separately compiled injected host. Documentation records the supported workflow and explicitly defers scanners, automatic blueprint generation, projections, plugins, plans/history, HTTP, and React UI. Final implementation-head evidence: bun ci unchanged; bun run check passed 447 tests / 2,935 assertions plus build, smoke, compiled workflow, PTY, malformed-state, and crash gates; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 artifacts plus compatible-host execution; GitHub CI passed both jobs; Claude and Codex feedback was independently evaluated and all justified findings were corrected.
+<!-- SECTION:FINAL_SUMMARY:END -->
