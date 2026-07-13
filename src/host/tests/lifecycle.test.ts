@@ -518,6 +518,97 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
+  test("passes frozen cancellation into pending composition and contains late settlement", async () => {
+    const secret = "/private/late-compose-secret";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const settlement of ["reject", "resolve"] as const) {
+        const entered = deferred<void>();
+        const late = deferred<Result<HostComposition>>();
+        const signal = signals();
+        let receivedContext: Parameters<HostBootstrapRegistry["compose"]>[0] | undefined;
+        let starts = 0;
+        const surface: HostSurface = {
+          start: () => {
+            starts += 1;
+            return { completion: Promise.resolve(), stop: async () => {} };
+          },
+        };
+        const running = runHost({
+          context: { workspaceRoot: "/absolute/workspace" },
+          registry: {
+            compose: async (context) => {
+              receivedContext = context;
+              entered.resolve();
+              return late.promise;
+            },
+          },
+          signalSource: signal.source,
+        });
+        await entered.promise;
+        signal.emit("SIGTERM");
+        expect(await running, settlement).toEqual({ signal: "SIGTERM", status: "cancelled" });
+        expect(Object.isFrozen(receivedContext), settlement).toBeTrue();
+        expect(receivedContext?.workspaceRoot, settlement).toBe("/absolute/workspace");
+        expect(receivedContext?.cancellation?.aborted, settlement).toBeTrue();
+        expect(signal.unsubscribes(), settlement).toBe(1);
+        if (settlement === "reject") {
+          late.reject(new Error(secret));
+        } else {
+          late.resolve(success(composition(surface, workspace({ state: "missing" }))));
+        }
+        await Promise.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(starts, settlement).toBe(0);
+      }
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("turns a malformed injected signal into generic cancellation with exact cleanup", async () => {
+    const started = deferred<void>();
+    let listener: ((signal: HostSignal) => void) | undefined;
+    let stops = 0;
+    let unsubscribes = 0;
+    const running = runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => {
+              started.resolve();
+              return {
+                completion: new Promise<void>(() => {}),
+                stop: async () => {
+                  stops += 1;
+                },
+              };
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: {
+        subscribe: (next) => {
+          listener = next;
+          return () => {
+            unsubscribes += 1;
+          };
+        },
+      },
+    });
+    await started.promise;
+    (listener as unknown as (signal: unknown) => void)("SIGHUP");
+
+    expect(await running).toEqual({ status: "cancelled" });
+    expect(stops).toBe(1);
+    expect(unsubscribes).toBe(1);
+  });
+
   test("cancellation during recovery prevents dispatch after recovery releases", async () => {
     const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const entered = deferred<void>();
@@ -548,6 +639,105 @@ describe("host lifecycle", () => {
     recovery.resolve(success({ generation: generation(0), status: "completed" }));
 
     expect(await running).toEqual({ status: "cancelled" });
+    expect(starts).toBe(0);
+  });
+
+  test("returns from pending recovery and contains late rejection or malformed success", async () => {
+    const secret = "/private/late-recovery-secret";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    let getterCalls = 0;
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const settlement of ["reject", "malformed"] as const) {
+        const cancellation = new AbortController();
+        const entered = deferred<void>();
+        const recovery = deferred<Result<WorkspaceRecoveryReport>>();
+        let starts = 0;
+        const malformed = Object.create(null) as Record<string, unknown>;
+        Object.defineProperty(malformed, "ok", {
+          enumerable: true,
+          get: () => {
+            getterCalls += 1;
+            return true;
+          },
+        });
+        Object.defineProperty(malformed, "value", {
+          enumerable: true,
+          value: { generation: 0, status: "completed" },
+        });
+        const running = runHost({
+          context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              {
+                start: () => {
+                  starts += 1;
+                  return { completion: Promise.resolve(), stop: async () => {} };
+                },
+              },
+              workspace({ state: "configured" }, async () => {
+                entered.resolve();
+                return recovery.promise;
+              }),
+            ),
+          ),
+          signalSource: signals().source,
+        });
+        await entered.promise;
+        cancellation.abort();
+        expect(await running, settlement).toEqual({ status: "cancelled" });
+        if (settlement === "reject") {
+          recovery.reject(new Error(secret));
+        } else {
+          recovery.resolve(malformed as never);
+        }
+        await Promise.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(starts, settlement).toBe(0);
+      }
+      expect(getterCalls).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("routes retryable workspace provider status without claiming incompatibility", async () => {
+    const secret = "/private/provider-status-secret";
+    let starts = 0;
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => {
+              starts += 1;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({
+            diagnostic: {
+              code: "workspace-configuration-provider-failure",
+              message: secret,
+            },
+            state: "conflict",
+          }),
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-configuration-provider-failure",
+          message: "Workspace configuration access failed",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(JSON.stringify(outcome)).not.toContain(secret);
     expect(starts).toBe(0);
   });
 

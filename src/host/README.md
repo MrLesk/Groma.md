@@ -45,6 +45,22 @@ finds the compatible marker published by a peer, initialization runs the normal 
 handshake and reports `already-initialized`; missing or conflicting reinspection remains
 fail-closed. A compatible marker is idempotent.
 
+Marker reads cross an exact provider boundary before the host inspects diagnostics or
+bytes. Only the Local Resource Provider's one canonical `resource-missing` failure means
+the marker is absent, and only its canonical bounded `resource-too-large` failure proves
+a configuration conflict. Malformed, accessor-bearing, proxied, extra, or secret-bearing
+lookalikes are retryable `workspace-configuration-provider-failure` state. Successful
+bytes must be an intrinsic, non-proxy `Uint8Array`; the host makes one bounded owned copy
+before comparing the exact marker. A transient provider failure remains publicly visible
+through the existing conflict status shape, but initialize and recover re-run inspection;
+a proven byte conflict remains stable and is never overwritten.
+
+Coordination acquisition Results and failure diagnostics are exact-validated before any
+publication. A retained lease must have the Local Resource Provider's opaque structural
+shape: a frozen, empty, null-prototype, non-proxy object. This proves contract shape, not
+provider or security provenance. A valid retained lease is released deterministically;
+malformed successes cannot stage configuration.
+
 ## Workspace and recovery gate
 
 `WorkspaceAccessCapability.requireWorkspace()` is the only semantic-operation gate
@@ -69,6 +85,10 @@ component's combined inputs, outputs, and actions, while `maxSnapshotStateValues
 the complete snapshot across all components and relationships. Concurrent initialize and
 recover calls reserve one non-rejecting operation tail in invocation order, so
 publication handles, leases, status, and generation are never mutated concurrently.
+Workspace construction requires factory-owned decoder metadata before it calls a provider,
+and the decoder's snapshot depth and value limits must be at least as strict as the local
+workspace limits. Marker and lease validation apply that exact decoder proxy policy in
+addition to the host's intrinsic proxy detector.
 Resource and transaction-provider callbacks must not
 reenter `initialize()` or `recover()` on the same workspace capability. Reentrant calls
 fail immediately with `workspace-transition-reentrant` instead of joining their own
@@ -80,7 +100,13 @@ surface dispatch.
 ## Lifecycle
 
 `runHost` installs the injected signal source and optional cancellation listener before
-composition. Cancellation during composition or recovery prevents surface dispatch.
+composition. The registry receives one frozen host-owned process context that preserves
+the selected workspace root and always carries the host controller's signal. Composition
+and recovery are safely observed and raced against that signal, so cancellation returns
+without waiting for a non-cooperative pending Promise; late resolve, reject, or malformed
+results are contained and never dispatch a surface. Only runtime values exactly equal to
+`SIGINT` or `SIGTERM` appear in a cancelled outcome. Any other injected signal value
+requests generic cancellation without exposing the value.
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners
 are removed on every exit path. The host calls `stop()` exactly once even after natural

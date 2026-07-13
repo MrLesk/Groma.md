@@ -7,6 +7,10 @@ import type {
   WorkspaceInitializationOutcome,
 } from "../application/index.ts";
 import {
+  applicationSnapshotStateDecoderMetadata,
+  type ApplicationSnapshotStateDecoderMetadata,
+} from "../application/index.ts";
+import {
   failure,
   parseGraphGeneration,
   success,
@@ -30,6 +34,7 @@ import {
   copyHostDiagnostics,
   inspectHostDenseArray,
   inspectHostRecord,
+  isHostProxy,
 } from "./runtime-validation.ts";
 
 const locator = workspaceResourceLocator("groma", "groma.yaml");
@@ -38,6 +43,24 @@ export const workspaceConfigurationLocator = locator.value;
 
 export const defaultWorkspaceDocument = "schema: groma/v0.1\n";
 const canonicalBytes = new TextEncoder().encode(defaultWorkspaceDocument);
+const intrinsicObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const intrinsicObjectGetPrototypeOf = Object.getPrototypeOf;
+const intrinsicObjectIsFrozen = Object.isFrozen;
+const intrinsicReflectApply = Reflect.apply;
+const intrinsicReflectOwnKeys = Reflect.ownKeys;
+const intrinsicUint8Array = Uint8Array;
+const intrinsicUint8ArrayPrototype = Uint8Array.prototype;
+const intrinsicTypedArrayPrototype = intrinsicObjectGetPrototypeOf(intrinsicUint8ArrayPrototype);
+const intrinsicTypedArrayByteLength = (() => {
+  const getter = intrinsicObjectGetOwnPropertyDescriptor(
+    intrinsicTypedArrayPrototype,
+    "byteLength",
+  )?.get;
+  if (getter === undefined) {
+    throw new Error("Uint8Array byte length intrinsic is unavailable");
+  }
+  return getter;
+})();
 
 export interface LocalWorkspaceBounds {
   readonly maxConfigurationBytes: number;
@@ -105,6 +128,26 @@ const readyStatus = (): WorkspaceStatus => Object.freeze({ state: "ready" });
 const conflictStatus = (value: Diagnostic): WorkspaceStatus =>
   Object.freeze({ diagnostic: ownedDiagnostic(value), state: "conflict" });
 
+type LocalWorkspaceState =
+  | { readonly state: "configured" | "missing" | "ready" }
+  | { readonly diagnostic: Diagnostic; readonly state: "configuration-conflict" }
+  | { readonly diagnostic: Diagnostic; readonly state: "provider-failure" };
+
+const missingState = (): LocalWorkspaceState => Object.freeze({ state: "missing" });
+const configuredState = (): LocalWorkspaceState => Object.freeze({ state: "configured" });
+const readyState = (): LocalWorkspaceState => Object.freeze({ state: "ready" });
+const configurationConflictState = (): LocalWorkspaceState =>
+  Object.freeze({ diagnostic: configurationConflict(), state: "configuration-conflict" });
+const providerFailureState = (): LocalWorkspaceState =>
+  Object.freeze({ diagnostic: providerFailure(), state: "provider-failure" });
+
+function publicStatus(value: LocalWorkspaceState): WorkspaceStatus {
+  if (value.state === "configuration-conflict" || value.state === "provider-failure") {
+    return conflictStatus(value.diagnostic);
+  }
+  return value;
+}
+
 function initializationProviderFailure(
   diagnostics: readonly Diagnostic[] = Object.freeze([providerFailure()]),
 ): WorkspaceInitializationOutcome {
@@ -129,15 +172,10 @@ function recoverySuccess(generation: GraphGeneration): Result<WorkspaceRecoveryR
   });
 }
 
-function initializationFailure(
-  conflict: Extract<WorkspaceStatus, { readonly state: "conflict" }>,
-): WorkspaceInitializationOutcome {
+function initializationFailure(value: Diagnostic): WorkspaceInitializationOutcome {
   return Object.freeze({
-    diagnostics: ownedDiagnostics([conflict.diagnostic]),
-    status:
-      conflict.diagnostic.code === "workspace-configuration-conflict"
-        ? "conflict"
-        : "provider-failure",
+    diagnostics: ownedDiagnostics([value]),
+    status: value.code === "workspace-configuration-conflict" ? "conflict" : "provider-failure",
   });
 }
 
@@ -156,6 +194,211 @@ function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): Local
     }
   }
   return Object.freeze(selected);
+}
+
+function validateStateDecoder(
+  value: ApplicationSnapshotStateDecoder,
+  bounds: LocalWorkspaceBounds,
+): ApplicationSnapshotStateDecoderMetadata {
+  const metadata = applicationSnapshotStateDecoderMetadata(value);
+  if (
+    metadata === undefined ||
+    !intrinsicObjectIsFrozen(value) ||
+    !intrinsicObjectIsFrozen(metadata) ||
+    !intrinsicObjectIsFrozen(metadata.bounds)
+  ) {
+    throw new TypeError("stateDecoder must be created by createApplicationSnapshotStateDecoder");
+  }
+  for (const name of ["maxSnapshotStateDepth", "maxSnapshotStateValues"] as const) {
+    const decoderLimit = metadata.bounds[name];
+    if (!Number.isSafeInteger(decoderLimit) || decoderLimit <= 0 || decoderLimit > bounds[name]) {
+      throw new RangeError(`stateDecoder ${name} must not exceed the local workspace bound`);
+    }
+  }
+  if (metadata.isProxy !== undefined && typeof metadata.isProxy !== "function") {
+    throw new TypeError("stateDecoder proxy policy is malformed");
+  }
+  return metadata;
+}
+
+function recognizedProxy(
+  value: unknown,
+  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+): boolean {
+  if (isHostProxy(value)) return true;
+  if (decoderProxyPolicy === undefined) return false;
+  try {
+    return decoderProxyPolicy(value) === true;
+  } catch {
+    return true;
+  }
+}
+
+function exactDetails(
+  value: Diagnostic["details"],
+  expected: Readonly<Record<string, string | number | boolean>>,
+): boolean {
+  if (value === undefined) return false;
+  try {
+    const keys = intrinsicReflectOwnKeys(value);
+    const expectedKeys = intrinsicReflectOwnKeys(expected);
+    if (keys.length !== expectedKeys.length) return false;
+    for (const key of expectedKeys) {
+      if (typeof key !== "string") return false;
+      const descriptor = intrinsicObjectGetOwnPropertyDescriptor(value, key);
+      if (
+        descriptor === undefined ||
+        !("value" in descriptor) ||
+        descriptor.value !== expected[key]
+      ) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCanonicalMissingFailure(diagnostics: readonly Diagnostic[]): boolean {
+  const value = diagnostics[0];
+  return (
+    diagnostics.length === 1 &&
+    value?.code === "resource-missing" &&
+    value.message === "Workspace resource does not exist" &&
+    exactDetails(value.details, Object.freeze({ operation: "resolve a resource" }))
+  );
+}
+
+function isCanonicalTooLargeFailure(
+  diagnostics: readonly Diagnostic[],
+  bounds: LocalWorkspaceBounds,
+): boolean {
+  const value = diagnostics[0];
+  return (
+    diagnostics.length === 1 &&
+    value?.code === "resource-too-large" &&
+    value.message === "Workspace resource exceeds the requested byte limit" &&
+    exactDetails(value.details, Object.freeze({ maximum: bounds.maxConfigurationBytes }))
+  );
+}
+
+function copyConfigurationBytes(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+): Result<Uint8Array> {
+  if (typeof value !== "object" || value === null || recognizedProxy(value, decoderProxyPolicy)) {
+    return failure(providerFailure());
+  }
+  try {
+    if (intrinsicObjectGetPrototypeOf(value) !== intrinsicUint8ArrayPrototype) {
+      return failure(providerFailure());
+    }
+    const byteLength = intrinsicReflectApply(intrinsicTypedArrayByteLength, value, []) as number;
+    if (
+      !Number.isSafeInteger(byteLength) ||
+      byteLength < 0 ||
+      byteLength > bounds.maxConfigurationBytes
+    ) {
+      return failure(providerFailure());
+    }
+    const copied = new intrinsicUint8Array(byteLength);
+    for (let index = 0; index < byteLength; index += 1) {
+      copied[index] = (value as Uint8Array)[index]!;
+    }
+    return success(copied);
+  } catch {
+    return failure(providerFailure());
+  }
+}
+
+function validatedConfigurationRead(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+): LocalWorkspaceState {
+  const result = inspectHostRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-workspace-provider-result",
+    "Workspace configuration read result",
+  );
+  if (!result.ok) return providerFailureState();
+  if (result.value.ok === false) {
+    const diagnostics = copyHostDiagnostics(
+      result.value.diagnostics,
+      bounds.maxProviderDiagnostics,
+      "invalid-workspace-provider-result",
+    );
+    if (!diagnostics.ok) return providerFailureState();
+    if (isCanonicalMissingFailure(diagnostics.value)) return missingState();
+    return isCanonicalTooLargeFailure(diagnostics.value, bounds)
+      ? configurationConflictState()
+      : providerFailureState();
+  }
+  if (result.value.ok !== true) return providerFailureState();
+  const contents = inspectHostRecord(
+    result.value.value,
+    [["bytes"]],
+    "invalid-workspace-provider-result",
+    "Workspace configuration read success",
+  );
+  if (!contents.ok) return providerFailureState();
+  const bytes = copyConfigurationBytes(contents.value.bytes, bounds, decoderProxyPolicy);
+  if (!bytes.ok) return providerFailureState();
+  return sameBytes(bytes.value) ? configuredState() : configurationConflictState();
+}
+
+type ValidatedCoordinationAcquisition =
+  | { readonly lease: LocalCoordinationLease; readonly state: "acquired" }
+  | { readonly state: "failed" };
+
+function validatedCoordinationAcquisition(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+): Result<ValidatedCoordinationAcquisition> {
+  const result = inspectHostRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-workspace-provider-result",
+    "Workspace coordination acquisition result",
+  );
+  if (!result.ok) return result;
+  if (result.value.ok === false) {
+    const diagnostics = copyHostDiagnostics(
+      result.value.diagnostics,
+      bounds.maxProviderDiagnostics,
+      "invalid-workspace-provider-result",
+    );
+    return diagnostics.ok && diagnostics.value.length > 0
+      ? success(Object.freeze({ state: "failed" }))
+      : failure(providerFailure());
+  }
+  if (result.value.ok !== true) return failure(providerFailure());
+  const lease = result.value.value;
+  if (typeof lease !== "object" || lease === null || recognizedProxy(lease, decoderProxyPolicy)) {
+    return failure(providerFailure());
+  }
+  try {
+    if (
+      !intrinsicObjectIsFrozen(lease) ||
+      intrinsicObjectGetPrototypeOf(lease) !== null ||
+      intrinsicReflectOwnKeys(lease).length !== 0
+    ) {
+      return failure(providerFailure());
+    }
+  } catch {
+    return failure(providerFailure());
+  }
+  return success(Object.freeze({ lease: lease as LocalCoordinationLease, state: "acquired" }));
 }
 
 type ValidatedCommitState = "committed" | "committed-indeterminate" | "not-committed";
@@ -280,7 +523,9 @@ export async function createLocalWorkspaceCapability(
   options: LocalWorkspaceCapabilityOptions,
 ): Promise<WorkspaceAccessCapability> {
   const bounds = validateBounds(options.bounds);
-  let current: WorkspaceStatus;
+  const decoderMetadata = validateStateDecoder(options.stateDecoder, bounds);
+  const decoderProxyPolicy = decoderMetadata.isProxy;
+  let current: LocalWorkspaceState;
   let configurationPublishedBySession = false;
   let pendingPublication:
     { action: "commit" | "discard"; readonly handle: StagedReplacementHandle } | undefined;
@@ -308,29 +553,15 @@ export async function createLocalWorkspaceCapability(
     }
   };
 
-  const inspect = async (): Promise<WorkspaceStatus> => {
+  const inspect = async (): Promise<LocalWorkspaceState> => {
     try {
       const read = await options.resources.read({
         locator: workspaceConfigurationLocator,
         maxBytes: bounds.maxConfigurationBytes,
       });
-      if (typeof read !== "object" || read === null || typeof read.ok !== "boolean") {
-        return conflictStatus(providerFailure());
-      }
-      if (!read.ok) {
-        if (read.diagnostics[0]?.code === "resource-missing") {
-          return missingStatus();
-        }
-        return read.diagnostics[0]?.code === "resource-too-large"
-          ? conflictStatus(configurationConflict())
-          : conflictStatus(providerFailure());
-      }
-      if (!(read.value.bytes instanceof Uint8Array) || !sameBytes(read.value.bytes)) {
-        return conflictStatus(configurationConflict());
-      }
-      return configuredStatus();
+      return validatedConfigurationRead(read, bounds, decoderProxyPolicy);
     } catch {
-      return conflictStatus(providerFailure());
+      return providerFailureState();
     }
   };
 
@@ -386,12 +617,16 @@ export async function createLocalWorkspaceCapability(
     if (!settled.ok) return recoveryFailure(...settled.diagnostics);
     const released = await releaseRetainedInitializationLease();
     if (!released.ok) return recoveryFailure(...released.diagnostics);
+    if (current.state === "provider-failure") current = await inspect();
+    if (current.state === "provider-failure") {
+      return recoveryFailure(current.diagnostic);
+    }
     if (current.state === "missing") {
       return recoveryFailure(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
       );
     }
-    if (current.state === "conflict") return recoveryFailure(current.diagnostic);
+    if (current.state === "configuration-conflict") return recoveryFailure(current.diagnostic);
     if (current.state === "ready") {
       return recoverySuccess(recoveredGeneration);
     }
@@ -407,7 +642,7 @@ export async function createLocalWorkspaceCapability(
         );
       }
       recoveredGeneration = snapshot.value.generation;
-      current = readyStatus();
+      current = readyState();
       return recoverySuccess(recoveredGeneration);
     } catch {
       return recoveryFailure(
@@ -417,7 +652,9 @@ export async function createLocalWorkspaceCapability(
   };
 
   const recoverDiscardedPublication = async (): Promise<WorkspaceInitializationOutcome> => {
-    if (current.state === "conflict") return initializationFailure(current);
+    if (current.state === "configuration-conflict" || current.state === "provider-failure") {
+      return initializationFailure(current.diagnostic);
+    }
     if (current.state !== "configured") return initializationProviderFailure();
     const recovered = await recoverUnlocked();
     return recovered.ok
@@ -433,8 +670,9 @@ export async function createLocalWorkspaceCapability(
     if (!retainedRelease.ok) {
       return initializationProviderFailure(retainedRelease.diagnostics);
     }
-    if (current.state === "conflict") {
-      return initializationFailure(current);
+    if (current.state === "provider-failure") current = await inspect();
+    if (current.state === "provider-failure" || current.state === "configuration-conflict") {
+      return initializationFailure(current.diagnostic);
     }
     if (current.state === "ready") {
       return initializationSuccess(recoveredGeneration, "already-initialized");
@@ -442,14 +680,18 @@ export async function createLocalWorkspaceCapability(
 
     if (current.state === "missing") {
       try {
-        const acquired = await options.resources.acquireCoordination({
-          context: "local-machine",
-          locator: workspaceConfigurationLocator,
-        });
-        if (!acquired.ok) {
+        const acquired = validatedCoordinationAcquisition(
+          await options.resources.acquireCoordination({
+            context: "local-machine",
+            locator: workspaceConfigurationLocator,
+          }),
+          bounds,
+          decoderProxyPolicy,
+        );
+        if (!acquired.ok || acquired.value.state !== "acquired") {
           return initializationProviderFailure();
         }
-        retainedInitializationLease = acquired.value;
+        retainedInitializationLease = acquired.value.lease;
         current = await inspect();
       } catch {
         return initializationProviderFailure();
@@ -483,7 +725,9 @@ export async function createLocalWorkspaceCapability(
         if (!released.ok) {
           return initializationProviderFailure(released.diagnostics);
         }
-        if (current.state === "conflict") return initializationFailure(current);
+        if (current.state === "configuration-conflict") {
+          return initializationFailure(current.diagnostic);
+        }
         if (current.state !== "configured") {
           try {
             current = await inspect();
@@ -512,7 +756,9 @@ export async function createLocalWorkspaceCapability(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
       );
     }
-    if (current.state === "conflict") return hostFailure(current.diagnostic);
+    if (current.state === "configuration-conflict" || current.state === "provider-failure") {
+      return hostFailure(current.diagnostic);
+    }
     return hostFailure(
       diagnostic(
         "workspace-recovery-required",
@@ -567,5 +813,10 @@ export async function createLocalWorkspaceCapability(
       () => initializationProviderFailure([transitionReentrant()]),
     );
 
-  return Object.freeze({ initialize, recover, requireWorkspace, status: () => current });
+  return Object.freeze({
+    initialize,
+    recover,
+    requireWorkspace,
+    status: () => publicStatus(current),
+  });
 }

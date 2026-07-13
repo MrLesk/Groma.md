@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 07:26'
+updated_date: '2026-07-13 07:48'
 labels:
   - host
   - bootstrap
@@ -49,7 +49,8 @@ Build the official 1A composition root for the compiled local executable. It sel
 6. Implement cancellation and process-signal coordination around an explicit running-surface session. Stop exactly once on normal completion, cancellation, signal, or failure; await deterministic cleanup; unsubscribe handlers in every exit path.
 7. Add host-boundary tests for missing, initialized, idempotent, conflicting and malformed workspaces; no-workspace gating; initialization promotion; strict recovery-before-dispatch; recovery failure; explicit capability composition; normal/signal/cancellation shutdown; coordination release; and forbidden HTTP/React/plugin-loading behavior.
 8. Document the 1A configuration, composition, lifecycle, and 1B replacement seam; run focused/full checks and four targets, independent specification and quality reviews, then publish a ready task-linked PR and complete Claude, Codex, and CI gates before finalization and merge.
-9. Close final PR-review capability-output containment gaps by applying the validated decoder proxy policy before reflection across transaction, initialization, snapshot, query, and mapper results; contain invocation and mapping faults behind stable secret-free application diagnostics; add zero-trap/no-secret regressions; and rerun all local and external review gates.
+9. Close application capability-output, query-authority, payload-binding, snapshot-proxy, and safely observable Promise containment gaps with owned bounded values, immutable Core query authority, exact semantic binding, and deterministic regressions.
+10. Close host/workspace review gaps by propagating cancellation through composition and recovery, validating signal names, preserving retryable provider failures separately from confirmed conflicts, validating missing-read evidence, aligning decoder recovery bounds, validating leases, copying marker bytes, and rerunning all local and external gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -112,4 +113,8 @@ Independent query-cursor correction: Application operations now treat the inject
 Pre-load prototype-mutation correction plan: capture BoundedQueryContracts prepare/page/exact inside Core query module immediately after class initialization; export narrow direct-module invocation functions that Reflect.apply the captured methods; remove application prototype reads; and prove in an isolated process that poisoning the public prototype before dynamic application import cannot forge the private-brand probe, redirect query calls, or leak a cursor. Preserve the existing public Core surface and normal query tests, then rerun focused, full, four-target, and direct application/host compilation checks.
 
 Pre-load query-authority correction: Core query now captures genuine BoundedQueryContracts prepare/page/exact plus Reflect.apply immediately after class initialization and exposes only narrow direct-module invokers. Application uses those immutable ESM bindings for brand probing and runtime queries, so poisoning the public prototype before application import cannot redirect calls or leak a cursor. Core index explicitly re-exports exactly the prior query class/type surface and omits the new internal invokers. An isolated Bun child imports Core, poisons all three prototype methods, dynamically imports Application, proves a fake receiver is rejected, then completes safe two-page pagination and exact read with zero override calls and no secret. Validation: focused application+host+isolated regression 92 tests / 805 assertions; full bun run check 383 tests / 2409 assertions; all four standalone targets; direct application and host compilation on all four targets; git diff --check.
+
+A thread-aware audit after final-head Codex review found the remaining host/workspace findings share one boundary: cancellation and retryable provider state were not preserved end to end, while marker reads, coordination acquisition, and decoder composition were not proven before state transitions. Application/query/payload/Promise cluster is complete and independently passed specification plus quality review at 773ea1d. The next sequential cluster addresses only these remaining host/workspace findings before a final all-thread audit.
+
+Host/workspace review cluster implemented: composition and recovery now race one host-owned cancellation signal with safely observed late settlements; signal names are runtime-validated; retryable provider inspection is distinct from proven configuration conflict; marker reads/bytes, decoder metadata and bounds, and coordination acquisition/lease shape fail closed before state publication. Boundary regressions cover malformed diagnostics and bytes, transient retry, stable conflicts, decoder provenance/bounds, lease variants, pending compose/recovery cancellation, malformed signals, and provider-failure routing. Validation: focused host 57 tests / 468 assertions; full bun run check 393 tests / 2,505 assertions; four packaged targets; direct application+host compilation 8/8; git diff --check.
 <!-- SECTION:NOTES:END -->

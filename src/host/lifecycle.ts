@@ -94,6 +94,18 @@ type ValidatedRecoveryOutcome =
   | { readonly state: "failed" }
   | { readonly report: WorkspaceRecoveryReport; readonly state: "completed" };
 
+type ObservedBootstrapOutcome =
+  | { readonly state: "bootstrap-failed" }
+  | { readonly state: "cancelled" }
+  | { readonly state: "invalid-composition" }
+  | { readonly composition: HostComposition; readonly state: "composed" };
+
+type ObservedRecoveryOutcome =
+  | { readonly state: "cancelled" }
+  | { readonly state: "malformed" }
+  | { readonly state: "rejected" }
+  | { readonly recovered: ValidatedRecoveryOutcome; readonly state: "validated" };
+
 function validatedRecoveryOutcome(value: unknown): Result<ValidatedRecoveryOutcome> {
   const result = inspectHostRecord(
     value,
@@ -166,12 +178,19 @@ function canonicalStatus(value: unknown): Result<WorkspaceStatus> {
       "invalid-host-workspace-status",
     );
     if (!sourceDiagnostic.ok) return sourceDiagnostic;
+    const providerFailure =
+      sourceDiagnostic.value[0]?.code === "workspace-configuration-provider-failure";
     return success(
       Object.freeze({
-        diagnostic: diagnostic(
-          "workspace-configuration-conflict",
-          "Workspace configuration is incompatible with this host",
-        ),
+        diagnostic: providerFailure
+          ? diagnostic(
+              "workspace-configuration-provider-failure",
+              "Workspace configuration access failed",
+            )
+          : diagnostic(
+              "workspace-configuration-conflict",
+              "Workspace configuration is incompatible with this host",
+            ),
         state: "conflict",
       }),
     );
@@ -292,9 +311,7 @@ function canonicalComposition(value: unknown): Result<HostComposition> {
   );
 }
 
-function canonicalRegistry(
-  value: unknown,
-): Result<(context: HostProcessContext) => Promise<unknown>> {
+function canonicalRegistry(value: unknown): Result<(context: HostProcessContext) => unknown> {
   const registry = inspectHostRecord(
     value,
     [["compose"]],
@@ -308,7 +325,7 @@ function canonicalRegistry(
   }
   const source = value as object;
   const compose = registry.value.compose;
-  return success((context) => Promise.resolve(Reflect.apply(compose, source, [context])));
+  return success((context) => Reflect.apply(compose, source, [context]));
 }
 
 function canonicalSignalSource(
@@ -441,12 +458,16 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   const cancellation = new Promise<void>((resolve) => {
     resolveCancellation = resolve;
   });
-  const requestCancellation = (signal?: HostSignal) => {
+  const requestCancellation = (signal?: unknown) => {
     if (hostCancellation.signal.aborted) return;
-    cancellationSignal = signal;
+    cancellationSignal = signal === "SIGINT" || signal === "SIGTERM" ? signal : undefined;
     hostCancellation.abort();
     resolveCancellation();
   };
+  const hostContext: HostProcessContext = Object.freeze({
+    cancellation: hostCancellation.signal,
+    workspaceRoot: options.context.workspaceRoot,
+  });
   const onAbort = () => requestCancellation();
   options.context.cancellation?.addEventListener("abort", onAbort, { once: true });
   if (options.context.cancellation?.aborted) requestCancellation();
@@ -480,24 +501,47 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
       } else {
         let rawComposition: unknown;
         try {
-          rawComposition = await registry.value(options.context);
+          rawComposition = registry.value(hostContext);
         } catch {
           rawComposition = undefined;
         }
-        const result = inspectHostRecord(
+        const composed = observeNativePromise<ObservedBootstrapOutcome>(
           rawComposition,
-          [
-            ["ok", "value"],
-            ["diagnostics", "ok"],
-          ],
-          "invalid-host-bootstrap-result",
-          "Host bootstrap result",
+          (value) => {
+            if (hostCancellation.signal.aborted) return { state: "cancelled" as const };
+            const result = inspectHostRecord(
+              value,
+              [
+                ["ok", "value"],
+                ["diagnostics", "ok"],
+              ],
+              "invalid-host-bootstrap-result",
+              "Host bootstrap result",
+            );
+            if (!result.ok || result.value.ok !== true) {
+              return { state: "bootstrap-failed" as const };
+            }
+            const composition = canonicalComposition(result.value.value);
+            return composition.ok
+              ? ({ composition: composition.value, state: "composed" } as const)
+              : ({ state: "invalid-composition" } as const);
+          },
+          () => ({ state: "bootstrap-failed" as const }),
         );
-        if (!result.ok || result.value.ok !== true) {
-          outcome = startupFailure("host-bootstrap-failed", "Host bootstrap failed");
+        if (composed.status !== "observed") {
+          outcome = hostCancellation.signal.aborted
+            ? cancelled(cancellationSignal)
+            : startupFailure("host-bootstrap-failed", "Host bootstrap failed");
         } else {
-          const composition = canonicalComposition(result.value.value);
-          if (!composition.ok) {
+          const first = await Promise.race([
+            composed.promise,
+            cancellation.then(() => ({ state: "cancelled" as const })),
+          ]);
+          if (first.state === "cancelled") {
+            outcome = cancelled(cancellationSignal);
+          } else if (first.state === "bootstrap-failed") {
+            outcome = startupFailure("host-bootstrap-failed", "Host bootstrap failed");
+          } else if (first.state === "invalid-composition") {
             outcome = startupFailure(
               "invalid-host-composition",
               "Host bootstrap returned malformed capabilities",
@@ -505,7 +549,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
           } else if (hostCancellation.signal.aborted) {
             outcome = cancelled(cancellationSignal);
           } else {
-            const rawStatus = composition.value.workspace.status();
+            const composition = first.composition;
+            const rawStatus = composition.workspace.status();
             const status = canonicalStatus(rawStatus);
             let recovery: "completed" | "not-required" | undefined;
             if (!status.ok) {
@@ -516,23 +561,68 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             } else if (status.value.state === "missing") {
               recovery = "not-required";
             } else if (status.value.state === "conflict") {
-              outcome = startupFailure(
-                "workspace-configuration-conflict",
-                "Workspace configuration is incompatible with this host",
-              );
+              outcome =
+                status.value.diagnostic.code === "workspace-configuration-provider-failure"
+                  ? startupFailure(
+                      "workspace-configuration-provider-failure",
+                      "Workspace configuration access failed",
+                    )
+                  : startupFailure(
+                      "workspace-configuration-conflict",
+                      "Workspace configuration is incompatible with this host",
+                    );
+            } else if (hostCancellation.signal.aborted) {
+              outcome = cancelled(cancellationSignal);
             } else {
-              const recovered = validatedRecoveryOutcome(
-                await composition.value.workspace.recover(),
+              let rawRecovery: unknown;
+              try {
+                rawRecovery = composition.workspace.recover();
+              } catch {
+                rawRecovery = undefined;
+              }
+              const observedRecovery = observeNativePromise<ObservedRecoveryOutcome>(
+                rawRecovery,
+                (value) => {
+                  if (hostCancellation.signal.aborted) return { state: "cancelled" as const };
+                  const recovered = validatedRecoveryOutcome(value);
+                  return recovered.ok
+                    ? ({ recovered: recovered.value, state: "validated" } as const)
+                    : ({ state: "malformed" } as const);
+                },
+                () => ({ state: "rejected" as const }),
               );
-              if (!recovered.ok) {
-                outcome = startupFailure(
-                  "invalid-host-recovery-result",
-                  "Workspace recovery capability returned a malformed result",
-                );
-              } else if (recovered.value.state === "failed") {
-                outcome = startupFailure("workspace-recovery-failed", "Workspace recovery failed");
+              if (observedRecovery.status !== "observed") {
+                outcome = hostCancellation.signal.aborted
+                  ? cancelled(cancellationSignal)
+                  : startupFailure(
+                      "invalid-host-recovery-result",
+                      "Workspace recovery capability returned a malformed result",
+                    );
               } else {
-                recovery = "completed";
+                const recovered = await Promise.race([
+                  observedRecovery.promise,
+                  cancellation.then(() => ({ state: "cancelled" as const })),
+                ]);
+                if (recovered.state === "cancelled") {
+                  outcome = cancelled(cancellationSignal);
+                } else if (recovered.state === "malformed") {
+                  outcome = startupFailure(
+                    "invalid-host-recovery-result",
+                    "Workspace recovery capability returned a malformed result",
+                  );
+                } else if (recovered.state === "rejected") {
+                  outcome = startupFailure(
+                    "workspace-recovery-failed",
+                    "Workspace recovery failed",
+                  );
+                } else if (recovered.recovered.state === "failed") {
+                  outcome = startupFailure(
+                    "workspace-recovery-failed",
+                    "Workspace recovery failed",
+                  );
+                } else {
+                  recovery = "completed";
+                }
               }
             }
 
@@ -543,10 +633,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                 const context = Object.freeze({
                   cancellation: hostCancellation.signal,
                   recovery: Object.freeze({ status: recovery }),
-                  workspace: composition.value.workspace,
+                  workspace: composition.workspace,
                 });
                 const start = Promise.resolve()
-                  .then(() => composition.value.surface.start(context))
+                  .then(() => composition.surface.start(context))
                   .then(
                     (value) => {
                       const validated = canonicalSession(value);

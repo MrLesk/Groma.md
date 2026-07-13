@@ -285,6 +285,497 @@ describe("local workspace capability", () => {
     }
   });
 
+  test("treats malformed and secret-bearing read failures as retryable provider failures", async () => {
+    const secret = "/private/workspace-read-secret";
+    let getterCalls = 0;
+    let proxyTraps = 0;
+    const accessorResult = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(accessorResult, "diagnostics", {
+      enumerable: true,
+      value: [{ code: "resource-missing", message: "Workspace resource does not exist" }],
+    });
+    Object.defineProperty(accessorResult, "ok", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return false;
+      },
+    });
+    const sparseDiagnostics = new Array(2);
+    sparseDiagnostics[0] = {
+      code: "resource-missing",
+      message: "Workspace resource does not exist",
+    };
+    const proxiedDiagnostics = new Proxy(
+      [
+        {
+          code: "resource-missing",
+          details: { operation: "resolve a resource" },
+          message: "Workspace resource does not exist",
+        },
+      ],
+      {
+        get: (target, property, receiver) => {
+          proxyTraps += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    class ProviderBytes extends Uint8Array {}
+    const values: Array<{ readonly name: string; readonly value: unknown }> = [
+      { name: "null", value: null },
+      { name: "accessor result", value: accessorResult },
+      {
+        name: "secret missing lookalike",
+        value: {
+          diagnostics: [
+            {
+              code: "resource-missing",
+              details: { operation: "resolve a resource" },
+              message: secret,
+            },
+          ],
+          ok: false,
+        },
+      },
+      {
+        name: "extra missing diagnostic",
+        value: {
+          diagnostics: [
+            {
+              code: "resource-missing",
+              details: { operation: "resolve a resource" },
+              message: "Workspace resource does not exist",
+            },
+            { code: "private-provider-secret", message: secret },
+          ],
+          ok: false,
+        },
+      },
+      {
+        name: "secret too-large lookalike",
+        value: {
+          diagnostics: [
+            {
+              code: "resource-too-large",
+              details: { maximum: 4_096 },
+              message: secret,
+            },
+          ],
+          ok: false,
+        },
+      },
+      { name: "sparse diagnostics", value: { diagnostics: sparseDiagnostics, ok: false } },
+      { name: "proxied diagnostics", value: { diagnostics: proxiedDiagnostics, ok: false } },
+      {
+        name: "extra success field",
+        value: {
+          ok: true,
+          value: { bytes: new TextEncoder().encode(defaultWorkspaceDocument), extra: true },
+        },
+      },
+      {
+        name: "subclass bytes",
+        value: {
+          ok: true,
+          value: { bytes: new ProviderBytes(new TextEncoder().encode(defaultWorkspaceDocument)) },
+        },
+      },
+    ];
+
+    for (const entry of values) {
+      const roots = await temporaryWorkspace();
+      const base = await createLocalResourceProvider(roots);
+      const resources = new Proxy(base, {
+        get(target, property) {
+          if (property === "read") return async () => entry.value as never;
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        resources,
+        transactionProvider: provider(emptySnapshot),
+      });
+
+      expect(workspace.status(), entry.name).toMatchObject({
+        diagnostic: { code: "workspace-configuration-provider-failure" },
+        state: "conflict",
+      });
+      expect(workspace.requireWorkspace(), entry.name).toMatchObject({
+        diagnostics: [{ code: "workspace-configuration-provider-failure" }],
+        ok: false,
+      });
+      expect(JSON.stringify(workspace.status()), entry.name).not.toContain(secret);
+    }
+    expect(getterCalls).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  test("rejects proxy marker bytes without traps and applies the decoder proxy policy", async () => {
+    const canonical = new TextEncoder().encode(defaultWorkspaceDocument);
+    let proxyTraps = 0;
+    const proxiedBytes = new Proxy(canonical, {
+      get: (target, property, receiver) => {
+        proxyTraps += 1;
+        return Reflect.get(target, property, receiver);
+      },
+      getPrototypeOf: (target) => {
+        proxyTraps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+    });
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      resources: new Proxy(base, {
+        get(target, property) {
+          if (property === "read")
+            return async () => ({ ok: true, value: { bytes: proxiedBytes } });
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+      transactionProvider: provider(emptySnapshot),
+    });
+    expect(workspace.status()).toMatchObject({
+      diagnostic: { code: "workspace-configuration-provider-failure" },
+      state: "conflict",
+    });
+    expect(proxyTraps).toBe(0);
+
+    const policyBytes = new TextEncoder().encode(defaultWorkspaceDocument);
+    let policyCalls = 0;
+    const policyDecoder = createApplicationSnapshotStateDecoder({
+      bounds: {
+        maxComponents: 100_000,
+        maxDiagnosticCount: 100,
+        maxEmbeddedItems: 100_000,
+        maxRelationships: 100_000,
+        maxSnapshotStateDepth: 30,
+        maxSnapshotStateValues: 100_000,
+      },
+      graph: new GraphKernel({
+        idSource: {
+          nextEntityId: () => "ent_00000000000000000000000000000001",
+          nextRelationId: () => "rel_00000000000000000000000000000001",
+        },
+        maxPageSize: 100,
+      }),
+      isProxy: (value) => {
+        policyCalls += 1;
+        return value === policyBytes;
+      },
+      model: stateModel,
+    });
+    const policyRoots = await temporaryWorkspace();
+    const policyBase = await createLocalResourceProvider(policyRoots);
+    const policyWorkspace = await createWorkspaceCapability({
+      operations,
+      resources: new Proxy(policyBase, {
+        get(target, property) {
+          if (property === "read") return async () => ({ ok: true, value: { bytes: policyBytes } });
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+      stateDecoder: policyDecoder,
+      transactionProvider: provider(emptySnapshot),
+    });
+    expect(policyWorkspace.status()).toMatchObject({
+      diagnostic: { code: "workspace-configuration-provider-failure" },
+      state: "conflict",
+    });
+    expect(policyCalls).toBeGreaterThan(0);
+  });
+
+  test("retries transient provider inspection while preserving proven conflicts", async () => {
+    for (const transition of ["initialize", "recover"] as const) {
+      const roots = await temporaryWorkspace();
+      if (transition === "recover") {
+        await Bun.write(
+          path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+          defaultWorkspaceDocument,
+        );
+      }
+      const base = await createLocalResourceProvider(roots);
+      let reads = 0;
+      const resources = new Proxy(base, {
+        get(target, property) {
+          if (property === "read") {
+            return async (...args: Parameters<LocalResourceProvider["read"]>) => {
+              reads += 1;
+              if (reads === 1) {
+                return {
+                  diagnostics: [{ code: "private-provider-failure", message: roots.workspaceRoot }],
+                  ok: false,
+                };
+              }
+              return target.read(...args);
+            };
+          }
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        resources,
+        transactionProvider: provider(emptySnapshot),
+      });
+      expect(workspace.status(), transition).toMatchObject({
+        diagnostic: { code: "workspace-configuration-provider-failure" },
+        state: "conflict",
+      });
+      const outcome = await workspace[transition]();
+      expect(outcome, transition).toMatchObject(
+        transition === "initialize" ? { status: "initialized" } : { ok: true },
+      );
+      expect(workspace.status(), transition).toEqual({ state: "ready" });
+      expect(reads, transition).toBeGreaterThan(1);
+    }
+
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      "schema: incompatible/v9\n",
+    );
+    const base = await createLocalResourceProvider(roots);
+    let conflictReads = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "read") {
+          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
+            conflictReads += 1;
+            if (conflictReads > 1) throw new Error("proven conflicts must not be reinspected");
+            return target.read(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const conflict = await createLocalWorkspaceCapability({
+      operations,
+      resources,
+      transactionProvider: provider(emptySnapshot),
+    });
+    expect(await conflict.initialize()).toMatchObject({ status: "conflict" });
+    expect(await conflict.recover()).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-conflict" }],
+      ok: false,
+    });
+    expect(conflictReads).toBe(1);
+  });
+
+  test("proves decoder recovery bounds before provider inspection", async () => {
+    for (const bounds of [
+      { maxSnapshotStateDepth: 10 },
+      { maxSnapshotStateValues: 100 },
+    ] as const) {
+      const roots = await temporaryWorkspace();
+      const base = await createLocalResourceProvider(roots);
+      let reads = 0;
+      const resources = new Proxy(base, {
+        get(target, property) {
+          if (property === "read") {
+            return async (...args: Parameters<LocalResourceProvider["read"]>) => {
+              reads += 1;
+              return target.read(...args);
+            };
+          }
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await expect(
+        createWorkspaceCapability({
+          bounds,
+          operations,
+          resources,
+          stateDecoder,
+          transactionProvider: provider(emptySnapshot),
+        }),
+      ).rejects.toThrow("must not exceed the local workspace bound");
+      expect(reads).toBe(0);
+    }
+
+    const forgedRoots = await temporaryWorkspace();
+    const forgedBase = await createLocalResourceProvider(forgedRoots);
+    let forgedReads = 0;
+    const forgedResources = new Proxy(forgedBase, {
+      get(target, property) {
+        if (property === "read") {
+          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
+            forgedReads += 1;
+            return target.read(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    await expect(
+      createWorkspaceCapability({
+        operations,
+        resources: forgedResources,
+        stateDecoder: Object.freeze({}) as never,
+        transactionProvider: provider(emptySnapshot),
+      }),
+    ).rejects.toThrow("must be created by createApplicationSnapshotStateDecoder");
+    expect(forgedReads).toBe(0);
+
+    const tighterDecoder = createApplicationSnapshotStateDecoder({
+      bounds: {
+        maxComponents: 10,
+        maxDiagnosticCount: 10,
+        maxEmbeddedItems: 10,
+        maxRelationships: 10,
+        maxSnapshotStateDepth: 10,
+        maxSnapshotStateValues: 50,
+      },
+      graph: new GraphKernel({
+        idSource: {
+          nextEntityId: () => "ent_00000000000000000000000000000001",
+          nextRelationId: () => "rel_00000000000000000000000000000001",
+        },
+        maxPageSize: 10,
+      }),
+      isProxy: isHostProxy,
+      model: stateModel,
+    });
+    const compatibleRoots = await temporaryWorkspace();
+    const compatible = await createWorkspaceCapability({
+      bounds: { maxSnapshotStateDepth: 20, maxSnapshotStateValues: 100 },
+      operations,
+      resources: await createLocalResourceProvider(compatibleRoots),
+      stateDecoder: tighterDecoder,
+      transactionProvider: provider(emptySnapshot),
+    });
+    expect(compatible.status()).toEqual({ state: "missing" });
+  });
+
+  test("rejects malformed coordination leases before publication without invoking traps", async () => {
+    let getterCalls = 0;
+    let proxyTraps = 0;
+    const mutableNullPrototype = Object.create(null);
+    const accessorLease = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(accessorLease, "secret", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return "private";
+      },
+    });
+    Object.freeze(accessorLease);
+    const ownFieldLease = Object.create(null) as Record<string, unknown>;
+    ownFieldLease.extra = true;
+    Object.freeze(ownFieldLease);
+    const proxyLease = new Proxy(Object.freeze(Object.create(null)), {
+      getPrototypeOf: (target) => {
+        proxyTraps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys: (target) => {
+        proxyTraps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const proxyFailureDiagnostics = new Proxy(
+      [{ code: "private-coordination-failure", message: "/private/coordination-secret" }],
+      {
+        get: (target, property, receiver) => {
+          proxyTraps += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    const variants: Array<{ readonly name: string; readonly result: unknown }> = [
+      {
+        name: "proxied failure diagnostics",
+        result: { diagnostics: proxyFailureDiagnostics, ok: false },
+      },
+      { name: "missing value", result: { ok: true } },
+      { name: "undefined value", result: { ok: true, value: undefined } },
+      { name: "mutable null prototype", result: { ok: true, value: mutableNullPrototype } },
+      { name: "ordinary prototype", result: { ok: true, value: Object.freeze({}) } },
+      { name: "own field", result: { ok: true, value: ownFieldLease } },
+      { name: "accessor", result: { ok: true, value: accessorLease } },
+      { name: "proxy", result: { ok: true, value: proxyLease } },
+    ];
+
+    for (const variant of variants) {
+      const roots = await temporaryWorkspace();
+      const base = await createLocalResourceProvider(roots);
+      let releases = 0;
+      let stages = 0;
+      const resources = new Proxy(base, {
+        get(target, property) {
+          if (property === "acquireCoordination") return async () => variant.result as never;
+          if (property === "releaseCoordination") {
+            return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+              releases += 1;
+              return target.releaseCoordination(...args);
+            };
+          }
+          if (property === "stageReplacement") {
+            return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+              stages += 1;
+              return target.stageReplacement(...args);
+            };
+          }
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        resources,
+        transactionProvider: provider(emptySnapshot),
+      });
+      expect(await workspace.initialize(), variant.name).toMatchObject({
+        status: "provider-failure",
+      });
+      expect({ releases, stages }, variant.name).toEqual({ releases: 0, stages: 0 });
+    }
+    expect(getterCalls).toBe(0);
+    expect(proxyTraps).toBe(0);
+  });
+
+  test("retains and releases one structurally valid provider lease", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let releases = 0;
+    let stages = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "releaseCoordination") {
+          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+            releases += 1;
+            return target.releaseCoordination(...args);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      resources,
+      transactionProvider: provider(emptySnapshot),
+    });
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect({ releases, stages }).toEqual({ releases: 1, stages: 1 });
+  });
+
   test("reports recovery failure and can retry without rewriting compatible configuration", async () => {
     const roots = await temporaryWorkspace();
     await Bun.write(
