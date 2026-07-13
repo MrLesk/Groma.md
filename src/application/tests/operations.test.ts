@@ -1818,6 +1818,110 @@ describe("application component reads", () => {
     });
   });
 
+  test("shares one structural preflight budget across component item extensions", async () => {
+    const maximumValues = 40;
+    const componentValueCount = 4;
+    const itemValueCount = (maximumValues - componentValueCount) / 2;
+    const hostileOwners = new Map<object, number>();
+    const nestedExtension = (length: number, owner?: number) => {
+      let value: Record<string, unknown> = {};
+      if (owner !== undefined) hostileOwners.set(value, owner);
+      for (let index = 1; index < length; index += 1) {
+        value = { child: value };
+        if (owner !== undefined) hostileOwners.set(value, owner);
+      }
+      return value;
+    };
+    const componentExtension = nestedExtension(componentValueCount, 0);
+    const hostileExtensions = [
+      nestedExtension(itemValueCount, 1),
+      nestedExtension(itemValueCount, 2),
+      nestedExtension(itemValueCount, 3),
+    ];
+    const fixture = new SnapshotFixture();
+    fixture.currentState = state([
+      component({
+        "example.dev/preflight": nestedExtension(componentValueCount),
+        id: ids.domain,
+      }),
+      component({
+        id: ids.service,
+        inputs: [{ id: "first" }, { id: "second" }, { id: "third" }],
+      }),
+    ]);
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const structuralBounds = Object.freeze({
+      ...applicationBounds,
+      maxSnapshotStateDepth: 100,
+      maxSnapshotStateValues: maximumValues,
+    });
+    let parseCalls = 0;
+    const hostileModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: (entity: GraphEntity) => {
+        parseCalls += 1;
+        const parsed = model.parse(entity);
+        if (!parsed.ok) return parsed;
+        if (entity.id === ids.domain) {
+          return success({
+            ...parsed.value,
+            extensions: { "example.dev/preflight": componentExtension },
+          } as never);
+        }
+        if (entity.id !== ids.service) return parsed;
+        return success({
+          ...parsed.value,
+          inputs: parsed.value.inputs?.map((item, index) => ({
+            ...item,
+            extensions: { "example.dev/hostile": hostileExtensions[index] },
+          })),
+        } as never);
+      },
+    });
+    const inspectedHostileNodes = [0, 0, 0, 0];
+    const isProxy = (value: unknown) => {
+      const owner = hostileOwners.get(value as object);
+      if (owner !== undefined) inspectedHostileNodes[owner]! += 1;
+      return false;
+    };
+    const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
+      bounds: structuralBounds,
+      graph,
+      isProxy,
+      model: hostileModel,
+    });
+    let mappings = 0;
+    const result = await operations(fixture, undefined, {
+      bounds: structuralBounds,
+      graph,
+      model: hostileModel,
+      resourceMapper: {
+        resourceForComponent: (id) => {
+          mappings += 1;
+          return success(resource(id));
+        },
+      },
+      snapshotStateDecoder,
+    }).listComponents({ limit: 2 });
+
+    expect(result).toEqual(
+      failure({
+        code: "application-snapshot-decode-failed",
+        message: "The provider could not complete the operation",
+      }),
+    );
+    expect(parseCalls).toBe(2);
+    expect(inspectedHostileNodes).toEqual([componentValueCount, itemValueCount, itemValueCount, 0]);
+    expect(inspectedHostileNodes.reduce((total, count) => total + count, 0)).toBe(maximumValues);
+    expect(mappings).toBe(0);
+  });
+
   test("binds every component view field exactly to its graph payload", async () => {
     for (const field of [
       "name",

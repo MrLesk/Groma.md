@@ -214,6 +214,7 @@ interface ModelSuccessContext {
   embeddedItems: number;
   readonly isProxy: (value: unknown) => boolean;
   readonly options: ApplicationSnapshotStateDecoderContext;
+  readonly structuralRemaining: { value: number };
 }
 
 function decoderBoundFailure(maximum: number): Result<never> {
@@ -481,9 +482,8 @@ function modelExtensions(
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
     const keys = Reflect.ownKeys(value);
-    if (keys.length > context.options.bounds.maxSnapshotStateValues) return decoderFailure();
+    if (keys.length > context.structuralRemaining.value) return decoderFailure();
     const extensions = Object.create(null) as Record<string, unknown>;
-    const remaining = { value: context.options.bounds.maxSnapshotStateValues };
     const active = new WeakSet<object>();
     for (const key of keys) {
       if (typeof key !== "string" || !extensionKeyPattern.test(key)) return decoderFailure();
@@ -491,9 +491,15 @@ function modelExtensions(
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
         return decoderFailure();
       }
-      const valid = preflightModelGraphData(descriptor.value, 1, remaining, active, context);
+      const valid = preflightModelGraphData(
+        descriptor.value,
+        1,
+        context.structuralRemaining,
+        active,
+        context,
+      );
       if (!valid.ok) return valid;
-      const copied = copyBoundaryGraphData(descriptor.value, context);
+      const copied = copyPreflightedModelGraphData(descriptor.value, context);
       if (!copied.ok) return copied;
       Object.defineProperty(extensions, key, { enumerable: true, value: copied.value });
     }
@@ -859,7 +865,25 @@ function copyModelSuccessValues(
 }
 
 function boundaryContext(options: ApplicationSnapshotStateDecoderContext): ModelSuccessContext {
-  return { embeddedItems: 0, isProxy: options.isProxy, options };
+  return {
+    embeddedItems: 0,
+    isProxy: options.isProxy,
+    options,
+    structuralRemaining: { value: options.bounds.maxSnapshotStateValues },
+  };
+}
+
+function copyPreflightedModelGraphData(
+  value: unknown,
+  context: ModelSuccessContext,
+): Result<GraphData> {
+  const copied = copyGraphPayload(value, "entity", {
+    code: "application-snapshot-decode-failed",
+    maximumDepth: context.options.bounds.maxSnapshotStateDepth,
+    maximumValues: context.options.bounds.maxSnapshotStateValues,
+    message: "Standard Model value exceeds the configured structural budget",
+  });
+  return copied.ok ? copied : decoderFailure();
 }
 
 function copyBoundaryGraphData(value: unknown, context: ModelSuccessContext): Result<GraphData> {
@@ -873,14 +897,7 @@ function copyBoundaryGraphData(value: unknown, context: ModelSuccessContext): Re
     new WeakSet<object>(),
     context,
   );
-  if (!safe.ok) return safe;
-  const copied = copyGraphPayload(value, "entity", {
-    code: "application-snapshot-decode-failed",
-    maximumDepth: context.options.bounds.maxSnapshotStateDepth,
-    maximumValues: context.options.bounds.maxSnapshotStateValues,
-    message: "Standard Model value exceeds the configured structural budget",
-  });
-  return copied.ok ? copied : decoderFailure();
+  return safe.ok ? copyPreflightedModelGraphData(value, context) : safe;
 }
 
 function copyModelEntityDraft(
@@ -1322,10 +1339,12 @@ function decode(
 
   const loaded = options.graph.load(entityDrafts, relationDrafts);
   if (!loaded.ok) return loaded;
+  const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
   const modelContext: ModelSuccessContext = {
     embeddedItems: 0,
     isProxy: options.isProxy,
     options,
+    structuralRemaining,
   };
   const components: Readonly<Record<string, unknown>>[] = [];
   for (let index = 0; index < entityDrafts.length; index += 1) {
@@ -1333,6 +1352,7 @@ function decode(
       embeddedItems: 0,
       isProxy: options.isProxy,
       options,
+      structuralRemaining,
     };
     const draft = entityDrafts[index]!;
     const resolved = options.graph.resolveEntity(loaded.value, {
