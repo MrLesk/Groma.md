@@ -101,11 +101,12 @@ the snapshot/startup path. Successfully discarded handle slots are cleared, but 
 record survives a cleanup failure for retry; handle-only records are removed after
 confirmed cleanup, while lease-bearing records remain until lease release succeeds.
 Snapshot/startup coordination and failed prepare cleanup likewise retain an opaque
-lease in volatile journal state when pre-move release fails. The next snapshot or
-prepare atomically takes that lease before its first asynchronous operation and retries
-release after settlement; a concurrent caller cannot share the in-flight lease and
-instead follows normal contended acquisition. Confirmed release clears the retained
-lease. Nothing volatile enters the deterministic transaction-state record.
+lease in volatile journal state when pre-move release fails. The next snapshot,
+prepare, commit, or recovery entry atomically takes that lease before its first
+asynchronous operation and retries release after settlement; a concurrent caller cannot
+share the in-flight lease and instead follows normal contended acquisition. Confirmed
+release clears the retained lease. Nothing volatile enters the deterministic
+transaction-state record.
 Journal publication stages have their own volatile same-process recovery records. A
 provider-confirmed pre-move rejection, or a thrown commit whose exact readback is still
 the previous state or absence, discards the stage. If discard fails, the next journal

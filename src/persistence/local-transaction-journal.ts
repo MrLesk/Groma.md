@@ -1380,10 +1380,7 @@ export function createLocalTransactionJournal(
     let preparation = live.get(token);
     let lease = preparation?.lease;
     if (lease === undefined) {
-      const acquired = await options.resources.acquireCoordination({
-        context: "local-machine",
-        locator: transactionCoordinationLocator,
-      });
+      const acquired = await acquireTransactionLease();
       if (!acquired.ok) return Object.freeze({ status: "indeterminate" });
       lease = acquired.value;
       if (preparation === undefined) {

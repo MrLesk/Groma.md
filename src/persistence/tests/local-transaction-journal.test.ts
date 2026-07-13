@@ -659,6 +659,104 @@ describe("local transaction journal", () => {
     });
   }
 
+  for (const retainedBy of ["prepare", "snapshot"] as const) {
+    test(`reuses a lease retained by ${retainedBy} when recovering a settled token`, async () => {
+      const roots = await workspace();
+      const base = await createLocalResourceProvider(roots);
+      let acquisitions = 0;
+      let releases = 0;
+      let failNextRelease = false;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (failNextRelease) {
+            failNextRelease = false;
+            return failure(
+              Object.freeze({
+                code: "injected-retained-release-failure",
+                message: "Injected retained release failure",
+              }),
+            );
+          }
+          return base.releaseCoordination(lease);
+        },
+      });
+      const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
+      if (!locator.ok) throw new Error("invalid retained-lease target locator");
+      const resource = parseResourceKey(locator.value);
+      if (!resource.ok) throw new Error("invalid retained-lease target resource");
+      const replacement = new TextEncoder().encode("settled state");
+      const result = parseContentRevision(
+        `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
+      );
+      if (!result.ok) throw new Error("invalid retained-lease target revision");
+      const target = Object.freeze({
+        expected: null,
+        locator: locator.value,
+        replacement,
+        resource: resource.value,
+        result: result.value,
+      });
+      let rejectMaterialization = false;
+      const adapter: CanonicalTransactionAdapter = Object.freeze({
+        load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
+        materialize: () =>
+          rejectMaterialization
+            ? failure(
+                Object.freeze({
+                  code: "injected-materialization-failure",
+                  message: "Injected materialization failure",
+                }),
+              )
+            : success(Object.freeze({ state: {}, targets: Object.freeze([target]) })),
+      });
+      const journal = createLocalTransactionJournal({ adapter, resources });
+      const proposal = {
+        affected: { entities: [], relations: [] },
+        baseGeneration: 0,
+        context: {},
+        expectedRevisions: [{ expected: null, resource: resource.value }],
+        generation: 1,
+        mutation: {},
+        priorState: {},
+      } as unknown as ProposedTransaction;
+      const prepared = await journal.prepare(proposal);
+      expect(prepared.status).toBe("prepared");
+      if (prepared.status !== "prepared") return;
+      expect(await journal.commit(prepared.token)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+
+      failNextRelease = true;
+      if (retainedBy === "snapshot") {
+        await expect(journal.snapshot([])).rejects.toThrow("Injected retained release failure");
+      } else {
+        rejectMaterialization = true;
+        await expect(
+          journal.prepare({
+            ...proposal,
+            baseGeneration: 1,
+            expectedRevisions: [],
+            generation: 2,
+          } as unknown as ProposedTransaction),
+        ).rejects.toThrow("preparation failed");
+      }
+
+      expect(acquisitions).toBe(2);
+      expect(await journal.recover(prepared.token)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+      expect(acquisitions).toBe(2);
+      expect(releases).toBe(3);
+    });
+  }
+
   for (const phase of [
     "after-prepared-state",
     "stage-target",
