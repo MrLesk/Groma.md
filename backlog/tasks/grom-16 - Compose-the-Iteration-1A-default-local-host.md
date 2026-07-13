@@ -1,11 +1,11 @@
 ---
 id: GROM-16
 title: Compose the Iteration 1A default local host
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 11:26'
+updated_date: '2026-07-13 11:38'
 labels:
   - host
   - bootstrap
@@ -140,4 +140,12 @@ Current-head Codex application inline review completed at 7544f721. Independentl
 Codex host-inline review triage (2026-07-13): actionable fixes applied for surface-session thenable assimilation, captured Reflect.apply invocation, staged replacement Result/handle validation, pre-scalar recovery-state containment under local bounds, nested Promise-valued host diagnostics, and default-bootstrap option snapshotting. Signal-name narrowing and decoder/local-bound mismatch rejection were already implemented and regression-covered, so no duplicate changes were made. Added focused host regressions and documentation. Validation: targeted host tests 73/73, full host tests 76/76, and bun run check 415/415 including formatting, typecheck, boundaries, build, and smoke.
 
 Final exact-worktree review closed the last capability-boundary issues: policy-before-reflection and policy-before-Promise observation, provider-replaceable opaque staged-handle identity, immutable bootstrap/surface/model method capture, early malformed-envelope settlement, sibling-draining containment within shared structural and entry budgets, and diagnostic-precedence preservation. Independent specification and quality reviews both passed the exact worktree. Validation: 420 tests / 2,725 assertions; format, typecheck, architecture boundaries, build, native smoke, git diff; all four packaged targets (Darwin arm64, Linux x64 baseline, Windows x64 baseline, Windows arm64); direct application and host compilation 8/8. External exact-head CI and Codex review remain before terminal task finalization.
+
+External exact-head gate at 338865b: GitHub Quality gates and Cross-platform binaries passed; all 27 previously audited Codex threads were resolved after independent verification; the newly requested exact-head Codex review completed with a thumbs-up and no new threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Composed the explicit Iteration 1A local host with strict workspace discovery and atomic initialization, recovery-before-dispatch, typed workspace gating, deterministic cancellation and signal cleanup, and a replaceable bootstrap registry. Hardened application and host capability boundaries with owned bounded values, proxy-first native-Promise settlement, immutable query/model/method authority, exact semantic binding, provider-owned opaque-handle identity, and shared structural budgets. Verified with 420 tests / 2,725 assertions, full format/type/boundary/build/smoke checks, four packaged targets, 8/8 direct application/host target compilations, independent specification and quality reviews, Claude review, green CI, and Codex exact-head acceptance.
+<!-- SECTION:FINAL_SUMMARY:END -->
