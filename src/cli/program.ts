@@ -86,10 +86,7 @@ function diagnosticResult(
 }
 
 function hostExit(diagnostics: readonly { readonly code: string }[], fallback: number): number {
-  return diagnostics.some(
-    (entry) =>
-      entry.code === "no-workspace" || entry.code.includes("workspace-configuration-conflict"),
-  )
+  return diagnostics.some((entry) => entry.code === "workspace-configuration-conflict")
     ? CLI_EXIT.workspace
     : fallback;
 }

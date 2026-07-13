@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 12:41'
+updated_date: '2026-07-13 12:47'
 labels:
   - cli
   - terminal
@@ -66,4 +66,6 @@ Exact-worktree specification pass corrected failure classification and bare-comm
 Exact-worktree quality pass corrected output containment: canonical rendering now fails closed instead of substituting or omitting values after structural failure; output traversal has a separate bounded value budget; oversized results become typed cli-output-bound-exceeded responses and never partial output. Surface regressions cover provider versus conflict exit routing.
 
 Superseding final validation: focused CLI and changed host suites pass 70 tests / 457 assertions; bun run check passes 441 tests / 2,899 assertions plus formatting, strict types, architecture boundaries, native build and smoke; all four standalone targets pass; direct CLI plus host compilation passes 8/8 across Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; the native compiled executable completed init/create/roots using stdin and JSON; git diff --check passes.
+
+Claude review on PR #15: the default Fable invocation hit the monthly spend cap, so the same review was completed with Claude Sonnet. No blocking findings. Removed the dead host-level no-workspace branch and made host workspace-conflict routing exact. Documented the intentional cancellation tradeoff: signal handling stops result publication and host cleanup promptly, while already-started bounded application operations settle because 1A exposes no safe mid-commit cancellation seam. The broader diagnostic substring note remains non-actionable until application diagnostics gain a typed union.
 <!-- SECTION:NOTES:END -->

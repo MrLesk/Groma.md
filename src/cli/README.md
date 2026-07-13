@@ -32,6 +32,11 @@ Exit classes are stable:
 |  130 | SIGINT or generic cancellation                 |
 |  143 | SIGTERM                                        |
 
+Signal handling stops command-result publication and completes host cleanup promptly.
+The shared 1A application operations do not expose a mid-operation cancellation seam,
+so an already-started bounded read or mutation is allowed to settle rather than being
+force-aborted during local transaction publication.
+
 With no command, an uninitialized workspace prints the exact `groma init` next step and
 does not create files. An initialized interactive terminal receives a bounded hierarchy
 overview. The overview reads at most 10 roots, 10 children per visited component, four
