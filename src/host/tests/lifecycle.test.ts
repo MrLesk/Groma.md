@@ -1045,6 +1045,157 @@ describe("host lifecycle", () => {
     }
   });
 
+  test("observes hostile rejecting completion and cleanup Promises without accessors or leaks", async () => {
+    const secret = "/private/host-promise-secret";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const location of ["completion", "stop", "unsubscribe"] as const) {
+        let accessorCalls = 0;
+        let speciesCalls = 0;
+        let promise: Promise<void>;
+        let descriptor: PropertyDescriptor | undefined;
+        if (location === "completion") {
+          promise = Promise.reject(new Error(secret));
+          Object.defineProperty(promise, "then", {
+            configurable: true,
+            get: () => {
+              accessorCalls += 1;
+              throw new Error(secret);
+            },
+          });
+          descriptor = Object.getOwnPropertyDescriptor(promise, "then");
+        } else if (location === "stop") {
+          promise = Promise.reject(new Error(secret));
+          Object.defineProperty(promise, "constructor", {
+            configurable: true,
+            get: () => {
+              accessorCalls += 1;
+              throw new Error(secret);
+            },
+          });
+          descriptor = Object.getOwnPropertyDescriptor(promise, "constructor");
+        } else {
+          class HostilePromise<T> extends Promise<T> {
+            static override get [Symbol.species](): PromiseConstructor {
+              speciesCalls += 1;
+              throw new Error(secret);
+            }
+          }
+          promise = HostilePromise.reject(new Error(secret));
+          descriptor = Object.getOwnPropertyDescriptor(promise, "constructor");
+        }
+
+        const outcome = await runHost({
+          context: { workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              {
+                start: () => ({
+                  completion: location === "completion" ? promise : Promise.resolve(),
+                  stop: () => (location === "stop" ? promise : Promise.resolve()),
+                }),
+              },
+              workspace({ state: "missing" }),
+            ),
+          ),
+          signalSource: {
+            subscribe: () => () => (location === "unsubscribe" ? promise : undefined),
+          },
+        });
+        const expectedCode =
+          location === "completion"
+            ? "host-surface-failed"
+            : location === "stop"
+              ? "host-surface-cleanup-failed"
+              : "host-signal-cleanup-failed";
+        expect("diagnostics" in outcome && outcome.diagnostics[0]?.code, location).toBe(
+          expectedCode,
+        );
+        expect(JSON.stringify(outcome), location).not.toContain(secret);
+        expect(accessorCalls, location).toBe(0);
+        expect(speciesCalls, location).toBe(0);
+        const descriptorName = location === "completion" ? "then" : "constructor";
+        expect(Object.getOwnPropertyDescriptor(promise, descriptorName), location).toEqual(
+          descriptor,
+        );
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("awaits resolving hostile stop and unsubscribe Promises once and restores descriptors", async () => {
+    const stopGate = deferred<void>();
+    const unsubscribeGate = deferred<void>();
+    let accessorCalls = 0;
+    let stops = 0;
+    let unsubscribes = 0;
+    let settled = false;
+    for (const promise of [stopGate.promise, unsubscribeGate.promise]) {
+      Object.defineProperty(promise, "constructor", {
+        configurable: true,
+        get: () => {
+          accessorCalls += 1;
+          throw new Error("/private/resolving-constructor-secret");
+        },
+      });
+    }
+    const stopDescriptor = Object.getOwnPropertyDescriptor(stopGate.promise, "constructor");
+    const unsubscribeDescriptor = Object.getOwnPropertyDescriptor(
+      unsubscribeGate.promise,
+      "constructor",
+    );
+    const running = runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => ({
+              completion: Promise.resolve(),
+              stop: () => {
+                stops += 1;
+                return stopGate.promise;
+              },
+            }),
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: {
+        subscribe: () => () => {
+          unsubscribes += 1;
+          return unsubscribeGate.promise;
+        },
+      },
+    });
+    void running.then(() => {
+      settled = true;
+    });
+    while (stops === 0) await Promise.resolve();
+    expect(settled).toBeFalse();
+    expect(stops).toBe(1);
+    expect(Object.getOwnPropertyDescriptor(stopGate.promise, "constructor")).toEqual(
+      stopDescriptor,
+    );
+    stopGate.resolve();
+    while (unsubscribes === 0) await Promise.resolve();
+    expect(settled).toBeFalse();
+    expect(unsubscribes).toBe(1);
+    expect(Object.getOwnPropertyDescriptor(unsubscribeGate.promise, "constructor")).toEqual(
+      unsubscribeDescriptor,
+    );
+    unsubscribeGate.resolve();
+    expect(await running).toEqual({ status: "completed" });
+    expect(stops).toBe(1);
+    expect(unsubscribes).toBe(1);
+    expect(accessorCalls).toBe(0);
+  });
+
   test("rejects accessor-bearing and proxied sessions without invoking traps", async () => {
     let getters = 0;
     const session = Object.create(null) as Record<string, unknown>;

@@ -89,6 +89,23 @@ Resource mapping is also a containment boundary: mapper failures become one gene
 component-scoped diagnostic, and mapper messages, details, locators, and keys never
 reach application callers.
 
+Initializer, snapshot-provider, transaction-executor, bounded-query, and mapper return
+values cross one application-owned containment boundary before semantic inspection. It
+uses the validated snapshot decoder's exact proxy policy before every nested reflection,
+accepts only intrinsic dense arrays and plain records made entirely of enumerable data
+properties, applies the configured structural and collection bounds, and produces deeply
+frozen owned copies. Capability methods and their receivers are captured during
+construction, so later mutation cannot redirect an operation instance. Query failures
+retain only bounded codes, allowlisted details, and application-owned messages; successful
+pages and exact reads are accepted only when generation and semantic items match the
+application-owned inputs, then reconstructed with validated cursor metadata.
+
+Canonical Standard Model component and relationship views are also bound back to their
+copied graph payloads. Every component field, embedded item, namespaced extension,
+relationship description, and relationship extension must have exactly the same presence
+and deep canonical value; object key order is irrelevant. A model cannot substitute
+semantic meaning and still receive canonical provenance or reach transaction execution.
+
 Each composition supplies explicit application bounds for component and relationship
 state, relationship mutations, embedded items, diagnostics, request-data structural
 depth and values, and snapshot structural depth and values. Create and update mutation

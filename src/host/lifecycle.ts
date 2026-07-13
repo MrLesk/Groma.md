@@ -21,11 +21,47 @@ import type {
   WorkspaceStatus,
 } from "./contracts.ts";
 import { copyHostDiagnostics, inspectHostRecord, isHostProxy } from "./runtime-validation.ts";
+import { observeNativePromise } from "../application/promise-observation.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
   readonly registry: HostBootstrapRegistry;
   readonly signalSource: HostSignalSource;
+}
+
+interface ContainedHostSurfaceSession {
+  readonly completion: Promise<{ readonly state: "completed" | "failed" }>;
+  readonly stop: () => unknown;
+}
+
+const intrinsicPromise = Promise;
+const intrinsicPromiseReject = Promise.reject;
+const intrinsicPromiseResolve = Promise.resolve;
+const intrinsicReflectApply = Reflect.apply;
+
+function resolvedPromise(): Promise<void> {
+  return intrinsicReflectApply(intrinsicPromiseResolve, intrinsicPromise, [
+    undefined,
+  ]) as Promise<void>;
+}
+
+function rejectedPromise(message: string): Promise<void> {
+  return intrinsicReflectApply(intrinsicPromiseReject, intrinsicPromise, [new Error(message)]);
+}
+
+function observeRequiredCleanup(value: unknown, message: string): Promise<void> {
+  const observed = observeNativePromise(
+    value,
+    () => undefined,
+    () => {
+      throw new Error(message);
+    },
+  );
+  return observed.status === "observed" ? observed.promise : rejectedPromise(message);
+}
+
+function observeOptionalCleanup(value: unknown, message: string): Promise<void> {
+  return value === undefined ? resolvedPromise() : observeRequiredCleanup(value, message);
 }
 
 function diagnostic(code: string, message: string): Diagnostic {
@@ -292,7 +328,7 @@ function canonicalSignalSource(
   return success((listener) => Reflect.apply(subscribe, receiver, [listener]));
 }
 
-function canonicalSession(value: unknown): Result<HostSurfaceSession> {
+function canonicalSession(value: unknown): Result<ContainedHostSurfaceSession> {
   const session = inspectHostRecord(
     value,
     [["completion", "stop"]],
@@ -302,20 +338,28 @@ function canonicalSession(value: unknown): Result<HostSurfaceSession> {
   if (
     !session.ok ||
     typeof session.value.stop !== "function" ||
-    isHostProxy(session.value.completion) ||
-    !(session.value.completion instanceof Promise)
+    isHostProxy(session.value.completion)
   ) {
     return failure(
       diagnostic("invalid-host-surface-session", "Host surface returned a malformed session"),
     );
   }
   const source = value as object;
-  const completion = session.value.completion;
+  const completion = observeNativePromise<{ readonly state: "completed" | "failed" }>(
+    session.value.completion,
+    () => ({ state: "completed" as const }),
+    () => ({ state: "failed" as const }),
+  );
+  if (completion.status !== "observed") {
+    return failure(
+      diagnostic("invalid-host-surface-session", "Host surface returned a malformed session"),
+    );
+  }
   const stop = session.value.stop;
   return success(
     Object.freeze({
-      completion,
-      stop: () => Promise.resolve(Reflect.apply(stop, source, [])),
+      completion: completion.promise,
+      stop: () => intrinsicReflectApply(stop, source, []),
     }),
   );
 }
@@ -408,15 +452,15 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   if (options.context.cancellation?.aborted) requestCancellation();
 
   let unsubscribe: (() => void | Promise<void>) | undefined;
-  let session: HostSurfaceSession | undefined;
+  let session: ContainedHostSurfaceSession | undefined;
   let stopPromise: Promise<void> | undefined;
   const stopOnce = (): Promise<void> => {
     if (stopPromise !== undefined) return stopPromise;
-    if (session === undefined) return Promise.resolve();
+    if (session === undefined) return resolvedPromise();
     try {
-      stopPromise = session.stop();
-    } catch (error) {
-      stopPromise = Promise.reject(error);
+      stopPromise = observeRequiredCleanup(session.stop(), "Host surface cleanup failed");
+    } catch {
+      stopPromise = rejectedPromise("Host surface cleanup failed");
     }
     return stopPromise;
   };
@@ -521,11 +565,11 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     async (late) => {
                       if (late.state !== "started") return;
                       try {
-                        void late.session.completion.then(
-                          () => undefined,
-                          () => undefined,
+                        void late.session.completion;
+                        await observeRequiredCleanup(
+                          late.session.stop(),
+                          "Host surface cleanup failed",
                         );
-                        await late.session.stop();
                       } catch {
                         // Late completion and cleanup are contained after cancellation returns.
                       }
@@ -540,10 +584,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   );
                 } else {
                   session = first.session;
-                  const completed = first.session.completion.then(
-                    () => ({ state: "completed" as const }),
-                    () => ({ state: "failed" as const }),
-                  );
+                  const completed = first.session.completion;
                   const winner = await Promise.race([
                     completed,
                     cancellation.then(() => ({ state: "cancelled" as const })),
@@ -578,7 +619,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   options.context.cancellation?.removeEventListener("abort", onAbort);
   if (unsubscribe !== undefined) {
     try {
-      await Promise.resolve(unsubscribe());
+      await observeOptionalCleanup(unsubscribe(), "Host signal cleanup failed");
     } catch {
       outcome = surfaceFailure("host-signal-cleanup-failed", "Host signal cleanup failed");
     }

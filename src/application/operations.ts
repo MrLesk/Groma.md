@@ -7,6 +7,7 @@ import {
   parseResourceKey,
   success,
   type ContentRevision,
+  type ContinuationCursor,
   type Diagnostic,
   type EntityId,
   type GraphData,
@@ -21,7 +22,7 @@ import {
   type TransactionOutcome,
   type TransactionRequest,
 } from "../core/index.ts";
-import { copyGraphPayload } from "../core/payload.ts";
+import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
@@ -58,8 +59,10 @@ import {
   applicationSnapshotStateDecoderMetadata,
   isCanonicalApplicationSnapshotComponent,
   isCanonicalApplicationSnapshotRelationship,
+  type ApplicationSnapshotStateDecoderMetadata,
   type DecodedApplicationSnapshotState,
 } from "./snapshot-state.ts";
+import { containCapabilityValue } from "./capability-value.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -75,6 +78,29 @@ interface SelectedPage<T> {
 }
 
 type ComponentFilter = (component: StandardComponent) => boolean;
+
+interface ApplicationCapabilityCalls {
+  readonly initialize: ApplicationOperationsOptions["initialization"]["initialize"];
+  readonly queryExact: ApplicationOperationsOptions["queries"]["exact"];
+  readonly queryPage: ApplicationOperationsOptions["queries"]["page"];
+  readonly queryPrepare: ApplicationOperationsOptions["queries"]["prepare"];
+  readonly queries: ApplicationOperationsOptions["queries"];
+  readonly resourceForComponent: ApplicationOperationsOptions["resourceMapper"]["resourceForComponent"];
+  readonly resourceMapper: ApplicationOperationsOptions["resourceMapper"];
+  readonly snapshot: ApplicationOperationsOptions["transactionProvider"]["snapshot"];
+  readonly transactionProvider: ApplicationOperationsOptions["transactionProvider"];
+  readonly execute: ApplicationOperationsOptions["transactionExecution"]["execute"];
+  readonly transactionExecution: ApplicationOperationsOptions["transactionExecution"];
+  readonly initialization: ApplicationOperationsOptions["initialization"];
+}
+
+interface ApplicationOperationsContext extends ApplicationOperationsOptions {
+  readonly calls: ApplicationCapabilityCalls;
+  readonly isProxy: ((value: unknown) => boolean) | undefined;
+}
+
+const intrinsicReflectApply = Reflect.apply;
+const applicationCapabilityContainmentFailure = Object.freeze({ ok: false as const });
 
 const absoluteBounds = Object.freeze({
   maxComponents: 1_000_000,
@@ -119,16 +145,22 @@ function componentResourceDiagnostic(componentId: string): Diagnostic {
 
 function componentResource(
   componentId: string,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Result<ResourceKey> {
   let value: unknown;
   try {
-    value = options.resourceMapper.resourceForComponent(componentId);
+    value = intrinsicReflectApply(
+      options.calls.resourceForComponent,
+      options.calls.resourceMapper,
+      [componentId],
+    );
   } catch {
-    return failure(componentResourceDiagnostic(componentId));
+    return frozenFailure(componentResourceDiagnostic(componentId));
   }
+  const contained = containApplicationCapabilityValue(value, options, 4, 16);
+  if (!contained.ok) return frozenFailure(componentResourceDiagnostic(componentId));
   const result = inspectExactRecord(
-    value,
+    contained.value,
     [
       ["ok", "value"],
       ["diagnostics", "ok"],
@@ -137,10 +169,10 @@ function componentResource(
     "Component resource mapping result",
   );
   if (!result.ok || result.value.ok !== true) {
-    return failure(componentResourceDiagnostic(componentId));
+    return frozenFailure(componentResourceDiagnostic(componentId));
   }
   const resource = parseResourceKey(result.value.value);
-  return resource.ok ? resource : failure(componentResourceDiagnostic(componentId));
+  return resource.ok ? resource : frozenFailure(componentResourceDiagnostic(componentId));
 }
 
 function validatePositiveBound(value: number, name: string, maximum: number): void {
@@ -186,7 +218,9 @@ function freezeApplicationOperationsOptions(
   });
 }
 
-function validateSnapshotStateDecoder(options: ApplicationOperationsOptions): void {
+function validateSnapshotStateDecoder(
+  options: ApplicationOperationsOptions,
+): ApplicationSnapshotStateDecoderMetadata {
   const metadata = applicationSnapshotStateDecoderMetadata(options.snapshotStateDecoder);
   if (metadata === undefined || !Object.isFrozen(options.snapshotStateDecoder)) {
     throw new TypeError(
@@ -211,6 +245,64 @@ function validateSnapshotStateDecoder(options: ApplicationOperationsOptions): vo
       throw new RangeError(`snapshotStateDecoder ${name} must match the application bound`);
     }
   }
+  return metadata;
+}
+
+function captureApplicationCapabilityCalls(
+  options: ApplicationOperationsOptions,
+): ApplicationCapabilityCalls {
+  const calls: ApplicationCapabilityCalls = {
+    execute: options.transactionExecution.execute,
+    initialization: options.initialization,
+    initialize: options.initialization.initialize,
+    queries: options.queries,
+    queryExact: options.queries.exact,
+    queryPage: options.queries.page,
+    queryPrepare: options.queries.prepare,
+    resourceForComponent: options.resourceMapper.resourceForComponent,
+    resourceMapper: options.resourceMapper,
+    snapshot: options.transactionProvider.snapshot,
+    transactionExecution: options.transactionExecution,
+    transactionProvider: options.transactionProvider,
+  };
+  for (const [name, value] of Object.entries(calls)) {
+    if (
+      name !== "initialization" &&
+      name !== "queries" &&
+      name !== "resourceMapper" &&
+      name !== "transactionExecution" &&
+      name !== "transactionProvider" &&
+      typeof value !== "function"
+    ) {
+      throw new TypeError(`Application capability ${name} must be callable`);
+    }
+  }
+  return Object.freeze(calls);
+}
+
+function containApplicationCapabilityValue(
+  value: unknown,
+  options: Pick<ApplicationOperationsContext, "bounds" | "isProxy">,
+  depthAllowance = 8,
+  valueAllowance = 0,
+) {
+  const contained = containCapabilityValue(value, {
+    isProxy: options.isProxy,
+    maximumContainerEntries: Math.max(
+      64,
+      options.bounds.maxComponents,
+      options.bounds.maxDiagnosticCount,
+      options.bounds.maxEmbeddedItems,
+      options.bounds.maxRelationships,
+    ),
+    maximumDepth: options.bounds.maxSnapshotStateDepth + depthAllowance,
+    maximumValues:
+      options.bounds.maxSnapshotStateValues +
+      valueAllowance +
+      options.bounds.maxComponents * 3 +
+      options.bounds.maxDiagnosticCount * 67,
+  });
+  return contained.ok ? contained : applicationCapabilityContainmentFailure;
 }
 
 function exactRequest(
@@ -361,10 +453,21 @@ function preflightRelationshipChanges(
   return success(undefined);
 }
 
-function preflightDiagnostics(value: unknown, bounds: ApplicationOperationBounds): Result<void> {
-  const entries = denseArray(value, "Diagnostics", bounds.maxDiagnosticCount);
+function preflightDiagnostics(
+  value: unknown,
+  bounds: ApplicationOperationBounds,
+  isProxy?: (value: unknown) => boolean,
+): Result<void> {
+  const entries = denseArray(value, "Diagnostics", bounds.maxDiagnosticCount, isProxy);
   if (!entries.ok) return entries;
   for (let index = 0; index < entries.value.length; index += 1) {
+    if (
+      typeof entries.value[index] === "object" &&
+      entries.value[index] !== null &&
+      isProxy?.(entries.value[index])
+    ) {
+      return failure(diagnostic("invalid-diagnostic", "Diagnostic is malformed"));
+    }
     const entry = inspectExactRecord(
       entries.value[index],
       [
@@ -386,6 +489,9 @@ function preflightDiagnostics(value: unknown, bounds: ApplicationOperationBounds
       return failure(diagnostic("invalid-diagnostic", "Diagnostic scalar fields are malformed"));
     }
     if (!("details" in entry.value)) continue;
+    if (isProxy?.(entry.value.details)) {
+      return failure(diagnostic("invalid-diagnostic", "Diagnostic details are malformed"));
+    }
     if (
       typeof entry.value.details !== "object" ||
       entry.value.details === null ||
@@ -426,6 +532,7 @@ function preflightDiagnostics(value: unknown, bounds: ApplicationOperationBounds
 function validatedInitializationOutcome(
   value: unknown,
   bounds: ApplicationOperationBounds,
+  isProxy?: (value: unknown) => boolean,
 ): Result<WorkspaceInitializationOutcome> {
   const raw = inspectExactRecord(
     value,
@@ -438,7 +545,7 @@ function validatedInitializationOutcome(
   );
   if (!raw.ok) return raw;
   if ("diagnostics" in raw.value) {
-    const diagnostics = preflightDiagnostics(raw.value.diagnostics, bounds);
+    const diagnostics = preflightDiagnostics(raw.value.diagnostics, bounds, isProxy);
     if (!diagnostics.ok) return diagnostics;
   }
   const copied = copyGraphPayload(value, "transaction");
@@ -579,15 +686,26 @@ function validatedInitializationOutcome(
 
 async function snapshot(
   resources: readonly ResourceKey[],
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Promise<Result<ReadSnapshot>> {
   let raw: unknown;
   try {
-    raw = await options.transactionProvider.snapshot(resources);
+    raw = await intrinsicReflectApply(options.calls.snapshot, options.calls.transactionProvider, [
+      resources,
+    ]);
   } catch {
     return failure(
       diagnostic("provider-snapshot-failed", "The transaction snapshot capability failed"),
     );
+  }
+  try {
+    if (typeof raw === "object" && raw !== null && options.isProxy?.(raw)) {
+      return failure(
+        diagnostic("provider-snapshot-failed", "The transaction snapshot capability failed"),
+      );
+    }
+  } catch {
+    return snapshotDecodeFailure();
   }
   const inspected = inspectExactRecord(
     raw,
@@ -596,12 +714,19 @@ async function snapshot(
     "Transaction provider snapshot",
   );
   if (!inspected.ok) return inspected;
+  const containedRevisions = containApplicationCapabilityValue(inspected.value.revisions, options);
+  if (!containedRevisions.ok) {
+    return failure(
+      diagnostic("invalid-provider-snapshot", "Transaction provider revisions are malformed"),
+    );
+  }
   const generation = parseGraphGeneration(inspected.value.generation);
   if (!generation.ok) return generation;
   const entries = denseArray(
-    inspected.value.revisions,
+    containedRevisions.value,
     "Transaction provider revisions",
     options.bounds.maxComponents,
+    options.isProxy,
   );
   if (!entries.ok) return entries;
   if (entries.value.length !== resources.length) {
@@ -652,12 +777,10 @@ function snapshotDecodeFailure(): Result<never> {
 
 function decodeSnapshotState(
   value: unknown,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Result<DecodedApplicationSnapshotState> {
   try {
-    const metadata = applicationSnapshotStateDecoderMetadata(options.snapshotStateDecoder);
-    if (metadata === undefined) return snapshotDecodeFailure();
-    const isProxy = metadata.isProxy;
+    const isProxy = options.isProxy;
     const decoded: unknown = options.snapshotStateDecoder.decode(value);
     if (typeof decoded === "object" && decoded !== null && isProxy?.(decoded)) {
       return snapshotDecodeFailure();
@@ -773,6 +896,258 @@ function decodeSnapshotState(
   }
 }
 
+function queryCapabilityFailure<T>(): Result<T> {
+  return frozenFailure(
+    diagnostic("query-capability-failed", "The bounded query capability failed safely"),
+  );
+}
+
+const boundedQueryDiagnosticCodes = new Set([
+  "continuation-anchor-too-large",
+  "continuation-cursor-too-large",
+  "cursor-query-mismatch",
+  "invalid-bounded-query-request",
+  "invalid-page-limit",
+  "invalid-prepared-query",
+  "invalid-query-items",
+  "invalid-query-page",
+  "invalid-query-page-state",
+  "malformed-continuation-cursor",
+  "missing-continuation-anchor",
+  "non-advancing-continuation-anchor",
+  "query-context-too-large",
+  "query-page-overflow",
+  "stale-cursor",
+  "unexpected-continuation-anchor",
+  "unsupported-continuation-cursor",
+]);
+
+function containedQueryCapabilityResult(
+  value: unknown,
+  options: ApplicationOperationsContext,
+): Result<unknown> {
+  const contained = containApplicationCapabilityValue(value, options);
+  if (!contained.ok) return queryCapabilityFailure();
+  const envelope = inspectExactRecord(
+    contained.value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "query-capability-failed",
+    "Bounded query capability result",
+  );
+  if (!envelope.ok) return queryCapabilityFailure();
+  if (envelope.value.ok === false) {
+    const diagnostics = applicationDiagnostics(
+      envelope.value.diagnostics,
+      "validation",
+      options.bounds,
+      options.isProxy,
+    );
+    return diagnostics.ok &&
+      diagnostics.value.length > 0 &&
+      diagnostics.value.every((entry) => boundedQueryDiagnosticCodes.has(entry.code))
+      ? frozenFailure(...diagnostics.value)
+      : queryCapabilityFailure();
+  }
+  return envelope.value.ok === true ? success(envelope.value.value) : queryCapabilityFailure();
+}
+
+function sameCanonicalQueryData(
+  left: unknown,
+  right: unknown,
+  bounds: ApplicationOperationBounds,
+): boolean {
+  try {
+    const budget = {
+      code: "query-capability-failed",
+      maximumDepth: bounds.maxSnapshotStateDepth,
+      maximumValues: bounds.maxSnapshotStateValues,
+      message: "Bounded query data exceeds the configured structural budget",
+    };
+    const leftCopy = copyCanonicalGraphData(left, "query", undefined, budget);
+    const rightCopy = copyCanonicalGraphData(right, "query", undefined, budget);
+    return (
+      leftCopy.ok && rightCopy.ok && leftCopy.value.canonicalJson === rightCopy.value.canonicalJson
+    );
+  } catch {
+    return false;
+  }
+}
+
+function prepareQuery(
+  generation: GraphGeneration,
+  query: GraphData,
+  request: BoundedPageRequest,
+  options: ApplicationOperationsContext,
+): Result<PreparedBoundedQuery> {
+  let raw: unknown;
+  try {
+    raw = intrinsicReflectApply(options.calls.queryPrepare, options.calls.queries, [
+      generation,
+      query,
+      request,
+    ]);
+  } catch {
+    return queryCapabilityFailure();
+  }
+  const result = containedQueryCapabilityResult(raw, options);
+  if (!result.ok) return result;
+  const prepared = inspectExactRecord(
+    result.value,
+    [
+      ["generation", "limit", "query"],
+      ["after", "generation", "limit", "query"],
+    ],
+    "query-capability-failed",
+    "Prepared bounded query",
+  );
+  if (!prepared.ok) return queryCapabilityFailure();
+  const parsedGeneration = parseGraphGeneration(prepared.value.generation);
+  const cursorPresent = Object.hasOwn(request, "cursor");
+  if (
+    !parsedGeneration.ok ||
+    parsedGeneration.value !== generation ||
+    prepared.value.limit !== request.limit ||
+    !Number.isSafeInteger(prepared.value.limit) ||
+    (prepared.value.limit as number) <= 0 ||
+    Object.hasOwn(prepared.value, "after") !== cursorPresent ||
+    !sameCanonicalQueryData(prepared.value.query, query, options.bounds)
+  ) {
+    return queryCapabilityFailure();
+  }
+  let after: GraphData | undefined;
+  if (cursorPresent) {
+    const copied = copyGraphPayload(prepared.value.after, "query", {
+      code: "query-capability-failed",
+      maximumDepth: options.bounds.maxSnapshotStateDepth,
+      maximumValues: options.bounds.maxSnapshotStateValues,
+      message: "Bounded query anchor exceeds the configured structural budget",
+    });
+    if (!copied.ok) return queryCapabilityFailure();
+    after = copied.value;
+  }
+  return success(
+    Object.freeze({
+      ...(cursorPresent ? { after: after! } : {}),
+      generation,
+      limit: request.limit as PreparedBoundedQuery["limit"],
+      query,
+    }),
+  );
+}
+
+function pageQuery<T>(
+  prepared: PreparedBoundedQuery,
+  items: readonly T[],
+  state: Readonly<{ readonly hasMore: boolean; readonly nextAnchor?: string }>,
+  options: ApplicationOperationsContext,
+): Result<{
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly T[];
+  readonly nextCursor?: ContinuationCursor;
+}> {
+  const ownedItems = Object.freeze([...items]);
+  let raw: unknown;
+  try {
+    raw = intrinsicReflectApply(options.calls.queryPage, options.calls.queries, [
+      prepared,
+      ownedItems,
+      state,
+    ]);
+  } catch {
+    return queryCapabilityFailure();
+  }
+  const result = containedQueryCapabilityResult(raw, options);
+  if (!result.ok) return result;
+  const page = inspectExactRecord(
+    result.value,
+    [
+      ["generation", "hasMore", "items"],
+      ["generation", "hasMore", "items", "nextCursor"],
+    ],
+    "query-capability-failed",
+    "Bounded query page",
+  );
+  if (!page.ok) return queryCapabilityFailure();
+  const generation = parseGraphGeneration(page.value.generation);
+  const expectsCursor = state.hasMore;
+  if (
+    !generation.ok ||
+    generation.value !== prepared.generation ||
+    page.value.hasMore !== state.hasMore ||
+    Object.hasOwn(page.value, "nextCursor") !== expectsCursor ||
+    !sameCanonicalQueryData(page.value.items, ownedItems, options.bounds)
+  ) {
+    return queryCapabilityFailure();
+  }
+  if (expectsCursor && typeof page.value.nextCursor !== "string") {
+    return queryCapabilityFailure();
+  }
+  if (expectsCursor) {
+    if (typeof state.nextAnchor !== "string") return queryCapabilityFailure();
+    const continuation = prepareQuery(
+      prepared.generation,
+      prepared.query,
+      Object.freeze({
+        cursor: page.value.nextCursor as ContinuationCursor,
+        limit: prepared.limit,
+      }),
+      options,
+    );
+    if (
+      !continuation.ok ||
+      !sameCanonicalQueryData(continuation.value.after, state.nextAnchor, options.bounds)
+    ) {
+      return queryCapabilityFailure();
+    }
+  }
+  return success(
+    Object.freeze({
+      generation: prepared.generation,
+      hasMore: state.hasMore,
+      items: ownedItems,
+      ...(expectsCursor ? { nextCursor: page.value.nextCursor as ContinuationCursor } : {}),
+    }),
+  );
+}
+
+function exactQuery<T>(
+  generation: GraphGeneration,
+  item: T,
+  options: ApplicationOperationsContext,
+): Result<{ readonly generation: GraphGeneration; readonly item: T }> {
+  let raw: unknown;
+  try {
+    raw = intrinsicReflectApply(options.calls.queryExact, options.calls.queries, [
+      generation,
+      item,
+    ]);
+  } catch {
+    return queryCapabilityFailure();
+  }
+  const result = containedQueryCapabilityResult(raw, options);
+  if (!result.ok) return result;
+  const exact = inspectExactRecord(
+    result.value,
+    [["generation", "item"]],
+    "query-capability-failed",
+    "Exact bounded query result",
+  );
+  if (!exact.ok) return queryCapabilityFailure();
+  const parsedGeneration = parseGraphGeneration(exact.value.generation);
+  if (
+    !parsedGeneration.ok ||
+    parsedGeneration.value !== generation ||
+    !sameCanonicalQueryData(exact.value.item, item, options.bounds)
+  ) {
+    return queryCapabilityFailure();
+  }
+  return success(Object.freeze({ generation, item }));
+}
+
 function selectPage<T extends { readonly id: string }>(
   items: readonly T[],
   prepared: PreparedBoundedQuery,
@@ -833,12 +1208,13 @@ function relationshipPage(
   revision: ContentRevision,
   relationships: readonly StandardRelationship[],
   request: BoundedPageRequest,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Result<RelationshipPage> {
-  const prepared = options.queries.prepare(
+  const prepared = prepareQuery(
     generation,
     Object.freeze({ operation: "component-outgoing-relationships", source }),
     request,
+    options,
   );
   if (!prepared.ok) return prepared;
   const outgoing = relationships
@@ -849,10 +1225,15 @@ function relationshipPage(
   const views: RelationshipView[] = selected.value.items.map((relationship) =>
     Object.freeze({ relationship, revision }),
   );
-  const page = options.queries.page(prepared.value, views, {
-    hasMore: selected.value.hasMore,
-    ...(selected.value.nextAnchor === undefined ? {} : { nextAnchor: selected.value.nextAnchor }),
-  });
+  const page = pageQuery(
+    prepared.value,
+    Object.freeze(views),
+    Object.freeze({
+      hasMore: selected.value.hasMore,
+      ...(selected.value.nextAnchor === undefined ? {} : { nextAnchor: selected.value.nextAnchor }),
+    }),
+    options,
+  );
   return page.ok ? success(page.value as RelationshipPage) : page;
 }
 
@@ -860,12 +1241,12 @@ async function componentPage(
   request: BoundedPageRequest,
   query: Readonly<Record<string, string>>,
   filter: ComponentFilter,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Promise<Result<ComponentPage>> {
   for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
     const initial = await snapshot(Object.freeze([]), options);
     if (!initial.ok) return readProviderFailure(initial.diagnostics);
-    const prepared = options.queries.prepare(initial.value.generation, query, request);
+    const prepared = prepareQuery(initial.value.generation, query, request, options);
     if (!prepared.ok) return prepared;
     const initialItems = initial.value.components.filter(filter);
     const initialPage = selectPage(initialItems, prepared.value);
@@ -903,12 +1284,17 @@ async function componentPage(
       if (!revision.ok) return revision;
       views[index] = Object.freeze({ component, revision: revision.value });
     }
-    const page = options.queries.page(prepared.value, views, {
-      hasMore: confirmedPage.value.hasMore,
-      ...(confirmedPage.value.nextAnchor === undefined
-        ? {}
-        : { nextAnchor: confirmedPage.value.nextAnchor }),
-    });
+    const page = pageQuery(
+      prepared.value,
+      Object.freeze(views),
+      Object.freeze({
+        hasMore: confirmedPage.value.hasMore,
+        ...(confirmedPage.value.nextAnchor === undefined
+          ? {}
+          : { nextAnchor: confirmedPage.value.nextAnchor }),
+      }),
+      options,
+    );
     return page.ok ? success(page.value as ComponentPage) : page;
   }
   return failure(
@@ -942,18 +1328,37 @@ const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
   "component-has-relationships": "Component relationships must be handled explicitly first",
   "component-resource-unavailable": "The component resource could not be resolved",
   "content-revision-conflict": "The component revision conflicts with canonical state",
+  "continuation-anchor-too-large": "The continuation anchor exceeds the configured size budget",
+  "continuation-cursor-too-large": "The continuation cursor exceeds the configured size budget",
+  "cursor-query-mismatch": "The continuation cursor belongs to a different query",
   "explicit-reparent-required": "Structural parent changes require explicit reparenting",
+  "invalid-bounded-query-request": "The bounded query request is malformed",
+  "invalid-page-limit": "The page limit is outside the configured bound",
+  "invalid-prepared-query": "The prepared bounded query is malformed",
+  "invalid-query-items": "The query items are malformed",
+  "invalid-query-page": "The query page is malformed",
+  "invalid-query-page-state": "The query page state is malformed",
+  "malformed-continuation-cursor": "The continuation cursor is malformed",
+  "missing-continuation-anchor": "A continuing page requires a deterministic anchor",
+  "non-advancing-continuation-anchor": "The continuation anchor must advance",
+  "query-context-too-large": "The query context exceeds the configured size budget",
+  "query-page-overflow": "The query page exceeds the validated item limit",
   "relationship-id-hijack": "The relationship identity belongs to another component",
   "self-component-parent": "A component cannot be its own structural parent",
+  "stale-cursor": "The continuation cursor belongs to a different graph generation",
+  "unexpected-continuation-anchor": "A completed page must not include a continuation anchor",
   "unknown-component": "The exact component does not exist",
   "unknown-component-parent": "The exact component parent does not exist",
   "unknown-relationship": "The exact relationship does not exist",
+  "unsupported-continuation-cursor": "The continuation cursor version is not supported",
 });
 
 const safeIdentityDetailKeys = new Set(["componentId", "id", "parent", "source", "target"]);
 const safeNumericDetailKeys = new Set([
   "actual",
   "attempts",
+  "currentGeneration",
+  "cursorGeneration",
   "limit",
   "maximum",
   "receivedLength",
@@ -1204,8 +1609,9 @@ function stringIdentities(
   value: unknown,
   kind: "component" | "relationship",
   maximum: number,
+  isProxy?: (value: unknown) => boolean,
 ): Result<readonly string[]> {
-  const values = denseArray(value, `Affected ${kind} identities`, maximum);
+  const values = denseArray(value, `Affected ${kind} identities`, maximum, isProxy);
   if (!values.ok) return values;
   const identities: string[] = [];
   for (let index = 0; index < values.value.length; index += 1) {
@@ -1233,7 +1639,11 @@ function stringIdentities(
 function preflightTransactionOutcome(
   outcome: unknown,
   bounds: ApplicationOperationBounds,
+  isProxy?: (value: unknown) => boolean,
 ): Result<void> {
+  if (typeof outcome === "object" && outcome !== null && isProxy?.(outcome)) {
+    return failure(diagnostic("invalid-transaction-outcome", "Transaction outcome is malformed"));
+  }
   const envelope = inspectExactRecord(
     outcome,
     [
@@ -1247,14 +1657,15 @@ function preflightTransactionOutcome(
   );
   if (!envelope.ok) return envelope;
   if ("diagnostics" in envelope.value) {
-    const diagnostics = preflightDiagnostics(envelope.value.diagnostics, bounds);
+    const diagnostics = preflightDiagnostics(envelope.value.diagnostics, bounds, isProxy);
     if (!diagnostics.ok) return diagnostics;
   }
   if ("revisions" in envelope.value) {
-    const count = boundedArrayLength(
+    const count = denseArray(
       envelope.value.revisions,
       "Committed revisions",
       bounds.maxComponents,
+      isProxy,
     );
     if (!count.ok) return count;
     const event = inspectExactRecord(
@@ -1271,16 +1682,18 @@ function preflightTransactionOutcome(
       "Committed affected identities",
     );
     if (!affected.ok) return affected;
-    const entities = boundedArrayLength(
+    const entities = denseArray(
       affected.value.entities,
       "Committed affected component identities",
       bounds.maxComponents,
+      isProxy,
     );
     if (!entities.ok) return entities;
-    const relations = boundedArrayLength(
+    const relations = denseArray(
       affected.value.relations,
       "Committed affected relationship identities",
       bounds.maxRelationships,
+      isProxy,
     );
     if (!relations.ok) return relations;
   }
@@ -1303,6 +1716,7 @@ function preflightTransactionOutcome(
       recovery.value.resources,
       "Transaction recovery resources",
       bounds.maxComponents,
+      isProxy,
     );
     if (!resources.ok) return resources;
     for (let index = 0; index < resources.value.length; index += 1) {
@@ -1323,8 +1737,22 @@ function mapTransactionOutcome<T>(
   },
   value: T,
   bounds: ApplicationOperationBounds,
+  isProxy?: (value: unknown) => boolean,
 ): ApplicationMutationOutcome<T> {
-  const preflight = preflightTransactionOutcome(outcome, bounds);
+  const contained = containCapabilityValue(outcome, {
+    isProxy,
+    maximumContainerEntries: Math.max(
+      64,
+      bounds.maxComponents,
+      bounds.maxDiagnosticCount,
+      bounds.maxRelationships,
+    ),
+    maximumDepth: bounds.maxSnapshotStateDepth,
+    maximumValues: bounds.maxSnapshotStateValues,
+  });
+  if (!contained.ok) return malformedOutcome();
+  outcome = contained.value;
+  const preflight = preflightTransactionOutcome(outcome, bounds, isProxy);
   if (!preflight.ok) return malformedOutcome();
   const copied = copyGraphPayload(outcome, "transaction", {
     code: "application-transaction-outcome-too-large",
@@ -1369,11 +1797,17 @@ function mapTransactionOutcome<T>(
       "Committed affected identities",
     );
     if (!affected.ok) return malformedOutcome();
-    const components = stringIdentities(affected.value.entities, "component", bounds.maxComponents);
+    const components = stringIdentities(
+      affected.value.entities,
+      "component",
+      bounds.maxComponents,
+      isProxy,
+    );
     const relationships = stringIdentities(
       affected.value.relations,
       "relationship",
       bounds.maxRelationships,
+      isProxy,
     );
     if (!components.ok || !relationships.ok) return malformedOutcome();
     if (
@@ -1387,6 +1821,7 @@ function mapTransactionOutcome<T>(
       envelope.value.revisions,
       "Committed revisions",
       bounds.maxComponents,
+      isProxy,
     );
     if (!revisionEntries.ok || revisionEntries.value.length !== resourceOwners.size) {
       return malformedOutcome();
@@ -1432,7 +1867,7 @@ function mapTransactionOutcome<T>(
         : envelope.value.status === "indeterminate"
           ? "indeterminate"
           : "validation";
-  const diagnostics = applicationDiagnostics(envelope.value.diagnostics, category, bounds);
+  const diagnostics = applicationDiagnostics(envelope.value.diagnostics, category, bounds, isProxy);
   if (!diagnostics.ok) return malformedOutcome();
   if (envelope.value.status === "conflict" || envelope.value.status === "validation-rejected") {
     return Object.freeze({ diagnostics: diagnostics.value, status: envelope.value.status });
@@ -1466,6 +1901,7 @@ function mapTransactionOutcome<T>(
       recovery.value.resources,
       "Transaction recovery resources",
       bounds.maxComponents,
+      isProxy,
     );
     if (!baseGeneration.ok || !recoveryGeneration.ok || !recoveryResources.ok) {
       return malformedOutcome();
@@ -1482,7 +1918,7 @@ async function executeMutation<T>(
   request: TransactionRequest,
   resourceOwners: ReadonlyMap<ResourceKey, string>,
   value: T,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Promise<ApplicationMutationOutcome<T>> {
   const expectedComponents = stringIdentities(
     request.affected.entities,
@@ -1501,7 +1937,11 @@ async function executeMutation<T>(
   });
   let outcome: TransactionOutcome;
   try {
-    outcome = await options.transactionExecution.execute(request);
+    outcome = await intrinsicReflectApply(
+      options.calls.execute,
+      options.calls.transactionExecution,
+      [request],
+    );
   } catch {
     return Object.freeze({
       diagnostics: Object.freeze([
@@ -1513,7 +1953,18 @@ async function executeMutation<T>(
       status: "indeterminate" as const,
     });
   }
-  return mapTransactionOutcome(outcome, resourceOwners, expectedAffected, value, options.bounds);
+  try {
+    return mapTransactionOutcome(
+      outcome,
+      resourceOwners,
+      expectedAffected,
+      value,
+      options.bounds,
+      options.isProxy,
+    );
+  } catch {
+    return malformedOutcome();
+  }
 }
 
 function relationshipInput(
@@ -1521,7 +1972,7 @@ function relationshipInput(
   source: EntityId,
   graph: GraphSnapshot,
   state: LoadedState,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Result<PlannedRelationship> {
   const copied = copyGraphPayload(value, "relation");
   if (!copied.ok) return copied;
@@ -1645,7 +2096,7 @@ function planRelationshipChanges(
   value: ComponentRelationshipChanges | undefined,
   source: EntityId,
   state: LoadedState,
-  options: ApplicationOperationsOptions,
+  options: ApplicationOperationsContext,
 ): Result<PlannedRelationshipChanges> {
   if (value === undefined) {
     return success(Object.freeze({ affected: Object.freeze([]), mutations: Object.freeze([]) }));
@@ -1794,8 +2245,13 @@ export function createApplicationOperations(
   ] as const) {
     validatePositiveBound(captured.bounds[name], name, absoluteBounds[name]);
   }
-  validateSnapshotStateDecoder(captured);
-  const options = freezeApplicationOperationsOptions(captured);
+  const metadata = validateSnapshotStateDecoder(captured);
+  const frozenOptions = freezeApplicationOperationsOptions(captured);
+  const options: ApplicationOperationsContext = Object.freeze({
+    ...frozenOptions,
+    calls: captureApplicationCapabilityCalls(frozenOptions),
+    isProxy: metadata.isProxy,
+  });
 
   const initialize = async (
     request: InitializeWorkspaceRequest,
@@ -1803,12 +2259,22 @@ export function createApplicationOperations(
     const validated = exactRequest(request, [[]], "Workspace initialization request");
     if (!validated.ok) return validated;
     try {
-      return validatedInitializationOutcome(
-        await options.initialization.initialize(),
-        options.bounds,
+      const raw = await intrinsicReflectApply(
+        options.calls.initialize,
+        options.calls.initialization,
+        [],
       );
+      const contained = containApplicationCapabilityValue(raw, options);
+      return contained.ok
+        ? validatedInitializationOutcome(contained.value, options.bounds, options.isProxy)
+        : frozenFailure(
+            diagnostic(
+              "workspace-initialization-failed",
+              "Workspace initialization capability failed",
+            ),
+          );
     } catch {
-      return failure(
+      return frozenFailure(
         diagnostic("workspace-initialization-failed", "Workspace initialization capability failed"),
       );
     }
@@ -1850,11 +2316,15 @@ export function createApplicationOperations(
       options,
     );
     if (!relationships.ok) return relationships;
-    const exact = options.queries.exact(read.value.generation, {
-      generation: read.value.generation,
-      item: Object.freeze({ component, revision: revision.value }),
-      relationships: relationships.value,
-    });
+    const exact = exactQuery(
+      read.value.generation,
+      Object.freeze({
+        generation: read.value.generation,
+        item: Object.freeze({ component, revision: revision.value }),
+        relationships: relationships.value,
+      }),
+      options,
+    );
     return exact.ok ? success(exact.value.item as ExactComponentRead) : exact;
   };
 

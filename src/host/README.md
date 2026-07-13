@@ -100,6 +100,17 @@ completed, cancelled, startup-failure, or surface-failure outcome with the froze
 host-owned `host-signal-cleanup-failed` surface-failure outcome, because deterministic
 shutdown was not achieved; external cleanup errors and diagnostics are never retained.
 
+Surface completion, `stop()`, and asynchronous signal cleanup are observed with captured
+Promise and reflection intrinsics. For ordinary Promises, Promise subclasses, hostile own
+`then` properties, and shadowable constructor/species behavior, the host installs its
+settlement handlers without invoking provider accessors, restores the original descriptor,
+and exposes only stable host-owned outcomes. A non-configurable, non-writable hostile own
+constructor descriptor cannot be safely shadowed or executed; the host fails closed
+without invoking it. If trusted plugin code has already returned such a rejected Promise,
+JavaScript provides no trap-free way to mark that original rejection handled, so this is
+containment rather than a security sandbox and the host does not install a global
+`unhandledRejection` interceptor.
+
 Registry, recovery, workspace-status, surface, and session values are treated as
 hostile runtime input. The host exact-inspects and copies capability shapes once and
 returns only stable host-owned failure diagnostics; source paths, resource keys,

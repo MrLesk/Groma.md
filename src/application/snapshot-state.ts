@@ -14,7 +14,7 @@ import {
   type Result,
   type TransactionInvariant,
 } from "../core/index.ts";
-import { copyGraphPayload } from "../core/payload.ts";
+import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   createStandardModelInvariant,
@@ -27,30 +27,8 @@ import {
 } from "../standard-model/index.ts";
 import type { ApplicationOperationBounds } from "./contracts.ts";
 import type { GraphKernel } from "../core/index.ts";
-
-const intrinsicPromise = Promise;
-const intrinsicPromiseThen = Promise.prototype.then;
-const intrinsicSymbolSpecies = Symbol.species;
-const intrinsicReflectApply = Reflect.apply;
-const intrinsicReflectDeleteProperty = Reflect.deleteProperty;
-const intrinsicCreate = Object.create;
-const intrinsicDefineProperty = Object.defineProperty;
-const intrinsicFreeze = Object.freeze;
-const intrinsicGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
-const intrinsicPromiseSpeciesDescriptor = (() => {
-  const descriptor = intrinsicGetOwnPropertyDescriptor(intrinsicPromise, intrinsicSymbolSpecies);
-  return descriptor === undefined ? undefined : intrinsicFreeze(descriptor);
-})();
-const promiseSpeciesCarrier = (() => {
-  const carrier = intrinsicCreate(null) as object;
-  intrinsicDefineProperty(carrier, intrinsicSymbolSpecies, {
-    configurable: false,
-    enumerable: false,
-    value: intrinsicPromise,
-    writable: false,
-  });
-  return intrinsicFreeze(carrier);
-})();
+import { containCapabilityValue } from "./capability-value.ts";
+import { containNativePromise } from "./promise-observation.ts";
 
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
@@ -167,113 +145,6 @@ const decoderFailureResult = Object.freeze({
 
 function decoderFailure<T = never>(): Result<T> {
   return decoderFailureResult;
-}
-
-type NativePromiseObservation = "contained" | "not-native" | "uncontained";
-
-function descriptorsEqual(
-  left: PropertyDescriptor | undefined,
-  right: PropertyDescriptor | undefined,
-): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  if (left.configurable !== right.configurable || left.enumerable !== right.enumerable) {
-    return false;
-  }
-  const leftIsData = "value" in left;
-  if (leftIsData !== "value" in right) return false;
-  return leftIsData
-    ? left.value === right.value && left.writable === right.writable
-    : left.get === right.get && left.set === right.set;
-}
-
-function installPromiseRejectionHandler(value: object): boolean {
-  try {
-    intrinsicReflectApply(intrinsicPromiseThen, value, [undefined, () => undefined]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function containNativePromise(value: object): NativePromiseObservation {
-  let native = false;
-  try {
-    native = value instanceof intrinsicPromise;
-  } catch {
-    return "not-native";
-  }
-  if (!native) return "not-native";
-
-  let constructorDescriptor: PropertyDescriptor | undefined;
-  try {
-    constructorDescriptor = intrinsicGetOwnPropertyDescriptor(value, "constructor");
-  } catch {
-    return "uncontained";
-  }
-
-  const configurable = constructorDescriptor?.configurable === true;
-  const writableDataProperty =
-    constructorDescriptor !== undefined &&
-    "value" in constructorDescriptor &&
-    constructorDescriptor.writable === true;
-  const fixedIntrinsicPromiseConstructor =
-    constructorDescriptor !== undefined &&
-    "value" in constructorDescriptor &&
-    constructorDescriptor.value === intrinsicPromise &&
-    constructorDescriptor.configurable === false &&
-    constructorDescriptor.writable === false;
-  if (fixedIntrinsicPromiseConstructor) {
-    let currentSpeciesDescriptor: PropertyDescriptor | undefined;
-    try {
-      currentSpeciesDescriptor = intrinsicGetOwnPropertyDescriptor(
-        intrinsicPromise,
-        intrinsicSymbolSpecies,
-      );
-    } catch {
-      return "uncontained";
-    }
-    if (!descriptorsEqual(currentSpeciesDescriptor, intrinsicPromiseSpeciesDescriptor)) {
-      return "uncontained";
-    }
-    return installPromiseRejectionHandler(value) ? "contained" : "uncontained";
-  }
-  if (constructorDescriptor !== undefined && !configurable && !writableDataProperty) {
-    return "uncontained";
-  }
-
-  let shadowed = false;
-  let contained = false;
-  try {
-    intrinsicDefineProperty(
-      value,
-      "constructor",
-      constructorDescriptor === undefined || configurable
-        ? {
-            configurable: true,
-            enumerable: constructorDescriptor?.enumerable ?? false,
-            value: promiseSpeciesCarrier,
-            writable: true,
-          }
-        : { value: promiseSpeciesCarrier },
-    );
-    shadowed = true;
-    contained = installPromiseRejectionHandler(value);
-  } catch {
-    // Decoder failure remains authoritative when safe Promise observation is unavailable.
-  } finally {
-    if (shadowed) {
-      try {
-        if (constructorDescriptor === undefined) {
-          intrinsicReflectDeleteProperty(value, "constructor");
-        } else {
-          intrinsicDefineProperty(value, "constructor", constructorDescriptor);
-        }
-      } catch {
-        // Restoration is best effort and must not expose provider-controlled errors.
-      }
-    }
-  }
-  return contained ? "contained" : "uncontained";
 }
 
 function compareText(left: string, right: string): number {
@@ -694,6 +565,71 @@ function modelItems(
   }
 }
 
+function canonicalModelDataEqual(
+  left: unknown,
+  right: unknown,
+  owner: "entity" | "relation",
+  context: ModelSuccessContext,
+): boolean {
+  const budget = {
+    code: "application-snapshot-decode-failed",
+    maximumDepth: context.options.bounds.maxSnapshotStateDepth,
+    maximumValues: context.options.bounds.maxSnapshotStateValues,
+    message: "Decoded model values exceed the configured structural budget",
+  };
+  const leftCopy = copyCanonicalGraphData(left, owner, undefined, budget);
+  const rightCopy = copyCanonicalGraphData(right, owner, undefined, budget);
+  return (
+    leftCopy.ok && rightCopy.ok && leftCopy.value.canonicalJson === rightCopy.value.canonicalJson
+  );
+}
+
+function modelItemPayload(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    id: value.id,
+    ...(value.name === undefined ? {} : { name: value.name }),
+    ...(value.description === undefined ? {} : { description: value.description }),
+    ...(value.extensions as Readonly<Record<string, unknown>>),
+  });
+}
+
+function modelComponentPayload(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const items = (field: "actions" | "inputs" | "outputs") =>
+    value[field] === undefined
+      ? undefined
+      : Object.freeze(
+          (value[field] as readonly Readonly<Record<string, unknown>>[]).map(modelItemPayload),
+        );
+  const actions = items("actions");
+  const inputs = items("inputs");
+  const outputs = items("outputs");
+  return Object.freeze({
+    ...(value.name === undefined ? {} : { name: value.name }),
+    ...(value.type === undefined ? {} : { type: value.type }),
+    ...(value.parent === undefined ? {} : { parent: value.parent }),
+    ...(value.intent === undefined ? {} : { intent: value.intent }),
+    ...(inputs === undefined ? {} : { inputs }),
+    ...(outputs === undefined ? {} : { outputs }),
+    ...(actions === undefined ? {} : { actions }),
+    ...(value.lifecycle === undefined ? {} : { lifecycle: value.lifecycle }),
+    ...(value.desired === undefined ? {} : { desired: value.desired }),
+    ...(value.extensions as Readonly<Record<string, unknown>>),
+  });
+}
+
+function modelRelationshipPayload(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    ...(value.description === undefined ? {} : { description: value.description }),
+    ...(value.extensions as Readonly<Record<string, unknown>>),
+  });
+}
+
 function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unknown> {
   try {
     if (typeof value !== "object" || value === null || context.isProxy(value)) {
@@ -762,22 +698,28 @@ function modelComponent(
   if (!actions.ok) return actions;
   const extensions = modelExtensions(record.value.extensions, context);
   if (!extensions.ok) return extensions;
-  return success(
-    Object.freeze({
-      id: id.value,
-      kind: STANDARD_COMPONENT_KIND,
-      ...(name.value === undefined ? {} : { name: name.value }),
-      ...(type.value === undefined ? {} : { type: type.value }),
-      ...(parent === undefined ? {} : { parent }),
-      ...(intent.value === undefined ? {} : { intent: intent.value }),
-      ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
-      ...(outputs.value === undefined ? {} : { outputs: outputs.value }),
-      ...(actions.value === undefined ? {} : { actions: actions.value }),
-      ...(lifecycle.value === undefined ? {} : { lifecycle: lifecycle.value }),
-      ...(desired.value === undefined ? {} : { desired: desired.value }),
-      extensions: extensions.value,
-    }),
-  );
+  const component = Object.freeze({
+    id: id.value,
+    kind: STANDARD_COMPONENT_KIND,
+    ...(name.value === undefined ? {} : { name: name.value }),
+    ...(type.value === undefined ? {} : { type: type.value }),
+    ...(parent === undefined ? {} : { parent }),
+    ...(intent.value === undefined ? {} : { intent: intent.value }),
+    ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
+    ...(outputs.value === undefined ? {} : { outputs: outputs.value }),
+    ...(actions.value === undefined ? {} : { actions: actions.value }),
+    ...(lifecycle.value === undefined ? {} : { lifecycle: lifecycle.value }),
+    ...(desired.value === undefined ? {} : { desired: desired.value }),
+    extensions: extensions.value,
+  });
+  return canonicalModelDataEqual(
+    modelComponentPayload(component),
+    entity.payload,
+    "entity",
+    context,
+  )
+    ? success(component)
+    : decoderFailure();
 }
 
 function modelRelationship(
@@ -813,16 +755,22 @@ function modelRelationship(
   const description = optionalModelString(record.value, "description");
   const extensions = modelExtensions(record.value.extensions, context);
   if (!description.ok || !extensions.ok) return decoderFailure();
-  return success(
-    Object.freeze({
-      id: id.value,
-      type: relation.type,
-      source: relation.source,
-      target: relation.target,
-      ...(description.value === undefined ? {} : { description: description.value }),
-      extensions: extensions.value,
-    }),
-  );
+  const relationship = Object.freeze({
+    id: id.value,
+    type: relation.type,
+    source: relation.source,
+    target: relation.target,
+    ...(description.value === undefined ? {} : { description: description.value }),
+    extensions: extensions.value,
+  });
+  return canonicalModelDataEqual(
+    modelRelationshipPayload(relationship),
+    relation.payload,
+    "relation",
+    context,
+  )
+    ? success(relationship)
+    : decoderFailure();
 }
 
 function modelRelationships(
@@ -1206,10 +1154,22 @@ function denseArray(
 }
 
 function decode(
-  value: unknown,
+  rawValue: unknown,
   options: ApplicationSnapshotStateDecoderContext,
 ): Result<DecodedApplicationSnapshotState> {
   const isProxy = options.isProxy ?? (() => false);
+  const contained = containCapabilityValue(rawValue, {
+    isProxy: options.isProxy,
+    maximumContainerEntries: options.bounds.maxSnapshotStateValues,
+    maximumDepth: options.bounds.maxSnapshotStateDepth,
+    maximumValues: options.bounds.maxSnapshotStateValues,
+  });
+  if (!contained.ok) {
+    return failure(
+      diagnostic("invalid-standard-model-state", "Snapshot state could not be inspected safely"),
+    );
+  }
+  const value = contained.value;
   if (typeof value === "object" && value !== null && isProxy(value)) {
     return failure(
       diagnostic("invalid-standard-model-state", "Snapshot state must not be a proxy"),
