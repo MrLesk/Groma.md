@@ -520,11 +520,13 @@ describe("local transaction journal", () => {
       recursive: true,
     });
 
-    expect(await journal.recover(prepared.token)).toMatchObject({
+    const restartedResources = await createLocalResourceProvider(roots);
+    const restarted = createLocalTransactionJournal({ adapter, resources: restartedResources });
+    expect(await restarted.recover(prepared.token)).toMatchObject({
       generation: 1,
       status: "committed",
     });
-    expect(await resources.read({ locator: locator.value, maxBytes: 100 })).toMatchObject({
+    expect(await restartedResources.read({ locator: locator.value, maxBytes: 100 })).toMatchObject({
       diagnostics: [{ code: "resource-missing" }],
       ok: false,
     });
