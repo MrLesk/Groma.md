@@ -8,7 +8,6 @@ import {
   success,
   type ContentRevision,
   type Diagnostic,
-  type EntityDraft,
   type EntityId,
   type GraphData,
   type GraphDataRecord,
@@ -28,7 +27,6 @@ import {
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
   type StandardComponentPatch,
-  type StandardModelTransactionState,
   type StandardRelationship,
 } from "../standard-model/index.ts";
 import type {
@@ -56,12 +54,12 @@ import type {
   UpdateComponentRequest,
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
+import {
+  createApplicationSnapshotStateDecoder,
+  type DecodedApplicationSnapshotState,
+} from "./snapshot-state.ts";
 
-interface LoadedState {
-  readonly components: readonly StandardComponent[];
-  readonly graph: GraphSnapshot;
-  readonly relationships: readonly StandardRelationship[];
-}
+type LoadedState = DecodedApplicationSnapshotState;
 
 interface ReadSnapshot extends LoadedState {
   readonly generation: GraphGeneration;
@@ -501,120 +499,6 @@ function validatedInitializationOutcome(
   );
 }
 
-function loadState(value: unknown, options: ApplicationOperationsOptions): Result<LoadedState> {
-  const rawEnvelope = inspectExactRecord(
-    value,
-    [["components", "relationships"]],
-    "invalid-standard-model-state",
-    "Standard Model transaction state",
-  );
-  if (!rawEnvelope.ok) return rawEnvelope;
-  const rawComponents = boundedArrayLength(
-    rawEnvelope.value.components,
-    "Standard Model transaction state components",
-    options.bounds.maxComponents,
-  );
-  if (!rawComponents.ok) return rawComponents;
-  const rawRelationships = boundedArrayLength(
-    rawEnvelope.value.relationships,
-    "Standard Model transaction state relationships",
-    options.bounds.maxRelationships,
-  );
-  if (!rawRelationships.ok) return rawRelationships;
-  const copied = copyGraphPayload(value, "transaction", {
-    code: "application-snapshot-state-too-large",
-    maximumDepth: options.bounds.maxSnapshotStateDepth,
-    maximumValues: options.bounds.maxSnapshotStateValues,
-    message: "Transaction snapshot state exceeds the configured structural budget",
-  });
-  if (!copied.ok) return copied;
-  const envelope = inspectExactRecord(
-    copied.value,
-    [["components", "relationships"]],
-    "invalid-standard-model-state",
-    "Standard Model transaction state",
-  );
-  if (!envelope.ok) return envelope;
-  const componentValues = denseArray(
-    envelope.value.components,
-    "Standard Model transaction state components",
-    options.bounds.maxComponents,
-  );
-  if (!componentValues.ok) return componentValues;
-  const relationshipValues = denseArray(
-    envelope.value.relationships,
-    "Standard Model transaction state relationships",
-    options.bounds.maxRelationships,
-  );
-  if (!relationshipValues.ok) return relationshipValues;
-
-  const entityDrafts: EntityDraft[] = [];
-  for (let index = 0; index < componentValues.value.length; index += 1) {
-    const record = inspectExactRecord(
-      componentValues.value[index],
-      [["id", "kind", "payload"]],
-      "invalid-standard-model-state",
-      `Standard Model component ${index}`,
-    );
-    if (!record.ok) return record;
-    entityDrafts[index] = Object.freeze({
-      id: record.value.id as string,
-      kind: record.value.kind as string,
-      payload: record.value.payload,
-    });
-  }
-
-  const relationDrafts = [];
-  for (let index = 0; index < relationshipValues.value.length; index += 1) {
-    const record = inspectExactRecord(
-      relationshipValues.value[index],
-      [["id", "payload", "source", "target", "type"]],
-      "invalid-standard-model-state",
-      `Standard Model relationship ${index}`,
-    );
-    if (!record.ok) return record;
-    relationDrafts[index] = Object.freeze({
-      id: record.value.id as string,
-      payload: record.value.payload,
-      source: Object.freeze({ id: record.value.source as string }),
-      target: Object.freeze({ id: record.value.target as string }),
-      type: record.value.type as string,
-    });
-  }
-
-  const loaded = options.graph.load(entityDrafts, relationDrafts);
-  if (!loaded.ok) return loaded;
-  const components: StandardComponent[] = [];
-  for (let index = 0; index < entityDrafts.length; index += 1) {
-    const draft = entityDrafts[index]!;
-    const resolved = options.graph.resolveEntity(loaded.value, {
-      expectedKind: STANDARD_COMPONENT_KIND,
-      id: draft.id!,
-    });
-    if (!resolved.ok) return resolved;
-    const component = options.model.parse(resolved.value);
-    if (!component.ok) return component;
-    components[index] = component.value;
-  }
-  components.sort((left, right) => compareText(left.id, right.id));
-
-  const graphRelations: GraphRelation[] = [];
-  for (let index = 0; index < relationDrafts.length; index += 1) {
-    const relation = options.graph.resolveRelation(loaded.value, relationDrafts[index]!.id!);
-    if (!relation.ok) return relation;
-    graphRelations[index] = relation.value;
-  }
-  const relationships = options.model.relationships(graphRelations);
-  if (!relationships.ok) return relationships;
-  return success(
-    Object.freeze({
-      components: Object.freeze(components),
-      graph: loaded.value,
-      relationships: relationships.value,
-    }),
-  );
-}
-
 async function snapshot(
   resources: readonly ResourceKey[],
   options: ApplicationOperationsOptions,
@@ -674,7 +558,7 @@ async function snapshot(
     }
     revisions.set(resource.value, revision.value);
   }
-  const state = loadState(inspected.value.state as StandardModelTransactionState, options);
+  const state = createApplicationSnapshotStateDecoder(options).decode(inspected.value.state);
   if (!state.ok) return state;
   return success(Object.freeze({ generation: generation.value, revisions, ...state.value }));
 }

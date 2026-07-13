@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-12 23:27'
+updated_date: '2026-07-13 00:06'
 labels:
   - host
   - bootstrap
@@ -67,4 +67,6 @@ Implemented the injected host lifecycle: cancellation/signals are installed befo
 Self-review closed the retryable coordination-release edge: initialization now retains an opaque lease after release failure, blocks promotion, and retries release before later recovery/initialization. Fault-injection proves the diagnostic stays path-free and the same session reaches ready after deterministic release.
 
 Specification-review correction: initialization publication now validates exact replacement outcomes and provider diagnostics, retains the original handle plus coordination lease across thrown, malformed, indeterminate, or unconfirmed-readback outcomes, retries that handle from initialize/recover, and confirms discard before clearing not-committed state. Snapshot input and lifecycle recovery Results/reports are copied from exact bounded data properties into frozen canonical values; hostile accessors, proxies, extra keys, unsafe generations, and malformed successes fail closed before readiness or dispatch. A real replacement-parent-directory-sync fault regression proves same-handle retry and delayed recovery promotion.
+
+Independent quality review hardened the host boundary before handoff: startup and surface diagnostics are now host-owned and path/secret-free; registry, composition, workspace status, recovery, signal cleanup, and surface-session values are exact-inspected without invoking accessors or proxy traps; cancellation is passed into surfaces and races asynchronous start with contained late cleanup. Local initialize/recover calls now serialize in invocation order. Host recovery and application reads share one bounded snapshot-state decoder with GraphKernel, Standard Model, relationship, and containment validation. Windows fixtures omit unsupported custom coordination roots. Focused tests, the full 338-test check, four-target standalone verification, and direct host/application entry compilation for all four supported targets pass.
 <!-- SECTION:NOTES:END -->

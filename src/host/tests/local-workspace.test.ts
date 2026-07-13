@@ -3,17 +3,24 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { ApplicationOperations } from "../../application/index.ts";
-import { parseGraphGeneration, type TransactionProvider } from "../../core/index.ts";
 import {
+  createApplicationSnapshotStateDecoder,
+  type ApplicationOperations,
+} from "../../application/index.ts";
+import { GraphKernel, parseGraphGeneration, type TransactionProvider } from "../../core/index.ts";
+import {
+  allowsCustomLocalCoordinationRoot,
   createLocalResourceProvider,
   type LocalResourceProvider,
 } from "../../persistence/index.ts";
 import {
-  createLocalWorkspaceCapability,
+  createLocalWorkspaceCapability as createWorkspaceCapability,
   defaultWorkspaceDocument,
+  type LocalWorkspaceCapabilityOptions,
   workspaceConfigurationLocator,
 } from "../index.ts";
+import { isHostProxy } from "../runtime-validation.ts";
+import { createStandardModelCapability } from "../../standard-model/index.ts";
 
 const roots: string[] = [];
 
@@ -23,8 +30,10 @@ afterEach(async () => {
 
 async function temporaryWorkspace() {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-host-workspace-"));
+  roots.push(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
   const coordinationRoot = await mkdtemp(path.join(tmpdir(), "groma-host-locks-"));
-  roots.push(workspaceRoot, coordinationRoot);
+  roots.push(coordinationRoot);
   return { coordinationRoot, workspaceRoot };
 }
 
@@ -38,11 +47,46 @@ function provider(
   return { snapshot };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
 const emptySnapshot = () => ({
   generation: 0,
   revisions: [],
   state: { components: [], relationships: [] },
 });
+
+const stateModel = createStandardModelCapability();
+const stateDecoder = createApplicationSnapshotStateDecoder({
+  bounds: {
+    maxComponents: 100_000,
+    maxRelationships: 100_000,
+    maxSnapshotStateDepth: 30,
+    maxSnapshotStateValues: 100_000,
+  },
+  graph: new GraphKernel({
+    idSource: {
+      nextEntityId: () => "ent_00000000000000000000000000000001",
+      nextRelationId: () => "rel_00000000000000000000000000000001",
+    },
+    maxPageSize: 100,
+  }),
+  isProxy: isHostProxy,
+  model: stateModel,
+});
+
+function createLocalWorkspaceCapability(
+  options: Omit<LocalWorkspaceCapabilityOptions, "stateDecoder">,
+) {
+  return createWorkspaceCapability({ ...options, stateDecoder });
+}
 
 describe("local workspace capability", () => {
   test("keeps initialization available without creating workspace files on discovery", async () => {
@@ -256,6 +300,22 @@ describe("local workspace capability", () => {
           relationships: [],
         },
       },
+      {
+        generation: 0,
+        revisions: [],
+        state: {
+          components: [],
+          relationships: [
+            {
+              id: "rel_00000000000000000000000000000001",
+              payload: new Proxy({}, {}),
+              source: "ent_00000000000000000000000000000001",
+              target: "ent_00000000000000000000000000000002",
+              type: "depends-on",
+            },
+          ],
+        },
+      },
       emptySnapshot(),
     ];
     const workspace = await createLocalWorkspaceCapability({
@@ -264,7 +324,7 @@ describe("local workspace capability", () => {
       resources,
     });
 
-    for (let attempt = 0; attempt < 9; attempt += 1) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
       expect(await workspace.recover()).toMatchObject({
         diagnostics: [{ code: "invalid-workspace-recovery" }],
         ok: false,
@@ -285,6 +345,137 @@ describe("local workspace capability", () => {
         resources,
       }),
     ).rejects.toThrow("maxSnapshotStateValues");
+  });
+
+  test("uses shared application semantics before accepting recovered state", async () => {
+    const first = "ent_00000000000000000000000000000001";
+    const second = "ent_00000000000000000000000000000002";
+    const component = (id: string, payload: Record<string, unknown> = {}) => ({
+      id,
+      kind: "component",
+      payload,
+    });
+    const invalidStates: ReadonlyArray<{ name: string; state: unknown }> = [
+      {
+        name: "dangling relationship",
+        state: {
+          components: [component(first)],
+          relationships: [
+            {
+              id: "rel_00000000000000000000000000000001",
+              payload: {},
+              source: first,
+              target: second,
+              type: "depends-on",
+            },
+          ],
+        },
+      },
+      {
+        name: "duplicate component",
+        state: { components: [component(first), component(first)], relationships: [] },
+      },
+      {
+        name: "invalid relationship token",
+        state: {
+          components: [component(first), component(second)],
+          relationships: [
+            {
+              id: "rel_00000000000000000000000000000001",
+              payload: {},
+              source: first,
+              target: second,
+              type: "Invalid Token",
+            },
+          ],
+        },
+      },
+      {
+        name: "malformed component",
+        state: { components: [component(first, { name: 42 })], relationships: [] },
+      },
+      {
+        name: "unknown parent",
+        state: { components: [component(first, { parent: second })], relationships: [] },
+      },
+      {
+        name: "containment cycle",
+        state: {
+          components: [component(first, { parent: second }), component(second, { parent: first })],
+          relationships: [],
+        },
+      },
+    ];
+
+    for (const entry of invalidStates) {
+      const roots = await temporaryWorkspace();
+      await Bun.write(
+        path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+        defaultWorkspaceDocument,
+      );
+      const resources = await createLocalResourceProvider(roots);
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        transactionProvider: provider(() => ({
+          generation: 0,
+          revisions: [],
+          state: entry.state,
+        })),
+        resources,
+      });
+
+      expect(await workspace.recover(), entry.name).toMatchObject({
+        diagnostics: [{ code: "invalid-workspace-recovery" }],
+        ok: false,
+      });
+      expect(workspace.status(), entry.name).toEqual({ state: "configured" });
+      expect(workspace.requireWorkspace(), entry.name).toMatchObject({
+        diagnostics: [{ code: "workspace-recovery-required" }],
+        ok: false,
+      });
+    }
+
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const resources = await createLocalResourceProvider(roots);
+    const boundedDecoder = createApplicationSnapshotStateDecoder({
+      bounds: {
+        maxComponents: 1,
+        maxRelationships: 1,
+        maxSnapshotStateDepth: 30,
+        maxSnapshotStateValues: 100,
+      },
+      graph: new GraphKernel({
+        idSource: {
+          nextEntityId: () => first,
+          nextRelationId: () => "rel_00000000000000000000000000000001",
+        },
+        maxPageSize: 10,
+      }),
+      isProxy: isHostProxy,
+      model: stateModel,
+    });
+    const bounded = await createWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => ({
+        generation: 0,
+        revisions: [],
+        state: {
+          components: [component(first), component(second)],
+          relationships: [],
+        },
+      })),
+      resources,
+      stateDecoder: boundedDecoder,
+    });
+    expect(await bounded.recover()).toMatchObject({
+      diagnostics: [{ code: "invalid-workspace-recovery" }],
+      ok: false,
+    });
+    expect(bounded.status()).toEqual({ state: "configured" });
   });
 
   test("retries the same committed handle after an interrupted commit report", async () => {
@@ -665,5 +856,110 @@ describe("local workspace capability", () => {
     expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
     expect(workspace.status()).toEqual({ state: "ready" });
     expect(releases).toBe(2);
+  });
+
+  test("serializes initialize with initialize and recover in invocation order", async () => {
+    for (const secondOperation of ["initialize", "recover"] as const) {
+      const roots = await temporaryWorkspace();
+      const base = await createLocalResourceProvider(roots);
+      const commitEntered = deferred<void>();
+      const commitGate = deferred<void>();
+      let activeMutations = 0;
+      let commits = 0;
+      let maxActiveMutations = 0;
+      let releases = 0;
+      let stages = 0;
+      const resources = new Proxy(base, {
+        get(target, property) {
+          if (property === "stageReplacement") {
+            return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+              stages += 1;
+              return target.stageReplacement(...args);
+            };
+          }
+          if (property === "commitReplacement") {
+            return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+              commits += 1;
+              activeMutations += 1;
+              maxActiveMutations = Math.max(maxActiveMutations, activeMutations);
+              commitEntered.resolve();
+              await commitGate.promise;
+              const outcome = await target.commitReplacement(...args);
+              activeMutations -= 1;
+              return outcome;
+            };
+          }
+          if (property === "releaseCoordination") {
+            return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+              releases += 1;
+              return target.releaseCoordination(...args);
+            };
+          }
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        transactionProvider: provider(emptySnapshot),
+        resources,
+      });
+
+      const first = workspace.initialize();
+      await commitEntered.promise;
+      const second = workspace[secondOperation]();
+      expect({ commits, releases, stages }).toEqual({ commits: 1, releases: 0, stages: 1 });
+      commitGate.resolve();
+
+      expect(await first).toMatchObject({ status: "initialized" });
+      expect(await second).toMatchObject(
+        secondOperation === "initialize"
+          ? { status: "already-initialized" }
+          : { ok: true, value: { status: "completed" } },
+      );
+      expect(maxActiveMutations).toBe(1);
+      expect(commits).toBe(1);
+      expect(releases).toBe(1);
+      expect(workspace.status()).toEqual({ state: "ready" });
+    }
+  });
+
+  test("serializes concurrent recover calls and snapshots once", async () => {
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const resources = await createLocalResourceProvider(roots);
+    const snapshotEntered = deferred<void>();
+    const snapshotGate = deferred<void>();
+    let activeSnapshots = 0;
+    let maxActiveSnapshots = 0;
+    let snapshots = 0;
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(async () => {
+        snapshots += 1;
+        activeSnapshots += 1;
+        maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots);
+        snapshotEntered.resolve();
+        await snapshotGate.promise;
+        activeSnapshots -= 1;
+        return emptySnapshot();
+      }),
+      resources,
+    });
+
+    const first = workspace.recover();
+    await snapshotEntered.promise;
+    const second = workspace.recover();
+    expect(snapshots).toBe(1);
+    snapshotGate.resolve();
+
+    expect(await first).toMatchObject({ ok: true });
+    expect(await second).toMatchObject({ ok: true });
+    expect(snapshots).toBe(1);
+    expect(maxActiveSnapshots).toBe(1);
+    expect(workspace.status()).toEqual({ state: "ready" });
   });
 });

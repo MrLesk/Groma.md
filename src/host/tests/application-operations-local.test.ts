@@ -3,6 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
+
 import {
   conformanceIds,
   exerciseApplicationOperations,
@@ -19,8 +21,10 @@ afterEach(async () => {
 
 async function temporaryWorkspace() {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-application-local-"));
+  roots.push(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
   const coordinationRoot = await mkdtemp(path.join(tmpdir(), "groma-application-locks-"));
-  roots.push(workspaceRoot, coordinationRoot);
+  roots.push(coordinationRoot);
   return { coordinationRoot, workspaceRoot };
 }
 
@@ -29,7 +33,9 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
     start: () => ({ completion: Promise.resolve(), stop: async () => {} }),
   });
   const registry = createDefaultBootstrapRegistry({
-    coordinationRoot: workspace.coordinationRoot,
+    ...(workspace.coordinationRoot === undefined
+      ? {}
+      : { coordinationRoot: workspace.coordinationRoot }),
     entropy: (length) => new Uint8Array(length),
     surface,
   });

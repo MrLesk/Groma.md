@@ -3,6 +3,8 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
+
 import {
   createDefaultBootstrapRegistry,
   type HostSurface,
@@ -17,8 +19,10 @@ afterEach(async () => {
 
 async function temporaryWorkspace() {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-host-composition-"));
+  roots.push(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
   const coordinationRoot = await mkdtemp(path.join(tmpdir(), "groma-host-coordination-"));
-  roots.push(workspaceRoot, coordinationRoot);
+  roots.push(coordinationRoot);
   return { coordinationRoot, workspaceRoot };
 }
 
@@ -38,7 +42,9 @@ describe("default bootstrap registry", () => {
     let byte = 0;
     const surface = idleSurface();
     const registry = createDefaultBootstrapRegistry({
-      coordinationRoot: context.coordinationRoot,
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
       entropy: (length) => Uint8Array.from({ length }, () => byte++ % 256),
       surface,
     });
@@ -67,6 +73,7 @@ describe("default bootstrap registry", () => {
       "queries",
       "resourceMapper",
       "resources",
+      "snapshotStateDecoder",
       "store",
       "surface",
       "transactionEngine",

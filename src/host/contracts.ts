@@ -1,5 +1,6 @@
 import type {
   ApplicationOperations,
+  ApplicationSnapshotStateDecoder,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
 import type { Diagnostic, EntropySource, Result } from "../core/index.ts";
@@ -37,6 +38,7 @@ export interface WorkspaceAccessCapability extends WorkspaceInitializationCapabi
 }
 
 export interface HostSurfaceContext {
+  readonly cancellation: AbortSignal;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly workspace: WorkspaceAccessCapability;
 }
@@ -66,6 +68,7 @@ export interface HostComposition {
   readonly resources: LocalResourceProvider;
   readonly store: MarkdownIntentStore;
   readonly surface: HostSurface;
+  readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
   readonly transactionEngine: TransactionEngine;
   readonly transactionProvider: TransactionProvider;
   readonly workspace: WorkspaceAccessCapability;

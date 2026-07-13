@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { failure, success, type Diagnostic, type Result } from "../../core/index.ts";
+import { failure, success, type Result } from "../../core/index.ts";
 import {
   runHost,
   type HostBootstrapRegistry,
@@ -8,6 +8,7 @@ import {
   type HostSignal,
   type HostSignalSource,
   type HostSurface,
+  type HostSurfaceSession,
   type WorkspaceAccessCapability,
   type WorkspaceStatus,
 } from "../index.ts";
@@ -58,10 +59,22 @@ function composition(
   surface: HostSurface,
   workspaceAccess: WorkspaceAccessCapability,
 ): HostComposition {
-  return {
+  const capability = Object.freeze({});
+  return Object.freeze({
+    graph: capability,
+    invariant: capability,
+    model: capability,
+    operations: capability,
+    queries: capability,
+    resourceMapper: capability,
+    resources: capability,
+    snapshotStateDecoder: capability,
+    store: capability,
     surface,
+    transactionEngine: capability,
+    transactionProvider: capability,
     workspace: workspaceAccess,
-  } as HostComposition;
+  }) as HostComposition;
 }
 
 function registry(value: HostComposition): HostBootstrapRegistry {
@@ -139,8 +152,9 @@ describe("host lifecycle", () => {
   test("reports recovery failure without dispatching a surface", async () => {
     const signal = signals();
     let starts = 0;
-    const diagnostic: Diagnostic = { code: "workspace-recovery-failed", message: "failed" };
-    const access = workspace({ state: "configured" }, async () => failure(diagnostic));
+    const access = workspace({ state: "configured" }, async () =>
+      failure({ code: "workspace-recovery-failed", message: "failed" }),
+    );
     const outcome = await runHost({
       context: { workspaceRoot: "/absolute/workspace" },
       registry: registry(
@@ -157,7 +171,10 @@ describe("host lifecycle", () => {
       signalSource: signal.source,
     });
 
-    expect(outcome).toEqual({ diagnostics: [diagnostic], status: "startup-failure" });
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "workspace-recovery-failed", message: "Workspace recovery failed" }],
+      status: "startup-failure",
+    });
     expect(starts).toBe(0);
     expect(signal.unsubscribes()).toBe(1);
   });
@@ -372,8 +389,8 @@ describe("host lifecycle", () => {
     ).toEqual({
       diagnostics: [
         {
-          code: "invalid-host-bootstrap-result",
-          message: "Host bootstrap registry returned a malformed result",
+          code: "host-bootstrap-failed",
+          message: "Host bootstrap failed",
         },
       ],
       status: "startup-failure",
@@ -397,8 +414,8 @@ describe("host lifecycle", () => {
     ).toEqual({
       diagnostics: [
         {
-          code: "invalid-host-surface-session",
-          message: "Host surface returned a malformed session",
+          code: "host-surface-start-failed",
+          message: "Host surface start failed",
         },
       ],
       status: "surface-failure",
@@ -434,5 +451,373 @@ describe("host lifecycle", () => {
     expect(outcome).toEqual({ status: "cancelled" });
     expect(stops).toBe(1);
     expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("does not call start when cancellation is already requested", async () => {
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const signal = signals();
+    let starts = 0;
+    const outcome = await runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => {
+              starts += 1;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({ status: "cancelled" });
+    expect(starts).toBe(0);
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("passes cancellation to cooperative start and awaits its session cleanup", async () => {
+    const cancellation = new AbortController();
+    const signal = signals();
+    const started = deferred<void>();
+    const cleaned = deferred<void>();
+    let stops = 0;
+    const running = runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: (context) => {
+              started.resolve();
+              return new Promise((resolve) => {
+                context.cancellation.addEventListener(
+                  "abort",
+                  () =>
+                    resolve({
+                      completion: new Promise<void>(() => {}),
+                      stop: async () => {
+                        stops += 1;
+                        cleaned.resolve();
+                      },
+                    }),
+                  { once: true },
+                );
+              });
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signal.source,
+    });
+    await started.promise;
+    cancellation.abort();
+
+    expect(await running).toEqual({ status: "cancelled" });
+    await cleaned.promise;
+    expect(stops).toBe(1);
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("returns on permanently pending start and cleans a late session exactly once", async () => {
+    const cancellation = new AbortController();
+    const signal = signals();
+    const started = deferred<void>();
+    const late = deferred<HostSurfaceSession>();
+    const stopEntered = deferred<void>();
+    let stops = 0;
+    const running = runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => {
+              started.resolve();
+              return late.promise as never;
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signal.source,
+    });
+    await started.promise;
+    cancellation.abort();
+    expect(await running).toEqual({ status: "cancelled" });
+    expect(signal.unsubscribes()).toBe(1);
+
+    late.resolve({
+      completion: Promise.resolve(),
+      stop: async () => {
+        stops += 1;
+        stopEntered.resolve();
+      },
+    });
+    await stopEntered.promise;
+    expect(stops).toBe(1);
+  });
+
+  test("contains a late start rejection after cancellation", async () => {
+    const cancellation = new AbortController();
+    const signal = signals();
+    const started = deferred<void>();
+    const late = deferred<never>();
+    const running = runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: () => {
+              started.resolve();
+              return late.promise;
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signal.source,
+    });
+    await started.promise;
+    cancellation.abort();
+    expect(await running).toEqual({ status: "cancelled" });
+    late.reject(new Error("/Users/alex/private late-secret-token"));
+    await Promise.resolve();
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("always invokes recover for a validated ready status", async () => {
+    const signal = signals();
+    let recoveries = 0;
+    const access = workspace({ state: "ready" }, async () => {
+      recoveries += 1;
+      return success({ generation: 3, status: "completed" });
+    });
+    expect(
+      await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            access,
+          ),
+        ),
+        signalSource: signal.source,
+      }),
+    ).toEqual({ status: "completed" });
+    expect(recoveries).toBe(1);
+  });
+
+  test("owns diagnostics and never retains hostile failure details", async () => {
+    const secret = "/Users/alex/private secret-token";
+    const source = { code: "source-secret", details: { token: secret }, message: secret };
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: { compose: async () => failure(source) },
+      signalSource: signal.source,
+    });
+    const serialized = JSON.stringify(outcome);
+    source.message = "mutated-after-return";
+    source.details.token = "mutated-after-return";
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-bootstrap-failed", message: "Host bootstrap failed" }],
+      status: "startup-failure",
+    });
+    expect(JSON.stringify(outcome)).toBe(serialized);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain("source-secret");
+  });
+
+  test("rejects non-exact compositions and statuses without invoking accessors", async () => {
+    const signal = signals();
+    let getterCalls = 0;
+    let starts = 0;
+    const surface: HostSurface = {
+      start: () => {
+        starts += 1;
+        return { completion: Promise.resolve(), stop: async () => {} };
+      },
+    };
+    const base = composition(surface, workspace({ state: "missing" }));
+    const accessor = { ...base } as Record<string, unknown>;
+    Object.defineProperty(accessor, "graph", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return {};
+      },
+    });
+    const symbol = { ...base };
+    Object.defineProperty(symbol, Symbol("secret"), { enumerable: true, value: true });
+    const nestedProxy = { ...base, graph: new Proxy({}, {}) };
+    for (const value of [
+      new Proxy(base, {}),
+      { ...base, extra: true },
+      accessor,
+      symbol,
+      nestedProxy,
+    ]) {
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: { compose: async () => success(value as never) },
+        signalSource: signal.source,
+      });
+      expect(outcome).toEqual({
+        diagnostics: [
+          {
+            code: "invalid-host-composition",
+            message: "Host bootstrap returned malformed capabilities",
+          },
+        ],
+        status: "startup-failure",
+      });
+    }
+
+    const statusAccessor = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(statusAccessor, "state", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return "ready";
+      },
+    });
+    for (const value of [
+      new Proxy({ state: "ready" }, {}),
+      { extra: true, state: "ready" },
+      statusAccessor,
+    ]) {
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            surface,
+            workspace(value as WorkspaceStatus, async () => {
+              throw new Error("must not recover");
+            }),
+          ),
+        ),
+        signalSource: signal.source,
+      });
+      expect(outcome).toMatchObject({ status: "startup-failure" });
+    }
+    expect(getterCalls).toBe(0);
+    expect(starts).toBe(0);
+  });
+
+  test("contains recovery, start, completion, and stop secrets in host-owned outcomes", async () => {
+    const secret = "/Users/alex/private secret-token";
+    const cases: Array<{
+      expectedCode: string;
+      registry: HostBootstrapRegistry;
+    }> = [
+      {
+        expectedCode: "workspace-recovery-failed",
+        registry: registry(
+          composition(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            workspace({ state: "configured" }, async () =>
+              failure({ code: secret, details: { token: secret }, message: secret }),
+            ),
+          ),
+        ),
+      },
+      {
+        expectedCode: "host-surface-start-failed",
+        registry: registry(
+          composition(
+            {
+              start: () => {
+                throw new Error(secret);
+              },
+            },
+            workspace({ state: "missing" }),
+          ),
+        ),
+      },
+      {
+        expectedCode: "host-surface-failed",
+        registry: registry(
+          composition(
+            {
+              start: () => ({
+                completion: Promise.reject(new Error(secret)),
+                stop: async () => {},
+              }),
+            },
+            workspace({ state: "missing" }),
+          ),
+        ),
+      },
+      {
+        expectedCode: "host-surface-cleanup-failed",
+        registry: registry(
+          composition(
+            {
+              start: () => ({
+                completion: Promise.resolve(),
+                stop: async () => {
+                  throw new Error(secret);
+                },
+              }),
+            },
+            workspace({ state: "missing" }),
+          ),
+        ),
+      },
+    ];
+    for (const entry of cases) {
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: entry.registry,
+        signalSource: signals().source,
+      });
+      expect("diagnostics" in outcome && outcome.diagnostics[0]?.code).toBe(entry.expectedCode);
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+    }
+  });
+
+  test("rejects accessor-bearing and proxied sessions without invoking traps", async () => {
+    let getters = 0;
+    const session = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(session, "completion", {
+      enumerable: true,
+      get: () => {
+        getters += 1;
+        return Promise.resolve();
+      },
+    });
+    Object.defineProperty(session, "stop", { enumerable: true, value: async () => {} });
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition({ start: () => session as never }, workspace({ state: "missing" })),
+      ),
+      signalSource: signals().source,
+    });
+    expect(outcome).toMatchObject({ status: "surface-failure" });
+    expect(getters).toBe(0);
+
+    const completion = new Proxy(Promise.resolve(), {
+      getPrototypeOf: () => {
+        getters += 1;
+        return Promise.prototype;
+      },
+    });
+    const proxiedOutcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          { start: () => ({ completion, stop: async () => {} }) },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signals().source,
+    });
+    expect(proxiedOutcome).toMatchObject({ status: "surface-failure" });
+    expect(getters).toBe(0);
   });
 });

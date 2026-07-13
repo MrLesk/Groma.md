@@ -1,25 +1,23 @@
 import type {
+  ApplicationSnapshotStateDecoder,
   ApplicationOperations,
+  DecodedApplicationSnapshotState,
   WorkspaceInitializationOutcome,
 } from "../application/index.ts";
 import {
   failure,
-  parseEntityId,
   parseGraphGeneration,
-  parseRelationId,
   success,
   type Diagnostic,
   type Result,
   type TransactionProvider,
 } from "../core/index.ts";
-import { copyGraphPayload } from "../core/payload.ts";
 import {
   workspaceResourceLocator,
   type LocalCoordinationLease,
   type LocalResourceProvider,
   type StagedReplacementHandle,
 } from "../persistence/index.ts";
-import { STANDARD_COMPONENT_KIND } from "../standard-model/index.ts";
 import type {
   WorkspaceAccessCapability,
   WorkspaceRecoveryReport,
@@ -29,7 +27,6 @@ import {
   copyHostDiagnostics,
   inspectHostDenseArray,
   inspectHostRecord,
-  isHostProxy,
 } from "./runtime-validation.ts";
 
 const locator = workspaceResourceLocator("groma", "groma.yaml");
@@ -51,6 +48,7 @@ export interface LocalWorkspaceCapabilityOptions {
   readonly bounds?: Partial<LocalWorkspaceBounds>;
   readonly operations: () => ApplicationOperations;
   readonly resources: LocalResourceProvider;
+  readonly stateDecoder: ApplicationSnapshotStateDecoder;
   readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
 }
 
@@ -180,12 +178,13 @@ function sameBytes(value: Uint8Array): boolean {
 
 interface CanonicalWorkspaceSnapshot {
   readonly generation: number;
-  readonly state: Readonly<Record<string, unknown>>;
+  readonly state: DecodedApplicationSnapshotState;
 }
 
 function canonicalSnapshot(
   value: unknown,
   bounds: LocalWorkspaceBounds,
+  stateDecoder: ApplicationSnapshotStateDecoder,
 ): Result<CanonicalWorkspaceSnapshot> {
   const snapshot = inspectHostRecord(
     value,
@@ -211,105 +210,12 @@ function canonicalSnapshot(
       diagnostic("invalid-workspace-recovery", "Workspace recovery returned unexpected revisions"),
     );
   }
-  const state = inspectHostRecord(
-    snapshot.value.state,
-    [["components", "relationships"]],
-    "invalid-workspace-recovery",
-    "Workspace recovery state",
-  );
+  const state = stateDecoder.decode(snapshot.value.state);
   if (!state.ok) return state;
-  const components = inspectHostDenseArray(
-    state.value.components,
-    bounds.maxSnapshotResources,
-    "invalid-workspace-recovery",
-    "Workspace recovery components",
-  );
-  if (!components.ok) return components;
-  const relationships = inspectHostDenseArray(
-    state.value.relationships,
-    bounds.maxSnapshotResources,
-    "invalid-workspace-recovery",
-    "Workspace recovery relationships",
-  );
-  if (!relationships.ok) return relationships;
-  const canonicalComponents = new Array<Record<string, unknown>>(components.value.length);
-  for (let index = 0; index < components.value.length; index += 1) {
-    const component = inspectHostRecord(
-      components.value[index],
-      [["id", "kind", "payload"]],
-      "invalid-workspace-recovery",
-      "Workspace recovery component",
-    );
-    if (
-      !component.ok ||
-      component.value.kind !== STANDARD_COMPONENT_KIND ||
-      typeof component.value.id !== "string" ||
-      !parseEntityId(component.value.id).ok ||
-      isHostProxy(component.value.payload)
-    ) {
-      return failure(
-        diagnostic("invalid-workspace-recovery", "Workspace recovery component is malformed"),
-      );
-    }
-    canonicalComponents[index] = Object.freeze({
-      id: component.value.id,
-      kind: component.value.kind,
-      payload: component.value.payload,
-    });
-  }
-  const canonicalRelationships = new Array<Record<string, unknown>>(relationships.value.length);
-  for (let index = 0; index < relationships.value.length; index += 1) {
-    const relationship = inspectHostRecord(
-      relationships.value[index],
-      [["id", "payload", "source", "target", "type"]],
-      "invalid-workspace-recovery",
-      "Workspace recovery relationship",
-    );
-    if (
-      !relationship.ok ||
-      typeof relationship.value.id !== "string" ||
-      !parseRelationId(relationship.value.id).ok ||
-      typeof relationship.value.source !== "string" ||
-      !parseEntityId(relationship.value.source).ok ||
-      typeof relationship.value.target !== "string" ||
-      !parseEntityId(relationship.value.target).ok ||
-      typeof relationship.value.type !== "string" ||
-      isHostProxy(relationship.value.payload)
-    ) {
-      return failure(
-        diagnostic("invalid-workspace-recovery", "Workspace recovery relationship is malformed"),
-      );
-    }
-    canonicalRelationships[index] = Object.freeze({
-      id: relationship.value.id,
-      payload: relationship.value.payload,
-      source: relationship.value.source,
-      target: relationship.value.target,
-      type: relationship.value.type,
-    });
-  }
-  const copied = copyGraphPayload(
-    Object.freeze({
-      components: Object.freeze(canonicalComponents),
-      relationships: Object.freeze(canonicalRelationships),
-    }),
-    "transaction",
-    {
-      code: "invalid-workspace-recovery",
-      maximumDepth: bounds.maxSnapshotStateDepth,
-      maximumValues: bounds.maxSnapshotStateValues,
-      message: "Workspace recovery state exceeds its configured bound",
-    },
-  );
-  if (!copied.ok || typeof copied.value !== "object" || copied.value === null) {
-    return failure(
-      diagnostic("invalid-workspace-recovery", "Workspace recovery state is malformed"),
-    );
-  }
   return success(
     Object.freeze({
       generation: generation.value,
-      state: copied.value as Readonly<Record<string, unknown>>,
+      state: state.value,
     }),
   );
 }
@@ -417,7 +323,7 @@ export async function createLocalWorkspaceCapability(
     return released.ok ? success("committed") : released;
   };
 
-  const recover = async (): Promise<Result<WorkspaceRecoveryReport>> => {
+  const recoverUnlocked = async (): Promise<Result<WorkspaceRecoveryReport>> => {
     const settled = await settlePendingPublication();
     if (!settled.ok) return settled;
     const released = await releaseRetainedInitializationLease();
@@ -435,6 +341,7 @@ export async function createLocalWorkspaceCapability(
       const snapshot = canonicalSnapshot(
         await options.transactionProvider.snapshot(Object.freeze([])),
         bounds,
+        options.stateDecoder,
       );
       if (!snapshot.ok) {
         return failure(
@@ -455,7 +362,7 @@ export async function createLocalWorkspaceCapability(
     }
   };
 
-  const initialize = async (): Promise<WorkspaceInitializationOutcome> => {
+  const initializeUnlocked = async (): Promise<WorkspaceInitializationOutcome> => {
     const settled = await settlePendingPublication();
     if (!settled.ok || settled.value === "discarded") {
       return Object.freeze({
@@ -552,7 +459,7 @@ export async function createLocalWorkspaceCapability(
       }
     }
 
-    const recovered = await recover();
+    const recovered = await recoverUnlocked();
     if (!recovered.ok) {
       return Object.freeze({ diagnostics: recovered.diagnostics, status: "provider-failure" });
     }
@@ -577,6 +484,36 @@ export async function createLocalWorkspaceCapability(
       ),
     );
   };
+
+  let operationTail: Promise<void> = Promise.resolve();
+  function serialized<T>(action: () => Promise<T>, fallback: () => T): Promise<T> {
+    const previous = operationTail;
+    let release!: () => void;
+    operationTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return (async () => {
+      await previous;
+      try {
+        return await action();
+      } catch {
+        return fallback();
+      } finally {
+        release();
+      }
+    })();
+  }
+  const recover = (): Promise<Result<WorkspaceRecoveryReport>> =>
+    serialized(recoverUnlocked, () =>
+      failure(diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed")),
+    );
+  const initialize = (): Promise<WorkspaceInitializationOutcome> =>
+    serialized(initializeUnlocked, () =>
+      Object.freeze({
+        diagnostics: Object.freeze([providerFailure()]),
+        status: "provider-failure",
+      }),
+    );
 
   return Object.freeze({ initialize, recover, requireWorkspace, status: () => current });
 }

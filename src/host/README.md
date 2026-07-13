@@ -58,9 +58,14 @@ startup dispatches with recovery marked `not-required` so the surface can offer
 initialization. Successful initialization performs the same recovery handshake and
 promotes the existing workspace session to ready without reconstructing the host.
 Provider snapshots are copied once from exact data properties into bounded canonical
-state before the host records their generation. The lifecycle independently validates
-the exact recovery `Result` and report at runtime, rejecting accessors, proxies, extra
-keys, unsafe generations, and malformed success values before surface dispatch.
+state before the host records their generation. Host recovery and normal application
+reads use the same application snapshot-state decoder, including GraphKernel loading,
+Standard Model parsing, duplicate and endpoint checks, and final containment invariant
+validation. Concurrent initialize and recover calls reserve one non-rejecting operation
+tail in invocation order, so publication handles, leases, status, and generation are
+never mutated concurrently. The lifecycle independently validates the exact recovery
+`Result` and report at runtime, rejecting accessors, proxies, extra keys, unsafe
+generations, and malformed success values before surface dispatch.
 
 ## Lifecycle
 
@@ -69,7 +74,19 @@ composition. Cancellation during composition or recovery prevents surface dispat
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners
 are removed on every exit path. `createProcessSignalSource` is the built-in process
-adapter; the CLI is not wired to it in 1A.
+adapter; the CLI is not wired to it in 1A. The surface receives the host cancellation
+signal. Cancellation races asynchronous surface start, so a permanently pending start
+cannot block host return; a valid session that resolves later is stopped exactly once
+and late rejection is contained.
+
+Registry, recovery, workspace-status, surface, and session values are treated as
+hostile runtime input. The host exact-inspects and copies capability shapes once and
+returns only stable host-owned failure diagnostics; source paths, resource keys,
+provider codes, messages, and tokens are never forwarded.
+
+The build verifies Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows
+arm64 by cross-compilation. Only the current native target is executed by this workflow;
+the other target claims are compilation portability, not native runtime certification.
 
 The 1A host contains no HTTP server, React bundling, project plugin discovery, dynamic
 project imports, or untrusted project-code execution.

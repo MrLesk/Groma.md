@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {
   createApplicationOperations,
+  createApplicationSnapshotStateDecoder,
   type ApplicationOperations,
   type ComponentResourceMapper,
 } from "../application/index.ts";
@@ -28,6 +29,7 @@ import {
   createStandardModelCapability,
   createStandardModelInvariant,
 } from "../standard-model/index.ts";
+import { isHostProxy } from "./runtime-validation.ts";
 import type {
   DefaultBootstrapRegistryOptions,
   HostBootstrapRegistry,
@@ -136,6 +138,12 @@ export function createDefaultBootstrapRegistry(
           return intent.ok ? parseResourceKey(intent.value) : intent;
         },
       });
+      const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
+        bounds: defaultHostBounds,
+        graph,
+        isProxy: isHostProxy,
+        model,
+      });
       let operations: ApplicationOperations | undefined;
       const workspace = await createLocalWorkspaceCapability({
         bounds: {
@@ -152,6 +160,7 @@ export function createDefaultBootstrapRegistry(
           return operations;
         },
         resources,
+        stateDecoder: snapshotStateDecoder,
         transactionProvider,
       });
       operations = createApplicationOperations({
@@ -187,6 +196,7 @@ export function createDefaultBootstrapRegistry(
           resources,
           store,
           surface: options.surface,
+          snapshotStateDecoder,
           transactionEngine,
           transactionProvider,
           workspace,

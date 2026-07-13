@@ -15,6 +15,11 @@ execution, resource-mapping, graph, query, Standard Model, and workspace-initial
 capabilities. Page reads confirm resource revisions in a second snapshot and retry a
 configured number of times if the generation changes; empty canonical state remains a
 valid empty graph because bootstrap representation belongs to the host.
+
+`createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
+provider snapshot state. Application reads and host startup recovery both use it, so
+bounded copying, GraphKernel loading, Standard Model parsing, relationship endpoints,
+duplicates, and containment invariants cannot drift between startup and semantic use.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.
