@@ -479,14 +479,21 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   cancellation.then(() => ({ state: "cancelled" as const })),
                 ]);
                 if (first.state === "cancelled") {
-                  void start.then(async (late) => {
-                    if (late.state !== "started") return;
-                    try {
-                      await late.session.stop();
-                    } catch {
-                      // Late cleanup is contained after cancellation has returned.
-                    }
-                  });
+                  void start.then(
+                    async (late) => {
+                      if (late.state !== "started") return;
+                      try {
+                        void late.session.completion.then(
+                          () => undefined,
+                          () => undefined,
+                        );
+                        await late.session.stop();
+                      } catch {
+                        // Late completion and cleanup are contained after cancellation returns.
+                      }
+                    },
+                    () => undefined,
+                  );
                   outcome = cancelled(cancellationSignal);
                 } else if (first.state !== "started") {
                   outcome = surfaceFailure(

@@ -560,6 +560,62 @@ describe("host lifecycle", () => {
     expect(stops).toBe(1);
   });
 
+  test("contains rejecting and resolving completion from a late cancelled-start session", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const settlement of ["reject", "resolve"] as const) {
+        const cancellation = new AbortController();
+        const started = deferred<void>();
+        const late = deferred<HostSurfaceSession>();
+        const completion = deferred<void>();
+        const stopEntered = deferred<void>();
+        let stops = 0;
+        const running = runHost({
+          context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              {
+                start: () => {
+                  started.resolve();
+                  return late.promise as never;
+                },
+              },
+              workspace({ state: "missing" }),
+            ),
+          ),
+          signalSource: signals().source,
+        });
+        await started.promise;
+        cancellation.abort();
+        expect(await running).toEqual({ status: "cancelled" });
+
+        late.resolve({
+          completion: completion.promise,
+          stop: async () => {
+            stops += 1;
+            stopEntered.resolve();
+          },
+        });
+        await stopEntered.promise;
+        if (settlement === "reject") {
+          completion.reject(new Error("late completion secret"));
+        } else {
+          completion.resolve();
+        }
+        await Promise.resolve();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(stops, settlement).toBe(1);
+      }
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("contains a late start rejection after cancellation", async () => {
     const cancellation = new AbortController();
     const signal = signals();
