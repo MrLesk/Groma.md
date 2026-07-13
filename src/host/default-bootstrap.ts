@@ -65,6 +65,7 @@ export function createDefaultBootstrapRegistry(
 ): HostBootstrapRegistry {
   const coordinationRoot = options.coordinationRoot;
   const entropyOption = options.entropy;
+  const resourceFaultInjector = options.resourceFaultInjector;
   const surfaceReceiver = options.surface;
   const surfaceStart =
     typeof surfaceReceiver === "object" && surfaceReceiver !== null
@@ -92,6 +93,7 @@ export function createDefaultBootstrapRegistry(
     try {
       const resources = await createLocalResourceProvider({
         ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
+        ...(resourceFaultInjector === undefined ? {} : { faultInjector: resourceFaultInjector }),
         workspaceRoot: context.workspaceRoot,
       });
       const model = createStandardModelCapability();

@@ -108,7 +108,9 @@ describe("default bootstrap registry", () => {
     const surface = idleSurface() as Mutable<HostSurface>;
     const replacementSurface = idleSurface();
     let originalStarts = 0;
+    let originalFaultBoundaries = 0;
     let replacedStarts = 0;
+    let replacementFaultBoundaries = 0;
     surface.start = () => {
       originalStarts += 1;
       return { completion: Promise.resolve(), stop: async () => {} };
@@ -118,6 +120,9 @@ describe("default bootstrap registry", () => {
         ? {}
         : { coordinationRoot: context.coordinationRoot }),
       entropy: (length) => new Uint8Array(length),
+      resourceFaultInjector: () => {
+        originalFaultBoundaries += 1;
+      },
       surface,
     };
     const registry = createDefaultBootstrapRegistry(options);
@@ -125,6 +130,9 @@ describe("default bootstrap registry", () => {
     options.coordinationRoot = "relative/private-coordination-root";
     options.entropy = () => {
       throw new Error("/private/replaced-entropy");
+    };
+    options.resourceFaultInjector = () => {
+      replacementFaultBoundaries += 1;
     };
     options.surface = replacementSurface;
     surface.start = () => {
@@ -146,7 +154,10 @@ describe("default bootstrap registry", () => {
       workspace: composed.value.workspace,
     });
     await session.completion;
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
     expect({ originalStarts, replacedStarts }).toEqual({ originalStarts: 1, replacedStarts: 0 });
+    expect(originalFaultBoundaries).toBeGreaterThan(0);
+    expect(replacementFaultBoundaries).toBe(0);
   });
 
   test("captures the surface start method with one property read", () => {

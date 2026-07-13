@@ -15,12 +15,14 @@ capabilities exist for conformance and host tests; a running surface receives on
 replace this registry with the plugin runtime without changing Core or application
 operation contracts.
 
-Registry construction snapshots the selected coordination root, entropy source, and
-surface before composition can await. Later mutation of the caller's options container
-cannot redirect the assembled host.
+Registry construction snapshots the selected coordination root, entropy source,
+verification-only resource fault injector, and surface before composition can await.
+Later mutation of the caller's options container cannot redirect the assembled host.
+The fault injector is an explicit composition seam for real-process durability tests;
+the production CLI never supplies one and has no environment-controlled crash path.
 
 The process context supplies one absolute workspace root. The host does not search its
-ancestors. GROM-17 will decide how the CLI chooses that root.
+ancestors. The 1A CLI uses its process working directory as that root.
 
 ## Minimal workspace document
 

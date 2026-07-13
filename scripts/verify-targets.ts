@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const iterationVerification = "tests/iteration-1a/verify.ts";
 
 interface Target {
   readonly architecture: "arm64" | "x64";
@@ -59,6 +60,15 @@ for (const target of targets) {
     `--executable=${target.executable}`,
     ...(isRunnable ? [] : ["--skip-run"]),
   ]);
+  if (isRunnable) {
+    await run([
+      process.execPath,
+      "run",
+      iterationVerification,
+      `--executable=${target.executable}`,
+      "--skip-crash",
+    ]);
+  }
 }
 
 await run([process.execPath, "run", "scripts/build.ts"]);

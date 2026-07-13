@@ -1,0 +1,30 @@
+export interface StandaloneCompileOptions {
+  readonly cwd: string;
+  readonly entrypoint: string;
+  readonly outputFile: string;
+  readonly target?: string;
+}
+
+export async function compileStandalone(options: StandaloneCompileOptions): Promise<number> {
+  const command = [
+    process.execPath,
+    "build",
+    "--compile",
+    "--minify",
+    "--reject-unresolved",
+    "--no-compile-autoload-dotenv",
+    "--no-compile-autoload-bunfig",
+    "--no-compile-autoload-tsconfig",
+    "--no-compile-autoload-package-json",
+    ...(options.target === undefined ? [] : [`--target=${options.target}`]),
+    `--outfile=${options.outputFile}`,
+    options.entrypoint,
+  ];
+  const build = Bun.spawn({
+    cmd: command,
+    cwd: options.cwd,
+    stderr: "inherit",
+    stdout: "inherit",
+  });
+  return build.exited;
+}
