@@ -21,11 +21,19 @@ import {
 } from "../standard-model/index.ts";
 import type { ApplicationOperationBounds } from "./contracts.ts";
 import type { GraphKernel } from "../core/index.ts";
+import {
+  registerApplicationSnapshotStateDecoder,
+  type ApplicationSnapshotStateDecoderBounds,
+} from "./snapshot-state-capability.ts";
 
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
     ApplicationOperationBounds,
-    "maxComponents" | "maxRelationships" | "maxSnapshotStateDepth" | "maxSnapshotStateValues"
+    | "maxComponents"
+    | "maxEmbeddedItems"
+    | "maxRelationships"
+    | "maxSnapshotStateDepth"
+    | "maxSnapshotStateValues"
   >;
   readonly graph: GraphKernel;
   readonly isProxy?: (value: unknown) => boolean;
@@ -53,6 +61,14 @@ function diagnostic(code: string, message: string) {
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function embeddedItemCount(component: StandardComponent): number {
+  return (
+    (component.actions?.length ?? 0) +
+    (component.inputs?.length ?? 0) +
+    (component.outputs?.length ?? 0)
+  );
 }
 
 function denseArray(
@@ -265,6 +281,15 @@ function decode(
     if (!resolved.ok) return resolved;
     const component = options.model.parse(resolved.value);
     if (!component.ok) return component;
+    if (embeddedItemCount(component.value) > options.bounds.maxEmbeddedItems) {
+      return failure(
+        Object.freeze({
+          code: "application-bound-exceeded",
+          details: Object.freeze({ maximum: options.bounds.maxEmbeddedItems }),
+          message: "Embedded component items exceed the configured item count",
+        }),
+      );
+    }
     components[index] = component.value;
   }
   components.sort((left, right) => compareText(left.id, right.id));
@@ -290,7 +315,7 @@ export function createApplicationSnapshotStateDecoder(
 ): ApplicationSnapshotStateDecoder {
   const zero = parseGraphGeneration(0);
   if (!zero.ok) throw new Error("zero graph generation must be valid");
-  const bounds = Object.freeze({ ...options.bounds });
+  const bounds: ApplicationSnapshotStateDecoderBounds = Object.freeze({ ...options.bounds });
   const copied: ApplicationSnapshotStateDecoderContext = Object.freeze({
     bounds,
     graph: options.graph,
@@ -306,5 +331,11 @@ export function createApplicationSnapshotStateDecoder(
     model: options.model,
     zero: zero.value,
   });
-  return Object.freeze({ decode: (value: unknown) => decode(value, copied) });
+  const decoder = Object.freeze({ decode: (value: unknown) => decode(value, copied) });
+  return registerApplicationSnapshotStateDecoder(decoder, {
+    bounds,
+    graph: options.graph,
+    isProxy: options.isProxy,
+    model: options.model,
+  });
 }

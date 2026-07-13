@@ -122,6 +122,67 @@ describe("host lifecycle", () => {
     expect(offCalls).toEqual(["SIGINT", "SIGTERM"]);
   });
 
+  test("rolls back every possibly-added listener when signal registration throws", () => {
+    for (const failingSignal of ["SIGINT", "SIGTERM"] as const) {
+      const listeners = new Map<HostSignal, Set<() => void>>();
+      const offCalls: HostSignal[] = [];
+      const emitter: HostProcessSignalEmitter = {
+        off: (signal, listener) => {
+          offCalls.push(signal);
+          listeners.get(signal)?.delete(listener);
+        },
+        on: (signal, listener) => {
+          const registered = listeners.get(signal) ?? new Set<() => void>();
+          registered.add(listener);
+          listeners.set(signal, registered);
+          if (signal === failingSignal) throw new Error(`/private/${signal}-registration`);
+        },
+      };
+
+      expect(() => createProcessSignalSource(emitter).subscribe(() => {})).toThrow(
+        "Process signal registration failed",
+      );
+      expect(Array.from(listeners.values()).every((entries) => entries.size === 0)).toBeTrue();
+      expect(offCalls).toEqual(failingSignal === "SIGINT" ? ["SIGINT"] : ["SIGTERM", "SIGINT"]);
+    }
+  });
+
+  test("attempts both signal removals and retries only failed cleanup", () => {
+    for (const failingSignals of [["SIGINT"], ["SIGTERM"], ["SIGINT", "SIGTERM"]] as const) {
+      const listeners = new Map<HostSignal, Set<() => void>>();
+      const offCalls: HostSignal[] = [];
+      const remainingFailures = new Set<HostSignal>(failingSignals);
+      const emitter: HostProcessSignalEmitter = {
+        off: (signal, listener) => {
+          offCalls.push(signal);
+          if (remainingFailures.delete(signal)) {
+            throw new Error(`/private/${signal}-cleanup`);
+          }
+          listeners.get(signal)?.delete(listener);
+        },
+        on: (signal, listener) => {
+          const registered = listeners.get(signal) ?? new Set<() => void>();
+          registered.add(listener);
+          listeners.set(signal, registered);
+        },
+      };
+      const unsubscribe = createProcessSignalSource(emitter).subscribe(() => {});
+
+      expect(unsubscribe).toThrow("Process signal cleanup failed");
+      expect(offCalls.slice(0, 2)).toEqual(["SIGINT", "SIGTERM"]);
+      unsubscribe();
+      const afterRetry = offCalls.length;
+      unsubscribe();
+
+      expect(Array.from(listeners.values()).every((entries) => entries.size === 0)).toBeTrue();
+      expect(offCalls).toHaveLength(afterRetry);
+      for (const signal of ["SIGINT", "SIGTERM"] as const) {
+        const expectedCalls = failingSignals.includes(signal as never) ? 2 : 1;
+        expect(offCalls.filter((called) => called === signal)).toHaveLength(expectedCalls);
+      }
+    }
+  });
+
   test("starts without a workspace and cleans a normally completed session exactly once", async () => {
     const completion = deferred<void>();
     const started = deferred<void>();

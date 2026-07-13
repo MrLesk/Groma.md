@@ -327,14 +327,52 @@ export function createProcessSignalSource(
     subscribe(listener: (signal: HostSignal) => void) {
       const interrupt = () => listener("SIGINT");
       const terminate = () => listener("SIGTERM");
-      emitter.on("SIGINT", interrupt);
-      emitter.on("SIGTERM", terminate);
-      let subscribed = true;
+      try {
+        emitter.on("SIGINT", interrupt);
+      } catch {
+        try {
+          emitter.off("SIGINT", interrupt);
+        } catch {
+          // Registration rollback is best-effort; the original failure remains authoritative.
+        }
+        throw new Error("Process signal registration failed");
+      }
+      try {
+        emitter.on("SIGTERM", terminate);
+      } catch {
+        for (const [signal, registered] of [
+          ["SIGTERM", terminate],
+          ["SIGINT", interrupt],
+        ] as const) {
+          try {
+            emitter.off(signal, registered);
+          } catch {
+            // Registration rollback is best-effort; the original failure remains authoritative.
+          }
+        }
+        throw new Error("Process signal registration failed");
+      }
+      let interruptRegistered = true;
+      let terminateRegistered = true;
       return () => {
-        if (!subscribed) return;
-        subscribed = false;
-        emitter.off("SIGINT", interrupt);
-        emitter.off("SIGTERM", terminate);
+        let failed = false;
+        if (interruptRegistered) {
+          try {
+            emitter.off("SIGINT", interrupt);
+            interruptRegistered = false;
+          } catch {
+            failed = true;
+          }
+        }
+        if (terminateRegistered) {
+          try {
+            emitter.off("SIGTERM", terminate);
+            terminateRegistered = false;
+          } catch {
+            failed = true;
+          }
+        }
+        if (failed) throw new Error("Process signal cleanup failed");
       };
     },
   });

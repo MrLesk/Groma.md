@@ -18,11 +18,18 @@ valid empty graph because bootstrap representation belongs to the host.
 
 `createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
 provider snapshot state. `ApplicationOperationsOptions` requires that explicit
-capability, and every read reuses the injected instance. The default host constructs one
-proxy-aware decoder and shares its exact identity with application reads and startup
-recovery, so bounded copying, GraphKernel loading, Standard Model parsing, relationship
-endpoints, duplicates, and containment invariants cannot drift. Its deterministic
-Standard Model invariant is constructed once with the decoder rather than per read.
+capability, and every read reuses the injected instance. Operations accept only the
+frozen decoder object returned by that factory; forged, wrapped, and proxied lookalikes
+are rejected during construction before provider access. Its GraphKernel and Standard
+Model identities and its component, embedded-item, relationship, snapshot-depth, and
+snapshot-value bounds must exactly match the application composition. The decoder owns
+its immutable runtime proxy-detection policy; the default host
+shares that exact proxy-aware instance with application reads and startup recovery, so
+bounded copying, GraphKernel loading, Standard Model parsing, relationship endpoints,
+duplicates, and containment invariants cannot drift. Its deterministic Standard Model
+invariant is constructed once with the decoder rather than per read. Decoder results are
+exact-inspected and copied at the application boundary; unexpected decoder faults become
+one stable `application-snapshot-decode-failed` diagnostic without retaining error data.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.

@@ -55,6 +55,7 @@ import type {
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
 import type { DecodedApplicationSnapshotState } from "./snapshot-state.ts";
+import { applicationSnapshotStateDecoderMetadata } from "./snapshot-state-capability.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -137,6 +138,32 @@ function componentResource(
 function validatePositiveBound(value: number, name: string, maximum: number): void {
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
     throw new RangeError(`${name} must be a positive safe integer no greater than ${maximum}`);
+  }
+}
+
+function validateSnapshotStateDecoder(options: ApplicationOperationsOptions): void {
+  const metadata = applicationSnapshotStateDecoderMetadata(options.snapshotStateDecoder);
+  if (metadata === undefined || !Object.isFrozen(options.snapshotStateDecoder)) {
+    throw new TypeError(
+      "snapshotStateDecoder must be created by createApplicationSnapshotStateDecoder",
+    );
+  }
+  if (metadata.graph !== options.graph) {
+    throw new TypeError("snapshotStateDecoder graph must match the application graph");
+  }
+  if (metadata.model !== options.model) {
+    throw new TypeError("snapshotStateDecoder model must match the application model");
+  }
+  for (const name of [
+    "maxComponents",
+    "maxEmbeddedItems",
+    "maxRelationships",
+    "maxSnapshotStateDepth",
+    "maxSnapshotStateValues",
+  ] as const) {
+    if (metadata.bounds[name] !== options.bounds[name]) {
+      throw new RangeError(`snapshotStateDecoder ${name} must match the application bound`);
+    }
   }
 }
 
@@ -555,9 +582,105 @@ async function snapshot(
     }
     revisions.set(resource.value, revision.value);
   }
-  const state = options.snapshotStateDecoder.decode(inspected.value.state);
+  const state = decodeSnapshotState(inspected.value.state, options);
   if (!state.ok) return state;
   return success(Object.freeze({ generation: generation.value, revisions, ...state.value }));
+}
+
+function snapshotDecodeFailure(): Result<never> {
+  return failure(
+    diagnostic(
+      "application-snapshot-decode-failed",
+      "The application snapshot decoder could not safely decode provider state",
+    ),
+  );
+}
+
+function decodeSnapshotState(
+  value: unknown,
+  options: ApplicationOperationsOptions,
+): Result<DecodedApplicationSnapshotState> {
+  let decoded: unknown;
+  try {
+    decoded = options.snapshotStateDecoder.decode(value);
+  } catch {
+    return snapshotDecodeFailure();
+  }
+  const result = inspectExactRecord(
+    decoded,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "application-snapshot-decode-failed",
+    "Application snapshot decoder result",
+  );
+  if (!result.ok) return snapshotDecodeFailure();
+  if (result.value.ok === false) {
+    const diagnostics = applicationDiagnostics(
+      result.value.diagnostics,
+      "provider",
+      options.bounds,
+    );
+    return diagnostics.ok && diagnostics.value.length > 0
+      ? failure(...diagnostics.value)
+      : snapshotDecodeFailure();
+  }
+  if (result.value.ok !== true) return snapshotDecodeFailure();
+  const state = inspectExactRecord(
+    result.value.value,
+    [["components", "graph", "relationships"]],
+    "application-snapshot-decode-failed",
+    "Decoded application snapshot state",
+  );
+  if (!state.ok) return snapshotDecodeFailure();
+  const components = denseArray(
+    state.value.components,
+    "Decoded application snapshot components",
+    options.bounds.maxComponents,
+  );
+  if (!components.ok) return snapshotDecodeFailure();
+  const relationships = denseArray(
+    state.value.relationships,
+    "Decoded application snapshot relationships",
+    options.bounds.maxRelationships,
+  );
+  if (!relationships.ok) return snapshotDecodeFailure();
+  const graph = state.value.graph;
+  try {
+    const entityCount =
+      typeof graph === "object" && graph !== null
+        ? Object.getOwnPropertyDescriptor(graph, "entityCount")
+        : undefined;
+    const relationCount =
+      typeof graph === "object" && graph !== null
+        ? Object.getOwnPropertyDescriptor(graph, "relationCount")
+        : undefined;
+    if (
+      typeof graph !== "object" ||
+      graph === null ||
+      !Object.isFrozen(graph) ||
+      entityCount === undefined ||
+      !("value" in entityCount) ||
+      !entityCount.enumerable ||
+      entityCount.value !== components.value.length ||
+      relationCount === undefined ||
+      !("value" in relationCount) ||
+      !relationCount.enumerable ||
+      relationCount.value !== relationships.value.length
+    ) {
+      return snapshotDecodeFailure();
+    }
+  } catch {
+    return snapshotDecodeFailure();
+  }
+  return success(
+    Object.freeze({
+      components: components.value as readonly StandardComponent[],
+      graph: graph as GraphSnapshot,
+      relationships: relationships.value as readonly StandardRelationship[],
+    }),
+  );
 }
 
 function selectPage<T extends { readonly id: string }>(
@@ -1537,6 +1660,7 @@ export function createApplicationOperations(
   ] as const) {
     validatePositiveBound(options.bounds[name], name, absoluteBounds[name]);
   }
+  validateSnapshotStateDecoder(options);
 
   const initialize = async (
     request: InitializeWorkspaceRequest,

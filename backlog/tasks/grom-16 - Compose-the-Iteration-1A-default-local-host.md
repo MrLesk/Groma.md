@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 01:02'
+updated_date: '2026-07-13 01:28'
 labels:
   - host
   - bootstrap
@@ -75,4 +75,6 @@ Specification re-review correction: when cancellation wins while surface.start r
 Final quality re-review correction: HostSignalSource cleanup now supports synchronous or asynchronous release, is invoked exactly once, immediately promise-assimilated, awaited before return, and overrides prior outcomes with a frozen host-owned host-signal-cleanup-failed surface failure on throw/rejection. Local workspace transitions now use an active AsyncLocalStorage token to reject same-transition provider reentrancy immediately with workspace-transition-reentrant while preserving FIFO for unrelated external callers. Deterministic tests cover cleanup success/failure/precedence/secrecy/zero-unhandled-rejection, commit and snapshot reentrancy across async boundaries, unpoisoned later calls, and existing overlap behavior.
 
 Claude PR review corrections: all workspace statuses, diagnostics, access failures, initialization outcomes, and recovery reports are now frozen host-owned snapshots; recovery generations use GraphGeneration without casts. ApplicationOperationsOptions now requires one explicit snapshot-state decoder, operations reuse that instance, and the default host shares the exact proxy-aware decoder with workspace recovery and composition; decoder invariant construction is one-time. Confirmed not-committed publication now recognizes a compatible peer marker, runs unlocked recovery, and returns already-initialized. HostSurfaceSession documents exact-once stop after natural completion, and createProcessSignalSource has a process-like injection seam with direct forwarding/idempotent-unsubscribe tests. Focused and full tests, four-target verification, and direct host/application target compilation pass.
+
+Final quality-review correction: application operations now accept only the exact frozen decoder returned by createApplicationSnapshotStateDecoder, verify GraphKernel and Standard Model identity plus exact component, embedded-item, relationship, snapshot-depth, and snapshot-value bounds before provider access, and contain unexpected decoder faults or malformed results behind stable secret-free diagnostics. The decoder owns immutable proxy-policy provenance and enforces embedded-item bounds while loading snapshot state. The process signal adapter now rolls back partial SIGINT/SIGTERM registration and independently tracks successful cleanup so failures remain retryable without duplicate removal. Deterministic regressions cover forged, wrapped, proxied, throwing, and incompatible decoders plus first/second registration and removal faults. Focused application/host tests pass (63 tests, 375 assertions); the full check passes (352 tests, 1941 assertions); four-target standalone verification and direct application/host compilation on all four targets pass.
 <!-- SECTION:NOTES:END -->

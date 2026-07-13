@@ -667,6 +667,134 @@ describe("application component reads", () => {
     });
   });
 
+  test("rejects forged, wrapped, proxied, and throwing decoder objects before provider access", () => {
+    const fixture = new SnapshotFixture();
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const decoder = createApplicationSnapshotStateDecoder({
+      bounds: applicationBounds,
+      graph,
+      model,
+    });
+    const candidates = [
+      { decode: () => success({ components: [], graph: graph.empty(), relationships: [] }) },
+      { decode: decoder.decode },
+      new Proxy(decoder, {}),
+      { decode: () => Promise.reject(new Error("/private/decoder-secret")) },
+      {
+        decode: () => {
+          throw new Error("/private/decoder-secret");
+        },
+      },
+    ];
+
+    for (const snapshotStateDecoder of candidates) {
+      expect(() =>
+        operations(fixture, undefined, {
+          graph,
+          snapshotStateDecoder: snapshotStateDecoder as never,
+        }),
+      ).toThrow("snapshotStateDecoder must be created");
+    }
+    expect(fixture.requested).toHaveLength(0);
+  });
+
+  test("requires exact decoder graph, model, and snapshot-bound compatibility", () => {
+    const fixture = new SnapshotFixture();
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const decoderBounds = [
+      "maxComponents",
+      "maxEmbeddedItems",
+      "maxRelationships",
+      "maxSnapshotStateDepth",
+      "maxSnapshotStateValues",
+    ] as const;
+    for (const name of decoderBounds) {
+      const bounds = Object.freeze({
+        ...applicationBounds,
+        maxComponents: name === "maxComponents" ? 1 : applicationBounds.maxComponents,
+      });
+      const mismatched = Object.freeze({ ...bounds, [name]: bounds[name] + 1 });
+      const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
+        bounds: mismatched,
+        graph,
+        model,
+      });
+      expect(() => operations(fixture, undefined, { bounds, graph, snapshotStateDecoder })).toThrow(
+        `snapshotStateDecoder ${name} must match`,
+      );
+    }
+
+    const otherGraph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.service,
+        nextRelationId: () => relationIds.second,
+      },
+      maxPageSize: 100,
+    });
+    expect(() =>
+      operations(fixture, undefined, {
+        graph,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph: otherGraph,
+          model,
+        }),
+      }),
+    ).toThrow("snapshotStateDecoder graph must match");
+
+    const otherModel = createStandardModelCapability();
+    expect(() =>
+      operations(fixture, undefined, {
+        graph,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph,
+          model: otherModel,
+        }),
+      }),
+    ).toThrow("snapshotStateDecoder model must match");
+    expect(fixture.requested).toHaveLength(0);
+  });
+
+  test("contains unexpected faults from a genuine decoder without leaking secrets", async () => {
+    const fixture = new SnapshotFixture();
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const api = operations(fixture, undefined, {
+      graph,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: applicationBounds,
+        graph,
+        isProxy: () => {
+          throw new Error("/private/decoder-secret");
+        },
+        model,
+      }),
+    });
+
+    const result = await api.listComponents({ limit: 2 });
+    expect(result.ok ? "" : result.diagnostics[0]?.code).toBe("application-snapshot-decode-failed");
+    expect(JSON.stringify(result)).not.toContain("/private/decoder-secret");
+    expect(fixture.requested).toHaveLength(1);
+  });
+
   test("accepts an uninitialized empty state as an empty bounded graph", async () => {
     const fixture = new SnapshotFixture();
     fixture.currentState = state([]);
@@ -1240,6 +1368,12 @@ describe("application operation bounds", () => {
       bounds: { ...applicationBounds, maxSnapshotStateDepth: 2, maxSnapshotStateValues: 2 },
     }).listComponents({ limit: 1 });
     expect(structural.ok).toBe(false);
+
+    const embeddedFixture = new SnapshotFixture();
+    const embedded = await operations(embeddedFixture, undefined, {
+      bounds: { ...applicationBounds, maxEmbeddedItems: 1 },
+    }).listComponents({ limit: 1 });
+    expect(embedded.ok ? "" : embedded.diagnostics[0]?.code).toBe("application-bound-exceeded");
   });
 
   test("rejects embedded and relationship request overflows before identity or execution", async () => {

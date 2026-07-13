@@ -74,6 +74,7 @@ const stateModel = createStandardModelCapability();
 const stateDecoder = createApplicationSnapshotStateDecoder({
   bounds: {
     maxComponents: 100_000,
+    maxEmbeddedItems: 100_000,
     maxRelationships: 100_000,
     maxSnapshotStateDepth: 30,
     maxSnapshotStateValues: 100_000,
@@ -562,6 +563,7 @@ describe("local workspace capability", () => {
     const boundedDecoder = createApplicationSnapshotStateDecoder({
       bounds: {
         maxComponents: 1,
+        maxEmbeddedItems: 1,
         maxRelationships: 1,
         maxSnapshotStateDepth: 30,
         maxSnapshotStateValues: 100,

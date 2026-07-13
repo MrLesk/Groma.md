@@ -83,10 +83,13 @@ SIGTERM all converge on one awaited `stop()` call. Signal and cancellation liste
 are removed on every exit path. The host calls `stop()` exactly once even after natural
 completion, so a surface session must tolerate cleanup from that completed state.
 `createProcessSignalSource` is the built-in process
-adapter; the CLI is not wired to it in 1A. The surface receives the host cancellation
-signal. Cancellation races asynchronous surface start, so a permanently pending start
-cannot block host return; a valid session that resolves later is stopped exactly once
-and late rejection is contained.
+adapter; the CLI is not wired to it in 1A. Its SIGINT and SIGTERM registration is
+transactional: a registration failure rolls back every listener that may have been
+added. Cleanup attempts both removals independently, records only successful removals,
+and leaves failures retryable without removing a successful listener twice. The surface
+receives the host cancellation signal. Cancellation races asynchronous surface start,
+so a permanently pending start cannot block host return; a valid session that resolves
+later is stopped exactly once and late rejection is contained.
 
 Signal-source cleanup may be synchronous or asynchronous. The host invokes it exactly
 once and awaits it before returning. A cleanup throw or rejection overrides any prior
