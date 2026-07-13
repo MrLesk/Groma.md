@@ -88,7 +88,10 @@ publication handles, leases, status, and generation are never mutated concurrent
 Workspace construction requires factory-owned decoder metadata before it calls a provider,
 and the decoder's snapshot depth and value limits must be at least as strict as the local
 workspace limits. Marker and lease validation apply that exact decoder proxy policy in
-addition to the host's intrinsic proxy detector.
+addition to the host's intrinsic proxy detector. Before its first provider await, workspace
+construction exact-inspects and snapshots its bounds, operations, and required capability
+methods; later container or method mutation cannot redirect calls, which retain their
+original receivers.
 Resource and transaction-provider callbacks must not
 reenter `initialize()` or `recover()` on the same workspace capability. Reentrant calls
 fail immediately with `workspace-transition-reentrant` instead of joining their own

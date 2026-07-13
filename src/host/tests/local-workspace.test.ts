@@ -48,6 +48,32 @@ function provider(
   return { snapshot };
 }
 
+function resourceProvider(
+  base: LocalResourceProvider,
+  overrides: Partial<LocalResourceProvider> = {},
+): LocalResourceProvider {
+  return {
+    acquireCoordination:
+      overrides.acquireCoordination ?? ((request) => base.acquireCoordination(request)),
+    cleanupReplacementStages:
+      overrides.cleanupReplacementStages ?? ((locator) => base.cleanupReplacementStages(locator)),
+    commitReplacement: overrides.commitReplacement ?? ((handle) => base.commitReplacement(handle)),
+    discardReplacement:
+      overrides.discardReplacement ?? ((handle) => base.discardReplacement(handle)),
+    enumerate: overrides.enumerate ?? ((request) => base.enumerate(request)),
+    read: overrides.read ?? ((request) => base.read(request)),
+    releaseCoordination:
+      overrides.releaseCoordination ?? ((lease) => base.releaseCoordination(lease)),
+    removeResource: overrides.removeResource ?? ((locator) => base.removeResource(locator)),
+    stageReplacement:
+      overrides.stageReplacement ?? ((locator, bytes) => base.stageReplacement(locator, bytes)),
+    withCoordination:
+      overrides.withCoordination ?? ((request, action) => base.withCoordination(request, action)),
+  };
+}
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -155,13 +181,7 @@ describe("local workspace capability", () => {
     const providerConflict = await createLocalWorkspaceCapability({
       operations,
       transactionProvider: provider(emptySnapshot),
-      resources: new Proxy(providerBase, {
-        get(target, property) {
-          if (property === "read") return async () => null as never;
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      }),
+      resources: resourceProvider(providerBase, { read: async () => null as never }),
     });
 
     for (const entry of [
@@ -254,6 +274,323 @@ describe("local workspace capability", () => {
     ).toEqual(Buffer.from(defaultWorkspaceDocument));
     expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
     expect(calls).toEqual(["snapshot:0"]);
+  });
+
+  test("snapshots workspace options and capability methods before the initial read awaits", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    const initialRead = deferred<Awaited<ReturnType<LocalResourceProvider["read"]>>>();
+    const missing = await base.read({
+      locator: workspaceConfigurationLocator,
+      maxBytes: 4_096,
+    });
+    const calls = {
+      acquireCoordination: 0,
+      commitReplacement: 0,
+      discardReplacement: 0,
+      operations: 0,
+      read: 0,
+      releaseCoordination: 0,
+      snapshot: 0,
+      stageReplacement: 0,
+    };
+    const readLimits: number[] = [];
+    const api = operations();
+    const resources = resourceProvider(base);
+    resources.acquireCoordination = async function (request) {
+      expect(this).toBe(resources);
+      calls.acquireCoordination += 1;
+      return base.acquireCoordination(request);
+    };
+    resources.commitReplacement = async function (handle) {
+      expect(this).toBe(resources);
+      calls.commitReplacement += 1;
+      if (calls.commitReplacement === 1) {
+        return {
+          diagnostics: [{ code: "rejected", message: "not committed" }],
+          state: "not-committed",
+        };
+      }
+      return base.commitReplacement(handle);
+    };
+    resources.discardReplacement = async function (handle) {
+      expect(this).toBe(resources);
+      calls.discardReplacement += 1;
+      return base.discardReplacement(handle);
+    };
+    resources.read = async function (request) {
+      expect(this).toBe(resources);
+      calls.read += 1;
+      readLimits.push(request.maxBytes);
+      if (calls.read === 1) return initialRead.promise;
+      return base.read(request);
+    };
+    resources.releaseCoordination = async function (lease) {
+      expect(this).toBe(resources);
+      calls.releaseCoordination += 1;
+      return base.releaseCoordination(lease);
+    };
+    resources.stageReplacement = async function (locator, bytes) {
+      expect(this).toBe(resources);
+      calls.stageReplacement += 1;
+      return base.stageReplacement(locator, bytes);
+    };
+    const transactionProvider: Mutable<Pick<TransactionProvider, "snapshot">> = {
+      snapshot: async function (requested) {
+        expect(this).toBe(transactionProvider);
+        expect(requested).toEqual([]);
+        calls.snapshot += 1;
+        return emptySnapshot();
+      },
+    };
+    const bounds = { maxConfigurationBytes: 4_096 };
+    let mutableOptions!: Mutable<LocalWorkspaceCapabilityOptions>;
+    const originalOperations = function (this: unknown) {
+      expect(this).toBe(mutableOptions);
+      calls.operations += 1;
+      return api;
+    };
+    mutableOptions = {
+      bounds,
+      operations: originalOperations,
+      resources,
+      stateDecoder,
+      transactionProvider,
+    };
+
+    const factory = createWorkspaceCapability(mutableOptions);
+    expect(calls.read).toBe(1);
+
+    const pendingRedirects = { calls: 0 };
+    const postReturnRedirects = { calls: 0 };
+    const installRedirects = (counter: { calls: number }, limit: number) => {
+      const redirected = resourceProvider(base, {
+        acquireCoordination: async () => {
+          counter.calls += 1;
+          throw new Error("redirected acquire");
+        },
+        commitReplacement: async () => {
+          counter.calls += 1;
+          throw new Error("redirected commit");
+        },
+        discardReplacement: async () => {
+          counter.calls += 1;
+          throw new Error("redirected discard");
+        },
+        read: async () => {
+          counter.calls += 1;
+          throw new Error("redirected read");
+        },
+        releaseCoordination: async () => {
+          counter.calls += 1;
+          throw new Error("redirected release");
+        },
+        stageReplacement: async () => {
+          counter.calls += 1;
+          throw new Error("redirected stage");
+        },
+      });
+      bounds.maxConfigurationBytes = limit;
+      mutableOptions.bounds = { maxConfigurationBytes: limit };
+      mutableOptions.operations = () => {
+        counter.calls += 1;
+        return operations();
+      };
+      mutableOptions.resources = redirected;
+      mutableOptions.stateDecoder = {
+        decode: () => {
+          counter.calls += 1;
+          throw new Error("redirected decode");
+        },
+      } as never;
+      mutableOptions.transactionProvider = {
+        snapshot: async () => {
+          counter.calls += 1;
+          return emptySnapshot();
+        },
+      };
+      resources.acquireCoordination = redirected.acquireCoordination;
+      resources.commitReplacement = redirected.commitReplacement;
+      resources.discardReplacement = redirected.discardReplacement;
+      resources.read = redirected.read;
+      resources.releaseCoordination = redirected.releaseCoordination;
+      resources.stageReplacement = redirected.stageReplacement;
+      transactionProvider.snapshot = mutableOptions.transactionProvider.snapshot;
+    };
+
+    installRedirects(pendingRedirects, 1);
+    expect(
+      Reflect.set(stateDecoder as object, "decode", mutableOptions.stateDecoder.decode),
+    ).toBeFalse();
+    initialRead.resolve(missing);
+    const workspace = await factory;
+    installRedirects(postReturnRedirects, 2);
+
+    expect(await workspace.initialize()).toMatchObject({ status: "provider-failure" });
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(workspace.requireWorkspace()).toEqual({ ok: true, value: api });
+    expect(calls).toEqual({
+      acquireCoordination: 2,
+      commitReplacement: 2,
+      discardReplacement: 1,
+      operations: 1,
+      read: 5,
+      releaseCoordination: 2,
+      snapshot: 1,
+      stageReplacement: 2,
+    });
+    expect(readLimits).toEqual([4_096, 4_096, 4_096, 4_096, 4_096]);
+    expect(pendingRedirects.calls).toBe(0);
+    expect(postReturnRedirects.calls).toBe(0);
+  });
+
+  test("rejects malformed and proxied workspace options before provider work", async () => {
+    let hostileEffects = 0;
+    const hostileProxy = <T extends object>(target: T): T =>
+      new Proxy(target, {
+        apply: (callable, thisArgument, argumentsList) => {
+          hostileEffects += 1;
+          return Reflect.apply(callable as never, thisArgument, argumentsList) as never;
+        },
+        get: (subject, property, receiver) => {
+          hostileEffects += 1;
+          return Reflect.get(subject, property, receiver);
+        },
+        getOwnPropertyDescriptor: (subject, property) => {
+          hostileEffects += 1;
+          return Reflect.getOwnPropertyDescriptor(subject, property);
+        },
+        getPrototypeOf: (subject) => {
+          hostileEffects += 1;
+          return Reflect.getPrototypeOf(subject);
+        },
+        ownKeys: (subject) => {
+          hostileEffects += 1;
+          return Reflect.ownKeys(subject);
+        },
+      });
+    const cases: ReadonlyArray<{
+      readonly alter: (
+        options: Mutable<LocalWorkspaceCapabilityOptions>,
+      ) => LocalWorkspaceCapabilityOptions;
+      readonly message: string;
+      readonly name: string;
+    }> = [
+      {
+        alter: (options) => hostileProxy(options),
+        message: "Local workspace options are malformed",
+        name: "proxied options",
+      },
+      {
+        alter: (options) => {
+          const malformed = { ...options } as Record<string, unknown>;
+          Object.defineProperty(malformed, "operations", {
+            enumerable: true,
+            get: () => {
+              hostileEffects += 1;
+              return operations;
+            },
+          });
+          return malformed as unknown as LocalWorkspaceCapabilityOptions;
+        },
+        message: "Local workspace options are malformed",
+        name: "options accessor",
+      },
+      {
+        alter: (options) => {
+          options.bounds = hostileProxy({ maxConfigurationBytes: 4_096 });
+          return options;
+        },
+        message: "Local workspace bounds are malformed",
+        name: "proxied bounds",
+      },
+      {
+        alter: (options) => {
+          options.operations = hostileProxy(options.operations);
+          return options;
+        },
+        message: "Local workspace operations must be a non-proxy function",
+        name: "proxied operations",
+      },
+      {
+        alter: (options) => {
+          options.resources = hostileProxy(options.resources);
+          return options;
+        },
+        message: "Local workspace resources must be a non-proxy capability object",
+        name: "proxied resources",
+      },
+      {
+        alter: (options) => {
+          const malformed = resourceProvider(options.resources);
+          Object.defineProperty(malformed, "read", {
+            get: () => {
+              hostileEffects += 1;
+              return options.resources.read;
+            },
+          });
+          options.resources = malformed;
+          return options;
+        },
+        message: "Local workspace resources.read must be a callable data method",
+        name: "resource method accessor",
+      },
+      {
+        alter: (options) => {
+          options.transactionProvider = hostileProxy(options.transactionProvider);
+          return options;
+        },
+        message: "Local workspace transaction provider must be a non-proxy capability object",
+        name: "proxied transaction provider",
+      },
+      {
+        alter: (options) => {
+          const malformed = {} as Pick<TransactionProvider, "snapshot">;
+          Object.defineProperty(malformed, "snapshot", {
+            get: () => {
+              hostileEffects += 1;
+              return options.transactionProvider.snapshot;
+            },
+          });
+          options.transactionProvider = malformed;
+          return options;
+        },
+        message: "Local workspace transaction provider.snapshot must be a callable data method",
+        name: "snapshot accessor",
+      },
+      {
+        alter: (options) => {
+          options.stateDecoder = hostileProxy(options.stateDecoder);
+          return options;
+        },
+        message: "Local workspace state decoder must be a non-proxy capability object",
+        name: "proxied decoder",
+      },
+    ];
+
+    for (const entry of cases) {
+      const roots = await temporaryWorkspace();
+      const base = await createLocalResourceProvider(roots);
+      let reads = 0;
+      const resources = resourceProvider(base, {
+        read: async (...args) => {
+          reads += 1;
+          return base.read(...args);
+        },
+      });
+      const options: Mutable<LocalWorkspaceCapabilityOptions> = {
+        operations,
+        resources,
+        stateDecoder,
+        transactionProvider: provider(emptySnapshot),
+      };
+
+      await expect(createWorkspaceCapability(entry.alter(options)), entry.name).rejects.toThrow(
+        entry.message,
+      );
+      expect(reads, entry.name).toBe(0);
+    }
+    expect(hostileEffects).toBe(0);
   });
 
   test("recognizes only the exact canonical marker and preserves conflicts", async () => {
@@ -386,13 +723,7 @@ describe("local workspace capability", () => {
     for (const entry of values) {
       const roots = await temporaryWorkspace();
       const base = await createLocalResourceProvider(roots);
-      const resources = new Proxy(base, {
-        get(target, property) {
-          if (property === "read") return async () => entry.value as never;
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      });
+      const resources = resourceProvider(base, { read: async () => entry.value as never });
       const workspace = await createLocalWorkspaceCapability({
         operations,
         resources,
@@ -430,13 +761,8 @@ describe("local workspace capability", () => {
     const base = await createLocalResourceProvider(roots);
     const workspace = await createLocalWorkspaceCapability({
       operations,
-      resources: new Proxy(base, {
-        get(target, property) {
-          if (property === "read")
-            return async () => ({ ok: true, value: { bytes: proxiedBytes } });
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
-        },
+      resources: resourceProvider(base, {
+        read: async () => ({ ok: true, value: { bytes: proxiedBytes } }),
       }),
       transactionProvider: provider(emptySnapshot),
     });
@@ -474,12 +800,8 @@ describe("local workspace capability", () => {
     const policyBase = await createLocalResourceProvider(policyRoots);
     const policyWorkspace = await createWorkspaceCapability({
       operations,
-      resources: new Proxy(policyBase, {
-        get(target, property) {
-          if (property === "read") return async () => ({ ok: true, value: { bytes: policyBytes } });
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
-        },
+      resources: resourceProvider(policyBase, {
+        read: async () => ({ ok: true, value: { bytes: policyBytes } }),
       }),
       stateDecoder: policyDecoder,
       transactionProvider: provider(emptySnapshot),
@@ -502,22 +824,16 @@ describe("local workspace capability", () => {
       }
       const base = await createLocalResourceProvider(roots);
       let reads = 0;
-      const resources = new Proxy(base, {
-        get(target, property) {
-          if (property === "read") {
-            return async (...args: Parameters<LocalResourceProvider["read"]>) => {
-              reads += 1;
-              if (reads === 1) {
-                return {
-                  diagnostics: [{ code: "private-provider-failure", message: roots.workspaceRoot }],
-                  ok: false,
-                };
-              }
-              return target.read(...args);
+      const resources = resourceProvider(base, {
+        read: async (...args: Parameters<LocalResourceProvider["read"]>) => {
+          reads += 1;
+          if (reads === 1) {
+            return {
+              diagnostics: [{ code: "private-provider-failure", message: roots.workspaceRoot }],
+              ok: false,
             };
           }
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
+          return base.read(...args);
         },
       });
       const workspace = await createLocalWorkspaceCapability({
@@ -544,17 +860,11 @@ describe("local workspace capability", () => {
     );
     const base = await createLocalResourceProvider(roots);
     let conflictReads = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "read") {
-          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
-            conflictReads += 1;
-            if (conflictReads > 1) throw new Error("proven conflicts must not be reinspected");
-            return target.read(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      read: async (...args: Parameters<LocalResourceProvider["read"]>) => {
+        conflictReads += 1;
+        if (conflictReads > 1) throw new Error("proven conflicts must not be reinspected");
+        return base.read(...args);
       },
     });
     const conflict = await createLocalWorkspaceCapability({
@@ -578,16 +888,10 @@ describe("local workspace capability", () => {
       const roots = await temporaryWorkspace();
       const base = await createLocalResourceProvider(roots);
       let reads = 0;
-      const resources = new Proxy(base, {
-        get(target, property) {
-          if (property === "read") {
-            return async (...args: Parameters<LocalResourceProvider["read"]>) => {
-              reads += 1;
-              return target.read(...args);
-            };
-          }
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
+      const resources = resourceProvider(base, {
+        read: async (...args: Parameters<LocalResourceProvider["read"]>) => {
+          reads += 1;
+          return base.read(...args);
         },
       });
       await expect(
@@ -605,16 +909,10 @@ describe("local workspace capability", () => {
     const forgedRoots = await temporaryWorkspace();
     const forgedBase = await createLocalResourceProvider(forgedRoots);
     let forgedReads = 0;
-    const forgedResources = new Proxy(forgedBase, {
-      get(target, property) {
-        if (property === "read") {
-          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
-            forgedReads += 1;
-            return target.read(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const forgedResources = resourceProvider(forgedBase, {
+      read: async (...args: Parameters<LocalResourceProvider["read"]>) => {
+        forgedReads += 1;
+        return forgedBase.read(...args);
       },
     });
     await expect(
@@ -711,23 +1009,15 @@ describe("local workspace capability", () => {
       const base = await createLocalResourceProvider(roots);
       let releases = 0;
       let stages = 0;
-      const resources = new Proxy(base, {
-        get(target, property) {
-          if (property === "acquireCoordination") return async () => variant.result as never;
-          if (property === "releaseCoordination") {
-            return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-              releases += 1;
-              return target.releaseCoordination(...args);
-            };
-          }
-          if (property === "stageReplacement") {
-            return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-              stages += 1;
-              return target.stageReplacement(...args);
-            };
-          }
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
+      const resources = resourceProvider(base, {
+        acquireCoordination: async () => variant.result as never,
+        releaseCoordination: async (...args) => {
+          releases += 1;
+          return base.releaseCoordination(...args);
+        },
+        stageReplacement: async (...args) => {
+          stages += 1;
+          return base.stageReplacement(...args);
         },
       });
       const workspace = await createLocalWorkspaceCapability({
@@ -749,22 +1039,14 @@ describe("local workspace capability", () => {
     const base = await createLocalResourceProvider(roots);
     let releases = 0;
     let stages = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "releaseCoordination") {
-          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-            releases += 1;
-            return target.releaseCoordination(...args);
-          };
-        }
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      releaseCoordination: async (...args) => {
+        releases += 1;
+        return base.releaseCoordination(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1098,33 +1380,23 @@ describe("local workspace capability", () => {
     let commits = 0;
     let stages = 0;
     const handles: unknown[] = [];
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            handles.push(args[0]);
-            if (commits === 1) {
-              await target.commitReplacement(...args);
-              throw new Error(roots.workspaceRoot);
-            }
-            return target.commitReplacement(...args);
-          };
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        handles.push(args[0]);
+        if (commits === 1) {
+          await base.commitReplacement(...args);
+          throw new Error(roots.workspaceRoot);
         }
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
-          };
-        }
-        if (property === "releaseCoordination") {
-          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-            releases += 1;
-            return target.releaseCoordination(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+        return base.commitReplacement(...args);
+      },
+      releaseCoordination: async (...args) => {
+        releases += 1;
+        return base.releaseCoordination(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1152,35 +1424,25 @@ describe("local workspace capability", () => {
     let reads = 0;
     let stages = 0;
     const handles: unknown[] = [];
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "read") {
-          return async (...args: Parameters<LocalResourceProvider["read"]>) => {
-            reads += 1;
-            if (reads === 3) {
-              return {
-                diagnostics: [{ code: "private-readback-failure", message: roots.workspaceRoot }],
-                ok: false,
-              };
-            }
-            return target.read(...args);
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        handles.push(args[0]);
+        return base.commitReplacement(...args);
+      },
+      read: async (...args) => {
+        reads += 1;
+        if (reads === 3) {
+          return {
+            diagnostics: [{ code: "private-readback-failure", message: roots.workspaceRoot }],
+            ok: false,
           };
         }
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
-          };
-        }
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            handles.push(args[0]);
-            return target.commitReplacement(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+        return base.read(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1213,42 +1475,34 @@ describe("local workspace capability", () => {
         return "committed";
       },
     });
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        handles.push(args[0]);
+        if (commits === 1) throw new Error(roots.workspaceRoot);
+        if (commits === 2) return null as never;
+        if (commits === 3) return accessorOutcome as never;
+        if (commits === 4) return new Proxy({ state: "committed" }, {}) as never;
+        if (commits === 5) {
+          return {
+            diagnostics: [
+              {
+                code: "private-indeterminate",
+                details: { commitState: "committed-indeterminate" },
+                message: roots.workspaceRoot,
+              },
+            ],
+            state: "committed-indeterminate",
           };
         }
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            handles.push(args[0]);
-            if (commits === 1) throw new Error(roots.workspaceRoot);
-            if (commits === 2) return null;
-            if (commits === 3) return accessorOutcome;
-            if (commits === 4) return new Proxy({ state: "committed" }, {});
-            if (commits === 5) {
-              return {
-                diagnostics: [
-                  {
-                    code: "private-indeterminate",
-                    details: { commitState: "committed-indeterminate" },
-                    message: roots.workspaceRoot,
-                  },
-                ],
-                state: "committed-indeterminate",
-              };
-            }
-            if (commits === 6) {
-              return { diagnostics: [{ code: "bad" }], state: "committed" };
-            }
-            return target.commitReplacement(...args);
-          };
+        if (commits === 6) {
+          return { diagnostics: [{ code: "bad" }], state: "committed" } as never;
         }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+        return base.commitReplacement(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1279,40 +1533,30 @@ describe("local workspace capability", () => {
     let commits = 0;
     let discards = 0;
     let stages = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        if (commits === 1) {
+          return {
+            diagnostics: [{ code: "rejected", message: "not committed" }],
+            state: "not-committed",
           };
         }
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            if (commits === 1) {
-              return {
-                diagnostics: [{ code: "rejected", message: "not committed" }],
-                state: "not-committed",
-              };
-            }
-            return target.commitReplacement(...args);
+        return base.commitReplacement(...args);
+      },
+      discardReplacement: async (...args) => {
+        discards += 1;
+        if (discards === 1) {
+          return {
+            diagnostics: [{ code: "private-cleanup-failure", message: roots.workspaceRoot }],
+            ok: false,
           };
         }
-        if (property === "discardReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["discardReplacement"]>) => {
-            discards += 1;
-            if (discards === 1) {
-              return {
-                diagnostics: [{ code: "private-cleanup-failure", message: roots.workspaceRoot }],
-                ok: false,
-              };
-            }
-            return target.discardReplacement(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+        return base.discardReplacement(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1340,43 +1584,31 @@ describe("local workspace capability", () => {
     let releaseResult: unknown;
     let snapshots = 0;
     let stages = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
-          };
-        }
-        if (property === "commitReplacement") {
-          return async () => {
-            commits += 1;
-            return {
-              diagnostics: [{ code: "peer-won", message: "A compatible peer published first" }],
-              state: "not-committed" as const,
-            };
-          };
-        }
-        if (property === "discardReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["discardReplacement"]>) => {
-            discards += 1;
-            const discarded = await target.discardReplacement(...args);
-            await Bun.write(
-              path.join(roots.workspaceRoot, "groma", "groma.yaml"),
-              defaultWorkspaceDocument,
-            );
-            return discarded;
-          };
-        }
-        if (property === "releaseCoordination") {
-          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-            releases += 1;
-            releaseResult = await target.releaseCoordination(...args);
-            return releaseResult;
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      commitReplacement: async () => {
+        commits += 1;
+        return {
+          diagnostics: [{ code: "peer-won", message: "A compatible peer published first" }],
+          state: "not-committed" as const,
+        };
+      },
+      discardReplacement: async (...args) => {
+        discards += 1;
+        const discarded = await base.discardReplacement(...args);
+        await Bun.write(
+          path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+          defaultWorkspaceDocument,
+        );
+        return discarded;
+      },
+      releaseCoordination: async (...args) => {
+        releases += 1;
+        releaseResult = await base.releaseCoordination(...args);
+        return releaseResult as never;
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1424,23 +1656,15 @@ describe("local workspace capability", () => {
     let snapshots = 0;
     let stages = 0;
     const handles: unknown[] = [];
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "stageReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-            stages += 1;
-            return target.stageReplacement(...args);
-          };
-        }
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            handles.push(args[0]);
-            return target.commitReplacement(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        handles.push(args[0]);
+        return base.commitReplacement(...args);
+      },
+      stageReplacement: async (...args) => {
+        stages += 1;
+        return base.stageReplacement(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1470,23 +1694,15 @@ describe("local workspace capability", () => {
     const roots = await temporaryWorkspace();
     const base = await createLocalResourceProvider(roots);
     let releases = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "releaseCoordination") {
-          return async (lease: Parameters<LocalResourceProvider["releaseCoordination"]>[0]) => {
-            releases += 1;
-            return target.releaseCoordination(lease);
-          };
-        }
-        if (property === "stageReplacement") {
-          return async () => ({
-            diagnostics: [{ code: "hostile-provider", message: roots.workspaceRoot }],
-            ok: false,
-          });
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      releaseCoordination: async (lease) => {
+        releases += 1;
+        return base.releaseCoordination(lease);
       },
+      stageReplacement: async () => ({
+        diagnostics: [{ code: "hostile-provider", message: roots.workspaceRoot }],
+        ok: false,
+      }),
     });
     const workspace = await createLocalWorkspaceCapability({
       operations,
@@ -1508,22 +1724,16 @@ describe("local workspace capability", () => {
     const roots = await temporaryWorkspace();
     const base = await createLocalResourceProvider(roots);
     let releases = 0;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "releaseCoordination") {
-          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-            releases += 1;
-            if (releases === 1) {
-              return {
-                diagnostics: [{ code: "private-release-failure", message: roots.workspaceRoot }],
-                ok: false,
-              };
-            }
-            return target.releaseCoordination(...args);
+    const resources = resourceProvider(base, {
+      releaseCoordination: async (...args) => {
+        releases += 1;
+        if (releases === 1) {
+          return {
+            diagnostics: [{ code: "private-release-failure", message: roots.workspaceRoot }],
+            ok: false,
           };
         }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+        return base.releaseCoordination(...args);
       },
     });
     const workspace = await createLocalWorkspaceCapability({
@@ -1554,19 +1764,13 @@ describe("local workspace capability", () => {
     let nestedInitialize: unknown;
     let nestedRecover: unknown;
     let workspace!: WorkspaceAccessCapability;
-    const resources = new Proxy(base, {
-      get(target, property) {
-        if (property === "commitReplacement") {
-          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-            commits += 1;
-            await new Promise<void>((resolve) => setImmediate(resolve));
-            nestedRecover = await workspace.recover();
-            nestedInitialize = await workspace.initialize();
-            return target.commitReplacement(...args);
-          };
-        }
-        const value = target[property as keyof LocalResourceProvider];
-        return typeof value === "function" ? value.bind(target) : value;
+    const resources = resourceProvider(base, {
+      commitReplacement: async (...args) => {
+        commits += 1;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        nestedRecover = await workspace.recover();
+        nestedInitialize = await workspace.initialize();
+        return base.commitReplacement(...args);
       },
     });
     workspace = await createLocalWorkspaceCapability({
@@ -1657,34 +1861,24 @@ describe("local workspace capability", () => {
       let maxActiveMutations = 0;
       let releases = 0;
       let stages = 0;
-      const resources = new Proxy(base, {
-        get(target, property) {
-          if (property === "stageReplacement") {
-            return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
-              stages += 1;
-              return target.stageReplacement(...args);
-            };
-          }
-          if (property === "commitReplacement") {
-            return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
-              commits += 1;
-              activeMutations += 1;
-              maxActiveMutations = Math.max(maxActiveMutations, activeMutations);
-              commitEntered.resolve();
-              await commitGate.promise;
-              const outcome = await target.commitReplacement(...args);
-              activeMutations -= 1;
-              return outcome;
-            };
-          }
-          if (property === "releaseCoordination") {
-            return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
-              releases += 1;
-              return target.releaseCoordination(...args);
-            };
-          }
-          const value = target[property as keyof LocalResourceProvider];
-          return typeof value === "function" ? value.bind(target) : value;
+      const resources = resourceProvider(base, {
+        commitReplacement: async (...args) => {
+          commits += 1;
+          activeMutations += 1;
+          maxActiveMutations = Math.max(maxActiveMutations, activeMutations);
+          commitEntered.resolve();
+          await commitGate.promise;
+          const outcome = await base.commitReplacement(...args);
+          activeMutations -= 1;
+          return outcome;
+        },
+        releaseCoordination: async (...args) => {
+          releases += 1;
+          return base.releaseCoordination(...args);
+        },
+        stageReplacement: async (...args) => {
+          stages += 1;
+          return base.stageReplacement(...args);
         },
       });
       const workspace = await createLocalWorkspaceCapability({

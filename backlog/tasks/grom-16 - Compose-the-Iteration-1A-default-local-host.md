@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 07:48'
+updated_date: '2026-07-13 08:13'
 labels:
   - host
   - bootstrap
@@ -117,4 +117,6 @@ Pre-load query-authority correction: Core query now captures genuine BoundedQuer
 A thread-aware audit after final-head Codex review found the remaining host/workspace findings share one boundary: cancellation and retryable provider state were not preserved end to end, while marker reads, coordination acquisition, and decoder composition were not proven before state transitions. Application/query/payload/Promise cluster is complete and independently passed specification plus quality review at 773ea1d. The next sequential cluster addresses only these remaining host/workspace findings before a final all-thread audit.
 
 Host/workspace review cluster implemented: composition and recovery now race one host-owned cancellation signal with safely observed late settlements; signal names are runtime-validated; retryable provider inspection is distinct from proven configuration conflict; marker reads/bytes, decoder metadata and bounds, and coordination acquisition/lease shape fail closed before state publication. Boundary regressions cover malformed diagnostics and bytes, transient retry, stable conflicts, decoder provenance/bounds, lease variants, pending compose/recovery cancellation, malformed signals, and provider-failure routing. Validation: focused host 57 tests / 468 assertions; full bun run check 393 tests / 2,505 assertions; four packaged targets; direct application+host compilation 8/8; git diff --check.
+
+Final workspace capability snapshot correction: local workspace construction now synchronously exact-inspects and copies bounds/options before its first provider await, captures operations plus resource read/stage/commit/discard/acquire/release, transaction snapshot, and genuine decoder decode callables with original receivers behind frozen internal capability wrappers, and never rereads caller containers or methods. Malformed/accessor/proxied options and capabilities fail before provider work. Regressions mutate containers and methods while the initial factory read is pending and again after factory return, prove original receivers/callables and copied bounds remain authoritative, exercise all six resource methods including discard, return the original operations object, and observe zero forged calls or traps. Validation: focused workspace 28 tests / 325 assertions; application+host 130 tests / 1,221 assertions; full bun run check 395 tests / 2,550 assertions; four packaged targets; direct application+host compilation 8/8; typecheck and git diff --check pass.
 <!-- SECTION:NOTES:END -->

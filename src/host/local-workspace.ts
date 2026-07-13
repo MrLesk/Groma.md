@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { isProxy as isNativeProxy } from "node:util/types";
 
 import type {
   ApplicationSnapshotStateDecoder,
@@ -46,6 +47,7 @@ const canonicalBytes = new TextEncoder().encode(defaultWorkspaceDocument);
 const intrinsicObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const intrinsicObjectGetPrototypeOf = Object.getPrototypeOf;
 const intrinsicObjectIsFrozen = Object.isFrozen;
+const intrinsicObjectHasOwn = Object.hasOwn;
 const intrinsicReflectApply = Reflect.apply;
 const intrinsicReflectOwnKeys = Reflect.ownKeys;
 const intrinsicUint8Array = Uint8Array;
@@ -89,6 +91,39 @@ const defaultBounds: LocalWorkspaceBounds = Object.freeze({
   maxSnapshotStateDepth: 30,
   maxSnapshotStateValues: 100_000,
 });
+
+const localWorkspaceBoundNames = Object.freeze([
+  "maxConfigurationBytes",
+  "maxProviderDiagnostics",
+  "maxSnapshotResources",
+  "maxSnapshotStateDepth",
+  "maxSnapshotStateValues",
+] as const);
+
+const localWorkspaceBoundKeySets = Object.freeze(
+  Array.from({ length: 1 << localWorkspaceBoundNames.length }, (_, mask) =>
+    Object.freeze(localWorkspaceBoundNames.filter((_, index) => (mask & (1 << index)) !== 0)),
+  ),
+);
+
+type LocalWorkspaceResources = Pick<
+  LocalResourceProvider,
+  | "acquireCoordination"
+  | "commitReplacement"
+  | "discardReplacement"
+  | "read"
+  | "releaseCoordination"
+  | "stageReplacement"
+>;
+
+interface CapturedLocalWorkspaceOptions {
+  readonly bounds: LocalWorkspaceBounds;
+  readonly decoderProxyPolicy: ((value: unknown) => boolean) | undefined;
+  readonly operations: () => ApplicationOperations;
+  readonly resources: LocalWorkspaceResources;
+  readonly stateDecoder: Pick<ApplicationSnapshotStateDecoder, "decode">;
+  readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
+}
 
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
@@ -179,7 +214,7 @@ function initializationFailure(value: Diagnostic): WorkspaceInitializationOutcom
   });
 }
 
-function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): LocalWorkspaceBounds {
+function validateBounds(input: Partial<LocalWorkspaceBounds>): LocalWorkspaceBounds {
   const selected = { ...defaultBounds, ...input };
   for (const [name, maximum] of [
     ["maxConfigurationBytes", 64 * 1024],
@@ -194,6 +229,71 @@ function validateBounds(input: Partial<LocalWorkspaceBounds> | undefined): Local
     }
   }
   return Object.freeze(selected);
+}
+
+function captureBounds(value: unknown): LocalWorkspaceBounds {
+  if (value === undefined) return validateBounds(Object.freeze({}));
+  const inspected = inspectHostRecord(
+    value,
+    localWorkspaceBoundKeySets,
+    "invalid-local-workspace-options",
+    "Local workspace bounds",
+  );
+  if (!inspected.ok) throw new TypeError("Local workspace bounds are malformed");
+  const copied: Partial<LocalWorkspaceBounds> = Object.create(
+    null,
+  ) as Partial<LocalWorkspaceBounds>;
+  for (const name of localWorkspaceBoundNames) {
+    if (intrinsicObjectHasOwn(inspected.value, name)) {
+      Object.defineProperty(copied, name, {
+        enumerable: true,
+        value: inspected.value[name] as number,
+      });
+    }
+  }
+  return validateBounds(Object.freeze(copied));
+}
+
+function requireCapabilityReceiver(value: unknown, subject: string): object {
+  if (typeof value !== "object" || value === null || isHostProxy(value) || isNativeProxy(value)) {
+    throw new TypeError(`${subject} must be a non-proxy capability object`);
+  }
+  return value;
+}
+
+function captureCapabilityMethod<TFunction extends Function>(
+  receiver: object,
+  name: string,
+  subject: string,
+): TFunction {
+  let current: object | null = receiver;
+  for (let depth = 0; current !== null && depth < 32; depth += 1) {
+    if (isHostProxy(current) || isNativeProxy(current)) {
+      throw new TypeError(`${subject} prototype chain must not contain a proxy`);
+    }
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = intrinsicObjectGetOwnPropertyDescriptor(current, name);
+    } catch {
+      throw new TypeError(`${subject}.${name} could not be inspected safely`);
+    }
+    if (descriptor !== undefined) {
+      if (
+        !("value" in descriptor) ||
+        typeof descriptor.value !== "function" ||
+        isNativeProxy(descriptor.value)
+      ) {
+        throw new TypeError(`${subject}.${name} must be a callable data method`);
+      }
+      return descriptor.value as TFunction;
+    }
+    try {
+      current = intrinsicObjectGetPrototypeOf(current) as object | null;
+    } catch {
+      throw new TypeError(`${subject}.${name} could not be inspected safely`);
+    }
+  }
+  throw new TypeError(`${subject}.${name} must be a callable data method`);
 }
 
 function validateStateDecoder(
@@ -219,6 +319,112 @@ function validateStateDecoder(
     throw new TypeError("stateDecoder proxy policy is malformed");
   }
   return metadata;
+}
+
+function captureLocalWorkspaceOptions(
+  value: LocalWorkspaceCapabilityOptions,
+): CapturedLocalWorkspaceOptions {
+  const inspected = inspectHostRecord(
+    value,
+    [
+      ["operations", "resources", "stateDecoder", "transactionProvider"],
+      ["bounds", "operations", "resources", "stateDecoder", "transactionProvider"],
+    ],
+    "invalid-local-workspace-options",
+    "Local workspace options",
+  );
+  if (!inspected.ok) throw new TypeError("Local workspace options are malformed");
+
+  const optionsReceiver = value as object;
+  const operations = inspected.value.operations;
+  if (typeof operations !== "function" || isNativeProxy(operations)) {
+    throw new TypeError("Local workspace operations must be a non-proxy function");
+  }
+  const bounds = captureBounds(inspected.value.bounds);
+  const resourcesReceiver = requireCapabilityReceiver(
+    inspected.value.resources,
+    "Local workspace resources",
+  );
+  const transactionReceiver = requireCapabilityReceiver(
+    inspected.value.transactionProvider,
+    "Local workspace transaction provider",
+  );
+  const decoderReceiver = requireCapabilityReceiver(
+    inspected.value.stateDecoder,
+    "Local workspace state decoder",
+  ) as ApplicationSnapshotStateDecoder;
+  const decoderMetadata = validateStateDecoder(decoderReceiver, bounds);
+
+  const read = captureCapabilityMethod<LocalResourceProvider["read"]>(
+    resourcesReceiver,
+    "read",
+    "Local workspace resources",
+  );
+  const stageReplacement = captureCapabilityMethod<LocalResourceProvider["stageReplacement"]>(
+    resourcesReceiver,
+    "stageReplacement",
+    "Local workspace resources",
+  );
+  const commitReplacement = captureCapabilityMethod<LocalResourceProvider["commitReplacement"]>(
+    resourcesReceiver,
+    "commitReplacement",
+    "Local workspace resources",
+  );
+  const discardReplacement = captureCapabilityMethod<LocalResourceProvider["discardReplacement"]>(
+    resourcesReceiver,
+    "discardReplacement",
+    "Local workspace resources",
+  );
+  const acquireCoordination = captureCapabilityMethod<LocalResourceProvider["acquireCoordination"]>(
+    resourcesReceiver,
+    "acquireCoordination",
+    "Local workspace resources",
+  );
+  const releaseCoordination = captureCapabilityMethod<LocalResourceProvider["releaseCoordination"]>(
+    resourcesReceiver,
+    "releaseCoordination",
+    "Local workspace resources",
+  );
+  const snapshot = captureCapabilityMethod<TransactionProvider["snapshot"]>(
+    transactionReceiver,
+    "snapshot",
+    "Local workspace transaction provider",
+  );
+  const decode = captureCapabilityMethod<ApplicationSnapshotStateDecoder["decode"]>(
+    decoderReceiver,
+    "decode",
+    "Local workspace state decoder",
+  );
+
+  const resources: LocalWorkspaceResources = Object.freeze({
+    acquireCoordination: (request) =>
+      intrinsicReflectApply(acquireCoordination, resourcesReceiver, [request]),
+    commitReplacement: (handle) =>
+      intrinsicReflectApply(commitReplacement, resourcesReceiver, [handle]),
+    discardReplacement: (handle) =>
+      intrinsicReflectApply(discardReplacement, resourcesReceiver, [handle]),
+    read: (request) => intrinsicReflectApply(read, resourcesReceiver, [request]),
+    releaseCoordination: (lease) =>
+      intrinsicReflectApply(releaseCoordination, resourcesReceiver, [lease]),
+    stageReplacement: (locator, bytes) =>
+      intrinsicReflectApply(stageReplacement, resourcesReceiver, [locator, bytes]),
+  });
+  const stateDecoder = Object.freeze({
+    decode: (state: unknown) => intrinsicReflectApply(decode, decoderReceiver, [state]),
+  });
+  const transactionProvider = Object.freeze({
+    snapshot: (resources: Parameters<TransactionProvider["snapshot"]>[0]) =>
+      intrinsicReflectApply(snapshot, transactionReceiver, [resources]),
+  });
+
+  return Object.freeze({
+    bounds,
+    decoderProxyPolicy: decoderMetadata.isProxy,
+    operations: () => intrinsicReflectApply(operations, optionsReceiver, []),
+    resources,
+    stateDecoder,
+    transactionProvider,
+  });
 }
 
 function recognizedProxy(
@@ -483,7 +689,7 @@ interface CanonicalWorkspaceSnapshot {
 function canonicalSnapshot(
   value: unknown,
   bounds: LocalWorkspaceBounds,
-  stateDecoder: ApplicationSnapshotStateDecoder,
+  stateDecoder: Pick<ApplicationSnapshotStateDecoder, "decode">,
 ): Result<CanonicalWorkspaceSnapshot> {
   const snapshot = inspectHostRecord(
     value,
@@ -522,9 +728,9 @@ function canonicalSnapshot(
 export async function createLocalWorkspaceCapability(
   options: LocalWorkspaceCapabilityOptions,
 ): Promise<WorkspaceAccessCapability> {
-  const bounds = validateBounds(options.bounds);
-  const decoderMetadata = validateStateDecoder(options.stateDecoder, bounds);
-  const decoderProxyPolicy = decoderMetadata.isProxy;
+  const captured = captureLocalWorkspaceOptions(options);
+  const bounds = captured.bounds;
+  const decoderProxyPolicy = captured.decoderProxyPolicy;
   let current: LocalWorkspaceState;
   let configurationPublishedBySession = false;
   let pendingPublication:
@@ -539,7 +745,7 @@ export async function createLocalWorkspaceCapability(
     const retained = retainedInitializationLease;
     if (retained === undefined) return success(undefined);
     try {
-      const raw = await options.resources.releaseCoordination(retained);
+      const raw = await captured.resources.releaseCoordination(retained);
       const released = validatedVoidResult(
         raw,
         bounds,
@@ -555,7 +761,7 @@ export async function createLocalWorkspaceCapability(
 
   const inspect = async (): Promise<LocalWorkspaceState> => {
     try {
-      const read = await options.resources.read({
+      const read = await captured.resources.read({
         locator: workspaceConfigurationLocator,
         maxBytes: bounds.maxConfigurationBytes,
       });
@@ -574,7 +780,7 @@ export async function createLocalWorkspaceCapability(
     if (pending === undefined) return success("none");
     if (pending.action === "discard") {
       try {
-        const raw = await options.resources.discardReplacement(pending.handle);
+        const raw = await captured.resources.discardReplacement(pending.handle);
         const discarded = validatedVoidResult(raw, bounds, "Workspace publication discard");
         if (!discarded.ok || discarded.value !== "succeeded") return failure(providerFailure());
       } catch {
@@ -589,7 +795,7 @@ export async function createLocalWorkspaceCapability(
     let state: Result<ValidatedCommitState>;
     try {
       state = validatedCommitState(
-        await options.resources.commitReplacement(pending.handle),
+        await captured.resources.commitReplacement(pending.handle),
         bounds,
       );
     } catch {
@@ -632,9 +838,9 @@ export async function createLocalWorkspaceCapability(
     }
     try {
       const snapshot = canonicalSnapshot(
-        await options.transactionProvider.snapshot(Object.freeze([])),
+        await captured.transactionProvider.snapshot(Object.freeze([])),
         bounds,
-        options.stateDecoder,
+        captured.stateDecoder,
       );
       if (!snapshot.ok) {
         return recoveryFailure(
@@ -681,7 +887,7 @@ export async function createLocalWorkspaceCapability(
     if (current.state === "missing") {
       try {
         const acquired = validatedCoordinationAcquisition(
-          await options.resources.acquireCoordination({
+          await captured.resources.acquireCoordination({
             context: "local-machine",
             locator: workspaceConfigurationLocator,
           }),
@@ -699,7 +905,7 @@ export async function createLocalWorkspaceCapability(
 
       if (current.state === "missing") {
         try {
-          const staged = await options.resources.stageReplacement(
+          const staged = await captured.resources.stageReplacement(
             workspaceConfigurationLocator,
             canonicalBytes.slice(),
           );
@@ -750,7 +956,9 @@ export async function createLocalWorkspaceCapability(
   };
 
   const requireWorkspace = (): Result<ApplicationOperations> => {
-    if (current.state === "ready") return Object.freeze({ ok: true, value: options.operations() });
+    if (current.state === "ready") {
+      return Object.freeze({ ok: true, value: captured.operations() });
+    }
     if (current.state === "missing") {
       return hostFailure(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
