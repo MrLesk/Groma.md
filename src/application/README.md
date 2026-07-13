@@ -20,16 +20,22 @@ valid empty graph because bootstrap representation belongs to the host.
 provider snapshot state. `ApplicationOperationsOptions` requires that explicit
 capability, and every read reuses the injected instance. Operations accept only the
 frozen decoder object returned by that factory; forged, wrapped, and proxied lookalikes
-are rejected during construction before provider access. Its GraphKernel and Standard
-Model identities and its component, embedded-item, relationship, snapshot-depth, and
-snapshot-value bounds must exactly match the application composition. The decoder owns
-its immutable runtime proxy-detection policy; the default host
-shares that exact proxy-aware instance with application reads and startup recovery, so
+are rejected during construction before provider access. Decoder provenance registration
+is private to the factory module; consumers can read compatibility metadata but cannot
+brand another object. Its GraphKernel and Standard Model identities and its component,
+embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly match
+the application composition. The decoder owns its immutable runtime proxy-detection
+policy; the default host shares that exact proxy-aware instance with application reads
+and startup recovery, so
 bounded copying, GraphKernel loading, Standard Model parsing, relationship endpoints,
 duplicates, and containment invariants cannot drift. Its deterministic Standard Model
 invariant is constructed once with the decoder rather than per read. Decoder results are
-exact-inspected and copied at the application boundary; unexpected decoder faults become
-one stable `application-snapshot-decode-failed` diagnostic without retaining error data.
+exact-inspected and copied inside one exception boundary. Diagnostic arrays, records, and
+details are copied only from bounded own data descriptors, and unexpected decoder faults
+or malformed results become one frozen `application-snapshot-decode-failed` diagnostic
+without retaining error data. Construction also snapshots and freezes every injected
+capability reference, scalar, and bound, so later caller mutation cannot change an
+operation instance's composition.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.

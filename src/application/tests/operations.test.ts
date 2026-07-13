@@ -25,6 +25,7 @@ import {
   createStandardModelCapability,
   createStandardModelInvariant,
   type StandardComponentInput,
+  type StandardModelCapability,
   type StandardModelTransactionState,
 } from "../../standard-model/index.ts";
 import {
@@ -35,6 +36,7 @@ import {
   type ApplicationOperationsOptions,
   type WorkspaceInitializationOutcome,
 } from "../index.ts";
+import * as snapshotStateModule from "../snapshot-state.ts";
 import {
   createStatefulSemanticInitializer,
   exerciseApplicationOperations,
@@ -67,6 +69,8 @@ const applicationBounds: ApplicationOperationBounds = Object.freeze({
   maxSnapshotStateDepth: 30,
   maxSnapshotStateValues: 100_000,
 });
+
+type Mutable<T> = { -readonly [Key in keyof T]: T[Key] };
 
 function component(input: StandardComponentInput) {
   const normalized = model.normalize(input);
@@ -367,7 +371,7 @@ function mutationOperations(
   return { api, executions: () => executions, initialization: semanticInitialization, provider };
 }
 
-function operations(
+function applicationOptions(
   fixture: SnapshotFixture,
   initializationOutcome: WorkspaceInitializationOutcome = {
     generation: generation(0),
@@ -390,7 +394,7 @@ function operations(
   const snapshotStateDecoder =
     overrides.snapshotStateDecoder ??
     createApplicationSnapshotStateDecoder({ bounds, graph, model });
-  return createApplicationOperations({
+  return {
     bounds,
     graph,
     initialization: { initialize: async () => initializationOutcome },
@@ -411,7 +415,18 @@ function operations(
     },
     transactionProvider: fixture,
     ...overrides,
-  });
+  } satisfies ApplicationOperationsOptions;
+}
+
+function operations(
+  fixture: SnapshotFixture,
+  initializationOutcome: WorkspaceInitializationOutcome = {
+    generation: generation(0),
+    status: "initialized",
+  },
+  overrides: Partial<ApplicationOperationsOptions> = {},
+) {
+  return createApplicationOperations(applicationOptions(fixture, initializationOutcome, overrides));
 }
 
 describe("application workspace initialization", () => {
@@ -704,6 +719,27 @@ describe("application component reads", () => {
     expect(fixture.requested).toHaveLength(0);
   });
 
+  test("keeps decoder provenance registration private to the factory module", () => {
+    expect("registerApplicationSnapshotStateDecoder" in snapshotStateModule).toBeFalse();
+    expect("recordApplicationSnapshotStateDecoder" in snapshotStateModule).toBeFalse();
+    expect(typeof snapshotStateModule.applicationSnapshotStateDecoderMetadata).toBe("function");
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const decoder = createApplicationSnapshotStateDecoder({
+      bounds: applicationBounds,
+      graph,
+      model,
+    });
+    const metadata = snapshotStateModule.applicationSnapshotStateDecoderMetadata(decoder);
+    expect(Object.isFrozen(metadata)).toBeTrue();
+    expect(Object.isFrozen(metadata?.bounds)).toBeTrue();
+  });
+
   test("requires exact decoder graph, model, and snapshot-bound compatibility", () => {
     const fixture = new SnapshotFixture();
     const graph = new GraphKernel({
@@ -793,6 +829,207 @@ describe("application component reads", () => {
     expect(result.ok ? "" : result.diagnostics[0]?.code).toBe("application-snapshot-decode-failed");
     expect(JSON.stringify(result)).not.toContain("/private/decoder-secret");
     expect(fixture.requested).toHaveLength(1);
+  });
+
+  test("snapshots every application option and bound before caller mutation", async () => {
+    const fixture = new SnapshotFixture();
+    const proxiedState = new Proxy(state([]), {});
+    fixture.currentState = proxiedState;
+    const bounds = { ...applicationBounds };
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    let originalExecutions = 0;
+    const source = applicationOptions(fixture, undefined, {
+      bounds,
+      graph,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds,
+        graph,
+        isProxy: (value) => value === proxiedState,
+        model,
+      }),
+      transactionExecution: {
+        execute: async () => {
+          originalExecutions += 1;
+          return Object.freeze({
+            committed: false,
+            diagnostics: Object.freeze([
+              Object.freeze({ code: "original-execution", message: "Original execution" }),
+            ]),
+            phase: "prepare" as const,
+            status: "provider-failure" as const,
+          });
+        },
+      },
+    });
+    const api = createApplicationOperations(source);
+    let forgedCalls = 0;
+    const forged = () => {
+      forgedCalls += 1;
+      throw new Error("/private/forged-capability");
+    };
+    const mutable = source as Mutable<ApplicationOperationsOptions>;
+    (bounds as Mutable<ApplicationOperationBounds>).maxComponents = 1;
+    mutable.graph = {} as never;
+    mutable.initialization = { initialize: forged } as never;
+    mutable.maxSnapshotAttempts = 1;
+    mutable.model = {} as never;
+    mutable.queries = { exact: forged, page: forged, prepare: forged } as never;
+    mutable.resourceMapper = { resourceForComponent: forged } as never;
+    mutable.snapshotStateDecoder = { decode: forged } as never;
+    mutable.transactionExecution = { execute: forged } as never;
+    mutable.transactionProvider = { snapshot: forged } as never;
+
+    expect(await api.initialize({})).toMatchObject({ ok: true });
+    expect(await api.listComponents({ limit: 2 })).toMatchObject({
+      diagnostics: [{ code: "invalid-standard-model-state" }],
+      ok: false,
+    });
+
+    fixture.currentState = richState;
+    fixture.sequence = [1, 2, 2, 2];
+    const roots = await api.listRoots({ limit: 10 });
+    expect(roots.ok && roots.value.items).toHaveLength(2);
+    expect(fixture.requested.length).toBeGreaterThanOrEqual(5);
+
+    const mutation = await api.updateComponent({
+      expectedRevision: `revision:${ids.domain.slice(-32)}`,
+      id: ids.domain,
+      patch: { name: "Renamed" },
+    });
+    expect(mutation.status).toBe("provider-failure");
+    expect(originalExecutions).toBe(1);
+    expect(forgedCalls).toBe(0);
+  });
+
+  test("contains hostile diagnostics from an identity-matched decoder model", async () => {
+    const secret = "/private/details-secret";
+
+    async function readWith(
+      diagnostics: readonly unknown[],
+      proxies: ReadonlySet<unknown> = new Set(),
+    ) {
+      const fixture = new SnapshotFixture();
+      fixture.currentState = state([
+        component({ id: ids.domain, name: "Commerce", type: "domain" }),
+      ]);
+      const graph = new GraphKernel({
+        idSource: {
+          nextEntityId: () => ids.domain,
+          nextRelationId: () => relationIds.first,
+        },
+        maxPageSize: 100,
+      });
+      const hostileModel: StandardModelCapability = Object.freeze({
+        ...model,
+        parse: () => ({ diagnostics, ok: false }) as never,
+      });
+      return operations(fixture, undefined, {
+        graph,
+        model: hostileModel,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph,
+          isProxy: (value) => proxies.has(value),
+          model: hostileModel,
+        }),
+      }).listComponents({ limit: 2 });
+    }
+
+    const proxyDetails = new Proxy({ maximum: 1, secret }, {});
+    const proxiedDetailsResult = await readWith(
+      [{ code: "hostile-model", details: proxyDetails, message: secret }],
+      new Set([proxyDetails]),
+    );
+    expect(proxiedDetailsResult.ok ? "" : proxiedDetailsResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+
+    let detailGetterCalls = 0;
+    const accessorDetails = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(accessorDetails, "maximum", {
+      enumerable: true,
+      get: () => {
+        detailGetterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const accessorResult = await readWith([
+      { code: "hostile-model", details: accessorDetails, message: secret },
+    ]);
+    expect(accessorResult.ok ? "" : accessorResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+    expect(detailGetterCalls).toBe(0);
+
+    const proxiedArray = new Proxy([{ code: "hostile-model", message: secret }], {});
+    const proxiedArrayResult = await readWith(proxiedArray, new Set([proxiedArray]));
+    expect(proxiedArrayResult.ok ? "" : proxiedArrayResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+
+    let entryGetterCalls = 0;
+    const accessorEntry = Object.create(null) as Record<string, unknown>;
+    Object.defineProperties(accessorEntry, {
+      code: {
+        enumerable: true,
+        get: () => {
+          entryGetterCalls += 1;
+          throw new Error(secret);
+        },
+      },
+      message: { enumerable: true, value: secret },
+    });
+    const accessorEntryResult = await readWith([accessorEntry]);
+    expect(accessorEntryResult.ok ? "" : accessorEntryResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+    expect(entryGetterCalls).toBe(0);
+
+    const mutableDetails: { componentId: string; maximum: number; secret: string } = {
+      componentId: ids.domain,
+      maximum: 2,
+      secret,
+    };
+    const mutableEntry = {
+      code: "mutable-model-failure",
+      details: mutableDetails,
+      message: secret,
+    };
+    const mutableDiagnostics = [mutableEntry];
+    const copiedResult = await readWith(mutableDiagnostics);
+    mutableDetails.componentId = ids.service;
+    mutableDetails.maximum = 999;
+    mutableEntry.code = secret;
+    mutableDiagnostics.splice(0);
+
+    expect(copiedResult).toMatchObject({
+      diagnostics: [
+        {
+          code: "mutable-model-failure",
+          details: { componentId: ids.domain, maximum: 2 },
+        },
+      ],
+      ok: false,
+    });
+    expect(Object.isFrozen(copiedResult)).toBeTrue();
+    expect(!copiedResult.ok && Object.isFrozen(copiedResult.diagnostics)).toBeTrue();
+    expect(!copiedResult.ok && Object.isFrozen(copiedResult.diagnostics[0]?.details)).toBeTrue();
+
+    for (const result of [
+      proxiedDetailsResult,
+      accessorResult,
+      proxiedArrayResult,
+      accessorEntryResult,
+      copiedResult,
+    ]) {
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }
   });
 
   test("accepts an uninitialized empty state as an empty bounded graph", async () => {

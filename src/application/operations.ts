@@ -54,8 +54,10 @@ import type {
   UpdateComponentRequest,
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
-import type { DecodedApplicationSnapshotState } from "./snapshot-state.ts";
-import { applicationSnapshotStateDecoderMetadata } from "./snapshot-state-capability.ts";
+import {
+  applicationSnapshotStateDecoderMetadata,
+  type DecodedApplicationSnapshotState,
+} from "./snapshot-state.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -101,6 +103,10 @@ function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
 
+function frozenFailure<T>(...diagnostics: readonly Diagnostic[]): Result<T> {
+  return Object.freeze({ diagnostics: Object.freeze([...diagnostics]), ok: false as const });
+}
+
 function componentResourceDiagnostic(componentId: string): Diagnostic {
   return Object.freeze({
     code: "component-resource-unavailable",
@@ -139,6 +145,43 @@ function validatePositiveBound(value: number, name: string, maximum: number): vo
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
     throw new RangeError(`${name} must be a positive safe integer no greater than ${maximum}`);
   }
+}
+
+function captureApplicationOperationsOptions(
+  source: ApplicationOperationsOptions,
+): ApplicationOperationsOptions {
+  const bounds = {
+    maxComponents: source.bounds.maxComponents,
+    maxDiagnosticCount: source.bounds.maxDiagnosticCount,
+    maxEmbeddedItems: source.bounds.maxEmbeddedItems,
+    maxRelationshipMutations: source.bounds.maxRelationshipMutations,
+    maxRelationships: source.bounds.maxRelationships,
+    maxRequestDataDepth: source.bounds.maxRequestDataDepth,
+    maxRequestDataValues: source.bounds.maxRequestDataValues,
+    maxSnapshotStateDepth: source.bounds.maxSnapshotStateDepth,
+    maxSnapshotStateValues: source.bounds.maxSnapshotStateValues,
+  };
+  return {
+    bounds,
+    graph: source.graph,
+    initialization: source.initialization,
+    maxSnapshotAttempts: source.maxSnapshotAttempts,
+    model: source.model,
+    queries: source.queries,
+    resourceMapper: source.resourceMapper,
+    snapshotStateDecoder: source.snapshotStateDecoder,
+    transactionExecution: source.transactionExecution,
+    transactionProvider: source.transactionProvider,
+  };
+}
+
+function freezeApplicationOperationsOptions(
+  source: ApplicationOperationsOptions,
+): ApplicationOperationsOptions {
+  return Object.freeze({
+    ...source,
+    bounds: Object.freeze({ ...source.bounds }),
+  });
 }
 
 function validateSnapshotStateDecoder(options: ApplicationOperationsOptions): void {
@@ -188,7 +231,15 @@ function boundedRequest(value: unknown, subject: string): Result<BoundedPageRequ
   );
 }
 
-function denseArray(value: unknown, subject: string, maximum: number): Result<readonly unknown[]> {
+function denseArray(
+  value: unknown,
+  subject: string,
+  maximum: number,
+  isProxy?: (value: unknown) => boolean,
+): Result<readonly unknown[]> {
+  if (typeof value === "object" && value !== null && isProxy?.(value)) {
+    return failure(diagnostic("invalid-standard-model-state", `${subject} must not be a proxy`));
+  }
   const length = boundedArrayLength(value, subject, maximum);
   if (!length.ok) return length;
   try {
@@ -588,7 +639,7 @@ async function snapshot(
 }
 
 function snapshotDecodeFailure(): Result<never> {
-  return failure(
+  return frozenFailure(
     diagnostic(
       "application-snapshot-decode-failed",
       "The application snapshot decoder could not safely decode provider state",
@@ -600,54 +651,68 @@ function decodeSnapshotState(
   value: unknown,
   options: ApplicationOperationsOptions,
 ): Result<DecodedApplicationSnapshotState> {
-  let decoded: unknown;
   try {
-    decoded = options.snapshotStateDecoder.decode(value);
-  } catch {
-    return snapshotDecodeFailure();
-  }
-  const result = inspectExactRecord(
-    decoded,
-    [
-      ["ok", "value"],
-      ["diagnostics", "ok"],
-    ],
-    "application-snapshot-decode-failed",
-    "Application snapshot decoder result",
-  );
-  if (!result.ok) return snapshotDecodeFailure();
-  if (result.value.ok === false) {
-    const diagnostics = applicationDiagnostics(
-      result.value.diagnostics,
-      "provider",
-      options.bounds,
+    const metadata = applicationSnapshotStateDecoderMetadata(options.snapshotStateDecoder);
+    if (metadata === undefined) return snapshotDecodeFailure();
+    const isProxy = metadata.isProxy;
+    const decoded: unknown = options.snapshotStateDecoder.decode(value);
+    if (typeof decoded === "object" && decoded !== null && isProxy?.(decoded)) {
+      return snapshotDecodeFailure();
+    }
+    const result = inspectExactRecord(
+      decoded,
+      [
+        ["ok", "value"],
+        ["diagnostics", "ok"],
+      ],
+      "application-snapshot-decode-failed",
+      "Application snapshot decoder result",
     );
-    return diagnostics.ok && diagnostics.value.length > 0
-      ? failure(...diagnostics.value)
-      : snapshotDecodeFailure();
-  }
-  if (result.value.ok !== true) return snapshotDecodeFailure();
-  const state = inspectExactRecord(
-    result.value.value,
-    [["components", "graph", "relationships"]],
-    "application-snapshot-decode-failed",
-    "Decoded application snapshot state",
-  );
-  if (!state.ok) return snapshotDecodeFailure();
-  const components = denseArray(
-    state.value.components,
-    "Decoded application snapshot components",
-    options.bounds.maxComponents,
-  );
-  if (!components.ok) return snapshotDecodeFailure();
-  const relationships = denseArray(
-    state.value.relationships,
-    "Decoded application snapshot relationships",
-    options.bounds.maxRelationships,
-  );
-  if (!relationships.ok) return snapshotDecodeFailure();
-  const graph = state.value.graph;
-  try {
+    if (!result.ok) return snapshotDecodeFailure();
+    if (result.value.ok === false) {
+      const diagnostics = applicationDiagnostics(
+        result.value.diagnostics,
+        "provider",
+        options.bounds,
+        isProxy,
+      );
+      return diagnostics.ok && diagnostics.value.length > 0
+        ? frozenFailure(...diagnostics.value)
+        : snapshotDecodeFailure();
+    }
+    if (result.value.ok !== true) return snapshotDecodeFailure();
+    if (
+      typeof result.value.value === "object" &&
+      result.value.value !== null &&
+      isProxy?.(result.value.value)
+    ) {
+      return snapshotDecodeFailure();
+    }
+    const state = inspectExactRecord(
+      result.value.value,
+      [["components", "graph", "relationships"]],
+      "application-snapshot-decode-failed",
+      "Decoded application snapshot state",
+    );
+    if (!state.ok) return snapshotDecodeFailure();
+    const components = denseArray(
+      state.value.components,
+      "Decoded application snapshot components",
+      options.bounds.maxComponents,
+      isProxy,
+    );
+    if (!components.ok) return snapshotDecodeFailure();
+    const relationships = denseArray(
+      state.value.relationships,
+      "Decoded application snapshot relationships",
+      options.bounds.maxRelationships,
+      isProxy,
+    );
+    if (!relationships.ok) return snapshotDecodeFailure();
+    const graph = state.value.graph;
+    if (typeof graph === "object" && graph !== null && isProxy?.(graph)) {
+      return snapshotDecodeFailure();
+    }
     const entityCount =
       typeof graph === "object" && graph !== null
         ? Object.getOwnPropertyDescriptor(graph, "entityCount")
@@ -671,16 +736,16 @@ function decodeSnapshotState(
     ) {
       return snapshotDecodeFailure();
     }
+    return success(
+      Object.freeze({
+        components: components.value as readonly StandardComponent[],
+        graph: graph as GraphSnapshot,
+        relationships: relationships.value as readonly StandardRelationship[],
+      }),
+    );
   } catch {
     return snapshotDecodeFailure();
   }
-  return success(
-    Object.freeze({
-      components: components.value as readonly StandardComponent[],
-      graph: graph as GraphSnapshot,
-      relationships: relationships.value as readonly StandardRelationship[],
-    }),
-  );
 }
 
 function selectPage<T extends { readonly id: string }>(
@@ -889,6 +954,14 @@ const safeReceivedTypes = new Set([
 const semanticPathPattern =
   /^(?:component|context|finalState|mutation|patch|priorState|request)(?:\.|\[|$)[A-Za-z0-9_.\[\]-]*$/;
 const safeDiagnosticCodePattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const safeDiagnosticDetailKeys = Object.freeze([
+  ...safeIdentityDetailKeys,
+  ...safeNumericDetailKeys,
+  ...safeBooleanDetailKeys,
+  "path",
+  "receivedType",
+  "state",
+]);
 
 function stableDiagnosticCode(code: string, category: DiagnosticCategory): string {
   if (code.length <= 128 && safeDiagnosticCodePattern.test(code)) return code;
@@ -906,39 +979,81 @@ function stableDiagnosticMessage(code: string, category: DiagnosticCategory): st
 }
 
 function safeDiagnosticDetails(
-  source: Diagnostic["details"],
-): Readonly<Record<string, string | number | boolean>> | undefined {
-  if (source === undefined) return undefined;
+  source: unknown,
+  isProxy?: (value: unknown) => boolean,
+): Result<Readonly<Record<string, string | number | boolean>> | undefined> {
+  if (source === undefined) return success(undefined);
+  const malformed = () =>
+    failure(
+      diagnostic("invalid-transaction-outcome", "Transaction diagnostic details are malformed"),
+    );
   const details = Object.create(null) as Record<string, string | number | boolean>;
-  for (const [key, value] of Object.entries(source)) {
-    let safe = false;
-    if (safeIdentityDetailKeys.has(key) && typeof value === "string") {
-      safe = parseEntityId(value).ok || parseRelationId(value).ok;
-    } else if (key === "path" && typeof value === "string") {
-      safe = semanticPathPattern.test(value);
-    } else if (key === "receivedType" && typeof value === "string") {
-      safe = safeReceivedTypes.has(value);
-    } else if (key === "state" && typeof value === "string") {
-      safe = value === "absent" || value === "incompatible" || value === "initialized";
-    } else if (safeNumericDetailKeys.has(key) && typeof value === "number") {
-      safe = Number.isFinite(value);
-    } else if (safeBooleanDetailKeys.has(key) && typeof value === "boolean") {
-      safe = true;
+  let copied = 0;
+  try {
+    if (typeof source !== "object" || source === null || Array.isArray(source)) return malformed();
+    if (isProxy?.(source)) return malformed();
+    const prototype = Object.getPrototypeOf(source);
+    if (prototype !== Object.prototype && prototype !== null) return malformed();
+    for (const key of safeDiagnosticDetailKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor) || !descriptor.enumerable) return malformed();
+      const value = descriptor.value;
+      let safe = false;
+      if (safeIdentityDetailKeys.has(key) && typeof value === "string") {
+        safe = parseEntityId(value).ok || parseRelationId(value).ok;
+      } else if (key === "path" && typeof value === "string") {
+        safe = semanticPathPattern.test(value);
+      } else if (key === "receivedType" && typeof value === "string") {
+        safe = safeReceivedTypes.has(value);
+      } else if (key === "state" && typeof value === "string") {
+        safe = value === "absent" || value === "incompatible" || value === "initialized";
+      } else if (safeNumericDetailKeys.has(key) && typeof value === "number") {
+        safe = Number.isFinite(value);
+      } else if (safeBooleanDetailKeys.has(key) && typeof value === "boolean") {
+        safe = true;
+      }
+      if (safe) {
+        Object.defineProperty(details, key, { enumerable: true, value });
+        copied += 1;
+      }
     }
-    if (safe) Object.defineProperty(details, key, { enumerable: true, value });
+  } catch {
+    return malformed();
   }
-  return Object.keys(details).length === 0 ? undefined : Object.freeze(details);
+  return success(copied === 0 ? undefined : Object.freeze(details));
 }
 
 function applicationDiagnostic(
   source: Diagnostic,
   category: DiagnosticCategory,
 ): ApplicationDiagnostic {
-  const code = stableDiagnosticCode(source.code, category);
-  const details = safeDiagnosticDetails(source.details);
+  const inspected = inspectExactRecord(
+    source,
+    [
+      ["code", "message"],
+      ["code", "details", "message"],
+    ],
+    "invalid-transaction-outcome",
+    "Transaction outcome diagnostic",
+  );
+  if (
+    !inspected.ok ||
+    typeof inspected.value.code !== "string" ||
+    typeof inspected.value.message !== "string"
+  ) {
+    const code = stableDiagnosticCode("", category);
+    return Object.freeze({ code, message: stableDiagnosticMessage(code, category) });
+  }
+  const details = safeDiagnosticDetails(inspected.value.details);
+  if (!details.ok) {
+    const code = stableDiagnosticCode("", category);
+    return Object.freeze({ code, message: stableDiagnosticMessage(code, category) });
+  }
+  const code = stableDiagnosticCode(inspected.value.code, category);
   return Object.freeze({
     code,
-    ...(details === undefined ? {} : { details }),
+    ...(details.value === undefined ? {} : { details: details.value }),
     message: stableDiagnosticMessage(code, category),
   });
 }
@@ -964,11 +1079,26 @@ function applicationDiagnostics(
   value: unknown,
   category: DiagnosticCategory,
   bounds: ApplicationOperationBounds,
+  isProxy?: (value: unknown) => boolean,
 ): Result<readonly ApplicationDiagnostic[]> {
-  const entries = denseArray(value, "Transaction outcome diagnostics", bounds.maxDiagnosticCount);
+  const entries = denseArray(
+    value,
+    "Transaction outcome diagnostics",
+    bounds.maxDiagnosticCount,
+    isProxy,
+  );
   if (!entries.ok) return entries;
   const diagnostics: ApplicationDiagnostic[] = [];
   for (let index = 0; index < entries.value.length; index += 1) {
+    if (
+      typeof entries.value[index] === "object" &&
+      entries.value[index] !== null &&
+      isProxy?.(entries.value[index])
+    ) {
+      return failure(
+        diagnostic("invalid-transaction-outcome", "Transaction diagnostics are malformed"),
+      );
+    }
     const entry = inspectExactRecord(
       entries.value[index],
       [
@@ -987,40 +1117,14 @@ function applicationDiagnostics(
         diagnostic("invalid-transaction-outcome", "Transaction diagnostics are malformed"),
       );
     }
-    let details: Readonly<Record<string, string | number | boolean>> | undefined;
-    if ("details" in entry.value) {
-      const record = entry.value.details;
-      if (typeof record !== "object" || record === null || Array.isArray(record)) {
-        return failure(
-          diagnostic("invalid-transaction-outcome", "Transaction diagnostic details are malformed"),
-        );
-      }
-      const safe = Object.create(null) as Record<string, string | number | boolean>;
-      for (const [key, detail] of Object.entries(record)) {
-        if (
-          typeof detail !== "string" &&
-          typeof detail !== "number" &&
-          typeof detail !== "boolean"
-        ) {
-          return failure(
-            diagnostic(
-              "invalid-transaction-outcome",
-              "Transaction diagnostic details are malformed",
-            ),
-          );
-        }
-        Object.defineProperty(safe, key, { enumerable: true, value: detail });
-      }
-      if (Object.keys(safe).length > 0) details = Object.freeze(safe);
-    }
-    diagnostics[index] = applicationDiagnostic(
-      Object.freeze({
-        code: entry.value.code,
-        ...(details === undefined ? {} : { details }),
-        message: entry.value.message,
-      }),
-      category,
-    );
+    const details = safeDiagnosticDetails(entry.value.details, isProxy);
+    if (!details.ok) return details;
+    const code = stableDiagnosticCode(entry.value.code, category);
+    diagnostics[index] = Object.freeze({
+      code,
+      ...(details.value === undefined ? {} : { details: details.value }),
+      message: stableDiagnosticMessage(code, category),
+    });
   }
   return success(Object.freeze(diagnostics));
 }
@@ -1045,7 +1149,7 @@ function snapshotFailure<T>(diagnostics: readonly Diagnostic[]): ApplicationMuta
 }
 
 function readProviderFailure<T>(diagnostics: readonly Diagnostic[]): Result<T> {
-  return failure(...diagnostics.map((entry) => applicationDiagnostic(entry, "provider")));
+  return frozenFailure(...diagnostics.map((entry) => applicationDiagnostic(entry, "provider")));
 }
 
 function revisionConflict<T>(): ApplicationMutationOutcome<T> {
@@ -1640,10 +1744,11 @@ function standardTransactionRequest(
 }
 
 export function createApplicationOperations(
-  options: ApplicationOperationsOptions,
+  source: ApplicationOperationsOptions,
 ): ApplicationOperations {
+  const captured = captureApplicationOperationsOptions(source);
   validatePositiveBound(
-    options.maxSnapshotAttempts,
+    captured.maxSnapshotAttempts,
     "maxSnapshotAttempts",
     absoluteBounds.maxSnapshotAttempts,
   );
@@ -1658,9 +1763,10 @@ export function createApplicationOperations(
     "maxSnapshotStateDepth",
     "maxSnapshotStateValues",
   ] as const) {
-    validatePositiveBound(options.bounds[name], name, absoluteBounds[name]);
+    validatePositiveBound(captured.bounds[name], name, absoluteBounds[name]);
   }
-  validateSnapshotStateDecoder(options);
+  validateSnapshotStateDecoder(captured);
+  const options = freezeApplicationOperationsOptions(captured);
 
   const initialize = async (
     request: InitializeWorkspaceRequest,

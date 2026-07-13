@@ -21,10 +21,6 @@ import {
 } from "../standard-model/index.ts";
 import type { ApplicationOperationBounds } from "./contracts.ts";
 import type { GraphKernel } from "../core/index.ts";
-import {
-  registerApplicationSnapshotStateDecoder,
-  type ApplicationSnapshotStateDecoderBounds,
-} from "./snapshot-state-capability.ts";
 
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
@@ -48,6 +44,40 @@ export interface DecodedApplicationSnapshotState {
 
 export interface ApplicationSnapshotStateDecoder {
   decode(value: unknown): Result<DecodedApplicationSnapshotState>;
+}
+
+type ApplicationSnapshotStateDecoderBounds = Readonly<
+  Pick<
+    ApplicationOperationBounds,
+    | "maxComponents"
+    | "maxEmbeddedItems"
+    | "maxRelationships"
+    | "maxSnapshotStateDepth"
+    | "maxSnapshotStateValues"
+  >
+>;
+
+export interface ApplicationSnapshotStateDecoderMetadata {
+  readonly bounds: ApplicationSnapshotStateDecoderBounds;
+  readonly graph: GraphKernel;
+  readonly isProxy: ((value: unknown) => boolean) | undefined;
+  readonly model: StandardModelCapability;
+}
+
+const decoderMetadata = new WeakMap<object, ApplicationSnapshotStateDecoderMetadata>();
+
+function recordApplicationSnapshotStateDecoder(
+  decoder: ApplicationSnapshotStateDecoder,
+  metadata: ApplicationSnapshotStateDecoderMetadata,
+): ApplicationSnapshotStateDecoder {
+  decoderMetadata.set(decoder as object, Object.freeze({ ...metadata }));
+  return decoder;
+}
+
+export function applicationSnapshotStateDecoderMetadata(
+  value: unknown,
+): ApplicationSnapshotStateDecoderMetadata | undefined {
+  return typeof value === "object" && value !== null ? decoderMetadata.get(value) : undefined;
 }
 
 interface ApplicationSnapshotStateDecoderContext extends ApplicationSnapshotStateDecoderOptions {
@@ -332,7 +362,7 @@ export function createApplicationSnapshotStateDecoder(
     zero: zero.value,
   });
   const decoder = Object.freeze({ decode: (value: unknown) => decode(value, copied) });
-  return registerApplicationSnapshotStateDecoder(decoder, {
+  return recordApplicationSnapshotStateDecoder(decoder, {
     bounds,
     graph: options.graph,
     isProxy: options.isProxy,
