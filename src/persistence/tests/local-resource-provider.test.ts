@@ -1260,6 +1260,23 @@ describe("staged atomic replacement", () => {
     expect(second.ok).toBeTrue();
     expect(await readFile(target, "utf8")).toBe("old-complete");
   });
+
+  test("treats a target beneath a missing parent as already absent", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider(roots);
+    const target = locator("groma", "intent", "ab", "target.md");
+    const staged = await provider.stageReplacement(target, textEncoder.encode("remove me"));
+    expect(staged.ok).toBeTrue();
+    if (!staged.ok) return;
+    expect((await provider.commitReplacement(staged.value)).state).toBe("committed");
+
+    await rm(path.dirname(path.join(roots.workspaceRoot, String(target))), {
+      recursive: true,
+    });
+
+    expect(await provider.removeResource(target)).toEqual({ state: "committed" });
+    expect(await provider.removeResource(target)).toEqual({ state: "committed" });
+  });
 });
 
 describe("same-machine coordination", () => {

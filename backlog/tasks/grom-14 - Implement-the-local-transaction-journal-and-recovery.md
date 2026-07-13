@@ -1,11 +1,11 @@
 ---
 id: GROM-14
 title: Implement the local transaction journal and recovery
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 20:39'
+updated_date: '2026-07-13 14:55'
 labels:
   - persistence
   - transactions
@@ -42,24 +42,17 @@ Provide crash-safe multi-resource transactions for the official local host. The 
 <!-- AC:BEGIN -->
 - [x] #1 A transaction records its base generation, target generation, target resources, expected revisions, and staged replacements before any canonical target changes
 - [x] #2 The committed generation marker advances only when all target resources form the complete new generation
-- [x] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
-- [x] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
+- [ ] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
+- [ ] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
 - [x] #5 Journal and staging artifacts contain no volatile metadata that would create canonical Git churn and are cleaned after a confirmed outcome
-- [x] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
+- [ ] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
 - [x] #7 The resulting generation and recovery outcome satisfy the Core transaction-provider contract and leave a future projection watermark integration point
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define a persistence-local canonical transaction adapter, strict bounds, deterministic token/revision helpers, and a versioned fixed transaction-state resource. The adapter loads the Standard Model transaction state and materializes exact sorted replace/delete targets; Core remains model/storage neutral.
-2. Extend the Local Resource Provider only where crash safety requires filesystem authority: persistent same-machine coordination leases spanning prepare through commit, target-specific orphan-stage cleanup, and idempotent durable file removal. Preserve the existing callback API, confinement, typed outcomes, POSIX parent-directory sync, explicit Windows durability limits, and all four compile targets.
-3. Implement snapshot and prepare under the transaction lease. Recover any interrupted prior journal first, read one committed generation and requested revisions, atomically recheck proposal generation/revisions, durably publish a bounded prepared record containing base/target generation, affected identities, expected/result revisions and replacement/delete content, then stage all replacement handles before returning the deterministic opaque token. No canonical target changes during prepare.
-4. Implement commit as prepared -> committing -> settled. Publish the durable committing marker before changing targets; apply sorted replacements/deletions idempotently; verify every exact resulting revision; then publish the idle state with the new committed generation and a bounded settlement receipt. Advance the generation marker only after the complete target set exists, preserve a projection-watermark field as the future projection integration point, and never infer rollback after committing begins.
-5. Implement idempotent recovery and startup settlement. A prepared record rolls back and cleans stages; a committing record compares each target with its expected/result revision and deterministically finishes the new generation; an idle matching settlement repeats the same committed/not-committed result. Unknown or externally divergent state stays indeterminate. Clean journal-owned stages after confirmed outcomes.
-6. Add boundary-local conformance and integration tests using the real Local Resource Provider and Markdown intent store: initial/steady snapshots, multi-document replace/create/delete, deterministic journal bytes/tokens, optimistic conflicts, competing writers, repeated recovery, projection watermark preservation, malformed/bounded journal records, and no timestamps/absolute paths.
-7. Add phase-by-phase fault injection around every durable journal and target boundary. Restart with fresh provider instances and prove each interruption exposes exactly the complete old or complete new graph, cleanup is idempotent, and subsequent work succeeds.
-8. Run focused and full checks, direct journal compilation for macOS arm64, Linux x64 baseline, Windows x64 baseline and Windows arm64, independent specification and quality reviews, then publish a ready task-linked PR and complete Claude/Codex review handling before finalization and merge.
+1. Make local resource deletion treat a missing resolved parent as an already-absent target while preserving fail-closed handling for every other resolution failure; add provider and journal recovery regressions. 2. Keep idle-settlement recovery indeterminate when the required journal re-publication or cleanup fails, then prove a later retry can confirm and return the durable settlement. 3. Generalize the existing retained snapshot-lease handoff so failed prepare releases retain the only opaque coordination handle and the next snapshot or prepare can settle and release it without process restart. 4. Run focused persistence tests, format/type/boundary checks, the complete repository suite and compiled walking skeleton, all four standalone targets, diff and dependency checks, then publish a ready task-backed PR and complete Claude, exact-head Codex, and CI review gates before re-finalizing GROM-14.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -86,10 +79,8 @@ Startup snapshot lease fix: the journal now retains an opaque snapshot/startup c
 Final quality hardening: transaction-state target reservation now uses captured String normalize/toLowerCase intrinsics with NFC -> case-fold -> NFC conservative aliasing, matching local coordination semantics. Exact and uppercase generic-adapter aliases are rejected before token/prepared publication; regressions prove both canonical and alias resources remain absent, snapshot stays usable, and later valid work commits. Journal-state publication now tracks same-process staged handles with exact prior/intended bytes and a commit-or-discard disposition. Provider not-committed and thrown pre-move outcomes discard; failed discard remains pending and is retried before any later stage; thrown or uncertain publication with intended bytes visible retains and retries the handle to finish finalization, while divergent readback fails closed. Added typed not-committed, pre-move throw, failed-discard retry, and visible-post-move throw regressions with zero final stage artifacts. Validation: focused journal/provider 112 tests / 604 assertions; full check 265 tests / 1329 assertions; check:targets and direct journal compilation pass macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64.
 
 PR #12 review gates: independent exact-commit specification and code-quality reviews passed at 066b91b. Claude approved with minor non-blocking suggestions after reviewing naming, conceptual simplicity, coherence, and user perspective; suggestions were assessed and intentionally deferred or retained by design. Codex completed with a thumbs-up and no comments or review threads. GitHub Verify quality gates and all four cross-platform binary checks passed.
+
+Completion audit on 2026-07-13 found that PR #12 merged before Codex finished. Its late exact-head review raised three actionable P2 findings that remain reproducible on current main: missing parent directories make already-absent deletion report not-committed; failed idle-settlement re-publication can be misreported as committed; and failed prepare release can lose the only retryable coordination handle. PR #11 also lacked a final Codex thumbs-up after a usage-limit retry, so the corrective PR must revalidate the combined current persistence surface. Reopened GROM-14 and acceptance criteria 3, 4, and 6 rather than treating historical notes as proof.
+
+Implemented the three completion-audit corrections on agent/grom-14-late-review-corrections. Local deletion now treats only resource-missing resolution as an already-absent committed target; every other resolution failure remains not-committed. Idle-settlement recovery tracks its required re-publication attempt and stays indeterminate on ordinary staging/cleanup failure until a later retry succeeds. The journal generalized its volatile retained snapshot lease into one transaction-lease handoff shared by snapshot and prepare, installs live preparation ownership before prepared publication, and transfers failed prepare cleanup releases into the retryable handoff without exposing the opaque handle. Added provider idempotence, committing-deletion recovery, failed settlement re-publication, and next-snapshot/next-prepare lease regressions; updated persistence semantics documentation. Validation: focused provider/journal suite passed 117 tests / 628 assertions; bun run check passed formatting, strict types, architecture boundaries, 452 tests / 2,959 assertions, native build/smoke, the complete compiled workflow, PTY checks, malformed-state containment, and 16 crash/recovery cases; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 plus compatible-host execution; bun ci made no changes; git diff --check and architecture boundaries pass.
 <!-- SECTION:NOTES:END -->
-
-## Final Summary
-
-<!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the deterministic local transaction journal and crash-safe Markdown commit path: exact adapter binding, prepared/committing/idle recovery, confirmed replace/delete durability, persistent same-machine leases, bounded cleanup, conservative alias protection, projection-watermark preservation, and real abrupt-process recovery. Verified by 265 tests / 1329 assertions, focused 112 / 604 persistence coverage, independent specification and quality review, Claude approval, Codex thumbs-up, green GitHub CI, and macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 compilation.
-<!-- SECTION:FINAL_SUMMARY:END -->

@@ -100,12 +100,12 @@ discarded through that token record before recovery returns indeterminate, inclu
 the snapshot/startup path. Successfully discarded handle slots are cleared, but the
 record survives a cleanup failure for retry; handle-only records are removed after
 confirmed cleanup, while lease-bearing records remain until lease release succeeds.
-Snapshot/startup coordination likewise retains an opaque lease in volatile journal
-state when pre-move release fails. The next snapshot atomically takes that lease before
-its first asynchronous operation and retries release after settlement; a concurrent
-caller cannot share the in-flight lease and instead follows normal contended
-acquisition. Confirmed release clears the retained lease. Nothing volatile enters the
-deterministic transaction-state record.
+Snapshot/startup coordination and failed prepare cleanup likewise retain an opaque
+lease in volatile journal state when pre-move release fails. The next snapshot or
+prepare atomically takes that lease before its first asynchronous operation and retries
+release after settlement; a concurrent caller cannot share the in-flight lease and
+instead follows normal contended acquisition. Confirmed release clears the retained
+lease. Nothing volatile enters the deterministic transaction-state record.
 Journal publication stages have their own volatile same-process recovery records. A
 provider-confirmed pre-move rejection, or a thrown commit whose exact readback is still
 the previous state or absence, discards the stage. If discard fails, the next journal
@@ -116,16 +116,22 @@ Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes
 a visible committing record durably before changing any target, and re-publishes a
-visible matching idle settlement before acknowledging it as committed. When a fresh
-process finds replacement bytes already visible at their recorded result revision, it
-still re-stages those exact journal bytes and requires a provider-confirmed commit plus
-exact readback before advancing the generation. Visibility alone cannot substitute for
-reasserting file and parent-directory durability after a post-rename crash.
+visible matching idle settlement before acknowledging it as committed. A failed idle
+settlement re-publication remains indeterminate even when the prior settlement bytes
+are still readable; a later retry must confirm the required cleanup and publication.
+When a fresh process finds replacement bytes already visible at their recorded result
+revision, it still re-stages those exact journal bytes and requires a provider-confirmed
+commit plus exact readback before advancing the generation. Visibility alone cannot
+substitute for reasserting file and parent-directory durability after a post-rename
+crash.
 
-Deletion is idempotent. POSIX removals sync the containing directory even when the
-target is already absent, so recovery can reassert deletion durability. Windows keeps
-the same exact old/new classification and atomic file behavior but, like replacement,
-makes no unsupported power-loss directory-durability claim. The journal and provider
+Deletion is idempotent. POSIX removals sync an existing containing directory even when
+the target is already absent, so recovery can reassert deletion durability. If the
+containing directory is itself absent, there is no target entry or containing directory
+left to sync; removal reports committed instead of trapping recovery in a permanent
+indeterminate state. Windows keeps the same exact old/new classification and atomic
+file behavior but, like replacement, makes no unsupported power-loss
+directory-durability claim. The journal and provider
 compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;
 cross-compilation is not a substitute for native permission/durability verification.
 An indeterminate deletion result is retried and accepted only after the provider

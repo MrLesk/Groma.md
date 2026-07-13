@@ -891,7 +891,7 @@ export function createLocalTransactionJournal(
   const limits = bounds(options.bounds);
   const live = new Map<string, LivePreparation>();
   const pendingJournalStages = new Map<StagedReplacementHandle, PendingJournalStage>();
-  let retainedSnapshotLease: LocalCoordinationLease | undefined;
+  let retainedTransactionLease: LocalCoordinationLease | undefined;
   const readExact = async (locator: WorkspaceResourceLocator, maximum = limits.maxJournalBytes) => {
     const read = await options.resources.read({ locator, maxBytes: maximum });
     if (!read.ok) {
@@ -1193,45 +1193,45 @@ export function createLocalTransactionJournal(
     if (state.phase === "prepared") return rollback(state);
     return rollForward(state);
   };
-  const retainSnapshotLease = (lease: LocalCoordinationLease): void => {
-    if (retainedSnapshotLease === undefined || retainedSnapshotLease === lease) {
-      retainedSnapshotLease = lease;
+  const retainTransactionLease = (lease: LocalCoordinationLease): void => {
+    if (retainedTransactionLease === undefined || retainedTransactionLease === lease) {
+      retainedTransactionLease = lease;
       return;
     }
-    throw new Error("Multiple local transaction snapshot leases could not be released");
+    throw new Error("Multiple local transaction leases could not be released");
   };
-  const acquireSnapshotLease = async (): Promise<LocalCoordinationLease> => {
-    const retained = retainedSnapshotLease;
+  const acquireTransactionLease = async (): Promise<Result<LocalCoordinationLease>> => {
+    const retained = retainedTransactionLease;
     if (retained !== undefined) {
-      retainedSnapshotLease = undefined;
-      return retained;
+      retainedTransactionLease = undefined;
+      return success(retained);
     }
-    const acquired = await options.resources.acquireCoordination({
+    return options.resources.acquireCoordination({
       context: "local-machine",
       locator: transactionCoordinationLocator,
     });
-    if (!acquired.ok) throw new Error(acquired.diagnostics[0]?.message);
-    return acquired.value;
   };
-  const releaseSnapshotLease = async (lease: LocalCoordinationLease): Promise<void> => {
+  const releaseTransactionLease = async (lease: LocalCoordinationLease): Promise<void> => {
     let released: Result<void>;
     try {
       released = await options.resources.releaseCoordination(lease);
     } catch (error) {
-      retainSnapshotLease(lease);
+      retainTransactionLease(lease);
       throw error;
     }
     if (!released.ok) {
-      retainSnapshotLease(lease);
+      retainTransactionLease(lease);
       throw new Error(released.diagnostics[0]?.message);
     }
-    if (retainedSnapshotLease === lease) retainedSnapshotLease = undefined;
+    if (retainedTransactionLease === lease) retainedTransactionLease = undefined;
   };
 
   const snapshot = async (
     requested: readonly ResourceKey[],
   ): Promise<TransactionProviderSnapshotInput> => {
-    const lease = await acquireSnapshotLease();
+    const acquired = await acquireTransactionLease();
+    if (!acquired.ok) throw new Error(acquired.diagnostics[0]?.message);
+    const lease = acquired.value;
     try {
       const settled = await settle(undefined);
       if (settled?.status === "indeterminate")
@@ -1252,15 +1252,12 @@ export function createLocalTransactionJournal(
         state: loaded.value.state,
       });
     } finally {
-      await releaseSnapshotLease(lease);
+      await releaseTransactionLease(lease);
     }
   };
 
   const prepare = async (proposal: ProposedTransaction): Promise<TransactionPrepareResultInput> => {
-    const acquired = await options.resources.acquireCoordination({
-      context: "local-machine",
-      locator: transactionCoordinationLocator,
-    });
+    const acquired = await acquireTransactionLease();
     if (!acquired.ok) {
       if (acquired.diagnostics[0]?.code === "resource-coordination-contended") {
         return Object.freeze({ reason: "generation", status: "conflict" });
@@ -1273,8 +1270,7 @@ export function createLocalTransactionJournal(
       if (prior?.status === "indeterminate") throw new Error("prior transaction is indeterminate");
       const state = await readState();
       if (state.phase !== "idle" || state.generation !== proposal.baseGeneration) {
-        const released = await options.resources.releaseCoordination(acquired.value);
-        if (!released.ok) throw new Error(released.diagnostics[0]?.message);
+        await releaseTransactionLease(acquired.value);
         return Object.freeze({ reason: "generation", status: "conflict" });
       }
       const loaded = await options.adapter.load();
@@ -1284,8 +1280,7 @@ export function createLocalTransactionJournal(
       );
       for (const expected of proposal.expectedRevisions) {
         if ((current.get(expected.resource) ?? null) !== expected.expected) {
-          const released = await options.resources.releaseCoordination(acquired.value);
-          if (!released.ok) throw new Error(released.diagnostics[0]?.message);
+          await releaseTransactionLease(acquired.value);
           return Object.freeze({ reason: "revision", status: "conflict" });
         }
       }
@@ -1316,8 +1311,7 @@ export function createLocalTransactionJournal(
         if (!locator.ok) throw new Error(locator.diagnostics[0]?.message);
         const classified = await readExact(locator.value, limits.maxTargetBytes);
         if (classified.revision !== target.expected) {
-          const released = await options.resources.releaseCoordination(acquired.value);
-          if (!released.ok) throw new Error(released.diagnostics[0]?.message);
+          await releaseTransactionLease(acquired.value);
           return Object.freeze({ reason: "revision", status: "conflict" });
         }
       }
@@ -1332,10 +1326,13 @@ export function createLocalTransactionJournal(
         token,
         version: 1,
       });
+      const handles: (StagedReplacementHandle | undefined)[] = [];
+      live.set(token, { handles, lease: acquired.value, stagesCleaned: true });
       await writeState(pending);
       await options.faultInjector?.("after-prepared-state");
-      const handles: (StagedReplacementHandle | undefined)[] = [];
-      live.set(token, { handles, lease: acquired.value, stagesCleaned: false });
+      const preparation = live.get(token);
+      if (preparation === undefined) throw new Error("prepared transaction state was lost");
+      preparation.stagesCleaned = false;
       for (let index = 0; index < targets.length; index += 1) {
         const target = targets[index]!;
         if (target.replacement === undefined) {
@@ -1363,12 +1360,15 @@ export function createLocalTransactionJournal(
         }
       }
       const preparation = token === undefined ? undefined : live.get(token);
-      const released =
-        token !== undefined && preparation?.lease === acquired.value
-          ? await release(token, acquired.value)
-          : (await options.resources.releaseCoordination(acquired.value)).ok;
-      if (!released)
-        throw new Error("local transaction preparation could not release coordination");
+      if (preparation?.lease === acquired.value) delete preparation.lease;
+      if (token !== undefined && preparation?.stagesCleaned === true) live.delete(token);
+      if (retainedTransactionLease !== acquired.value) {
+        try {
+          await releaseTransactionLease(acquired.value);
+        } catch {
+          // The retained opaque lease is handed to the next snapshot or prepare attempt.
+        }
+      }
       throw new Error("local transaction preparation failed");
     }
   };
@@ -1394,11 +1394,14 @@ export function createLocalTransactionJournal(
       }
     }
     let result: TransactionCommitResultInput;
+    let confirmingIdleSettlement = false;
     try {
       let state = await readState();
       if (state.phase === "idle") {
         if (state.settlement?.token === token) {
+          confirmingIdleSettlement = true;
           await writeState(state);
+          confirmingIdleSettlement = false;
           result = settlementResult(state.settlement);
         } else {
           result = Object.freeze({ status: "indeterminate" });
@@ -1414,7 +1417,7 @@ export function createLocalTransactionJournal(
         result = await rollForward(state);
       }
     } catch (error) {
-      if (error instanceof JournalCommitUnconfirmedError) {
+      if (error instanceof JournalCommitUnconfirmedError || confirmingIdleSettlement) {
         result = Object.freeze({ status: "indeterminate" });
       } else {
         try {

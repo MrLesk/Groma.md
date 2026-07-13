@@ -455,6 +455,208 @@ describe("local transaction journal", () => {
     expect((await provider.removeResource(locator.value)).state).toBe("committed");
   });
 
+  test("recovers a committing deletion whose target parent is already absent", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
+    if (!locator.ok) throw new Error("invalid missing-parent target locator");
+    const resource = parseResourceKey(locator.value);
+    if (!resource.ok) throw new Error("invalid missing-parent target resource");
+    const prior = new TextEncoder().encode("remove me");
+    await seed(resources, locator.value, prior);
+    const priorRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(prior).digest("hex")}`,
+    );
+    if (!priorRevision.ok) throw new Error("invalid missing-parent target revision");
+    const target = Object.freeze({
+      expected: priorRevision.value,
+      locator: locator.value,
+      resource: resource.value,
+      result: null,
+    });
+    const adapter: CanonicalTransactionAdapter = Object.freeze({
+      load: async () =>
+        success(
+          Object.freeze({
+            resources: Object.freeze([
+              Object.freeze({
+                locator: locator.value,
+                resource: resource.value,
+                revision: priorRevision.value,
+              }),
+            ]),
+            state: {},
+          }),
+        ),
+      materialize: () => success(Object.freeze({ state: {}, targets: Object.freeze([target]) })),
+    });
+    let interrupted = false;
+    const journal = createLocalTransactionJournal({
+      adapter,
+      faultInjector(phase) {
+        if (!interrupted && phase === "after-committing-state") {
+          interrupted = true;
+          throw new Error("interrupt before deletion");
+        }
+      },
+      resources,
+    });
+    const proposal = {
+      affected: { entities: [], relations: [] },
+      baseGeneration: 0,
+      context: {},
+      expectedRevisions: [{ expected: priorRevision.value, resource: resource.value }],
+      generation: 1,
+      mutation: {},
+      priorState: {},
+    } as unknown as ProposedTransaction;
+    const prepared = await journal.prepare(proposal);
+    expect(prepared.status).toBe("prepared");
+    if (prepared.status !== "prepared") return;
+    expect(await journal.commit(prepared.token)).toEqual({ status: "indeterminate" });
+    expect(interrupted).toBeTrue();
+
+    await rm(path.dirname(path.join(roots.workspaceRoot, String(locator.value))), {
+      recursive: true,
+    });
+
+    expect(await journal.recover(prepared.token)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(await resources.read({ locator: locator.value, maxBytes: 100 })).toMatchObject({
+      diagnostics: [{ code: "resource-missing" }],
+      ok: false,
+    });
+  });
+
+  test("keeps an idle settlement indeterminate until re-publication succeeds", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    let failRepublication = false;
+    let rejectedRepublications = 0;
+    const resources = providerWithOverrides(base, {
+      async stageReplacement(locator, bytes) {
+        if (failRepublication && locator === localTransactionStateLocator) {
+          rejectedRepublications += 1;
+          return failure(
+            Object.freeze({
+              code: "injected-journal-republication-failure",
+              message: "Injected journal re-publication failure",
+            }),
+          );
+        }
+        return base.stageReplacement(locator, bytes);
+      },
+    });
+    const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
+    if (!locator.ok) throw new Error("invalid re-publication target locator");
+    const resource = parseResourceKey(locator.value);
+    if (!resource.ok) throw new Error("invalid re-publication target resource");
+    const replacement = new TextEncoder().encode("new state");
+    const replacementRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
+    );
+    if (!replacementRevision.ok) throw new Error("invalid replacement revision");
+    const target = Object.freeze({
+      expected: null,
+      locator: locator.value,
+      replacement,
+      resource: resource.value,
+      result: replacementRevision.value,
+    });
+    const adapter: CanonicalTransactionAdapter = Object.freeze({
+      load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
+      materialize: () => success(Object.freeze({ state: {}, targets: Object.freeze([target]) })),
+    });
+    const journal = createLocalTransactionJournal({ adapter, resources });
+    const proposal = {
+      affected: { entities: [], relations: [] },
+      baseGeneration: 0,
+      context: {},
+      expectedRevisions: [{ expected: null, resource: resource.value }],
+      generation: 1,
+      mutation: {},
+      priorState: {},
+    } as unknown as ProposedTransaction;
+    const prepared = await journal.prepare(proposal);
+    expect(prepared.status).toBe("prepared");
+    if (prepared.status !== "prepared") return;
+    expect(await journal.commit(prepared.token)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+
+    failRepublication = true;
+    expect(await journal.recover(prepared.token)).toEqual({ status: "indeterminate" });
+    expect(rejectedRepublications).toBe(1);
+    failRepublication = false;
+    expect(await journal.recover(prepared.token)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+  });
+
+  for (const retry of ["prepare", "snapshot"] as const) {
+    test(`retains a failed prepare release for the next ${retry}`, async () => {
+      const roots = await workspace();
+      const base = await createLocalResourceProvider(roots);
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (releases === 1) {
+            return failure(
+              Object.freeze({
+                code: "injected-prepare-release-failure",
+                message: "Injected prepare release failure",
+              }),
+            );
+          }
+          return base.releaseCoordination(lease);
+        },
+      });
+      let materializations = 0;
+      const adapter: CanonicalTransactionAdapter = Object.freeze({
+        load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
+        materialize: () => {
+          materializations += 1;
+          return failure(
+            Object.freeze({
+              code: "injected-materialization-failure",
+              message: "Injected materialization failure",
+            }),
+          );
+        },
+      });
+      const journal = createLocalTransactionJournal({ adapter, resources });
+      const proposal = {
+        affected: { entities: [], relations: [] },
+        baseGeneration: 0,
+        context: {},
+        expectedRevisions: [],
+        generation: 1,
+        mutation: {},
+        priorState: {},
+      } as unknown as ProposedTransaction;
+
+      await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+      if (retry === "snapshot") {
+        expect(await journal.snapshot([])).toMatchObject({ generation: 0, revisions: [] });
+      } else {
+        await expect(journal.prepare(proposal)).rejects.toThrow("preparation failed");
+      }
+      expect(acquisitions).toBe(1);
+      expect(releases).toBe(2);
+      expect(materializations).toBe(retry === "prepare" ? 2 : 1);
+    });
+  }
+
   for (const phase of [
     "after-prepared-state",
     "stage-target",

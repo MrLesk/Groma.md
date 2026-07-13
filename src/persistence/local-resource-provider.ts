@@ -1104,7 +1104,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     let targetPath: string;
     try {
       const target = await this.#resolve(locator.value, true);
-      if (!target.ok) return notCommitted(...target.diagnostics);
+      if (!target.ok) {
+        return target.diagnostics[0]?.code === "resource-missing"
+          ? Object.freeze({ state: "committed" })
+          : notCommitted(...target.diagnostics);
+      }
       targetPath = target.value.absolutePath;
       if (target.value.stats === undefined) {
         try {
