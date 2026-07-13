@@ -1,11 +1,11 @@
 ---
 id: GROM-17
 title: Implement the Iteration 1A CLI and terminal entry experience
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 13:13'
+updated_date: '2026-07-13 13:21'
 labels:
   - cli
   - terminal
@@ -76,4 +76,12 @@ Post-Codex correction validation: focused CLI 25 tests / 175 assertions; full bu
 Exact-head Codex review of 2775464 found one additional actionable P2: invocation argument bounds were checked before retaining a valid leading JSON format, so oversized machine requests rendered plain diagnostics. parseInvocation now derives only the bounded-failure format from the leading global option before the aggregate argument preflight, preserving the JSON envelope without parsing the oversized command. Parser and program regressions cover the 257-plus-argument JSON case.
 
 Post-second-Codex correction validation: focused CLI 26 tests / 180 assertions; full bun run check 445 tests / 2,922 assertions including format, types, boundaries, native build and smoke; git diff check passes. The correction is parser-only; the prior exact four-target and 8/8 direct compile results remain applicable and final-head CI will rerun both package jobs.
+
+Final external gate at bdadf3e: Codex completed the exact-head review with a thumbs-up and no new comments. GitHub Cross-platform binaries passed. The first Quality gates attempt failed before checkout because GitHub Actions returned Service Unavailable while resolving action download metadata; no repository change was justified, and rerunning only the failed job passed the complete quality suite.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented the complete Iteration 1A one-shot CLI and bounded terminal entry experience over the shared host/application seams: init and every component operation, file/stdin JSON requests, deterministic plain/JSON envelopes and exit classes, explicit paging, bounded PTY hierarchy, signal-aware streaming input, and no direct persistence access. Verified with 445 tests / 2,922 assertions, native compiled-binary workflow, four packaged targets, 8/8 direct CLI/host compiles, Claude review, iterative exact-head Codex review, and green GitHub CI.
+<!-- SECTION:FINAL_SUMMARY:END -->
