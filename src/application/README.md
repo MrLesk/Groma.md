@@ -37,6 +37,13 @@ without retaining error data. Construction also snapshots and freezes every inje
 capability reference, scalar, and bound, so later caller mutation cannot change an
 operation instance's composition.
 
+The same factory-owned decoder boundary canonicalizes individual GraphEntity candidates
+for mutations. It applies decoder-owned proxy detection before reflection, copies the
+complete payload under snapshot depth and value bounds, binds the expected identity and
+kind, contains Standard Model parsing, and returns only a frozen application-owned entity
+plus a canonical privately provenanced component. Create and sparse-update operations do
+not parse model values outside this boundary.
+
 Standard Model capability successes are also untrusted boundary values. The snapshot
 decoder exact-inspects component, item, extension, and relationship records; binds their
 identities, kinds, types, and endpoints back to the resolved graph; rejects proxies before

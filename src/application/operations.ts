@@ -1891,10 +1891,60 @@ export function createApplicationOperations(
         diagnostic("invalid-application-request", "Created component relationships are malformed"),
       );
     }
-    const normalized = options.model.normalize(
-      copiedComponent as CreateComponentRequest["component"],
+    const invalidNormalizedComponent = () =>
+      rejected<StandardComponent>(
+        diagnostic("invalid-standard-model-value", "Standard Model normalize result is malformed"),
+      );
+    let rawNormalized: unknown;
+    try {
+      rawNormalized = options.model.normalize(
+        copiedComponent as CreateComponentRequest["component"],
+      );
+    } catch {
+      return invalidNormalizedComponent();
+    }
+    const normalizedResult = inspectExactRecord(
+      rawNormalized,
+      [
+        ["ok", "value"],
+        ["diagnostics", "ok"],
+      ],
+      "invalid-standard-model-value",
+      "Standard Model normalize result",
     );
-    if (!normalized.ok) return rejected(...normalized.diagnostics);
+    if (!normalizedResult.ok) return invalidNormalizedComponent();
+    if (normalizedResult.value.ok === false) {
+      const diagnostics = applicationDiagnostics(
+        normalizedResult.value.diagnostics,
+        "validation",
+        options.bounds,
+      );
+      return diagnostics.ok
+        ? Object.freeze({ diagnostics: diagnostics.value, status: "validation-rejected" as const })
+        : invalidNormalizedComponent();
+    }
+    if (normalizedResult.value.ok !== true) return invalidNormalizedComponent();
+    const normalized = inspectExactRecord(
+      normalizedResult.value.value,
+      [
+        ["kind", "payload"],
+        ["id", "kind", "payload"],
+      ],
+      "invalid-standard-model-value",
+      "Standard Model normalized component",
+    );
+    if (
+      !normalized.ok ||
+      normalized.value.kind !== STANDARD_COMPONENT_KIND ||
+      (normalized.value.id !== undefined && typeof normalized.value.id !== "string")
+    ) {
+      return invalidNormalizedComponent();
+    }
+    const normalizedDraft = Object.freeze({
+      ...(normalized.value.id === undefined ? {} : { id: normalized.value.id }),
+      kind: STANDARD_COMPONENT_KIND,
+      payload: normalized.value.payload as GraphData,
+    });
     let current: ReadSnapshot | undefined;
     let added: { readonly entity: GraphEntity; readonly snapshot: GraphSnapshot } | undefined;
     let component: StandardComponent | undefined;
@@ -1902,27 +1952,30 @@ export function createApplicationOperations(
     for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
       const initial = await snapshot(Object.freeze([]), options);
       if (!initial.ok) return snapshotFailure(initial.diagnostics);
-      const proposed = options.graph.addEntity(initial.value.graph, normalized.value);
+      const proposed = options.graph.addEntity(initial.value.graph, normalizedDraft);
       if (!proposed.ok) {
-        return normalized.value.id === undefined
-          ? rejected(...proposed.diagnostics)
-          : revisionConflict();
+        return proposed.diagnostics.some((entry) => entry.code === "ambiguous-entity-identity")
+          ? revisionConflict()
+          : rejected(...proposed.diagnostics);
       }
-      const parsed = options.model.parse(proposed.value.entity);
+      const parsed = options.snapshotStateDecoder.canonicalizeEntity(proposed.value.entity, {
+        id: proposed.value.entity.id,
+        kind: STANDARD_COMPONENT_KIND,
+      });
       if (!parsed.ok) return rejected(...parsed.diagnostics);
-      const resource = componentResource(parsed.value.id, options);
+      const resource = componentResource(parsed.value.component.id, options);
       if (!resource.ok) return rejected(...resource.diagnostics);
       const confirmed = await snapshot(Object.freeze([resource.value]), options);
       if (!confirmed.ok) return snapshotFailure(confirmed.diagnostics);
       if (confirmed.value.generation !== initial.value.generation) continue;
       if (
-        componentById(confirmed.value, parsed.value.id) !== undefined ||
+        componentById(confirmed.value, parsed.value.component.id) !== undefined ||
         confirmed.value.revisions.get(resource.value) !== null
       ) {
         return revisionConflict();
       }
       added = proposed.value;
-      component = parsed.value;
+      component = parsed.value.component;
       current = confirmed.value;
       mapped = resource.value;
       break;
@@ -1975,9 +2028,9 @@ export function createApplicationOperations(
       }
     }
     if (
-      typeof normalized.value.payload !== "object" ||
-      normalized.value.payload === null ||
-      Array.isArray(normalized.value.payload)
+      typeof added.entity.payload !== "object" ||
+      added.entity.payload === null ||
+      Array.isArray(added.entity.payload)
     ) {
       return rejected(
         diagnostic("invalid-standard-model-value", "Normalized component payload is malformed"),
@@ -1985,7 +2038,7 @@ export function createApplicationOperations(
     }
     const componentInput = Object.freeze({
       id: component.id,
-      ...(normalized.value.payload as GraphDataRecord),
+      ...(added.entity.payload as GraphDataRecord),
     });
     relationshipMutations.sort((left, right) =>
       compareText(
@@ -2131,18 +2184,20 @@ export function createApplicationOperations(
     ) {
       return invalidPatchedComponent();
     }
+    const computed = options.snapshotStateDecoder.canonicalizeEntity(
+      Object.freeze({
+        id: id.value,
+        kind: STANDARD_COMPONENT_KIND,
+        payload: patched.value.payload,
+      }),
+      { id: id.value, kind: STANDARD_COMPONENT_KIND },
+    );
+    if (!computed.ok) return rejected(...computed.diagnostics);
     const finalEmbedded = preflightEmbeddedItems(
-      patched.value.payload,
+      computed.value.entity.payload,
       options.bounds.maxEmbeddedItems,
     );
     if (!finalEmbedded.ok) return rejected(...finalEmbedded.diagnostics);
-    const computedEntity = Object.freeze({
-      id: id.value,
-      kind: STANDARD_COMPONENT_KIND,
-      payload: patched.value.payload as GraphData,
-    });
-    const computed = options.model.parse(computedEntity);
-    if (!computed.ok) return rejected(...computed.diagnostics);
     const plannedRelationships = planRelationshipChanges(
       copiedRelationshipChanges,
       id.value,
@@ -2171,7 +2226,7 @@ export function createApplicationOperations(
     return executeMutation(
       transaction,
       new Map([[mapped.value, id.value]]),
-      computed.value,
+      computed.value.component,
       options,
     );
   };

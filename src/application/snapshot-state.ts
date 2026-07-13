@@ -70,7 +70,16 @@ export interface DecodedApplicationSnapshotState {
   readonly relationships: readonly StandardRelationship[];
 }
 
+export interface CanonicalApplicationSnapshotEntity {
+  readonly component: StandardComponent;
+  readonly entity: GraphEntity;
+}
+
 export interface ApplicationSnapshotStateDecoder {
+  canonicalizeEntity(
+    value: unknown,
+    expected: Readonly<Pick<GraphEntity, "id" | "kind">>,
+  ): Result<CanonicalApplicationSnapshotEntity>;
   decode(value: unknown): Result<DecodedApplicationSnapshotState>;
 }
 
@@ -839,6 +848,78 @@ function copyModelSuccessValues(
   );
 }
 
+function canonicalizeEntity(
+  value: unknown,
+  expected: Readonly<Pick<GraphEntity, "id" | "kind">>,
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<CanonicalApplicationSnapshotEntity> {
+  const isProxy = options.isProxy ?? (() => false);
+  if (typeof value === "object" && value !== null && isProxy(value)) return decoderFailure();
+  const inspected = inspectExactRecord(
+    value,
+    [["id", "kind", "payload"]],
+    "application-snapshot-decode-failed",
+    "Standard Model entity",
+  );
+  if (
+    !inspected.ok ||
+    inspected.value.id !== expected.id ||
+    inspected.value.kind !== expected.kind ||
+    expected.kind !== STANDARD_COMPONENT_KIND
+  ) {
+    return decoderFailure();
+  }
+  if (typeof inspected.value.id !== "string") return decoderFailure();
+  const id = parseEntityId(inspected.value.id);
+  if (!id.ok || id.value !== expected.id) return decoderFailure();
+  if (
+    typeof inspected.value.payload === "object" &&
+    inspected.value.payload !== null &&
+    isProxy(inspected.value.payload)
+  ) {
+    return decoderFailure();
+  }
+  const context: ModelSuccessContext = { embeddedItems: 0, isProxy, options };
+  const safePayload = preflightModelGraphData(
+    inspected.value.payload,
+    1,
+    { value: options.bounds.maxSnapshotStateValues },
+    new WeakSet<object>(),
+    context,
+  );
+  if (!safePayload.ok) return safePayload;
+  const copiedPayload = copyGraphPayload(inspected.value.payload, "entity", {
+    code: "application-snapshot-decode-failed",
+    maximumDepth: options.bounds.maxSnapshotStateDepth,
+    maximumValues: options.bounds.maxSnapshotStateValues,
+    message: "Standard Model entity payload exceeds the configured structural budget",
+  });
+  if (!copiedPayload.ok) return decoderFailure();
+  const entity = Object.freeze({
+    id: id.value,
+    kind: STANDARD_COMPONENT_KIND,
+    payload: copiedPayload.value,
+  });
+  let rawParsed: unknown;
+  try {
+    rawParsed = options.model.parse(entity);
+  } catch {
+    return decoderFailure();
+  }
+  const parsed = modelSuccess(rawParsed, context);
+  if (!parsed.ok) return parsed;
+  const component = modelComponent(parsed.value, entity, context);
+  if (!component.ok) return component;
+  const canonical = copyModelSuccessValues([component.value], [], context);
+  if (!canonical.ok || canonical.value.components.length !== 1) return decoderFailure();
+  return success(
+    Object.freeze({
+      component: canonical.value.components[0]!,
+      entity,
+    }),
+  );
+}
+
 function denseArray(
   value: unknown,
   subject: string,
@@ -1110,6 +1191,13 @@ export function createApplicationSnapshotStateDecoder(
     zero: zero.value,
   });
   const decoder = Object.freeze({
+    canonicalizeEntity: (value: unknown, expected: Readonly<Pick<GraphEntity, "id" | "kind">>) => {
+      try {
+        return canonicalizeEntity(value, expected, copied);
+      } catch {
+        return decoderFailure();
+      }
+    },
     decode: (value: unknown) => {
       try {
         return decode(value, copied);
