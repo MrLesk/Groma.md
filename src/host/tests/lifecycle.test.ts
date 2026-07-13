@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ApplicationOperations } from "../../application/index.ts";
 import { failure, parseGraphGeneration, success, type Result } from "../../core/index.ts";
 import {
   createProcessSignalSource,
@@ -64,16 +65,37 @@ function workspace(
   };
 }
 
+function applicationOperations(
+  initialize: ApplicationOperations["initialize"] = async () =>
+    failure({ code: "unused", message: "unused" }),
+): ApplicationOperations {
+  const unused = async (): Promise<never> => {
+    throw new Error("unused application operation");
+  };
+  return {
+    createComponent: unused,
+    getComponent: unused,
+    initialize,
+    listChildren: unused,
+    listComponents: unused,
+    listRoots: unused,
+    removeComponent: unused,
+    reparentComponent: unused,
+    updateComponent: unused,
+  };
+}
+
 function composition(
   surface: HostSurface,
   workspaceAccess: WorkspaceAccessCapability,
+  operations: ApplicationOperations = applicationOperations(),
 ): HostComposition {
   const capability = Object.freeze({});
   return Object.freeze({
     graph: capability,
     invariant: capability,
     model: capability,
-    operations: capability,
+    operations,
     queries: capability,
     resourceMapper: capability,
     resources: capability,
@@ -213,6 +235,70 @@ describe("host lifecycle", () => {
     expect(contextRecovery).toBe("not-required");
     expect(stops).toBe(1);
     expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("exposes only captured application initialization while the workspace is missing", async () => {
+    const signal = signals();
+    let initializeCalls = 0;
+    let replacementCalls = 0;
+    let receivedOriginalReceiver = false;
+    let initializationFrozen = false;
+    let initializationKeys: PropertyKey[] = [];
+    let initializationResult: unknown;
+    let workspaceGate: unknown;
+    let operations!: ApplicationOperations;
+    const initialize: ApplicationOperations["initialize"] = async function (
+      this: ApplicationOperations,
+      request,
+    ) {
+      initializeCalls += 1;
+      receivedOriginalReceiver = this === operations;
+      expect(request).toEqual({});
+      return success({ generation: generation(1), status: "initialized" });
+    };
+    operations = applicationOperations(initialize);
+    const workspaceAccess = workspace({ state: "missing" });
+    workspaceAccess.status = () => {
+      operations.initialize = async () => {
+        replacementCalls += 1;
+        return success({ generation: generation(2), status: "already-initialized" });
+      };
+      return { state: "missing" };
+    };
+    const surface: HostSurface = {
+      start: async (context) => {
+        initializationFrozen = Object.isFrozen(context.initialization);
+        initializationKeys = Reflect.ownKeys(context.initialization);
+        workspaceGate = context.workspace.requireWorkspace();
+        initializationResult = await context.initialization.initialize({});
+        return { completion: Promise.resolve(), stop: async () => {} };
+      },
+    };
+
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(composition(surface, workspaceAccess, operations)),
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect({ initializeCalls, replacementCalls, receivedOriginalReceiver }).toEqual({
+      initializeCalls: 1,
+      receivedOriginalReceiver: true,
+      replacementCalls: 0,
+    });
+    expect({ initializationFrozen, initializationKeys }).toEqual({
+      initializationFrozen: true,
+      initializationKeys: ["initialize"],
+    });
+    expect(initializationResult).toEqual({
+      ok: true,
+      value: { generation: generation(1), status: "initialized" },
+    });
+    expect(workspaceGate).toEqual({
+      diagnostics: [{ code: "unused", message: "unused" }],
+      ok: false,
+    });
   });
 
   test("contains external cancellation registration failure and rolls back a possibly-added listener", async () => {
@@ -1525,12 +1611,23 @@ describe("host lifecycle", () => {
     const symbol = { ...base };
     Object.defineProperty(symbol, Symbol("secret"), { enumerable: true, value: true });
     const nestedProxy = { ...base, graph: new Proxy({}, {}) };
+    const operationsAccessor = { ...base.operations } as Record<string, unknown>;
+    Object.defineProperty(operationsAccessor, "initialize", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return async () => success({ generation: generation(0), status: "initialized" });
+      },
+    });
     for (const value of [
       new Proxy(base, {}),
       { ...base, extra: true },
       accessor,
       symbol,
       nestedProxy,
+      { ...base, operations: new Proxy(base.operations, {}) },
+      { ...base, operations: { ...base.operations, extra: true } },
+      { ...base, operations: operationsAccessor },
     ]) {
       const outcome = await runHost({
         context: { workspaceRoot: "/absolute/workspace" },
