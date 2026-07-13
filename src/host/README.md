@@ -123,6 +123,12 @@ that attempt begins, one matching removal attempt even if registration throws. A
 fault returns the stable `host-startup-failed` outcome; a removal fault returns
 `host-cancellation-cleanup-failed`. Process-signal cleanup still runs afterward, so its
 own surfaced failure has deterministic final precedence when both cleanup steps fail.
+Listener registration and removal are synchronous `void` contracts: `undefined` is the
+only valid return. Any other value is malformed immediately. A safely observable native
+Promise is given captured intrinsic settlement handlers before that failure is reported,
+but is never awaited, so rejection is contained and resolving or permanently pending
+returns cannot delay host shutdown. Hostile `then` and shadowable constructor/species
+behavior are not consulted.
 
 `createProcessSignalSource` is the built-in process adapter; the CLI is not wired to it
 in 1A. Its SIGINT and SIGTERM registration is

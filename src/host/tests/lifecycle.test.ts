@@ -314,6 +314,210 @@ describe("host lifecycle", () => {
     }
   });
 
+  test("observes rejected cancellation registration Promises without hostile then access or leaks", async () => {
+    const secret = "/private/rejected-cancellation-registration";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    let adds = 0;
+    let removes = 0;
+    let thenCalls = 0;
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const rejected = Promise.reject(new Error(secret));
+      Object.defineProperty(rejected, "then", {
+        configurable: true,
+        get: () => {
+          thenCalls += 1;
+          throw new Error(secret);
+        },
+      });
+      const thenDescriptor = Object.getOwnPropertyDescriptor(rejected, "then");
+      const externalCancellation = {
+        aborted: false,
+        addEventListener: () => {
+          adds += 1;
+          return rejected;
+        },
+        removeEventListener: () => {
+          removes += 1;
+        },
+      } as unknown as AbortSignal;
+      const signal = signals();
+
+      const outcome = await runHost({
+        context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            workspace({ state: "missing" }),
+          ),
+        ),
+        signalSource: signal.source,
+      });
+
+      expect(outcome).toEqual({
+        diagnostics: [{ code: "host-startup-failed", message: "Host startup failed" }],
+        status: "startup-failure",
+      });
+      expect({ adds, removes, signalUnsubscribes: signal.unsubscribes() }).toEqual({
+        adds: 1,
+        removes: 1,
+        signalUnsubscribes: 0,
+      });
+      expect(thenCalls).toBe(0);
+      expect(Object.getOwnPropertyDescriptor(rejected, "then")).toEqual(thenDescriptor);
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("observes rejected cancellation removal Promises before exact signal cleanup", async () => {
+    const cancellationSecret = "/private/rejected-cancellation-removal";
+    const signalSecret = "/private/rejected-process-signal-removal";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    let speciesCalls = 0;
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      class HostilePromise<T> extends Promise<T> {
+        static override get [Symbol.species](): PromiseConstructor {
+          speciesCalls += 1;
+          throw new Error(cancellationSecret);
+        }
+      }
+      for (const signalCleanupFails of [false, true]) {
+        let processUnsubscribes = 0;
+        let removes = 0;
+        const rejected = HostilePromise.reject(new Error(cancellationSecret));
+        const constructorDescriptor = Object.getOwnPropertyDescriptor(rejected, "constructor");
+        const externalCancellation = {
+          aborted: false,
+          addEventListener: () => undefined,
+          removeEventListener: () => {
+            removes += 1;
+            return rejected;
+          },
+        } as unknown as AbortSignal;
+        const signalSource: HostSignalSource = {
+          subscribe: () => () => {
+            processUnsubscribes += 1;
+            if (signalCleanupFails) throw new Error(signalSecret);
+          },
+        };
+
+        const outcome = await runHost({
+          context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+              workspace({ state: "missing" }),
+            ),
+          ),
+          signalSource,
+        });
+
+        expect(outcome, String(signalCleanupFails)).toEqual({
+          diagnostics: [
+            signalCleanupFails
+              ? { code: "host-signal-cleanup-failed", message: "Host signal cleanup failed" }
+              : {
+                  code: "host-cancellation-cleanup-failed",
+                  message: "Host cancellation cleanup failed",
+                },
+          ],
+          status: "surface-failure",
+        });
+        expect({ processUnsubscribes, removes }, String(signalCleanupFails)).toEqual({
+          processUnsubscribes: 1,
+          removes: 1,
+        });
+        expect(Object.getOwnPropertyDescriptor(rejected, "constructor")).toEqual(
+          constructorDescriptor,
+        );
+        expect(JSON.stringify(outcome), String(signalCleanupFails)).not.toContain(
+          cancellationSecret,
+        );
+        expect(JSON.stringify(outcome), String(signalCleanupFails)).not.toContain(signalSecret);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(speciesCalls).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("rejects resolving and pending listener returns synchronously without hanging", async () => {
+    for (const returnState of ["resolved", "pending"] as const) {
+      for (const location of ["add", "remove"] as const) {
+        const malformedReturn =
+          returnState === "resolved" ? Promise.resolve() : new Promise<void>(() => {});
+        let adds = 0;
+        let removes = 0;
+        const externalCancellation = {
+          aborted: false,
+          addEventListener: () => {
+            adds += 1;
+            return location === "add" ? malformedReturn : undefined;
+          },
+          removeEventListener: () => {
+            removes += 1;
+            return location === "remove" ? malformedReturn : undefined;
+          },
+        } as unknown as AbortSignal;
+        const signal = signals();
+        const running = runHost({
+          context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+              workspace({ state: "missing" }),
+            ),
+          ),
+          signalSource: signal.source,
+        });
+        const raced = await Promise.race([
+          running.then((outcome) => ({ outcome, state: "returned" as const })),
+          new Promise<{ readonly state: "hung" }>((resolve) =>
+            setImmediate(() => resolve({ state: "hung" })),
+          ),
+        ]);
+
+        expect(raced.state, `${location}:${returnState}`).toBe("returned");
+        if (raced.state !== "returned") continue;
+        expect(raced.outcome, `${location}:${returnState}`).toEqual(
+          location === "add"
+            ? {
+                diagnostics: [{ code: "host-startup-failed", message: "Host startup failed" }],
+                status: "startup-failure",
+              }
+            : {
+                diagnostics: [
+                  {
+                    code: "host-cancellation-cleanup-failed",
+                    message: "Host cancellation cleanup failed",
+                  },
+                ],
+                status: "surface-failure",
+              },
+        );
+        expect(
+          { adds, removes, signalUnsubscribes: signal.unsubscribes() },
+          `${location}:${returnState}`,
+        ).toEqual({
+          adds: 1,
+          removes: 1,
+          signalUnsubscribes: location === "add" ? 0 : 1,
+        });
+      }
+    }
+  });
+
   test("finishes recovery before semantic surface dispatch", async () => {
     const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const recoveryEntered = deferred<void>();

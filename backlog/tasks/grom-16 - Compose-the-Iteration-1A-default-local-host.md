@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 09:07'
+updated_date: '2026-07-13 09:18'
 labels:
   - host
   - bootstrap
@@ -123,4 +123,6 @@ Final workspace capability snapshot correction: local workspace construction now
 Final Claude correction implemented without commit: external HostProcessContext cancellation registration/removal is exception-contained with one rollback/removal attempt, process-signal unsubscribe still runs exactly once after external removal failure, and stable cleanup precedence remains surface stop then external cancellation then process signal. Application snapshot decoder construction now requires an explicit callable isProxy detector before inspecting bounds/graph/model; metadata and capability containment carry the required policy, non-proxy fixtures inject a deliberate false detector, and runtime detector faults remain fail-closed. Added regressions for throwing external add/remove, no skipped process unsubscribe, signal-cleanup final precedence, omitted/malformed detectors with zero reflection/provider work, and literal cyclic snapshot containment with zero downstream transaction execution or secret leakage. Removed the redundant late session completion read because canonicalSession already observes settlement. Validation: focused application/query/host/workspace 128 tests / 1,179 assertions; complete application+host 134 tests / 1,245 assertions; typecheck, format check, and git diff --check pass.
 
 Focused follow-up: added objective coverage that a required callable isProxy detector throwing on runtime object input yields frozen generic application-snapshot-decode-failed diagnostics, leaks no secret, and performs zero downstream mapping or transaction execution. Reflowed the corresponding application README paragraph without semantic change. Validation: application operations 67 tests / 660 assertions; format check, typecheck, and git diff --check pass.
+
+Final listener-return quality correction: HostProcessContext cancellation addEventListener/removeEventListener remain strict synchronous void contracts. Any non-undefined return is immediately malformed; safely observable native Promises receive captured intrinsic settlement handlers first but are never awaited, so rejected returns are contained and resolving or permanently pending returns cannot hang runHost. Registration non-void returns stable host-startup-failed and still attempts removal; removal non-void returns host-cancellation-cleanup-failed without skipping exactly-once process-signal unsubscribe, whose failure retains final precedence. Regressions cover rejected registration with hostile own then, rejected removal Promise subclass with hostile species, zero unhandled rejections/secret leakage/descriptor drift, and resolving/pending returns for both methods. Validation: lifecycle 36 tests / 230 assertions; full host 70 tests / 621 assertions; format check, typecheck, and git diff --check pass.
 <!-- SECTION:NOTES:END -->

@@ -64,6 +64,16 @@ function observeOptionalCleanup(value: unknown, message: string): Promise<void> 
   return value === undefined ? resolvedPromise() : observeRequiredCleanup(value, message);
 }
 
+function isExactSynchronousVoid(value: unknown): value is undefined {
+  if (value === undefined) return true;
+  observeNativePromise(
+    value,
+    () => undefined,
+    () => undefined,
+  );
+  return false;
+}
+
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
@@ -491,7 +501,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
     externalCancellation = options.context.cancellation;
     if (externalCancellation !== undefined) {
       externalCancellationMayBeRegistered = true;
-      externalCancellation.addEventListener("abort", onAbort, { once: true });
+      const registered = externalCancellation.addEventListener("abort", onAbort, { once: true });
+      if (!isExactSynchronousVoid(registered)) {
+        throw new Error("Host cancellation listener registration was malformed");
+      }
       if (externalCancellation.aborted) requestCancellation();
     }
     const subscribed = signalSource.value((signal) => requestCancellation(signal));
@@ -713,7 +726,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   }
   if (externalCancellationMayBeRegistered && externalCancellation !== undefined) {
     try {
-      externalCancellation.removeEventListener("abort", onAbort);
+      const removed = externalCancellation.removeEventListener("abort", onAbort);
+      if (!isExactSynchronousVoid(removed)) {
+        throw new Error("Host cancellation listener cleanup was malformed");
+      }
     } catch {
       outcome = surfaceFailure(
         "host-cancellation-cleanup-failed",

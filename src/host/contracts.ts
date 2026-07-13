@@ -16,7 +16,7 @@ import type {
 import type { ComponentResourceMapper } from "../application/index.ts";
 
 export interface HostProcessContext {
-  /** Registered and removed at most once by the host; listener failures are surfaced as typed outcomes. */
+  /** Listener methods must return undefined synchronously; non-void returns fail without being awaited. */
   readonly cancellation?: AbortSignal;
   readonly workspaceRoot: string;
 }
