@@ -201,6 +201,7 @@ function validateSnapshotStateDecoder(options: ApplicationOperationsOptions): vo
   }
   for (const name of [
     "maxComponents",
+    "maxDiagnosticCount",
     "maxEmbeddedItems",
     "maxRelationships",
     "maxSnapshotStateDepth",
@@ -923,7 +924,6 @@ const relationTypePattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 
 interface PlannedRelationship {
   readonly graph: GraphSnapshot;
-  readonly relation: GraphRelation;
   readonly view: StandardRelationship;
 }
 
@@ -1620,17 +1620,22 @@ function relationshipInput(
   }
   const viewed = options.snapshotStateDecoder.canonicalizeRelationships(Object.freeze([relation]));
   if (!viewed.ok) return viewed;
-  return success(Object.freeze({ graph: nextGraph, relation, view: viewed.value[0]! }));
+  return success(Object.freeze({ graph: nextGraph, view: viewed.value[0]! }));
 }
 
-function relationshipMutation(relation: GraphRelation): GraphDataRecord {
+function relationshipMutation(relationship: StandardRelationship): GraphDataRecord {
+  const payload: Record<string, GraphData> = {};
+  if (relationship.description !== undefined) payload.description = relationship.description;
+  for (const key of Object.keys(relationship.extensions).sort(compareText)) {
+    payload[key] = relationship.extensions[key]!;
+  }
   return Object.freeze({
     relationship: Object.freeze({
-      id: relation.id,
-      payload: relation.payload,
-      source: relation.source,
-      target: relation.target,
-      type: relation.type,
+      id: relationship.id,
+      payload: Object.freeze(payload),
+      source: relationship.source,
+      target: relationship.target,
+      type: relationship.type,
     }),
     type: "upsert",
   });
@@ -1717,14 +1722,14 @@ function planRelationshipChanges(
     for (let index = 0; index < upserts.value.length; index += 1) {
       const planned = relationshipInput(upserts.value[index], source, graph, state, options);
       if (!planned.ok) return planned;
-      if (targeted.has(planned.value.relation.id)) {
+      if (targeted.has(planned.value.view.id)) {
         return failure(
           diagnostic("ambiguous-relationship-mutation", "Relationship is targeted more than once"),
         );
       }
-      targeted.add(planned.value.relation.id);
+      targeted.add(planned.value.view.id);
       graph = planned.value.graph;
-      mutations.push(relationshipMutation(planned.value.relation));
+      mutations.push(relationshipMutation(planned.value.view));
     }
   }
   mutations.sort((left, right) => {
@@ -1975,7 +1980,7 @@ export function createApplicationOperations(
           options,
         );
         if (!planned.ok) return rejected(...planned.diagnostics);
-        if (affectedRelationships.has(planned.value.relation.id)) {
+        if (affectedRelationships.has(planned.value.view.id)) {
           return rejected(
             diagnostic(
               "ambiguous-relationship-mutation",
@@ -1983,8 +1988,8 @@ export function createApplicationOperations(
             ),
           );
         }
-        affectedRelationships.add(planned.value.relation.id);
-        relationshipMutations.push(relationshipMutation(planned.value.relation));
+        affectedRelationships.add(planned.value.view.id);
+        relationshipMutations.push(relationshipMutation(planned.value.view));
         graph = planned.value.graph;
       }
     }

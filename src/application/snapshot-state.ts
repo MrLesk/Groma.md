@@ -56,6 +56,7 @@ export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
     ApplicationOperationBounds,
     | "maxComponents"
+    | "maxDiagnosticCount"
     | "maxEmbeddedItems"
     | "maxRelationships"
     | "maxSnapshotStateDepth"
@@ -104,6 +105,7 @@ type ApplicationSnapshotStateDecoderBounds = Readonly<
   Pick<
     ApplicationOperationBounds,
     | "maxComponents"
+    | "maxDiagnosticCount"
     | "maxEmbeddedItems"
     | "maxRelationships"
     | "maxSnapshotStateDepth"
@@ -410,7 +412,13 @@ function copiedModelFailure(value: unknown, context: ModelSuccessContext): Resul
       "application-snapshot-decode-failed",
       "Standard Model diagnostics",
     );
-    if (!length.ok || length.value === 0 || length.value > 1_000) return decoderFailure();
+    if (
+      !length.ok ||
+      length.value === 0 ||
+      length.value > context.options.bounds.maxDiagnosticCount
+    ) {
+      return decoderFailure();
+    }
     const keys = Reflect.ownKeys(value);
     if (keys.length !== length.value + 1) return decoderFailure();
     const diagnostics = [];
@@ -443,6 +451,41 @@ function copiedModelFailure(value: unknown, context: ModelSuccessContext): Resul
       });
     }
     return Object.freeze({ diagnostics: Object.freeze(diagnostics), ok: false as const });
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function boundedDecoderResult<T>(
+  value: Result<T>,
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<T> {
+  try {
+    const inspected = inspectExactRecord(
+      value,
+      [
+        ["ok", "value"],
+        ["diagnostics", "ok"],
+      ],
+      "application-snapshot-decode-failed",
+      "Application snapshot decoder result",
+    );
+    if (!inspected.ok) return decoderFailure();
+    if (inspected.value.ok === true) return value;
+    if (inspected.value.ok !== false) return decoderFailure();
+    const diagnostics = inspectIntrinsicArrayLength(
+      inspected.value.diagnostics,
+      "application-snapshot-decode-failed",
+      "Application snapshot decoder diagnostics",
+    );
+    if (
+      !diagnostics.ok ||
+      diagnostics.value === 0 ||
+      diagnostics.value > options.bounds.maxDiagnosticCount
+    ) {
+      return decoderFailure();
+    }
+    return value;
   } catch {
     return decoderFailure();
   }
@@ -1047,20 +1090,73 @@ function patchComponent(
   );
 }
 
-function canonicalizeRelationships(
+function copyRelationshipInputs(
   relations: readonly GraphRelation[],
-  options: ApplicationSnapshotStateDecoderContext,
-): Result<readonly StandardRelationship[]> {
-  const context = boundaryContext(options);
+  context: ModelSuccessContext,
+): Result<readonly GraphRelation[]> {
+  const copied = copyBoundaryGraphData(relations, context);
+  if (!copied.ok || !Array.isArray(copied.value)) return decoderFailure();
+  if (copied.value.length > context.options.bounds.maxRelationships) {
+    return decoderBoundFailure(context.options.bounds.maxRelationships);
+  }
+  const inputs: GraphRelation[] = [];
+  for (let index = 0; index < copied.value.length; index += 1) {
+    const record = inspectExactRecord(
+      copied.value[index],
+      [["id", "payload", "source", "target", "type"]],
+      "application-snapshot-decode-failed",
+      `Standard Model relationship input ${index}`,
+    );
+    if (!record.ok) return decoderFailure();
+    if (
+      typeof record.value.id !== "string" ||
+      typeof record.value.source !== "string" ||
+      typeof record.value.target !== "string" ||
+      typeof record.value.type !== "string" ||
+      !relationTokenPattern.test(record.value.type)
+    ) {
+      return decoderFailure();
+    }
+    const id = parseRelationId(record.value.id);
+    const source = parseEntityId(record.value.source);
+    const target = parseEntityId(record.value.target);
+    if (!id.ok || !source.ok || !target.ok) {
+      return decoderFailure();
+    }
+    inputs[index] = Object.freeze({
+      id: id.value,
+      payload: record.value.payload as GraphData,
+      source: source.value,
+      target: target.value,
+      type: record.value.type,
+    });
+  }
+  return success(Object.freeze(inputs));
+}
+
+function modelRelationshipValues(
+  relations: readonly GraphRelation[],
+  context: ModelSuccessContext,
+): Result<readonly Readonly<Record<string, unknown>>[]> {
+  const copied = copyRelationshipInputs(relations, context);
+  if (!copied.ok) return copied;
   let rawRelationships: unknown;
   try {
-    rawRelationships = options.model.relationships(relations);
+    rawRelationships = context.options.model.relationships(copied.value);
   } catch {
     return decoderFailure();
   }
   const result = modelSuccess(rawRelationships, context);
   if (!result.ok) return result;
-  const relationships = modelRelationships(result.value, relations, context);
+  return modelRelationships(result.value, copied.value, context);
+}
+
+function canonicalizeRelationships(
+  relations: readonly GraphRelation[],
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<readonly StandardRelationship[]> {
+  const context = boundaryContext(options);
+  const relationships = modelRelationshipValues(relations, context);
   if (!relationships.ok) return relationships;
   const canonical = copyModelSuccessValues([], relationships.value, context);
   return canonical.ok ? success(canonical.value.relationships) : canonical;
@@ -1297,12 +1393,7 @@ function decode(
     if (!relation.ok) return relation;
     graphRelations[index] = relation.value;
   }
-  const relationshipResult = modelSuccess(
-    options.model.relationships(graphRelations),
-    modelContext,
-  );
-  if (!relationshipResult.ok) return relationshipResult;
-  const relationships = modelRelationships(relationshipResult.value, graphRelations, modelContext);
+  const relationships = modelRelationshipValues(graphRelations, modelContext);
   if (!relationships.ok) return relationships;
   const canonical = copyModelSuccessValues(components, relationships.value, modelContext);
   if (!canonical.ok) return canonical;
@@ -1339,21 +1430,21 @@ export function createApplicationSnapshotStateDecoder(
   const decoder = Object.freeze({
     canonicalizeEntity: (value: unknown, expected: Readonly<Pick<GraphEntity, "id" | "kind">>) => {
       try {
-        return canonicalizeEntity(value, expected, copied);
+        return boundedDecoderResult(canonicalizeEntity(value, expected, copied), copied);
       } catch {
         return decoderFailure();
       }
     },
     canonicalizeRelationships: (value: readonly GraphRelation[]) => {
       try {
-        return canonicalizeRelationships(value, copied);
+        return boundedDecoderResult(canonicalizeRelationships(value, copied), copied);
       } catch {
         return decoderFailure();
       }
     },
     decode: (value: unknown) => {
       try {
-        return decode(value, copied);
+        return boundedDecoderResult(decode(value, copied), copied);
       } catch {
         return decoderFailure();
       }
@@ -1363,14 +1454,14 @@ export function createApplicationSnapshotStateDecoder(
       expected: ExpectedApplicationComponentIdentity,
     ) => {
       try {
-        return normalizeComponent(value, expected, copied);
+        return boundedDecoderResult(normalizeComponent(value, expected, copied), copied);
       } catch {
         return decoderFailure();
       }
     },
     patchComponent: (entity: GraphEntity, patch: StandardComponentPatch, expectedId: string) => {
       try {
-        return patchComponent(entity, patch, expectedId, copied);
+        return boundedDecoderResult(patchComponent(entity, patch, expectedId, copied), copied);
       } catch {
         return decoderFailure();
       }

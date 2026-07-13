@@ -12,6 +12,7 @@ import {
   type GraphDataRecord,
   type GraphEntity,
   type GraphGeneration,
+  type GraphRelation,
   type OpaqueIdSource,
   type ProposedTransaction,
   type ResourceKey,
@@ -37,6 +38,7 @@ import {
   createApplicationOperations,
   createApplicationSnapshotStateDecoder,
   type ApplicationOperationsOptions,
+  type ApplicationSnapshotStateDecoder,
   type WorkspaceInitializationOutcome,
 } from "../index.ts";
 import * as snapshotStateModule from "../snapshot-state.ts";
@@ -771,6 +773,7 @@ describe("application component reads", () => {
     });
     const decoderBounds = [
       "maxComponents",
+      "maxDiagnosticCount",
       "maxEmbeddedItems",
       "maxRelationships",
       "maxSnapshotStateDepth",
@@ -822,6 +825,70 @@ describe("application component reads", () => {
       }),
     ).toThrow("snapshotStateDecoder model must match");
     expect(fixture.requested).toHaveLength(0);
+  });
+
+  test("bounds diagnostics from every decoder Standard Model operation", () => {
+    const bounds = Object.freeze({ ...applicationBounds, maxDiagnosticCount: 1 });
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const entity = component({ id: ids.domain, type: "domain" }) as GraphEntity;
+    const relation: GraphRelation = Object.freeze({
+      id: relationIds.first as GraphRelation["id"],
+      payload: Object.freeze({ description: "Depends on" }),
+      source: ids.domain as GraphRelation["source"],
+      target: ids.service as GraphRelation["target"],
+      type: "depends-on",
+    });
+    const diagnostics = Object.freeze([
+      Object.freeze({ code: "first-model-failure", message: "first" }),
+      Object.freeze({ code: "second-model-failure", message: "second" }),
+    ]);
+    const failed = () => Object.freeze({ diagnostics, ok: false as const });
+    const check = (result: ReturnType<ApplicationSnapshotStateDecoder["decode"]>) => {
+      expect(result.ok).toBeFalse();
+      if (result.ok) return;
+      expect(result.diagnostics).toHaveLength(1);
+      expect(result.diagnostics[0]?.code).toBe("application-snapshot-decode-failed");
+      expect(Object.isFrozen(result)).toBeTrue();
+      expect(Object.isFrozen(result.diagnostics)).toBeTrue();
+    };
+
+    for (const operation of ["normalize", "patch", "parse", "relationships"] as const) {
+      const modelCapability: StandardModelCapability = Object.freeze({
+        ...model,
+        [operation]: () => failed() as never,
+      });
+      const decoder = createApplicationSnapshotStateDecoder({
+        bounds,
+        graph,
+        model: modelCapability,
+      });
+      if (operation === "normalize") {
+        check(
+          decoder.normalizeComponent(
+            { id: ids.domain },
+            { present: true, value: ids.domain },
+          ) as never,
+        );
+      } else if (operation === "patch") {
+        check(decoder.patchComponent(entity, { name: "Ignored" }, ids.domain) as never);
+      } else if (operation === "parse") {
+        check(
+          decoder.canonicalizeEntity(entity, {
+            id: entity.id,
+            kind: STANDARD_COMPONENT_KIND,
+          }) as never,
+        );
+        check(decoder.decode(state([entity])));
+      } else {
+        check(decoder.canonicalizeRelationships(Object.freeze([relation])) as never);
+      }
+    }
   });
 
   test("contains unexpected faults from a genuine decoder without leaking secrets", async () => {
@@ -2456,6 +2523,123 @@ describe("application component mutations", () => {
     });
     expect(finalRead.ok && finalRead.value.relationships.items).toEqual([]);
     expect(other.status).toBe("committed");
+  });
+
+  test("isolates relationship model input mutation and executes only the canonical view", async () => {
+    const secret = "/private/relationship-model-mutation";
+    const unsafe = new Proxy(
+      { secret },
+      {
+        ownKeys: () => {
+          throw new Error(secret);
+        },
+      },
+    );
+    let modelCalls = 0;
+    let modelInputFrozen = true;
+    let mutationAccepted = false;
+    let unsafeReachedExecution = false;
+    let lastExecutedRelationship: GraphDataRecord | undefined;
+    const hostileModel: StandardModelCapability = Object.freeze({
+      ...model,
+      relationships: (relations: readonly GraphRelation[]) => {
+        const viewed = model.relationships(relations);
+        const relation = relations[0];
+        if (relation !== undefined) {
+          modelCalls += 1;
+          modelInputFrozen &&=
+            Object.isFrozen(relations) &&
+            Object.isFrozen(relation) &&
+            Object.isFrozen(relation.payload);
+          if (typeof relation.payload === "object" && relation.payload !== null) {
+            mutationAccepted ||= Reflect.defineProperty(relation.payload, "example.dev/unsafe", {
+              enumerable: true,
+              value: unsafe,
+            });
+          }
+          mutationAccepted ||= Reflect.defineProperty(relations, "0", {
+            enumerable: true,
+            value: unsafe,
+          });
+        }
+        return viewed;
+      },
+    });
+    const fixture = mutationOperations(
+      new MutationProvider(),
+      async (request, engine) => {
+        const mutation = request.mutation as {
+          readonly relationships: readonly GraphDataRecord[];
+        };
+        for (const change of mutation.relationships) {
+          if (change.type !== "upsert") continue;
+          const relationship = change.relationship as GraphDataRecord;
+          const payload = relationship.payload as GraphDataRecord;
+          unsafeReachedExecution ||=
+            Object.getOwnPropertyDescriptor(payload, "example.dev/unsafe")?.value === unsafe;
+          lastExecutedRelationship = relationship;
+          expect(Object.isFrozen(relationship)).toBeTrue();
+          expect(Object.isFrozen(payload)).toBeTrue();
+        }
+        return engine.execute(request);
+      },
+      undefined,
+      applicationBounds,
+      hostileModel,
+      (value) => value === unsafe,
+    );
+    const source = await fixture.api.createComponent({ component: { id: ids.domain } });
+    await fixture.api.createComponent({ component: { id: ids.target } });
+    await fixture.api.createComponent({ component: { id: ids.secondRoot } });
+    const added = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(source),
+      id: ids.domain,
+      patch: {},
+      relationships: {
+        upsert: [
+          {
+            description: "Initial",
+            id: relationIds.first,
+            target: ids.target,
+            type: "depends-on",
+          },
+        ],
+      },
+    });
+    expect(added.status).toBe("committed");
+    if (added.status !== "committed") return;
+    const changed = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(added),
+      id: ids.domain,
+      patch: {},
+      relationships: {
+        upsert: [
+          {
+            "example.dev/weight": 2,
+            description: "Changed",
+            id: relationIds.first,
+            target: ids.secondRoot,
+            type: "coordinates-with",
+          },
+        ],
+      },
+    });
+    expect(changed.status).toBe("committed");
+    expect(modelCalls).toBeGreaterThanOrEqual(2);
+    expect(modelInputFrozen).toBeTrue();
+    expect(mutationAccepted).toBeFalse();
+    expect(unsafeReachedExecution).toBeFalse();
+    expect(lastExecutedRelationship).toMatchObject({
+      id: relationIds.first,
+      payload: {
+        "example.dev/weight": 2,
+        description: "Changed",
+      },
+      source: ids.domain,
+      target: ids.secondRoot,
+      type: "coordinates-with",
+    });
+    expect(JSON.stringify(lastExecutedRelationship)).not.toContain(secret);
   });
 
   test("reparents explicitly and leaves cycle rejection to the registered invariant", async () => {

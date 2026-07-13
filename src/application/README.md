@@ -23,7 +23,7 @@ frozen decoder object returned by that factory; forged, wrapped, and proxied loo
 are rejected during construction before provider access. Decoder provenance registration
 is private to the factory module; consumers can read compatibility metadata but cannot
 brand another object. Its GraphKernel and Standard Model identities and its component,
-embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly match
+diagnostic, embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly match
 the application composition. The decoder owns its immutable runtime proxy-detection
 policy; the default host shares that exact proxy-aware instance with application reads
 and startup recovery, so
@@ -45,8 +45,13 @@ the snapshot depth and value bounds. Normalization binds both the expected prese
 value of a caller-supplied identity before graph, provider, resource-mapping, or execution
 work; patching binds the target identity and canonicalizes the full merged entity through
 the same parse boundary. Only frozen application-owned drafts, entities, canonical
-components, and canonical relationships escape. Create and sparse-update operations do
-not call Standard Model capabilities directly.
+components, and canonical relationships escape. Relationship inputs are copied and
+deeply frozen before model viewing, and transaction upserts are rebuilt only from the
+decoder-returned canonical relationship, so model mutation cannot alter the executed
+payload. Every decoder method also limits failure diagnostics to the configured
+application count; oversized or malformed model diagnostics collapse to one stable
+generic failure. Create and sparse-update operations do not call Standard Model
+capabilities directly.
 
 Standard Model capability successes are also untrusted boundary values. The snapshot
 decoder exact-inspects component, item, extension, and relationship records; binds their
