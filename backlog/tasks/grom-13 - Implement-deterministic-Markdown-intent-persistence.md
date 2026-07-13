@@ -1,11 +1,11 @@
 ---
 id: GROM-13
 title: Implement deterministic Markdown intent persistence
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-13 16:21'
+updated_date: '2026-07-13 16:29'
 labels:
   - persistence
   - markdown
@@ -44,7 +44,7 @@ Persist standard-model components as deterministic, human-readable Markdown unde
 - [x] #3 Equivalent semantic state serializes to byte-identical output with deterministic type, parent, field, embedded-item, relationship, extension, and file ordering
 - [x] #4 No volatile timestamps, absolute machine paths, evidence, bindings, or derived status are written into intent files
 - [x] #5 Unknown namespaced extensions survive load, unrelated mutation, and rewrite byte-stably where canonical normalization permits
-- [ ] #6 Every loaded document has a deterministic content revision and malformed, duplicated, conflicted, cyclic, or wrong-kind documents produce actionable diagnostics
+- [x] #6 Every loaded document has a deterministic content revision and malformed, duplicated, conflicted, cyclic, or wrong-kind documents produce actionable diagnostics
 - [x] #7 Direct store APIs cannot bypass the standard model codec and do not receive scanner observations
 <!-- AC:END -->
 
@@ -81,4 +81,12 @@ Final Codex audit follow-up: the retrospective exact-PR review identified two va
 Final Codex findings reproduced and corrected in yamlRecord. YAML AST inspection now rejects node.anchor even without an alias, converted frontmatter is checked recursively for unpaired surrogate values and keys before model use, and the shared Unicode diagnostic now describes intent data rather than serialization only. Focused Markdown intent validation: 30 tests passed with 146 assertions.
 
 Correction validation on the publish candidate: bun run check passed 458 tests with 3,001 assertions, including the compiled Iteration 1A workflow and crash recovery; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; git diff --check passed.
+
+Review gates on code head 86e8418: both GitHub Actions jobs passed; default Claude Opus approved the correction with no blocking findings; Codex completed with a thumbs-up and no review comments. Opus optional decoder key-surrogate regression was not added because the shared key-validation branch already has serialization coverage and the new decoder value regression proves yamlRecord invokes the same validator.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Closed the remaining deterministic Markdown decoder gaps by rejecting standalone YAML anchors and escaped unpaired UTF-16 surrogates before Standard Model use. Verified with 30 focused tests and 146 assertions, the full 458-test/3,001-assertion suite, compiled Iteration 1A workflow and crash recovery, all four supported binary targets, green CI, Claude Opus approval, and Codex acceptance.
+<!-- SECTION:FINAL_SUMMARY:END -->
