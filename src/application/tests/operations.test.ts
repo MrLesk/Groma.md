@@ -1105,6 +1105,9 @@ describe("application component reads", () => {
 
     expect(await api.initialize({})).toMatchObject({ ok: true });
     expect(await api.listRoots({ limit: 2 })).toMatchObject({ ok: true });
+    expect(await api.getComponent({ id: ids.domain, relationships: { limit: 1 } })).toMatchObject({
+      ok: true,
+    });
     const mutation = await api.updateComponent({
       expectedRevision: `revision:${ids.domain.slice(-32)}`,
       id: ids.domain,
@@ -1968,14 +1971,11 @@ describe("application component reads", () => {
     }
   });
 
-  test("contains recognized snapshot, query, and mapper proxies before their traps", async () => {
+  test("contains recognized snapshot and mapper proxies before their traps", async () => {
     for (const location of [
       "snapshot-outer",
       "snapshot-revisions",
       "snapshot-state",
-      "query-prepare",
-      "query-page",
-      "query-exact",
       "mapper",
     ] as const) {
       const proxies = new Set<unknown>();
@@ -2000,25 +2000,6 @@ describe("application component reads", () => {
               ? recognizedProxy(snapshotValue, proxies, traps)
               : snapshotValue) as never,
         };
-      } else if (location.startsWith("query-")) {
-        const safeQueries = new BoundedQueryContracts({
-          maxAnchorCharacters: 256,
-          maxCursorCharacters: 2_048,
-          maxPageSize: 10,
-          maxQueryContextCharacters: 512,
-        });
-        const method = location.slice("query-".length) as "exact" | "page" | "prepare";
-        const intrinsic = BoundedQueryContracts.prototype[method];
-        Object.defineProperty(safeQueries, method, {
-          configurable: true,
-          value: (...args: unknown[]) =>
-            recognizedProxy(
-              Reflect.apply(intrinsic as never, safeQueries, args) as object,
-              proxies,
-              traps,
-            ),
-        });
-        overrides.queries = safeQueries;
       } else {
         overrides.resourceMapper = {
           resourceForComponent: () =>
@@ -2027,7 +2008,7 @@ describe("application component reads", () => {
       }
       const api = proxyAwareOperations(fixture, proxies, overrides);
       const result =
-        location === "query-exact" || location === "mapper"
+        location === "mapper"
           ? await api.getComponent({ id: ids.domain, relationships: { limit: 1 } })
           : await api.listComponents({ limit: 1 });
       expect(result.ok, location).toBeFalse();
@@ -2037,50 +2018,108 @@ describe("application component reads", () => {
     }
   });
 
-  test("query wrappers never reject or leak on throwing, Promise, or unrecognized proxy outputs", async () => {
-    const secret = "/private/query-capability-secret";
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
-    try {
-      for (const behavior of ["throw", "promise", "proxy"] as const) {
-        const queries = new BoundedQueryContracts({
-          maxAnchorCharacters: 256,
-          maxCursorCharacters: 2_048,
-          maxPageSize: 10,
-          maxQueryContextCharacters: 512,
-        });
-        Object.defineProperty(queries, "prepare", {
-          configurable: true,
-          value: () => {
-            if (behavior === "throw") throw new Error(secret);
-            if (behavior === "promise") return Promise.reject(new Error(secret));
-            return new Proxy(
-              {},
-              {
-                ownKeys: () => {
-                  throw new Error(secret);
-                },
-              },
-            );
-          },
-        });
-        const result = await operations(new SnapshotFixture(), undefined, {
-          queries,
-        }).listComponents({ limit: 1 });
-        expect(result.ok, behavior).toBeFalse();
-        expect(result.ok ? "" : result.diagnostics[0]?.code, behavior).toBe(
-          "query-capability-failed",
-        );
-        expect(Object.isFrozen(result), behavior).toBeTrue();
-        expect(JSON.stringify(result), behavior).not.toContain(secret);
-      }
-      await Promise.resolve();
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
+  test("uses exact Core query methods instead of subclass override redirection", async () => {
+    for (const method of ["prepare", "page", "exact"] as const) {
+      class RedirectedQueries extends BoundedQueryContracts {}
+      let redirected = 0;
+      Object.defineProperty(RedirectedQueries.prototype, method, {
+        configurable: true,
+        value: () => {
+          redirected += 1;
+          throw new Error("/private/redirected-query-capability");
+        },
+      });
+      const queries = new RedirectedQueries({
+        maxAnchorCharacters: 256,
+        maxCursorCharacters: 2_048,
+        maxPageSize: 10,
+        maxQueryContextCharacters: 512,
+      });
+      const api = operations(new SnapshotFixture(), undefined, { queries });
+      const result =
+        method === "exact"
+          ? await api.getComponent({ id: ids.domain, relationships: { limit: 1 } })
+          : await api.listComponents({ limit: 1 });
+      expect(result.ok, method).toBeTrue();
+      expect(redirected, method).toBe(0);
     }
+  });
+
+  test("binds continuation cursors independently of colluding page and prepare overrides", async () => {
+    const secret = "/private/colluding-cursor";
+    const queries = new BoundedQueryContracts({
+      maxAnchorCharacters: 256,
+      maxCursorCharacters: 2_048,
+      maxPageSize: 10,
+      maxQueryContextCharacters: 512,
+    });
+    let prepareCalls = 0;
+    let pageCalls = 0;
+    Object.defineProperties(queries, {
+      page: {
+        configurable: true,
+        value: (prepared: { generation: GraphGeneration }, items: readonly unknown[]) => {
+          pageCalls += 1;
+          return success({
+            generation: prepared.generation,
+            hasMore: true,
+            items,
+            nextCursor: secret,
+          }) as never;
+        },
+      },
+      prepare: {
+        configurable: true,
+        value: (
+          currentGeneration: GraphGeneration,
+          query: GraphData,
+          request: { cursor?: string; limit: number },
+        ) => {
+          prepareCalls += 1;
+          return success({
+            ...(request.cursor === secret ? { after: ids.domain } : {}),
+            generation: currentGeneration,
+            limit: request.limit,
+            query,
+          }) as never;
+        },
+      },
+    });
+    const first = await operations(new SnapshotFixture(), undefined, { queries }).listComponents({
+      limit: 1,
+    });
+    expect(first.ok).toBeTrue();
+    expect(first.ok && first.value.hasMore).toBeTrue();
+    expect(first.ok && first.value.nextCursor).not.toBe(secret);
+    expect(JSON.stringify(first)).not.toContain(secret);
+    expect(prepareCalls).toBe(0);
+    expect(pageCalls).toBe(0);
+  });
+
+  test("rejects query receivers without the genuine Core private brand before provider work", () => {
+    const fake = Object.create(BoundedQueryContracts.prototype) as BoundedQueryContracts;
+    const fakeFixture = new SnapshotFixture();
+    expect(() => operations(fakeFixture, undefined, { queries: fake })).toThrow(TypeError);
+    expect(fakeFixture.requested).toHaveLength(0);
+
+    const proxies = new Set<unknown>();
+    const traps = { count: 0 };
+    const proxyFixture = new SnapshotFixture();
+    const proxy = recognizedProxy(
+      new BoundedQueryContracts({
+        maxAnchorCharacters: 256,
+        maxCursorCharacters: 2_048,
+        maxPageSize: 10,
+        maxQueryContextCharacters: 512,
+      }),
+      proxies,
+      traps,
+    );
+    expect(() => proxyAwareOperations(proxyFixture, proxies, { queries: proxy })).toThrow(
+      TypeError,
+    );
+    expect(proxyFixture.requested).toHaveLength(0);
+    expect(traps.count).toBe(0);
   });
 });
 

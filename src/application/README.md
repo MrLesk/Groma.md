@@ -100,6 +100,14 @@ retain only bounded codes, allowlisted details, and application-owned messages; 
 pages and exact reads are accepted only when generation and semantic items match the
 application-owned inputs, then reconstructed with validated cursor metadata.
 
+The query capability is Core's concrete `BoundedQueryContracts`: application construction
+rejects recognized proxies and receivers without its genuine private brand. Exact
+`prepare`, `page`, and `exact` prototype methods are captured when the application module
+loads and applied to the explicitly injected receiver, preserving its configured private
+bounds while bypassing instance or subclass overrides. Cursor generation and validation
+therefore share one independent Core authority rather than trusting query methods to
+self-attest one another.
+
 Canonical Standard Model component and relationship views are also bound back to their
 copied graph payloads. Every component field, embedded item, namespaced extension,
 relationship description, and relationship extension must have exactly the same presence

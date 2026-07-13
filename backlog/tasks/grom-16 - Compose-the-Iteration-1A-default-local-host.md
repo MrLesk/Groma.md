@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 07:02'
+updated_date: '2026-07-13 07:17'
 labels:
   - host
   - bootstrap
@@ -104,4 +104,8 @@ Quality-review correction after 265c1da: maxDiagnosticCount is now part of snaps
 Final-head Codex review on 0125562 identified reflection-before-proxy-policy in transaction outcome preflight. Independent reproduction confirmed recognized outer, diagnostics, and revisions Proxies execute one trap before failure. The same explicit capability-output defect reproduces for initialization and snapshot, and query prepare currently leaks a hostile rejection; mapper follows the same unsafe pattern. This is in-scope GROM-16 composition boundary hardening because the official host injects these replaceable capabilities and the manifesto requires explicit portable contracts plus fail-closed ambiguity. The correction will reuse one validated decoder proxy policy and avoid product/API changes.
 
 Capability-output containment correction: application init, snapshot, query, resource mapping, and transaction results now cross one bounded proxy-aware copy boundary with captured method/receiver pairs; Standard Model component and relationship views are bound exactly to graph payloads; host completion, stop, and unsubscribe native Promises use the extracted intrinsic observer with stable cleanup failures and descriptor restoration. Query results are reconstructed from application-owned inputs, continuation cursors are revalidated against the owned anchor, and only known bounded-query diagnostics are preserved. Validation: focused application+host 89 tests / 809 assertions; full bun run check 380 tests / 2413 assertions; four standalone targets; direct application and host compilation on all four targets; git diff --check.
+
+Quality-follow-up plan: retain the explicitly injected concrete BoundedQueryContracts receiver, capture Core prepare/page/exact prototype methods at module initialization, reject recognized proxies and receivers without the genuine private brand during application construction using only the exact Core method, bypass instance/subclass redirection, and prove colluding page/prepare cannot self-attest a secret cursor. Then rerun focused, full, four-target, and direct application/host compilation checks.
+
+Independent query-cursor correction: Application operations now treat the injected query object as a configured concrete Core BoundedQueryContracts receiver, validate its genuine private brand at construction after decoder-provenanced proxy rejection, and invoke module-captured Core prepare/page/exact prototype intrinsics. Instance and subclass overrides cannot redirect cursor generation, validation, paging, or exact reads; a colluding page/prepare pair cannot self-attest or expose a secret cursor. Output containment and application-owned reconstruction remain in place. Validation: focused application+host 91 tests / 802 assertions; full bun run check 382 tests / 2406 assertions; all four standalone targets; direct application and host compilation on all four targets; git diff --check.
 <!-- SECTION:NOTES:END -->

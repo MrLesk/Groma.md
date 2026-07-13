@@ -1,4 +1,5 @@
 import {
+  BoundedQueryContracts,
   failure,
   parseContentRevision,
   parseEntityId,
@@ -81,9 +82,6 @@ type ComponentFilter = (component: StandardComponent) => boolean;
 
 interface ApplicationCapabilityCalls {
   readonly initialize: ApplicationOperationsOptions["initialization"]["initialize"];
-  readonly queryExact: ApplicationOperationsOptions["queries"]["exact"];
-  readonly queryPage: ApplicationOperationsOptions["queries"]["page"];
-  readonly queryPrepare: ApplicationOperationsOptions["queries"]["prepare"];
   readonly queries: ApplicationOperationsOptions["queries"];
   readonly resourceForComponent: ApplicationOperationsOptions["resourceMapper"]["resourceForComponent"];
   readonly resourceMapper: ApplicationOperationsOptions["resourceMapper"];
@@ -100,6 +98,9 @@ interface ApplicationOperationsContext extends ApplicationOperationsOptions {
 }
 
 const intrinsicReflectApply = Reflect.apply;
+const intrinsicBoundedQueryExact = BoundedQueryContracts.prototype.exact;
+const intrinsicBoundedQueryPage = BoundedQueryContracts.prototype.page;
+const intrinsicBoundedQueryPrepare = BoundedQueryContracts.prototype.prepare;
 const applicationCapabilityContainmentFailure = Object.freeze({ ok: false as const });
 
 const absoluteBounds = Object.freeze({
@@ -256,9 +257,6 @@ function captureApplicationCapabilityCalls(
     initialization: options.initialization,
     initialize: options.initialization.initialize,
     queries: options.queries,
-    queryExact: options.queries.exact,
-    queryPage: options.queries.page,
-    queryPrepare: options.queries.prepare,
     resourceForComponent: options.resourceMapper.resourceForComponent,
     resourceMapper: options.resourceMapper,
     snapshot: options.transactionProvider.snapshot,
@@ -278,6 +276,33 @@ function captureApplicationCapabilityCalls(
     }
   }
   return Object.freeze(calls);
+}
+
+function validateBoundedQueryReceiver(
+  queries: unknown,
+  isProxy: ((value: unknown) => boolean) | undefined,
+): asserts queries is BoundedQueryContracts {
+  if (typeof queries !== "object" || queries === null) {
+    throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
+  }
+  let recognizedProxy = false;
+  try {
+    recognizedProxy = isProxy?.(queries) ?? false;
+  } catch {
+    // The exact Core private-brand probe below is trap-free for genuine instances and proxies.
+  }
+  if (recognizedProxy) {
+    throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
+  }
+  try {
+    intrinsicReflectApply(intrinsicBoundedQueryPrepare, queries, [
+      0,
+      Object.freeze({}),
+      Object.freeze({ limit: 1 }),
+    ]);
+  } catch {
+    throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
+  }
 }
 
 function containApplicationCapabilityValue(
@@ -984,7 +1009,7 @@ function prepareQuery(
 ): Result<PreparedBoundedQuery> {
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(options.calls.queryPrepare, options.calls.queries, [
+    raw = intrinsicReflectApply(intrinsicBoundedQueryPrepare, options.calls.queries, [
       generation,
       query,
       request,
@@ -1052,7 +1077,7 @@ function pageQuery<T>(
   const ownedItems = Object.freeze([...items]);
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(options.calls.queryPage, options.calls.queries, [
+    raw = intrinsicReflectApply(intrinsicBoundedQueryPage, options.calls.queries, [
       prepared,
       ownedItems,
       state,
@@ -1121,7 +1146,7 @@ function exactQuery<T>(
 ): Result<{ readonly generation: GraphGeneration; readonly item: T }> {
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(options.calls.queryExact, options.calls.queries, [
+    raw = intrinsicReflectApply(intrinsicBoundedQueryExact, options.calls.queries, [
       generation,
       item,
     ]);
@@ -2247,6 +2272,7 @@ export function createApplicationOperations(
   }
   const metadata = validateSnapshotStateDecoder(captured);
   const frozenOptions = freezeApplicationOperationsOptions(captured);
+  validateBoundedQueryReceiver(frozenOptions.queries, metadata.isProxy);
   const options: ApplicationOperationsContext = Object.freeze({
     ...frozenOptions,
     calls: captureApplicationCapabilityCalls(frozenOptions),
