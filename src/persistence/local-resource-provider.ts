@@ -104,7 +104,7 @@ interface CoordinationOwner {
 interface CoordinationLeaseRecord {
   readonly identity: string;
   readonly owner: CoordinationOwner;
-  released: boolean;
+  state: "held" | "ownership-lost" | "released";
 }
 
 type CoordinationRecoveryPolicy = "proven-dead" | "stale-age";
@@ -1276,7 +1276,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       this.#leases.set(lease as object, {
         identity,
         owner: acquired.value,
-        released: false,
+        state: "held",
       });
       return success(lease);
     } catch (error) {
@@ -1303,10 +1303,24 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         ),
       );
     }
-    if (record.released) return success(undefined);
+    if (record.state === "released") return success(undefined);
+    if (record.state === "ownership-lost") {
+      return failure(
+        diagnostic(
+          "resource-coordination-ownership-lost",
+          "Local coordination ownership could not be verified",
+        ),
+      );
+    }
     const released = await this.#releaseCoordination(record.identity, record.owner);
-    if (!released.ok) return released;
-    record.released = true;
+    if (!released.ok) {
+      if (released.diagnostics[0]?.code === "resource-coordination-ownership-lost") {
+        record.state = "ownership-lost";
+        processCoordination.delete(record.identity);
+      }
+      return released;
+    }
+    record.state = "released";
     processCoordination.delete(record.identity);
     return success(undefined);
   }

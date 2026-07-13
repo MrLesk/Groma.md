@@ -100,11 +100,14 @@ discarded through that token record before recovery returns indeterminate, inclu
 the snapshot/startup path. Successfully discarded handle slots are cleared, but the
 record survives a cleanup failure for retry; handle-only records are removed after
 confirmed cleanup, while lease-bearing records remain until lease release succeeds.
-Snapshot/startup coordination likewise retains an opaque lease in volatile journal
-state when pre-move release fails. The next snapshot atomically takes that lease before
-its first asynchronous operation and retries release after settlement; a concurrent
-caller cannot share the in-flight lease and instead follows normal contended
-acquisition. Confirmed release clears the retained lease. Nothing volatile enters the
+Snapshot/startup coordination and failed prepare cleanup likewise retain an opaque
+lease in volatile journal state when pre-move release fails. The next snapshot,
+prepare, commit, or recovery entry atomically takes that lease before its first
+asynchronous operation and retries release after settlement; a concurrent caller cannot
+share the in-flight lease and instead follows normal contended acquisition. Confirmed
+release clears the retained lease. Ownership-lost and invalid-handle diagnostics are
+terminal instead: the stale handle is discarded and the next entry must acquire and
+verify fresh coordination before transaction work. Nothing volatile enters the
 deterministic transaction-state record.
 Journal publication stages have their own volatile same-process recovery records. A
 provider-confirmed pre-move rejection, or a thrown commit whose exact readback is still
@@ -116,18 +119,27 @@ Journal publication is accepted only after the resource provider confirms
 `committed`; byte readback alone proves visibility, not file and directory durability.
 An indeterminate publication is retried on the same staged handle. Restart re-publishes
 a visible committing record durably before changing any target, and re-publishes a
-visible matching idle settlement before acknowledging it as committed. When a fresh
-process finds replacement bytes already visible at their recorded result revision, it
-still re-stages those exact journal bytes and requires a provider-confirmed commit plus
-exact readback before advancing the generation. Visibility alone cannot substitute for
-reasserting file and parent-directory durability after a post-rename crash.
+visible matching idle settlement before acknowledging it as committed. A failed idle
+settlement re-publication remains indeterminate even when the prior settlement bytes
+are still readable; a later retry must confirm the required cleanup and publication.
+When a fresh process finds replacement bytes already visible at their recorded result
+revision, it still re-stages those exact journal bytes and requires a provider-confirmed
+commit plus exact readback before advancing the generation. Visibility alone cannot
+substitute for reasserting file and parent-directory durability after a post-rename
+crash.
 
-Deletion is idempotent. POSIX removals sync the containing directory even when the
-target is already absent, so recovery can reassert deletion durability. Windows keeps
-the same exact old/new classification and atomic file behavior but, like replacement,
-makes no unsupported power-loss directory-durability claim. The journal and provider
+Deletion is idempotent. POSIX removals sync an existing containing directory even when
+the target is already absent, so recovery can reassert deletion durability. A missing
+containing directory fails closed: its disappearance could also hide untargeted sibling
+resources, so the provider cannot safely advance the transaction generation from the
+target's absence alone. Windows keeps the same exact old/new classification and atomic
+file behavior but, like replacement, makes no unsupported power-loss
+directory-durability claim. The journal and provider
 compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;
 cross-compilation is not a substitute for native permission/durability verification.
+Safe remediation is to restore the missing ancestor and any untargeted canonical
+siblings from Git or backup, or recreate a parent proven to have contained only the
+target, then retry recovery; never delete the journal to force progress.
 An indeterminate deletion result is retried and accepted only after the provider
 confirms `committed` and exact readback confirms absence; repeated uncertainty leaves
 the committing record recoverable.
