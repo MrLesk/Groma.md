@@ -1,11 +1,11 @@
 ---
 id: GROM-14
 title: Implement the local transaction journal and recovery
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-13 15:42'
+updated_date: '2026-07-13 15:50'
 labels:
   - persistence
   - transactions
@@ -42,10 +42,10 @@ Provide crash-safe multi-resource transactions for the official local host. The 
 <!-- AC:BEGIN -->
 - [x] #1 A transaction records its base generation, target generation, target resources, expected revisions, and staged replacements before any canonical target changes
 - [x] #2 The committed generation marker advances only when all target resources form the complete new generation
-- [ ] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
-- [ ] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
+- [x] #3 Recovery is idempotent and deterministically finishes or rolls back an interrupted transaction without creating a mixed generation
+- [x] #4 Concurrent writers are coordinated so stale or competing transactions fail without overwriting committed work
 - [x] #5 Journal and staging artifacts contain no volatile metadata that would create canonical Git churn and are cleaned after a confirmed outcome
-- [ ] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
+- [x] #6 Fault-injection tests terminate the transaction at every durable phase and prove that restart exposes exactly the old or new complete graph
 - [x] #7 The resulting generation and recovery outcome satisfy the Core transaction-provider contract and leave a future projection watermark integration point
 <!-- AC:END -->
 
@@ -93,4 +93,12 @@ Addressed the 45f348e Codex P2 locally: finish now acquires through the shared r
 Exact-head Codex review at 8a79520 raised two additional actionable fail-closed issues. P1: the generalized retained slot could reuse a handle after release reported resource-coordination-ownership-lost; that handle no longer proves filesystem ownership, and token-scoped finish release has the same stale-handle risk. P2: accepting a missing ancestor as a committed deletion can hide externally removed untargeted siblings in the same canonical shard. Independent trace confirms both findings. The provider must distinguish a missing final file under an existing parent from a missing ancestor, and ownership-lost leases must be retired so the next entry reacquires from the filesystem without letting a repeated stale release clear a newer same-process guard.
 
 Addressed both 8a79520 Codex threads. Missing-final-file deletion under an existing parent remains idempotent and durable, but a missing ancestor now stays not-committed because it can hide untargeted sibling resources; the journal regression deletes a shard containing both the target and an untargeted sibling and proves recovery plus snapshot remain indeterminate rather than advancing the generation. Coordination leases now have held/ownership-lost/released provider state. First ownership loss retires only that lease and clears its process guard; repeated release of the stale handle returns the same terminal diagnostic without clearing a newer lease's guard. The journal retains retryable release failures but discards ownership-lost or invalid handles and reacquires before snapshot, prepare, commit, or recover work; an integrated commit-release ownership-loss test proves same-journal recovery progresses. Opus reviewed 8a79520 for product coherence and found no blocking issue. Its low-severity claim that retryable finish-release failure drops the handle was non-actionable: the live token record deliberately retains that lease, and existing retry tests prove the next finish reuses it. Opus also accepted the earlier missing-ancestor behavior, but Codex's sibling-loss counterexample independently proved that behavior unsafe, so fail-closed semantics take precedence. Validation after corrections: focused provider/journal suite 123 tests / 668 assertions; bun run check 458 tests / 2,999 assertions plus formatting, strict types, architecture boundaries, native build/smoke, compiled workflow, PTY, and crash recovery; bun run check:targets verified macOS arm64, Linux x64, Windows x64, and Windows arm64; bun ci reported no install changes; git diff --check passed. Final pushed-head Opus, Codex, and CI reviews remain required.
+
+Exact implementation head 98dc349 passed GitHub Verify quality gates and cross-platform binaries, and Codex finished with a thumbs-up plus an explicit no-major-issues result for that commit. Final-head Opus found no blocking correctness or safety issue. Applied its user-facing suggestion by documenting safe remediation for a legitimate missing-ancestor trigger: restore the ancestor and untargeted siblings from Git or backup, or recreate a parent proven to have held only the target, then retry recovery without deleting the journal. Its test-hash suggestion was not actionable because the integration test explicitly asserts that ownership loss fired, so hashing drift fails loudly, while exporting provider-private identity would weaken the boundary. Its two-channel liveness note describes intentional recovery-receipt semantics: retryable finish releases remain owned by the token record and clients must recover an indeterminate token before starting unrelated work. Focused tests remain 123 / 668 and full validation remains 458 / 2,999 with all four binary targets.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented and hardened the crash-safe local transaction journal, deterministic recovery, persistent same-machine coordination, and fail-closed deletion/lease behavior. Late review gaps now keep failed settlement publication indeterminate, reuse only retryable opaque leases across every transaction entry path, force fresh coordination after ownership loss, and prevent missing ancestors from hiding sibling loss behind a committed generation. Verified by 123 focused persistence tests / 668 assertions, 458 full tests / 2,999 assertions, compiled crash-recovery workflows, macOS arm64, Linux x64, Windows x64, and Windows arm64 target builds, clean dependency/diff checks, green GitHub Verify, exact-head Opus review, and exact-head Codex acceptance.
+<!-- SECTION:FINAL_SUMMARY:END -->

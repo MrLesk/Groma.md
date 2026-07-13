@@ -137,6 +137,9 @@ file behavior but, like replacement, makes no unsupported power-loss
 directory-durability claim. The journal and provider
 compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;
 cross-compilation is not a substitute for native permission/durability verification.
+Safe remediation is to restore the missing ancestor and any untargeted canonical
+siblings from Git or backup, or recreate a parent proven to have contained only the
+target, then retry recovery; never delete the journal to force progress.
 An indeterminate deletion result is retried and accepted only after the provider
 confirms `committed` and exact readback confirms absence; repeated uncertainty leaves
 the committing record recoverable.
