@@ -1,0 +1,178 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
+
+import {
+  createDefaultBootstrapRegistry,
+  type DefaultBootstrapRegistryOptions,
+  type HostSurface,
+  type HostSurfaceSession,
+} from "../index.ts";
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+});
+
+async function temporaryWorkspace() {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-host-composition-"));
+  roots.push(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
+  const coordinationRoot = await mkdtemp(path.join(tmpdir(), "groma-host-coordination-"));
+  roots.push(coordinationRoot);
+  return { coordinationRoot, workspaceRoot };
+}
+
+function idleSurface(): HostSurface {
+  return {
+    start: () =>
+      ({
+        completion: Promise.resolve(),
+        stop: async () => {},
+      }) satisfies HostSurfaceSession,
+  };
+}
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+describe("default bootstrap registry", () => {
+  test("composes every 1A capability explicitly with stable shared identity", async () => {
+    const context = await temporaryWorkspace();
+    let byte = 0;
+    const surface = idleSurface();
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => Uint8Array.from({ length }, () => byte++ % 256),
+      surface,
+    });
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(composed.value.surface).not.toBe(surface);
+    expect(Object.isFrozen(composed.value.surface)).toBeTrue();
+    expect(composed.value.workspace.status()).toEqual({ state: "missing" });
+    expect(composed.value.workspace.requireWorkspace()).toMatchObject({
+      diagnostics: [{ code: "no-workspace" }],
+      ok: false,
+    });
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(composed.value.workspace.requireWorkspace()).toEqual({
+      ok: true,
+      value: composed.value.operations,
+    });
+    expect(composed.value.transactionEngine).not.toBe(composed.value.transactionProvider);
+    expect(Object.isFrozen(composed.value)).toBeTrue();
+    expect(Object.keys(composed.value).sort()).toEqual([
+      "graph",
+      "invariant",
+      "model",
+      "operations",
+      "queries",
+      "resourceMapper",
+      "resources",
+      "snapshotStateDecoder",
+      "store",
+      "surface",
+      "transactionEngine",
+      "transactionProvider",
+      "workspace",
+    ]);
+  });
+
+  test("reports invalid process context without leaking the supplied path", async () => {
+    const surface = idleSurface();
+    const registry = createDefaultBootstrapRegistry({ surface });
+    const relative = await registry.compose({ workspaceRoot: "relative/private" });
+
+    expect(relative).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-host-process-context",
+          message: "Host workspace root must be an absolute path",
+        },
+      ],
+      ok: false,
+    });
+  });
+
+  test("snapshots mutable bootstrap options before deferred composition", async () => {
+    const context = await temporaryWorkspace();
+    const surface = idleSurface() as Mutable<HostSurface>;
+    const replacementSurface = idleSurface();
+    let originalStarts = 0;
+    let replacedStarts = 0;
+    surface.start = () => {
+      originalStarts += 1;
+      return { completion: Promise.resolve(), stop: async () => {} };
+    };
+    const options: Mutable<DefaultBootstrapRegistryOptions> = {
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => new Uint8Array(length),
+      surface,
+    };
+    const registry = createDefaultBootstrapRegistry(options);
+
+    options.coordinationRoot = "relative/private-coordination-root";
+    options.entropy = () => {
+      throw new Error("/private/replaced-entropy");
+    };
+    options.surface = replacementSurface;
+    surface.start = () => {
+      replacedStarts += 1;
+      return { completion: Promise.resolve(), stop: async () => {} };
+    };
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(composed.value.surface).not.toBe(surface);
+    expect(composed.value.surface).not.toBe(replacementSurface);
+    const session = await composed.value.surface.start({
+      cancellation: new AbortController().signal,
+      recovery: { status: "not-required" },
+      workspace: composed.value.workspace,
+    });
+    await session.completion;
+    expect({ originalStarts, replacedStarts }).toEqual({ originalStarts: 1, replacedStarts: 0 });
+  });
+
+  test("captures the surface start method with one property read", () => {
+    let reads = 0;
+    const surface = Object.create(null) as HostSurface;
+    Object.defineProperty(surface, "start", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return () => ({ completion: Promise.resolve(), stop: async () => {} });
+      },
+    });
+
+    createDefaultBootstrapRegistry({ surface });
+
+    expect(reads).toBe(1);
+  });
+
+  test("contains no server, React, dynamic plugin, or project-code loading path", async () => {
+    const hostRoot = path.resolve(import.meta.dir, "..");
+    const productionFiles = (await readdir(hostRoot)).filter((file) => file.endsWith(".ts")).sort();
+    const sources = await Promise.all(
+      productionFiles.map((file) => readFile(path.join(hostRoot, file), "utf8")),
+    );
+    const production = sources.join("\n");
+
+    expect(production).not.toContain("node:http");
+    expect(production).not.toContain("Bun.serve");
+    expect(production).not.toContain('from "react"');
+    expect(production).not.toContain("import(");
+    expect(production).not.toContain("projectPlugin");
+  });
+});

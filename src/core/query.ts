@@ -526,3 +526,47 @@ export class BoundedQueryContracts {
     });
   }
 }
+
+const intrinsicReflectApply = Reflect.apply;
+const intrinsicBoundedQueryExact = BoundedQueryContracts.prototype.exact;
+const intrinsicBoundedQueryPage = BoundedQueryContracts.prototype.page;
+const intrinsicBoundedQueryPrepare = BoundedQueryContracts.prototype.prepare;
+
+/** @internal Application boundary invocation that cannot be redirected through the public prototype. */
+export function invokeCapturedBoundedQueryExact<T>(
+  receiver: BoundedQueryContracts,
+  generation: number,
+  item: T,
+): Result<ExactGraphRead<T>> {
+  return intrinsicReflectApply(intrinsicBoundedQueryExact, receiver, [generation, item]) as Result<
+    ExactGraphRead<T>
+  >;
+}
+
+/** @internal Application boundary invocation that cannot be redirected through the public prototype. */
+export function invokeCapturedBoundedQueryPage<T>(
+  receiver: BoundedQueryContracts,
+  prepared: PreparedBoundedQuery,
+  items: readonly T[],
+  state: QueryPageState,
+): Result<GraphQueryPage<T>> {
+  return intrinsicReflectApply(intrinsicBoundedQueryPage, receiver, [
+    prepared,
+    items,
+    state,
+  ]) as Result<GraphQueryPage<T>>;
+}
+
+/** @internal Application boundary invocation that also proves the receiver's private brand. */
+export function invokeCapturedBoundedQueryPrepare(
+  receiver: BoundedQueryContracts,
+  generation: number,
+  query: unknown,
+  request: BoundedQueryRequest,
+): Result<PreparedBoundedQuery> {
+  return intrinsicReflectApply(intrinsicBoundedQueryPrepare, receiver, [
+    generation,
+    query,
+    request,
+  ]) as Result<PreparedBoundedQuery>;
+}

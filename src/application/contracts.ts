@@ -17,6 +17,7 @@ import type {
   StandardModelCapability,
   StandardRelationship,
 } from "../standard-model/index.ts";
+import type { ApplicationSnapshotStateDecoder } from "./snapshot-state.ts";
 
 export type WorkspaceInitializationOutcome =
   | { readonly generation: GraphGeneration; readonly status: "initialized" }
@@ -63,6 +64,7 @@ export interface ApplicationOperationsOptions {
   readonly model: StandardModelCapability;
   readonly queries: BoundedQueryContracts;
   readonly resourceMapper: ComponentResourceMapper;
+  readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
   readonly transactionExecution: TransactionExecutionCapability;
   readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
 }
