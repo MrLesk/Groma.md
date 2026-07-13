@@ -32,6 +32,7 @@ bun run check:boundaries # enforce architectural dependency directions
 bun run check:targets # cross-compile every supported target and run the host-compatible one
 bun run build         # compile the native standalone executable to dist/groma
 bun run smoke         # verify one native artifact and exercise version and help
+bun run verify:1a     # build and black-box verify the complete native 1A workflow
 bun run check         # run every required local verification gate
 ```
 
@@ -72,8 +73,10 @@ Tests live in a `tests/` directory inside the boundary they verify, for example
 `src/core/tests/` and `src/cli/tests/`. Tooling tests live in `scripts/tests/`. Bun
 discovers `*.test.ts` recursively, and keeping tests inside their owning boundary lets
 the architecture checker enforce the same dependency direction without cluttering
-production module roots. Add deeper fixture or golden-output directories only when a
-test suite demonstrates that need.
+production module roots. Release-level black-box verification lives in
+`tests/iteration-1a/` because it exercises the compiled artifact across every source
+boundary without importing a product implementation API. Add deeper fixture or
+golden-output directories only when a test suite demonstrates that need.
 
 ## Iteration 1A Build Targets
 
@@ -111,22 +114,46 @@ GitHub Actions runs on every pull request and every push to `main`. The required
 quality job starts from a clean checkout, installs with `bun ci`, and invokes the same
 `bun run check` command used locally. A second job uses one Linux runner to
 cross-compile all four promised 1A targets. It verifies the exact single-file output
-for every target and executes version and help only for the Linux binary that the host
-can run.
+for every target and executes version, help, and the complete non-crash 1A workflow
+only for the Linux binary that the host can run.
 
 `bun run check:targets` uses the same rule locally: it cross-compiles every target and
-smoke-tests the target matching the current operating system and architecture. A
+black-box tests the target matching the current operating system and architecture. The
+compiled child process is executed directly and does not use a separately installed
+Bun runtime; Bun remains only the development harness that builds and drives it. A
 successful cross-compile is not described as native runtime verification for a
-different operating system. After verifying the matrix, it restores a native artifact
-so `bun run smoke` can run immediately.
+different operating system. After verifying the matrix, the command restores a native
+artifact so `bun run smoke` can run immediately.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
 retaining their release tags as comments for review. Setup Bun reads the exact Bun
 version from `package.json`.
 
 When verification fails, run `bun run check` first. Its fail-fast order is formatting,
-types, architectural boundaries, tests, build, and binary smoke behavior. Run the
-named subcommand directly after identifying the failing gate.
+types, architectural boundaries, unit tests, standalone build and smoke behavior, then
+the complete Iteration 1A black-box and crash-recovery suite. Run the named subcommand
+directly after identifying the failing gate.
+
+## Iteration 1A Completion Verification
+
+`bun run verify:1a` is the clean-checkout completion command. It compiles the native
+single-file `groma` executable, checks its version and help surfaces, and then drives
+only that executable through initialization, recursive same- and mixed-type component
+workflows, cross-branch relationships, bounded queries, expected-revision updates,
+rename and reparent identity continuity, restart, deterministic output, malformed
+state, and negative invariants. The verifier compares canonical bytes and resource
+locations without importing product internals.
+
+The same command compiles a separate verification-only entry with an explicit host
+fault injector. Real child processes terminate at every prepared, committing,
+replacement, settlement, and deletion durability boundary. Recovery always exposes
+the complete old or complete new graph and must accept a later valid mutation. This
+fault control is not present in the production entry point or production executable.
+
+Iteration 1A deliberately stops at the correctness walking skeleton. Scanners,
+automatic architecture generation, reconciliation, disposable projection, dynamic
+plugin loading, plans, Git history, the embedded HTTP service, and the React UI remain
+later-iteration work.
 
 ## Deliberately Deferred
 

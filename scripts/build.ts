@@ -2,6 +2,8 @@ import { mkdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { compileStandalone } from "./standalone-compiler.ts";
+
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const outputDirectory = path.join(projectRoot, "dist");
 const entrypoint = path.join(projectRoot, "src", "cli", "main.ts");
@@ -31,29 +33,12 @@ const outputFile = path.join(outputDirectory, isWindows ? "groma.exe" : "groma")
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
 
-const command = [
-  process.execPath,
-  "build",
-  "--compile",
-  "--minify",
-  "--reject-unresolved",
-  "--no-compile-autoload-dotenv",
-  "--no-compile-autoload-bunfig",
-  "--no-compile-autoload-tsconfig",
-  "--no-compile-autoload-package-json",
-  ...(target === undefined ? [] : [`--target=${target}`]),
-  `--outfile=${outputFile}`,
-  entrypoint,
-];
-
-const build = Bun.spawn({
-  cmd: command,
+const exitCode = await compileStandalone({
   cwd: projectRoot,
-  stderr: "inherit",
-  stdout: "inherit",
+  entrypoint,
+  outputFile,
+  ...(target === undefined ? {} : { target }),
 });
-
-const exitCode = await build.exited;
 if (exitCode !== 0) {
   process.exit(exitCode);
 }

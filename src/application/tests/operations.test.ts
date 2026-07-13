@@ -2860,6 +2860,51 @@ describe("application component mutations", () => {
     expect(updated.value.extensions).toEqual({ "example.dev/tier": 1 });
   });
 
+  test("rejects semantically identical component patches without executing", async () => {
+    const fixture = mutationOperations();
+    const created = await fixture.api.createComponent({
+      component: {
+        "example.dev/owner": "architecture",
+        actions: [{ description: "Place an order", id: "place", name: "Place order" }],
+        id: ids.service,
+        intent: "Own the order lifecycle.",
+        name: "Orders",
+        type: "service",
+      },
+    });
+    expect(created.status).toBe("committed");
+    if (created.status !== "committed") return;
+    const executions = fixture.executions();
+    const state = fixture.provider.currentState;
+
+    const repeated = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(created),
+      id: ids.service,
+      patch: {
+        actions: [{ description: "Place an order", id: "place", name: "Place order" }],
+        intent: "Own the order lifecycle.",
+        name: "Orders",
+      },
+    });
+
+    expect(repeated.status).toBe("validation-rejected");
+    expect(repeated.status === "validation-rejected" && repeated.diagnostics[0]?.code).toBe(
+      "empty-component-mutation",
+    );
+    expect(fixture.executions()).toBe(executions);
+    expect(fixture.provider.prepares).toBe(1);
+    expect(fixture.provider.commits).toBe(1);
+    expect(fixture.provider.generation).toBe(Number(created.generation));
+    expect(fixture.provider.currentState).toBe(state);
+
+    const changed = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(created),
+      id: ids.service,
+      patch: { name: "Ordering" },
+    });
+    expect(changed.status).toBe("committed");
+  });
+
   test("validates embedded items against the final sparse component", async () => {
     const fixture = mutationOperations(
       new MutationProvider(),

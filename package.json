@@ -9,12 +9,13 @@
     "build": "bun run scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "format": "prettier --write src scripts .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
-    "format:check": "prettier --check src scripts .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
+    "format": "prettier --write src scripts tests .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
+    "format:check": "prettier --check src scripts tests .github DEVELOPMENT.md package.json tsconfig.json .prettierrc.json",
     "check:boundaries": "bun run scripts/check-boundaries.ts",
     "check:targets": "bun run scripts/verify-targets.ts",
     "smoke": "bun run scripts/verify-binary.ts",
-    "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run build && bun run smoke"
+    "verify:1a": "bun run build && bun run smoke && bun run tests/iteration-1a/verify.ts",
+    "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",

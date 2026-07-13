@@ -4,7 +4,11 @@ import type {
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
 import type { Diagnostic, EntropySource, GraphGeneration, Result } from "../core/index.ts";
-import type { LocalResourceProvider, MarkdownIntentStore } from "../persistence/index.ts";
+import type {
+  LocalResourceFaultInjector,
+  LocalResourceProvider,
+  MarkdownIntentStore,
+} from "../persistence/index.ts";
 import type { StandardModelCapability } from "../standard-model/index.ts";
 import type {
   BoundedQueryContracts,
@@ -95,6 +99,8 @@ export interface HostBootstrapRegistry {
 export interface DefaultBootstrapRegistryOptions {
   readonly coordinationRoot?: string;
   readonly entropy?: EntropySource;
+  /** Explicit verification seam; production composition does not supply one. */
+  readonly resourceFaultInjector?: LocalResourceFaultInjector;
   readonly surface: HostSurface;
 }
 

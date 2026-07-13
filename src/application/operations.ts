@@ -1053,20 +1053,21 @@ function containedQueryCapabilityResult(
   return envelope.value.ok === true ? success(envelope.value.value) : queryCapabilityFailure();
 }
 
-function sameCanonicalQueryData(
+function sameCanonicalGraphData(
   left: unknown,
   right: unknown,
   bounds: ApplicationOperationBounds,
+  owner: "entity" | "query",
 ): boolean {
   try {
     const budget = {
-      code: "query-capability-failed",
+      code: "canonical-comparison-failed",
       maximumDepth: bounds.maxSnapshotStateDepth,
       maximumValues: bounds.maxSnapshotStateValues,
-      message: "Bounded query data exceeds the configured structural budget",
+      message: "Bounded graph data exceeds the configured structural budget",
     };
-    const leftCopy = copyCanonicalGraphData(left, "query", undefined, budget);
-    const rightCopy = copyCanonicalGraphData(right, "query", undefined, budget);
+    const leftCopy = copyCanonicalGraphData(left, owner, undefined, budget);
+    const rightCopy = copyCanonicalGraphData(right, owner, undefined, budget);
     return (
       leftCopy.ok && rightCopy.ok && leftCopy.value.canonicalJson === rightCopy.value.canonicalJson
     );
@@ -1108,7 +1109,7 @@ function prepareQuery(
     !Number.isSafeInteger(prepared.value.limit) ||
     (prepared.value.limit as number) <= 0 ||
     Object.hasOwn(prepared.value, "after") !== cursorPresent ||
-    !sameCanonicalQueryData(prepared.value.query, query, options.bounds)
+    !sameCanonicalGraphData(prepared.value.query, query, options.bounds, "query")
   ) {
     return queryCapabilityFailure();
   }
@@ -1170,7 +1171,7 @@ function pageQuery<T>(
     generation.value !== prepared.generation ||
     page.value.hasMore !== state.hasMore ||
     Object.hasOwn(page.value, "nextCursor") !== expectsCursor ||
-    !sameCanonicalQueryData(page.value.items, ownedItems, options.bounds)
+    !sameCanonicalGraphData(page.value.items, ownedItems, options.bounds, "query")
   ) {
     return queryCapabilityFailure();
   }
@@ -1190,7 +1191,7 @@ function pageQuery<T>(
     );
     if (
       !continuation.ok ||
-      !sameCanonicalQueryData(continuation.value.after, state.nextAnchor, options.bounds)
+      !sameCanonicalGraphData(continuation.value.after, state.nextAnchor, options.bounds, "query")
     ) {
       return queryCapabilityFailure();
     }
@@ -1229,7 +1230,7 @@ function exactQuery<T>(
   if (
     !parsedGeneration.ok ||
     parsedGeneration.value !== generation ||
-    !sameCanonicalQueryData(exact.value.item, item, options.bounds)
+    !sameCanonicalGraphData(exact.value.item, item, options.bounds, "query")
   ) {
     return queryCapabilityFailure();
   }
@@ -2694,15 +2695,22 @@ export function createApplicationOperations(
     );
     if (!plannedRelationships.ok) return rejected(...plannedRelationships.diagnostics);
     const patchKeys = Object.keys(patch);
-    if (patchKeys.length === 0 && plannedRelationships.value.mutations.length === 0) {
+    const hasComponentChanges =
+      patchKeys.length > 0 &&
+      !sameCanonicalGraphData(
+        entity.value.payload,
+        computed.value.entity.payload,
+        options.bounds,
+        "entity",
+      );
+    if (!hasComponentChanges && plannedRelationships.value.mutations.length === 0) {
       return rejected(diagnostic("empty-component-mutation", "Component update has no changes"));
     }
-    const componentMutations =
-      patchKeys.length === 0
-        ? Object.freeze([])
-        : Object.freeze([
-            Object.freeze({ id: id.value, patch: patch as GraphDataRecord, type: "patch" }),
-          ]);
+    const componentMutations = !hasComponentChanges
+      ? Object.freeze([])
+      : Object.freeze([
+          Object.freeze({ id: id.value, patch: patch as GraphDataRecord, type: "patch" }),
+        ]);
     const transaction = standardTransactionRequest(
       componentMutations,
       plannedRelationships.value.mutations,
