@@ -7,6 +7,7 @@ const phases = new Set<LocalResourceFaultPhase>([
   "removal-after-unlink",
   "removal-parent-directory-sync",
   "replacement-after-rename-before-mode",
+  "replacement-parent-creation-sync",
   "replacement-parent-directory-sync",
   "replacement-target-file-sync",
 ]);

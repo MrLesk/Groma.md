@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +34,7 @@ const ids = Object.freeze({
   googleLogin: "ent_00000000000000000000000000000008",
   invalid: "ent_00000000000000000000000000000009",
   recovery: "ent_0000000000000000000000000000000a",
+  freshShardCrash: "ent_ab000000000000000000000000000000",
 });
 const relationshipId = "rel_00000000000000000000000000000001";
 
@@ -267,6 +277,10 @@ const gromaSnapshot = (workspaceRoot: string) => snapshot(path.join(workspaceRoo
 const intentSnapshot = (workspaceRoot: string) =>
   snapshot(path.join(workspaceRoot, "groma", "intent"));
 
+function quotePosixShellArgument(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
 async function expectFailureWithoutChanges(
   executable: string,
   workspaceRoot: string,
@@ -282,10 +296,19 @@ async function expectFailureWithoutChanges(
 
 async function verifyTerminal(executable: string, workspaceRoot: string): Promise<void> {
   if (process.platform === "win32") return;
+  const quotedExecutable = path.join(path.dirname(workspaceRoot), "groma terminal 'quoted'");
+  await symlink(executable, quotedExecutable);
   const command =
     process.platform === "darwin"
-      ? ["script", "-q", "/dev/null", executable]
-      : ["script", "-q", "-e", "-c", executable, "/dev/null"];
+      ? ["script", "-q", "/dev/null", quotedExecutable]
+      : [
+          "script",
+          "-q",
+          "-e",
+          "-c",
+          `exec ${quotePosixShellArgument(quotedExecutable)}`,
+          "/dev/null",
+        ];
   const result = await runProcess(command[0]!, workspaceRoot, command.slice(1));
   assert.equal(result.exitCode, 0, result.stderr);
   const output = result.stdout.replaceAll("\r", "");
@@ -293,6 +316,7 @@ async function verifyTerminal(executable: string, workspaceRoot: string): Promis
   assert.equal(output.includes("\u001b"), false);
   assert.ok(output.includes(`  - id="${ids.orders}"`), output);
   assert.ok(output.includes(`    - id="${ids.orderItem}"`), output);
+  assert.ok(output.includes(`truncated: reason=children parent="${ids.users}"`), output);
 }
 
 async function verifyWorkflow(executable: string, workspaceRoot: string): Promise<void> {
@@ -425,11 +449,13 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.ok(exactOrders.stdout.includes(relationshipId));
   assert.ok(exactOrders.stdout.includes(ids.login));
 
-  const beforeRepeat = await intentSnapshot(workspaceRoot);
-  const repeated = await success(
+  const beforeRepeat = await gromaSnapshot(workspaceRoot);
+  await failure(
     executable,
     workspaceRoot,
     ["component", "update", "--stdin"],
+    4,
+    "empty-component-mutation",
     JSON.stringify({
       expectedRevision: mutationRevision(orders, ids.orders),
       id: ids.orders,
@@ -449,13 +475,10 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
       },
     }),
   );
-  assert.deepEqual(await intentSnapshot(workspaceRoot), beforeRepeat);
-  assert.equal(
-    mutationRevision(repeated, ids.orders),
-    mutationRevision(orders, ids.orders),
-    "semantically identical serialization changed the content revision",
-  );
-  const originalPath = beforeRepeat.find((entry) => entry.path.includes(ids.orders))?.path;
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeRepeat);
+  const originalPath = (await intentSnapshot(workspaceRoot)).find((entry) =>
+    entry.path.includes(ids.orders),
+  )?.path;
   assert.equal(typeof originalPath, "string");
 
   const renamed = await success(
@@ -463,7 +486,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     workspaceRoot,
     ["component", "update", "--stdin"],
     JSON.stringify({
-      expectedRevision: mutationRevision(repeated, ids.orders),
+      expectedRevision: mutationRevision(orders, ids.orders),
       id: ids.orders,
       patch: { name: "Ordering" },
     }),
@@ -507,6 +530,16 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.equal(firstHelp.stderr, "");
   assert.equal(firstHelp.stdout, secondHelp.stdout);
   assert.ok(firstHelp.stdout.includes("Usage:\n"));
+  for (let index = 0; index < 9; index += 1) {
+    await createComponent(executable, workspaceRoot, {
+      component: {
+        id: `ent_${(32 + index).toString(16).padStart(32, "0")}`,
+        name: `Terminal child ${index + 1}`,
+        parent: ids.users,
+        type: "component",
+      },
+    });
+  }
   await verifyTerminal(executable, workspaceRoot);
 
   await expectFailureWithoutChanges(
@@ -596,11 +629,13 @@ interface CrashCase {
   readonly locator: "journal" | "source";
   readonly occurrence: number;
   readonly operation: "create" | "delete";
+  readonly sourceId?: string;
   readonly phase:
     | "after-rename"
     | "removal-after-unlink"
     | "removal-parent-directory-sync"
     | "replacement-after-rename-before-mode"
+    | "replacement-parent-creation-sync"
     | "replacement-parent-directory-sync"
     | "replacement-target-file-sync";
 }
@@ -618,6 +653,14 @@ const crashCases: readonly CrashCase[] = [
     occurrence: 1,
     operation: "create",
     phase: "after-rename",
+  },
+  {
+    expected: "old",
+    locator: "source",
+    occurrence: 1,
+    operation: "create",
+    phase: "replacement-parent-creation-sync",
+    sourceId: ids.freshShardCrash,
   },
   ...replacementPhases.map((phase): CrashCase => ({
     expected: "new",
@@ -666,6 +709,7 @@ async function verifyCrashCase(
   workspaceRoot: string,
   crashCase: CrashCase,
 ): Promise<void> {
+  const sourceId = crashCase.sourceId ?? ids.orders;
   await success(executable, workspaceRoot, ["init"]);
   await createComponent(executable, workspaceRoot, {
     component: { id: ids.users, name: "Recovery target", type: "domain" },
@@ -675,26 +719,26 @@ async function verifyCrashCase(
   if (crashCase.operation === "create") {
     command = ["--format", "json", "component", "create", "--stdin"];
     input = JSON.stringify({
-      component: { id: ids.orders, name: "Crash candidate", parent: ids.users, type: "service" },
+      component: { id: sourceId, name: "Crash candidate", parent: ids.users, type: "service" },
       relationships: [{ id: relationshipId, target: ids.users, type: "depends-on" }],
     });
   } else {
     const created = await createComponent(executable, workspaceRoot, {
-      component: { id: ids.orders, name: "Delete candidate", type: "service" },
+      component: { id: sourceId, name: "Delete candidate", type: "service" },
     });
     command = [
       "--format",
       "json",
       "component",
       "remove",
-      ids.orders,
+      sourceId,
       "--revision",
-      mutationRevision(created, ids.orders),
+      mutationRevision(created, sourceId),
     ];
   }
   const crashed = await runProcess(crashExecutable, workspaceRoot, command, input, {
     GROMA_VERIFY_FAULT_LOCATOR:
-      crashCase.locator === "journal" ? transactionStateLocator : intentLocator(ids.orders),
+      crashCase.locator === "journal" ? transactionStateLocator : intentLocator(sourceId),
     GROMA_VERIFY_FAULT_OCCURRENCE: String(crashCase.occurrence),
     GROMA_VERIFY_FAULT_PHASE: crashCase.phase,
   });
@@ -703,7 +747,7 @@ async function verifyCrashCase(
   const listed = await success(executable, workspaceRoot, ["component", "list", "--limit", "10"]);
   const expectedIds =
     crashCase.expected === "new" && crashCase.operation === "create"
-      ? [ids.users, ids.orders].sort()
+      ? [ids.users, sourceId].sort()
       : [ids.users];
   assert.deepEqual(componentIds(listed), expectedIds, `${crashCase.phase} recovery`);
   const generation = valueRecord(listed).generation;
@@ -718,15 +762,15 @@ async function verifyCrashCase(
 
   if (crashCase.expected === "old") {
     await createComponent(executable, workspaceRoot, {
-      component: { id: ids.orders, name: "Valid after rollback", type: "service" },
+      component: { id: sourceId, name: "Valid after rollback", type: "service" },
     });
   } else if (crashCase.operation === "create") {
-    const recovered = await component(executable, workspaceRoot, ids.orders);
+    const recovered = await component(executable, workspaceRoot, sourceId);
     assert.equal(recovered.component.parent, ids.users);
     const exact = await success(executable, workspaceRoot, [
       "component",
       "get",
-      ids.orders,
+      sourceId,
       "--relationships-limit",
       "10",
     ]);
@@ -737,7 +781,7 @@ async function verifyCrashCase(
       ["component", "update", "--stdin"],
       JSON.stringify({
         expectedRevision: recovered.revision,
-        id: ids.orders,
+        id: sourceId,
         patch: { name: `Recovered ${crashCase.phase}` },
       }),
     );
@@ -763,7 +807,8 @@ async function verifyCrashes(executable: string, temporaryRoot: string): Promise
   const hostCrashCases = crashCases.filter(
     (entry) =>
       process.platform !== "win32" ||
-      (entry.phase !== "replacement-parent-directory-sync" &&
+      (entry.phase !== "replacement-parent-creation-sync" &&
+        entry.phase !== "replacement-parent-directory-sync" &&
         entry.phase !== "removal-parent-directory-sync"),
   );
   for (let index = 0; index < hostCrashCases.length; index += 1) {
