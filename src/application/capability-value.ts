@@ -64,17 +64,37 @@ export function containCapabilityValue(
             return containmentFailure;
           }
           const keys = intrinsicOwnKeys(value);
-          if (keys.length !== length.value + 1) return containmentFailure;
           const copied: unknown[] = new Array<unknown>(length.value);
+          let malformed = keys.length !== length.value + 1;
+          const visited = new Set<string>();
           for (let index = 0; index < length.value; index += 1) {
-            const descriptor = intrinsicGetOwnPropertyDescriptor(value, String(index));
+            const key = String(index);
+            visited.add(key);
+            const descriptor = intrinsicGetOwnPropertyDescriptor(value, key);
             if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-              return containmentFailure;
+              malformed = true;
+              continue;
             }
             const item = copy(descriptor.value, depth + 1);
-            if (!item.ok) return item;
-            copied[index] = item.value;
+            if (!item.ok) {
+              malformed = true;
+            } else {
+              copied[index] = item.value;
+            }
           }
+          let extraEntriesRemaining = Math.max(0, options.maximumContainerEntries - length.value);
+          for (const key of keys) {
+            if (key === "length" || (typeof key === "string" && visited.has(key))) continue;
+            malformed = true;
+            if (extraEntriesRemaining < 1 || remaining < 1) break;
+            extraEntriesRemaining -= 1;
+            const descriptor = intrinsicGetOwnPropertyDescriptor(value, key);
+            if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+              continue;
+            }
+            copy(descriptor.value, depth + 1);
+          }
+          if (malformed) return containmentFailure;
           return { ok: true, value: intrinsicFreeze(copied) };
         }
 
@@ -83,16 +103,23 @@ export function containCapabilityValue(
         const keys = intrinsicOwnKeys(value);
         if (keys.length > options.maximumContainerEntries) return containmentFailure;
         const copied = intrinsicCreate(null) as Record<string, unknown>;
+        let malformed = false;
         for (const key of keys) {
-          if (typeof key !== "string") return containmentFailure;
           const descriptor = intrinsicGetOwnPropertyDescriptor(value, key);
           if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-            return containmentFailure;
+            malformed = true;
+            continue;
           }
           const child = copy(descriptor.value, depth + 1);
-          if (!child.ok) return child;
-          intrinsicDefineProperty(copied, key, { enumerable: true, value: child.value });
+          if (!child.ok) {
+            malformed = true;
+          } else if (typeof key !== "string") {
+            malformed = true;
+          } else {
+            intrinsicDefineProperty(copied, key, { enumerable: true, value: child.value });
+          }
         }
+        if (malformed) return containmentFailure;
         return { ok: true, value: intrinsicFreeze(copied) };
       } finally {
         active.delete(value);

@@ -1,5 +1,7 @@
 import { isProxy } from "node:util/types";
 
+import { containCapabilityValue } from "../application/capability-value.ts";
+import { containNativePromise } from "../application/promise-observation.ts";
 import { failure, success, type Diagnostic, type Result } from "../core/index.ts";
 import {
   inspectExactRecord,
@@ -108,12 +110,34 @@ export function copyHostDiagnostics(
   maximum: number,
   code: string,
 ): Result<readonly Diagnostic[]> {
+  if (isHostProxy(value)) {
+    return failure(invalid(code, "Diagnostics are malformed"));
+  }
+  if (typeof value === "object" && value !== null && containNativePromise(value) !== "not-native") {
+    return failure(invalid(code, "Diagnostics are malformed"));
+  }
   const entries = inspectHostDenseArray(value, maximum, code, "Diagnostics");
   if (!entries.ok) return entries;
+  const containedEntries = new Array<unknown>(entries.value.length);
+  let containmentFailed = false;
+  for (let index = 0; index < entries.value.length; index += 1) {
+    const contained = containCapabilityValue(entries.value[index], {
+      isProxy: isHostProxy,
+      maximumContainerEntries: 64,
+      maximumDepth: 4,
+      maximumValues: 256,
+    });
+    if (!contained.ok) {
+      containmentFailed = true;
+      continue;
+    }
+    containedEntries[index] = contained.value;
+  }
+  if (containmentFailed) return failure(invalid(code, "Diagnostics are malformed"));
   const copied = new Array<Diagnostic>(entries.value.length);
   for (let index = 0; index < entries.value.length; index += 1) {
     const entry = inspectHostRecord(
-      entries.value[index],
+      containedEntries[index],
       [
         ["code", "message"],
         ["code", "details", "message"],

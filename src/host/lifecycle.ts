@@ -45,6 +45,12 @@ function resolvedPromise(): Promise<void> {
   ]) as Promise<void>;
 }
 
+function resolvedValue<TValue>(value: TValue): Promise<TValue> {
+  return intrinsicReflectApply(intrinsicPromiseResolve, intrinsicPromise, [
+    value,
+  ]) as Promise<TValue>;
+}
+
 function rejectedPromise(message: string): Promise<void> {
   return intrinsicReflectApply(intrinsicPromiseReject, intrinsicPromise, [new Error(message)]);
 }
@@ -231,10 +237,10 @@ function canonicalWorkspace(value: unknown): Result<WorkspaceAccessCapability> {
   const status = workspace.value.status;
   return success(
     Object.freeze({
-      initialize: () => Reflect.apply(initialize, source, []),
-      recover: () => Reflect.apply(recover, source, []),
-      requireWorkspace: () => Reflect.apply(requireWorkspace, source, []),
-      status: () => Reflect.apply(status, source, []),
+      initialize: () => intrinsicReflectApply(initialize, source, []),
+      recover: () => intrinsicReflectApply(recover, source, []),
+      requireWorkspace: () => intrinsicReflectApply(requireWorkspace, source, []),
+      status: () => intrinsicReflectApply(status, source, []),
     }) as WorkspaceAccessCapability,
   );
 }
@@ -248,7 +254,7 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   const start = surface.value.start;
   return success(
     Object.freeze({
-      start: (context: HostSurfaceContext) => Reflect.apply(start, source, [context]),
+      start: (context: HostSurfaceContext) => intrinsicReflectApply(start, source, [context]),
     }),
   );
 }
@@ -335,7 +341,7 @@ function canonicalRegistry(value: unknown): Result<(context: HostProcessContext)
   }
   const source = value as object;
   const compose = registry.value.compose;
-  return success((context) => Reflect.apply(compose, source, [context]));
+  return success((context) => intrinsicReflectApply(compose, source, [context]));
 }
 
 function canonicalSignalSource(
@@ -352,7 +358,7 @@ function canonicalSignalSource(
   }
   const receiver = value as object;
   const subscribe = source.value.subscribe;
-  return success((listener) => Reflect.apply(subscribe, receiver, [listener]));
+  return success((listener) => intrinsicReflectApply(subscribe, receiver, [listener]));
 }
 
 function canonicalSession(value: unknown): Result<ContainedHostSurfaceSession> {
@@ -388,6 +394,28 @@ function canonicalSession(value: unknown): Result<ContainedHostSurfaceSession> {
       completion: completion.promise,
       stop: () => intrinsicReflectApply(stop, source, []),
     }),
+  );
+}
+
+type ObservedSurfaceStartOutcome =
+  | { readonly state: "failed" | "invalid" }
+  | { readonly session: ContainedHostSurfaceSession; readonly state: "started" };
+
+function validatedSurfaceStart(value: unknown): ObservedSurfaceStartOutcome {
+  const validated = canonicalSession(value);
+  return validated.ok ? { session: validated.value, state: "started" } : { state: "invalid" };
+}
+
+function observeSurfaceStart(value: unknown): Promise<ObservedSurfaceStartOutcome> {
+  if (isHostProxy(value)) return resolvedValue({ state: "invalid" });
+  const observed = observeNativePromise<ObservedSurfaceStartOutcome>(
+    value,
+    validatedSurfaceStart,
+    () => ({ state: "failed" }),
+  );
+  if (observed.status === "observed") return observed.promise;
+  return resolvedValue(
+    observed.status === "not-native" ? validatedSurfaceStart(value) : { state: "invalid" },
   );
 }
 
@@ -514,7 +542,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
         "Host signal source returned malformed cleanup",
       );
     } else {
-      unsubscribe = () => Reflect.apply(subscribed, undefined, []) as void | Promise<void>;
+      unsubscribe = () => intrinsicReflectApply(subscribed, undefined, []) as void | Promise<void>;
       if (hostCancellation.signal.aborted) {
         outcome = cancelled(cancellationSignal);
       } else {
@@ -654,17 +682,12 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   recovery: Object.freeze({ status: recovery }),
                   workspace: composition.workspace,
                 });
-                const start = Promise.resolve()
-                  .then(() => composition.surface.start(context))
-                  .then(
-                    (value) => {
-                      const validated = canonicalSession(value);
-                      return validated.ok
-                        ? ({ session: validated.value, state: "started" } as const)
-                        : ({ state: "invalid" } as const);
-                    },
-                    () => ({ state: "failed" as const }),
-                  );
+                let start: Promise<ObservedSurfaceStartOutcome>;
+                try {
+                  start = observeSurfaceStart(composition.surface.start(context));
+                } catch {
+                  start = resolvedValue({ state: "failed" });
+                }
                 const first = await Promise.race([
                   start,
                   cancellation.then(() => ({ state: "cancelled" as const })),

@@ -69,6 +69,7 @@ import {
   type DecodedApplicationSnapshotState,
 } from "./snapshot-state.ts";
 import { containCapabilityValue } from "./capability-value.ts";
+import { observeNativePromise } from "./promise-observation.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -103,7 +104,47 @@ interface ApplicationOperationsContext extends ApplicationOperationsOptions {
 }
 
 const intrinsicReflectApply = Reflect.apply;
+const intrinsicObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const applicationCapabilityContainmentFailure = Object.freeze({ ok: false as const });
+const rejectedApplicationCapabilitySettlement = Object.freeze({ status: "rejected" as const });
+const failedApplicationProxyPolicy = Object.freeze({ status: "proxy-policy-failed" as const });
+
+type ApplicationCapabilitySettlement =
+  | typeof failedApplicationProxyPolicy
+  | typeof rejectedApplicationCapabilitySettlement
+  | { readonly status: "fulfilled"; readonly value: unknown };
+
+async function settleApplicationCapabilityValue(
+  value: unknown,
+  isProxy: (value: unknown) => boolean,
+): Promise<ApplicationCapabilitySettlement> {
+  try {
+    if (typeof value === "object" && value !== null && isProxy(value)) {
+      return rejectedApplicationCapabilitySettlement;
+    }
+  } catch {
+    return failedApplicationProxyPolicy;
+  }
+  let fulfilledValue: unknown;
+  const observed = observeNativePromise(
+    value,
+    (settled) => {
+      fulfilledValue = settled;
+      return true;
+    },
+    () => false,
+  );
+  if (observed.status === "uncontained") return rejectedApplicationCapabilitySettlement;
+  if (observed.status === "observed") {
+    try {
+      if (!(await observed.promise)) return rejectedApplicationCapabilitySettlement;
+    } catch {
+      return rejectedApplicationCapabilitySettlement;
+    }
+    return Object.freeze({ status: "fulfilled" as const, value: fulfilledValue });
+  }
+  return Object.freeze({ status: "fulfilled" as const, value });
+}
 
 const absoluteBounds = Object.freeze({
   maxComponents: 1_000_000,
@@ -331,6 +372,23 @@ function containApplicationCapabilityValue(
       options.bounds.maxDiagnosticCount * 67,
   });
   return contained.ok ? contained : applicationCapabilityContainmentFailure;
+}
+
+function precontainApplicationSnapshotProperties(
+  value: unknown,
+  options: ApplicationOperationsContext,
+): void {
+  if (typeof value !== "object" || value === null) return;
+  for (const key of ["revisions", "state"] as const) {
+    try {
+      const descriptor = intrinsicObjectGetOwnPropertyDescriptor(value, key);
+      if (descriptor !== undefined && "value" in descriptor && descriptor.enumerable) {
+        containApplicationCapabilityValue(descriptor.value, options);
+      }
+    } catch {
+      // Exact snapshot inspection below owns the public failure.
+    }
+  }
 }
 
 function exactRequest(
@@ -718,23 +776,25 @@ async function snapshot(
 ): Promise<Result<ReadSnapshot>> {
   let raw: unknown;
   try {
-    raw = await intrinsicReflectApply(options.calls.snapshot, options.calls.transactionProvider, [
-      resources,
-    ]);
+    const invoked = intrinsicReflectApply(
+      options.calls.snapshot,
+      options.calls.transactionProvider,
+      [resources],
+    );
+    const settled = await settleApplicationCapabilityValue(invoked, options.isProxy);
+    if (settled.status === "proxy-policy-failed") return snapshotDecodeFailure();
+    if (settled.status !== "fulfilled") {
+      return failure(
+        diagnostic("provider-snapshot-failed", "The transaction snapshot capability failed"),
+      );
+    }
+    raw = settled.value;
   } catch {
     return failure(
       diagnostic("provider-snapshot-failed", "The transaction snapshot capability failed"),
     );
   }
-  try {
-    if (typeof raw === "object" && raw !== null && options.isProxy?.(raw)) {
-      return failure(
-        diagnostic("provider-snapshot-failed", "The transaction snapshot capability failed"),
-      );
-    }
-  } catch {
-    return snapshotDecodeFailure();
-  }
+  precontainApplicationSnapshotProperties(raw, options);
   const inspected = inspectExactRecord(
     raw,
     [["generation", "revisions", "state"]],
@@ -1952,13 +2012,16 @@ async function executeMutation<T>(
     components: expectedComponents.value,
     relationships: expectedRelationships.value,
   });
-  let outcome: TransactionOutcome;
+  let outcome: unknown;
   try {
-    outcome = await intrinsicReflectApply(
+    const invoked = intrinsicReflectApply(
       options.calls.execute,
       options.calls.transactionExecution,
       [request],
     );
+    const settled = await settleApplicationCapabilityValue(invoked, options.isProxy);
+    if (settled.status !== "fulfilled") throw new Error("transaction execution rejected");
+    outcome = settled.value;
   } catch {
     return Object.freeze({
       diagnostics: Object.freeze([
@@ -2277,11 +2340,21 @@ export function createApplicationOperations(
     const validated = exactRequest(request, [[]], "Workspace initialization request");
     if (!validated.ok) return validated;
     try {
-      const raw = await intrinsicReflectApply(
+      const invoked = intrinsicReflectApply(
         options.calls.initialize,
         options.calls.initialization,
         [],
       );
+      const settled = await settleApplicationCapabilityValue(invoked, options.isProxy);
+      if (settled.status !== "fulfilled") {
+        return frozenFailure(
+          diagnostic(
+            "workspace-initialization-failed",
+            "Workspace initialization capability failed",
+          ),
+        );
+      }
+      const raw = settled.value;
       const contained = containApplicationCapabilityValue(raw, options);
       return contained.ok
         ? validatedInitializationOutcome(contained.value, options.bounds, options.isProxy)

@@ -7,6 +7,7 @@ import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
 
 import {
   createDefaultBootstrapRegistry,
+  type DefaultBootstrapRegistryOptions,
   type HostSurface,
   type HostSurfaceSession,
 } from "../index.ts";
@@ -36,6 +37,8 @@ function idleSurface(): HostSurface {
   };
 }
 
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
 describe("default bootstrap registry", () => {
   test("composes every 1A capability explicitly with stable shared identity", async () => {
     const context = await temporaryWorkspace();
@@ -52,7 +55,8 @@ describe("default bootstrap registry", () => {
 
     expect(composed.ok).toBeTrue();
     if (!composed.ok) return;
-    expect(composed.value.surface).toBe(surface);
+    expect(composed.value.surface).not.toBe(surface);
+    expect(Object.isFrozen(composed.value.surface)).toBeTrue();
     expect(composed.value.workspace.status()).toEqual({ state: "missing" });
     expect(composed.value.workspace.requireWorkspace()).toMatchObject({
       diagnostics: [{ code: "no-workspace" }],
@@ -96,6 +100,65 @@ describe("default bootstrap registry", () => {
       ],
       ok: false,
     });
+  });
+
+  test("snapshots mutable bootstrap options before deferred composition", async () => {
+    const context = await temporaryWorkspace();
+    const surface = idleSurface() as Mutable<HostSurface>;
+    const replacementSurface = idleSurface();
+    let originalStarts = 0;
+    let replacedStarts = 0;
+    surface.start = () => {
+      originalStarts += 1;
+      return { completion: Promise.resolve(), stop: async () => {} };
+    };
+    const options: Mutable<DefaultBootstrapRegistryOptions> = {
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => new Uint8Array(length),
+      surface,
+    };
+    const registry = createDefaultBootstrapRegistry(options);
+
+    options.coordinationRoot = "relative/private-coordination-root";
+    options.entropy = () => {
+      throw new Error("/private/replaced-entropy");
+    };
+    options.surface = replacementSurface;
+    surface.start = () => {
+      replacedStarts += 1;
+      return { completion: Promise.resolve(), stop: async () => {} };
+    };
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(composed.value.surface).not.toBe(surface);
+    expect(composed.value.surface).not.toBe(replacementSurface);
+    const session = await composed.value.surface.start({
+      cancellation: new AbortController().signal,
+      recovery: { status: "not-required" },
+      workspace: composed.value.workspace,
+    });
+    await session.completion;
+    expect({ originalStarts, replacedStarts }).toEqual({ originalStarts: 1, replacedStarts: 0 });
+  });
+
+  test("captures the surface start method with one property read", () => {
+    let reads = 0;
+    const surface = Object.create(null) as HostSurface;
+    Object.defineProperty(surface, "start", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return () => ({ completion: Promise.resolve(), stop: async () => {} });
+      },
+    });
+
+    createDefaultBootstrapRegistry({ surface });
+
+    expect(reads).toBe(1);
   });
 
   test("contains no server, React, dynamic plugin, or project-code loading path", async () => {

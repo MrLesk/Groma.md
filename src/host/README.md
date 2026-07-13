@@ -15,6 +15,10 @@ capabilities exist for conformance and host tests; a running surface receives on
 replace this registry with the plugin runtime without changing Core or application
 operation contracts.
 
+Registry construction snapshots the selected coordination root, entropy source, and
+surface before composition can await. Later mutation of the caller's options container
+cannot redirect the assembled host.
+
 The process context supplies one absolute workspace root. The host does not search its
 ancestors. GROM-17 will decide how the CLI chooses that root.
 
@@ -59,7 +63,10 @@ Coordination acquisition Results and failure diagnostics are exact-validated bef
 publication. A retained lease must have the Local Resource Provider's opaque structural
 shape: a frozen, empty, null-prototype, non-proxy object. This proves contract shape, not
 provider or security provenance. A valid retained lease is released deterministically;
-malformed successes cannot stage configuration.
+malformed successes cannot stage configuration. Successful staging Results cross the
+same exact boundary. Their provider-owned handles must be non-Promise, non-proxy objects;
+the host preserves their identity for commit or discard without imposing the built-in
+provider's private representation on replaceable providers.
 
 ## Workspace and recovery gate
 
@@ -76,7 +83,9 @@ startup dispatches with recovery marked `not-required` so the surface can offer
 initialization. Successful initialization performs the same recovery handshake and
 promotes the existing workspace session to ready without reconstructing the host.
 Provider snapshots are copied once from exact data properties into bounded canonical
-state before the host records their generation. Host recovery and normal application
+state before the host records their generation. Snapshot state containment applies the
+configured local depth and value bounds and observes nested native Promises before an
+earlier malformed scalar can reject the snapshot. Host recovery and normal application
 reads receive the exact same proxy-aware application snapshot-state decoder instance,
 including GraphKernel loading, Standard Model parsing, duplicate and endpoint checks,
 and final containment invariant validation.
@@ -155,6 +164,12 @@ without invoking it. If trusted plugin code has already returned such a rejected
 JavaScript provides no trap-free way to mark that original rejection handled, so this is
 containment rather than a security sandbox and the host does not install a global
 `unhandledRejection` interceptor.
+
+A synchronous `surface.start` return is exact-validated directly, without passing the
+session through Promise resolution or consulting a session-shaped value's `then` member.
+A native Promise return is instead observed with the captured intrinsic path before its
+fulfilled session is validated. Host diagnostic boundaries likewise make bounded owned
+copies and observe nested native Promises before returning generic host-owned failures.
 
 Registry, recovery, workspace-status, surface, and session values are treated as
 hostile runtime input. The host exact-inspects and copies capability shapes once and

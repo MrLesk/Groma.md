@@ -101,6 +101,33 @@ export interface ApplicationSnapshotStateDecoderMetadata {
 const decoderMetadata = new WeakMap<object, ApplicationSnapshotStateDecoderMetadata>();
 const canonicalComponents = new WeakSet<object>();
 const canonicalRelationships = new WeakSet<object>();
+const intrinsicReflectApply = Reflect.apply;
+
+interface ApplicationSnapshotStateDecoderModelCalls {
+  readonly normalize: StandardModelCapability["normalize"];
+  readonly parse: StandardModelCapability["parse"];
+  readonly patch: StandardModelCapability["patch"];
+  readonly receiver: StandardModelCapability;
+  readonly relationships: StandardModelCapability["relationships"];
+}
+
+function captureStandardModelCalls(
+  model: StandardModelCapability,
+): ApplicationSnapshotStateDecoderModelCalls {
+  const calls = {
+    normalize: model.normalize,
+    parse: model.parse,
+    patch: model.patch,
+    receiver: model,
+    relationships: model.relationships,
+  };
+  for (const [name, value] of Object.entries(calls)) {
+    if (name !== "receiver" && typeof value !== "function") {
+      throw new TypeError(`Standard Model ${name} must be callable`);
+    }
+  }
+  return Object.freeze(calls);
+}
 
 function recordApplicationSnapshotStateDecoder(
   decoder: ApplicationSnapshotStateDecoder,
@@ -126,6 +153,7 @@ export function isCanonicalApplicationSnapshotRelationship(value: unknown): bool
 
 interface ApplicationSnapshotStateDecoderContext extends ApplicationSnapshotStateDecoderOptions {
   readonly invariant: TransactionInvariant;
+  readonly modelCalls: ApplicationSnapshotStateDecoderModelCalls;
   readonly zero: GraphGeneration;
 }
 
@@ -370,25 +398,72 @@ function modelRecord(
   context: ModelSuccessContext,
 ): Result<Readonly<Record<string, unknown>>> {
   try {
-    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      context.isProxy(value) ||
+      containNativePromise(value) !== "not-native"
+    ) {
       return decoderFailure();
     }
     if (Array.isArray(value)) return decoderFailure();
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
     const keys = Reflect.ownKeys(value);
-    if (keys.length > allowed.size) return decoderFailure();
     const inspected = Object.create(null) as Record<string, unknown>;
+    let malformed = keys.length > allowed.size;
+    const malformedActive = new WeakSet<object>();
     for (const key of keys) {
-      if (typeof key !== "string" || !allowed.has(key)) return decoderFailure();
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return decoderFailure();
+        malformed = true;
+        continue;
+      }
+      if (
+        typeof descriptor.value === "object" &&
+        descriptor.value !== null &&
+        containNativePromise(descriptor.value) !== "not-native"
+      ) {
+        malformed = true;
+        continue;
+      }
+      if (typeof key !== "string" || !allowed.has(key)) {
+        malformed = true;
+        if (typeof descriptor.value === "object" && descriptor.value !== null) {
+          preflightModelGraphData(
+            descriptor.value,
+            1,
+            context.structuralRemaining,
+            malformedActive,
+            context,
+          );
+        }
+        continue;
       }
       Object.defineProperty(inspected, key, { enumerable: true, value: descriptor.value });
     }
     for (const key of required) {
-      if (!Object.hasOwn(inspected, key)) return decoderFailure();
+      if (!Object.hasOwn(inspected, key)) malformed = true;
+    }
+    if (malformed) {
+      for (const key of Reflect.ownKeys(inspected)) {
+        const descriptor = Object.getOwnPropertyDescriptor(inspected, key);
+        if (
+          descriptor !== undefined &&
+          "value" in descriptor &&
+          typeof descriptor.value === "object" &&
+          descriptor.value !== null
+        ) {
+          preflightModelGraphData(
+            descriptor.value,
+            1,
+            context.structuralRemaining,
+            malformedActive,
+            context,
+          );
+        }
+      }
+      return decoderFailure();
     }
     return success(Object.freeze(inspected));
   } catch {
@@ -415,7 +490,13 @@ function preflightModelGraphData(
   ) {
     return success(undefined);
   }
-  if (typeof value !== "object" || context.isProxy(value)) return decoderFailure();
+  if (
+    typeof value !== "object" ||
+    context.isProxy(value) ||
+    containNativePromise(value) !== "not-native"
+  ) {
+    return decoderFailure();
+  }
   if (active.has(value)) return decoderFailure();
   active.add(value);
   try {
@@ -428,11 +509,15 @@ function preflightModelGraphData(
       );
       if (!length.ok || length.value > remaining.value) return decoderFailure();
       const keys = Reflect.ownKeys(value);
-      if (keys.length !== length.value + 1) return decoderFailure();
+      let malformed = keys.length !== length.value + 1;
+      const visited = new Set<string>();
       for (let index = 0; index < length.value; index += 1) {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        const key = String(index);
+        visited.add(key);
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-          return decoderFailure();
+          malformed = true;
+          continue;
         }
         const item = preflightModelGraphData(
           descriptor.value,
@@ -441,19 +526,32 @@ function preflightModelGraphData(
           active,
           context,
         );
-        if (!item.ok) return item;
+        if (!item.ok) malformed = true;
       }
-      return success(undefined);
+      let extraEntriesRemaining = remaining.value;
+      for (const key of keys) {
+        if (key === "length" || (typeof key === "string" && visited.has(key))) continue;
+        malformed = true;
+        if (extraEntriesRemaining < 1 || remaining.value < 1) break;
+        extraEntriesRemaining -= 1;
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+          continue;
+        }
+        preflightModelGraphData(descriptor.value, depth + 1, remaining, active, context);
+      }
+      return malformed ? decoderFailure() : success(undefined);
     }
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
     const keys = Reflect.ownKeys(value);
     if (keys.length > remaining.value) return decoderFailure();
+    let malformed = false;
     for (const key of keys) {
-      if (typeof key !== "string") return decoderFailure();
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return decoderFailure();
+        malformed = true;
+        continue;
       }
       const child = preflightModelGraphData(
         descriptor.value,
@@ -462,9 +560,10 @@ function preflightModelGraphData(
         active,
         context,
       );
-      if (!child.ok) return child;
+      if (!child.ok) malformed = true;
+      if (typeof key !== "string") malformed = true;
     }
-    return success(undefined);
+    return malformed ? decoderFailure() : success(undefined);
   } finally {
     active.delete(value);
   }
@@ -475,7 +574,12 @@ function modelExtensions(
   context: ModelSuccessContext,
 ): Result<Readonly<Record<string, unknown>>> {
   try {
-    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      context.isProxy(value) ||
+      containNativePromise(value) !== "not-native"
+    ) {
       return decoderFailure();
     }
     if (Array.isArray(value)) return decoderFailure();
@@ -485,11 +589,17 @@ function modelExtensions(
     if (keys.length > context.structuralRemaining.value) return decoderFailure();
     const extensions = Object.create(null) as Record<string, unknown>;
     const active = new WeakSet<object>();
+    let malformed = false;
     for (const key of keys) {
-      if (typeof key !== "string" || !extensionKeyPattern.test(key)) return decoderFailure();
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return decoderFailure();
+        malformed = true;
+        continue;
+      }
+      if (typeof key !== "string" || !extensionKeyPattern.test(key)) {
+        malformed = true;
+        preflightModelGraphData(descriptor.value, 1, context.structuralRemaining, active, context);
+        continue;
       }
       const valid = preflightModelGraphData(
         descriptor.value,
@@ -498,11 +608,18 @@ function modelExtensions(
         active,
         context,
       );
-      if (!valid.ok) return valid;
+      if (!valid.ok) {
+        malformed = true;
+        continue;
+      }
       const copied = copyPreflightedModelGraphData(descriptor.value, context);
-      if (!copied.ok) return copied;
+      if (!copied.ok) {
+        malformed = true;
+        continue;
+      }
       Object.defineProperty(extensions, key, { enumerable: true, value: copied.value });
     }
+    if (malformed) return decoderFailure();
     return success(Object.freeze(extensions));
   } catch {
     return decoderFailure();
@@ -527,7 +644,12 @@ function modelItems(
 ): Result<readonly Readonly<Record<string, unknown>>[] | undefined> {
   if (value === undefined) return success(undefined);
   try {
-    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      context.isProxy(value) ||
+      containNativePromise(value) !== "not-native"
+    ) {
       return decoderFailure();
     }
     const length = inspectIntrinsicArrayLength(
@@ -536,35 +658,62 @@ function modelItems(
       "Decoded model items",
     );
     if (!length.ok) return decoderFailure();
-    if (context.embeddedItems + length.value > context.options.bounds.maxEmbeddedItems) {
-      return decoderBoundFailure(context.options.bounds.maxEmbeddedItems);
-    }
+    const embeddedBoundExceeded =
+      context.embeddedItems + length.value > context.options.bounds.maxEmbeddedItems;
     context.embeddedItems += length.value;
     const keys = Reflect.ownKeys(value);
-    if (keys.length !== length.value + 1) return decoderFailure();
     const identities = new Set<string>();
     const items: Readonly<Record<string, unknown>>[] = [];
+    let malformed = keys.length !== length.value + 1;
+    const visited = new Set<string>();
     for (let index = 0; index < length.value; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      const key = String(index);
+      visited.add(key);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return decoderFailure();
+        malformed = true;
+        continue;
       }
       const record = modelRecord(descriptor.value, itemFields, itemRequiredFields, context);
       if (!record.ok || typeof record.value.id !== "string" || record.value.id.length === 0) {
-        return decoderFailure();
+        malformed = true;
+        continue;
       }
-      if (identities.has(record.value.id)) return decoderFailure();
+      if (identities.has(record.value.id)) {
+        malformed = true;
+        continue;
+      }
       identities.add(record.value.id);
       const name = optionalModelString(record.value, "name");
       const description = optionalModelString(record.value, "description");
       const extensions = modelExtensions(record.value.extensions, context);
-      if (!name.ok || !description.ok || !extensions.ok) return decoderFailure();
+      if (!name.ok || !description.ok || !extensions.ok) {
+        malformed = true;
+        continue;
+      }
       items[index] = Object.freeze({
         id: record.value.id,
         ...(name.value === undefined ? {} : { name: name.value }),
         ...(description.value === undefined ? {} : { description: description.value }),
         extensions: extensions.value,
       });
+    }
+    const active = new WeakSet<object>();
+    let extraEntriesRemaining = context.structuralRemaining.value;
+    for (const key of keys) {
+      if (key === "length" || (typeof key === "string" && visited.has(key))) continue;
+      malformed = true;
+      if (extraEntriesRemaining < 1 || context.structuralRemaining.value < 1) break;
+      extraEntriesRemaining -= 1;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        continue;
+      }
+      preflightModelGraphData(descriptor.value, 1, context.structuralRemaining, active, context);
+    }
+    if (malformed) return decoderFailure();
+    if (embeddedBoundExceeded) {
+      return decoderBoundFailure(context.options.bounds.maxEmbeddedItems);
     }
     items.sort((left, right) => compareText(left.id as string, right.id as string));
     return success(Object.freeze(items));
@@ -677,6 +826,10 @@ function modelComponent(
 ): Result<Readonly<Record<string, unknown>>> {
   const record = modelRecord(value, componentFields, componentRequiredFields, context);
   if (!record.ok) return record;
+  const inputs = modelItems(record.value.inputs, context);
+  const outputs = modelItems(record.value.outputs, context);
+  const actions = modelItems(record.value.actions, context);
+  const extensions = modelExtensions(record.value.extensions, context);
   if (typeof record.value.id !== "string") return decoderFailure();
   const id = parseEntityId(record.value.id);
   if (!id.ok || id.value !== entity.id) return decoderFailure();
@@ -698,14 +851,14 @@ function modelComponent(
     if (!parsed.ok) return decoderFailure();
     parent = parsed.value;
   }
-  const inputs = modelItems(record.value.inputs, context);
-  if (!inputs.ok) return inputs;
-  const outputs = modelItems(record.value.outputs, context);
-  if (!outputs.ok) return outputs;
-  const actions = modelItems(record.value.actions, context);
-  if (!actions.ok) return actions;
-  const extensions = modelExtensions(record.value.extensions, context);
-  if (!extensions.ok) return extensions;
+  if (!inputs.ok || !outputs.ok || !actions.ok || !extensions.ok) {
+    for (const result of [inputs, outputs, actions, extensions]) {
+      if (!result.ok && result.diagnostics[0]?.code === "application-bound-exceeded") {
+        return result;
+      }
+    }
+    return decoderFailure();
+  }
   const component = Object.freeze({
     id: id.value,
     kind: STANDARD_COMPONENT_KIND,
@@ -736,7 +889,10 @@ function modelRelationship(
   context: ModelSuccessContext,
 ): Result<Readonly<Record<string, unknown>>> {
   const record = modelRecord(value, relationshipFields, relationshipRequiredFields, context);
-  if (!record.ok || typeof record.value.id !== "string") return decoderFailure();
+  if (!record.ok) return decoderFailure();
+  const description = optionalModelString(record.value, "description");
+  const extensions = modelExtensions(record.value.extensions, context);
+  if (typeof record.value.id !== "string") return decoderFailure();
   const id = parseRelationId(record.value.id);
   if (!id.ok) return decoderFailure();
   const relation = expected.get(id.value);
@@ -760,8 +916,6 @@ function modelRelationship(
   ) {
     return decoderFailure();
   }
-  const description = optionalModelString(record.value, "description");
-  const extensions = modelExtensions(record.value.extensions, context);
   if (!description.ok || !extensions.ok) return decoderFailure();
   const relationship = Object.freeze({
     id: id.value,
@@ -797,23 +951,47 @@ function modelRelationships(
     );
     if (!length.ok || length.value !== relations.length) return decoderFailure();
     const keys = Reflect.ownKeys(value);
-    if (keys.length !== length.value + 1) return decoderFailure();
     const expected = new Map<string, GraphRelation>();
     for (const relation of relations) expected.set(relation.id, relation);
     const seen = new Set<string>();
     const copied: Readonly<Record<string, unknown>>[] = [];
+    let malformed = keys.length !== length.value + 1;
+    const visited = new Set<string>();
     for (let index = 0; index < length.value; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      const key = String(index);
+      visited.add(key);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return decoderFailure();
+        malformed = true;
+        continue;
       }
       const relationship = modelRelationship(descriptor.value, expected, context);
-      if (!relationship.ok) return relationship;
+      if (!relationship.ok) {
+        malformed = true;
+        continue;
+      }
       const id = relationship.value.id as string;
-      if (seen.has(id)) return decoderFailure();
+      if (seen.has(id)) {
+        malformed = true;
+        continue;
+      }
       seen.add(id);
       copied[index] = relationship.value;
     }
+    const active = new WeakSet<object>();
+    let extraEntriesRemaining = context.structuralRemaining.value;
+    for (const key of keys) {
+      if (key === "length" || (typeof key === "string" && visited.has(key))) continue;
+      malformed = true;
+      if (extraEntriesRemaining < 1 || context.structuralRemaining.value < 1) break;
+      extraEntriesRemaining -= 1;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        continue;
+      }
+      preflightModelGraphData(descriptor.value, 1, context.structuralRemaining, active, context);
+    }
+    if (malformed) return decoderFailure();
     copied.sort((left, right) => compareText(left.id as string, right.id as string));
     return success(Object.freeze(copied));
   } catch {
@@ -959,7 +1137,9 @@ function canonicalizeEntity(
   });
   let rawParsed: unknown;
   try {
-    rawParsed = options.model.parse(entity);
+    rawParsed = intrinsicReflectApply(options.modelCalls.parse, options.modelCalls.receiver, [
+      entity,
+    ]);
   } catch {
     return decoderFailure();
   }
@@ -994,7 +1174,11 @@ function normalizeComponent(
   }
   let rawNormalized: unknown;
   try {
-    rawNormalized = options.model.normalize(copiedInput.value as StandardComponentInput);
+    rawNormalized = intrinsicReflectApply(
+      options.modelCalls.normalize,
+      options.modelCalls.receiver,
+      [copiedInput.value as StandardComponentInput],
+    );
   } catch {
     return decoderFailure();
   }
@@ -1033,7 +1217,10 @@ function patchComponent(
   });
   let rawPatched: unknown;
   try {
-    rawPatched = options.model.patch(entity, patch.value as StandardComponentPatch);
+    rawPatched = intrinsicReflectApply(options.modelCalls.patch, options.modelCalls.receiver, [
+      entity,
+      patch.value as StandardComponentPatch,
+    ]);
   } catch {
     return decoderFailure();
   }
@@ -1108,7 +1295,11 @@ function modelRelationshipValues(
   if (!copied.ok) return copied;
   let rawRelationships: unknown;
   try {
-    rawRelationships = context.options.model.relationships(copied.value);
+    rawRelationships = intrinsicReflectApply(
+      context.options.modelCalls.relationships,
+      context.options.modelCalls.receiver,
+      [copied.value],
+    );
   } catch {
     return decoderFailure();
   }
@@ -1360,7 +1551,15 @@ function decode(
       id: draft.id!,
     });
     if (!resolved.ok) return resolved;
-    const parsed = modelSuccess(options.model.parse(resolved.value), componentContext);
+    let rawParsed: unknown;
+    try {
+      rawParsed = intrinsicReflectApply(options.modelCalls.parse, options.modelCalls.receiver, [
+        resolved.value,
+      ]);
+    } catch {
+      return decoderFailure();
+    }
+    const parsed = modelSuccess(rawParsed, componentContext);
     if (!parsed.ok) return parsed;
     const component = modelComponent(parsed.value, resolved.value, componentContext);
     if (!component.ok) return component;
@@ -1396,6 +1595,7 @@ export function createApplicationSnapshotStateDecoder(
   const zero = parseGraphGeneration(0);
   if (!zero.ok) throw new Error("zero graph generation must be valid");
   const bounds: ApplicationSnapshotStateDecoderBounds = Object.freeze({ ...options.bounds });
+  const model = options.model;
   const copied: ApplicationSnapshotStateDecoderContext = Object.freeze({
     bounds,
     graph: options.graph,
@@ -1408,7 +1608,8 @@ export function createApplicationSnapshotStateDecoder(
       maxRelationships: bounds.maxRelationships,
     }),
     isProxy,
-    model: options.model,
+    model,
+    modelCalls: captureStandardModelCalls(model),
     zero: zero.value,
   });
   const decoder = Object.freeze({
@@ -1455,6 +1656,6 @@ export function createApplicationSnapshotStateDecoder(
     bounds,
     graph: options.graph,
     isProxy,
-    model: options.model,
+    model,
   });
 }

@@ -12,6 +12,7 @@ import {
   allowsCustomLocalCoordinationRoot,
   createLocalResourceProvider,
   type LocalResourceProvider,
+  type StagedReplacementHandle,
 } from "../../persistence/index.ts";
 import {
   createLocalWorkspaceCapability as createWorkspaceCapability,
@@ -1120,6 +1121,73 @@ describe("local workspace capability", () => {
     });
   });
 
+  test("contains rejected recovery state before rejecting earlier snapshot fields", async () => {
+    const secret = "/private/early-recovery-state";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const roots = await temporaryWorkspace();
+      await Bun.write(
+        path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+        defaultWorkspaceDocument,
+      );
+      const resources = await createLocalResourceProvider(roots);
+      const workspace = await createLocalWorkspaceCapability({
+        operations,
+        transactionProvider: provider(() => ({
+          extra: true,
+          generation: -1,
+          revisions: [Promise.reject(new Error(`${secret}:revision`)) as never],
+          state: Promise.reject(new Error(secret)),
+        })),
+        resources,
+      });
+
+      const outcome = await workspace.recover();
+      expect(outcome).toMatchObject({
+        diagnostics: [{ code: "invalid-workspace-recovery" }],
+        ok: false,
+      });
+      expect(workspace.status()).toEqual({ state: "configured" });
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("does not assimilate recovery snapshot then accessors", async () => {
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const resources = await createLocalResourceProvider(roots);
+    let getterCalls = 0;
+    const snapshot = emptySnapshot() as Record<string, unknown>;
+    Object.defineProperty(snapshot, "then", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error("/private/recovery-then-accessor");
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => snapshot as never),
+      resources,
+    });
+
+    expect(await workspace.recover()).toMatchObject({
+      diagnostics: [{ code: "invalid-workspace-recovery" }],
+      ok: false,
+    });
+    expect(getterCalls).toBe(0);
+  });
+
   test("rejects hostile recovery state and validates configured bounds", async () => {
     const roots = await temporaryWorkspace();
     await Bun.write(
@@ -1718,6 +1786,139 @@ describe("local workspace capability", () => {
       diagnostics: [{ code: "resource-missing" }],
       ok: false,
     });
+  });
+
+  test("rejects malformed staged replacement results and opaque handles", async () => {
+    const secret = "/private/staged-replacement-handle";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    let proxyTraps = 0;
+    const proxiedHandle = new Proxy(Object.freeze(Object.create(null)), {
+      getPrototypeOf: (target) => {
+        proxyTraps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys: (target) => {
+        proxyTraps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const variants: ReadonlyArray<{
+      readonly create: () => unknown;
+      readonly name: string;
+    }> = [
+      { create: () => ({ ok: true }), name: "missing handle" },
+      { create: () => ({ ok: "true", value: undefined }), name: "non-boolean status" },
+      { create: () => ({ ok: true, value: undefined }), name: "undefined handle" },
+      { create: () => ({ ok: true, value: "not-an-object" }), name: "scalar handle" },
+      { create: () => ({ ok: true, value: proxiedHandle }), name: "proxied handle" },
+      {
+        create: () => ({ ok: true, value: Promise.reject(new Error(secret)) }),
+        name: "rejected Promise handle",
+      },
+      {
+        create: () => ({
+          extra: true,
+          ok: true,
+          value: Promise.reject(new Error(`${secret}:malformed-envelope`)),
+        }),
+        name: "rejected Promise handle in malformed result",
+      },
+      {
+        create: () => ({
+          diagnostics: [Promise.reject(new Error(`${secret}:malformed-diagnostics`))],
+          extra: true,
+          ok: false,
+        }),
+        name: "rejected Promise diagnostics in malformed result",
+      },
+    ];
+
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const variant of variants) {
+        const roots = await temporaryWorkspace();
+        const base = await createLocalResourceProvider(roots);
+        let commits = 0;
+        let discards = 0;
+        let releases = 0;
+        let snapshots = 0;
+        const resources = resourceProvider(base, {
+          commitReplacement: async (...args) => {
+            commits += 1;
+            return base.commitReplacement(...args);
+          },
+          discardReplacement: async (...args) => {
+            discards += 1;
+            return base.discardReplacement(...args);
+          },
+          releaseCoordination: async (...args) => {
+            releases += 1;
+            return base.releaseCoordination(...args);
+          },
+          stageReplacement: async () => variant.create() as never,
+        });
+        const workspace = await createLocalWorkspaceCapability({
+          operations,
+          transactionProvider: provider(() => {
+            snapshots += 1;
+            return emptySnapshot();
+          }),
+          resources,
+        });
+
+        expect(await workspace.initialize(), variant.name).toMatchObject({
+          status: "provider-failure",
+        });
+        expect({ commits, discards, releases, snapshots }, variant.name).toEqual({
+          commits: 0,
+          discards: 0,
+          releases: 1,
+          snapshots: 0,
+        });
+        expect(
+          await base.read({ locator: workspaceConfigurationLocator, maxBytes: 4_096 }),
+          variant.name,
+        ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(proxyTraps).toBe(0);
+  });
+
+  test("preserves a replaceable provider's opaque staged handle identity", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    const customHandle = { providerToken: "custom-provider-handle" };
+    let underlyingHandle: StagedReplacementHandle | undefined;
+    let committedHandle: StagedReplacementHandle | undefined;
+    const resources = resourceProvider(base, {
+      stageReplacement: async (locator, bytes) => {
+        const staged = await base.stageReplacement(locator, bytes);
+        if (!staged.ok) return staged;
+        underlyingHandle = staged.value;
+        return { ok: true, value: customHandle as unknown as StagedReplacementHandle };
+      },
+      commitReplacement: async (handle) => {
+        committedHandle = handle;
+        if (underlyingHandle === undefined) {
+          throw new Error("The provider must stage before committing");
+        }
+        return base.commitReplacement(underlyingHandle);
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(committedHandle as unknown).toBe(customHandle);
   });
 
   test("retains and retries an initialization lease after release failure", async () => {

@@ -11,6 +11,8 @@ import {
   applicationSnapshotStateDecoderMetadata,
   type ApplicationSnapshotStateDecoderMetadata,
 } from "../application/index.ts";
+import { containCapabilityValue } from "../application/capability-value.ts";
+import { containNativePromise, observeNativePromise } from "../application/promise-observation.ts";
 import {
   failure,
   parseGraphGeneration,
@@ -436,6 +438,41 @@ function recognizedProxy(value: unknown, decoderProxyPolicy: (value: unknown) =>
   }
 }
 
+const rejectedLocalCapabilitySettlement = Object.freeze({ status: "rejected" as const });
+
+async function settleLocalCapabilityValue(
+  value: unknown,
+  decoderProxyPolicy: (value: unknown) => boolean,
+): Promise<
+  | typeof rejectedLocalCapabilitySettlement
+  | { readonly status: "fulfilled"; readonly value: unknown }
+> {
+  if (typeof value === "object" && value !== null && recognizedProxy(value, decoderProxyPolicy)) {
+    return Object.freeze({ status: "fulfilled" as const, value });
+  }
+  let fulfilledValue: unknown;
+  const observed = observeNativePromise(
+    value,
+    (settled) => {
+      fulfilledValue = settled;
+      return true;
+    },
+    () => false,
+  );
+  if (observed.status !== "observed") {
+    return observed.status === "not-native"
+      ? Object.freeze({ status: "fulfilled" as const, value })
+      : rejectedLocalCapabilitySettlement;
+  }
+  try {
+    return (await observed.promise)
+      ? Object.freeze({ status: "fulfilled" as const, value: fulfilledValue })
+      : rejectedLocalCapabilitySettlement;
+  } catch {
+    return rejectedLocalCapabilitySettlement;
+  }
+}
+
 function exactDetails(
   value: Diagnostic["details"],
   expected: Readonly<Record<string, string | number | boolean>>,
@@ -559,6 +596,41 @@ type ValidatedCoordinationAcquisition =
   | { readonly lease: LocalCoordinationLease; readonly state: "acquired" }
   | { readonly state: "failed" };
 
+function isCanonicalCoordinationLease(
+  value: unknown,
+  decoderProxyPolicy: (value: unknown) => boolean,
+): value is object {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    recognizedProxy(value, decoderProxyPolicy) ||
+    containNativePromise(value) !== "not-native"
+  ) {
+    return false;
+  }
+  try {
+    return (
+      intrinsicObjectIsFrozen(value) &&
+      intrinsicObjectGetPrototypeOf(value) === null &&
+      intrinsicReflectOwnKeys(value).length === 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isOpaqueProviderHandle(
+  value: unknown,
+  decoderProxyPolicy: (value: unknown) => boolean,
+): value is object {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !recognizedProxy(value, decoderProxyPolicy) &&
+    containNativePromise(value) === "not-native"
+  );
+}
+
 function validatedCoordinationAcquisition(
   value: unknown,
   bounds: LocalWorkspaceBounds,
@@ -586,21 +658,85 @@ function validatedCoordinationAcquisition(
   }
   if (result.value.ok !== true) return failure(providerFailure());
   const lease = result.value.value;
-  if (typeof lease !== "object" || lease === null || recognizedProxy(lease, decoderProxyPolicy)) {
-    return failure(providerFailure());
-  }
-  try {
-    if (
-      !intrinsicObjectIsFrozen(lease) ||
-      intrinsicObjectGetPrototypeOf(lease) !== null ||
-      intrinsicReflectOwnKeys(lease).length !== 0
-    ) {
-      return failure(providerFailure());
-    }
-  } catch {
+  if (!isCanonicalCoordinationLease(lease, decoderProxyPolicy)) {
     return failure(providerFailure());
   }
   return success(Object.freeze({ lease: lease as LocalCoordinationLease, state: "acquired" }));
+}
+
+type ValidatedStagedReplacement =
+  | { readonly handle: StagedReplacementHandle; readonly state: "staged" }
+  | { readonly state: "failed" };
+
+function observeStagedResultValue(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: (value: unknown) => boolean,
+): void {
+  if (typeof value !== "object" || value === null || recognizedProxy(value, decoderProxyPolicy)) {
+    return;
+  }
+  try {
+    const handle = intrinsicObjectGetOwnPropertyDescriptor(value, "value");
+    if (handle !== undefined && "value" in handle) {
+      const candidate = handle.value;
+      if (
+        typeof candidate === "object" &&
+        candidate !== null &&
+        !recognizedProxy(candidate, decoderProxyPolicy)
+      ) {
+        containNativePromise(candidate);
+      }
+    }
+    const diagnostics = intrinsicObjectGetOwnPropertyDescriptor(value, "diagnostics");
+    if (diagnostics !== undefined && "value" in diagnostics) {
+      copyHostDiagnostics(
+        diagnostics.value,
+        bounds.maxProviderDiagnostics,
+        "invalid-workspace-provider-result",
+      );
+    }
+  } catch {
+    // Exact result inspection below owns the public failure.
+  }
+}
+
+function validatedStagedReplacement(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: (value: unknown) => boolean,
+): Result<ValidatedStagedReplacement> {
+  observeStagedResultValue(value, bounds, decoderProxyPolicy);
+  const result = inspectHostRecord(
+    value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-workspace-provider-result",
+    "Workspace configuration stage result",
+  );
+  if (!result.ok) return result;
+  if (result.value.ok === false) {
+    const diagnostics = copyHostDiagnostics(
+      result.value.diagnostics,
+      bounds.maxProviderDiagnostics,
+      "invalid-workspace-provider-result",
+    );
+    return diagnostics.ok && diagnostics.value.length > 0
+      ? success(Object.freeze({ state: "failed" }))
+      : failure(providerFailure());
+  }
+  if (result.value.ok !== true) return failure(providerFailure());
+  const handle = result.value.value;
+  return isOpaqueProviderHandle(handle, decoderProxyPolicy)
+    ? success(
+        Object.freeze({
+          handle: handle as StagedReplacementHandle,
+          state: "staged",
+        }),
+      )
+    : failure(providerFailure());
 }
 
 type ValidatedCommitState = "committed" | "committed-indeterminate" | "not-committed";
@@ -682,11 +818,44 @@ interface CanonicalWorkspaceSnapshot {
   readonly state: DecodedApplicationSnapshotState;
 }
 
+const workspaceStateContainmentFailure = Object.freeze({ ok: false as const });
+
+function containWorkspaceSnapshotState(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: (value: unknown) => boolean,
+) {
+  if (typeof value !== "object" || value === null || recognizedProxy(value, decoderProxyPolicy)) {
+    return workspaceStateContainmentFailure;
+  }
+  try {
+    const containment = {
+      isProxy: (candidate: unknown) => recognizedProxy(candidate, decoderProxyPolicy),
+      maximumContainerEntries: bounds.maxSnapshotStateValues,
+      maximumDepth: bounds.maxSnapshotStateDepth,
+      maximumValues: bounds.maxSnapshotStateValues,
+    };
+    const revisions = intrinsicObjectGetOwnPropertyDescriptor(value, "revisions");
+    if (revisions !== undefined && "value" in revisions && revisions.enumerable) {
+      containCapabilityValue(revisions.value, containment);
+    }
+    const descriptor = intrinsicObjectGetOwnPropertyDescriptor(value, "state");
+    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+      return workspaceStateContainmentFailure;
+    }
+    return containCapabilityValue(descriptor.value, containment);
+  } catch {
+    return workspaceStateContainmentFailure;
+  }
+}
+
 function canonicalSnapshot(
   value: unknown,
   bounds: LocalWorkspaceBounds,
+  decoderProxyPolicy: (value: unknown) => boolean,
   stateDecoder: Pick<ApplicationSnapshotStateDecoder, "decode">,
 ): Result<CanonicalWorkspaceSnapshot> {
+  const containedState = containWorkspaceSnapshotState(value, bounds, decoderProxyPolicy);
   const snapshot = inspectHostRecord(
     value,
     [["generation", "revisions", "state"]],
@@ -694,6 +863,11 @@ function canonicalSnapshot(
     "Workspace recovery snapshot",
   );
   if (!snapshot.ok) return snapshot;
+  if (!containedState.ok) {
+    return failure(
+      diagnostic("invalid-workspace-recovery", "Workspace recovery state is malformed"),
+    );
+  }
   const generation = parseGraphGeneration(snapshot.value.generation);
   if (!generation.ok) {
     return failure(
@@ -711,7 +885,7 @@ function canonicalSnapshot(
       diagnostic("invalid-workspace-recovery", "Workspace recovery returned unexpected revisions"),
     );
   }
-  const state = stateDecoder.decode(snapshot.value.state);
+  const state = stateDecoder.decode(containedState.value);
   if (!state.ok) return state;
   return success(
     Object.freeze({
@@ -833,9 +1007,17 @@ export async function createLocalWorkspaceCapability(
       return recoverySuccess(recoveredGeneration);
     }
     try {
+      const invoked = captured.transactionProvider.snapshot(Object.freeze([]));
+      const settled = await settleLocalCapabilityValue(invoked, decoderProxyPolicy);
+      if (settled.status !== "fulfilled") {
+        return recoveryFailure(
+          diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
+        );
+      }
       const snapshot = canonicalSnapshot(
-        await captured.transactionProvider.snapshot(Object.freeze([])),
+        settled.value,
         bounds,
+        decoderProxyPolicy,
         captured.stateDecoder,
       );
       if (!snapshot.ok) {
@@ -901,17 +1083,21 @@ export async function createLocalWorkspaceCapability(
 
       if (current.state === "missing") {
         try {
-          const staged = await captured.resources.stageReplacement(
-            workspaceConfigurationLocator,
-            canonicalBytes.slice(),
+          const staged = validatedStagedReplacement(
+            await captured.resources.stageReplacement(
+              workspaceConfigurationLocator,
+              canonicalBytes.slice(),
+            ),
+            bounds,
+            decoderProxyPolicy,
           );
-          if (!staged.ok) {
+          if (!staged.ok || staged.value.state !== "staged") {
             const released = await releaseRetainedInitializationLease();
             return initializationProviderFailure(
               released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
             );
           }
-          pendingPublication = { action: "commit", handle: staged.value };
+          pendingPublication = { action: "commit", handle: staged.value.handle };
         } catch {
           const released = await releaseRetainedInitializationLease();
           return initializationProviderFailure(

@@ -43,19 +43,20 @@ operation instance's composition.
 
 The same factory-owned decoder boundary owns every Standard Model call used by
 mutations: normalization, patching, parsing, and relationship viewing. It copies model
-inputs before invocation, contains thrown, malformed, and native-Promise results, applies
-decoder-owned proxy detection before reflection, and copies complete model outputs under
-the snapshot depth and value bounds. Normalization binds both the expected presence and
-value of a caller-supplied identity before graph, provider, resource-mapping, or execution
-work; patching binds the target identity and canonicalizes the full merged entity through
-the same parse boundary. Only frozen application-owned drafts, entities, canonical
-components, and canonical relationships escape. Relationship inputs are copied and
-deeply frozen before model viewing, and transaction upserts are rebuilt only from the
-decoder-returned canonical relationship, so model mutation cannot alter the executed
-payload. Every decoder method also limits failure diagnostics to the configured
-application count; oversized or malformed model diagnostics collapse to one stable
-generic failure. Create and sparse-update operations do not call Standard Model
-capabilities directly.
+inputs before invocation, captures each method with its original receiver during decoder
+construction, contains thrown, malformed, and native-Promise results, applies decoder-owned
+proxy detection before reflection, and copies complete model outputs under the snapshot
+depth and value bounds. Later mutation of the Standard Model object cannot redirect an
+existing decoder. Normalization binds both the expected presence and value of a
+caller-supplied identity before graph, provider, resource-mapping, or execution work;
+patching binds the target identity and canonicalizes the full merged entity through the
+same parse boundary. Only frozen application-owned drafts, entities, canonical components,
+and canonical relationships escape. Relationship inputs are copied and deeply frozen
+before model viewing, and transaction upserts are rebuilt only from the decoder-returned
+canonical relationship, so model mutation cannot alter the executed payload. Every
+decoder method also limits failure diagnostics to the configured application count;
+oversized or malformed model diagnostics collapse to one stable generic failure. Create
+and sparse-update operations do not call Standard Model capabilities directly.
 
 Standard Model capability successes are also untrusted boundary values. The snapshot
 decoder exact-inspects component, item, extension, and relationship records; binds their
@@ -77,7 +78,9 @@ own constructor descriptor using a private frozen species carrier, so hostile ow
 inherited `then`, `constructor`, and subclass species accessors cannot leak late
 rejections. A fixed own constructor pointing at the captured Promise is observed only
 while its species descriptor still exactly matches the module-initial intrinsic;
-other non-shadowable constructors fail closed.
+other non-shadowable constructors fail closed. Native Promises nested in inspected model
+records, items, and extension graphs are observed during those existing bounded validation
+passes, without adding a separate per-model structural traversal.
 
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
@@ -106,11 +109,14 @@ values cross one application-owned containment boundary before semantic inspecti
 uses the validated snapshot decoder's exact proxy policy before every nested reflection,
 accepts only intrinsic dense arrays and plain records made entirely of enumerable data
 properties, applies the configured structural and collection bounds, and produces deeply
-frozen owned copies. Capability methods and their receivers are captured during
-construction, so later mutation cannot redirect an operation instance. Query failures
-retain only bounded codes, allowlisted details, and application-owned messages; successful
-pages and exact reads are accepted only when generation and semantic items match the
-application-owned inputs, then reconstructed with validated cursor metadata.
+frozen owned copies. Genuine native Promise returns are observed through captured
+intrinsics before containment; plain thenables and result-shaped values with `then`
+accessors are inspected synchronously and rejected without reading or awaiting `then`.
+Capability methods and their receivers are captured during construction, so later mutation
+cannot redirect an operation instance. Query failures retain only bounded codes,
+allowlisted details, and application-owned messages; successful pages and exact reads are
+accepted only when generation and semantic items match the application-owned inputs, then
+reconstructed with validated cursor metadata.
 
 The query capability is Core's concrete `BoundedQueryContracts`: application construction
 rejects recognized proxies and receivers without its genuine private brand. Core captures

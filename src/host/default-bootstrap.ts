@@ -38,6 +38,8 @@ import type {
 } from "./contracts.ts";
 import { createLocalWorkspaceCapability } from "./local-workspace.ts";
 
+const intrinsicReflectApply = Reflect.apply;
+
 export const defaultHostBounds = Object.freeze({
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
@@ -61,14 +63,25 @@ function diagnostic(code: string, message: string): Diagnostic {
 export function createDefaultBootstrapRegistry(
   options: DefaultBootstrapRegistryOptions,
 ): HostBootstrapRegistry {
+  const coordinationRoot = options.coordinationRoot;
+  const entropyOption = options.entropy;
+  const surfaceReceiver = options.surface;
+  const surfaceStart =
+    typeof surfaceReceiver === "object" && surfaceReceiver !== null
+      ? surfaceReceiver.start
+      : undefined;
   if (
-    typeof options.surface !== "object" ||
-    options.surface === null ||
-    typeof options.surface.start !== "function"
+    typeof surfaceReceiver !== "object" ||
+    surfaceReceiver === null ||
+    typeof surfaceStart !== "function"
   ) {
     throw new TypeError("surface must implement the host surface contract");
   }
-  const entropy = options.entropy ?? ((length: number) => randomBytes(length));
+  const surface = Object.freeze({
+    start: (context: Parameters<typeof surfaceStart>[0]) =>
+      intrinsicReflectApply(surfaceStart, surfaceReceiver, [context]),
+  });
+  const entropy = entropyOption ?? ((length: number) => randomBytes(length));
 
   const compose = async (context: HostProcessContext) => {
     if (typeof context.workspaceRoot !== "string" || !path.isAbsolute(context.workspaceRoot)) {
@@ -78,9 +91,7 @@ export function createDefaultBootstrapRegistry(
     }
     try {
       const resources = await createLocalResourceProvider({
-        ...(options.coordinationRoot === undefined
-          ? {}
-          : { coordinationRoot: options.coordinationRoot }),
+        ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
         workspaceRoot: context.workspaceRoot,
       });
       const model = createStandardModelCapability();
@@ -196,7 +207,7 @@ export function createDefaultBootstrapRegistry(
           resourceMapper,
           resources,
           store,
-          surface: options.surface,
+          surface,
           snapshotStateDecoder,
           transactionEngine,
           transactionProvider,

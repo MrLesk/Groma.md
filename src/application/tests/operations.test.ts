@@ -644,6 +644,27 @@ describe("application workspace initialization", () => {
       expect(traps.count, location).toBe(0);
     }
   });
+
+  test("does not assimilate initialization then accessors before containment", async () => {
+    const secret = "/private/initialization-then-secret";
+    let getterCalls = 0;
+    const outcome = { generation: generation(0), status: "initialized" as const };
+    Object.defineProperty(outcome, "then", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const result = await operations(new SnapshotFixture(), undefined, {
+      initialization: { initialize: () => outcome as never },
+    }).initialize({});
+
+    expect(result.ok).toBeFalse();
+    expect(result.ok ? "" : result.diagnostics[0]?.code).toBe("workspace-initialization-failed");
+    expect(getterCalls).toBe(0);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
 });
 
 describe("application component reads", () => {
@@ -1243,6 +1264,74 @@ describe("application component reads", () => {
     expect(forgedCalls).toBe(0);
   });
 
+  test("captures Standard Model methods in the snapshot decoder", () => {
+    const calls = { normalize: 0, parse: 0, patch: 0, relationships: 0 };
+    let forgedCalls = 0;
+    let receiverMismatches = 0;
+    const mutableModel: StandardModelCapability = {
+      ...model,
+      normalize(input: StandardComponentInput) {
+        calls.normalize += 1;
+        if (this !== mutableModel) receiverMismatches += 1;
+        return model.normalize(input);
+      },
+      parse(entity: GraphEntity) {
+        calls.parse += 1;
+        if (this !== mutableModel) receiverMismatches += 1;
+        return model.parse(entity);
+      },
+      patch(entity: GraphEntity, patch: StandardComponentPatch) {
+        calls.patch += 1;
+        if (this !== mutableModel) receiverMismatches += 1;
+        return model.patch(entity, patch);
+      },
+      relationships(relations: readonly GraphRelation[]) {
+        calls.relationships += 1;
+        if (this !== mutableModel) receiverMismatches += 1;
+        return model.relationships(relations);
+      },
+    };
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const decoder = createApplicationSnapshotStateDecoder({
+      bounds: applicationBounds,
+      graph,
+      isProxy: doesNotRecognizeProxy,
+      model: mutableModel,
+    });
+    const entity = component({ id: ids.domain }) as GraphEntity;
+    const relation: GraphRelation = Object.freeze({
+      id: relationIds.first as GraphRelation["id"],
+      payload: {},
+      source: ids.domain as GraphRelation["source"],
+      target: ids.service as GraphRelation["target"],
+      type: "depends-on",
+    });
+    const forged = () => {
+      forgedCalls += 1;
+      throw new Error("/private/redirected-model-method");
+    };
+    mutableModel.normalize = forged as never;
+    mutableModel.parse = forged as never;
+    mutableModel.patch = forged as never;
+    mutableModel.relationships = forged as never;
+
+    expect(
+      decoder.normalizeComponent({ id: ids.domain }, { present: true, value: ids.domain }).ok,
+    ).toBeTrue();
+    expect(decoder.canonicalizeEntity(entity, entity).ok).toBeTrue();
+    expect(decoder.patchComponent(entity, { name: "Renamed" }, ids.domain).ok).toBeTrue();
+    expect(decoder.canonicalizeRelationships([relation]).ok).toBeTrue();
+    expect(calls).toEqual({ normalize: 1, parse: 2, patch: 1, relationships: 1 });
+    expect(receiverMismatches).toBe(0);
+    expect(forgedCalls).toBe(0);
+  });
+
   test("contains hostile diagnostics from an identity-matched decoder model", async () => {
     const secret = "/private/details-secret";
 
@@ -1577,7 +1666,21 @@ describe("application component reads", () => {
 
     async function readWith(modelOverride: Partial<StandardModelCapability>) {
       const fixture = new SnapshotFixture();
-      fixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
+      fixture.currentState = state(
+        [
+          component({ id: ids.domain, type: "domain" }),
+          component({ id: ids.service, type: "service" }),
+        ],
+        [
+          {
+            id: relationIds.first,
+            payload: {},
+            source: ids.domain,
+            target: ids.service,
+            type: "depends-on",
+          },
+        ],
+      );
       const graph = new GraphKernel({
         idSource: {
           nextEntityId: () => ids.domain,
@@ -1625,6 +1728,57 @@ describe("application component reads", () => {
       const fixedConstructorSuccessResult = await readWith({
         parse: () => success(fixedIntrinsicConstructorPromise() as never),
       });
+      const nestedComponentPromiseResult = await readWith({
+        parse: (entity: GraphEntity) => {
+          const parsed = model.parse(entity);
+          return parsed.ok
+            ? success({
+                ...parsed.value,
+                extensions: {
+                  "example.dev/promise": {
+                    nested: Promise.reject(new Error(`${marker}:component-nested:${secret}`)),
+                  },
+                },
+              } as never)
+            : parsed;
+        },
+      });
+      const nestedRelationshipPromiseResult = await readWith({
+        relationships: (relations: readonly GraphRelation[]) => {
+          const viewed = model.relationships(relations);
+          return viewed.ok
+            ? success(
+                viewed.value.map((relationship) => ({
+                  ...relationship,
+                  description: Promise.reject(new Error(`${marker}:relationship-nested:${secret}`)),
+                })) as never,
+              )
+            : viewed;
+        },
+      });
+      const earlyMismatchPromiseResult = await readWith({
+        parse: (entity: GraphEntity) => {
+          const parsed = model.parse(entity);
+          if (!parsed.ok) return parsed;
+          const candidate = {
+            ...parsed.value,
+            extensions: {
+              "example.dev/promise": {
+                first: Promise.reject(new Error(`${marker}:first-sibling:${secret}`)),
+                second: Promise.reject(new Error(`${marker}:second-sibling:${secret}`)),
+              },
+            },
+            id: entity.id === ids.domain ? ids.service : ids.domain,
+          } as Record<PropertyKey, unknown>;
+          Object.defineProperty(candidate, Symbol("invalid-promise-field"), {
+            enumerable: true,
+            value: {
+              nested: Promise.reject(new Error(`${marker}:symbol-field:${secret}`)),
+            },
+          });
+          return success(candidate as never);
+        },
+      });
       const promiseShapedPrototype = Object.create(null) as Record<string, unknown>;
       Object.defineProperty(promiseShapedPrototype, "then", {
         get: () => {
@@ -1644,6 +1798,9 @@ describe("application component reads", () => {
         unshadowableConstructorResult,
         fixedConstructorParseResult,
         fixedConstructorSuccessResult,
+        nestedComponentPromiseResult,
+        nestedRelationshipPromiseResult,
+        earlyMismatchPromiseResult,
         shapedResult,
       ]) {
         expect(result.ok ? "" : result.diagnostics[0]?.code).toBe(
@@ -2208,6 +2365,28 @@ describe("application component reads", () => {
       "application-bound-exceeded",
     );
 
+    const wrongIdentityOverflowModel: StandardModelCapability = Object.freeze({
+      ...overflowModel,
+      parse: (entity: GraphEntity) => {
+        const parsed = overflowModel.parse(entity);
+        return parsed.ok ? success({ ...parsed.value, id: ids.service } as never) : parsed;
+      },
+    });
+    const wrongIdentityOverflow = await operations(overflowFixture, undefined, {
+      bounds: overflowBounds,
+      graph,
+      model: wrongIdentityOverflowModel,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: overflowBounds,
+        graph,
+        isProxy: doesNotRecognizeProxy,
+        model: wrongIdentityOverflowModel,
+      }),
+    }).listComponents({ limit: 1 });
+    expect(wrongIdentityOverflow.ok ? "" : wrongIdentityOverflow.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+
     const structuralFixture = new SnapshotFixture();
     structuralFixture.currentState = state([component({ id: ids.domain })]);
     const structuralBounds = Object.freeze({
@@ -2278,6 +2457,7 @@ describe("application component reads", () => {
       "snapshot-outer",
       "snapshot-revisions",
       "snapshot-state",
+      "snapshot-nested-payload",
       "mapper",
     ] as const) {
       const proxies = new Set<unknown>();
@@ -2290,7 +2470,23 @@ describe("application component reads", () => {
             ? recognizedProxy([], proxies, traps)
             : Object.freeze([]);
         const snapshotState =
-          location === "snapshot-state" ? recognizedProxy(state([]), proxies, traps) : state([]);
+          location === "snapshot-state"
+            ? recognizedProxy(state([]), proxies, traps)
+            : location === "snapshot-nested-payload"
+              ? state([
+                  Object.freeze({
+                    id: ids.domain,
+                    kind: STANDARD_COMPONENT_KIND,
+                    payload: Object.freeze({
+                      id: ids.domain,
+                      kind: STANDARD_COMPONENT_KIND,
+                      "example.dev/nested": {
+                        value: recognizedProxy({ safe: true }, proxies, traps),
+                      },
+                    }),
+                  }),
+                ])
+              : state([]);
         const snapshotValue = {
           generation: generation(1),
           revisions,
@@ -2317,6 +2513,77 @@ describe("application component reads", () => {
       expect(Object.isFrozen(result), location).toBeTrue();
       expect(JSON.stringify(result), location).not.toContain("recognized-proxy-trap");
       expect(traps.count, location).toBe(0);
+    }
+  });
+
+  test("does not assimilate snapshot then accessors before containment", async () => {
+    const secret = "/private/snapshot-then-secret";
+    let getterCalls = 0;
+    let mappings = 0;
+    const snapshotValue = {
+      generation: generation(1),
+      revisions: [],
+      state: state([]),
+    };
+    Object.defineProperty(snapshotValue, "then", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const result = await operations(new SnapshotFixture(), undefined, {
+      resourceMapper: {
+        resourceForComponent: (id) => {
+          mappings += 1;
+          return success(resource(id));
+        },
+      },
+      transactionProvider: { snapshot: () => snapshotValue as never },
+    }).listComponents({ limit: 1 });
+
+    expect(result.ok).toBeFalse();
+    expect(getterCalls).toBe(0);
+    expect(mappings).toBe(0);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  test("contains snapshot state promises before malformed envelope rejection", async () => {
+    const secret = "/private/malformed-snapshot-state";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const malformedArray = [Promise.reject(new Error(`${secret}:array-item`))];
+      Object.defineProperty(malformedArray, "extra", { enumerable: true, value: true });
+      const malformedState = {
+        first: Promise.reject(new Error(`${secret}:first`)),
+        list: malformedArray,
+        second: Promise.reject(new Error(`${secret}:second`)),
+      } as Record<PropertyKey, unknown>;
+      Object.defineProperty(malformedState, Symbol("promise"), {
+        enumerable: true,
+        value: Promise.reject(new Error(`${secret}:symbol`)),
+      });
+      const result = await operations(new SnapshotFixture(), undefined, {
+        transactionProvider: {
+          snapshot: () =>
+            ({
+              extra: true,
+              generation: generation(1),
+              revisions: [],
+              state: malformedState,
+            }) as never,
+        },
+      }).listComponents({ limit: 1 });
+
+      expect(result.ok).toBeFalse();
+      expect(JSON.stringify(result)).not.toContain(secret);
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
     }
   });
 
@@ -3504,6 +3771,26 @@ describe("application component mutations", () => {
     } as never);
     expect(invalid.status).toBe("validation-rejected");
     expect(malformedFixture.executions()).toBe(1);
+  });
+
+  test("does not assimilate transaction outcome then accessors before containment", async () => {
+    const secret = "/private/transaction-then-secret";
+    let getterCalls = 0;
+    const outcome = { status: "impossible" };
+    Object.defineProperty(outcome, "then", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const fixture = mutationOperations(new MutationProvider(), (() => outcome) as never);
+    const result = await fixture.api.createComponent({ component: { id: ids.domain } });
+
+    expect(result.status).toBe("indeterminate");
+    expect(fixture.executions()).toBe(1);
+    expect(getterCalls).toBe(0);
+    expect(JSON.stringify(result)).not.toContain(secret);
   });
 
   test("sanitizes conflict, provider, validation, and indeterminate capability diagnostics", async () => {

@@ -1466,6 +1466,60 @@ describe("host lifecycle", () => {
     expect(starts).toBe(0);
   });
 
+  test("contains Promise-valued workspace diagnostics before rejecting their status", async () => {
+    const secret = "/private/workspace-diagnostic-promise";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const location of ["diagnostic", "details", "details-siblings"] as const) {
+        const rejected = Promise.reject(new Error(secret));
+        const diagnostic =
+          location === "diagnostic"
+            ? rejected
+            : {
+                code: "private-workspace-diagnostic",
+                details:
+                  location === "details"
+                    ? { rejected }
+                    : {
+                        first: rejected,
+                        second: Promise.reject(new Error(`${secret}:second`)),
+                      },
+                message: secret,
+              };
+        const signal = signals();
+        const outcome = await runHost({
+          context: { workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+              workspace({ diagnostic, state: "conflict" } as never),
+            ),
+          ),
+          signalSource: signal.source,
+        });
+
+        expect(outcome, location).toEqual({
+          diagnostics: [
+            {
+              code: "invalid-host-workspace-status",
+              message: "Workspace status capability returned malformed state",
+            },
+          ],
+          status: "startup-failure",
+        });
+        expect(signal.unsubscribes(), location).toBe(1);
+        expect(JSON.stringify(outcome), location).not.toContain(secret);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("contains recovery, start, completion, and stop secrets in host-owned outcomes", async () => {
     const secret = "/Users/alex/private secret-token";
     const cases: Array<{
@@ -1728,5 +1782,112 @@ describe("host lifecycle", () => {
     });
     expect(proxiedOutcome).toMatchObject({ status: "surface-failure" });
     expect(getters).toBe(0);
+
+    const proxiedSession = new Proxy(
+      { completion: Promise.resolve(), stop: async () => {} },
+      {
+        getPrototypeOf: () => {
+          getters += 1;
+          return Object.prototype;
+        },
+      },
+    );
+    const proxiedSessionOutcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition({ start: () => proxiedSession }, workspace({ state: "missing" })),
+      ),
+      signalSource: signals().source,
+    });
+    expect(proxiedSessionOutcome).toMatchObject({ status: "surface-failure" });
+    expect(getters).toBe(0);
+  });
+
+  test("validates synchronous surface sessions without thenable assimilation", async () => {
+    const secret = "/private/session-then-accessor";
+    const signal = signals();
+    let stops = 0;
+    let thenCalls = 0;
+    const session = {
+      completion: Promise.resolve(),
+      stop: async () => {
+        stops += 1;
+      },
+    } as Record<string, unknown>;
+    Object.defineProperty(session, "then", {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        thenCalls += 1;
+        throw new Error(secret);
+      },
+    });
+
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition({ start: () => session as never }, workspace({ state: "missing" })),
+      ),
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-surface-start-failed", message: "Host surface start failed" }],
+      status: "surface-failure",
+    });
+    expect({ stops, thenCalls, unsubscribes: signal.unsubscribes() }).toEqual({
+      stops: 0,
+      thenCalls: 0,
+      unsubscribes: 1,
+    });
+    expect(JSON.stringify(outcome)).not.toContain(secret);
+  });
+
+  test("uses the captured apply intrinsic after asynchronous composition", async () => {
+    const composeEntered = deferred<void>();
+    const composed = deferred<Result<HostComposition>>();
+    const signal = signals();
+    const applyDescriptor = Object.getOwnPropertyDescriptor(Reflect, "apply");
+    let hostileApplyCalls = 0;
+    const running = runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () => {
+          composeEntered.resolve();
+          return composed.promise;
+        },
+      },
+      signalSource: signal.source,
+    });
+    await composeEntered.promise;
+
+    let outcome: Awaited<ReturnType<typeof runHost>> | undefined;
+    try {
+      Object.defineProperty(Reflect, "apply", {
+        configurable: true,
+        value: () => {
+          hostileApplyCalls += 1;
+          throw new Error("/private/mutable-reflect-apply");
+        },
+        writable: true,
+      });
+      composed.resolve(
+        success(
+          composition(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            workspace({ state: "missing" }),
+          ),
+        ),
+      );
+      outcome = await running;
+    } finally {
+      if (applyDescriptor !== undefined) {
+        Object.defineProperty(Reflect, "apply", applyDescriptor);
+      }
+    }
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(hostileApplyCalls).toBe(0);
+    expect(signal.unsubscribes()).toBe(1);
   });
 });
