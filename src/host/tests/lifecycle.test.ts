@@ -1,17 +1,26 @@
 import { describe, expect, test } from "bun:test";
 
-import { failure, success, type Result } from "../../core/index.ts";
+import { failure, parseGraphGeneration, success, type Result } from "../../core/index.ts";
 import {
+  createProcessSignalSource,
   runHost,
   type HostBootstrapRegistry,
   type HostComposition,
+  type HostProcessSignalEmitter,
   type HostSignal,
   type HostSignalSource,
   type HostSurface,
   type HostSurfaceSession,
   type WorkspaceAccessCapability,
+  type WorkspaceRecoveryReport,
   type WorkspaceStatus,
 } from "../index.ts";
+
+function generation(value: number) {
+  const parsed = parseGraphGeneration(value);
+  if (!parsed.ok) throw new Error("invalid test generation");
+  return parsed.value;
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -44,11 +53,11 @@ function signals() {
 
 function workspace(
   status: WorkspaceStatus,
-  recover: () => Promise<Result<{ generation: number; status: "completed" }>> = async () =>
-    success({ generation: 0, status: "completed" }),
+  recover: () => Promise<Result<WorkspaceRecoveryReport>> = async () =>
+    success({ generation: generation(0), status: "completed" }),
 ): WorkspaceAccessCapability {
   return {
-    initialize: async () => ({ generation: 0 as never, status: "already-initialized" }),
+    initialize: async () => ({ generation: generation(0), status: "already-initialized" }),
     recover,
     requireWorkspace: () => failure({ code: "unused", message: "unused" }),
     status: () => status,
@@ -82,6 +91,37 @@ function registry(value: HostComposition): HostBootstrapRegistry {
 }
 
 describe("host lifecycle", () => {
+  test("process signal source forwards both signals and unsubscribes idempotently", () => {
+    const listeners = new Map<HostSignal, Set<() => void>>();
+    const onCalls: HostSignal[] = [];
+    const offCalls: HostSignal[] = [];
+    const emitter: HostProcessSignalEmitter = {
+      off: (signal, listener) => {
+        offCalls.push(signal);
+        listeners.get(signal)?.delete(listener);
+      },
+      on: (signal, listener) => {
+        onCalls.push(signal);
+        const registered = listeners.get(signal) ?? new Set<() => void>();
+        registered.add(listener);
+        listeners.set(signal, registered);
+      },
+    };
+    const source = createProcessSignalSource(emitter);
+    const received: HostSignal[] = [];
+    const unsubscribe = source.subscribe((signal) => received.push(signal));
+    for (const listener of listeners.get("SIGINT") ?? []) listener();
+    for (const listener of listeners.get("SIGTERM") ?? []) listener();
+    unsubscribe();
+    unsubscribe();
+    for (const listener of listeners.get("SIGINT") ?? []) listener();
+
+    expect(Object.isFrozen(source)).toBeTrue();
+    expect(received).toEqual(["SIGINT", "SIGTERM"]);
+    expect(onCalls).toEqual(["SIGINT", "SIGTERM"]);
+    expect(offCalls).toEqual(["SIGINT", "SIGTERM"]);
+  });
+
   test("starts without a workspace and cleans a normally completed session exactly once", async () => {
     const completion = deferred<void>();
     const started = deferred<void>();
@@ -115,7 +155,7 @@ describe("host lifecycle", () => {
   });
 
   test("finishes recovery before semantic surface dispatch", async () => {
-    const recovery = deferred<Result<{ generation: number; status: "completed" }>>();
+    const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const recoveryEntered = deferred<void>();
     const started = deferred<void>();
     const completion = deferred<void>();
@@ -142,7 +182,7 @@ describe("host lifecycle", () => {
     });
     await recoveryEntered.promise;
     expect(trace).toEqual(["recovery:start"]);
-    recovery.resolve(success({ generation: 4, status: "completed" }));
+    recovery.resolve(success({ generation: generation(4), status: "completed" }));
     await started.promise;
     expect(trace).toEqual(["recovery:start", "recovery:complete", "surface:completed"]);
     completion.resolve();
@@ -418,7 +458,7 @@ describe("host lifecycle", () => {
   });
 
   test("cancellation during recovery prevents dispatch after recovery releases", async () => {
-    const recovery = deferred<Result<{ generation: number; status: "completed" }>>();
+    const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const entered = deferred<void>();
     const cancellation = new AbortController();
     const signal = signals();
@@ -444,7 +484,7 @@ describe("host lifecycle", () => {
     });
     await entered.promise;
     cancellation.abort();
-    recovery.resolve(success({ generation: 0, status: "completed" }));
+    recovery.resolve(success({ generation: generation(0), status: "completed" }));
 
     expect(await running).toEqual({ status: "cancelled" });
     expect(starts).toBe(0);
@@ -757,7 +797,7 @@ describe("host lifecycle", () => {
     let recoveries = 0;
     const access = workspace({ state: "ready" }, async () => {
       recoveries += 1;
-      return success({ generation: 3, status: "completed" });
+      return success({ generation: generation(3), status: "completed" });
     });
     expect(
       await runHost({

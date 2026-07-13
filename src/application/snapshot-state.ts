@@ -5,8 +5,10 @@ import {
   type EntityDraft,
   type GraphRelation,
   type GraphSnapshot,
+  type GraphGeneration,
   type ProposedTransaction,
   type Result,
+  type TransactionInvariant,
 } from "../core/index.ts";
 import { copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
@@ -38,6 +40,11 @@ export interface DecodedApplicationSnapshotState {
 
 export interface ApplicationSnapshotStateDecoder {
   decode(value: unknown): Result<DecodedApplicationSnapshotState>;
+}
+
+interface ApplicationSnapshotStateDecoderContext extends ApplicationSnapshotStateDecoderOptions {
+  readonly invariant: TransactionInvariant;
+  readonly zero: GraphGeneration;
 }
 
 function diagnostic(code: string, message: string) {
@@ -93,7 +100,7 @@ function denseArray(
 
 function decode(
   value: unknown,
-  options: ApplicationSnapshotStateDecoderOptions,
+  options: ApplicationSnapshotStateDecoderContext,
 ): Result<DecodedApplicationSnapshotState> {
   const isProxy = options.isProxy ?? (() => false);
   if (typeof value === "object" && value !== null && isProxy(value)) {
@@ -230,26 +237,16 @@ function decode(
     });
   }
 
-  const zero = parseGraphGeneration(0);
-  if (!zero.ok) throw new Error("zero graph generation must be valid");
-  const invariant = createStandardModelInvariant({
-    maxComponentMutations: Math.max(1, options.bounds.maxComponents),
-    maxComponents: options.bounds.maxComponents,
-    maxOwnerCharacters: 128,
-    maxPinnedComponentIds: 1,
-    maxRelationshipMutations: Math.max(1, options.bounds.maxRelationships),
-    maxRelationships: options.bounds.maxRelationships,
-  });
-  const invariantDiagnostics = invariant.validate(
+  const invariantDiagnostics = options.invariant.validate(
     Object.freeze({
       affected: Object.freeze({ entities: Object.freeze([]), relations: Object.freeze([]) }),
-      baseGeneration: zero.value,
+      baseGeneration: options.zero,
       context: Object.freeze({
         ownership: Object.freeze({ owner: "groma.application.snapshot", plane: "intent" }),
         pinnedComponentIds: Object.freeze([]),
       }),
       expectedRevisions: Object.freeze([]),
-      generation: zero.value,
+      generation: options.zero,
       mutation: Object.freeze({ components: Object.freeze([]), relationships: Object.freeze([]) }),
       priorState: copied.value,
     }) as ProposedTransaction,
@@ -291,11 +288,23 @@ function decode(
 export function createApplicationSnapshotStateDecoder(
   options: ApplicationSnapshotStateDecoderOptions,
 ): ApplicationSnapshotStateDecoder {
-  const copied = Object.freeze({
-    bounds: Object.freeze({ ...options.bounds }),
+  const zero = parseGraphGeneration(0);
+  if (!zero.ok) throw new Error("zero graph generation must be valid");
+  const bounds = Object.freeze({ ...options.bounds });
+  const copied: ApplicationSnapshotStateDecoderContext = Object.freeze({
+    bounds,
     graph: options.graph,
+    invariant: createStandardModelInvariant({
+      maxComponentMutations: Math.max(1, bounds.maxComponents),
+      maxComponents: bounds.maxComponents,
+      maxOwnerCharacters: 128,
+      maxPinnedComponentIds: 1,
+      maxRelationshipMutations: Math.max(1, bounds.maxRelationships),
+      maxRelationships: bounds.maxRelationships,
+    }),
     ...(options.isProxy === undefined ? {} : { isProxy: options.isProxy }),
     model: options.model,
+    zero: zero.value,
   });
   return Object.freeze({ decode: (value: unknown) => decode(value, copied) });
 }

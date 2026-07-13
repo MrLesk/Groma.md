@@ -54,10 +54,7 @@ import type {
   UpdateComponentRequest,
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
-import {
-  createApplicationSnapshotStateDecoder,
-  type DecodedApplicationSnapshotState,
-} from "./snapshot-state.ts";
+import type { DecodedApplicationSnapshotState } from "./snapshot-state.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -558,7 +555,7 @@ async function snapshot(
     }
     revisions.set(resource.value, revision.value);
   }
-  const state = createApplicationSnapshotStateDecoder(options).decode(inspected.value.state);
+  const state = options.snapshotStateDecoder.decode(inspected.value.state);
   if (!state.ok) return state;
   return success(Object.freeze({ generation: generation.value, revisions, ...state.value }));
 }

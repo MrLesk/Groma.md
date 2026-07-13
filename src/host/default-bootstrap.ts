@@ -181,6 +181,7 @@ export function createDefaultBootstrapRegistry(
         model,
         queries,
         resourceMapper,
+        snapshotStateDecoder,
         transactionExecution: transactionEngine,
         transactionProvider,
       });

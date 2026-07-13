@@ -11,6 +11,7 @@ import {
   parseGraphGeneration,
   success,
   type Diagnostic,
+  type GraphGeneration,
   type Result,
   type TransactionProvider,
 } from "../core/index.ts";
@@ -70,6 +71,22 @@ function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
 
+function ownedDiagnostic(value: Diagnostic): Diagnostic {
+  return Object.freeze({
+    code: value.code,
+    ...(value.details === undefined ? {} : { details: Object.freeze({ ...value.details }) }),
+    message: value.message,
+  });
+}
+
+function ownedDiagnostics(values: readonly Diagnostic[]): readonly Diagnostic[] {
+  return Object.freeze(values.map(ownedDiagnostic));
+}
+
+function hostFailure<T>(...diagnostics: readonly Diagnostic[]): Result<T> {
+  return Object.freeze({ diagnostics: ownedDiagnostics(diagnostics), ok: false });
+}
+
 const configurationConflict = () =>
   diagnostic(
     "workspace-configuration-conflict",
@@ -82,11 +99,41 @@ const providerFailure = () =>
 const transitionReentrant = () =>
   diagnostic("workspace-transition-reentrant", "Workspace transition reentrancy is not supported");
 
+const missingStatus = (): WorkspaceStatus => Object.freeze({ state: "missing" });
+const configuredStatus = (): WorkspaceStatus => Object.freeze({ state: "configured" });
+const readyStatus = (): WorkspaceStatus => Object.freeze({ state: "ready" });
+const conflictStatus = (value: Diagnostic): WorkspaceStatus =>
+  Object.freeze({ diagnostic: ownedDiagnostic(value), state: "conflict" });
+
+function initializationProviderFailure(
+  diagnostics: readonly Diagnostic[] = Object.freeze([providerFailure()]),
+): WorkspaceInitializationOutcome {
+  return Object.freeze({ diagnostics: ownedDiagnostics(diagnostics), status: "provider-failure" });
+}
+
+function initializationSuccess(
+  generation: GraphGeneration,
+  status: "already-initialized" | "initialized",
+): WorkspaceInitializationOutcome {
+  return Object.freeze({ generation, status });
+}
+
+function recoveryFailure(...diagnostics: readonly Diagnostic[]): Result<WorkspaceRecoveryReport> {
+  return hostFailure(...diagnostics);
+}
+
+function recoverySuccess(generation: GraphGeneration): Result<WorkspaceRecoveryReport> {
+  return Object.freeze({
+    ok: true,
+    value: Object.freeze({ generation, status: "completed" }),
+  });
+}
+
 function initializationFailure(
   conflict: Extract<WorkspaceStatus, { readonly state: "conflict" }>,
 ): WorkspaceInitializationOutcome {
   return Object.freeze({
-    diagnostics: Object.freeze([conflict.diagnostic]),
+    diagnostics: ownedDiagnostics([conflict.diagnostic]),
     status:
       conflict.diagnostic.code === "workspace-configuration-conflict"
         ? "conflict"
@@ -186,7 +233,7 @@ function sameBytes(value: Uint8Array): boolean {
 }
 
 interface CanonicalWorkspaceSnapshot {
-  readonly generation: number;
+  readonly generation: GraphGeneration;
   readonly state: DecodedApplicationSnapshotState;
 }
 
@@ -237,7 +284,9 @@ export async function createLocalWorkspaceCapability(
   let configurationPublishedBySession = false;
   let pendingPublication:
     { action: "commit" | "discard"; readonly handle: StagedReplacementHandle } | undefined;
-  let recoveredGeneration = 0;
+  const zero = parseGraphGeneration(0);
+  if (!zero.ok) throw new Error("zero graph generation must be valid");
+  let recoveredGeneration = zero.value;
   let retainedInitializationLease: LocalCoordinationLease | undefined;
 
   const releaseRetainedInitializationLease = async (): Promise<Result<void>> => {
@@ -266,22 +315,22 @@ export async function createLocalWorkspaceCapability(
         maxBytes: bounds.maxConfigurationBytes,
       });
       if (typeof read !== "object" || read === null || typeof read.ok !== "boolean") {
-        return { diagnostic: providerFailure(), state: "conflict" };
+        return conflictStatus(providerFailure());
       }
       if (!read.ok) {
         if (read.diagnostics[0]?.code === "resource-missing") {
-          return Object.freeze({ state: "missing" as const });
+          return missingStatus();
         }
         return read.diagnostics[0]?.code === "resource-too-large"
-          ? Object.freeze({ diagnostic: configurationConflict(), state: "conflict" as const })
-          : Object.freeze({ diagnostic: providerFailure(), state: "conflict" as const });
+          ? conflictStatus(configurationConflict())
+          : conflictStatus(providerFailure());
       }
       if (!(read.value.bytes instanceof Uint8Array) || !sameBytes(read.value.bytes)) {
-        return Object.freeze({ diagnostic: configurationConflict(), state: "conflict" as const });
+        return conflictStatus(configurationConflict());
       }
-      return Object.freeze({ state: "configured" as const });
+      return configuredStatus();
     } catch {
-      return Object.freeze({ diagnostic: providerFailure(), state: "conflict" as const });
+      return conflictStatus(providerFailure());
     }
   };
 
@@ -334,17 +383,17 @@ export async function createLocalWorkspaceCapability(
 
   const recoverUnlocked = async (): Promise<Result<WorkspaceRecoveryReport>> => {
     const settled = await settlePendingPublication();
-    if (!settled.ok) return settled;
+    if (!settled.ok) return recoveryFailure(...settled.diagnostics);
     const released = await releaseRetainedInitializationLease();
-    if (!released.ok) return released;
+    if (!released.ok) return recoveryFailure(...released.diagnostics);
     if (current.state === "missing") {
-      return failure(
+      return recoveryFailure(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
       );
     }
-    if (current.state === "conflict") return failure(current.diagnostic);
+    if (current.state === "conflict") return recoveryFailure(current.diagnostic);
     if (current.state === "ready") {
-      return success({ generation: recoveredGeneration, status: "completed" });
+      return recoverySuccess(recoveredGeneration);
     }
     try {
       const snapshot = canonicalSnapshot(
@@ -353,47 +402,42 @@ export async function createLocalWorkspaceCapability(
         options.stateDecoder,
       );
       if (!snapshot.ok) {
-        return failure(
+        return recoveryFailure(
           diagnostic("invalid-workspace-recovery", "Workspace recovery returned malformed state"),
         );
       }
-      const report = Object.freeze({
-        generation: snapshot.value.generation,
-        status: "completed" as const,
-      });
-      recoveredGeneration = report.generation;
-      current = Object.freeze({ state: "ready" });
-      return success(report);
+      recoveredGeneration = snapshot.value.generation;
+      current = readyStatus();
+      return recoverySuccess(recoveredGeneration);
     } catch {
-      return failure(
+      return recoveryFailure(
         diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
       );
     }
   };
 
+  const recoverDiscardedPublication = async (): Promise<WorkspaceInitializationOutcome> => {
+    if (current.state === "conflict") return initializationFailure(current);
+    if (current.state !== "configured") return initializationProviderFailure();
+    const recovered = await recoverUnlocked();
+    return recovered.ok
+      ? initializationSuccess(recovered.value.generation, "already-initialized")
+      : initializationProviderFailure(recovered.diagnostics);
+  };
+
   const initializeUnlocked = async (): Promise<WorkspaceInitializationOutcome> => {
     const settled = await settlePendingPublication();
-    if (!settled.ok || settled.value === "discarded") {
-      return Object.freeze({
-        diagnostics: Object.freeze([providerFailure()]),
-        status: "provider-failure",
-      });
-    }
+    if (!settled.ok) return initializationProviderFailure();
+    if (settled.value === "discarded") return recoverDiscardedPublication();
     const retainedRelease = await releaseRetainedInitializationLease();
     if (!retainedRelease.ok) {
-      return Object.freeze({
-        diagnostics: retainedRelease.diagnostics,
-        status: "provider-failure",
-      });
+      return initializationProviderFailure(retainedRelease.diagnostics);
     }
     if (current.state === "conflict") {
       return initializationFailure(current);
     }
     if (current.state === "ready") {
-      return Object.freeze({
-        generation: recoveredGeneration as never,
-        status: "already-initialized",
-      });
+      return initializationSuccess(recoveredGeneration, "already-initialized");
     }
 
     if (current.state === "missing") {
@@ -403,18 +447,12 @@ export async function createLocalWorkspaceCapability(
           locator: workspaceConfigurationLocator,
         });
         if (!acquired.ok) {
-          return Object.freeze({
-            diagnostics: Object.freeze([providerFailure()]),
-            status: "provider-failure",
-          });
+          return initializationProviderFailure();
         }
         retainedInitializationLease = acquired.value;
         current = await inspect();
       } catch {
-        return Object.freeze({
-          diagnostics: Object.freeze([providerFailure()]),
-          status: "provider-failure",
-        });
+        return initializationProviderFailure();
       }
 
       if (current.state === "missing") {
@@ -425,33 +463,25 @@ export async function createLocalWorkspaceCapability(
           );
           if (!staged.ok) {
             const released = await releaseRetainedInitializationLease();
-            return Object.freeze({
-              diagnostics: released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
-              status: "provider-failure",
-            });
+            return initializationProviderFailure(
+              released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
+            );
           }
           pendingPublication = { action: "commit", handle: staged.value };
         } catch {
           const released = await releaseRetainedInitializationLease();
-          return Object.freeze({
-            diagnostics: released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
-            status: "provider-failure",
-          });
+          return initializationProviderFailure(
+            released.ok ? Object.freeze([providerFailure()]) : released.diagnostics,
+          );
         }
         const published = await settlePendingPublication();
-        if (!published.ok || published.value !== "committed") {
-          return Object.freeze({
-            diagnostics: Object.freeze([providerFailure()]),
-            status: "provider-failure",
-          });
-        }
+        if (!published.ok) return initializationProviderFailure();
+        if (published.value === "discarded") return recoverDiscardedPublication();
+        if (published.value !== "committed") return initializationProviderFailure();
       } else {
         const released = await releaseRetainedInitializationLease();
         if (!released.ok) {
-          return Object.freeze({
-            diagnostics: released.diagnostics,
-            status: "provider-failure",
-          });
+          return initializationProviderFailure(released.diagnostics);
         }
         if (current.state === "conflict") return initializationFailure(current);
         if (current.state !== "configured") {
@@ -460,33 +490,30 @@ export async function createLocalWorkspaceCapability(
           } catch {
             // The path-free provider failure below is the only exposed diagnostic.
           }
-          return Object.freeze({
-            diagnostics: Object.freeze([providerFailure()]),
-            status: "provider-failure",
-          });
+          return initializationProviderFailure();
         }
       }
     }
 
     const recovered = await recoverUnlocked();
     if (!recovered.ok) {
-      return Object.freeze({ diagnostics: recovered.diagnostics, status: "provider-failure" });
+      return initializationProviderFailure(recovered.diagnostics);
     }
-    return Object.freeze({
-      generation: recovered.value.generation as never,
-      status: configurationPublishedBySession ? "initialized" : "already-initialized",
-    });
+    return initializationSuccess(
+      recovered.value.generation,
+      configurationPublishedBySession ? "initialized" : "already-initialized",
+    );
   };
 
   const requireWorkspace = (): Result<ApplicationOperations> => {
-    if (current.state === "ready") return success(options.operations());
+    if (current.state === "ready") return Object.freeze({ ok: true, value: options.operations() });
     if (current.state === "missing") {
-      return failure(
+      return hostFailure(
         diagnostic("no-workspace", "This operation requires an initialized Groma workspace"),
       );
     }
-    if (current.state === "conflict") return failure(current.diagnostic);
-    return failure(
+    if (current.state === "conflict") return hostFailure(current.diagnostic);
+    return hostFailure(
       diagnostic(
         "workspace-recovery-required",
         "Workspace transaction recovery must complete before semantic operations",
@@ -528,22 +555,16 @@ export async function createLocalWorkspaceCapability(
     serialized(
       recoverUnlocked,
       () =>
-        failure(diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed")),
-      () => failure(transitionReentrant()),
+        recoveryFailure(
+          diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
+        ),
+      () => recoveryFailure(transitionReentrant()),
     );
   const initialize = (): Promise<WorkspaceInitializationOutcome> =>
     serialized(
       initializeUnlocked,
-      () =>
-        Object.freeze({
-          diagnostics: Object.freeze([providerFailure()]),
-          status: "provider-failure",
-        }),
-      () =>
-        Object.freeze({
-          diagnostics: Object.freeze([transitionReentrant()]),
-          status: "provider-failure",
-        }),
+      () => initializationProviderFailure(),
+      () => initializationProviderFailure([transitionReentrant()]),
     );
 
   return Object.freeze({ initialize, recover, requireWorkspace, status: () => current });

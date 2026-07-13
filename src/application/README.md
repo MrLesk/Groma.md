@@ -17,9 +17,12 @@ configured number of times if the generation changes; empty canonical state rema
 valid empty graph because bootstrap representation belongs to the host.
 
 `createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
-provider snapshot state. Application reads and host startup recovery both use it, so
-bounded copying, GraphKernel loading, Standard Model parsing, relationship endpoints,
-duplicates, and containment invariants cannot drift between startup and semantic use.
+provider snapshot state. `ApplicationOperationsOptions` requires that explicit
+capability, and every read reuses the injected instance. The default host constructs one
+proxy-aware decoder and shares its exact identity with application reads and startup
+recovery, so bounded copying, GraphKernel loading, Standard Model parsing, relationship
+endpoints, duplicates, and containment invariants cannot drift. Its deterministic
+Standard Model invariant is constructed once with the decoder rather than per read.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.

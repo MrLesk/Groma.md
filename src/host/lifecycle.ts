@@ -9,6 +9,7 @@ import type {
   HostBootstrapRegistry,
   HostComposition,
   HostProcessContext,
+  HostProcessSignalEmitter,
   HostRunOutcome,
   HostSignal,
   HostSignalSource,
@@ -319,19 +320,21 @@ function canonicalSession(value: unknown): Result<HostSurfaceSession> {
   );
 }
 
-export function createProcessSignalSource(): HostSignalSource {
+export function createProcessSignalSource(
+  emitter: HostProcessSignalEmitter = process,
+): HostSignalSource {
   return Object.freeze({
     subscribe(listener: (signal: HostSignal) => void) {
       const interrupt = () => listener("SIGINT");
       const terminate = () => listener("SIGTERM");
-      process.on("SIGINT", interrupt);
-      process.on("SIGTERM", terminate);
+      emitter.on("SIGINT", interrupt);
+      emitter.on("SIGTERM", terminate);
       let subscribed = true;
       return () => {
         if (!subscribed) return;
         subscribed = false;
-        process.off("SIGINT", interrupt);
-        process.off("SIGTERM", terminate);
+        emitter.off("SIGINT", interrupt);
+        emitter.off("SIGTERM", terminate);
       };
     },
   });

@@ -40,8 +40,10 @@ provider returns an exact, structurally valid `committed` outcome and exact mark
 readback succeeds. Thrown, malformed, or `committed-indeterminate` outcomes retain the
 original staged handle and coordination lease for a later commit retry; marker
 visibility alone never promotes the session. A confirmed `not-committed` outcome is
-discarded to a confirmed result before the handle is cleared. A compatible marker is
-idempotent.
+discarded to a confirmed result before the handle is cleared. If exact reinspection then
+finds the compatible marker published by a peer, initialization runs the normal recovery
+handshake and reports `already-initialized`; missing or conflicting reinspection remains
+fail-closed. A compatible marker is idempotent.
 
 ## Workspace and recovery gate
 
@@ -59,7 +61,8 @@ initialization. Successful initialization performs the same recovery handshake a
 promotes the existing workspace session to ready without reconstructing the host.
 Provider snapshots are copied once from exact data properties into bounded canonical
 state before the host records their generation. Host recovery and normal application
-reads use the same application snapshot-state decoder, including GraphKernel loading,
+reads receive the exact same proxy-aware application snapshot-state decoder instance,
+including GraphKernel loading,
 Standard Model parsing, duplicate and endpoint checks, and final containment invariant
 validation. Concurrent initialize and recover calls reserve one non-rejecting operation
 tail in invocation order, so publication handles, leases, status, and generation are
@@ -77,7 +80,9 @@ surface dispatch.
 composition. Cancellation during composition or recovery prevents surface dispatch.
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners
-are removed on every exit path. `createProcessSignalSource` is the built-in process
+are removed on every exit path. The host calls `stop()` exactly once even after natural
+completion, so a surface session must tolerate cleanup from that completed state.
+`createProcessSignalSource` is the built-in process
 adapter; the CLI is not wired to it in 1A. The surface receives the host cancellation
 signal. Cancellation races asynchronous surface start, so a permanently pending start
 cannot block host return; a valid session that resolves later is stopped exactly once

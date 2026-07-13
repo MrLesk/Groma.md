@@ -31,6 +31,7 @@ import {
   type ApplicationMutationOutcome,
   type ApplicationOperationBounds,
   createApplicationOperations,
+  createApplicationSnapshotStateDecoder,
   type ApplicationOperationsOptions,
   type WorkspaceInitializationOutcome,
 } from "../index.ts";
@@ -333,6 +334,11 @@ function mutationOperations(
     }),
   );
   if (!registered.ok) throw new Error("failed to register test invariant");
+  const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
+    bounds,
+    graph,
+    model,
+  });
   let executions = 0;
   const api = createApplicationOperations({
     bounds,
@@ -347,6 +353,7 @@ function mutationOperations(
       maxQueryContextCharacters: 512,
     }),
     resourceMapper: { resourceForComponent: (id) => success(resource(id)) },
+    snapshotStateDecoder,
     transactionExecution: {
       execute: (request) => {
         executions += 1;
@@ -370,15 +377,22 @@ function operations(
 ) {
   let entityCounter = 100;
   let relationCounter = 100;
-  return createApplicationOperations({
-    bounds: applicationBounds,
-    graph: new GraphKernel({
+  const bounds = overrides.bounds ?? applicationBounds;
+  const graph =
+    overrides.graph ??
+    new GraphKernel({
       idSource: {
         nextEntityId: () => `ent_${(entityCounter++).toString(16).padStart(32, "0")}`,
         nextRelationId: () => `rel_${(relationCounter++).toString(16).padStart(32, "0")}`,
       },
       maxPageSize: 100,
-    }),
+    });
+  const snapshotStateDecoder =
+    overrides.snapshotStateDecoder ??
+    createApplicationSnapshotStateDecoder({ bounds, graph, model });
+  return createApplicationOperations({
+    bounds,
+    graph,
     initialization: { initialize: async () => initializationOutcome },
     maxSnapshotAttempts: 3,
     model,
@@ -389,6 +403,7 @@ function operations(
       maxQueryContextCharacters: 512,
     }),
     resourceMapper: { resourceForComponent: (id) => success(resource(id)) },
+    snapshotStateDecoder,
     transactionExecution: {
       execute: async () => {
         throw new Error("read slice must not execute transactions");
@@ -624,6 +639,32 @@ describe("application component reads", () => {
     });
     expect(notFound.ok ? "" : notFound.diagnostics[0]?.code).toBe("unknown-component");
     expect(JSON.stringify(notFound)).not.toContain("opaque-resource:");
+  });
+
+  test("uses the injected proxy-aware snapshot decoder for application reads", async () => {
+    const fixture = new SnapshotFixture();
+    fixture.currentState = new Proxy(state([]), {});
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const api = operations(fixture, undefined, {
+      graph,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: applicationBounds,
+        graph,
+        isProxy: (value) => value === fixture.currentState,
+        model,
+      }),
+    });
+
+    expect(await api.listComponents({ limit: 2 })).toMatchObject({
+      diagnostics: [{ code: "invalid-standard-model-state" }],
+      ok: false,
+    });
   });
 
   test("accepts an uninitialized empty state as an empty bounded graph", async () => {

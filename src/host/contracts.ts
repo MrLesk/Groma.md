@@ -3,7 +3,7 @@ import type {
   ApplicationSnapshotStateDecoder,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
-import type { Diagnostic, EntropySource, Result } from "../core/index.ts";
+import type { Diagnostic, EntropySource, GraphGeneration, Result } from "../core/index.ts";
 import type { LocalResourceProvider, MarkdownIntentStore } from "../persistence/index.ts";
 import type { StandardModelCapability } from "../standard-model/index.ts";
 import type {
@@ -27,7 +27,7 @@ export type WorkspaceStatus =
   | { readonly state: "ready" };
 
 export interface WorkspaceRecoveryReport {
-  readonly generation: number;
+  readonly generation: GraphGeneration;
   readonly status: "completed";
 }
 
@@ -49,6 +49,7 @@ export interface HostSurfaceContext {
 
 export interface HostSurfaceSession {
   readonly completion: Promise<void>;
+  /** Called exactly once, including after natural completion; it must tolerate that state. */
   stop(): Promise<void>;
 }
 
@@ -57,6 +58,11 @@ export interface HostSurface {
 }
 
 export type HostSignal = "SIGINT" | "SIGTERM";
+
+export interface HostProcessSignalEmitter {
+  off(signal: HostSignal, listener: () => void): void;
+  on(signal: HostSignal, listener: () => void): void;
+}
 
 export interface HostSignalSource {
   subscribe(listener: (signal: HostSignal) => void): () => void | Promise<void>;

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 00:32'
+updated_date: '2026-07-13 01:02'
 labels:
   - host
   - bootstrap
@@ -73,4 +73,6 @@ Independent quality review hardened the host boundary before handoff: startup an
 Specification re-review correction: when cancellation wins while surface.start remains pending, any later valid session now has its completion promise observed immediately before exact-once stop. The detached start observer also contains late malformed/start rejection and stop failure, preventing late secret-bearing completion failures from reaching unhandledRejection. A deterministic regression covers both rejecting and resolving late completion with zero process unhandled-rejection events.
 
 Final quality re-review correction: HostSignalSource cleanup now supports synchronous or asynchronous release, is invoked exactly once, immediately promise-assimilated, awaited before return, and overrides prior outcomes with a frozen host-owned host-signal-cleanup-failed surface failure on throw/rejection. Local workspace transitions now use an active AsyncLocalStorage token to reject same-transition provider reentrancy immediately with workspace-transition-reentrant while preserving FIFO for unrelated external callers. Deterministic tests cover cleanup success/failure/precedence/secrecy/zero-unhandled-rejection, commit and snapshot reentrancy across async boundaries, unpoisoned later calls, and existing overlap behavior.
+
+Claude PR review corrections: all workspace statuses, diagnostics, access failures, initialization outcomes, and recovery reports are now frozen host-owned snapshots; recovery generations use GraphGeneration without casts. ApplicationOperationsOptions now requires one explicit snapshot-state decoder, operations reuse that instance, and the default host shares the exact proxy-aware decoder with workspace recovery and composition; decoder invariant construction is one-time. Confirmed not-committed publication now recognizes a compatible peer marker, runs unlocked recovery, and returns already-initialized. HostSurfaceSession documents exact-once stop after natural completion, and createProcessSignalSource has a process-like injection seam with direct forwarding/idempotent-unsubscribe tests. Focused and full tests, four-target verification, and direct host/application target compilation pass.
 <!-- SECTION:NOTES:END -->

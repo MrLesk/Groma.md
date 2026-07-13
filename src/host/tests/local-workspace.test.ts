@@ -58,6 +58,12 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
+function generation(value: number) {
+  const parsed = parseGraphGeneration(value);
+  if (!parsed.ok) throw new Error("invalid test generation");
+  return parsed.value;
+}
+
 const emptySnapshot = () => ({
   generation: 0,
   revisions: [],
@@ -110,6 +116,117 @@ describe("local workspace capability", () => {
       ok: false,
     });
     expect(await Array.fromAsync(new Bun.Glob("**/*").scan(roots.workspaceRoot))).toEqual([]);
+  });
+
+  test("exposes only frozen status, diagnostic, access, and recovery snapshots", async () => {
+    const missingRoots = await temporaryWorkspace();
+    const missing = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources: await createLocalResourceProvider(missingRoots),
+    });
+
+    const configuredRoots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(configuredRoots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const configured = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources: await createLocalResourceProvider(configuredRoots),
+    });
+
+    const conflictRoots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(conflictRoots.workspaceRoot, "groma", "groma.yaml"),
+      "schema: hostile/v9\n",
+    );
+    const conflict = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources: await createLocalResourceProvider(conflictRoots),
+    });
+
+    const providerRoots = await temporaryWorkspace();
+    const providerBase = await createLocalResourceProvider(providerRoots);
+    const providerConflict = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources: new Proxy(providerBase, {
+        get(target, property) {
+          if (property === "read") return async () => null as never;
+          const value = target[property as keyof LocalResourceProvider];
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+    });
+
+    for (const entry of [
+      { accessCode: "no-workspace", expected: "missing", workspace: missing },
+      {
+        accessCode: "workspace-recovery-required",
+        expected: "configured",
+        workspace: configured,
+      },
+      {
+        accessCode: "workspace-configuration-conflict",
+        expected: "conflict",
+        workspace: conflict,
+      },
+      {
+        accessCode: "workspace-configuration-provider-failure",
+        expected: "conflict",
+        workspace: providerConflict,
+      },
+    ] as const) {
+      const status = entry.workspace.status();
+      expect(Object.isFrozen(status), entry.expected).toBeTrue();
+      expect(Reflect.set(status as object, "state", "ready"), entry.expected).toBeFalse();
+      expect(entry.workspace.status().state, entry.expected).toBe(entry.expected);
+      expect(entry.workspace.requireWorkspace(), entry.expected).toMatchObject({
+        diagnostics: [{ code: entry.accessCode }],
+        ok: false,
+      });
+      if (status.state === "conflict") {
+        expect(Object.isFrozen(status.diagnostic)).toBeTrue();
+        expect(Reflect.set(status.diagnostic as object, "code", "mutated")).toBeFalse();
+        expect(entry.workspace.status()).toMatchObject({
+          diagnostic: { code: entry.accessCode },
+          state: "conflict",
+        });
+      }
+    }
+
+    const conflictOutcome = await conflict.initialize();
+    expect(Object.isFrozen(conflictOutcome)).toBeTrue();
+    expect(
+      "diagnostics" in conflictOutcome && Object.isFrozen(conflictOutcome.diagnostics),
+    ).toBeTrue();
+    expect(
+      "diagnostics" in conflictOutcome && Object.isFrozen(conflictOutcome.diagnostics[0]),
+    ).toBeTrue();
+
+    const missingRecovery = await missing.recover();
+    expect(Object.isFrozen(missingRecovery)).toBeTrue();
+    expect(!missingRecovery.ok && Object.isFrozen(missingRecovery.diagnostics)).toBeTrue();
+    expect(!missingRecovery.ok && Object.isFrozen(missingRecovery.diagnostics[0])).toBeTrue();
+
+    const recovered = await configured.recover();
+    expect(recovered.ok).toBeTrue();
+    if (!recovered.ok) return;
+    expect(Object.isFrozen(recovered)).toBeTrue();
+    expect(Object.isFrozen(recovered.value)).toBeTrue();
+    expect(Reflect.set(recovered.value as object, "generation", generation(99))).toBeFalse();
+    expect(Number(recovered.value.generation)).toBe(0);
+    const ready = configured.status();
+    expect(Object.isFrozen(ready)).toBeTrue();
+    expect(Reflect.set(ready as object, "state", "missing")).toBeFalse();
+    expect(configured.status()).toEqual({ state: "ready" });
+    expect(configured.requireWorkspace()).toMatchObject({ ok: true });
+
+    const repeated = await configured.recover();
+    expect(repeated.ok && Object.isFrozen(repeated.value)).toBeTrue();
   });
 
   test("atomically initializes, recovers, and promotes the same session", async () => {
@@ -334,7 +451,7 @@ describe("local workspace capability", () => {
     const recovered = await workspace.recover();
     expect(recovered).toEqual({
       ok: true,
-      value: { generation: 0, status: "completed" },
+      value: { generation: generation(0), status: "completed" },
     });
     expect(recovered.ok && Object.isFrozen(recovered.value)).toBeTrue();
     expect(generationGetterCalls).toBe(0);
@@ -717,6 +834,82 @@ describe("local workspace capability", () => {
     expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
     expect(stages).toBe(2);
     expect(commits).toBe(2);
+  });
+
+  test("recognizes a compatible marker published by a peer after confirmed discard", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let commits = 0;
+    let discards = 0;
+    let releases = 0;
+    let releaseResult: unknown;
+    let snapshots = 0;
+    let stages = 0;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "stageReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+            stages += 1;
+            return target.stageReplacement(...args);
+          };
+        }
+        if (property === "commitReplacement") {
+          return async () => {
+            commits += 1;
+            return {
+              diagnostics: [{ code: "peer-won", message: "A compatible peer published first" }],
+              state: "not-committed" as const,
+            };
+          };
+        }
+        if (property === "discardReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["discardReplacement"]>) => {
+            discards += 1;
+            const discarded = await target.discardReplacement(...args);
+            await Bun.write(
+              path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+              defaultWorkspaceDocument,
+            );
+            return discarded;
+          };
+        }
+        if (property === "releaseCoordination") {
+          return async (...args: Parameters<LocalResourceProvider["releaseCoordination"]>) => {
+            releases += 1;
+            releaseResult = await target.releaseCoordination(...args);
+            return releaseResult;
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(() => {
+        snapshots += 1;
+        return emptySnapshot();
+      }),
+      resources,
+    });
+
+    const outcome = await workspace.initialize();
+    expect(await readFile(path.join(roots.workspaceRoot, "groma", "groma.yaml"), "utf8")).toBe(
+      defaultWorkspaceDocument,
+    );
+    expect({ commits, discards, releaseResult, releases, snapshots, stages }).toEqual({
+      commits: 1,
+      discards: 1,
+      releaseResult: { ok: true, value: undefined },
+      releases: 1,
+      snapshots: 1,
+      stages: 1,
+    });
+    expect({ outcome, status: workspace.status() }).toEqual({
+      outcome: { generation: generation(0), status: "already-initialized" },
+      status: { state: "ready" },
+    });
+    expect(workspace.requireWorkspace()).toMatchObject({ ok: true });
   });
 
   test("confirms real directory durability by retrying the same local-provider handle", async () => {
