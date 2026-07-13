@@ -99,7 +99,7 @@ interface ApplicationCapabilityCalls {
 
 interface ApplicationOperationsContext extends ApplicationOperationsOptions {
   readonly calls: ApplicationCapabilityCalls;
-  readonly isProxy: ((value: unknown) => boolean) | undefined;
+  readonly isProxy: (value: unknown) => boolean;
 }
 
 const intrinsicReflectApply = Reflect.apply;
@@ -282,14 +282,14 @@ function captureApplicationCapabilityCalls(
 
 function validateBoundedQueryReceiver(
   queries: unknown,
-  isProxy: ((value: unknown) => boolean) | undefined,
+  isProxy: (value: unknown) => boolean,
 ): asserts queries is BoundedQueryContracts {
   if (typeof queries !== "object" || queries === null) {
     throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
   }
   let recognizedProxy = false;
   try {
-    recognizedProxy = isProxy?.(queries) ?? false;
+    recognizedProxy = isProxy(queries);
   } catch {
     // The exact Core private-brand probe below is trap-free for genuine instances and proxies.
   }
@@ -1754,7 +1754,7 @@ function mapTransactionOutcome<T>(
   },
   value: T,
   bounds: ApplicationOperationBounds,
-  isProxy?: (value: unknown) => boolean,
+  isProxy: (value: unknown) => boolean,
 ): ApplicationMutationOutcome<T> {
   const contained = containCapabilityValue(outcome, {
     isProxy,

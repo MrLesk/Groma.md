@@ -215,6 +215,105 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
+  test("contains external cancellation registration failure and rolls back a possibly-added listener", async () => {
+    const secret = "/private/external-cancellation-registration";
+    let adds = 0;
+    let listener: unknown;
+    let removes = 0;
+    const externalCancellation = {
+      aborted: false,
+      addEventListener: (_type: string, next: unknown) => {
+        adds += 1;
+        listener = next;
+        throw new Error(secret);
+      },
+      removeEventListener: (_type: string, next: unknown) => {
+        removes += 1;
+        if (listener === next) listener = undefined;
+      },
+    } as unknown as AbortSignal;
+    const signal = signals();
+
+    const outcome = await runHost({
+      context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-startup-failed", message: "Host startup failed" }],
+      status: "startup-failure",
+    });
+    expect({ adds, removes, signalUnsubscribes: signal.unsubscribes() }).toEqual({
+      adds: 1,
+      removes: 1,
+      signalUnsubscribes: 0,
+    });
+    expect(listener).toBeUndefined();
+    expect(JSON.stringify(outcome)).not.toContain(secret);
+  });
+
+  test("contains external cancellation removal failure without skipping signal cleanup", async () => {
+    const cancellationSecret = "/private/external-cancellation-removal";
+    const signalSecret = "/private/process-signal-removal";
+    for (const signalCleanupFails of [false, true]) {
+      let adds = 0;
+      let processUnsubscribes = 0;
+      let removes = 0;
+      const externalCancellation = {
+        aborted: false,
+        addEventListener: () => {
+          adds += 1;
+        },
+        removeEventListener: () => {
+          removes += 1;
+          throw new Error(cancellationSecret);
+        },
+      } as unknown as AbortSignal;
+      const signalSource: HostSignalSource = {
+        subscribe: () => () => {
+          processUnsubscribes += 1;
+          if (signalCleanupFails) throw new Error(signalSecret);
+        },
+      };
+
+      const outcome = await runHost({
+        context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            workspace({ state: "missing" }),
+          ),
+        ),
+        signalSource,
+      });
+
+      expect(outcome, String(signalCleanupFails)).toEqual({
+        diagnostics: [
+          signalCleanupFails
+            ? { code: "host-signal-cleanup-failed", message: "Host signal cleanup failed" }
+            : {
+                code: "host-cancellation-cleanup-failed",
+                message: "Host cancellation cleanup failed",
+              },
+        ],
+        status: "surface-failure",
+      });
+      expect({ adds, processUnsubscribes, removes }, String(signalCleanupFails)).toEqual({
+        adds: 1,
+        processUnsubscribes: 1,
+        removes: 1,
+      });
+      expect(JSON.stringify(outcome), String(signalCleanupFails)).not.toContain(cancellationSecret);
+      expect(JSON.stringify(outcome), String(signalCleanupFails)).not.toContain(signalSecret);
+    }
+  });
+
   test("finishes recovery before semantic surface dispatch", async () => {
     const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const recoveryEntered = deferred<void>();

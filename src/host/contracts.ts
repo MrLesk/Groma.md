@@ -16,6 +16,7 @@ import type {
 import type { ComponentResourceMapper } from "../application/index.ts";
 
 export interface HostProcessContext {
+  /** Registered and removed at most once by the host; listener failures are surfaced as typed outcomes. */
   readonly cancellation?: AbortSignal;
   readonly workspaceRoot: string;
 }

@@ -63,6 +63,7 @@ const relationIds = {
 } as const;
 
 const model = createStandardModelCapability();
+const doesNotRecognizeProxy = (_value: unknown) => false;
 const applicationBounds: ApplicationOperationBounds = Object.freeze({
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
@@ -348,7 +349,7 @@ function mutationOperations(
   const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
     bounds,
     graph,
-    ...(isProxy === undefined ? {} : { isProxy }),
+    isProxy: isProxy ?? doesNotRecognizeProxy,
     model: modelCapability,
   });
   let executions = 0;
@@ -413,7 +414,12 @@ function applicationOptions(
     });
   const snapshotStateDecoder =
     overrides.snapshotStateDecoder ??
-    createApplicationSnapshotStateDecoder({ bounds, graph, model });
+    createApplicationSnapshotStateDecoder({
+      bounds,
+      graph,
+      isProxy: doesNotRecognizeProxy,
+      model,
+    });
   return {
     bounds,
     graph,
@@ -744,6 +750,29 @@ describe("application component reads", () => {
     expect(JSON.stringify(notFound)).not.toContain("opaque-resource:");
   });
 
+  test("contains literal cyclic snapshot capability values before downstream execution", async () => {
+    const secret = "/private/cyclic-snapshot-secret";
+    const cyclic: {
+      components: readonly unknown[];
+      relationships: readonly unknown[];
+      secret: string;
+      self?: unknown;
+    } = { components: [], relationships: [], secret };
+    cyclic.self = cyclic;
+    const provider = new MutationProvider();
+    provider.currentState = cyclic as never;
+    const fixture = mutationOperations(provider);
+
+    const result = await fixture.api.listComponents({ limit: 1 });
+
+    expect(result.ok).toBeFalse();
+    expect(Object.isFrozen(result)).toBeTrue();
+    expect(provider.snapshots).toBe(1);
+    expect(fixture.executions()).toBe(0);
+    expect(fixture.mappings()).toBe(0);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   test("uses the injected proxy-aware snapshot decoder for application reads", async () => {
     const fixture = new SnapshotFixture();
     fixture.currentState = new Proxy(state([]), {});
@@ -770,6 +799,95 @@ describe("application component reads", () => {
     });
   });
 
+  test("requires an explicit proxy detector before inspecting decoder capabilities", () => {
+    const fixture = new SnapshotFixture();
+    let reflections = 0;
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const hostileBounds = new Proxy(applicationBounds, {
+      get: (target, property, receiver) => {
+        reflections += 1;
+        return Reflect.get(target, property, receiver);
+      },
+      ownKeys: (target) => {
+        reflections += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const hostileGraph = new Proxy(graph, {
+      get: (target, property, receiver) => {
+        reflections += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const hostileModel = new Proxy(model, {
+      get: (target, property, receiver) => {
+        reflections += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    for (const detector of [undefined, null, false, "not-a-detector"]) {
+      const options = {
+        bounds: hostileBounds,
+        graph: hostileGraph,
+        ...(detector === undefined ? {} : { isProxy: detector }),
+        model: hostileModel,
+      };
+      expect(() => createApplicationSnapshotStateDecoder(options as never)).toThrow(
+        "isProxy must be a function",
+      );
+    }
+    expect(reflections).toBe(0);
+    expect(fixture.requested).toHaveLength(0);
+  });
+
+  test("contains runtime proxy-detector faults before downstream capability work", async () => {
+    const secret = "/private/runtime-proxy-detector-secret";
+    let detectorCalls = 0;
+    const provider = new MutationProvider();
+    const fixture = mutationOperations(
+      provider,
+      undefined,
+      undefined,
+      applicationBounds,
+      model,
+      (value) => {
+        if (typeof value === "object" && value !== null) {
+          detectorCalls += 1;
+          throw new Error(secret);
+        }
+        return false;
+      },
+    );
+    detectorCalls = 0;
+
+    const result = await fixture.api.listComponents({ limit: 1 });
+
+    expect(result).toEqual({
+      diagnostics: [
+        {
+          code: "application-snapshot-decode-failed",
+          message: "The provider could not complete the operation",
+        },
+      ],
+      ok: false,
+    });
+    expect(Object.isFrozen(result)).toBeTrue();
+    expect(!result.ok && Object.isFrozen(result.diagnostics)).toBeTrue();
+    expect(!result.ok && Object.isFrozen(result.diagnostics[0])).toBeTrue();
+    expect(detectorCalls).toBe(1);
+    expect(provider.snapshots).toBe(1);
+    expect(fixture.mappings()).toBe(0);
+    expect(fixture.executions()).toBe(0);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   test("rejects forged, wrapped, proxied, and throwing decoder objects before provider access", () => {
     const fixture = new SnapshotFixture();
     const graph = new GraphKernel({
@@ -782,6 +900,7 @@ describe("application component reads", () => {
     const decoder = createApplicationSnapshotStateDecoder({
       bounds: applicationBounds,
       graph,
+      isProxy: doesNotRecognizeProxy,
       model,
     });
     const candidates = [
@@ -823,6 +942,7 @@ describe("application component reads", () => {
     const decoder = createApplicationSnapshotStateDecoder({
       bounds: applicationBounds,
       graph,
+      isProxy: doesNotRecognizeProxy,
       model,
     });
     const metadata = snapshotStateModule.applicationSnapshotStateDecoderMetadata(decoder);
@@ -856,6 +976,7 @@ describe("application component reads", () => {
       const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
         bounds: mismatched,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model,
       });
       expect(() => operations(fixture, undefined, { bounds, graph, snapshotStateDecoder })).toThrow(
@@ -876,6 +997,7 @@ describe("application component reads", () => {
         snapshotStateDecoder: createApplicationSnapshotStateDecoder({
           bounds: applicationBounds,
           graph: otherGraph,
+          isProxy: doesNotRecognizeProxy,
           model,
         }),
       }),
@@ -888,6 +1010,7 @@ describe("application component reads", () => {
         snapshotStateDecoder: createApplicationSnapshotStateDecoder({
           bounds: applicationBounds,
           graph,
+          isProxy: doesNotRecognizeProxy,
           model: otherModel,
         }),
       }),
@@ -934,6 +1057,7 @@ describe("application component reads", () => {
       const decoder = createApplicationSnapshotStateDecoder({
         bounds,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model: modelCapability,
       });
       if (operation === "normalize") {
@@ -1471,6 +1595,7 @@ describe("application component reads", () => {
         snapshotStateDecoder: createApplicationSnapshotStateDecoder({
           bounds: applicationBounds,
           graph,
+          isProxy: doesNotRecognizeProxy,
           model: hostileModel,
         }),
       }).listComponents({ limit: 2 });
@@ -1595,6 +1720,7 @@ describe("application component reads", () => {
       snapshotStateDecoder: createApplicationSnapshotStateDecoder({
         bounds: applicationBounds,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model: mutableModel,
       }),
     }).listComponents({ limit: 2 });
@@ -1670,6 +1796,7 @@ describe("application component reads", () => {
         snapshotStateDecoder: createApplicationSnapshotStateDecoder({
           bounds: applicationBounds,
           graph,
+          isProxy: doesNotRecognizeProxy,
           model: hostileModel,
         }),
       }).listComponents({ limit: 2 });
@@ -1828,6 +1955,7 @@ describe("application component reads", () => {
         snapshotStateDecoder: createApplicationSnapshotStateDecoder({
           bounds: applicationBounds,
           graph,
+          isProxy: doesNotRecognizeProxy,
           model: hostileModel,
         }),
       }).getComponent({ id: ids.service, relationships: { limit: 2 } });
@@ -1868,6 +1996,7 @@ describe("application component reads", () => {
       snapshotStateDecoder: createApplicationSnapshotStateDecoder({
         bounds: itemBounds,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model: itemModel,
       }),
     }).listComponents({ limit: 2 });
@@ -1900,6 +2029,7 @@ describe("application component reads", () => {
       snapshotStateDecoder: createApplicationSnapshotStateDecoder({
         bounds: overflowBounds,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model: overflowModel,
       }),
     }).listComponents({ limit: 1 });
@@ -1929,6 +2059,7 @@ describe("application component reads", () => {
       snapshotStateDecoder: createApplicationSnapshotStateDecoder({
         bounds: structuralBounds,
         graph,
+        isProxy: doesNotRecognizeProxy,
         model: structuralModel,
       }),
     }).listComponents({ limit: 2 });

@@ -27,11 +27,13 @@ brand another object.
 Its GraphKernel and Standard Model identities and its component, diagnostic,
 embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly
 match the application composition. The decoder owns its immutable runtime proxy-detection
-policy; the default host shares that exact proxy-aware instance with application reads
-and startup recovery, so bounded copying, GraphKernel loading, Standard Model parsing,
-relationship endpoints, duplicates, and containment invariants cannot drift. Its
-deterministic Standard Model invariant is constructed once with the decoder rather than
-per read. Decoder results are
+policy. Construction requires an explicit callable detector; compositions that
+deliberately do not recognize proxies must still inject that policy, while malformed
+construction values and detector faults fail closed. The default host shares that exact
+proxy-aware instance with application reads and startup recovery, so bounded copying,
+GraphKernel loading, Standard Model parsing, relationship endpoints, duplicates, and
+containment invariants cannot drift. Its deterministic Standard Model invariant is
+constructed once with the decoder rather than per read. Decoder results are
 exact-inspected and copied inside one exception boundary. Diagnostic arrays, records, and
 details are copied only from bounded own data descriptors, and unexpected decoder faults
 or malformed results become one frozen `application-snapshot-decode-failed` diagnostic

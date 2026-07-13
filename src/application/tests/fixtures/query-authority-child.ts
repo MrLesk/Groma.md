@@ -102,7 +102,12 @@ try {
     maxSnapshotStateDepth: 20,
     maxSnapshotStateValues: 10_000,
   });
-  const snapshotStateDecoder = createApplicationSnapshotStateDecoder({ bounds, graph, model });
+  const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
+    bounds,
+    graph,
+    isProxy: () => false,
+    model,
+  });
   const resource = (id: string): ResourceKey => {
     const parsed = parseResourceKey(`opaque-resource:${id}`);
     if (!parsed.ok) throw new Error("invalid resource fixture");

@@ -118,7 +118,7 @@ type LocalWorkspaceResources = Pick<
 
 interface CapturedLocalWorkspaceOptions {
   readonly bounds: LocalWorkspaceBounds;
-  readonly decoderProxyPolicy: ((value: unknown) => boolean) | undefined;
+  readonly decoderProxyPolicy: (value: unknown) => boolean;
   readonly operations: () => ApplicationOperations;
   readonly resources: LocalWorkspaceResources;
   readonly stateDecoder: Pick<ApplicationSnapshotStateDecoder, "decode">;
@@ -315,7 +315,7 @@ function validateStateDecoder(
       throw new RangeError(`stateDecoder ${name} must not exceed the local workspace bound`);
     }
   }
-  if (metadata.isProxy !== undefined && typeof metadata.isProxy !== "function") {
+  if (typeof metadata.isProxy !== "function") {
     throw new TypeError("stateDecoder proxy policy is malformed");
   }
   return metadata;
@@ -427,12 +427,8 @@ function captureLocalWorkspaceOptions(
   });
 }
 
-function recognizedProxy(
-  value: unknown,
-  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
-): boolean {
+function recognizedProxy(value: unknown, decoderProxyPolicy: (value: unknown) => boolean): boolean {
   if (isHostProxy(value)) return true;
-  if (decoderProxyPolicy === undefined) return false;
   try {
     return decoderProxyPolicy(value) === true;
   } catch {
@@ -492,7 +488,7 @@ function isCanonicalTooLargeFailure(
 function copyConfigurationBytes(
   value: unknown,
   bounds: LocalWorkspaceBounds,
-  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+  decoderProxyPolicy: (value: unknown) => boolean,
 ): Result<Uint8Array> {
   if (typeof value !== "object" || value === null || recognizedProxy(value, decoderProxyPolicy)) {
     return failure(providerFailure());
@@ -522,7 +518,7 @@ function copyConfigurationBytes(
 function validatedConfigurationRead(
   value: unknown,
   bounds: LocalWorkspaceBounds,
-  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+  decoderProxyPolicy: (value: unknown) => boolean,
 ): LocalWorkspaceState {
   const result = inspectHostRecord(
     value,
@@ -566,7 +562,7 @@ type ValidatedCoordinationAcquisition =
 function validatedCoordinationAcquisition(
   value: unknown,
   bounds: LocalWorkspaceBounds,
-  decoderProxyPolicy: ((value: unknown) => boolean) | undefined,
+  decoderProxyPolicy: (value: unknown) => boolean,
 ): Result<ValidatedCoordinationAcquisition> {
   const result = inspectHostRecord(
     value,

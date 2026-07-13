@@ -1,7 +1,7 @@
 import { containNativePromise } from "./promise-observation.ts";
 
 interface CapabilityValueContainmentOptions {
-  readonly isProxy: ((value: unknown) => boolean) | undefined;
+  readonly isProxy: (value: unknown) => boolean;
   readonly maximumContainerEntries: number;
   readonly maximumDepth: number;
   readonly maximumValues: number;
@@ -46,7 +46,7 @@ export function containCapabilityValue(
     if (typeof value !== "object") return containmentFailure;
 
     try {
-      if (options.isProxy?.(value)) return containmentFailure;
+      if (options.isProxy(value)) return containmentFailure;
       if (containNativePromise(value) !== "not-native") return containmentFailure;
       if (active.has(value)) return containmentFailure;
       active.add(value);

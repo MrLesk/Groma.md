@@ -118,6 +118,12 @@ SIGTERM all converge on one awaited `stop()` call. Signal and cancellation liste
 are removed on every exit path. The host calls `stop()` exactly once even after natural
 completion, so a surface session must tolerate cleanup from that completed state.
 
+The optional external cancellation listener receives one registration attempt and, once
+that attempt begins, one matching removal attempt even if registration throws. A setup
+fault returns the stable `host-startup-failed` outcome; a removal fault returns
+`host-cancellation-cleanup-failed`. Process-signal cleanup still runs afterward, so its
+own surfaced failure has deterministic final precedence when both cleanup steps fail.
+
 `createProcessSignalSource` is the built-in process adapter; the CLI is not wired to it
 in 1A. Its SIGINT and SIGTERM registration is
 transactional: a registration failure rolls back every listener that may have been

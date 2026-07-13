@@ -469,8 +469,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
     workspaceRoot: options.context.workspaceRoot,
   });
   const onAbort = () => requestCancellation();
-  options.context.cancellation?.addEventListener("abort", onAbort, { once: true });
-  if (options.context.cancellation?.aborted) requestCancellation();
+  let externalCancellation: AbortSignal | undefined;
+  let externalCancellationMayBeRegistered = false;
 
   let unsubscribe: (() => void | Promise<void>) | undefined;
   let session: ContainedHostSurfaceSession | undefined;
@@ -488,6 +488,12 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
 
   let outcome: HostRunOutcome = startupFailure("host-startup-failed", "Host startup failed");
   try {
+    externalCancellation = options.context.cancellation;
+    if (externalCancellation !== undefined) {
+      externalCancellationMayBeRegistered = true;
+      externalCancellation.addEventListener("abort", onAbort, { once: true });
+      if (externalCancellation.aborted) requestCancellation();
+    }
     const subscribed = signalSource.value((signal) => requestCancellation(signal));
     if (typeof subscribed !== "function") {
       outcome = startupFailure(
@@ -655,7 +661,6 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     async (late) => {
                       if (late.state !== "started") return;
                       try {
-                        void late.session.completion;
                         await observeRequiredCleanup(
                           late.session.stop(),
                           "Host surface cleanup failed",
@@ -706,7 +711,16 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   } catch {
     outcome = surfaceFailure("host-surface-cleanup-failed", "Host surface cleanup failed");
   }
-  options.context.cancellation?.removeEventListener("abort", onAbort);
+  if (externalCancellationMayBeRegistered && externalCancellation !== undefined) {
+    try {
+      externalCancellation.removeEventListener("abort", onAbort);
+    } catch {
+      outcome = surfaceFailure(
+        "host-cancellation-cleanup-failed",
+        "Host cancellation cleanup failed",
+      );
+    }
+  }
   if (unsubscribe !== undefined) {
     try {
       await observeOptionalCleanup(unsubscribe(), "Host signal cleanup failed");

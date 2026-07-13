@@ -41,7 +41,7 @@ export interface ApplicationSnapshotStateDecoderOptions {
     | "maxSnapshotStateValues"
   >;
   readonly graph: GraphKernel;
-  readonly isProxy?: (value: unknown) => boolean;
+  readonly isProxy: (value: unknown) => boolean;
   readonly model: StandardModelCapability;
 }
 
@@ -94,7 +94,7 @@ type ApplicationSnapshotStateDecoderBounds = Readonly<
 export interface ApplicationSnapshotStateDecoderMetadata {
   readonly bounds: ApplicationSnapshotStateDecoderBounds;
   readonly graph: GraphKernel;
-  readonly isProxy: ((value: unknown) => boolean) | undefined;
+  readonly isProxy: (value: unknown) => boolean;
   readonly model: StandardModelCapability;
 }
 
@@ -857,8 +857,7 @@ function copyModelSuccessValues(
 }
 
 function boundaryContext(options: ApplicationSnapshotStateDecoderContext): ModelSuccessContext {
-  const isProxy = options.isProxy ?? (() => false);
-  return { embeddedItems: 0, isProxy, options };
+  return { embeddedItems: 0, isProxy: options.isProxy, options };
 }
 
 function copyBoundaryGraphData(value: unknown, context: ModelSuccessContext): Result<GraphData> {
@@ -1157,7 +1156,6 @@ function decode(
   rawValue: unknown,
   options: ApplicationSnapshotStateDecoderContext,
 ): Result<DecodedApplicationSnapshotState> {
-  const isProxy = options.isProxy ?? (() => false);
   const contained = containCapabilityValue(rawValue, {
     isProxy: options.isProxy,
     maximumContainerEntries: options.bounds.maxSnapshotStateValues,
@@ -1170,7 +1168,7 @@ function decode(
     );
   }
   const value = contained.value;
-  if (typeof value === "object" && value !== null && isProxy(value)) {
+  if (typeof value === "object" && value !== null && options.isProxy(value)) {
     return failure(
       diagnostic("invalid-standard-model-state", "Snapshot state must not be a proxy"),
     );
@@ -1186,18 +1184,18 @@ function decode(
     rawEnvelope.value.components,
     "Standard Model transaction state components",
     options.bounds.maxComponents,
-    isProxy,
+    options.isProxy,
   );
   if (!rawComponents.ok) return rawComponents;
   const rawRelationships = denseArray(
     rawEnvelope.value.relationships,
     "Standard Model transaction state relationships",
     options.bounds.maxRelationships,
-    isProxy,
+    options.isProxy,
   );
   if (!rawRelationships.ok) return rawRelationships;
   for (const entry of rawComponents.value) {
-    if (typeof entry === "object" && entry !== null && isProxy(entry)) {
+    if (typeof entry === "object" && entry !== null && options.isProxy(entry)) {
       return failure(
         diagnostic("invalid-standard-model-state", "Component state must not be a proxy"),
       );
@@ -1212,7 +1210,7 @@ function decode(
     if (
       typeof record.value.payload === "object" &&
       record.value.payload !== null &&
-      isProxy(record.value.payload)
+      options.isProxy(record.value.payload)
     ) {
       return failure(
         diagnostic("invalid-standard-model-state", "Component payload must not be a proxy"),
@@ -1220,7 +1218,7 @@ function decode(
     }
   }
   for (const entry of rawRelationships.value) {
-    if (typeof entry === "object" && entry !== null && isProxy(entry)) {
+    if (typeof entry === "object" && entry !== null && options.isProxy(entry)) {
       return failure(
         diagnostic("invalid-standard-model-state", "Relationship state must not be a proxy"),
       );
@@ -1235,7 +1233,7 @@ function decode(
     if (
       typeof record.value.payload === "object" &&
       record.value.payload !== null &&
-      isProxy(record.value.payload)
+      options.isProxy(record.value.payload)
     ) {
       return failure(
         diagnostic("invalid-standard-model-state", "Relationship payload must not be a proxy"),
@@ -1260,14 +1258,14 @@ function decode(
     envelope.value.components,
     "Standard Model transaction state components",
     options.bounds.maxComponents,
-    isProxy,
+    options.isProxy,
   );
   if (!componentValues.ok) return componentValues;
   const relationshipValues = denseArray(
     envelope.value.relationships,
     "Standard Model transaction state relationships",
     options.bounds.maxRelationships,
-    isProxy,
+    options.isProxy,
   );
   if (!relationshipValues.ok) return relationshipValues;
 
@@ -1324,14 +1322,14 @@ function decode(
   if (!loaded.ok) return loaded;
   const modelContext: ModelSuccessContext = {
     embeddedItems: 0,
-    isProxy,
+    isProxy: options.isProxy,
     options,
   };
   const components: Readonly<Record<string, unknown>>[] = [];
   for (let index = 0; index < entityDrafts.length; index += 1) {
     const componentContext: ModelSuccessContext = {
       embeddedItems: 0,
-      isProxy,
+      isProxy: options.isProxy,
       options,
     };
     const draft = entityDrafts[index]!;
@@ -1369,6 +1367,10 @@ function decode(
 export function createApplicationSnapshotStateDecoder(
   options: ApplicationSnapshotStateDecoderOptions,
 ): ApplicationSnapshotStateDecoder {
+  const isProxy = options?.isProxy;
+  if (typeof isProxy !== "function") {
+    throw new TypeError("isProxy must be a function");
+  }
   const zero = parseGraphGeneration(0);
   if (!zero.ok) throw new Error("zero graph generation must be valid");
   const bounds: ApplicationSnapshotStateDecoderBounds = Object.freeze({ ...options.bounds });
@@ -1383,7 +1385,7 @@ export function createApplicationSnapshotStateDecoder(
       maxRelationshipMutations: Math.max(1, bounds.maxRelationships),
       maxRelationships: bounds.maxRelationships,
     }),
-    ...(options.isProxy === undefined ? {} : { isProxy: options.isProxy }),
+    isProxy,
     model: options.model,
     zero: zero.value,
   });
@@ -1430,7 +1432,7 @@ export function createApplicationSnapshotStateDecoder(
   return recordApplicationSnapshotStateDecoder(decoder, {
     bounds,
     graph: options.graph,
-    isProxy: options.isProxy,
+    isProxy,
     model: options.model,
   });
 }
