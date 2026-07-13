@@ -40,30 +40,64 @@ function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
+async function readBoundedStream(
+  stream: ReadableStream<Uint8Array>,
+  cancellation: AbortSignal,
+): Promise<string> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let cancellationPromise: Promise<void> | undefined;
+  const cancel = () => {
+    if (cancellationPromise !== undefined) return;
+    try {
+      cancellationPromise = reader.cancel().then(
+        () => undefined,
+        () => undefined,
+      );
+    } catch {
+      cancellationPromise = Promise.resolve();
+    }
+  };
+  cancellation.addEventListener("abort", cancel, { once: true });
+  try {
+    if (cancellation.aborted) {
+      cancel();
+      throw new Error("input cancelled");
+    }
+    while (true) {
+      const item = await reader.read();
+      if (cancellation.aborted) throw new Error("input cancelled");
+      if (item.done) break;
+      total += item.value.byteLength;
+      if (total > CLI_MAX_INPUT_BYTES) throw new Error("input exceeds bound");
+      chunks.push(item.value.slice());
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return decodeUtf8(bytes);
+  } catch (error) {
+    cancel();
+    throw error;
+  } finally {
+    cancellation.removeEventListener("abort", cancel);
+    if (cancellationPromise !== undefined) await cancellationPromise;
+    reader.releaseLock();
+  }
+}
+
 function defaultInputReader(workspaceRoot: string): CliInputReader {
   return Object.freeze({
-    async read(source: CliInputSource): Promise<string> {
-      if (source.kind === "file") {
-        const file = Bun.file(path.resolve(workspaceRoot, source.path));
-        if (file.size > CLI_MAX_INPUT_BYTES) throw new Error("input exceeds bound");
-        const bytes = await file.bytes();
-        if (bytes.byteLength > CLI_MAX_INPUT_BYTES) throw new Error("input exceeds bound");
-        return decodeUtf8(bytes);
-      }
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      for await (const chunk of Bun.stdin.stream()) {
-        total += chunk.byteLength;
-        if (total > CLI_MAX_INPUT_BYTES) throw new Error("input exceeds bound");
-        chunks.push(chunk.slice());
-      }
-      const bytes = new Uint8Array(total);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return decodeUtf8(bytes);
+    read(source: CliInputSource, cancellation: AbortSignal): Promise<string> {
+      const stream =
+        source.kind === "file"
+          ? Bun.file(path.resolve(workspaceRoot, source.path)).stream()
+          : Bun.stdin.stream();
+      return readBoundedStream(stream, cancellation);
     },
   });
 }
@@ -131,12 +165,36 @@ export async function runProgram(
   }
   const invocation = parsed.invocation;
   if (invocation.command.kind === "help") {
-    output.writeOutput(HELP_TEXT);
-    return CLI_EXIT.success;
+    if (invocation.format === "plain") {
+      output.writeOutput(HELP_TEXT);
+      return CLI_EXIT.success;
+    }
+    return emit(
+      Object.freeze({
+        command: "help",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: Object.freeze({ usage: HELP_TEXT }),
+      }),
+      invocation.format,
+      output,
+    );
   }
   if (invocation.command.kind === "version") {
-    output.writeOutput(`${GROMA_VERSION}\n`);
-    return CLI_EXIT.success;
+    if (invocation.format === "plain") {
+      output.writeOutput(`${GROMA_VERSION}\n`);
+      return CLI_EXIT.success;
+    }
+    return emit(
+      Object.freeze({
+        command: "version",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: Object.freeze({ version: GROMA_VERSION }),
+      }),
+      invocation.format,
+      output,
+    );
   }
 
   const workspaceRoot = options.workspaceRoot ?? process.cwd();

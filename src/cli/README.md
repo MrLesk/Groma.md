@@ -16,6 +16,8 @@ can retry with a smaller explicit page.
 `--format json` is the stable machine-facing envelope. Each response has `command`,
 `exitCode`, `ok`, and `result`; object keys are emitted canonically. Plain output is
 deterministic, contains no ANSI styling or prompts, and quotes component-controlled text.
+Explicit JSON help and version requests use the same envelope instead of switching back
+to plain text.
 The exact plain-text grammar remains provisional through Iteration 2 so the human
 experience can improve without changing the application contracts or JSON envelope.
 

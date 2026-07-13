@@ -26,7 +26,7 @@ const OVERVIEW_MAX_QUERIES = 50;
 const OVERVIEW_ROOT_LIMIT = 10;
 
 export interface CliInputReader {
-  read(source: CliInputSource): Promise<string>;
+  read(source: CliInputSource, cancellation: AbortSignal): Promise<string>;
 }
 
 export interface CliSurfaceController {
@@ -130,13 +130,14 @@ async function structuredRequest(
   command: CliCommand,
   source: CliInputSource,
   reader: CliInputReader,
+  cancellation: AbortSignal,
 ): Promise<
   | { readonly ok: false; readonly result: CliCommandResult }
   | { readonly ok: true; readonly value: Readonly<Record<string, unknown>> }
 > {
   let text: string;
   try {
-    text = await reader.read(source);
+    text = await reader.read(source, cancellation);
   } catch {
     return Object.freeze({
       ok: false as const,
@@ -294,7 +295,7 @@ async function execute(
   if (!("listRoots" in operations)) return operations;
   switch (command.kind) {
     case "component-create": {
-      const request = await structuredRequest(command, command.input, reader);
+      const request = await structuredRequest(command, command.input, reader, context.cancellation);
       if (!request.ok) return request.result;
       return mutationResult(
         command,
@@ -332,7 +333,7 @@ async function execute(
         }),
       );
     case "component-update": {
-      const request = await structuredRequest(command, command.input, reader);
+      const request = await structuredRequest(command, command.input, reader, context.cancellation);
       if (!request.ok) return request.result;
       return mutationResult(
         command,

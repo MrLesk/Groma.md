@@ -29,6 +29,18 @@ function captureOutput(): ProgramOutput & { errors: string[]; output: string[] }
   };
 }
 
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 interface JsonEnvelope {
   readonly command: string;
   readonly exitCode: number;
@@ -89,6 +101,25 @@ describe("CLI program", () => {
       expect(captured.errors).toEqual([]);
     });
   }
+
+  test("wraps explicit JSON help and version requests in the machine envelope", async () => {
+    for (const [argument, result] of [
+      ["--help", { usage: HELP_TEXT }],
+      ["--version", { version: GROMA_VERSION }],
+    ] as const) {
+      const captured = captureOutput();
+
+      expect(await runProgram(["--format", "json", argument], captured)).toBe(CLI_EXIT.success);
+      expect(captured.errors).toEqual([]);
+      expect(captured.output).toHaveLength(1);
+      expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toEqual({
+        command: argument.slice(2),
+        exitCode: 0,
+        ok: true,
+        result,
+      });
+    }
+  });
 
   test("offers initialization without creating files when the workspace is missing", async () => {
     const root = await workspace();
@@ -389,5 +420,54 @@ describe("CLI program", () => {
     expect(result.exitCode).toBe(CLI_EXIT.usage);
     expect(result.text).toContain("cli-input-unavailable");
     expect(result.text).not.toContain(file);
+  });
+
+  test("stops reading a file as soon as its streamed bytes exceed the input bound", async () => {
+    const root = await workspace();
+    await jsonCommand(root, ["init"]);
+    const file = path.join(root, "oversized-request.json");
+    await writeFile(file, new Uint8Array(2 * 1_048_576));
+
+    const result = await jsonCommand(root, ["component", "create", "--input", path.basename(file)]);
+
+    expect(result.exitCode).toBe(CLI_EXIT.usage);
+    expect(result.text).toContain("cli-input-unavailable");
+  });
+
+  test("SIGTERM cancels a pending stdin stream without waiting for the pipe to close", async () => {
+    const root = await workspace();
+    await jsonCommand(root, ["init"]);
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        path.resolve(import.meta.dir, "../main.ts"),
+        "--format",
+        "json",
+        "component",
+        "create",
+        "--stdin",
+      ],
+      cwd: root,
+      stderr: "pipe",
+      stdin: "pipe",
+      stdout: "pipe",
+    });
+    try {
+      await Bun.sleep(250);
+      child.kill("SIGTERM");
+      expect(await within(child.exited, 2_000, "pending CLI stdin cancellation")).toBe(143);
+      const stdout = await new Response(child.stdout).text();
+      expect(JSON.parse(stdout) as JsonEnvelope).toMatchObject({
+        exitCode: 143,
+        ok: false,
+        result: { signal: "SIGTERM", status: "cancelled" },
+      });
+    } finally {
+      child.stdin.end();
+      if (child.exitCode === null) {
+        child.kill(9);
+        await Promise.race([child.exited, Bun.sleep(2_000)]);
+      }
+    }
   });
 });
