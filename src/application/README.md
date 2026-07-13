@@ -37,12 +37,16 @@ without retaining error data. Construction also snapshots and freezes every inje
 capability reference, scalar, and bound, so later caller mutation cannot change an
 operation instance's composition.
 
-The same factory-owned decoder boundary canonicalizes individual GraphEntity candidates
-for mutations. It applies decoder-owned proxy detection before reflection, copies the
-complete payload under snapshot depth and value bounds, binds the expected identity and
-kind, contains Standard Model parsing, and returns only a frozen application-owned entity
-plus a canonical privately provenanced component. Create and sparse-update operations do
-not parse model values outside this boundary.
+The same factory-owned decoder boundary owns every Standard Model call used by
+mutations: normalization, patching, parsing, and relationship viewing. It copies model
+inputs before invocation, contains thrown, malformed, and native-Promise results, applies
+decoder-owned proxy detection before reflection, and copies complete model outputs under
+the snapshot depth and value bounds. Normalization binds both the expected presence and
+value of a caller-supplied identity before graph, provider, resource-mapping, or execution
+work; patching binds the target identity and canonicalizes the full merged entity through
+the same parse boundary. Only frozen application-owned drafts, entities, canonical
+components, and canonical relationships escape. Create and sparse-update operations do
+not call Standard Model capabilities directly.
 
 Standard Model capability successes are also untrusted boundary values. The snapshot
 decoder exact-inspects component, item, extension, and relationship records; binds their

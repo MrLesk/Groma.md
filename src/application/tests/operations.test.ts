@@ -350,6 +350,7 @@ function mutationOperations(
     model: modelCapability,
   });
   let executions = 0;
+  let mappings = 0;
   const api = createApplicationOperations({
     bounds,
     graph,
@@ -362,7 +363,12 @@ function mutationOperations(
       maxPageSize: 10,
       maxQueryContextCharacters: 512,
     }),
-    resourceMapper: { resourceForComponent: (id) => success(resource(id)) },
+    resourceMapper: {
+      resourceForComponent: (id) => {
+        mappings += 1;
+        return success(resource(id));
+      },
+    },
     snapshotStateDecoder,
     transactionExecution: {
       execute: (request) => {
@@ -374,7 +380,13 @@ function mutationOperations(
     },
     transactionProvider: provider,
   });
-  return { api, executions: () => executions, initialization: semanticInitialization, provider };
+  return {
+    api,
+    executions: () => executions,
+    initialization: semanticInitialization,
+    mappings: () => mappings,
+    provider,
+  };
 }
 
 function applicationOptions(
@@ -1883,6 +1895,23 @@ describe("application component mutations", () => {
           return success(Object.freeze({ ...result.value, payload }));
         },
       }),
+      Object.freeze({
+        ...model,
+        patch: () => {
+          const entry = Object.create(null) as Record<string, unknown>;
+          Object.defineProperties(entry, {
+            code: {
+              enumerable: true,
+              get: () => {
+                getterCalls += 1;
+                throw new Error(secret);
+              },
+            },
+            message: { enumerable: true, value: secret },
+          });
+          return { diagnostics: [entry], ok: false } as never;
+        },
+      }),
     ];
     for (const modelCapability of cases) {
       const fixture = mutationOperations(
@@ -2049,6 +2078,23 @@ describe("application component mutations", () => {
         ...model,
         normalize: () => ({ ok: true }) as never,
       }),
+      Object.freeze({
+        ...model,
+        normalize: () => {
+          const entry = Object.create(null) as Record<string, unknown>;
+          Object.defineProperties(entry, {
+            code: {
+              enumerable: true,
+              get: () => {
+                getterCalls += 1;
+                throw new Error(secret);
+              },
+            },
+            message: { enumerable: true, value: secret },
+          });
+          return { diagnostics: [entry], ok: false } as never;
+        },
+      }),
     ] as const) {
       const fixture = mutationOperations(
         new MutationProvider(),
@@ -2093,6 +2139,247 @@ describe("application component mutations", () => {
     expect(JSON.stringify(normalizeResult)).not.toContain(secret);
     expect(normalizeFixture.executions()).toBe(0);
     expect(getterCalls).toBe(0);
+  });
+
+  test("binds normalized identity presence before graph or provider work", async () => {
+    for (const supplied of [true, false]) {
+      const modelCapability: StandardModelCapability = Object.freeze({
+        ...model,
+        normalize: (input: StandardComponentInput) => {
+          const normalized = model.normalize(input);
+          if (!normalized.ok) return normalized;
+          return success(Object.freeze({ ...normalized.value, id: ids.service }));
+        },
+      });
+      const fixture = mutationOperations(
+        new MutationProvider(),
+        undefined,
+        undefined,
+        applicationBounds,
+        modelCapability,
+      );
+      const result = await fixture.api.createComponent({
+        component: supplied ? { id: ids.domain } : {},
+      });
+      expect(result.status, supplied ? "substituted id" : "injected id").toBe(
+        "validation-rejected",
+      );
+      expect(fixture.provider.snapshots).toBe(0);
+      expect(fixture.mappings()).toBe(0);
+      expect(fixture.executions()).toBe(0);
+    }
+
+    const minted = mutationOperations();
+    const result = await minted.api.createComponent({ component: {} });
+    expect(result.status).toBe("committed");
+    if (result.status !== "committed") return;
+    expect(String(result.value.id)).toBe("ent_00000000000000000000000000000032");
+  });
+
+  test("contains rejected Promise normalize and patch results", async () => {
+    const secret = "/private/mutation-promise-secret";
+    const unhandled: unknown[] = [];
+    let getterCalls = 0;
+    let speciesCalls = 0;
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    class HostilePromise<T> extends Promise<T> {
+      static override get [Symbol.species](): PromiseConstructor {
+        speciesCalls += 1;
+        throw new Error(secret);
+      }
+    }
+    Object.defineProperty(HostilePromise.prototype, "then", {
+      configurable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const rejectedPromise = (hostile: boolean): Promise<never> => {
+      if (!hostile) return Promise.reject(new Error(secret));
+      const promise = new HostilePromise<never>((_resolve, reject) => reject(new Error(secret)));
+      Object.defineProperty(promise, "then", {
+        configurable: true,
+        get: () => {
+          getterCalls += 1;
+          throw new Error(secret);
+        },
+      });
+      return promise;
+    };
+
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const hostile of [false, true]) {
+        const normalizeModel: StandardModelCapability = Object.freeze({
+          ...model,
+          normalize: () => rejectedPromise(hostile) as never,
+        });
+        const normalizeFixture = mutationOperations(
+          new MutationProvider(),
+          undefined,
+          undefined,
+          applicationBounds,
+          normalizeModel,
+        );
+        const normalized = await normalizeFixture.api.createComponent({
+          component: { id: ids.domain },
+        });
+        expect(normalized.status).toBe("validation-rejected");
+        expect(JSON.stringify(normalized)).not.toContain(secret);
+        expect(normalizeFixture.provider.snapshots).toBe(0);
+        expect(normalizeFixture.executions()).toBe(0);
+
+        const patchModel: StandardModelCapability = Object.freeze({
+          ...model,
+          patch: () => rejectedPromise(hostile) as never,
+        });
+        const patchFixture = mutationOperations(
+          new MutationProvider(),
+          undefined,
+          undefined,
+          applicationBounds,
+          patchModel,
+        );
+        const created = await patchFixture.api.createComponent({ component: { id: ids.domain } });
+        expect(created.status).toBe("committed");
+        if (created.status !== "committed") continue;
+        const executions = patchFixture.executions();
+        const patched = await patchFixture.api.updateComponent({
+          expectedRevision: committedRevision(created),
+          id: ids.domain,
+          patch: { name: "Ignored" },
+        });
+        expect(patched.status).toBe("validation-rejected");
+        expect(JSON.stringify(patched)).not.toContain(secret);
+        expect(patchFixture.executions()).toBe(executions);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(getterCalls).toBe(0);
+      expect(speciesCalls).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("rejects proxied and oversized normalize and patch payloads inside the decoder boundary", async () => {
+    const secret = "/private/model-boundary-secret";
+    let proxyTraps = 0;
+    const nestedProxy = new Proxy(
+      { secret },
+      {
+        ownKeys: () => {
+          proxyTraps += 1;
+          throw new Error(secret);
+        },
+      },
+    );
+    const proxyModel: StandardModelCapability = Object.freeze({
+      ...model,
+      normalize: (input: StandardComponentInput) => {
+        const normalized = model.normalize(input);
+        if (!normalized.ok) return normalized;
+        return success(
+          Object.freeze({
+            ...normalized.value,
+            payload: Object.freeze({
+              ...(normalized.value.payload as GraphDataRecord),
+              "example.dev/proxy": nestedProxy,
+            }),
+          }),
+        );
+      },
+    });
+    const proxyFixture = mutationOperations(
+      new MutationProvider(),
+      undefined,
+      undefined,
+      applicationBounds,
+      proxyModel,
+      (value) => value === nestedProxy,
+    );
+    const proxyResult = await proxyFixture.api.createComponent({
+      component: { id: ids.domain },
+    });
+    expect(proxyResult.status).toBe("validation-rejected");
+    expect(JSON.stringify(proxyResult)).not.toContain(secret);
+    expect(proxyFixture.provider.snapshots).toBe(0);
+    expect(proxyFixture.mappings()).toBe(0);
+    expect(proxyFixture.executions()).toBe(0);
+    expect(proxyTraps).toBe(0);
+
+    const structuralBounds = Object.freeze({
+      ...applicationBounds,
+      maxSnapshotStateValues: 100,
+    });
+    const large = new Array(150).fill(true);
+    const normalizeModel: StandardModelCapability = Object.freeze({
+      ...model,
+      normalize: (input: StandardComponentInput) => {
+        const normalized = model.normalize(input);
+        if (!normalized.ok) return normalized;
+        return success(
+          Object.freeze({
+            ...normalized.value,
+            payload: Object.freeze({
+              ...(normalized.value.payload as GraphDataRecord),
+              "example.dev/large": large,
+            }),
+          }),
+        );
+      },
+    });
+    const normalizeFixture = mutationOperations(
+      new MutationProvider(),
+      undefined,
+      undefined,
+      structuralBounds,
+      normalizeModel,
+    );
+    const normalizeResult = await normalizeFixture.api.createComponent({
+      component: { id: ids.domain },
+    });
+    expect(normalizeResult.status).toBe("validation-rejected");
+    expect(normalizeFixture.provider.snapshots).toBe(0);
+    expect(normalizeFixture.mappings()).toBe(0);
+    expect(normalizeFixture.executions()).toBe(0);
+
+    const patchModel: StandardModelCapability = Object.freeze({
+      ...model,
+      patch: (entity: GraphEntity, patch: StandardComponentPatch) => {
+        const patched = model.patch(entity, patch);
+        if (!patched.ok) return patched;
+        return success(
+          Object.freeze({
+            ...patched.value,
+            payload: Object.freeze({
+              ...(patched.value.payload as GraphDataRecord),
+              "example.dev/large": large,
+            }),
+          }),
+        );
+      },
+    });
+    const patchFixture = mutationOperations(
+      new MutationProvider(),
+      undefined,
+      undefined,
+      structuralBounds,
+      patchModel,
+    );
+    const created = await patchFixture.api.createComponent({ component: { id: ids.domain } });
+    expect(created.status).toBe("committed");
+    if (created.status !== "committed") return;
+    const executions = patchFixture.executions();
+    const patchResult = await patchFixture.api.updateComponent({
+      expectedRevision: committedRevision(created),
+      id: ids.domain,
+      patch: { name: "Ignored" },
+    });
+    expect(patchResult.status).toBe("validation-rejected");
+    expect(patchFixture.executions()).toBe(executions);
   });
 
   test("adds, updates, removes outgoing relationships and rejects identity hijacking", async () => {

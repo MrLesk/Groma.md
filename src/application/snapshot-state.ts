@@ -20,6 +20,8 @@ import {
   createStandardModelInvariant,
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
+  type StandardComponentInput,
+  type StandardComponentPatch,
   type StandardModelCapability,
   type StandardRelationship,
 } from "../standard-model/index.ts";
@@ -75,12 +77,27 @@ export interface CanonicalApplicationSnapshotEntity {
   readonly entity: GraphEntity;
 }
 
+export type ExpectedApplicationComponentIdentity =
+  { readonly present: false } | { readonly present: true; readonly value: unknown };
+
 export interface ApplicationSnapshotStateDecoder {
   canonicalizeEntity(
     value: unknown,
     expected: Readonly<Pick<GraphEntity, "id" | "kind">>,
   ): Result<CanonicalApplicationSnapshotEntity>;
+  canonicalizeRelationships(
+    value: readonly GraphRelation[],
+  ): Result<readonly StandardRelationship[]>;
   decode(value: unknown): Result<DecodedApplicationSnapshotState>;
+  normalizeComponent(
+    value: StandardComponentInput,
+    expected: ExpectedApplicationComponentIdentity,
+  ): Result<EntityDraft>;
+  patchComponent(
+    entity: GraphEntity,
+    patch: StandardComponentPatch,
+    expectedId: string,
+  ): Result<CanonicalApplicationSnapshotEntity>;
 }
 
 type ApplicationSnapshotStateDecoderBounds = Readonly<
@@ -848,57 +865,88 @@ function copyModelSuccessValues(
   );
 }
 
+function boundaryContext(options: ApplicationSnapshotStateDecoderContext): ModelSuccessContext {
+  const isProxy = options.isProxy ?? (() => false);
+  return { embeddedItems: 0, isProxy, options };
+}
+
+function copyBoundaryGraphData(value: unknown, context: ModelSuccessContext): Result<GraphData> {
+  if (typeof value === "object" && value !== null && context.isProxy(value)) {
+    return decoderFailure();
+  }
+  const safe = preflightModelGraphData(
+    value,
+    1,
+    { value: context.options.bounds.maxSnapshotStateValues },
+    new WeakSet<object>(),
+    context,
+  );
+  if (!safe.ok) return safe;
+  const copied = copyGraphPayload(value, "entity", {
+    code: "application-snapshot-decode-failed",
+    maximumDepth: context.options.bounds.maxSnapshotStateDepth,
+    maximumValues: context.options.bounds.maxSnapshotStateValues,
+    message: "Standard Model value exceeds the configured structural budget",
+  });
+  return copied.ok ? copied : decoderFailure();
+}
+
+function copyModelEntityDraft(
+  value: unknown,
+  expected: ExpectedApplicationComponentIdentity,
+  context: ModelSuccessContext,
+): Result<EntityDraft> {
+  if (typeof value === "object" && value !== null && context.isProxy(value)) {
+    return decoderFailure();
+  }
+  const inspected = inspectExactRecord(
+    value,
+    [
+      ["kind", "payload"],
+      ["id", "kind", "payload"],
+    ],
+    "application-snapshot-decode-failed",
+    "Standard Model entity draft",
+  );
+  if (!inspected.ok || inspected.value.kind !== STANDARD_COMPONENT_KIND) {
+    return decoderFailure();
+  }
+  const hasId = Object.hasOwn(inspected.value, "id");
+  let id: GraphEntity["id"] | undefined;
+  if (expected.present) {
+    if (typeof expected.value !== "string" || !hasId || inspected.value.id !== expected.value) {
+      return decoderFailure();
+    }
+    const parsed = parseEntityId(expected.value);
+    if (!parsed.ok) return decoderFailure();
+    id = parsed.value;
+  } else if (hasId) {
+    return decoderFailure();
+  }
+  const payload = copyBoundaryGraphData(inspected.value.payload, context);
+  if (!payload.ok) return payload;
+  return success(
+    Object.freeze({
+      ...(id === undefined ? {} : { id }),
+      kind: STANDARD_COMPONENT_KIND,
+      payload: payload.value,
+    }),
+  );
+}
+
 function canonicalizeEntity(
   value: unknown,
   expected: Readonly<Pick<GraphEntity, "id" | "kind">>,
   options: ApplicationSnapshotStateDecoderContext,
 ): Result<CanonicalApplicationSnapshotEntity> {
-  const isProxy = options.isProxy ?? (() => false);
-  if (typeof value === "object" && value !== null && isProxy(value)) return decoderFailure();
-  const inspected = inspectExactRecord(
-    value,
-    [["id", "kind", "payload"]],
-    "application-snapshot-decode-failed",
-    "Standard Model entity",
-  );
-  if (
-    !inspected.ok ||
-    inspected.value.id !== expected.id ||
-    inspected.value.kind !== expected.kind ||
-    expected.kind !== STANDARD_COMPONENT_KIND
-  ) {
-    return decoderFailure();
-  }
-  if (typeof inspected.value.id !== "string") return decoderFailure();
-  const id = parseEntityId(inspected.value.id);
-  if (!id.ok || id.value !== expected.id) return decoderFailure();
-  if (
-    typeof inspected.value.payload === "object" &&
-    inspected.value.payload !== null &&
-    isProxy(inspected.value.payload)
-  ) {
-    return decoderFailure();
-  }
-  const context: ModelSuccessContext = { embeddedItems: 0, isProxy, options };
-  const safePayload = preflightModelGraphData(
-    inspected.value.payload,
-    1,
-    { value: options.bounds.maxSnapshotStateValues },
-    new WeakSet<object>(),
-    context,
-  );
-  if (!safePayload.ok) return safePayload;
-  const copiedPayload = copyGraphPayload(inspected.value.payload, "entity", {
-    code: "application-snapshot-decode-failed",
-    maximumDepth: options.bounds.maxSnapshotStateDepth,
-    maximumValues: options.bounds.maxSnapshotStateValues,
-    message: "Standard Model entity payload exceeds the configured structural budget",
-  });
-  if (!copiedPayload.ok) return decoderFailure();
-  const entity = Object.freeze({
-    id: id.value,
+  if (expected.kind !== STANDARD_COMPONENT_KIND) return decoderFailure();
+  const context = boundaryContext(options);
+  const draft = copyModelEntityDraft(value, { present: true, value: expected.id }, context);
+  if (!draft.ok || draft.value.id === undefined) return decoderFailure();
+  const entity: GraphEntity = Object.freeze({
+    id: expected.id,
     kind: STANDARD_COMPONENT_KIND,
-    payload: copiedPayload.value,
+    payload: draft.value.payload as GraphData,
   });
   let rawParsed: unknown;
   try {
@@ -918,6 +966,104 @@ function canonicalizeEntity(
       entity,
     }),
   );
+}
+
+function normalizeComponent(
+  value: StandardComponentInput,
+  expected: ExpectedApplicationComponentIdentity,
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<EntityDraft> {
+  const context = boundaryContext(options);
+  const copiedInput = copyBoundaryGraphData(value, context);
+  if (
+    !copiedInput.ok ||
+    typeof copiedInput.value !== "object" ||
+    copiedInput.value === null ||
+    Array.isArray(copiedInput.value)
+  ) {
+    return decoderFailure();
+  }
+  let rawNormalized: unknown;
+  try {
+    rawNormalized = options.model.normalize(copiedInput.value as StandardComponentInput);
+  } catch {
+    return decoderFailure();
+  }
+  const normalized = modelSuccess(rawNormalized, context);
+  return normalized.ok ? copyModelEntityDraft(normalized.value, expected, context) : normalized;
+}
+
+function patchComponent(
+  entityValue: GraphEntity,
+  patchValue: StandardComponentPatch,
+  expectedId: string,
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<CanonicalApplicationSnapshotEntity> {
+  const context = boundaryContext(options);
+  const expected = parseEntityId(expectedId);
+  if (!expected.ok) return decoderFailure();
+  const current = copyModelEntityDraft(
+    entityValue,
+    { present: true, value: expected.value },
+    context,
+  );
+  if (!current.ok || current.value.id === undefined) return decoderFailure();
+  const patch = copyBoundaryGraphData(patchValue, context);
+  if (
+    !patch.ok ||
+    typeof patch.value !== "object" ||
+    patch.value === null ||
+    Array.isArray(patch.value)
+  ) {
+    return decoderFailure();
+  }
+  const entity: GraphEntity = Object.freeze({
+    id: expected.value,
+    kind: STANDARD_COMPONENT_KIND,
+    payload: current.value.payload as GraphData,
+  });
+  let rawPatched: unknown;
+  try {
+    rawPatched = options.model.patch(entity, patch.value as StandardComponentPatch);
+  } catch {
+    return decoderFailure();
+  }
+  const patched = modelSuccess(rawPatched, context);
+  if (!patched.ok) return patched;
+  const draft = copyModelEntityDraft(
+    patched.value,
+    { present: true, value: expected.value },
+    context,
+  );
+  if (!draft.ok || draft.value.id === undefined) return decoderFailure();
+  return canonicalizeEntity(
+    Object.freeze({
+      id: expected.value,
+      kind: STANDARD_COMPONENT_KIND,
+      payload: draft.value.payload,
+    }),
+    { id: expected.value, kind: STANDARD_COMPONENT_KIND },
+    options,
+  );
+}
+
+function canonicalizeRelationships(
+  relations: readonly GraphRelation[],
+  options: ApplicationSnapshotStateDecoderContext,
+): Result<readonly StandardRelationship[]> {
+  const context = boundaryContext(options);
+  let rawRelationships: unknown;
+  try {
+    rawRelationships = options.model.relationships(relations);
+  } catch {
+    return decoderFailure();
+  }
+  const result = modelSuccess(rawRelationships, context);
+  if (!result.ok) return result;
+  const relationships = modelRelationships(result.value, relations, context);
+  if (!relationships.ok) return relationships;
+  const canonical = copyModelSuccessValues([], relationships.value, context);
+  return canonical.ok ? success(canonical.value.relationships) : canonical;
 }
 
 function denseArray(
@@ -1198,9 +1344,33 @@ export function createApplicationSnapshotStateDecoder(
         return decoderFailure();
       }
     },
+    canonicalizeRelationships: (value: readonly GraphRelation[]) => {
+      try {
+        return canonicalizeRelationships(value, copied);
+      } catch {
+        return decoderFailure();
+      }
+    },
     decode: (value: unknown) => {
       try {
         return decode(value, copied);
+      } catch {
+        return decoderFailure();
+      }
+    },
+    normalizeComponent: (
+      value: StandardComponentInput,
+      expected: ExpectedApplicationComponentIdentity,
+    ) => {
+      try {
+        return normalizeComponent(value, expected, copied);
+      } catch {
+        return decoderFailure();
+      }
+    },
+    patchComponent: (entity: GraphEntity, patch: StandardComponentPatch, expectedId: string) => {
+      try {
+        return patchComponent(entity, patch, expectedId, copied);
       } catch {
         return decoderFailure();
       }

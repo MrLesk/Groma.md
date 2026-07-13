@@ -1618,7 +1618,7 @@ function relationshipInput(
     relation = added.value.relation;
     nextGraph = added.value.snapshot;
   }
-  const viewed = options.model.relationships(Object.freeze([relation]));
+  const viewed = options.snapshotStateDecoder.canonicalizeRelationships(Object.freeze([relation]));
   if (!viewed.ok) return viewed;
   return success(Object.freeze({ graph: nextGraph, relation, view: viewed.value[0]! }));
 }
@@ -1891,60 +1891,21 @@ export function createApplicationOperations(
         diagnostic("invalid-application-request", "Created component relationships are malformed"),
       );
     }
-    const invalidNormalizedComponent = () =>
-      rejected<StandardComponent>(
-        diagnostic("invalid-standard-model-value", "Standard Model normalize result is malformed"),
-      );
-    let rawNormalized: unknown;
-    try {
-      rawNormalized = options.model.normalize(
-        copiedComponent as CreateComponentRequest["component"],
-      );
-    } catch {
-      return invalidNormalizedComponent();
-    }
-    const normalizedResult = inspectExactRecord(
-      rawNormalized,
-      [
-        ["ok", "value"],
-        ["diagnostics", "ok"],
-      ],
-      "invalid-standard-model-value",
-      "Standard Model normalize result",
+    const componentRecord =
+      typeof copiedComponent === "object" &&
+      copiedComponent !== null &&
+      !Array.isArray(copiedComponent)
+        ? (copiedComponent as GraphDataRecord)
+        : undefined;
+    const expectedIdentity =
+      componentRecord !== undefined && Object.hasOwn(componentRecord, "id")
+        ? Object.freeze({ present: true as const, value: componentRecord.id })
+        : Object.freeze({ present: false as const });
+    const normalized = options.snapshotStateDecoder.normalizeComponent(
+      copiedComponent as CreateComponentRequest["component"],
+      expectedIdentity,
     );
-    if (!normalizedResult.ok) return invalidNormalizedComponent();
-    if (normalizedResult.value.ok === false) {
-      const diagnostics = applicationDiagnostics(
-        normalizedResult.value.diagnostics,
-        "validation",
-        options.bounds,
-      );
-      return diagnostics.ok
-        ? Object.freeze({ diagnostics: diagnostics.value, status: "validation-rejected" as const })
-        : invalidNormalizedComponent();
-    }
-    if (normalizedResult.value.ok !== true) return invalidNormalizedComponent();
-    const normalized = inspectExactRecord(
-      normalizedResult.value.value,
-      [
-        ["kind", "payload"],
-        ["id", "kind", "payload"],
-      ],
-      "invalid-standard-model-value",
-      "Standard Model normalized component",
-    );
-    if (
-      !normalized.ok ||
-      normalized.value.kind !== STANDARD_COMPONENT_KIND ||
-      (normalized.value.id !== undefined && typeof normalized.value.id !== "string")
-    ) {
-      return invalidNormalizedComponent();
-    }
-    const normalizedDraft = Object.freeze({
-      ...(normalized.value.id === undefined ? {} : { id: normalized.value.id }),
-      kind: STANDARD_COMPONENT_KIND,
-      payload: normalized.value.payload as GraphData,
-    });
+    if (!normalized.ok) return rejected(...normalized.diagnostics);
     let current: ReadSnapshot | undefined;
     let added: { readonly entity: GraphEntity; readonly snapshot: GraphSnapshot } | undefined;
     let component: StandardComponent | undefined;
@@ -1952,7 +1913,7 @@ export function createApplicationOperations(
     for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
       const initial = await snapshot(Object.freeze([]), options);
       if (!initial.ok) return snapshotFailure(initial.diagnostics);
-      const proposed = options.graph.addEntity(initial.value.graph, normalizedDraft);
+      const proposed = options.graph.addEntity(initial.value.graph, normalized.value);
       if (!proposed.ok) {
         return proposed.diagnostics.some((entry) => entry.code === "ambiguous-entity-identity")
           ? revisionConflict()
@@ -2137,60 +2098,10 @@ export function createApplicationOperations(
       id: id.value,
     });
     if (!entity.ok) return rejected(...entity.diagnostics);
-    const invalidPatchedComponent = () =>
-      rejected<StandardComponent>(
-        diagnostic("invalid-standard-model-value", "Standard Model patch result is malformed"),
-      );
-    let rawPatched: unknown;
-    try {
-      rawPatched = options.model.patch(entity.value, patch as StandardComponentPatch);
-    } catch {
-      return invalidPatchedComponent();
-    }
-    const patchedResult = inspectExactRecord(
-      rawPatched,
-      [
-        ["ok", "value"],
-        ["diagnostics", "ok"],
-      ],
-      "invalid-standard-model-value",
-      "Standard Model patch result",
-    );
-    if (!patchedResult.ok) return invalidPatchedComponent();
-    if (patchedResult.value.ok === false) {
-      const diagnostics = applicationDiagnostics(
-        patchedResult.value.diagnostics,
-        "validation",
-        options.bounds,
-      );
-      return diagnostics.ok
-        ? Object.freeze({ diagnostics: diagnostics.value, status: "validation-rejected" as const })
-        : invalidPatchedComponent();
-    }
-    if (patchedResult.value.ok !== true) return invalidPatchedComponent();
-    const patched = inspectExactRecord(
-      patchedResult.value.value,
-      [["id", "kind", "payload"]],
-      "invalid-standard-model-value",
-      "Standard Model patched component",
-    );
-    if (
-      !patched.ok ||
-      patched.value.id !== id.value ||
-      patched.value.kind !== STANDARD_COMPONENT_KIND ||
-      typeof patched.value.payload !== "object" ||
-      patched.value.payload === null ||
-      Array.isArray(patched.value.payload)
-    ) {
-      return invalidPatchedComponent();
-    }
-    const computed = options.snapshotStateDecoder.canonicalizeEntity(
-      Object.freeze({
-        id: id.value,
-        kind: STANDARD_COMPONENT_KIND,
-        payload: patched.value.payload,
-      }),
-      { id: id.value, kind: STANDARD_COMPONENT_KIND },
+    const computed = options.snapshotStateDecoder.patchComponent(
+      entity.value,
+      patch as StandardComponentPatch,
+      id.value,
     );
     if (!computed.ok) return rejected(...computed.diagnostics);
     const finalEmbedded = preflightEmbeddedItems(
