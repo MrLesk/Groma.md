@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 00:15'
+updated_date: '2026-07-13 00:32'
 labels:
   - host
   - bootstrap
@@ -71,4 +71,6 @@ Specification-review correction: initialization publication now validates exact 
 Independent quality review hardened the host boundary before handoff: startup and surface diagnostics are now host-owned and path/secret-free; registry, composition, workspace status, recovery, signal cleanup, and surface-session values are exact-inspected without invoking accessors or proxy traps; cancellation is passed into surfaces and races asynchronous start with contained late cleanup. Local initialize/recover calls now serialize in invocation order. Host recovery and application reads share one bounded snapshot-state decoder with GraphKernel, Standard Model, relationship, and containment validation. Windows fixtures omit unsupported custom coordination roots. Focused tests, the full 338-test check, four-target standalone verification, and direct host/application entry compilation for all four supported targets pass.
 
 Specification re-review correction: when cancellation wins while surface.start remains pending, any later valid session now has its completion promise observed immediately before exact-once stop. The detached start observer also contains late malformed/start rejection and stop failure, preventing late secret-bearing completion failures from reaching unhandledRejection. A deterministic regression covers both rejecting and resolving late completion with zero process unhandled-rejection events.
+
+Final quality re-review correction: HostSignalSource cleanup now supports synchronous or asynchronous release, is invoked exactly once, immediately promise-assimilated, awaited before return, and overrides prior outcomes with a frozen host-owned host-signal-cleanup-failed surface failure on throw/rejection. Local workspace transitions now use an active AsyncLocalStorage token to reject same-transition provider reentrancy immediately with workspace-transition-reentrant while preserving FIFO for unrelated external callers. Deterministic tests cover cleanup success/failure/precedence/secrecy/zero-unhandled-rejection, commit and snapshot reentrancy across async boundaries, unpoisoned later calls, and existing overlap behavior.
 <!-- SECTION:NOTES:END -->

@@ -278,6 +278,114 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
+  test("awaits asynchronous signal cleanup exactly once before returning", async () => {
+    const cleanupEntered = deferred<void>();
+    const cleanupGate = deferred<void>();
+    let cleanups = 0;
+    let settled = false;
+    const running = runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: {
+        subscribe: () => async () => {
+          cleanups += 1;
+          cleanupEntered.resolve();
+          await cleanupGate.promise;
+        },
+      },
+    });
+    const observed = running.then((outcome) => {
+      settled = true;
+      return outcome;
+    });
+
+    await cleanupEntered.promise;
+    await Promise.resolve();
+    expect(settled).toBeFalse();
+    expect(cleanups).toBe(1);
+    cleanupGate.resolve();
+
+    expect(await observed).toEqual({ status: "completed" });
+    expect(cleanups).toBe(1);
+  });
+
+  test("contains synchronous and asynchronous signal cleanup failure with final precedence", async () => {
+    const secret = "/Users/alex/private unsubscribe secret";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    const cancellation = new AbortController();
+    cancellation.abort();
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const entry of [
+        {
+          cleanup: () => {
+            throw new Error(secret);
+          },
+          context: { workspaceRoot: "/absolute/workspace" },
+          name: "synchronous after completion",
+        },
+        {
+          cleanup: async () => {
+            throw new Error(secret);
+          },
+          context: {
+            cancellation: cancellation.signal,
+            workspaceRoot: "/absolute/workspace",
+          },
+          name: "asynchronous after cancellation",
+        },
+      ]) {
+        let cleanups = 0;
+        const outcome = await runHost({
+          context: entry.context,
+          registry: registry(
+            composition(
+              { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+              workspace({ state: "missing" }),
+            ),
+          ),
+          signalSource: {
+            subscribe: () => () => {
+              cleanups += 1;
+              return entry.cleanup();
+            },
+          },
+        });
+
+        expect(outcome, entry.name).toEqual({
+          diagnostics: [
+            { code: "host-signal-cleanup-failed", message: "Host signal cleanup failed" },
+          ],
+          status: "surface-failure",
+        });
+        expect(cleanups, entry.name).toBe(1);
+        expect(Object.isFrozen(outcome), entry.name).toBeTrue();
+        expect(
+          "diagnostics" in outcome && Object.isFrozen(outcome.diagnostics),
+          entry.name,
+        ).toBeTrue();
+        expect(
+          "diagnostics" in outcome && Object.isFrozen(outcome.diagnostics[0]),
+          entry.name,
+        ).toBeTrue();
+        expect(JSON.stringify(outcome), entry.name).not.toContain(secret);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("cancellation that wins during composition prevents surface dispatch", async () => {
     const composed = deferred<Result<HostComposition>>();
     const composeEntered = deferred<void>();

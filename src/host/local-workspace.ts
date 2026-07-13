@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type {
   ApplicationSnapshotStateDecoder,
   ApplicationOperations,
@@ -44,6 +46,10 @@ export interface LocalWorkspaceBounds {
   readonly maxSnapshotStateValues: number;
 }
 
+/**
+ * Resource and transaction-provider callbacks must not reenter initialize or recover
+ * on the workspace capability whose transition invoked them.
+ */
 export interface LocalWorkspaceCapabilityOptions {
   readonly bounds?: Partial<LocalWorkspaceBounds>;
   readonly operations: () => ApplicationOperations;
@@ -72,6 +78,9 @@ const configurationConflict = () =>
 
 const providerFailure = () =>
   diagnostic("workspace-configuration-provider-failure", "Workspace configuration access failed");
+
+const transitionReentrant = () =>
+  diagnostic("workspace-transition-reentrant", "Workspace transition reentrancy is not supported");
 
 function initializationFailure(
   conflict: Extract<WorkspaceStatus, { readonly state: "conflict" }>,
@@ -485,8 +494,17 @@ export async function createLocalWorkspaceCapability(
     );
   };
 
+  const transitionContext = new AsyncLocalStorage<object>();
+  let activeTransition: object | undefined;
   let operationTail: Promise<void> = Promise.resolve();
-  function serialized<T>(action: () => Promise<T>, fallback: () => T): Promise<T> {
+  function serialized<T>(
+    action: () => Promise<T>,
+    fallback: () => T,
+    reentrant: () => T,
+  ): Promise<T> {
+    if (activeTransition !== undefined && transitionContext.getStore() === activeTransition) {
+      return Promise.resolve(reentrant());
+    }
     const previous = operationTail;
     let release!: () => void;
     operationTail = new Promise<void>((resolve) => {
@@ -494,25 +512,38 @@ export async function createLocalWorkspaceCapability(
     });
     return (async () => {
       await previous;
+      const transition = Object.freeze({});
+      activeTransition = transition;
       try {
-        return await action();
+        return await transitionContext.run(transition, action);
       } catch {
         return fallback();
       } finally {
+        activeTransition = undefined;
         release();
       }
     })();
   }
   const recover = (): Promise<Result<WorkspaceRecoveryReport>> =>
-    serialized(recoverUnlocked, () =>
-      failure(diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed")),
+    serialized(
+      recoverUnlocked,
+      () =>
+        failure(diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed")),
+      () => failure(transitionReentrant()),
     );
   const initialize = (): Promise<WorkspaceInitializationOutcome> =>
-    serialized(initializeUnlocked, () =>
-      Object.freeze({
-        diagnostics: Object.freeze([providerFailure()]),
-        status: "provider-failure",
-      }),
+    serialized(
+      initializeUnlocked,
+      () =>
+        Object.freeze({
+          diagnostics: Object.freeze([providerFailure()]),
+          status: "provider-failure",
+        }),
+      () =>
+        Object.freeze({
+          diagnostics: Object.freeze([transitionReentrant()]),
+          status: "provider-failure",
+        }),
     );
 
   return Object.freeze({ initialize, recover, requireWorkspace, status: () => current });

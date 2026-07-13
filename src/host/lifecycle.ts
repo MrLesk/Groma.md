@@ -366,7 +366,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   options.context.cancellation?.addEventListener("abort", onAbort, { once: true });
   if (options.context.cancellation?.aborted) requestCancellation();
 
-  let unsubscribe: (() => void) | undefined;
+  let unsubscribe: (() => void | Promise<void>) | undefined;
   let session: HostSurfaceSession | undefined;
   let stopPromise: Promise<void> | undefined;
   const stopOnce = (): Promise<void> => {
@@ -389,7 +389,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
         "Host signal source returned malformed cleanup",
       );
     } else {
-      unsubscribe = () => Reflect.apply(subscribed, undefined, []);
+      unsubscribe = () => Reflect.apply(subscribed, undefined, []) as void | Promise<void>;
       if (hostCancellation.signal.aborted) {
         outcome = cancelled(cancellationSignal);
       } else {
@@ -540,7 +540,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   options.context.cancellation?.removeEventListener("abort", onAbort);
   if (unsubscribe !== undefined) {
     try {
-      unsubscribe();
+      await Promise.resolve(unsubscribe());
     } catch {
       outcome = surfaceFailure("host-signal-cleanup-failed", "Host signal cleanup failed");
     }

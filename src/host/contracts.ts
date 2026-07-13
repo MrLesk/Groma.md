@@ -31,6 +31,10 @@ export interface WorkspaceRecoveryReport {
   readonly status: "completed";
 }
 
+/**
+ * Initialize and recover are FIFO across external callers and non-reentrant while a
+ * transition is executing provider callbacks on this capability.
+ */
 export interface WorkspaceAccessCapability extends WorkspaceInitializationCapability {
   recover(): Promise<Result<WorkspaceRecoveryReport>>;
   requireWorkspace(): Result<ApplicationOperations>;
@@ -55,7 +59,7 @@ export interface HostSurface {
 export type HostSignal = "SIGINT" | "SIGTERM";
 
 export interface HostSignalSource {
-  subscribe(listener: (signal: HostSignal) => void): () => void;
+  subscribe(listener: (signal: HostSignal) => void): () => void | Promise<void>;
 }
 
 export interface HostComposition {

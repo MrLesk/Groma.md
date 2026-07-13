@@ -17,6 +17,7 @@ import {
   createLocalWorkspaceCapability as createWorkspaceCapability,
   defaultWorkspaceDocument,
   type LocalWorkspaceCapabilityOptions,
+  type WorkspaceAccessCapability,
   workspaceConfigurationLocator,
 } from "../index.ts";
 import { isHostProxy } from "../runtime-validation.ts";
@@ -856,6 +857,105 @@ describe("local workspace capability", () => {
     expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
     expect(workspace.status()).toEqual({ state: "ready" });
     expect(releases).toBe(2);
+  });
+
+  test("fails reentrant commit-provider transitions without poisoning the FIFO tail", async () => {
+    const roots = await temporaryWorkspace();
+    const base = await createLocalResourceProvider(roots);
+    let commits = 0;
+    let nestedInitialize: unknown;
+    let nestedRecover: unknown;
+    let workspace!: WorkspaceAccessCapability;
+    const resources = new Proxy(base, {
+      get(target, property) {
+        if (property === "commitReplacement") {
+          return async (...args: Parameters<LocalResourceProvider["commitReplacement"]>) => {
+            commits += 1;
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            nestedRecover = await workspace.recover();
+            nestedInitialize = await workspace.initialize();
+            return target.commitReplacement(...args);
+          };
+        }
+        const value = target[property as keyof LocalResourceProvider];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(emptySnapshot),
+      resources,
+    });
+
+    expect(await workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect(nestedRecover).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-transition-reentrant",
+          message: "Workspace transition reentrancy is not supported",
+        },
+      ],
+      ok: false,
+    });
+    expect(nestedInitialize).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-transition-reentrant",
+          message: "Workspace transition reentrancy is not supported",
+        },
+      ],
+      status: "provider-failure",
+    });
+    expect(commits).toBe(1);
+    expect(await workspace.recover()).toMatchObject({ ok: true });
+    expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
+  });
+
+  test("fails reentrant snapshot-provider transitions across awaits without poisoning the tail", async () => {
+    const roots = await temporaryWorkspace();
+    await Bun.write(
+      path.join(roots.workspaceRoot, "groma", "groma.yaml"),
+      defaultWorkspaceDocument,
+    );
+    const resources = await createLocalResourceProvider(roots);
+    let nestedInitialize: unknown;
+    let nestedRecover: unknown;
+    let snapshots = 0;
+    let workspace!: WorkspaceAccessCapability;
+    workspace = await createLocalWorkspaceCapability({
+      operations,
+      transactionProvider: provider(async () => {
+        snapshots += 1;
+        await Promise.resolve();
+        nestedRecover = await workspace.recover();
+        nestedInitialize = await workspace.initialize();
+        return emptySnapshot();
+      }),
+      resources,
+    });
+
+    expect(await workspace.recover()).toMatchObject({ ok: true });
+    expect(nestedRecover).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-transition-reentrant",
+          message: "Workspace transition reentrancy is not supported",
+        },
+      ],
+      ok: false,
+    });
+    expect(nestedInitialize).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-transition-reentrant",
+          message: "Workspace transition reentrancy is not supported",
+        },
+      ],
+      status: "provider-failure",
+    });
+    expect(snapshots).toBe(1);
+    expect(await workspace.initialize()).toMatchObject({ status: "already-initialized" });
+    expect(await workspace.recover()).toMatchObject({ ok: true });
   });
 
   test("serializes initialize with initialize and recover in invocation order", async () => {

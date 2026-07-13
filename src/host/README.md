@@ -63,9 +63,13 @@ reads use the same application snapshot-state decoder, including GraphKernel loa
 Standard Model parsing, duplicate and endpoint checks, and final containment invariant
 validation. Concurrent initialize and recover calls reserve one non-rejecting operation
 tail in invocation order, so publication handles, leases, status, and generation are
-never mutated concurrently. The lifecycle independently validates the exact recovery
-`Result` and report at runtime, rejecting accessors, proxies, extra keys, unsafe
-generations, and malformed success values before surface dispatch.
+never mutated concurrently. Resource and transaction-provider callbacks must not
+reenter `initialize()` or `recover()` on the same workspace capability. Reentrant calls
+fail immediately with `workspace-transition-reentrant` instead of joining their own
+tail; calls from unrelated external async contexts retain FIFO behavior. The lifecycle
+independently validates the exact recovery `Result` and report at runtime, rejecting
+accessors, proxies, extra keys, unsafe generations, and malformed success values before
+surface dispatch.
 
 ## Lifecycle
 
@@ -78,6 +82,12 @@ adapter; the CLI is not wired to it in 1A. The surface receives the host cancell
 signal. Cancellation races asynchronous surface start, so a permanently pending start
 cannot block host return; a valid session that resolves later is stopped exactly once
 and late rejection is contained.
+
+Signal-source cleanup may be synchronous or asynchronous. The host invokes it exactly
+once and awaits it before returning. A cleanup throw or rejection overrides any prior
+completed, cancelled, startup-failure, or surface-failure outcome with the frozen
+host-owned `host-signal-cleanup-failed` surface-failure outcome, because deterministic
+shutdown was not achieved; external cleanup errors and diagnostics are never retained.
 
 Registry, recovery, workspace-status, surface, and session values are treated as
 hostile runtime input. The host exact-inspects and copies capability shapes once and
