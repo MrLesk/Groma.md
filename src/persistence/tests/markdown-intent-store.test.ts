@@ -774,7 +774,7 @@ vendor.io/nested:
     ).toMatchObject({ diagnostics: [{ code: "duplicate-intent-relation" }], ok: false });
   });
 
-  test("rejects conflicts, duplicate YAML keys, aliases, tags, wrong kinds, and malformed bodies", () => {
+  test("rejects conflicts, duplicate YAML keys, aliases, anchors, tags, wrong kinds, and malformed bodies", () => {
     const id = entityId("90");
     const locator = markdownIntentLocator(id);
     if (!locator.ok) throw new Error("expected locator");
@@ -811,7 +811,15 @@ vendor.io/nested:
       ],
       [
         "intent-unsupported-yaml",
+        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nname: &name Ordering\n---\n`,
+      ],
+      [
+        "intent-unsupported-yaml",
         `---\nschema: groma/v0.1\nkind: component\nid: !custom ${id}\n---\n`,
+      ],
+      [
+        "invalid-intent-unicode",
+        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nname: "\\uD800"\n---\n`,
       ],
       ["intent-wrong-kind", `---\nschema: groma/v0.1\nkind: evidence\nid: ${id}\n---\n`],
       [

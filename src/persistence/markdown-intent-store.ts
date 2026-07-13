@@ -150,7 +150,7 @@ function validateUnicode(value: unknown, rootPath: string): Result<void> {
         return failure(
           diagnostic(
             "invalid-intent-unicode",
-            "Intent serialization cannot represent an unpaired UTF-16 surrogate losslessly in UTF-8",
+            "Intent data contains an unpaired UTF-16 surrogate that cannot be represented losslessly in UTF-8",
             { index, path: current.path },
           ),
         );
@@ -167,7 +167,7 @@ function validateUnicode(value: unknown, rootPath: string): Result<void> {
         return failure(
           diagnostic(
             "invalid-intent-unicode",
-            "Intent serialization cannot represent an unpaired UTF-16 surrogate in a key losslessly in UTF-8",
+            "Intent data contains an unpaired UTF-16 surrogate in a key that cannot be represented losslessly in UTF-8",
             { index: keyIndex, path: `${current.path} key` },
           ),
         );
@@ -550,7 +550,7 @@ function yamlRecord(source: string): Result<Readonly<Record<string, unknown>>> {
       return visit.BREAK;
     },
     Node: (_key, node) => {
-      if (isAlias(node) || node.tag !== undefined) {
+      if (isAlias(node) || node.anchor !== undefined || node.tag !== undefined) {
         unsupported = true;
         return visit.BREAK;
       }
@@ -595,6 +595,8 @@ function yamlRecord(source: string): Result<Readonly<Record<string, unknown>>> {
       ),
     );
   }
+  const unicode = validateUnicode(value, "frontmatter");
+  if (!unicode.ok) return unicode;
   return exactRecord(value)
     ? success(value)
     : failure(
