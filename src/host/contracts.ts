@@ -42,8 +42,11 @@ export interface WorkspaceAccessCapability extends WorkspaceInitializationCapabi
   status(): WorkspaceStatus;
 }
 
+export type HostInitializationOperations = Readonly<Pick<ApplicationOperations, "initialize">>;
+
 export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
+  readonly initialization: HostInitializationOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly workspace: WorkspaceAccessCapability;
 }

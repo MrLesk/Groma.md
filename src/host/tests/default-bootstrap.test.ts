@@ -7,6 +7,7 @@ import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
 
 import {
   createDefaultBootstrapRegistry,
+  runHost,
   type DefaultBootstrapRegistryOptions,
   type HostSurface,
   type HostSurfaceSession,
@@ -138,6 +139,9 @@ describe("default bootstrap registry", () => {
     expect(composed.value.surface).not.toBe(replacementSurface);
     const session = await composed.value.surface.start({
       cancellation: new AbortController().signal,
+      initialization: Object.freeze({
+        initialize: (request) => composed.value.operations.initialize(request),
+      }),
       recovery: { status: "not-required" },
       workspace: composed.value.workspace,
     });
@@ -159,6 +163,54 @@ describe("default bootstrap registry", () => {
     createDefaultBootstrapRegistry({ surface });
 
     expect(reads).toBe(1);
+  });
+
+  test("initializes a missing workspace through the contained application view", async () => {
+    const context = await temporaryWorkspace();
+    let accessAfter: unknown;
+    let accessBefore: unknown;
+    let initializationFrozen = false;
+    let initializationKeys: PropertyKey[] = [];
+    let initializationResult: unknown;
+    let initializationView: unknown;
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => new Uint8Array(length),
+      surface: {
+        start: async (surfaceContext) => {
+          initializationView = surfaceContext.initialization;
+          initializationFrozen = Object.isFrozen(surfaceContext.initialization);
+          initializationKeys = Reflect.ownKeys(surfaceContext.initialization);
+          accessBefore = surfaceContext.workspace.requireWorkspace();
+          initializationResult = await surfaceContext.initialization.initialize({});
+          accessAfter = surfaceContext.workspace.requireWorkspace();
+          return { completion: Promise.resolve(), stop: async () => {} };
+        },
+      },
+    });
+
+    const outcome = await runHost({
+      context: { workspaceRoot: context.workspaceRoot },
+      registry,
+      signalSource: { subscribe: () => () => {} },
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(accessBefore).toMatchObject({
+      diagnostics: [{ code: "no-workspace" }],
+      ok: false,
+    });
+    expect(initializationResult).toMatchObject({ ok: true, value: { status: "initialized" } });
+    expect(accessAfter).toMatchObject({ ok: true });
+    if (typeof accessAfter === "object" && accessAfter !== null && "value" in accessAfter) {
+      expect(initializationView).not.toBe(accessAfter.value);
+    }
+    expect({ initializationFrozen, initializationKeys }).toEqual({
+      initializationFrozen: true,
+      initializationKeys: ["initialize"],
+    });
   });
 
   test("contains no server, React, dynamic plugin, or project-code loading path", async () => {

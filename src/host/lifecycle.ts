@@ -8,6 +8,7 @@ import {
 import type {
   HostBootstrapRegistry,
   HostComposition,
+  HostInitializationOperations,
   HostProcessContext,
   HostProcessSignalEmitter,
   HostRunOutcome,
@@ -35,6 +36,10 @@ export interface RunHostOptions {
 interface ContainedHostSurfaceSession {
   readonly completion: Promise<{ readonly state: "completed" | "failed" }>;
   readonly stop: () => unknown;
+}
+
+interface ContainedHostComposition extends HostComposition {
+  readonly initialization: HostInitializationOperations;
 }
 
 const intrinsicPromise = Promise;
@@ -127,7 +132,7 @@ type ObservedBootstrapOutcome =
   | { readonly state: "bootstrap-failed" }
   | { readonly state: "cancelled" }
   | { readonly state: "invalid-composition" }
-  | { readonly composition: HostComposition; readonly state: "composed" };
+  | { readonly composition: ContainedHostComposition; readonly state: "composed" };
 
 type ObservedRecoveryOutcome =
   | { readonly state: "cancelled" }
@@ -272,7 +277,50 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   );
 }
 
-function canonicalComposition(value: unknown): Result<HostComposition> {
+function canonicalInitializationOperations(value: unknown): Result<HostInitializationOperations> {
+  const operations = inspectHostRecord(
+    value,
+    [
+      [
+        "createComponent",
+        "getComponent",
+        "initialize",
+        "listChildren",
+        "listComponents",
+        "listRoots",
+        "removeComponent",
+        "reparentComponent",
+        "updateComponent",
+      ],
+    ],
+    "invalid-host-composition",
+    "Application operations",
+  );
+  if (
+    !operations.ok ||
+    typeof operations.value.createComponent !== "function" ||
+    typeof operations.value.getComponent !== "function" ||
+    typeof operations.value.initialize !== "function" ||
+    typeof operations.value.listChildren !== "function" ||
+    typeof operations.value.listComponents !== "function" ||
+    typeof operations.value.listRoots !== "function" ||
+    typeof operations.value.removeComponent !== "function" ||
+    typeof operations.value.reparentComponent !== "function" ||
+    typeof operations.value.updateComponent !== "function"
+  ) {
+    return failure(diagnostic("invalid-host-composition", "Application operations are malformed"));
+  }
+  const source = value as object;
+  const initialize = operations.value.initialize;
+  return success(
+    Object.freeze({
+      initialize: (request: Parameters<HostInitializationOperations["initialize"]>[0]) =>
+        intrinsicReflectApply(initialize, source, [request]),
+    }) as HostInitializationOperations,
+  );
+}
+
+function canonicalComposition(value: unknown): Result<ContainedHostComposition> {
   const composition = inspectHostRecord(
     value,
     [
@@ -300,11 +348,12 @@ function canonicalComposition(value: unknown): Result<HostComposition> {
   if (!workspace.ok) return workspace;
   const surface = canonicalSurface(composition.value.surface);
   if (!surface.ok) return surface;
+  const initialization = canonicalInitializationOperations(composition.value.operations);
+  if (!initialization.ok) return initialization;
   for (const field of [
     "graph",
     "invariant",
     "model",
-    "operations",
     "queries",
     "resourceMapper",
     "resources",
@@ -324,6 +373,7 @@ function canonicalComposition(value: unknown): Result<HostComposition> {
   return success(
     Object.freeze({
       graph: composition.value.graph,
+      initialization: initialization.value,
       invariant: composition.value.invariant,
       model: composition.value.model,
       operations: composition.value.operations,
@@ -336,7 +386,7 @@ function canonicalComposition(value: unknown): Result<HostComposition> {
       transactionEngine: composition.value.transactionEngine,
       transactionProvider: composition.value.transactionProvider,
       workspace: workspace.value,
-    }) as HostComposition,
+    }) as ContainedHostComposition,
   );
 }
 
@@ -692,6 +742,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
               } else {
                 const context = Object.freeze({
                   cancellation: hostCancellation.signal,
+                  initialization: composition.initialization,
                   recovery: Object.freeze({ status: recovery }),
                   workspace: composition.workspace,
                 });

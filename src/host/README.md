@@ -70,13 +70,19 @@ provider's private representation on replaceable providers.
 
 ## Workspace and recovery gate
 
-`WorkspaceAccessCapability.requireWorkspace()` is the only semantic-operation gate
-provided to surfaces. It returns the shared `ApplicationOperations` instance only
-after configuration is compatible and `transactionProvider.snapshot([])` has
-completed. Missing configuration returns `no-workspace`; incompatible configuration
-returns `workspace-configuration-conflict`; compatible but unrecovered state returns
-`workspace-recovery-required`. All host diagnostics are stable and omit absolute paths
-and provider details.
+`HostSurfaceContext.initialization` is a frozen initialization-only view of the shared
+`ApplicationOperations` instance. The host exact-validates the complete application
+surface and captures `initialize` with its original receiver at composition time, so a
+missing-workspace surface can call `initialization.initialize({})` without receiving any
+other operation authority.
+
+`WorkspaceAccessCapability.requireWorkspace()` is the only gate to the complete
+semantic-operation surface provided to surfaces. It returns the shared
+`ApplicationOperations` instance only after configuration is compatible and
+`transactionProvider.snapshot([])` has completed. Missing configuration returns
+`no-workspace`; incompatible configuration returns `workspace-configuration-conflict`;
+compatible but unrecovered state returns `workspace-recovery-required`. All host
+diagnostics are stable and omit absolute paths and provider details.
 
 Ready startup completes recovery before calling `surface.start`. Missing-workspace
 startup dispatches with recovery marked `not-required` so the surface can offer
@@ -140,8 +146,8 @@ returns cannot delay host shutdown. Hostile `then` and shadowable constructor/sp
 behavior are not consulted. Proxy-wrapped returns are rejected by the host's intrinsic
 proxy detector before Promise observation, so proxy traps cannot run in this validation.
 
-`createProcessSignalSource` is the built-in process adapter; the CLI is not wired to it
-in 1A. Its SIGINT and SIGTERM registration is
+`createProcessSignalSource` is the built-in process adapter used by the CLI. Its SIGINT
+and SIGTERM registration is
 transactional: a registration failure rolls back every listener that may have been
 added. Cleanup attempts both removals independently, records only successful removals,
 and leaves failures retryable without removing a successful listener twice. The surface
