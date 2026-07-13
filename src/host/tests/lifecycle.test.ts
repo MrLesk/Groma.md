@@ -518,6 +518,76 @@ describe("host lifecycle", () => {
     }
   });
 
+  test("rejects proxied cleanup and listener returns before Promise observation", async () => {
+    for (const location of ["add", "remove", "stop", "unsubscribe"] as const) {
+      let adds = 0;
+      let removes = 0;
+      let stops = 0;
+      let unsubscribes = 0;
+      let traps = 0;
+      const malformedReturn = new Proxy(Promise.resolve(), {
+        getOwnPropertyDescriptor: () => {
+          traps += 1;
+          throw new Error("/private/proxied-cleanup-descriptor");
+        },
+        getPrototypeOf: () => {
+          traps += 1;
+          throw new Error("/private/proxied-cleanup-prototype");
+        },
+      });
+      const externalCancellation = {
+        aborted: false,
+        addEventListener: () => {
+          adds += 1;
+          return location === "add" ? malformedReturn : undefined;
+        },
+        removeEventListener: () => {
+          removes += 1;
+          return location === "remove" ? malformedReturn : undefined;
+        },
+      } as unknown as AbortSignal;
+      const outcome = await runHost({
+        context: { cancellation: externalCancellation, workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            {
+              start: () => ({
+                completion: Promise.resolve(),
+                stop: () => {
+                  stops += 1;
+                  return location === "stop" ? malformedReturn : Promise.resolve();
+                },
+              }),
+            },
+            workspace({ state: "missing" }),
+          ),
+        ),
+        signalSource: {
+          subscribe: () => () => {
+            unsubscribes += 1;
+            return location === "unsubscribe" ? malformedReturn : Promise.resolve();
+          },
+        },
+      });
+
+      const expectedCode =
+        location === "add"
+          ? "host-startup-failed"
+          : location === "remove"
+            ? "host-cancellation-cleanup-failed"
+            : location === "stop"
+              ? "host-surface-cleanup-failed"
+              : "host-signal-cleanup-failed";
+      expect("diagnostics" in outcome && outcome.diagnostics[0]?.code, location).toBe(expectedCode);
+      expect(traps, location).toBe(0);
+      expect({ adds, removes, stops, unsubscribes }, location).toEqual(
+        location === "add"
+          ? { adds: 1, removes: 1, stops: 0, unsubscribes: 0 }
+          : { adds: 1, removes: 1, stops: 1, unsubscribes: 1 },
+      );
+    }
+  });
+
   test("finishes recovery before semantic surface dispatch", async () => {
     const recovery = deferred<Result<WorkspaceRecoveryReport>>();
     const recoveryEntered = deferred<void>();
@@ -1123,6 +1193,49 @@ describe("host lifecycle", () => {
       status: "surface-failure",
     });
     expect(secondSignals.unsubscribes()).toBe(1);
+  });
+
+  test("rejects proxied bootstrap and recovery Promises before observation", async () => {
+    for (const location of ["bootstrap", "recovery"] as const) {
+      let traps = 0;
+      const result =
+        location === "bootstrap"
+          ? success(
+              composition(
+                { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+                workspace({ state: "missing" }),
+              ),
+            )
+          : success({ generation: generation(0), status: "completed" as const });
+      const proxiedPromise = new Proxy(Promise.resolve(result), {
+        getOwnPropertyDescriptor: () => {
+          traps += 1;
+          throw new Error("/private/proxied-host-promise-descriptor");
+        },
+        getPrototypeOf: () => {
+          traps += 1;
+          throw new Error("/private/proxied-host-promise-prototype");
+        },
+      });
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry:
+          location === "bootstrap"
+            ? ({ compose: () => proxiedPromise } as never)
+            : registry(
+                composition(
+                  { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+                  workspace({ state: "configured" }, () => proxiedPromise as never),
+                ),
+              ),
+        signalSource: signals().source,
+      });
+
+      expect("diagnostics" in outcome && outcome.diagnostics[0]?.code, location).toBe(
+        location === "bootstrap" ? "host-bootstrap-failed" : "invalid-host-recovery-result",
+      );
+      expect(traps, location).toBe(0);
+    }
   });
 
   test("cancellation raised while a surface starts stops the resulting session once", async () => {

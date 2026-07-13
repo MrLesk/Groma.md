@@ -141,6 +141,17 @@ async function settleApplicationCapabilityValue(
     } catch {
       return rejectedApplicationCapabilitySettlement;
     }
+    try {
+      if (
+        typeof fulfilledValue === "object" &&
+        fulfilledValue !== null &&
+        isProxy(fulfilledValue)
+      ) {
+        return rejectedApplicationCapabilitySettlement;
+      }
+    } catch {
+      return failedApplicationProxyPolicy;
+    }
     return Object.freeze({ status: "fulfilled" as const, value: fulfilledValue });
   }
   return Object.freeze({ status: "fulfilled" as const, value });

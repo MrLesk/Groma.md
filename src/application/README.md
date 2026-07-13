@@ -110,8 +110,9 @@ uses the validated snapshot decoder's exact proxy policy before every nested ref
 accepts only intrinsic dense arrays and plain records made entirely of enumerable data
 properties, applies the configured structural and collection bounds, and produces deeply
 frozen owned copies. Genuine native Promise returns are observed through captured
-intrinsics before containment; plain thenables and result-shaped values with `then`
-accessors are inspected synchronously and rejected without reading or awaiting `then`.
+intrinsics, then the decoder proxy policy is applied again to the fulfilled value before
+containment or reflection; plain thenables and result-shaped values with `then` accessors
+are inspected synchronously and rejected without reading or awaiting `then`.
 Capability methods and their receivers are captured during construction, so later mutation
 cannot redirect an operation instance. Query failures retain only bounded codes,
 allowlisted details, and application-owned messages; successful pages and exact reads are

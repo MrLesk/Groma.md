@@ -2548,6 +2548,51 @@ describe("application component reads", () => {
     expect(JSON.stringify(result)).not.toContain(secret);
   });
 
+  test("rejects a proxy fulfilled by a native snapshot Promise before reflection", async () => {
+    const proxies = new Set<unknown>();
+    const traps = { count: 0 };
+    const snapshotValue = new Proxy(
+      {
+        generation: generation(1),
+        revisions: [],
+        state: state([]),
+      },
+      {
+        getOwnPropertyDescriptor: () => {
+          traps.count += 1;
+          throw new Error("/private/fulfilled-proxy-descriptor");
+        },
+        getPrototypeOf: () => {
+          traps.count += 1;
+          throw new Error("/private/fulfilled-proxy-prototype");
+        },
+        ownKeys: () => {
+          traps.count += 1;
+          throw new Error("/private/fulfilled-proxy-keys");
+        },
+      },
+    );
+    proxies.add(snapshotValue);
+    const result = await proxyAwareOperations(new SnapshotFixture(), proxies, {
+      transactionProvider: {
+        snapshot: () => Promise.resolve(snapshotValue) as never,
+      },
+    }).listComponents({ limit: 1 });
+
+    expect(result.ok).toBeFalse();
+    expect(Object.isFrozen(result)).toBeTrue();
+    expect(result).toEqual({
+      diagnostics: [
+        {
+          code: "provider-snapshot-failed",
+          message: "The provider could not complete the operation",
+        },
+      ],
+      ok: false,
+    });
+    expect(traps.count).toBe(0);
+  });
+
   test("contains snapshot state promises before malformed envelope rejection", async () => {
     const secret = "/private/malformed-snapshot-state";
     const unhandled: unknown[] = [];

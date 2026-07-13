@@ -21,7 +21,10 @@ import type {
   WorkspaceStatus,
 } from "./contracts.ts";
 import { copyHostDiagnostics, inspectHostRecord, isHostProxy } from "./runtime-validation.ts";
-import { observeNativePromise } from "../application/promise-observation.ts";
+import {
+  observeNativePromise,
+  type NativePromiseObservation,
+} from "../application/promise-observation.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -55,8 +58,18 @@ function rejectedPromise(message: string): Promise<void> {
   return intrinsicReflectApply(intrinsicPromiseReject, intrinsicPromise, [new Error(message)]);
 }
 
+function observeHostNativePromise<TResult>(
+  value: unknown,
+  fulfilled: (value: unknown) => TResult,
+  rejected: (reason: unknown) => TResult,
+): NativePromiseObservation<TResult> {
+  return isHostProxy(value)
+    ? { status: "uncontained" }
+    : observeNativePromise(value, fulfilled, rejected);
+}
+
 function observeRequiredCleanup(value: unknown, message: string): Promise<void> {
-  const observed = observeNativePromise(
+  const observed = observeHostNativePromise(
     value,
     () => undefined,
     () => {
@@ -72,7 +85,7 @@ function observeOptionalCleanup(value: unknown, message: string): Promise<void> 
 
 function isExactSynchronousVoid(value: unknown): value is undefined {
   if (value === undefined) return true;
-  observeNativePromise(
+  observeHostNativePromise(
     value,
     () => undefined,
     () => undefined,
@@ -378,7 +391,7 @@ function canonicalSession(value: unknown): Result<ContainedHostSurfaceSession> {
     );
   }
   const source = value as object;
-  const completion = observeNativePromise<{ readonly state: "completed" | "failed" }>(
+  const completion = observeHostNativePromise<{ readonly state: "completed" | "failed" }>(
     session.value.completion,
     () => ({ state: "completed" as const }),
     () => ({ state: "failed" as const }),
@@ -408,7 +421,7 @@ function validatedSurfaceStart(value: unknown): ObservedSurfaceStartOutcome {
 
 function observeSurfaceStart(value: unknown): Promise<ObservedSurfaceStartOutcome> {
   if (isHostProxy(value)) return resolvedValue({ state: "invalid" });
-  const observed = observeNativePromise<ObservedSurfaceStartOutcome>(
+  const observed = observeHostNativePromise<ObservedSurfaceStartOutcome>(
     value,
     validatedSurfaceStart,
     () => ({ state: "failed" }),
@@ -552,7 +565,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
         } catch {
           rawComposition = undefined;
         }
-        const composed = observeNativePromise<ObservedBootstrapOutcome>(
+        const composed = observeHostNativePromise<ObservedBootstrapOutcome>(
           rawComposition,
           (value) => {
             if (hostCancellation.signal.aborted) return { state: "cancelled" as const };
@@ -627,7 +640,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
               } catch {
                 rawRecovery = undefined;
               }
-              const observedRecovery = observeNativePromise<ObservedRecoveryOutcome>(
+              const observedRecovery = observeHostNativePromise<ObservedRecoveryOutcome>(
                 rawRecovery,
                 (value) => {
                   if (hostCancellation.signal.aborted) return { state: "cancelled" as const };

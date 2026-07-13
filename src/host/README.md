@@ -137,7 +137,8 @@ only valid return. Any other value is malformed immediately. A safely observable
 Promise is given captured intrinsic settlement handlers before that failure is reported,
 but is never awaited, so rejection is contained and resolving or permanently pending
 returns cannot delay host shutdown. Hostile `then` and shadowable constructor/species
-behavior are not consulted.
+behavior are not consulted. Proxy-wrapped returns are rejected by the host's intrinsic
+proxy detector before Promise observation, so proxy traps cannot run in this validation.
 
 `createProcessSignalSource` is the built-in process adapter; the CLI is not wired to it
 in 1A. Its SIGINT and SIGTERM registration is
@@ -164,6 +165,10 @@ without invoking it. If trusted plugin code has already returned such a rejected
 JavaScript provides no trap-free way to mark that original rejection handled, so this is
 containment rather than a security sandbox and the host does not install a global
 `unhandledRejection` interceptor.
+
+The same proxy-first observation helper owns bootstrap composition and workspace recovery
+Promises. A proxy-wrapped Promise is rejected before `instanceof` or descriptor inspection,
+and fulfilled capability values cross their own exact proxy-aware boundary before use.
 
 A synchronous `surface.start` return is exact-validated directly, without passing the
 session through Promise resolution or consulting a session-shaped value's `then` member.

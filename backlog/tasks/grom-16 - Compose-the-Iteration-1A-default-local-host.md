@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 11:38'
+updated_date: '2026-07-13 12:05'
 labels:
   - host
   - bootstrap
@@ -142,10 +142,14 @@ Codex host-inline review triage (2026-07-13): actionable fixes applied for surfa
 Final exact-worktree review closed the last capability-boundary issues: policy-before-reflection and policy-before-Promise observation, provider-replaceable opaque staged-handle identity, immutable bootstrap/surface/model method capture, early malformed-envelope settlement, sibling-draining containment within shared structural and entry budgets, and diagnostic-precedence preservation. Independent specification and quality reviews both passed the exact worktree. Validation: 420 tests / 2,725 assertions; format, typecheck, architecture boundaries, build, native smoke, git diff; all four packaged targets (Darwin arm64, Linux x64 baseline, Windows x64 baseline, Windows arm64); direct application and host compilation 8/8. External exact-head CI and Codex review remain before terminal task finalization.
 
 External exact-head gate at 338865b: GitHub Quality gates and Cross-platform binaries passed; all 27 previously audited Codex threads were resolved after independent verification; the newly requested exact-head Codex review completed with a thumbs-up and no new threads.
+
+Exact-head Codex review on de859d0 found three additional policy-ordering gaps: host cleanup/listener non-void returns can reach native-Promise observation before the host proxy detector, and a native snapshot Promise can fulfill with a recognized Proxy that is not rechecked before reflection. Reopened for focused zero-trap corrections and full revalidation.
+
+Final Codex policy-ordering correction: application capability settlement now reapplies the decoder proxy policy to native-Promise fulfilled values before any reflection; host lifecycle routes completion, start, bootstrap, recovery, stop, signal cleanup, and cancellation listener returns through one intrinsic proxy-first Promise observer. Zero-trap regressions cover fulfilled snapshot Proxies, proxied bootstrap/recovery Promises, and proxied add/remove/stop/unsubscribe returns with exact diagnostics and cleanup counts. Independent specification and quality re-reviews passed. Validation: 423 tests / 2,745 assertions; full format/type/boundary/build/native-smoke suite; four packaged targets; direct application+host compilation 8/8; git diff check.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Composed the explicit Iteration 1A local host with strict workspace discovery and atomic initialization, recovery-before-dispatch, typed workspace gating, deterministic cancellation and signal cleanup, and a replaceable bootstrap registry. Hardened application and host capability boundaries with owned bounded values, proxy-first native-Promise settlement, immutable query/model/method authority, exact semantic binding, provider-owned opaque-handle identity, and shared structural budgets. Verified with 420 tests / 2,725 assertions, full format/type/boundary/build/smoke checks, four packaged targets, 8/8 direct application/host target compilations, independent specification and quality reviews, Claude review, green CI, and Codex exact-head acceptance.
+Composed the explicit Iteration 1A local host with strict workspace discovery and atomic initialization, recovery-before-dispatch, typed workspace gating, deterministic cancellation and signal cleanup, and a replaceable bootstrap registry. Hardened application and host capability boundaries with owned bounded values, proxy-first native-Promise settlement including fulfilled values, immutable query/model/method authority, exact semantic binding, provider-owned opaque-handle identity, and shared structural budgets. Verified with 423 tests / 2,745 assertions, full format/type/boundary/build/smoke checks, four packaged targets, 8/8 direct application/host target compilations, independent specification and quality reviews, Claude review, and iterative Codex review.
 <!-- SECTION:FINAL_SUMMARY:END -->
