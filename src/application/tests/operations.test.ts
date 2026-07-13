@@ -724,6 +724,8 @@ describe("application component reads", () => {
   test("keeps decoder provenance registration private to the factory module", () => {
     expect("registerApplicationSnapshotStateDecoder" in snapshotStateModule).toBeFalse();
     expect("recordApplicationSnapshotStateDecoder" in snapshotStateModule).toBeFalse();
+    expect("promiseSpeciesCarrier" in snapshotStateModule).toBeFalse();
+    expect("intrinsicPromiseSpeciesDescriptor" in snapshotStateModule).toBeFalse();
     expect(typeof snapshotStateModule.applicationSnapshotStateDecoderMetadata).toBe("function");
     const graph = new GraphKernel({
       idSource: {
@@ -1139,6 +1141,10 @@ describe("application component reads", () => {
     let constructorDescriptor: PropertyDescriptor | undefined;
     let writableConstructorPromise: Promise<never> | undefined;
     let writableConstructorDescriptor: PropertyDescriptor | undefined;
+    const fixedConstructorPromises: {
+      readonly descriptor: PropertyDescriptor;
+      readonly promise: Promise<never>;
+    }[] = [];
     const onUnhandled = (reason: unknown) => {
       unhandled.push(reason);
     };
@@ -1222,6 +1228,21 @@ describe("application component reads", () => {
       return promise;
     }
 
+    function fixedIntrinsicConstructorPromise(): HostilePromise<never> {
+      const promise = hostilePromise();
+      Object.defineProperty(promise, "constructor", {
+        configurable: false,
+        enumerable: false,
+        value: Promise,
+        writable: false,
+      });
+      fixedConstructorPromises.push({
+        descriptor: Object.getOwnPropertyDescriptor(promise, "constructor")!,
+        promise,
+      });
+      return promise;
+    }
+
     async function readWith(modelOverride: Partial<StandardModelCapability>) {
       const fixture = new SnapshotFixture();
       fixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
@@ -1265,6 +1286,12 @@ describe("application component reads", () => {
       const unshadowableConstructorResult = await readWith({
         parse: () => unshadowableConstructorPromise() as never,
       });
+      const fixedConstructorParseResult = await readWith({
+        parse: () => fixedIntrinsicConstructorPromise() as never,
+      });
+      const fixedConstructorSuccessResult = await readWith({
+        parse: () => success(fixedIntrinsicConstructorPromise() as never),
+      });
       const promiseShapedPrototype = Object.create(null) as Record<string, unknown>;
       Object.defineProperty(promiseShapedPrototype, "then", {
         get: () => {
@@ -1282,6 +1309,8 @@ describe("application component reads", () => {
         intrinsicResult,
         writableConstructorResult,
         unshadowableConstructorResult,
+        fixedConstructorParseResult,
+        fixedConstructorSuccessResult,
         shapedResult,
       ]) {
         expect(result.ok ? "" : result.diagnostics[0]?.code).toBe(
@@ -1299,6 +1328,11 @@ describe("application component reads", () => {
       expect(Object.getOwnPropertyDescriptor(writableConstructorPromise!, "constructor")).toEqual(
         writableConstructorDescriptor,
       );
+      for (const entry of fixedConstructorPromises) {
+        expect(Object.getOwnPropertyDescriptor(entry.promise, "constructor")).toEqual(
+          entry.descriptor,
+        );
+      }
       expect(getterCalls).toBe(0);
       expect(speciesGetterCalls).toBe(0);
       expect(unhandled).toEqual([]);

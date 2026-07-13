@@ -28,10 +28,27 @@ import type { GraphKernel } from "../core/index.ts";
 
 const intrinsicPromise = Promise;
 const intrinsicPromiseThen = Promise.prototype.then;
+const intrinsicSymbolSpecies = Symbol.species;
 const intrinsicReflectApply = Reflect.apply;
 const intrinsicReflectDeleteProperty = Reflect.deleteProperty;
+const intrinsicCreate = Object.create;
 const intrinsicDefineProperty = Object.defineProperty;
+const intrinsicFreeze = Object.freeze;
 const intrinsicGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const intrinsicPromiseSpeciesDescriptor = (() => {
+  const descriptor = intrinsicGetOwnPropertyDescriptor(intrinsicPromise, intrinsicSymbolSpecies);
+  return descriptor === undefined ? undefined : intrinsicFreeze(descriptor);
+})();
+const promiseSpeciesCarrier = (() => {
+  const carrier = intrinsicCreate(null) as object;
+  intrinsicDefineProperty(carrier, intrinsicSymbolSpecies, {
+    configurable: false,
+    enumerable: false,
+    value: intrinsicPromise,
+    writable: false,
+  });
+  return intrinsicFreeze(carrier);
+})();
 
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
@@ -126,6 +143,30 @@ function decoderFailure<T = never>(): Result<T> {
 
 type NativePromiseObservation = "contained" | "not-native" | "uncontained";
 
+function descriptorsEqual(
+  left: PropertyDescriptor | undefined,
+  right: PropertyDescriptor | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  if (left.configurable !== right.configurable || left.enumerable !== right.enumerable) {
+    return false;
+  }
+  const leftIsData = "value" in left;
+  if (leftIsData !== "value" in right) return false;
+  return leftIsData
+    ? left.value === right.value && left.writable === right.writable
+    : left.get === right.get && left.set === right.set;
+}
+
+function installPromiseRejectionHandler(value: object): boolean {
+  try {
+    intrinsicReflectApply(intrinsicPromiseThen, value, [undefined, () => undefined]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function containNativePromise(value: object): NativePromiseObservation {
   let native = false;
   try {
@@ -147,6 +188,27 @@ function containNativePromise(value: object): NativePromiseObservation {
     constructorDescriptor !== undefined &&
     "value" in constructorDescriptor &&
     constructorDescriptor.writable === true;
+  const fixedIntrinsicPromiseConstructor =
+    constructorDescriptor !== undefined &&
+    "value" in constructorDescriptor &&
+    constructorDescriptor.value === intrinsicPromise &&
+    constructorDescriptor.configurable === false &&
+    constructorDescriptor.writable === false;
+  if (fixedIntrinsicPromiseConstructor) {
+    let currentSpeciesDescriptor: PropertyDescriptor | undefined;
+    try {
+      currentSpeciesDescriptor = intrinsicGetOwnPropertyDescriptor(
+        intrinsicPromise,
+        intrinsicSymbolSpecies,
+      );
+    } catch {
+      return "uncontained";
+    }
+    if (!descriptorsEqual(currentSpeciesDescriptor, intrinsicPromiseSpeciesDescriptor)) {
+      return "uncontained";
+    }
+    return installPromiseRejectionHandler(value) ? "contained" : "uncontained";
+  }
   if (constructorDescriptor !== undefined && !configurable && !writableDataProperty) {
     return "uncontained";
   }
@@ -161,14 +223,13 @@ function containNativePromise(value: object): NativePromiseObservation {
         ? {
             configurable: true,
             enumerable: constructorDescriptor?.enumerable ?? false,
-            value: intrinsicPromise,
+            value: promiseSpeciesCarrier,
             writable: true,
           }
-        : { value: intrinsicPromise },
+        : { value: promiseSpeciesCarrier },
     );
     shadowed = true;
-    intrinsicReflectApply(intrinsicPromiseThen, value, [undefined, () => undefined]);
-    contained = true;
+    contained = installPromiseRejectionHandler(value);
   } catch {
     // Decoder failure remains authoritative when safe Promise observation is unavailable.
   } finally {

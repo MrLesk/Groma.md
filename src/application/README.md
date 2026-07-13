@@ -45,8 +45,11 @@ Core's graph-data copier to create the only values that may escape, with every n
 array, item, extension, component, and relationship application-owned and frozen.
 Malformed native-Promise model outputs are observed with module-captured Promise and
 reflection intrinsics. Observation temporarily shadows and then exactly restores a safe
-own constructor descriptor, so hostile own or inherited `then`, `constructor`, and
-subclass species accessors cannot leak late rejections.
+own constructor descriptor using a private frozen species carrier, so hostile own or
+inherited `then`, `constructor`, and subclass species accessors cannot leak late
+rejections. A fixed own constructor pointing at the captured Promise is observed only
+while its species descriptor still exactly matches the module-initial intrinsic;
+other non-shadowable constructors fail closed.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.
