@@ -1129,11 +1129,16 @@ describe("application component reads", () => {
     expect(JSON.stringify(promiseResult)).not.toContain(secret);
   });
 
-  test("drains native Promise model outputs without reading hostile then accessors", async () => {
+  test("contains native Promise outputs without consulting hostile species or accessors", async () => {
     const marker = "HOSTILE_UNHANDLED";
     const secret = "/private/success-secret";
     const unhandled: unknown[] = [];
     let getterCalls = 0;
+    let speciesGetterCalls = 0;
+    let constructorPromise: Promise<never> | undefined;
+    let constructorDescriptor: PropertyDescriptor | undefined;
+    let writableConstructorPromise: Promise<never> | undefined;
+    let writableConstructorDescriptor: PropertyDescriptor | undefined;
     const onUnhandled = (reason: unknown) => {
       unhandled.push(reason);
     };
@@ -1150,7 +1155,12 @@ describe("application component reads", () => {
       return promise;
     }
 
-    class HostilePromise<T> extends Promise<T> {}
+    class HostilePromise<T> extends Promise<T> {
+      static override get [Symbol.species](): PromiseConstructor {
+        speciesGetterCalls += 1;
+        throw new Error(`${marker}:species:${secret}`);
+      }
+    }
     Object.defineProperty(HostilePromise.prototype, "then", {
       configurable: true,
       get: () => {
@@ -1158,10 +1168,59 @@ describe("application component reads", () => {
         throw new Error(`${marker}:inherited-then:${secret}`);
       },
     });
-    const inheritedThenPromise = () =>
-      new HostilePromise<never>((_resolve, reject) => {
+    function hostilePromise(): HostilePromise<never> {
+      const promise = new HostilePromise<never>((_resolve, reject) => {
         reject(new Error(`${marker}:${secret}`));
       });
+      Object.defineProperty(promise, "then", {
+        configurable: true,
+        get: () => {
+          getterCalls += 1;
+          throw new Error(`${marker}:own-subclass-then:${secret}`);
+        },
+      });
+      return promise;
+    }
+
+    function constructorAccessorPromise(): HostilePromise<never> {
+      const promise = hostilePromise();
+      Object.defineProperty(promise, "constructor", {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          getterCalls += 1;
+          throw new Error(`${marker}:constructor:${secret}`);
+        },
+      });
+      constructorPromise = promise;
+      constructorDescriptor = Object.getOwnPropertyDescriptor(promise, "constructor");
+      return promise;
+    }
+
+    function writableConstructorDataPromise(): HostilePromise<never> {
+      const promise = hostilePromise();
+      Object.defineProperty(promise, "constructor", {
+        configurable: false,
+        enumerable: true,
+        value: HostilePromise,
+        writable: true,
+      });
+      writableConstructorPromise = promise;
+      writableConstructorDescriptor = Object.getOwnPropertyDescriptor(promise, "constructor");
+      return promise;
+    }
+
+    function unshadowableConstructorPromise(): HostilePromise<never> {
+      const promise = new HostilePromise<never>(() => undefined);
+      Object.defineProperty(promise, "constructor", {
+        configurable: false,
+        get: () => {
+          getterCalls += 1;
+          throw new Error(`${marker}:unshadowable-constructor:${secret}`);
+        },
+      });
+      return promise;
+    }
 
     async function readWith(modelOverride: Partial<StandardModelCapability>) {
       const fixture = new SnapshotFixture();
@@ -1190,12 +1249,21 @@ describe("application component reads", () => {
 
     process.on("unhandledRejection", onUnhandled);
     try {
-      const parseResult = await readWith({ parse: () => ownThenPromise() as never });
+      const parseResult = await readWith({ parse: () => hostilePromise() as never });
       const successValue = await readWith({
-        parse: () => success(inheritedThenPromise() as never),
+        parse: () => success(constructorAccessorPromise() as never),
       });
       const relationshipResult = await readWith({
         relationships: () => ownThenPromise() as never,
+      });
+      const intrinsicResult = await readWith({
+        parse: () => Promise.reject(new Error(`${marker}:intrinsic:${secret}`)) as never,
+      });
+      const writableConstructorResult = await readWith({
+        parse: () => writableConstructorDataPromise() as never,
+      });
+      const unshadowableConstructorResult = await readWith({
+        parse: () => unshadowableConstructorPromise() as never,
       });
       const promiseShapedPrototype = Object.create(null) as Record<string, unknown>;
       Object.defineProperty(promiseShapedPrototype, "then", {
@@ -1207,7 +1275,15 @@ describe("application component reads", () => {
       const promiseShaped = Object.create(promiseShapedPrototype);
       const shapedResult = await readWith({ parse: () => promiseShaped as never });
 
-      for (const result of [parseResult, successValue, relationshipResult, shapedResult]) {
+      for (const result of [
+        parseResult,
+        successValue,
+        relationshipResult,
+        intrinsicResult,
+        writableConstructorResult,
+        unshadowableConstructorResult,
+        shapedResult,
+      ]) {
         expect(result.ok ? "" : result.diagnostics[0]?.code).toBe(
           "application-snapshot-decode-failed",
         );
@@ -1217,7 +1293,14 @@ describe("application component reads", () => {
       }
       await Promise.resolve();
       await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(Object.getOwnPropertyDescriptor(constructorPromise!, "constructor")).toEqual(
+        constructorDescriptor,
+      );
+      expect(Object.getOwnPropertyDescriptor(writableConstructorPromise!, "constructor")).toEqual(
+        writableConstructorDescriptor,
+      );
       expect(getterCalls).toBe(0);
+      expect(speciesGetterCalls).toBe(0);
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);

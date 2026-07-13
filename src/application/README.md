@@ -43,8 +43,10 @@ identities, kinds, types, and endpoints back to the resolved graph; rejects prox
 reflection; and applies one aggregate embedded-item and structural budget. It then uses
 Core's graph-data copier to create the only values that may escape, with every nested
 array, item, extension, component, and relationship application-owned and frozen.
-Malformed native-Promise model outputs are observed with the module-captured intrinsic
-Promise `then`, so hostile own or inherited `then` accessors cannot leak late rejections.
+Malformed native-Promise model outputs are observed with module-captured Promise and
+reflection intrinsics. Observation temporarily shadows and then exactly restores a safe
+own constructor descriptor, so hostile own or inherited `then`, `constructor`, and
+subclass species accessors cannot leak late rejections.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.

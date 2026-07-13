@@ -28,6 +28,10 @@ import type { GraphKernel } from "../core/index.ts";
 
 const intrinsicPromise = Promise;
 const intrinsicPromiseThen = Promise.prototype.then;
+const intrinsicReflectApply = Reflect.apply;
+const intrinsicReflectDeleteProperty = Reflect.deleteProperty;
+const intrinsicDefineProperty = Object.defineProperty;
+const intrinsicGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
@@ -120,20 +124,67 @@ function decoderFailure<T = never>(): Result<T> {
   return decoderFailureResult;
 }
 
-function containNativePromise(value: object): boolean {
+type NativePromiseObservation = "contained" | "not-native" | "uncontained";
+
+function containNativePromise(value: object): NativePromiseObservation {
   let native = false;
   try {
     native = value instanceof intrinsicPromise;
   } catch {
-    return false;
+    return "not-native";
   }
-  if (!native) return false;
+  if (!native) return "not-native";
+
+  let constructorDescriptor: PropertyDescriptor | undefined;
   try {
-    Reflect.apply(intrinsicPromiseThen, value, [undefined, () => undefined]);
+    constructorDescriptor = intrinsicGetOwnPropertyDescriptor(value, "constructor");
   } catch {
-    // Malformed Promise subclasses can reject observation; decoder failure remains authoritative.
+    return "uncontained";
   }
-  return true;
+
+  const configurable = constructorDescriptor?.configurable === true;
+  const writableDataProperty =
+    constructorDescriptor !== undefined &&
+    "value" in constructorDescriptor &&
+    constructorDescriptor.writable === true;
+  if (constructorDescriptor !== undefined && !configurable && !writableDataProperty) {
+    return "uncontained";
+  }
+
+  let shadowed = false;
+  let contained = false;
+  try {
+    intrinsicDefineProperty(
+      value,
+      "constructor",
+      constructorDescriptor === undefined || configurable
+        ? {
+            configurable: true,
+            enumerable: constructorDescriptor?.enumerable ?? false,
+            value: intrinsicPromise,
+            writable: true,
+          }
+        : { value: intrinsicPromise },
+    );
+    shadowed = true;
+    intrinsicReflectApply(intrinsicPromiseThen, value, [undefined, () => undefined]);
+    contained = true;
+  } catch {
+    // Decoder failure remains authoritative when safe Promise observation is unavailable.
+  } finally {
+    if (shadowed) {
+      try {
+        if (constructorDescriptor === undefined) {
+          intrinsicReflectDeleteProperty(value, "constructor");
+        } else {
+          intrinsicDefineProperty(value, "constructor", constructorDescriptor);
+        }
+      } catch {
+        // Restoration is best effort and must not expose provider-controlled errors.
+      }
+    }
+  }
+  return contained ? "contained" : "uncontained";
 }
 
 function compareText(left: string, right: string): number {
@@ -518,7 +569,7 @@ function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unkn
     if (typeof value !== "object" || value === null || context.isProxy(value)) {
       return decoderFailure();
     }
-    if (containNativePromise(value)) return decoderFailure();
+    if (containNativePromise(value) !== "not-native") return decoderFailure();
     const inspected = inspectExactRecord(
       value,
       [
@@ -533,7 +584,7 @@ function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unkn
       const modelValue = inspected.value.value;
       if (typeof modelValue === "object" && modelValue !== null) {
         if (context.isProxy(modelValue)) return decoderFailure();
-        if (containNativePromise(modelValue)) return decoderFailure();
+        if (containNativePromise(modelValue) !== "not-native") return decoderFailure();
       }
       return success(modelValue);
     }
