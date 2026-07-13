@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 07:17'
+updated_date: '2026-07-13 07:26'
 labels:
   - host
   - bootstrap
@@ -108,4 +108,8 @@ Capability-output containment correction: application init, snapshot, query, res
 Quality-follow-up plan: retain the explicitly injected concrete BoundedQueryContracts receiver, capture Core prepare/page/exact prototype methods at module initialization, reject recognized proxies and receivers without the genuine private brand during application construction using only the exact Core method, bypass instance/subclass redirection, and prove colluding page/prepare cannot self-attest a secret cursor. Then rerun focused, full, four-target, and direct application/host compilation checks.
 
 Independent query-cursor correction: Application operations now treat the injected query object as a configured concrete Core BoundedQueryContracts receiver, validate its genuine private brand at construction after decoder-provenanced proxy rejection, and invoke module-captured Core prepare/page/exact prototype intrinsics. Instance and subclass overrides cannot redirect cursor generation, validation, paging, or exact reads; a colluding page/prepare pair cannot self-attest or expose a secret cursor. Output containment and application-owned reconstruction remain in place. Validation: focused application+host 91 tests / 802 assertions; full bun run check 382 tests / 2406 assertions; all four standalone targets; direct application and host compilation on all four targets; git diff --check.
+
+Pre-load prototype-mutation correction plan: capture BoundedQueryContracts prepare/page/exact inside Core query module immediately after class initialization; export narrow direct-module invocation functions that Reflect.apply the captured methods; remove application prototype reads; and prove in an isolated process that poisoning the public prototype before dynamic application import cannot forge the private-brand probe, redirect query calls, or leak a cursor. Preserve the existing public Core surface and normal query tests, then rerun focused, full, four-target, and direct application/host compilation checks.
+
+Pre-load query-authority correction: Core query now captures genuine BoundedQueryContracts prepare/page/exact plus Reflect.apply immediately after class initialization and exposes only narrow direct-module invokers. Application uses those immutable ESM bindings for brand probing and runtime queries, so poisoning the public prototype before application import cannot redirect calls or leak a cursor. Core index explicitly re-exports exactly the prior query class/type surface and omits the new internal invokers. An isolated Bun child imports Core, poisons all three prototype methods, dynamically imports Application, proves a fake receiver is rejected, then completes safe two-page pagination and exact read with zero override calls and no secret. Validation: focused application+host+isolated regression 92 tests / 805 assertions; full bun run check 383 tests / 2409 assertions; all four standalone targets; direct application and host compilation on all four targets; git diff --check.
 <!-- SECTION:NOTES:END -->

@@ -1,5 +1,4 @@
 import {
-  BoundedQueryContracts,
   failure,
   parseContentRevision,
   parseEntityId,
@@ -24,6 +23,12 @@ import {
   type TransactionRequest,
 } from "../core/index.ts";
 import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
+import {
+  invokeCapturedBoundedQueryExact,
+  invokeCapturedBoundedQueryPage,
+  invokeCapturedBoundedQueryPrepare,
+  type BoundedQueryContracts,
+} from "../core/query.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
@@ -98,9 +103,6 @@ interface ApplicationOperationsContext extends ApplicationOperationsOptions {
 }
 
 const intrinsicReflectApply = Reflect.apply;
-const intrinsicBoundedQueryExact = BoundedQueryContracts.prototype.exact;
-const intrinsicBoundedQueryPage = BoundedQueryContracts.prototype.page;
-const intrinsicBoundedQueryPrepare = BoundedQueryContracts.prototype.prepare;
 const applicationCapabilityContainmentFailure = Object.freeze({ ok: false as const });
 
 const absoluteBounds = Object.freeze({
@@ -295,11 +297,12 @@ function validateBoundedQueryReceiver(
     throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
   }
   try {
-    intrinsicReflectApply(intrinsicBoundedQueryPrepare, queries, [
+    invokeCapturedBoundedQueryPrepare(
+      queries as BoundedQueryContracts,
       0,
       Object.freeze({}),
       Object.freeze({ limit: 1 }),
-    ]);
+    );
   } catch {
     throw new TypeError("queries must be a genuine BoundedQueryContracts instance");
   }
@@ -1009,11 +1012,7 @@ function prepareQuery(
 ): Result<PreparedBoundedQuery> {
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(intrinsicBoundedQueryPrepare, options.calls.queries, [
-      generation,
-      query,
-      request,
-    ]);
+    raw = invokeCapturedBoundedQueryPrepare(options.calls.queries, generation, query, request);
   } catch {
     return queryCapabilityFailure();
   }
@@ -1077,11 +1076,7 @@ function pageQuery<T>(
   const ownedItems = Object.freeze([...items]);
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(intrinsicBoundedQueryPage, options.calls.queries, [
-      prepared,
-      ownedItems,
-      state,
-    ]);
+    raw = invokeCapturedBoundedQueryPage(options.calls.queries, prepared, ownedItems, state);
   } catch {
     return queryCapabilityFailure();
   }
@@ -1146,10 +1141,7 @@ function exactQuery<T>(
 ): Result<{ readonly generation: GraphGeneration; readonly item: T }> {
   let raw: unknown;
   try {
-    raw = intrinsicReflectApply(intrinsicBoundedQueryExact, options.calls.queries, [
-      generation,
-      item,
-    ]);
+    raw = invokeCapturedBoundedQueryExact(options.calls.queries, generation, item);
   } catch {
     return queryCapabilityFailure();
   }
