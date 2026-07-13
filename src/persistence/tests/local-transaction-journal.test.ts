@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -455,19 +455,29 @@ describe("local transaction journal", () => {
     expect((await provider.removeResource(locator.value)).state).toBe("committed");
   });
 
-  test("recovers a committing deletion whose target parent is already absent", async () => {
+  test("keeps deletion indeterminate when a missing parent can hide a sibling", async () => {
     const roots = await workspace();
     const resources = await createLocalResourceProvider(roots);
     const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
     if (!locator.ok) throw new Error("invalid missing-parent target locator");
     const resource = parseResourceKey(locator.value);
     if (!resource.ok) throw new Error("invalid missing-parent target resource");
+    const siblingLocator = workspaceResourceLocator("groma", "intent", "ab", "sibling.md");
+    if (!siblingLocator.ok) throw new Error("invalid missing-parent sibling locator");
+    const siblingResource = parseResourceKey(siblingLocator.value);
+    if (!siblingResource.ok) throw new Error("invalid missing-parent sibling resource");
     const prior = new TextEncoder().encode("remove me");
+    const sibling = new TextEncoder().encode("keep me");
     await seed(resources, locator.value, prior);
+    await seed(resources, siblingLocator.value, sibling);
     const priorRevision = parseContentRevision(
       `sha256:${createHash("sha256").update(prior).digest("hex")}`,
     );
     if (!priorRevision.ok) throw new Error("invalid missing-parent target revision");
+    const siblingRevision = parseContentRevision(
+      `sha256:${createHash("sha256").update(sibling).digest("hex")}`,
+    );
+    if (!siblingRevision.ok) throw new Error("invalid missing-parent sibling revision");
     const target = Object.freeze({
       expected: priorRevision.value,
       locator: locator.value,
@@ -483,6 +493,11 @@ describe("local transaction journal", () => {
                 locator: locator.value,
                 resource: resource.value,
                 revision: priorRevision.value,
+              }),
+              Object.freeze({
+                locator: siblingLocator.value,
+                resource: siblingResource.value,
+                revision: siblingRevision.value,
               }),
             ]),
             state: {},
@@ -522,11 +537,17 @@ describe("local transaction journal", () => {
 
     const restartedResources = await createLocalResourceProvider(roots);
     const restarted = createLocalTransactionJournal({ adapter, resources: restartedResources });
-    expect(await restarted.recover(prepared.token)).toMatchObject({
-      generation: 1,
-      status: "committed",
-    });
+    expect(await restarted.recover(prepared.token)).toEqual({ status: "indeterminate" });
+    await expect(restarted.snapshot([])).rejects.toThrow(
+      "interrupted transaction cannot be settled",
+    );
     expect(await restartedResources.read({ locator: locator.value, maxBytes: 100 })).toMatchObject({
+      diagnostics: [{ code: "resource-missing" }],
+      ok: false,
+    });
+    expect(
+      await restartedResources.read({ locator: siblingLocator.value, maxBytes: 100 }),
+    ).toMatchObject({
       diagnostics: [{ code: "resource-missing" }],
       ok: false,
     });
@@ -659,103 +680,155 @@ describe("local transaction journal", () => {
     });
   }
 
-  for (const retainedBy of ["prepare", "snapshot"] as const) {
-    test(`reuses a lease retained by ${retainedBy} when recovering a settled token`, async () => {
-      const roots = await workspace();
-      const base = await createLocalResourceProvider(roots);
-      let acquisitions = 0;
-      let releases = 0;
-      let failNextRelease = false;
-      const resources = providerWithOverrides(base, {
-        acquireCoordination(request) {
-          acquisitions += 1;
-          return base.acquireCoordination(request);
-        },
-        async releaseCoordination(lease) {
-          releases += 1;
-          if (failNextRelease) {
-            failNextRelease = false;
-            return failure(
-              Object.freeze({
-                code: "injected-retained-release-failure",
-                message: "Injected retained release failure",
-              }),
-            );
-          }
-          return base.releaseCoordination(lease);
-        },
-      });
-      const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
-      if (!locator.ok) throw new Error("invalid retained-lease target locator");
-      const resource = parseResourceKey(locator.value);
-      if (!resource.ok) throw new Error("invalid retained-lease target resource");
-      const replacement = new TextEncoder().encode("settled state");
-      const result = parseContentRevision(
-        `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
-      );
-      if (!result.ok) throw new Error("invalid retained-lease target revision");
-      const target = Object.freeze({
-        expected: null,
-        locator: locator.value,
-        replacement,
-        resource: resource.value,
-        result: result.value,
-      });
-      let rejectMaterialization = false;
-      const adapter: CanonicalTransactionAdapter = Object.freeze({
-        load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
-        materialize: () =>
-          rejectMaterialization
-            ? failure(
+  for (const releaseFailure of ["retryable", "ownership-lost"] as const) {
+    for (const retainedBy of ["prepare", "snapshot"] as const) {
+      const behavior =
+        releaseFailure === "retryable"
+          ? `reuses a lease retained by ${retainedBy}`
+          : `reacquires after ${retainedBy} loses lease ownership`;
+      test(`${behavior} when recovering a settled token`, async () => {
+        const roots = await workspace();
+        const base = await createLocalResourceProvider(roots);
+        let acquisitions = 0;
+        let releases = 0;
+        let failNextRelease = false;
+        const resources = providerWithOverrides(base, {
+          acquireCoordination(request) {
+            acquisitions += 1;
+            return base.acquireCoordination(request);
+          },
+          async releaseCoordination(lease) {
+            releases += 1;
+            if (failNextRelease) {
+              failNextRelease = false;
+              if (releaseFailure === "ownership-lost") {
+                const released = await base.releaseCoordination(lease);
+                if (!released.ok) return released;
+                return failure(
+                  Object.freeze({
+                    code: "resource-coordination-ownership-lost",
+                    message: "Injected coordination ownership loss",
+                  }),
+                );
+              }
+              return failure(
                 Object.freeze({
-                  code: "injected-materialization-failure",
-                  message: "Injected materialization failure",
+                  code: "injected-retained-release-failure",
+                  message: "Injected retained release failure",
                 }),
-              )
-            : success(Object.freeze({ state: {}, targets: Object.freeze([target]) })),
-      });
-      const journal = createLocalTransactionJournal({ adapter, resources });
-      const proposal = {
-        affected: { entities: [], relations: [] },
-        baseGeneration: 0,
-        context: {},
-        expectedRevisions: [{ expected: null, resource: resource.value }],
-        generation: 1,
-        mutation: {},
-        priorState: {},
-      } as unknown as ProposedTransaction;
-      const prepared = await journal.prepare(proposal);
-      expect(prepared.status).toBe("prepared");
-      if (prepared.status !== "prepared") return;
-      expect(await journal.commit(prepared.token)).toMatchObject({
-        generation: 1,
-        status: "committed",
-      });
+              );
+            }
+            return base.releaseCoordination(lease);
+          },
+        });
+        const locator = workspaceResourceLocator("groma", "intent", "ab", "target.md");
+        if (!locator.ok) throw new Error("invalid retained-lease target locator");
+        const resource = parseResourceKey(locator.value);
+        if (!resource.ok) throw new Error("invalid retained-lease target resource");
+        const replacement = new TextEncoder().encode("settled state");
+        const result = parseContentRevision(
+          `sha256:${createHash("sha256").update(replacement).digest("hex")}`,
+        );
+        if (!result.ok) throw new Error("invalid retained-lease target revision");
+        const target = Object.freeze({
+          expected: null,
+          locator: locator.value,
+          replacement,
+          resource: resource.value,
+          result: result.value,
+        });
+        let rejectMaterialization = false;
+        const adapter: CanonicalTransactionAdapter = Object.freeze({
+          load: async () => success(Object.freeze({ resources: Object.freeze([]), state: {} })),
+          materialize: () =>
+            rejectMaterialization
+              ? failure(
+                  Object.freeze({
+                    code: "injected-materialization-failure",
+                    message: "Injected materialization failure",
+                  }),
+                )
+              : success(Object.freeze({ state: {}, targets: Object.freeze([target]) })),
+        });
+        const journal = createLocalTransactionJournal({ adapter, resources });
+        const proposal = {
+          affected: { entities: [], relations: [] },
+          baseGeneration: 0,
+          context: {},
+          expectedRevisions: [{ expected: null, resource: resource.value }],
+          generation: 1,
+          mutation: {},
+          priorState: {},
+        } as unknown as ProposedTransaction;
+        const prepared = await journal.prepare(proposal);
+        expect(prepared.status).toBe("prepared");
+        if (prepared.status !== "prepared") return;
+        expect(await journal.commit(prepared.token)).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
 
-      failNextRelease = true;
-      if (retainedBy === "snapshot") {
-        await expect(journal.snapshot([])).rejects.toThrow("Injected retained release failure");
-      } else {
-        rejectMaterialization = true;
-        await expect(
-          journal.prepare({
-            ...proposal,
-            baseGeneration: 1,
-            expectedRevisions: [],
-            generation: 2,
-          } as unknown as ProposedTransaction),
-        ).rejects.toThrow("preparation failed");
-      }
+        failNextRelease = true;
+        if (retainedBy === "snapshot") {
+          await expect(journal.snapshot([])).rejects.toThrow(
+            releaseFailure === "retryable"
+              ? "Injected retained release failure"
+              : "Injected coordination ownership loss",
+          );
+        } else {
+          rejectMaterialization = true;
+          await expect(
+            journal.prepare({
+              ...proposal,
+              baseGeneration: 1,
+              expectedRevisions: [],
+              generation: 2,
+            } as unknown as ProposedTransaction),
+          ).rejects.toThrow("preparation failed");
+        }
 
-      expect(acquisitions).toBe(2);
-      expect(await journal.recover(prepared.token)).toMatchObject({
-        generation: 1,
-        status: "committed",
+        expect(acquisitions).toBe(2);
+        expect(await journal.recover(prepared.token)).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
+        expect(acquisitions).toBe(releaseFailure === "retryable" ? 2 : 3);
+        expect(releases).toBe(3);
       });
-      expect(acquisitions).toBe(2);
-      expect(releases).toBe(3);
-    });
+    }
   }
+
+  test("reacquires after a committed transaction loses coordination during release", async () => {
+    const roots = await workspace();
+    const canonicalRoot = await realpath(roots.workspaceRoot);
+    const absoluteResource = path.resolve(canonicalRoot, "groma");
+    const key = `${canonicalRoot}\0${absoluteResource}`
+      .normalize("NFC")
+      .toLowerCase()
+      .normalize("NFC");
+    const identity = createHash("sha256").update(key).digest("hex");
+    const lockPath = path.join(roots.coordinationRoot, `${identity}.lock`);
+    let releaseCalls = 0;
+    let ownershipLost = false;
+    const active = await harness(roots, undefined, async (phase) => {
+      if (phase !== "coordination-release") return;
+      releaseCalls += 1;
+      if (releaseCalls === 2) {
+        ownershipLost = true;
+        await rm(lockPath, { recursive: true });
+      }
+    });
+
+    const outcome = await active.engine.execute(createRequest());
+    expect(ownershipLost).toBeTrue();
+    expect(outcome.status).toBe("indeterminate");
+    if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+    expect(await active.engine.recover(outcome.recovery)).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(releaseCalls).toBe(3);
+  });
 
   for (const phase of [
     "after-prepared-state",

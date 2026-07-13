@@ -105,8 +105,10 @@ lease in volatile journal state when pre-move release fails. The next snapshot,
 prepare, commit, or recovery entry atomically takes that lease before its first
 asynchronous operation and retries release after settlement; a concurrent caller cannot
 share the in-flight lease and instead follows normal contended acquisition. Confirmed
-release clears the retained lease. Nothing volatile enters the deterministic
-transaction-state record.
+release clears the retained lease. Ownership-lost and invalid-handle diagnostics are
+terminal instead: the stale handle is discarded and the next entry must acquire and
+verify fresh coordination before transaction work. Nothing volatile enters the
+deterministic transaction-state record.
 Journal publication stages have their own volatile same-process recovery records. A
 provider-confirmed pre-move rejection, or a thrown commit whose exact readback is still
 the previous state or absence, discards the stage. If discard fails, the next journal
@@ -127,10 +129,10 @@ substitute for reasserting file and parent-directory durability after a post-ren
 crash.
 
 Deletion is idempotent. POSIX removals sync an existing containing directory even when
-the target is already absent, so recovery can reassert deletion durability. If the
-containing directory is itself absent, there is no target entry or containing directory
-left to sync; removal reports committed instead of trapping recovery in a permanent
-indeterminate state. Windows keeps the same exact old/new classification and atomic
+the target is already absent, so recovery can reassert deletion durability. A missing
+containing directory fails closed: its disappearance could also hide untargeted sibling
+resources, so the provider cannot safely advance the transaction generation from the
+target's absence alone. Windows keeps the same exact old/new classification and atomic
 file behavior but, like replacement, makes no unsupported power-loss
 directory-durability claim. The journal and provider
 compile for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64;

@@ -181,6 +181,17 @@ function conservativeLocatorAlias(locator: string): string {
   return Reflect.apply(intrinsicNormalize, lowered, ["NFC"]) as string;
 }
 
+function coordinationLeaseCannotBeRetried(released: Result<void>): boolean {
+  if (released.ok) return false;
+  for (let index = 0; index < released.diagnostics.length; index += 1) {
+    const code = released.diagnostics[index]?.code;
+    if (code === "invalid-coordination-lease" || code === "resource-coordination-ownership-lost") {
+      return true;
+    }
+  }
+  return false;
+}
+
 const localTransactionStateAlias = conservativeLocatorAlias(localTransactionStateLocator);
 
 const coordinationLocatorResult = workspaceResourceLocator("groma");
@@ -1043,8 +1054,14 @@ export function createLocalTransactionJournal(
   };
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
     const released = await options.resources.releaseCoordination(lease);
-    if (!released.ok) return false;
     const preparation = live.get(token);
+    if (!released.ok) {
+      if (coordinationLeaseCannotBeRetried(released) && preparation?.lease === lease) {
+        delete preparation.lease;
+        if (preparation.stagesCleaned) live.delete(token);
+      }
+      return false;
+    }
     if (preparation?.lease === lease) {
       delete preparation.lease;
       if (preparation.stagesCleaned) live.delete(token);
@@ -1220,7 +1237,7 @@ export function createLocalTransactionJournal(
       throw error;
     }
     if (!released.ok) {
-      retainTransactionLease(lease);
+      if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
       throw new Error(released.diagnostics[0]?.message);
     }
     if (retainedTransactionLease === lease) retainedTransactionLease = undefined;

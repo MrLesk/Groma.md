@@ -1261,7 +1261,7 @@ describe("staged atomic replacement", () => {
     expect(await readFile(target, "utf8")).toBe("old-complete");
   });
 
-  test("treats a target beneath a missing parent as already absent", async () => {
+  test("fails closed when a missing parent could hide untargeted resources", async () => {
     const roots = await fixture();
     const provider = await createLocalResourceProvider(roots);
     const target = locator("groma", "intent", "ab", "target.md");
@@ -1274,8 +1274,14 @@ describe("staged atomic replacement", () => {
       recursive: true,
     });
 
-    expect(await provider.removeResource(target)).toEqual({ state: "committed" });
-    expect(await provider.removeResource(target)).toEqual({ state: "committed" });
+    expect(await provider.removeResource(target)).toMatchObject({
+      diagnostics: [{ code: "resource-missing" }],
+      state: "not-committed",
+    });
+    expect(await provider.removeResource(target)).toMatchObject({
+      diagnostics: [{ code: "resource-missing" }],
+      state: "not-committed",
+    });
   });
 });
 
@@ -1518,6 +1524,41 @@ describe("same-machine coordination", () => {
         value: undefined,
       });
     }
+  });
+
+  test("retires an ownership-lost lease without clearing a newer process guard", async () => {
+    if (process.platform === "win32") return;
+    const roots = await fixture();
+    const first = await createLocalResourceProvider(roots);
+    const second = await createLocalResourceProvider(roots);
+    const third = await createLocalResourceProvider(roots);
+    const request = { context: "local-machine" as const, locator: locator("ownership-lost") };
+    const acquired = await first.acquireCoordination(request);
+    expect(acquired).toMatchObject({ ok: true });
+    if (!acquired.ok) throw new Error("expected persistent lease");
+    const identity = await coordinationHash(roots.workspaceRoot, request.locator);
+    const lockPath = path.join(requiredCoordinationRoot(roots), `${identity}.lock`);
+    await rm(lockPath, { recursive: true });
+
+    expect(await first.releaseCoordination(acquired.value)).toMatchObject({
+      diagnostics: [{ code: "resource-coordination-ownership-lost" }],
+      ok: false,
+    });
+    const replacement = await second.acquireCoordination(request);
+    expect(replacement).toMatchObject({ ok: true });
+    if (!replacement.ok) throw new Error("expected replacement lease");
+    expect(await first.releaseCoordination(acquired.value)).toMatchObject({
+      diagnostics: [{ code: "resource-coordination-ownership-lost" }],
+      ok: false,
+    });
+    expect(await third.acquireCoordination(request)).toMatchObject({
+      diagnostics: [{ code: "resource-coordination-contended" }],
+      ok: false,
+    });
+    expect(await second.releaseCoordination(replacement.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
   });
 
   test("retains action and release diagnostics when both fail", async () => {
