@@ -138,11 +138,15 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
 }
 
 export function parseInvocation(args: readonly string[]): CliInvocationResult {
+  const boundedFailureFormat: CliFormat =
+    (args[0] === "--format" && args[1] === "json") || args[0] === "--format=json"
+      ? "json"
+      : "plain";
   if (
     args.length > CLI_MAX_ARGUMENTS ||
     args.reduce((total, argument) => total + argument.length, 0) > CLI_MAX_ARGUMENT_CHARACTERS
   ) {
-    return failed("plain", "Command arguments exceed the supported bound");
+    return failed(boundedFailureFormat, "Command arguments exceed the supported bound");
   }
 
   let format: CliFormat = "plain";

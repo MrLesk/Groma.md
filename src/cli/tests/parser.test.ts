@@ -86,5 +86,12 @@ describe("CLI provisional grammar", () => {
       },
     );
     expect(parseInvocation(["x".repeat(65_537)])).toMatchObject({ ok: false });
+    expect(
+      parseInvocation([
+        "--format",
+        "json",
+        ...Array.from({ length: CLI_MAX_ARGUMENTS }, () => "x"),
+      ]),
+    ).toMatchObject({ format: "json", ok: false });
   });
 });

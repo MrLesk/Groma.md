@@ -121,6 +121,24 @@ describe("CLI program", () => {
     }
   });
 
+  test("preserves the requested JSON envelope for an oversized invocation", async () => {
+    const captured = captureOutput();
+    const exitCode = await runProgram(
+      ["--format", "json", ...Array.from({ length: 256 }, () => "argument")],
+      captured,
+    );
+
+    expect(exitCode).toBe(CLI_EXIT.usage);
+    expect(captured.errors).toEqual([]);
+    expect(captured.output).toHaveLength(1);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      command: "invocation",
+      exitCode: CLI_EXIT.usage,
+      ok: false,
+      result: { diagnostics: [{ code: "cli-invalid-invocation" }], ok: false },
+    });
+  });
+
   test("offers initialization without creating files when the workspace is missing", async () => {
     const root = await workspace();
     const captured = captureOutput();

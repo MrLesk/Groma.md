@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 13:02'
+updated_date: '2026-07-13 13:13'
 labels:
   - cli
   - terminal
@@ -72,4 +72,8 @@ Claude review on PR #15: the default Fable invocation hit the monthly spend cap,
 Codex review of fb0418b produced three actionable P2 findings, all independently verified and corrected: explicit JSON help and version now use the stable envelope; CliInputReader receives the host AbortSignal and the default Bun stdin reader cancels its locked stream on signal so an open pipe cannot delay exit; Bun file input now uses BunFile.stream() and stops after the first over-limit chunk instead of buffering a TOCTOU-grown file. Current official Bun documentation was checked through Context7 /oven-sh/bun for Bun.stdin.stream(), BunFile.stream(), and Uint8Array chunk iteration. Regressions cover JSON meta commands, a 2 MiB input file, and a real SIGTERM child with stdin deliberately left open.
 
 Post-Codex correction validation: focused CLI 25 tests / 175 assertions; full bun run check 444 tests / 2,917 assertions; all four standalone targets; direct CLI and host compilation 8/8; formatting, strict types, architecture boundaries, native build/smoke, and git diff checks pass.
+
+Exact-head Codex review of 2775464 found one additional actionable P2: invocation argument bounds were checked before retaining a valid leading JSON format, so oversized machine requests rendered plain diagnostics. parseInvocation now derives only the bounded-failure format from the leading global option before the aggregate argument preflight, preserving the JSON envelope without parsing the oversized command. Parser and program regressions cover the 257-plus-argument JSON case.
+
+Post-second-Codex correction validation: focused CLI 26 tests / 180 assertions; full bun run check 445 tests / 2,922 assertions including format, types, boundaries, native build and smoke; git diff check passes. The correction is parser-only; the prior exact four-target and 8/8 direct compile results remain applicable and final-head CI will rerun both package jobs.
 <!-- SECTION:NOTES:END -->
