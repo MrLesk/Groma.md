@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:34'
-updated_date: '2026-07-12 13:25'
+updated_date: '2026-07-13 16:29'
 labels:
   - persistence
   - markdown
@@ -51,13 +51,10 @@ Persist standard-model components as deterministic, human-readable Markdown unde
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Define persistence-local Markdown intent contracts, configured bounds, stable diagnostics, exact SHA-256 content revisions, and the canonical groma/intent/<two-hex-shard>/<entity-id>.md locator/resource mapping. Keep the Local Resource Provider and Standard Model capability injected so filesystem and model policy stay behind their boundaries.
-2. Pin yaml 2.9.0 and implement a deterministic groma/v0.1 codec. Store one component per file, keep intent in a reversible # Intent Markdown body, store outgoing relationships with stable IDs in frontmatter, order all known fields/items/relationships/extensions deterministically, and hash exact UTF-8 bytes.
-3. Decode bounded frontmatter with duplicate-key, conflict-marker, schema, kind, identity, relationship, and GraphData validation. Route components through StandardModelCapability normalize/parse/serialize and relationships through its semantic view so direct store APIs cannot bypass the standard codec.
-4. Implement provider-backed exact reads and bounded whole-store loads. Enumerate only the canonical two-level shard layout, treat a missing intent root as empty, enforce document/directory/byte ceilings, return stable entity/relation order, and diagnose wrong locations, duplicate identities, unknown parents/targets, cycles, malformed resources, and unexpected kinds.
-5. Preserve unknown namespaced component, item, and relationship extensions through load, unrelated model mutation, and canonical rewrite while never adding evidence, bindings, aliases, plans, timestamps, machine paths, or derived status.
-6. Add boundary-local golden and temporary-provider tests for root/nested components, same/mixed recursive containment, relationships, Unicode/prose fidelity, stable rename/reparent locations, semantic determinism, exact revisions, extension preservation, empty stores, bounds, conflicts, duplicates, wrong kind/location, missing endpoints, cycles, and malformed YAML.
-7. Run focused/full checks plus direct persistence compilation for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; complete independent specification then quality review, publish a ready task-linked PR, run Claude for text/naming/simplicity, and wait for Codex acceptance/comments before finalization and merge.
+1. Reproduce the final Codex findings for escaped unpaired surrogates and standalone YAML anchors against the current decoder.
+2. Reject anchors during YAML AST inspection and validate the converted frontmatter record for lossless Unicode before Standard Model use.
+3. Add focused direct-decode regressions proving stable diagnostics for both hand-authored cases without weakening valid YAML or canonical rewrites.
+4. Run focused persistence tests, full checks, four-target cross-compilation, independent review, and deliver a ready task-linked correction PR through Claude Opus and Codex gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -78,10 +75,18 @@ Final numeric emission quality fix: canonical serialization now wraps every fini
 Claude/Codex review fixes: serialize now rejects complete column-zero Git conflict blocks with intent-conflict-marker while lone separator prose remains valid. Intent bytes use intrinsic typed-array tag/buffer/offset/length inspection and raw-buffer copies, accepting Buffer/Uint8Array subclasses without species or subclass constructors, rejecting wrong typed arrays/proxies, and returning isolated plain Uint8Array snapshots whose mutation cannot invalidate revisions. The __proto__ regression now proves an own data property survives. Bounded loads reject empty non-final pages and cap pages at maxDocuments + 256 shards + one terminal page. Validation: focused Markdown intent suite 30 passed (144 assertions); bun run typecheck passed; git diff --check passed.
 
 Final validation at 8750d421d252bdddf31c9016f72e276bd3f93aaa: bun run check passed 215 tests with 997 assertions; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; independent specification and quality reviews passed. Ready PR #11 passed both CI jobs. Claude review and Codex review of 3ac6ffc were independently assessed and their actionable findings were fixed; Codex exact-head retry produced only a service usage-limit notice, not new code feedback.
+
+Final Codex audit follow-up: the retrospective exact-PR review identified two valid current gaps. yamlRecord accepted an unused YAML anchor because only aliases and explicit tags were inspected, and YAML escape decoding could construct an unpaired UTF-16 surrogate after the raw document had already passed strict UTF-8 decoding. Context-hunter classification: L1 bounded persistence-decoder correction; no public contract or architecture change.
+
+Final Codex findings reproduced and corrected in yamlRecord. YAML AST inspection now rejects node.anchor even without an alias, converted frontmatter is checked recursively for unpaired surrogate values and keys before model use, and the shared Unicode diagnostic now describes intent data rather than serialization only. Focused Markdown intent validation: 30 tests passed with 146 assertions.
+
+Correction validation on the publish candidate: bun run check passed 458 tests with 3,001 assertions, including the compiled Iteration 1A workflow and crash recovery; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64; git diff --check passed.
+
+Review gates on code head 86e8418: both GitHub Actions jobs passed; default Claude Opus approved the correction with no blocking findings; Codex completed with a thumbs-up and no review comments. Opus optional decoder key-surrogate regression was not added because the shared key-validation branch already has serialization coverage and the new decoder value regression proves yamlRecord invokes the same validator.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the deterministic groma/v0.1 Markdown intent store with stable-ID sharding, reversible prose, outgoing relationships, exact revisions, bounded provider loading, strict lossless YAML/numeric handling, graph diagnostics, extension preservation, and defensive runtime copying. Documented the canonical format and verified it with 30 focused tests, the full 215-test suite, independent spec/quality review, ready PR review, CI, and all four supported Bun binary targets.
+Closed the remaining deterministic Markdown decoder gaps by rejecting standalone YAML anchors and escaped unpaired UTF-16 surrogates before Standard Model use. Verified with 30 focused tests and 146 assertions, the full 458-test/3,001-assertion suite, compiled Iteration 1A workflow and crash recovery, all four supported binary targets, green CI, Claude Opus approval, and Codex acceptance.
 <!-- SECTION:FINAL_SUMMARY:END -->
