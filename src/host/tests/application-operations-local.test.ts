@@ -91,8 +91,8 @@ describe("official local application operations composition", () => {
     const workspace = await temporaryWorkspace();
     const first = await composition(workspace);
     expect(await first.operations.initialize({})).toMatchObject({ ok: true });
-    const items = (prefix: string) =>
-      Array.from({ length: 60 }, (_, index) => ({
+    const items = (prefix: string, length = 60) =>
+      Array.from({ length }, (_, index) => ({
         id: `${prefix}-${String(index).padStart(2, "0")}`,
       }));
 
@@ -133,5 +133,105 @@ describe("official local application operations composition", () => {
         (component.inputs ?? []).map((item) => item.id),
       ),
     ).toHaveLength(120);
+  });
+
+  test("rejects an oversized final sparse component without bricking restart", async () => {
+    const workspace = await temporaryWorkspace();
+    const first = await composition(workspace);
+    expect(await first.operations.initialize({})).toMatchObject({ ok: true });
+    const items = (prefix: string, length = 60) =>
+      Array.from({ length }, (_, index) => ({
+        id: `${prefix}-${String(index).padStart(2, "0")}`,
+      }));
+    const created = await first.operations.createComponent({
+      component: {
+        id: conformanceIds.rootA,
+        inputs: items("input"),
+        type: "domain",
+      },
+    });
+    expect(created.status).toBe("committed");
+    if (created.status !== "committed") return;
+    const revision = created.revisions[0]?.revision;
+    if (revision === null || revision === undefined) throw new Error("missing create revision");
+
+    const rejected = await first.operations.updateComponent({
+      expectedRevision: revision,
+      id: conformanceIds.rootA,
+      patch: { outputs: items("output") },
+    });
+    expect(rejected.status).toBe("validation-rejected");
+    expect(rejected.status === "validation-rejected" && rejected.diagnostics[0]?.code).toBe(
+      "application-bound-exceeded",
+    );
+    const unchanged = await first.operations.getComponent({
+      id: conformanceIds.rootA,
+      relationships: { limit: 1 },
+    });
+    expect(unchanged.ok).toBeTrue();
+    if (!unchanged.ok) return;
+    expect(unchanged.value.generation).toBe(created.generation);
+    expect(unchanged.value.item.revision).toBe(revision);
+    expect(unchanged.value.item.component.inputs).toHaveLength(60);
+    expect(unchanged.value.item.component.outputs).toBeUndefined();
+
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const restartedRead = await restarted.operations.getComponent({
+      id: conformanceIds.rootA,
+      relationships: { limit: 1 },
+    });
+    expect(restartedRead.ok).toBeTrue();
+    if (!restartedRead.ok) return;
+    expect(restartedRead.value.generation).toBe(created.generation);
+    expect(restartedRead.value.item.revision).toBe(revision);
+    expect(restartedRead.value.item.component.inputs).toHaveLength(60);
+    expect(restartedRead.value.item.component.outputs).toBeUndefined();
+
+    const atLimit = await restarted.operations.updateComponent({
+      expectedRevision: restartedRead.value.item.revision,
+      id: conformanceIds.rootA,
+      patch: { outputs: items("accepted-output", 40) },
+    });
+    expect(atLimit.status).toBe("committed");
+    if (atLimit.status !== "committed") return;
+    expect(atLimit.value.inputs).toHaveLength(60);
+    expect(atLimit.value.outputs).toHaveLength(40);
+    const atLimitRevision = atLimit.revisions[0]?.revision;
+    if (atLimitRevision === null || atLimitRevision === undefined) {
+      throw new Error("missing at-limit update revision");
+    }
+
+    const atLimitRestart = await composition(workspace);
+    expect(await atLimitRestart.workspace.recover()).toMatchObject({ ok: true });
+    const atLimitRead = await atLimitRestart.operations.getComponent({
+      id: conformanceIds.rootA,
+      relationships: { limit: 1 },
+    });
+    expect(atLimitRead.ok).toBeTrue();
+    if (!atLimitRead.ok) return;
+    expect(atLimitRead.value.item.component.inputs).toHaveLength(60);
+    expect(atLimitRead.value.item.component.outputs).toHaveLength(40);
+
+    const replaced = await atLimitRestart.operations.updateComponent({
+      expectedRevision: atLimitRevision,
+      id: conformanceIds.rootA,
+      patch: { inputs: null, outputs: items("replacement-output", 100) },
+    });
+    expect(replaced.status).toBe("committed");
+    if (replaced.status !== "committed") return;
+    expect(replaced.value.inputs).toBeUndefined();
+    expect(replaced.value.outputs).toHaveLength(100);
+
+    const finalRestart = await composition(workspace);
+    expect(await finalRestart.workspace.recover()).toMatchObject({ ok: true });
+    const finalRead = await finalRestart.operations.getComponent({
+      id: conformanceIds.rootA,
+      relationships: { limit: 1 },
+    });
+    expect(finalRead.ok).toBeTrue();
+    if (!finalRead.ok) return;
+    expect(finalRead.value.item.component.inputs).toBeUndefined();
+    expect(finalRead.value.item.component.outputs).toHaveLength(100);
   });
 });

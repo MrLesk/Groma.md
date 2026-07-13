@@ -80,9 +80,12 @@ data—including component items and extensions plus outgoing relationship descr
 and extensions—is copied within one total request budget before model, identity, graph,
 provider, or transaction work. `maxEmbeddedItems` limits each component's combined
 inputs, outputs, and actions on both writes and reads; `maxSnapshotStateValues` remains
-the aggregate whole-snapshot structural bound. Construction also enforces absolute
-ceilings (including snapshot retry count), so hostile arrays and payloads fail before
-unbounded copying, identity minting, graph loading, or transaction execution.
+the aggregate whole-snapshot structural bound. Sparse updates retain the early raw-patch
+preflight before provider access and validate the final model-merged component again
+before relationship planning or transaction execution, so omitted arrays cannot bypass
+the combined per-component bound. Construction also enforces absolute ceilings
+(including snapshot retry count), so hostile arrays and payloads fail before unbounded
+copying, identity minting, graph loading, or transaction execution.
 Auto-generated component IDs are minted against the validated current graph, and
 committed outcomes are accepted only when their affected identity sets exactly match the
 submitted transaction.

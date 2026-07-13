@@ -310,6 +310,7 @@ function mutationOperations(
   ) => Promise<TransactionOutcome>,
   idSource?: OpaqueIdSource,
   bounds = applicationBounds,
+  modelCapability: StandardModelCapability = model,
 ) {
   const semanticInitialization = createStatefulSemanticInitializer();
   let entityCounter = 50;
@@ -343,7 +344,7 @@ function mutationOperations(
   const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
     bounds,
     graph,
-    model,
+    model: modelCapability,
   });
   let executions = 0;
   const api = createApplicationOperations({
@@ -351,7 +352,7 @@ function mutationOperations(
     graph,
     initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
-    model,
+    model: modelCapability,
     queries: new BoundedQueryContracts({
       maxAnchorCharacters: 256,
       maxCursorCharacters: 2_048,
@@ -1759,6 +1760,121 @@ describe("application component mutations", () => {
     expect(updated.value.intent).toBe("Updated intent.");
     expect(updated.value.actions?.[0]?.id).toBe("ship");
     expect(updated.value.extensions).toEqual({ "example.dev/tier": 1 });
+  });
+
+  test("validates embedded items against the final sparse component", async () => {
+    const fixture = mutationOperations(
+      new MutationProvider(),
+      undefined,
+      undefined,
+      Object.freeze({ ...applicationBounds, maxEmbeddedItems: 100 }),
+    );
+    const items = (prefix: string, length: number) =>
+      Array.from({ length }, (_, index) => ({ id: `${prefix}-${String(index).padStart(3, "0")}` }));
+    const created = await fixture.api.createComponent({
+      component: { id: ids.domain, inputs: items("input", 60) },
+    });
+    expect(created.status).toBe("committed");
+    if (created.status !== "committed") return;
+    const executions = fixture.executions();
+    const rejectedUpdate = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(created),
+      id: ids.domain,
+      patch: { outputs: items("rejected-output", 60) },
+    });
+    expect(rejectedUpdate.status).toBe("validation-rejected");
+    expect(
+      rejectedUpdate.status === "validation-rejected" && rejectedUpdate.diagnostics[0]?.code,
+    ).toBe("application-bound-exceeded");
+    expect(fixture.executions()).toBe(executions);
+    expect(fixture.provider.generation).toBe(Number(created.generation));
+
+    const unchanged = await fixture.api.getComponent({
+      id: ids.domain,
+      relationships: { limit: 1 },
+    });
+    expect(unchanged.ok).toBeTrue();
+    if (!unchanged.ok) return;
+    expect(unchanged.value.generation).toBe(created.generation);
+    expect(unchanged.value.item.revision).toBe(committedRevision(created));
+    expect(unchanged.value.item.component.inputs).toHaveLength(60);
+    expect(unchanged.value.item.component.outputs).toBeUndefined();
+
+    const atLimit = await fixture.api.updateComponent({
+      expectedRevision: unchanged.value.item.revision,
+      id: ids.domain,
+      patch: { outputs: items("output", 40) },
+    });
+    expect(atLimit.status).toBe("committed");
+    if (atLimit.status !== "committed") return;
+    expect(atLimit.value.inputs).toHaveLength(60);
+    expect(atLimit.value.outputs).toHaveLength(40);
+
+    const replaced = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(atLimit),
+      id: ids.domain,
+      patch: { inputs: null, outputs: items("replacement-output", 100) },
+    });
+    expect(replaced.status).toBe("committed");
+    if (replaced.status !== "committed") return;
+    expect(replaced.value.inputs).toBeUndefined();
+    expect(replaced.value.outputs).toHaveLength(100);
+  });
+
+  test("contains throwing and malformed Standard Model patch outputs", async () => {
+    const secret = "/private/model-patch-secret";
+    let getterCalls = 0;
+    const cases: readonly StandardModelCapability[] = [
+      Object.freeze({
+        ...model,
+        patch: () => {
+          throw new Error(secret);
+        },
+      }),
+      Object.freeze({
+        ...model,
+        patch: () => {
+          const draft = Object.create(null) as Record<string, unknown>;
+          Object.defineProperties(draft, {
+            id: { enumerable: true, value: ids.domain },
+            kind: { enumerable: true, value: STANDARD_COMPONENT_KIND },
+            payload: {
+              enumerable: true,
+              get: () => {
+                getterCalls += 1;
+                throw new Error(secret);
+              },
+            },
+          });
+          return success(draft as never);
+        },
+      }),
+    ];
+    for (const modelCapability of cases) {
+      const fixture = mutationOperations(
+        new MutationProvider(),
+        undefined,
+        undefined,
+        applicationBounds,
+        modelCapability,
+      );
+      const created = await fixture.api.createComponent({ component: { id: ids.domain } });
+      expect(created.status).toBe("committed");
+      if (created.status !== "committed") continue;
+      const executions = fixture.executions();
+      const result = await fixture.api.updateComponent({
+        expectedRevision: committedRevision(created),
+        id: ids.domain,
+        patch: { name: "Ignored" },
+      });
+      expect(result.status).toBe("validation-rejected");
+      expect(result.status === "validation-rejected" && result.diagnostics[0]?.code).toBe(
+        "invalid-standard-model-value",
+      );
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(fixture.executions()).toBe(executions);
+    }
+    expect(getterCalls).toBe(0);
   });
 
   test("adds, updates, removes outgoing relationships and rejects identity hijacking", async () => {

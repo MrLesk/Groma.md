@@ -2084,8 +2084,58 @@ export function createApplicationOperations(
       id: id.value,
     });
     if (!entity.ok) return rejected(...entity.diagnostics);
-    const patched = options.model.patch(entity.value, patch as StandardComponentPatch);
-    if (!patched.ok) return rejected(...patched.diagnostics);
+    const invalidPatchedComponent = () =>
+      rejected<StandardComponent>(
+        diagnostic("invalid-standard-model-value", "Standard Model patch result is malformed"),
+      );
+    let rawPatched: unknown;
+    try {
+      rawPatched = options.model.patch(entity.value, patch as StandardComponentPatch);
+    } catch {
+      return invalidPatchedComponent();
+    }
+    const patchedResult = inspectExactRecord(
+      rawPatched,
+      [
+        ["ok", "value"],
+        ["diagnostics", "ok"],
+      ],
+      "invalid-standard-model-value",
+      "Standard Model patch result",
+    );
+    if (!patchedResult.ok) return invalidPatchedComponent();
+    if (patchedResult.value.ok === false) {
+      const diagnostics = applicationDiagnostics(
+        patchedResult.value.diagnostics,
+        "validation",
+        options.bounds,
+      );
+      return diagnostics.ok
+        ? Object.freeze({ diagnostics: diagnostics.value, status: "validation-rejected" as const })
+        : invalidPatchedComponent();
+    }
+    if (patchedResult.value.ok !== true) return invalidPatchedComponent();
+    const patched = inspectExactRecord(
+      patchedResult.value.value,
+      [["id", "kind", "payload"]],
+      "invalid-standard-model-value",
+      "Standard Model patched component",
+    );
+    if (
+      !patched.ok ||
+      patched.value.id !== id.value ||
+      patched.value.kind !== STANDARD_COMPONENT_KIND ||
+      typeof patched.value.payload !== "object" ||
+      patched.value.payload === null ||
+      Array.isArray(patched.value.payload)
+    ) {
+      return invalidPatchedComponent();
+    }
+    const finalEmbedded = preflightEmbeddedItems(
+      patched.value.payload,
+      options.bounds.maxEmbeddedItems,
+    );
+    if (!finalEmbedded.ok) return rejected(...finalEmbedded.diagnostics);
     const computedEntity = Object.freeze({
       id: id.value,
       kind: STANDARD_COMPONENT_KIND,
