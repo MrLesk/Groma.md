@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 13:21'
+updated_date: '2026-07-13 13:33'
 labels:
   - cli
   - terminal
@@ -78,10 +78,12 @@ Exact-head Codex review of 2775464 found one additional actionable P2: invocatio
 Post-second-Codex correction validation: focused CLI 26 tests / 180 assertions; full bun run check 445 tests / 2,922 assertions including format, types, boundaries, native build and smoke; git diff check passes. The correction is parser-only; the prior exact four-target and 8/8 direct compile results remain applicable and final-head CI will rerun both package jobs.
 
 Final external gate at bdadf3e: Codex completed the exact-head review with a thumbs-up and no new comments. GitHub Cross-platform binaries passed. The first Quality gates attempt failed before checkout because GitHub Actions returned Service Unavailable while resolving action download metadata; no repository change was justified, and rerunning only the failed job passed the complete quality suite.
+
+Exact-head Codex review of 668ad11 found one independently actionable output-containment issue: arrays could carry extra own properties that canonical JSON silently omitted. The renderer now requires the exact intrinsic array key set before serialization and fails closed otherwise; a regression proves attached data cannot disappear. Final correction validation: focused CLI 27 tests / 181 assertions; full bun run check 446 tests / 2,923 assertions including formatting, strict types, architecture boundaries, native build, and smoke.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the complete Iteration 1A one-shot CLI and bounded terminal entry experience over the shared host/application seams: init and every component operation, file/stdin JSON requests, deterministic plain/JSON envelopes and exit classes, explicit paging, bounded PTY hierarchy, signal-aware streaming input, and no direct persistence access. Verified with 445 tests / 2,922 assertions, native compiled-binary workflow, four packaged targets, 8/8 direct CLI/host compiles, Claude review, iterative exact-head Codex review, and green GitHub CI.
+Implemented the complete Iteration 1A one-shot CLI and bounded terminal entry experience over the shared host/application seams: init and every component operation, file/stdin JSON requests, deterministic plain/JSON envelopes and exit classes, explicit paging, bounded PTY hierarchy, signal-aware streaming input, and no direct persistence access. Verified with 446 tests / 2,923 assertions, native compiled-binary workflow, four packaged targets, 8/8 direct CLI/host compiles, Claude review, iterative exact-head Codex review, and green GitHub CI.
 <!-- SECTION:FINAL_SUMMARY:END -->

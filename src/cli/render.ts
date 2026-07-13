@@ -42,6 +42,8 @@ function canonicalJson(value: unknown): string | undefined {
         if (length === undefined || !("value" in length) || !Number.isSafeInteger(length.value)) {
           return undefined;
         }
+        const keys = intrinsicOwnKeys(current);
+        if (keys.length !== length.value + 1) return undefined;
         const values = new Array<string>(length.value);
         for (let index = 0; index < length.value; index += 1) {
           const descriptor = intrinsicGetOwnPropertyDescriptor(current, String(index));

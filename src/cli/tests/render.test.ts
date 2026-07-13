@@ -75,4 +75,21 @@ describe("CLI rendering", () => {
       ),
     ).toEqual({ ok: false });
   });
+
+  test("rejects arrays with extra own properties instead of dropping data", () => {
+    const items: unknown[] = ["visible"];
+    Object.defineProperty(items, "secret", { enumerable: true, value: "must-not-disappear" });
+
+    expect(
+      renderCommandResult(
+        {
+          command: "component list",
+          exitCode: 0,
+          ok: true,
+          result: { items },
+        },
+        "json",
+      ),
+    ).toEqual({ ok: false });
+  });
 });
