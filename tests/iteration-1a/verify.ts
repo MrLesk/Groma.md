@@ -88,8 +88,10 @@ async function runProcess(
     stdout: "pipe",
   });
   if (input !== undefined) {
-    child.stdin.write(input);
-    child.stdin.end();
+    const stdin = child.stdin;
+    if (stdin === undefined) throw new Error("compiled process stdin was unavailable");
+    stdin.write(input);
+    stdin.end();
   }
   const stdout = new Response(child.stdout).text();
   const stderr = new Response(child.stderr).text();
@@ -180,8 +182,9 @@ function mutationRevision(result: JsonResult, componentId: string): string {
       entry !== null &&
       (entry as { componentId?: unknown }).componentId === componentId,
   ) as { revision?: unknown } | undefined;
-  assert.equal(typeof match?.revision, "string", result.stdout);
-  return match.revision;
+  const revision = match?.revision;
+  assert(typeof revision === "string", result.stdout);
+  return revision;
 }
 
 function componentIds(result: JsonResult): string[] {
@@ -194,7 +197,7 @@ function componentIds(result: JsonResult): string[] {
     assert.equal(typeof component, "object");
     assert.notEqual(component, null);
     const id = (component as { id?: unknown }).id;
-    assert.equal(typeof id, "string");
+    assert(typeof id === "string");
     return id;
   });
 }
@@ -214,10 +217,11 @@ async function component(
   const item = valueRecord(result).item as Record<string, unknown>;
   assert.equal(typeof item, "object");
   assert.notEqual(item, null);
-  assert.equal(typeof item.revision, "string");
+  const revision = item.revision;
+  assert(typeof revision === "string");
   assert.equal(typeof item.component, "object");
   assert.notEqual(item.component, null);
-  return { component: item.component as Record<string, unknown>, revision: item.revision };
+  return { component: item.component as Record<string, unknown>, revision };
 }
 
 async function createComponent(
@@ -755,6 +759,7 @@ async function verifyCrashes(executable: string, temporaryRoot: string): Promise
     outputFile: crashExecutable,
   });
   assert.equal(exitCode, 0, "verification crash executable compilation failed");
+  // Windows deliberately skips directory sync and therefore never reaches these fault phases.
   const hostCrashCases = crashCases.filter(
     (entry) =>
       process.platform !== "win32" ||

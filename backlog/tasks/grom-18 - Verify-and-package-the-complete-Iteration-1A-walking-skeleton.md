@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-11 17:35'
-updated_date: '2026-07-13 14:00'
+updated_date: '2026-07-13 14:10'
 labels:
   - integration
   - verification
@@ -63,4 +63,6 @@ Plan correction from implementation evidence: the 1A surface deliberately accept
 Acceptance criterion 7 was corrected to the previously approved GROM-6 policy after the final audit found stale native-runner wording. Alex explicitly chose single-runner Bun cross-compilation over native runners; every artifact remains promised and verified, the compatible artifact runs the workflow directly, and documentation distinguishes cross-compilation from native runtime certification.
 
 Exact-worktree validation: bun ci confirmed the locked dependency graph with no changes; bun run check passed formatting, strict types, architecture boundaries, 446 unit tests / 2,926 assertions, native standalone build and smoke, the complete compiled-binary workflow, malformed-state containment, PTY behavior, and 15 real-process crash/recovery cases. bun run check:targets cross-compiled Darwin arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, verified exactly one standalone artifact for each, ran the complete non-crash workflow directly on the compatible Darwin artifact, and restored the native binary. Semantically identical rich-item serialization preserved exact intent bytes and content revision; rename and reparent preserved stable ID and resource locator. Every expected failure preserved the complete groma tree byte-for-byte. git diff --check passes.
+
+Claude review on PR #16: the default Fable invocation hit the monthly spend cap, so the required review completed with Claude Sonnet. Its independently verified actionable finding was that root tests/iteration-1a files were outside tsconfig include and therefore escaped tsc; tsconfig now includes tests/**/*.ts, all resulting unknown-value narrowing and optional stdin errors are fixed, and the Windows crash filter now explains the provider directory-sync policy. The CI-timeout observation is non-actionable because the exact GitHub quality job completed in 55 seconds against a 10-minute limit. PTY coverage remains intentionally native POSIX while Windows receives deterministic non-PTY and unit coverage. Post-Claude validation: tsc includes the root verification sources; bun run check passes 446 tests / 2,926 assertions plus the complete compiled-binary and crash suite; all four targets and compatible-host workflow pass.
 <!-- SECTION:NOTES:END -->
