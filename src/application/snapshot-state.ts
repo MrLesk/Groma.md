@@ -26,6 +26,9 @@ import {
 import type { ApplicationOperationBounds } from "./contracts.ts";
 import type { GraphKernel } from "../core/index.ts";
 
+const intrinsicPromise = Promise;
+const intrinsicPromiseThen = Promise.prototype.then;
+
 export interface ApplicationSnapshotStateDecoderOptions {
   readonly bounds: Pick<
     ApplicationOperationBounds,
@@ -115,6 +118,22 @@ const decoderFailureResult = Object.freeze({
 
 function decoderFailure<T = never>(): Result<T> {
   return decoderFailureResult;
+}
+
+function containNativePromise(value: object): boolean {
+  let native = false;
+  try {
+    native = value instanceof intrinsicPromise;
+  } catch {
+    return false;
+  }
+  if (!native) return false;
+  try {
+    Reflect.apply(intrinsicPromiseThen, value, [undefined, () => undefined]);
+  } catch {
+    // Malformed Promise subclasses can reject observation; decoder failure remains authoritative.
+  }
+  return true;
 }
 
 function compareText(left: string, right: string): number {
@@ -499,13 +518,7 @@ function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unkn
     if (typeof value !== "object" || value === null || context.isProxy(value)) {
       return decoderFailure();
     }
-    if (value instanceof Promise) {
-      void value.then(
-        () => undefined,
-        () => undefined,
-      );
-      return decoderFailure();
-    }
+    if (containNativePromise(value)) return decoderFailure();
     const inspected = inspectExactRecord(
       value,
       [
@@ -520,13 +533,7 @@ function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unkn
       const modelValue = inspected.value.value;
       if (typeof modelValue === "object" && modelValue !== null) {
         if (context.isProxy(modelValue)) return decoderFailure();
-        if (modelValue instanceof Promise) {
-          void modelValue.then(
-            () => undefined,
-            () => undefined,
-          );
-          return decoderFailure();
-        }
+        if (containNativePromise(modelValue)) return decoderFailure();
       }
       return success(modelValue);
     }

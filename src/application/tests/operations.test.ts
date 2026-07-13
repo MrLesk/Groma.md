@@ -1129,6 +1129,101 @@ describe("application component reads", () => {
     expect(JSON.stringify(promiseResult)).not.toContain(secret);
   });
 
+  test("drains native Promise model outputs without reading hostile then accessors", async () => {
+    const marker = "HOSTILE_UNHANDLED";
+    const secret = "/private/success-secret";
+    const unhandled: unknown[] = [];
+    let getterCalls = 0;
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+
+    function ownThenPromise(): Promise<never> {
+      const promise = Promise.reject(new Error(`${marker}:${secret}`));
+      Object.defineProperty(promise, "then", {
+        configurable: true,
+        get: () => {
+          getterCalls += 1;
+          throw new Error(`${marker}:own-then:${secret}`);
+        },
+      });
+      return promise;
+    }
+
+    class HostilePromise<T> extends Promise<T> {}
+    Object.defineProperty(HostilePromise.prototype, "then", {
+      configurable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(`${marker}:inherited-then:${secret}`);
+      },
+    });
+    const inheritedThenPromise = () =>
+      new HostilePromise<never>((_resolve, reject) => {
+        reject(new Error(`${marker}:${secret}`));
+      });
+
+    async function readWith(modelOverride: Partial<StandardModelCapability>) {
+      const fixture = new SnapshotFixture();
+      fixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
+      const graph = new GraphKernel({
+        idSource: {
+          nextEntityId: () => ids.domain,
+          nextRelationId: () => relationIds.first,
+        },
+        maxPageSize: 100,
+      });
+      const hostileModel: StandardModelCapability = Object.freeze({
+        ...model,
+        ...modelOverride,
+      });
+      return operations(fixture, undefined, {
+        graph,
+        model: hostileModel,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph,
+          model: hostileModel,
+        }),
+      }).listComponents({ limit: 2 });
+    }
+
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const parseResult = await readWith({ parse: () => ownThenPromise() as never });
+      const successValue = await readWith({
+        parse: () => success(inheritedThenPromise() as never),
+      });
+      const relationshipResult = await readWith({
+        relationships: () => ownThenPromise() as never,
+      });
+      const promiseShapedPrototype = Object.create(null) as Record<string, unknown>;
+      Object.defineProperty(promiseShapedPrototype, "then", {
+        get: () => {
+          getterCalls += 1;
+          throw new Error(`${marker}:shaped-then:${secret}`);
+        },
+      });
+      const promiseShaped = Object.create(promiseShapedPrototype);
+      const shapedResult = await readWith({ parse: () => promiseShaped as never });
+
+      for (const result of [parseResult, successValue, relationshipResult, shapedResult]) {
+        expect(result.ok ? "" : result.diagnostics[0]?.code).toBe(
+          "application-snapshot-decode-failed",
+        );
+        expect(Object.isFrozen(result)).toBeTrue();
+        expect(JSON.stringify(result)).not.toContain(marker);
+        expect(JSON.stringify(result)).not.toContain(secret);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(getterCalls).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("copies mutable component success values without retaining model aliases", async () => {
     const nested = { enabled: true };
     const itemExtensions = { "example.dev/item": nested };
