@@ -40,7 +40,9 @@ operation instance's composition.
 Standard Model capability successes are also untrusted boundary values. The snapshot
 decoder exact-inspects component, item, extension, and relationship records; binds their
 identities, kinds, types, and endpoints back to the resolved graph; rejects proxies before
-reflection; and applies one aggregate embedded-item and structural budget. It then uses
+reflection; applies the embedded-item bound independently to each component across its
+combined inputs, outputs, and actions; and retains one aggregate structural budget over
+the complete snapshot and canonical model-success envelope. It then uses
 Core's graph-data copier to create the only values that may escape, with every nested
 array, item, extension, component, and relationship application-owned and frozen.
 Malformed native-Promise model outputs are observed with module-captured Promise and
@@ -76,8 +78,11 @@ state, relationship mutations, embedded items, diagnostics, request-data structu
 depth and values, and snapshot structural depth and values. Create and update mutation
 data—including component items and extensions plus outgoing relationship descriptions
 and extensions—is copied within one total request budget before model, identity, graph,
-provider, or transaction work. Construction also enforces absolute ceilings (including
-snapshot retry count), so hostile arrays and payloads fail before unbounded copying,
-identity minting, graph loading, or transaction execution. Auto-generated component IDs
-are minted against the validated current graph, and committed outcomes are accepted only
-when their affected identity sets exactly match the submitted transaction.
+provider, or transaction work. `maxEmbeddedItems` limits each component's combined
+inputs, outputs, and actions on both writes and reads; `maxSnapshotStateValues` remains
+the aggregate whole-snapshot structural bound. Construction also enforces absolute
+ceilings (including snapshot retry count), so hostile arrays and payloads fail before
+unbounded copying, identity minting, graph loading, or transaction execution.
+Auto-generated component IDs are minted against the validated current graph, and
+committed outcomes are accepted only when their affected identity sets exactly match the
+submitted transaction.

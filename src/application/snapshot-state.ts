@@ -1046,15 +1046,20 @@ function decode(
   };
   const components: Readonly<Record<string, unknown>>[] = [];
   for (let index = 0; index < entityDrafts.length; index += 1) {
+    const componentContext: ModelSuccessContext = {
+      embeddedItems: 0,
+      isProxy,
+      options,
+    };
     const draft = entityDrafts[index]!;
     const resolved = options.graph.resolveEntity(loaded.value, {
       expectedKind: STANDARD_COMPONENT_KIND,
       id: draft.id!,
     });
     if (!resolved.ok) return resolved;
-    const parsed = modelSuccess(options.model.parse(resolved.value), modelContext);
+    const parsed = modelSuccess(options.model.parse(resolved.value), componentContext);
     if (!parsed.ok) return parsed;
-    const component = modelComponent(parsed.value, resolved.value, modelContext);
+    const component = modelComponent(parsed.value, resolved.value, componentContext);
     if (!component.ok) return component;
     components[index] = component.value;
   }

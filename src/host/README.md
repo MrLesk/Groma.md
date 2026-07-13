@@ -64,9 +64,12 @@ state before the host records their generation. Host recovery and normal applica
 reads receive the exact same proxy-aware application snapshot-state decoder instance,
 including GraphKernel loading,
 Standard Model parsing, duplicate and endpoint checks, and final containment invariant
-validation. Concurrent initialize and recover calls reserve one non-rejecting operation
-tail in invocation order, so publication handles, leases, status, and generation are
-never mutated concurrently. Resource and transaction-provider callbacks must not
+validation. The default `maxEmbeddedItems` bound applies independently to each
+component's combined inputs, outputs, and actions, while `maxSnapshotStateValues` bounds
+the complete snapshot across all components and relationships. Concurrent initialize and
+recover calls reserve one non-rejecting operation tail in invocation order, so
+publication handles, leases, status, and generation are never mutated concurrently.
+Resource and transaction-provider callbacks must not
 reenter `initialize()` or `recover()` on the same workspace capability. Reentrant calls
 fail immediately with `workspace-transition-reentrant` instead of joining their own
 tail; calls from unrelated external async contexts retain FIFO behavior. The lifecycle

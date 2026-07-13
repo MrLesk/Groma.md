@@ -450,9 +450,6 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
           "Host bootstrap result",
         );
         if (!result.ok || result.value.ok !== true) {
-          if (result.ok && result.value.ok === false) {
-            copyHostDiagnostics(result.value.diagnostics, 100, "invalid-host-bootstrap-result");
-          }
           outcome = startupFailure("host-bootstrap-failed", "Host bootstrap failed");
         } else {
           const composition = canonicalComposition(result.value.value);

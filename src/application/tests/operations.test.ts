@@ -1503,7 +1503,7 @@ describe("application component reads", () => {
     expect(Object.isFrozen(copied.extensions["example.dev/value"])).toBeTrue();
   });
 
-  test("bounds aggregate embedded items and structural model success values", async () => {
+  test("bounds embedded items per component and structural model success values globally", async () => {
     const fixture = new SnapshotFixture();
     fixture.currentState = state([
       component({ id: ids.domain, type: "domain" }),
@@ -1537,7 +1537,41 @@ describe("application component reads", () => {
         model: itemModel,
       }),
     }).listComponents({ limit: 2 });
-    expect(itemResult.ok ? "" : itemResult.diagnostics[0]?.code).toBe("application-bound-exceeded");
+    expect(itemResult.ok).toBeTrue();
+    if (!itemResult.ok) return;
+    expect(itemResult.value.items).toHaveLength(2);
+    expect(
+      itemResult.value.items.map(({ component: value }) => value.inputs?.map((item) => item.id)),
+    ).toEqual([["item"], ["item"]]);
+
+    const overflowFixture = new SnapshotFixture();
+    overflowFixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
+    const overflowBounds = Object.freeze({ ...applicationBounds, maxEmbeddedItems: 2 });
+    const overflowModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: (entity: GraphEntity) =>
+        success({
+          actions: [{ extensions: {}, id: "action" }],
+          extensions: {},
+          id: entity.id,
+          inputs: [{ extensions: {}, id: "input" }],
+          kind: STANDARD_COMPONENT_KIND,
+          outputs: [{ extensions: {}, id: "output" }],
+        } as never),
+    });
+    const overflowResult = await operations(overflowFixture, undefined, {
+      bounds: overflowBounds,
+      graph,
+      model: overflowModel,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: overflowBounds,
+        graph,
+        model: overflowModel,
+      }),
+    }).listComponents({ limit: 1 });
+    expect(overflowResult.ok ? "" : overflowResult.diagnostics[0]?.code).toBe(
+      "application-bound-exceeded",
+    );
 
     const structuralFixture = new SnapshotFixture();
     structuralFixture.currentState = state([component({ id: ids.domain })]);

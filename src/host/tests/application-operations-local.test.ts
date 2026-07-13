@@ -86,4 +86,52 @@ describe("official local application operations composition", () => {
     );
     expect(markdown.value.relations).toEqual([]);
   });
+
+  test("commits and recovers components whose aggregate items exceed the per-component bound", async () => {
+    const workspace = await temporaryWorkspace();
+    const first = await composition(workspace);
+    expect(await first.operations.initialize({})).toMatchObject({ ok: true });
+    const items = (prefix: string) =>
+      Array.from({ length: 60 }, (_, index) => ({
+        id: `${prefix}-${String(index).padStart(2, "0")}`,
+      }));
+
+    const firstMutation = await first.operations.createComponent({
+      component: {
+        id: conformanceIds.rootA,
+        inputs: items("first"),
+        type: "domain",
+      },
+    });
+    const secondMutation = await first.operations.createComponent({
+      component: {
+        id: conformanceIds.rootB,
+        inputs: items("second"),
+        type: "domain",
+      },
+    });
+    expect(firstMutation.status).toBe("committed");
+    expect(secondMutation.status).toBe("committed");
+
+    const initialRead = await first.operations.listComponents({ limit: 2 });
+    expect(initialRead.ok).toBeTrue();
+    if (!initialRead.ok) return;
+    expect(initialRead.value.items.map(({ component }) => component.inputs?.length)).toEqual([
+      60, 60,
+    ]);
+
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const restartedRead = await restarted.operations.listComponents({ limit: 2 });
+    expect(restartedRead.ok).toBeTrue();
+    if (!restartedRead.ok) return;
+    expect(restartedRead.value.items.map(({ component }) => component.inputs?.length)).toEqual([
+      60, 60,
+    ]);
+    expect(
+      restartedRead.value.items.flatMap(({ component }) =>
+        (component.inputs ?? []).map((item) => item.id),
+      ),
+    ).toHaveLength(120);
+  });
 });
