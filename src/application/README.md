@@ -36,6 +36,13 @@ or malformed results become one frozen `application-snapshot-decode-failed` diag
 without retaining error data. Construction also snapshots and freezes every injected
 capability reference, scalar, and bound, so later caller mutation cannot change an
 operation instance's composition.
+
+Standard Model capability successes are also untrusted boundary values. The snapshot
+decoder exact-inspects component, item, extension, and relationship records; binds their
+identities, kinds, types, and endpoints back to the resolved graph; rejects proxies before
+reflection; and applies one aggregate embedded-item and structural budget. It then uses
+Core's graph-data copier to create the only values that may escape, with every nested
+array, item, extension, component, and relationship application-owned and frozen.
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.

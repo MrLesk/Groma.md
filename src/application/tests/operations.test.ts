@@ -10,6 +10,7 @@ import {
   success,
   type GraphData,
   type GraphDataRecord,
+  type GraphEntity,
   type GraphGeneration,
   type OpaqueIdSource,
   type ProposedTransaction,
@@ -22,6 +23,7 @@ import {
   type TransactionProviderSnapshotInput,
 } from "../../core/index.ts";
 import {
+  STANDARD_COMPONENT_KIND,
   createStandardModelCapability,
   createStandardModelInvariant,
   type StandardComponentInput,
@@ -1030,6 +1032,329 @@ describe("application component reads", () => {
     ]) {
       expect(JSON.stringify(result)).not.toContain(secret);
     }
+  });
+
+  test("rejects hostile component success values from an identity-matched model", async () => {
+    const secret = "/private/success-secret";
+    const base = {
+      extensions: {},
+      id: ids.domain,
+      kind: STANDARD_COMPONENT_KIND,
+      name: "Commerce",
+      type: "domain",
+    };
+
+    async function readWith(value: unknown, proxies: ReadonlySet<unknown> = new Set()) {
+      const fixture = new SnapshotFixture();
+      fixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
+      const graph = new GraphKernel({
+        idSource: {
+          nextEntityId: () => ids.domain,
+          nextRelationId: () => relationIds.first,
+        },
+        maxPageSize: 100,
+      });
+      const hostileModel: StandardModelCapability = Object.freeze({
+        ...model,
+        parse: () => success(value as never),
+      });
+      return operations(fixture, undefined, {
+        graph,
+        model: hostileModel,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph,
+          isProxy: (candidate) => proxies.has(candidate),
+          model: hostileModel,
+        }),
+      }).listComponents({ limit: 2 });
+    }
+
+    let getterCalls = 0;
+    const accessor = { ...base } as Record<string, unknown>;
+    Object.defineProperty(accessor, "name", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        throw new Error(secret);
+      },
+    });
+    const { extensions: _extensions, ...missingExtensions } = base;
+    const symbolComponent = { ...base } as Record<PropertyKey, unknown>;
+    symbolComponent[Symbol("secret")] = secret;
+    const proxyComponent = new Proxy({ ...base }, {});
+    const proxyItem = new Proxy({ extensions: {}, id: "input" }, {});
+    const proxyExtensions = new Proxy({ "example.dev/value": true }, {});
+    const nestedProxy = new Proxy({ secret }, {});
+    const cases = [
+      { name: "proxy component", proxies: new Set([proxyComponent]), value: proxyComponent },
+      { name: "accessor component", value: accessor },
+      { name: "wrong identity", value: { ...base, id: ids.service } },
+      { name: "missing required field", value: missingExtensions },
+      { name: "extra field", value: { ...base, extra: secret } },
+      { name: "wrong kind", value: { ...base, kind: "service" } },
+      { name: "wrong field type", value: { ...base, name: 1 } },
+      { name: "symbol field", value: symbolComponent },
+      {
+        name: "proxy item",
+        proxies: new Set([proxyItem]),
+        value: { ...base, inputs: [proxyItem] },
+      },
+      {
+        name: "proxy extensions",
+        proxies: new Set([proxyExtensions]),
+        value: { ...base, extensions: proxyExtensions },
+      },
+      {
+        name: "nested proxy extension",
+        proxies: new Set([nestedProxy]),
+        value: { ...base, extensions: { "example.dev/value": { nested: nestedProxy } } },
+      },
+    ];
+    for (const entry of cases) {
+      const result = await readWith(entry.value, entry.proxies);
+      expect(result.ok ? "" : result.diagnostics[0]?.code, entry.name).toBe(
+        "application-snapshot-decode-failed",
+      );
+      expect(JSON.stringify(result), entry.name).not.toContain(secret);
+    }
+    expect(getterCalls).toBe(0);
+
+    const rejectingSuccess = Promise.reject(new Error(secret));
+    const promiseResult = await readWith(rejectingSuccess);
+    await Promise.resolve();
+    expect(promiseResult.ok ? "" : promiseResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
+    expect(JSON.stringify(promiseResult)).not.toContain(secret);
+  });
+
+  test("copies mutable component success values without retaining model aliases", async () => {
+    const nested = { enabled: true };
+    const itemExtensions = { "example.dev/item": nested };
+    const item = { extensions: itemExtensions, id: "orders", name: "Orders" };
+    const extensions = { "example.dev/component": { tier: 1 } };
+    const modelValue = {
+      extensions,
+      id: ids.domain,
+      inputs: [item],
+      kind: STANDARD_COMPONENT_KIND,
+      name: "Commerce",
+      type: "domain",
+    };
+    const fixture = new SnapshotFixture();
+    fixture.currentState = state([component({ id: ids.domain, type: "domain" })]);
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const mutableModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: () => success(modelValue as never),
+    });
+    const result = await operations(fixture, undefined, {
+      graph,
+      model: mutableModel,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: applicationBounds,
+        graph,
+        model: mutableModel,
+      }),
+    }).listComponents({ limit: 2 });
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+    const copied = result.value.items[0]!.component;
+
+    modelValue.name = "Changed";
+    item.name = "Changed";
+    nested.enabled = false;
+    (extensions["example.dev/component"] as { tier: number }).tier = 9;
+    modelValue.inputs.splice(0);
+
+    expect(copied).toMatchObject({
+      extensions: { "example.dev/component": { tier: 1 } },
+      inputs: [
+        {
+          extensions: { "example.dev/item": { enabled: true } },
+          id: "orders",
+          name: "Orders",
+        },
+      ],
+      name: "Commerce",
+    });
+    expect(Object.isFrozen(copied)).toBeTrue();
+    expect(Object.isFrozen(copied.inputs)).toBeTrue();
+    expect(Object.isFrozen(copied.inputs?.[0])).toBeTrue();
+    expect(Object.isFrozen(copied.inputs?.[0]?.extensions["example.dev/item"])).toBeTrue();
+  });
+
+  test("rejects hostile relationship success values and copies valid mutable ones", async () => {
+    const secret = "/private/success-secret";
+    const base = {
+      extensions: {},
+      id: relationIds.first,
+      source: ids.service,
+      target: ids.target,
+      type: "depends-on",
+    };
+
+    async function readWith(value: unknown, proxies: ReadonlySet<unknown> = new Set()) {
+      const fixture = new SnapshotFixture();
+      fixture.currentState = state(
+        [
+          component({ id: ids.service, type: "service" }),
+          component({ id: ids.target, type: "service" }),
+        ],
+        [
+          {
+            id: relationIds.first,
+            payload: {},
+            source: ids.service,
+            target: ids.target,
+            type: "depends-on",
+          },
+        ],
+      );
+      const graph = new GraphKernel({
+        idSource: {
+          nextEntityId: () => ids.domain,
+          nextRelationId: () => relationIds.first,
+        },
+        maxPageSize: 100,
+      });
+      const hostileModel: StandardModelCapability = Object.freeze({
+        ...model,
+        relationships: () => success(value as never),
+      });
+      return operations(fixture, undefined, {
+        graph,
+        model: hostileModel,
+        snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+          bounds: applicationBounds,
+          graph,
+          isProxy: (candidate) => proxies.has(candidate),
+          model: hostileModel,
+        }),
+      }).getComponent({ id: ids.service, relationships: { limit: 2 } });
+    }
+
+    const proxyRelationship = new Proxy({ ...base }, {});
+    const proxyArray = new Proxy([{ ...base }], {});
+    const nestedProxy = new Proxy({ secret }, {});
+    const { extensions: _extensions, ...missingExtensions } = base;
+    const cases = [
+      {
+        name: "proxy relationship",
+        proxies: new Set([proxyRelationship]),
+        value: [proxyRelationship],
+      },
+      { name: "proxy array", proxies: new Set([proxyArray]), value: proxyArray },
+      { name: "missing field", value: [missingExtensions] },
+      { name: "extra field", value: [{ ...base, extra: secret }] },
+      { name: "wrong id", value: [{ ...base, id: relationIds.second }] },
+      { name: "wrong type", value: [{ ...base, type: "coordinates-with" }] },
+      { name: "wrong source", value: [{ ...base, source: ids.target }] },
+      { name: "wrong target", value: [{ ...base, target: ids.service }] },
+      { name: "malformed type", value: [{ ...base, type: "Depends_On" }] },
+      {
+        name: "nested proxy extension",
+        proxies: new Set([nestedProxy]),
+        value: [{ ...base, extensions: { "example.dev/value": nestedProxy } }],
+      },
+    ];
+    for (const entry of cases) {
+      const result = await readWith(entry.value, entry.proxies);
+      expect(result.ok ? "" : result.diagnostics[0]?.code, entry.name).toBe(
+        "application-snapshot-decode-failed",
+      );
+      expect(JSON.stringify(result), entry.name).not.toContain(secret);
+    }
+
+    const relationshipExtensions = { "example.dev/value": { weight: 1 } };
+    const mutable = [{ ...base, description: "Authenticates", extensions: relationshipExtensions }];
+    const copiedResult = await readWith(mutable);
+    expect(copiedResult.ok).toBeTrue();
+    if (!copiedResult.ok) return;
+    mutable[0]!.description = "Changed";
+    (relationshipExtensions["example.dev/value"] as { weight: number }).weight = 9;
+    mutable.splice(0);
+    const copied = copiedResult.value.relationships.items[0]!.relationship;
+    expect(copied).toMatchObject({
+      description: "Authenticates",
+      extensions: { "example.dev/value": { weight: 1 } },
+    });
+    expect(Object.isFrozen(copied)).toBeTrue();
+    expect(Object.isFrozen(copied.extensions)).toBeTrue();
+    expect(Object.isFrozen(copied.extensions["example.dev/value"])).toBeTrue();
+  });
+
+  test("bounds aggregate embedded items and structural model success values", async () => {
+    const fixture = new SnapshotFixture();
+    fixture.currentState = state([
+      component({ id: ids.domain, type: "domain" }),
+      component({ id: ids.service, type: "service" }),
+    ]);
+    const graph = new GraphKernel({
+      idSource: {
+        nextEntityId: () => ids.domain,
+        nextRelationId: () => relationIds.first,
+      },
+      maxPageSize: 100,
+    });
+    const itemBounds = Object.freeze({ ...applicationBounds, maxEmbeddedItems: 1 });
+    const itemModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: (entity: GraphEntity) =>
+        success({
+          extensions: {},
+          id: entity.id,
+          inputs: [{ extensions: {}, id: "item" }],
+          kind: STANDARD_COMPONENT_KIND,
+        } as never),
+    });
+    const itemResult = await operations(fixture, undefined, {
+      bounds: itemBounds,
+      graph,
+      model: itemModel,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: itemBounds,
+        graph,
+        model: itemModel,
+      }),
+    }).listComponents({ limit: 2 });
+    expect(itemResult.ok ? "" : itemResult.diagnostics[0]?.code).toBe("application-bound-exceeded");
+
+    const structuralFixture = new SnapshotFixture();
+    structuralFixture.currentState = state([component({ id: ids.domain })]);
+    const structuralBounds = Object.freeze({
+      ...applicationBounds,
+      maxSnapshotStateValues: 30,
+    });
+    const structuralModel: StandardModelCapability = Object.freeze({
+      ...model,
+      parse: (entity: GraphEntity) =>
+        success({
+          extensions: { "example.dev/large": new Array(50).fill(true) },
+          id: entity.id,
+          kind: STANDARD_COMPONENT_KIND,
+        } as never),
+    });
+    const structuralResult = await operations(structuralFixture, undefined, {
+      bounds: structuralBounds,
+      graph,
+      model: structuralModel,
+      snapshotStateDecoder: createApplicationSnapshotStateDecoder({
+        bounds: structuralBounds,
+        graph,
+        model: structuralModel,
+      }),
+    }).listComponents({ limit: 2 });
+    expect(structuralResult.ok ? "" : structuralResult.diagnostics[0]?.code).toBe(
+      "application-snapshot-decode-failed",
+    );
   });
 
   test("accepts an uninitialized empty state as an empty bounded graph", async () => {

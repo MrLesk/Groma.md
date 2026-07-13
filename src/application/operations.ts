@@ -56,6 +56,8 @@ import type {
 } from "./contracts.ts";
 import {
   applicationSnapshotStateDecoderMetadata,
+  isCanonicalApplicationSnapshotComponent,
+  isCanonicalApplicationSnapshotRelationship,
   type DecodedApplicationSnapshotState,
 } from "./snapshot-state.ts";
 
@@ -709,6 +711,28 @@ function decodeSnapshotState(
       isProxy,
     );
     if (!relationships.ok) return snapshotDecodeFailure();
+    for (const component of components.value) {
+      if (
+        typeof component !== "object" ||
+        component === null ||
+        isProxy?.(component) ||
+        !Object.isFrozen(component) ||
+        !isCanonicalApplicationSnapshotComponent(component)
+      ) {
+        return snapshotDecodeFailure();
+      }
+    }
+    for (const relationship of relationships.value) {
+      if (
+        typeof relationship !== "object" ||
+        relationship === null ||
+        isProxy?.(relationship) ||
+        !Object.isFrozen(relationship) ||
+        !isCanonicalApplicationSnapshotRelationship(relationship)
+      ) {
+        return snapshotDecodeFailure();
+      }
+    }
     const graph = state.value.graph;
     if (typeof graph === "object" && graph !== null && isProxy?.(graph)) {
       return snapshotDecodeFailure();

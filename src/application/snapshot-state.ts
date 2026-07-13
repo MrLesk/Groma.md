@@ -1,8 +1,12 @@
 import {
   failure,
+  parseEntityId,
   parseGraphGeneration,
+  parseRelationId,
   success,
   type EntityDraft,
+  type GraphData,
+  type GraphEntity,
   type GraphRelation,
   type GraphSnapshot,
   type GraphGeneration,
@@ -65,6 +69,8 @@ export interface ApplicationSnapshotStateDecoderMetadata {
 }
 
 const decoderMetadata = new WeakMap<object, ApplicationSnapshotStateDecoderMetadata>();
+const canonicalComponents = new WeakSet<object>();
+const canonicalRelationships = new WeakSet<object>();
 
 function recordApplicationSnapshotStateDecoder(
   decoder: ApplicationSnapshotStateDecoder,
@@ -80,6 +86,14 @@ export function applicationSnapshotStateDecoderMetadata(
   return typeof value === "object" && value !== null ? decoderMetadata.get(value) : undefined;
 }
 
+export function isCanonicalApplicationSnapshotComponent(value: unknown): boolean {
+  return typeof value === "object" && value !== null && canonicalComponents.has(value);
+}
+
+export function isCanonicalApplicationSnapshotRelationship(value: unknown): boolean {
+  return typeof value === "object" && value !== null && canonicalRelationships.has(value);
+}
+
 interface ApplicationSnapshotStateDecoderContext extends ApplicationSnapshotStateDecoderOptions {
   readonly invariant: TransactionInvariant;
   readonly zero: GraphGeneration;
@@ -89,15 +103,620 @@ function diagnostic(code: string, message: string) {
   return Object.freeze({ code, message });
 }
 
+const decoderFailureResult = Object.freeze({
+  diagnostics: Object.freeze([
+    diagnostic(
+      "application-snapshot-decode-failed",
+      "The application snapshot decoder could not safely decode provider state",
+    ),
+  ]),
+  ok: false as const,
+});
+
+function decoderFailure<T = never>(): Result<T> {
+  return decoderFailureResult;
+}
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function embeddedItemCount(component: StandardComponent): number {
-  return (
-    (component.actions?.length ?? 0) +
-    (component.inputs?.length ?? 0) +
-    (component.outputs?.length ?? 0)
+const componentFields = new Set([
+  "actions",
+  "desired",
+  "extensions",
+  "id",
+  "inputs",
+  "intent",
+  "kind",
+  "lifecycle",
+  "name",
+  "outputs",
+  "parent",
+  "type",
+]);
+const componentRequiredFields = new Set(["extensions", "id", "kind"]);
+const itemFields = new Set(["description", "extensions", "id", "name"]);
+const itemRequiredFields = new Set(["extensions", "id"]);
+const relationshipFields = new Set(["description", "extensions", "id", "source", "target", "type"]);
+const relationshipRequiredFields = new Set(["extensions", "id", "source", "target", "type"]);
+const extensionKeyPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
+const openTokenPattern = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+const relationTokenPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const diagnosticCodePattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const safeDiagnosticIdentityKeys = new Set(["componentId", "id", "parent", "source", "target"]);
+const safeDiagnosticNumericKeys = new Set([
+  "actual",
+  "attempts",
+  "limit",
+  "maximum",
+  "receivedLength",
+  "sourceMessageLength",
+]);
+const safeDiagnosticBooleanKeys = new Set([
+  "actualAbsent",
+  "expectedAbsent",
+  "overwritePrevented",
+  "retryable",
+]);
+const safeDiagnosticDetailKeys = Object.freeze([
+  ...safeDiagnosticIdentityKeys,
+  ...safeDiagnosticNumericKeys,
+  ...safeDiagnosticBooleanKeys,
+  "path",
+  "receivedType",
+  "state",
+]);
+const safeReceivedTypes = new Set([
+  "bigint",
+  "boolean",
+  "function",
+  "number",
+  "object",
+  "string",
+  "symbol",
+  "undefined",
+]);
+const semanticPathPattern =
+  /^(?:component|context|finalState|mutation|patch|priorState|request)(?:\.|\[|$)[A-Za-z0-9_.\[\]-]*$/;
+
+interface ModelSuccessContext {
+  embeddedItems: number;
+  readonly isProxy: (value: unknown) => boolean;
+  readonly options: ApplicationSnapshotStateDecoderContext;
+}
+
+function decoderBoundFailure(maximum: number): Result<never> {
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      Object.freeze({
+        code: "application-bound-exceeded",
+        details: Object.freeze({ maximum }),
+        message: "Decoded model values exceed the configured item count",
+      }),
+    ]),
+    ok: false as const,
+  });
+}
+
+function modelDiagnosticDetails(
+  value: unknown,
+  context: ModelSuccessContext,
+): Result<Readonly<Record<string, string | number | boolean>> | undefined> {
+  if (value === undefined) return success(undefined);
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    if (Array.isArray(value)) return decoderFailure();
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
+    const details = Object.create(null) as Record<string, string | number | boolean>;
+    let count = 0;
+    for (const key of safeDiagnosticDetailKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor) || !descriptor.enumerable) return decoderFailure();
+      const detail = descriptor.value;
+      let safe = false;
+      if (safeDiagnosticIdentityKeys.has(key) && typeof detail === "string") {
+        safe = parseEntityId(detail).ok || parseRelationId(detail).ok;
+      } else if (safeDiagnosticNumericKeys.has(key) && typeof detail === "number") {
+        safe = Number.isFinite(detail);
+      } else if (safeDiagnosticBooleanKeys.has(key) && typeof detail === "boolean") {
+        safe = true;
+      } else if (key === "path" && typeof detail === "string") {
+        safe = semanticPathPattern.test(detail);
+      } else if (key === "receivedType" && typeof detail === "string") {
+        safe = safeReceivedTypes.has(detail);
+      } else if (key === "state" && typeof detail === "string") {
+        safe = detail === "absent" || detail === "incompatible" || detail === "initialized";
+      }
+      if (safe) {
+        Object.defineProperty(details, key, { enumerable: true, value: detail });
+        count += 1;
+      }
+    }
+    return success(count === 0 ? undefined : Object.freeze(details));
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function copiedModelFailure(value: unknown, context: ModelSuccessContext): Result<never> {
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    const length = inspectIntrinsicArrayLength(
+      value,
+      "application-snapshot-decode-failed",
+      "Standard Model diagnostics",
+    );
+    if (!length.ok || length.value === 0 || length.value > 1_000) return decoderFailure();
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== length.value + 1) return decoderFailure();
+    const diagnostics = [];
+    for (let index = 0; index < length.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      const record = modelRecord(
+        descriptor.value,
+        new Set(["code", "details", "message"]),
+        new Set(["code", "message"]),
+        context,
+      );
+      if (
+        !record.ok ||
+        typeof record.value.code !== "string" ||
+        record.value.code.length > 128 ||
+        !diagnosticCodePattern.test(record.value.code) ||
+        typeof record.value.message !== "string"
+      ) {
+        return decoderFailure();
+      }
+      const details = modelDiagnosticDetails(record.value.details, context);
+      if (!details.ok) return decoderFailure();
+      diagnostics[index] = Object.freeze({
+        code: record.value.code,
+        ...(details.value === undefined ? {} : { details: details.value }),
+        message: "The Standard Model rejected decoded provider state",
+      });
+    }
+    return Object.freeze({ diagnostics: Object.freeze(diagnostics), ok: false as const });
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function modelRecord(
+  value: unknown,
+  allowed: ReadonlySet<string>,
+  required: ReadonlySet<string>,
+  context: ModelSuccessContext,
+): Result<Readonly<Record<string, unknown>>> {
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    if (Array.isArray(value)) return decoderFailure();
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > allowed.size) return decoderFailure();
+    const inspected = Object.create(null) as Record<string, unknown>;
+    for (const key of keys) {
+      if (typeof key !== "string" || !allowed.has(key)) return decoderFailure();
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      Object.defineProperty(inspected, key, { enumerable: true, value: descriptor.value });
+    }
+    for (const key of required) {
+      if (!Object.hasOwn(inspected, key)) return decoderFailure();
+    }
+    return success(Object.freeze(inspected));
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function preflightModelGraphData(
+  value: unknown,
+  depth: number,
+  remaining: { value: number },
+  active: WeakSet<object>,
+  context: ModelSuccessContext,
+): Result<void> {
+  if (depth > context.options.bounds.maxSnapshotStateDepth || remaining.value < 1) {
+    return decoderFailure();
+  }
+  remaining.value -= 1;
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  ) {
+    return success(undefined);
+  }
+  if (typeof value !== "object" || context.isProxy(value)) return decoderFailure();
+  if (active.has(value)) return decoderFailure();
+  active.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) return decoderFailure();
+      const length = inspectIntrinsicArrayLength(
+        value,
+        "application-snapshot-decode-failed",
+        "Decoded model extension array",
+      );
+      if (!length.ok || length.value > remaining.value) return decoderFailure();
+      const keys = Reflect.ownKeys(value);
+      if (keys.length !== length.value + 1) return decoderFailure();
+      for (let index = 0; index < length.value; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+          return decoderFailure();
+        }
+        const item = preflightModelGraphData(
+          descriptor.value,
+          depth + 1,
+          remaining,
+          active,
+          context,
+        );
+        if (!item.ok) return item;
+      }
+      return success(undefined);
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > remaining.value) return decoderFailure();
+    for (const key of keys) {
+      if (typeof key !== "string") return decoderFailure();
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      const child = preflightModelGraphData(
+        descriptor.value,
+        depth + 1,
+        remaining,
+        active,
+        context,
+      );
+      if (!child.ok) return child;
+    }
+    return success(undefined);
+  } finally {
+    active.delete(value);
+  }
+}
+
+function modelExtensions(
+  value: unknown,
+  context: ModelSuccessContext,
+): Result<Readonly<Record<string, unknown>>> {
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    if (Array.isArray(value)) return decoderFailure();
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return decoderFailure();
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > context.options.bounds.maxSnapshotStateValues) return decoderFailure();
+    const extensions = Object.create(null) as Record<string, unknown>;
+    const remaining = { value: context.options.bounds.maxSnapshotStateValues };
+    const active = new WeakSet<object>();
+    for (const key of keys) {
+      if (typeof key !== "string" || !extensionKeyPattern.test(key)) return decoderFailure();
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      const valid = preflightModelGraphData(descriptor.value, 1, remaining, active, context);
+      if (!valid.ok) return valid;
+      Object.defineProperty(extensions, key, { enumerable: true, value: descriptor.value });
+    }
+    return success(Object.freeze(extensions));
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function optionalModelString(
+  record: Readonly<Record<string, unknown>>,
+  field: string,
+  tokenPattern?: RegExp,
+): Result<string | undefined> {
+  if (!Object.hasOwn(record, field)) return success(undefined);
+  const value = record[field];
+  return typeof value === "string" && (tokenPattern === undefined || tokenPattern.test(value))
+    ? success(value)
+    : decoderFailure();
+}
+
+function modelItems(
+  value: unknown,
+  context: ModelSuccessContext,
+): Result<readonly Readonly<Record<string, unknown>>[] | undefined> {
+  if (value === undefined) return success(undefined);
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    const length = inspectIntrinsicArrayLength(
+      value,
+      "application-snapshot-decode-failed",
+      "Decoded model items",
+    );
+    if (!length.ok) return decoderFailure();
+    if (context.embeddedItems + length.value > context.options.bounds.maxEmbeddedItems) {
+      return decoderBoundFailure(context.options.bounds.maxEmbeddedItems);
+    }
+    context.embeddedItems += length.value;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== length.value + 1) return decoderFailure();
+    const identities = new Set<string>();
+    const items: Readonly<Record<string, unknown>>[] = [];
+    for (let index = 0; index < length.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      const record = modelRecord(descriptor.value, itemFields, itemRequiredFields, context);
+      if (!record.ok || typeof record.value.id !== "string" || record.value.id.length === 0) {
+        return decoderFailure();
+      }
+      if (identities.has(record.value.id)) return decoderFailure();
+      identities.add(record.value.id);
+      const name = optionalModelString(record.value, "name");
+      const description = optionalModelString(record.value, "description");
+      const extensions = modelExtensions(record.value.extensions, context);
+      if (!name.ok || !description.ok || !extensions.ok) return decoderFailure();
+      items[index] = Object.freeze({
+        id: record.value.id,
+        ...(name.value === undefined ? {} : { name: name.value }),
+        ...(description.value === undefined ? {} : { description: description.value }),
+        extensions: extensions.value,
+      });
+    }
+    items.sort((left, right) => compareText(left.id as string, right.id as string));
+    return success(Object.freeze(items));
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function modelSuccess(value: unknown, context: ModelSuccessContext): Result<unknown> {
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    if (value instanceof Promise) {
+      void value.then(
+        () => undefined,
+        () => undefined,
+      );
+      return decoderFailure();
+    }
+    const inspected = inspectExactRecord(
+      value,
+      [
+        ["ok", "value"],
+        ["diagnostics", "ok"],
+      ],
+      "application-snapshot-decode-failed",
+      "Standard Model result",
+    );
+    if (!inspected.ok) return decoderFailure();
+    if (inspected.value.ok === true) {
+      const modelValue = inspected.value.value;
+      if (typeof modelValue === "object" && modelValue !== null) {
+        if (context.isProxy(modelValue)) return decoderFailure();
+        if (modelValue instanceof Promise) {
+          void modelValue.then(
+            () => undefined,
+            () => undefined,
+          );
+          return decoderFailure();
+        }
+      }
+      return success(modelValue);
+    }
+    return inspected.value.ok === false
+      ? copiedModelFailure(inspected.value.diagnostics, context)
+      : decoderFailure();
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function modelComponent(
+  value: unknown,
+  entity: GraphEntity,
+  context: ModelSuccessContext,
+): Result<Readonly<Record<string, unknown>>> {
+  const record = modelRecord(value, componentFields, componentRequiredFields, context);
+  if (!record.ok) return record;
+  if (typeof record.value.id !== "string") return decoderFailure();
+  const id = parseEntityId(record.value.id);
+  if (!id.ok || id.value !== entity.id) return decoderFailure();
+  if (record.value.kind !== STANDARD_COMPONENT_KIND || record.value.kind !== entity.kind) {
+    return decoderFailure();
+  }
+  const name = optionalModelString(record.value, "name");
+  const type = optionalModelString(record.value, "type", openTokenPattern);
+  const intent = optionalModelString(record.value, "intent");
+  const lifecycle = optionalModelString(record.value, "lifecycle", openTokenPattern);
+  const desired = optionalModelString(record.value, "desired", openTokenPattern);
+  if (!name.ok || !type.ok || !intent.ok || !lifecycle.ok || !desired.ok) {
+    return decoderFailure();
+  }
+  let parent: string | undefined;
+  if (Object.hasOwn(record.value, "parent")) {
+    if (typeof record.value.parent !== "string") return decoderFailure();
+    const parsed = parseEntityId(record.value.parent);
+    if (!parsed.ok) return decoderFailure();
+    parent = parsed.value;
+  }
+  const inputs = modelItems(record.value.inputs, context);
+  if (!inputs.ok) return inputs;
+  const outputs = modelItems(record.value.outputs, context);
+  if (!outputs.ok) return outputs;
+  const actions = modelItems(record.value.actions, context);
+  if (!actions.ok) return actions;
+  const extensions = modelExtensions(record.value.extensions, context);
+  if (!extensions.ok) return extensions;
+  return success(
+    Object.freeze({
+      id: id.value,
+      kind: STANDARD_COMPONENT_KIND,
+      ...(name.value === undefined ? {} : { name: name.value }),
+      ...(type.value === undefined ? {} : { type: type.value }),
+      ...(parent === undefined ? {} : { parent }),
+      ...(intent.value === undefined ? {} : { intent: intent.value }),
+      ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
+      ...(outputs.value === undefined ? {} : { outputs: outputs.value }),
+      ...(actions.value === undefined ? {} : { actions: actions.value }),
+      ...(lifecycle.value === undefined ? {} : { lifecycle: lifecycle.value }),
+      ...(desired.value === undefined ? {} : { desired: desired.value }),
+      extensions: extensions.value,
+    }),
+  );
+}
+
+function modelRelationship(
+  value: unknown,
+  expected: ReadonlyMap<string, GraphRelation>,
+  context: ModelSuccessContext,
+): Result<Readonly<Record<string, unknown>>> {
+  const record = modelRecord(value, relationshipFields, relationshipRequiredFields, context);
+  if (!record.ok || typeof record.value.id !== "string") return decoderFailure();
+  const id = parseRelationId(record.value.id);
+  if (!id.ok) return decoderFailure();
+  const relation = expected.get(id.value);
+  if (relation === undefined) return decoderFailure();
+  if (
+    typeof record.value.type !== "string" ||
+    !relationTokenPattern.test(record.value.type) ||
+    record.value.type !== relation.type ||
+    typeof record.value.source !== "string" ||
+    typeof record.value.target !== "string"
+  ) {
+    return decoderFailure();
+  }
+  const source = parseEntityId(record.value.source);
+  const target = parseEntityId(record.value.target);
+  if (
+    !source.ok ||
+    !target.ok ||
+    source.value !== relation.source ||
+    target.value !== relation.target
+  ) {
+    return decoderFailure();
+  }
+  const description = optionalModelString(record.value, "description");
+  const extensions = modelExtensions(record.value.extensions, context);
+  if (!description.ok || !extensions.ok) return decoderFailure();
+  return success(
+    Object.freeze({
+      id: id.value,
+      type: relation.type,
+      source: relation.source,
+      target: relation.target,
+      ...(description.value === undefined ? {} : { description: description.value }),
+      extensions: extensions.value,
+    }),
+  );
+}
+
+function modelRelationships(
+  value: unknown,
+  relations: readonly GraphRelation[],
+  context: ModelSuccessContext,
+): Result<readonly Readonly<Record<string, unknown>>[]> {
+  try {
+    if (typeof value !== "object" || value === null || context.isProxy(value)) {
+      return decoderFailure();
+    }
+    const length = inspectIntrinsicArrayLength(
+      value,
+      "application-snapshot-decode-failed",
+      "Decoded model relationships",
+    );
+    if (!length.ok || length.value !== relations.length) return decoderFailure();
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== length.value + 1) return decoderFailure();
+    const expected = new Map<string, GraphRelation>();
+    for (const relation of relations) expected.set(relation.id, relation);
+    const seen = new Set<string>();
+    const copied: Readonly<Record<string, unknown>>[] = [];
+    for (let index = 0; index < length.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return decoderFailure();
+      }
+      const relationship = modelRelationship(descriptor.value, expected, context);
+      if (!relationship.ok) return relationship;
+      const id = relationship.value.id as string;
+      if (seen.has(id)) return decoderFailure();
+      seen.add(id);
+      copied[index] = relationship.value;
+    }
+    copied.sort((left, right) => compareText(left.id as string, right.id as string));
+    return success(Object.freeze(copied));
+  } catch {
+    return decoderFailure();
+  }
+}
+
+function copyModelSuccessValues(
+  components: readonly Readonly<Record<string, unknown>>[],
+  relationships: readonly Readonly<Record<string, unknown>>[],
+  context: ModelSuccessContext,
+): Result<{
+  readonly components: readonly StandardComponent[];
+  readonly relationships: readonly StandardRelationship[];
+}> {
+  const copied = copyGraphPayload(Object.freeze({ components, relationships }), "transaction", {
+    code: "application-snapshot-decode-failed",
+    maximumDepth: context.options.bounds.maxSnapshotStateDepth,
+    maximumValues: context.options.bounds.maxSnapshotStateValues,
+    message: "Decoded model values exceed the configured structural budget",
+  });
+  if (!copied.ok) return decoderFailure();
+  const envelope = inspectExactRecord(
+    copied.value,
+    [["components", "relationships"]],
+    "application-snapshot-decode-failed",
+    "Decoded model values",
+  );
+  if (
+    !envelope.ok ||
+    !Array.isArray(envelope.value.components) ||
+    !Array.isArray(envelope.value.relationships)
+  ) {
+    return decoderFailure();
+  }
+  const canonicalComponentValues = envelope.value.components as readonly StandardComponent[];
+  const canonicalRelationshipValues = envelope.value
+    .relationships as readonly StandardRelationship[];
+  for (const component of canonicalComponentValues) canonicalComponents.add(component as object);
+  for (const relationship of canonicalRelationshipValues) {
+    canonicalRelationships.add(relationship as object);
+  }
+  return success(
+    Object.freeze({
+      components: canonicalComponentValues,
+      relationships: canonicalRelationshipValues,
+    }),
   );
 }
 
@@ -301,7 +920,12 @@ function decode(
 
   const loaded = options.graph.load(entityDrafts, relationDrafts);
   if (!loaded.ok) return loaded;
-  const components: StandardComponent[] = [];
+  const modelContext: ModelSuccessContext = {
+    embeddedItems: 0,
+    isProxy,
+    options,
+  };
+  const components: Readonly<Record<string, unknown>>[] = [];
   for (let index = 0; index < entityDrafts.length; index += 1) {
     const draft = entityDrafts[index]!;
     const resolved = options.graph.resolveEntity(loaded.value, {
@@ -309,33 +933,33 @@ function decode(
       id: draft.id!,
     });
     if (!resolved.ok) return resolved;
-    const component = options.model.parse(resolved.value);
+    const parsed = modelSuccess(options.model.parse(resolved.value), modelContext);
+    if (!parsed.ok) return parsed;
+    const component = modelComponent(parsed.value, resolved.value, modelContext);
     if (!component.ok) return component;
-    if (embeddedItemCount(component.value) > options.bounds.maxEmbeddedItems) {
-      return failure(
-        Object.freeze({
-          code: "application-bound-exceeded",
-          details: Object.freeze({ maximum: options.bounds.maxEmbeddedItems }),
-          message: "Embedded component items exceed the configured item count",
-        }),
-      );
-    }
     components[index] = component.value;
   }
-  components.sort((left, right) => compareText(left.id, right.id));
+  components.sort((left, right) => compareText(left.id as string, right.id as string));
   const graphRelations: GraphRelation[] = [];
   for (let index = 0; index < relationDrafts.length; index += 1) {
     const relation = options.graph.resolveRelation(loaded.value, relationDrafts[index]!.id!);
     if (!relation.ok) return relation;
     graphRelations[index] = relation.value;
   }
-  const relationships = options.model.relationships(graphRelations);
+  const relationshipResult = modelSuccess(
+    options.model.relationships(graphRelations),
+    modelContext,
+  );
+  if (!relationshipResult.ok) return relationshipResult;
+  const relationships = modelRelationships(relationshipResult.value, graphRelations, modelContext);
   if (!relationships.ok) return relationships;
+  const canonical = copyModelSuccessValues(components, relationships.value, modelContext);
+  if (!canonical.ok) return canonical;
   return success(
     Object.freeze({
-      components: Object.freeze(components),
+      components: canonical.value.components,
       graph: loaded.value,
-      relationships: relationships.value,
+      relationships: canonical.value.relationships,
     }),
   );
 }
@@ -361,7 +985,15 @@ export function createApplicationSnapshotStateDecoder(
     model: options.model,
     zero: zero.value,
   });
-  const decoder = Object.freeze({ decode: (value: unknown) => decode(value, copied) });
+  const decoder = Object.freeze({
+    decode: (value: unknown) => {
+      try {
+        return decode(value, copied);
+      } catch {
+        return decoderFailure();
+      }
+    },
+  });
   return recordApplicationSnapshotStateDecoder(decoder, {
     bounds,
     graph: options.graph,
