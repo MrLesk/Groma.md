@@ -78,9 +78,10 @@ promotes the existing workspace session to ready without reconstructing the host
 Provider snapshots are copied once from exact data properties into bounded canonical
 state before the host records their generation. Host recovery and normal application
 reads receive the exact same proxy-aware application snapshot-state decoder instance,
-including GraphKernel loading,
-Standard Model parsing, duplicate and endpoint checks, and final containment invariant
-validation. The default `maxEmbeddedItems` bound applies independently to each
+including GraphKernel loading, Standard Model parsing, duplicate and endpoint checks,
+and final containment invariant validation.
+
+The default `maxEmbeddedItems` bound applies independently to each
 component's combined inputs, outputs, and actions, while `maxSnapshotStateValues` bounds
 the complete snapshot across all components and relationships. Concurrent initialize and
 recover calls reserve one non-rejecting operation tail in invocation order, so
@@ -92,8 +93,9 @@ addition to the host's intrinsic proxy detector. Before its first provider await
 construction exact-inspects and snapshots its bounds, operations, and required capability
 methods; later container or method mutation cannot redirect calls, which retain their
 original receivers.
-Resource and transaction-provider callbacks must not
-reenter `initialize()` or `recover()` on the same workspace capability. Reentrant calls
+
+Resource and transaction-provider callbacks must not reenter `initialize()` or
+`recover()` on the same workspace capability. Reentrant calls
 fail immediately with `workspace-transition-reentrant` instead of joining their own
 tail; calls from unrelated external async contexts retain FIFO behavior. The lifecycle
 independently validates the exact recovery `Result` and report at runtime, rejecting
@@ -110,12 +112,14 @@ without waiting for a non-cooperative pending Promise; late resolve, reject, or 
 results are contained and never dispatch a surface. Only runtime values exactly equal to
 `SIGINT` or `SIGTERM` appear in a cancelled outcome. Any other injected signal value
 requests generic cancellation without exposing the value.
+
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners
 are removed on every exit path. The host calls `stop()` exactly once even after natural
 completion, so a surface session must tolerate cleanup from that completed state.
-`createProcessSignalSource` is the built-in process
-adapter; the CLI is not wired to it in 1A. Its SIGINT and SIGTERM registration is
+
+`createProcessSignalSource` is the built-in process adapter; the CLI is not wired to it
+in 1A. Its SIGINT and SIGTERM registration is
 transactional: a registration failure rolls back every listener that may have been
 added. Cleanup attempts both removals independently, records only successful removals,
 and leaves failures retryable without removing a successful listener twice. The surface

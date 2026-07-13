@@ -620,7 +620,7 @@ function validatedCommitState(
     "Workspace configuration publication outcome",
   );
   if (!outcome.ok) return outcome;
-  if (Object.hasOwn(outcome.value, "diagnostics")) {
+  if (intrinsicObjectHasOwn(outcome.value, "diagnostics")) {
     const diagnostics = copyHostDiagnostics(
       outcome.value.diagnostics,
       bounds.maxProviderDiagnostics,

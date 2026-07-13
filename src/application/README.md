@@ -22,14 +22,16 @@ capability, and every read reuses the injected instance. Operations accept only 
 frozen decoder object returned by that factory; forged, wrapped, and proxied lookalikes
 are rejected during construction before provider access. Decoder provenance registration
 is private to the factory module; consumers can read compatibility metadata but cannot
-brand another object. Its GraphKernel and Standard Model identities and its component,
-diagnostic, embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly match
-the application composition. The decoder owns its immutable runtime proxy-detection
+brand another object.
+
+Its GraphKernel and Standard Model identities and its component, diagnostic,
+embedded-item, relationship, snapshot-depth, and snapshot-value bounds must exactly
+match the application composition. The decoder owns its immutable runtime proxy-detection
 policy; the default host shares that exact proxy-aware instance with application reads
-and startup recovery, so
-bounded copying, GraphKernel loading, Standard Model parsing, relationship endpoints,
-duplicates, and containment invariants cannot drift. Its deterministic Standard Model
-invariant is constructed once with the decoder rather than per read. Decoder results are
+and startup recovery, so bounded copying, GraphKernel loading, Standard Model parsing,
+relationship endpoints, duplicates, and containment invariants cannot drift. Its
+deterministic Standard Model invariant is constructed once with the decoder rather than
+per read. Decoder results are
 exact-inspected and copied inside one exception boundary. Diagnostic arrays, records, and
 details are copied only from bounded own data descriptors, and unexpected decoder faults
 or malformed results become one frozen `application-snapshot-decode-failed` diagnostic
@@ -68,6 +70,7 @@ inherited `then`, `constructor`, and subclass species accessors cannot leak late
 rejections. A fixed own constructor pointing at the captured Promise is observed only
 while its species descriptor still exactly matches the module-initial intrinsic;
 other non-shadowable constructors fail closed.
+
 The injected initializer is responsible for atomically establishing that minimal
 canonical workspace, recognizing compatible prior initialization, and preserving any
 conflicting existing state without overwrite.
@@ -85,6 +88,7 @@ validation and transaction diagnostics are copied into presentation-neutral outc
 with canonical resource details removed. Capability-supplied diagnostic codes are
 exposed only when they are bounded lowercase kebab-case tokens; unsafe codes are
 replaced with application-owned category codes.
+
 Resource mapping is also a containment boundary: mapper failures become one generic
 component-scoped diagnostic, and mapper messages, details, locators, and keys never
 reach application callers.
@@ -128,6 +132,7 @@ before relationship planning or transaction execution, so omitted arrays cannot 
 the combined per-component bound. Construction also enforces absolute ceilings
 (including snapshot retry count), so hostile arrays and payloads fail before unbounded
 copying, identity minting, graph loading, or transaction execution.
+
 Auto-generated component IDs are minted against the validated current graph, and
 committed outcomes are accepted only when their affected identity sets exactly match the
 submitted transaction.
