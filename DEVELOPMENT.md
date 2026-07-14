@@ -158,8 +158,9 @@ later-iteration work.
 ## Deliberately Deferred
 
 The approved web stack is Bun's embedded HTTP server and Bun's React bundler. Neither
-HTTP nor React is installed or started in Iteration 1A. The application service begins
-in Iteration 4, the web viewer in Iteration 4, and web editing in Iteration 5.
+HTTP nor React is installed or started in Iteration 1A or required for the disposable
+local artifact that Iteration 2 proves. Iteration 4 introduces the application service
+and complete web viewing and editing together.
 
 Iteration 1A also does not implement scanning, reconciliation, disposable projection,
 dynamic plugin loading, plans, or Git history views.

@@ -12,12 +12,18 @@ All decisions in this overview are subordinate to [MANIFESTO.md](MANIFESTO.md).
 
 ## Blueprint Legend
 
-Every component card uses these fields:
+Every component card uses this schema. Optional fields may be omitted when they add no
+recognition value:
 
 - **Seed key:** temporary stable handle used by this document. It is not a future
   Groma entity ID.
 - **Type:** an open model-owned token describing the component's architectural role.
 - **Parent:** the single structural parent component, or `None` for a root.
+- **Label:** optional short display label for bounded visual projections.
+- **Summary:** optional one-sentence overview used by bounded visual projections.
+- **`iconDomain`:** optional canonical favicon-domain recognition metadata; the first
+  renderer derives only a deterministic offline domain badge, monogram, or text hint
+  from it, and it grants no identity, evidence, network, or trust authority.
 - **First delivery:** the first iteration expected to make the component real.
 - **Intent:** why the component exists, independent of implementation technology.
 - **Inputs:** concepts or information the component receives.
@@ -25,24 +31,29 @@ Every component card uses these fields:
 - **Actions:** responsibilities the component performs.
 - **Relationships:** architectural dependencies and collaborations.
 
-The planned delivery iterations are:
+The planned delivery iterations are deliberately ordered around useful vertical
+slices:
 
-| Iteration | Architectural outcome                                            |
-| --------- | ---------------------------------------------------------------- |
-| 1A        | Correctness walking skeleton and minimal persistence             |
-| 1B        | Official host, projection, validation, and manual self-blueprint |
-| 2         | Scanning, evidence, binding, and reconciliation                  |
-| 3         | Plans, Git history, and architectural comparison                 |
-| 4         | Long-lived application service and web viewer                    |
-| 5         | Web editing and complete self-hosting                            |
+| Iteration | Architectural outcome                                                       |
+| --------- | --------------------------------------------------------------------------- |
+| 1A        | Correctness walking skeleton and minimal persistence                        |
+| 1B        | Minimal query foundation and manual self-blueprint                          |
+| 2         | Living visual blueprint: scan, reconcile, inspect, and curate locally       |
+| 3         | Plans, Git history, ecosystem hardening, and organization-scale proof       |
+| 4         | Long-lived local application service, complete web viewing, and web editing |
 
 ## v0.1 Component Vocabulary
 
-The blueprint is a workspace containing one or more root components. Every
-architectural node beneath that workspace uses the same recursively composable model:
+The blueprint is a workspace containing one or more root components. Every canonical
+architectural entity beneath that workspace uses the same recursively composable
+model:
 
 ```text
 Component
+├── name?
+├── label?
+├── summary?
+├── iconDomain?
 ├── type
 ├── parent?              # absent for roots
 ├── intent
@@ -51,6 +62,11 @@ Component
 ├── actions
 └── relationships
 ```
+
+`Component` is the semantic and canonical term. `Node` is a projection term for a
+box, chip, folded group, or other item drawn in a particular view. A projected node
+does not introduce a second identity system and may summarize more than one canonical
+component when the view budget requires folding.
 
 Type is an open token rather than a closed hierarchy. For example, a Shopify blueprint
 may have `Shop` and `Users` root components of type `domain`, with recursively nested
@@ -66,13 +82,27 @@ contracts; Core does not learn component types or hierarchy policy.
 `kind` and `type` have different scopes. Graph-level `kind` identifies the entity as a
 standard-model `component` and lets codecs reject a document for the wrong entity
 kind. Model-level `type` is the open architectural role chosen for that component,
-such as `domain`, `service`, or `component`.
+such as `domain`, `service`, `agent`, `store`, or `external`. These are conventional
+tokens, not a closed taxonomy. `external` identifies a system outside the blueprint's
+ownership that is still architecturally relevant enough to carry intent and
+relationships.
 
-Type and parent are structural metadata. The model intentionally limits structured
-component meaning to five concepts: intent, inputs, outputs, actions, and
-relationships. This is enough to make a component understandable and connectable
-without forcing users or scanners to fill in a large architectural taxonomy. Other
-useful concepts map onto this vocabulary until real usage justifies promoting them:
+`name`, `type`, and `parent` are identity and structural metadata. `label`, `summary`,
+and `iconDomain` are optional canonical recognition metadata: `label` is a short
+display override for `name`, `summary` is concise intent for overview cards, and
+`iconDomain` is a favicon-domain hint. When `iconDomain` is present, the first renderer
+derives only a deterministic, self-contained domain badge, monogram, or text hint from
+it; it never fetches a favicon or any other remote asset. `iconDomain` never
+participates in identity or evidence matching and grants no network or trust
+authority. A future explicit icon-resolution capability is separate from the first
+renderer and requires explicit user action and a privacy policy. For a projected node
+representing one component, display text resolves deterministically from `label`, then
+`name`, then the stable canonical component ID when both display strings are absent. The model
+intentionally limits structured component meaning to five concepts: intent, inputs,
+outputs, actions, and relationships. This is enough to make a component understandable
+and connectable without forcing users or scanners to fill in a large architectural
+taxonomy. Other useful concepts map onto this vocabulary until real usage justifies
+promoting them:
 
 | Richer concept     | v0.1 representation                                      |
 | ------------------ | -------------------------------------------------------- |
@@ -91,6 +121,13 @@ Inputs and outputs are the v0.1 connection points. A later model may describe th
 typed ports, but v0.1 does not require users to classify flow, protocol, multiplicity,
 or control semantics.
 
+Presentation grouping normally follows canonical containment. A projection may also
+fold children, tools, ports, or sequential detail into a temporary visual group to
+keep its main layer readable. Such grouping is view-local and never changes parentage,
+relationships, or canonical files. A folded group receives a deterministic view-local
+label derived from its grouping rule and bounded member count; it never receives a
+synthetic canonical component ID or identity.
+
 Every scanner contribution is optional and partial. A scanner may observe only a
 component candidate, only actions, or only a relationship. It does not fail the
 contract by omitting inputs or outputs, and it is never expected to infer intent,
@@ -104,6 +141,8 @@ systems.
 - Project files and contracts are observed by scanners.
 - Scanners send one-way observation sessions to Groma.
 - Groma reconciles observations with durable architectural intent.
+- A first-run local visual projection makes the reconciled blueprint immediately
+  understandable without becoming another source of truth.
 - Humans primarily explore the aggregate blueprint through the web interface.
 - Humans, agents, and automation use the CLI for complete semantic access.
 - Git retains past blueprint states.
@@ -140,6 +179,10 @@ flowchart LR
 
     Index --> Operations
     Index --> Service
+    Operations -->|"bounded renderer data"| Renderer["Bounded Visual Renderer"]
+    CLI -. "trigger and open lifecycle only" .-> Renderer
+    Renderer --> Artifact["Local HTML or SVG"]
+    Artifact -->|"return to CLI caller"| Actor
 
     Git["Git History"] --> Views["View Resolution and Comparison"]
     Plans --> Views
@@ -148,6 +191,11 @@ flowchart LR
 
     Backlog["Backlog.md"] -. "coordinates implementation between plans" .-> Actor
 ```
+
+The dashed CLI-to-renderer edge carries control only. Every renderer input comes from
+a bounded Shared Application Operations read, and the disposable artifact returns to
+the CLI caller represented by `Actor`; it does not route through the Web Surface or
+its Human node.
 
 ## Architectural Component Tree
 
@@ -303,8 +351,8 @@ not part of Core.
 - **Seed key:** `plugin-package-manager`
 - **Type:** `component`
 - **Parent:** Official Host
-- **First delivery:** 1B for local packages; remote acquisition after the runtime API
-  is proven
+- **First delivery:** 3, after the minimal built-in capability path and living visual
+  blueprint are proven
 - **Intent:** Install, select, reproduce, and update distributable plugin packages
   without exposing package-manager technology to Core or modifying observed projects.
 - **Inputs:** Package source; user or blueprint scope; package manifest; project trust;
@@ -328,15 +376,15 @@ The official model is a required built-in plugin rather than a Core assumption.
 - **Parent:** Standard Blueprint Model
 - **First delivery:** 1A
 - **Intent:** Express an intentionally small architectural vocabulary through
-  recursively nested components, open types, intent, inputs, outputs, actions,
-  relationships, lifecycle, and desired state.
+  recursively nested components, open types, lightweight recognition metadata,
+  intent, inputs, outputs, actions, relationships, lifecycle, and desired state.
 - **Inputs:** Partial semantic entity mutations; extension metadata; relation-type
   registrations.
 - **Outputs:** Validated partial or complete model entities; model-specific views;
   semantic diagnostics.
 - **Actions:** Define the minimal entity vocabulary; normalize semantic documents;
-  preserve omitted fields; resolve structural parents; derive child views and standard
-  display states.
+  preserve omitted fields; resolve structural parents; derive labels, child views, and
+  standard display states.
 - **Relationships:** Uses Graph Kernel; consumed explicitly by official CLI, planning,
   reconciliation, and web plugins.
 
@@ -446,7 +494,7 @@ aliases, plans, and transaction recovery.
 - **Seed key:** `schema-migration`
 - **Type:** `component`
 - **Parent:** Canonical Persistence
-- **First delivery:** 1B
+- **First delivery:** 3
 - **Intent:** Evolve versioned canonical documents explicitly and reviewably without
   silently changing a workspace during ordinary mutations.
 - **Inputs:** Workspace schema floor; document schema versions; registered migrators.
@@ -494,6 +542,32 @@ the blueprint.
   relations; enforce page and subgraph budgets.
 - **Relationships:** Uses Projection Index; serves Application Operations, Graph
   Comparator, CLI, and Application Service.
+
+#### Visual Blueprint Renderer
+
+- **Seed key:** `visual-blueprint-renderer`
+- **Type:** `component`
+- **Parent:** Projection
+- **First delivery:** 2
+- **Intent:** Turn a bounded reconciled subgraph into an immediately understandable,
+  self-contained local visual artifact without adding presentation state to the
+  canonical blueprint.
+- **Inputs:** Bounded subgraph; containment and ordinary relationships; component
+  `name`, `label`, `summary`, `iconDomain`, and type metadata; evidence, binding,
+  ambiguity, and coverage states.
+- **Outputs:** Deterministic local HTML or SVG; bounded main-layer node set; focus and
+  detail views; structured intent and evidence inspector; deterministic offline
+  domain badge, monogram, or text hint when `iconDomain` is present.
+- **Actions:** Select a readable main layer; lay out nodes deterministically; fold
+  subordinate detail without changing canonical structure; expand or focus recursive
+  components; trace relationships; distinguish curated intent, automatic candidates,
+  bound evidence, ambiguity, missing coverage, containment, and ordinary relations;
+  derive the offline `iconDomain` hint without fetching favicons or remote assets.
+- **Relationships:** Consumes presentation-neutral bounded reads from Shared
+  Application Operations; produces an artifact opened by CLI Surface; its layout,
+  grouping, zoom, and theme are disposable and reconstructable; it makes no network
+  request. Any future icon-resolution capability is separate and requires explicit
+  user action and a privacy policy.
 
 ### 6. Scanning and Reconciliation
 
@@ -575,7 +649,7 @@ observations into Groma identity and canonical evidence.
 - **Seed key:** `external-observation-submission`
 - **Type:** `component`
 - **Parent:** Scanning and Reconciliation
-- **First delivery:** 2
+- **First delivery:** 3
 - **Intent:** Let external agents, humans, and independent scanners report observations
   through the same safe session model without editing canonical files.
 - **Inputs:** Versioned framed begin, observation, heartbeat, and complete records from
@@ -688,11 +762,15 @@ Surfaces never write stores directly. They call shared application operations.
 - **Inputs:** Command arguments; plaintext or JSON format; standard input for patches or
   observation submission.
 - **Outputs:** One complete bounded result page; stable exit status; optional PTY
-  presentation and scan progress.
+  presentation and scan progress; local visual artifact location.
 - **Actions:** Parse and dispatch commands; render plaintext and JSON; enforce plain
-  behavior; host long-running session commands without streaming ordinary results.
+  behavior; host long-running session commands without streaming ordinary results;
+  open the current bounded visual blueprint for interactive use after a successful
+  first-run scan.
 - **Relationships:** Calls Shared Application Operations; contributes `init`, entity,
-  scan, plan, diff, validation, migration, and plugin commands over time.
+  scan, visual export, plan, diff, validation, migration, and plugin commands over
+  time; uses Visual Blueprint Renderer without adding renderer semantics to
+  application operations.
 
 #### Application Service
 
@@ -715,7 +793,7 @@ Surfaces never write stores directly. They call shared application operations.
 - **Seed key:** `web-surface`
 - **Type:** `component`
 - **Parent:** CLI, Service, and Web Surfaces
-- **First delivery:** 4 for viewing, 5 for editing
+- **First delivery:** 4
 - **Intent:** Give humans a scalable visual environment for understanding and editing
   the aggregate blueprint.
 - **Inputs:** Bounded subgraphs; search and filters; current, plan, and diff views;
@@ -725,7 +803,8 @@ Surfaces never write stores directly. They call shared application operations.
 - **Actions:** Search and expand subgraphs; switch views; inspect provenance; edit through
   application operations; recover from missed generations.
 - **Relationships:** Uses Application Service only; does not access Markdown or SQLite;
-  is the default interactive experience for bare `groma`.
+  replaces the disposable local artifact as the default interactive experience for
+  bare `groma` when the long-lived service is available.
 
 ### 9. Plugin Development
 
@@ -751,7 +830,7 @@ Surfaces never write stores directly. They call shared application operations.
 - **Seed key:** `plugin-scaffolding`
 - **Type:** `component`
 - **Parent:** Plugin Development
-- **First delivery:** 1B
+- **First delivery:** 3
 - **Intent:** Create a minimal local plugin skeleton that follows public capability and
   manifest conventions without coupling authors to repository internals.
 - **Inputs:** Plugin name; intended capability contributions; local destination.
@@ -888,10 +967,12 @@ groma plugin doctor
 entry. `sync` materializes the exact lock without resolving newer versions. `config`
 selects package contributions without editing manifests manually.
 
-The first delivery supports built-ins and local path packages. Remote npm and Git
-acquisition, integrity locking, and automatic synchronization ship only after the
-plugin API and long-running lifecycle have passed their conformance and self-hosting
-gates.
+Iteration 1B proves built-in contributions through the same public capability
+contracts used by future packages, without yet making package acquisition part of the
+first useful path. Local path packages, scaffolding, remote npm and Git acquisition,
+integrity locking, and automatic synchronization follow after the living visual
+blueprint has passed its first-run gate and the plugin API and long-running lifecycle
+have passed their conformance and self-hosting gates.
 
 ## Example: Recursive Shopify Blueprint
 
@@ -919,8 +1000,8 @@ Users [domain]
 This hierarchy may continue to any depth. A component can contain children of its own
 type or other types, but a child has only one parent and containment cannot form a
 cycle. Actions such as `Add item` and `Remove item` are owned by Cart rather than
-modeled as child components. Dependencies or flows between any nodes—including nodes
-in different roots—use ordinary many-to-many relationships and do not affect
+modeled as child components. Dependencies or flows between any components—including
+components in different roots—use ordinary many-to-many relationships and do not affect
 containment.
 
 ## Example: Ordering System
@@ -1145,6 +1226,22 @@ flowchart TB
 
 ## Primary Workflows
 
+### Reach the First Useful Blueprint
+
+```text
+groma init
+  -> groma scan
+  -> complete observation and reconciliation
+  -> bounded current-view query
+  -> reconstruct local visual artifact
+  -> open the main blueprint layer
+```
+
+This is the first release-defining product path. It performs no network request or AI
+call and uploads nothing by default. The opened main layer uses a presentation budget
+rather than a canonical node cap: additional architecture remains available through
+component focus, recursive expansion, search, and detail views.
+
 ### Initialize a Workspace
 
 ```text
@@ -1203,6 +1300,24 @@ observation key
 Moving, splitting, merging, or pinning conceptual components changes Groma-owned
 bindings. It does not change scanner behavior.
 
+### Navigate the Local Visual Blueprint
+
+```text
+bounded current-view query
+  -> derive projected nodes from canonical components
+  -> choose main layer within the view budget
+  -> deterministic hierarchical layout
+  -> fold subordinate detail
+  -> open local HTML or SVG
+  -> focus, expand, trace, or inspect
+```
+
+The main layer should be dense enough to communicate the system, but it never truncates
+canonical state. Focusing a component replaces the current visual context with a
+bounded detail subgraph. Inspection exposes concise intent and structured supporting
+evidence, including provenance, bindings, uncertainty, and coverage. Visual groups,
+positions, filters, and zoom are disposable.
+
 ### Create a Plan
 
 ```text
@@ -1251,7 +1366,9 @@ web query
 ```
 
 The browser never requests or lays out the complete organization graph. Missed event
-generations cause targeted refetch rather than speculative local repair.
+generations cause targeted refetch rather than speculative local repair. It preserves
+the same component-to-node, folding, focus, and inspector semantics proven first by
+the local visual artifact.
 
 ### Self-Hosting with Backlog.md
 
@@ -1287,30 +1404,39 @@ stable cross-references but retain separate responsibilities.
 15. Large graphs are explored through search, aggregation, and bounded subgraphs.
 16. Unknown plugin metadata survives even when its plugin is unavailable.
 17. Ambiguous identity, binding, and relation targets fail closed.
-18. Every architectural node is a component with an open type and zero or one
-    structural parent; the blueprint workspace may contain multiple roots.
+18. Every canonical architectural entity is a component with an open type and zero or
+    one structural parent; the blueprint workspace may contain multiple roots.
 19. Component containment is acyclic, permits same- or mixed-type recursion, and is
     independent from unrestricted non-containment relationships.
 20. The v0.1 component model structures only intent, inputs, outputs, actions, and
-    relationships as meaning beyond its small type and parent metadata.
+    relationships as meaning beyond its small identity, structural, and recognition
+    metadata.
 21. Scanner observations are partial contributions; no scanner must populate a
     complete component.
+22. A visual node is a disposable projection of one or more canonical components, not
+    another canonical entity kind.
+23. Layout coordinates, folded groups, zoom, focus, theme, and other renderer state
+    never enter canonical data.
+24. The main visual layer is bounded by a presentation budget; focus, recursive
+    expansion, and detail queries reveal additional architecture without imposing a
+    canonical component limit.
 
 ## Deliberately Unresolved Decisions
 
 These questions remain open until their scheduled iteration provides evidence. They
 must not be guessed during earlier implementation.
 
-| Decision                                                     | Earliest evidence                          | Freeze point       |
-| ------------------------------------------------------------ | ------------------------------------------ | ------------------ |
-| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                  | End of Iteration 2 |
-| External observation transport grammar                       | Synthetic scanner and agent submission     | End of Iteration 2 |
-| Plaintext grammar details                                    | Real agent use across scanning and binding | End of Iteration 2 |
-| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                | End of Iteration 2 |
-| Default CLI page size                                        | Real query and comparison benchmarks       | End of Iteration 3 |
-| Plan ordering UX                                             | Concurrent plan dogfood                    | End of Iteration 3 |
-| Event batching thresholds                                    | Viewer and scan load tests                 | End of Iteration 4 |
-| Browser expansion and retained-node budgets                  | Layout prototype on reference hardware     | End of Iteration 4 |
+| Decision                                                     | Earliest evidence                                 | Freeze point       |
+| ------------------------------------------------------------ | ------------------------------------------------- | ------------------ |
+| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                         | End of Iteration 2 |
+| External observation transport grammar                       | Synthetic scanner and agent submission            | End of Iteration 3 |
+| Plaintext grammar details                                    | Real agent use across scanning and binding        | End of Iteration 2 |
+| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                       | End of Iteration 3 |
+| Default CLI page size                                        | Real query and comparison benchmarks              | End of Iteration 3 |
+| Plan ordering UX                                             | Concurrent plan dogfood                           | End of Iteration 3 |
+| Event batching thresholds                                    | Viewer and scan load tests                        | End of Iteration 4 |
+| Local-artifact main-layer, focus, and expansion budgets      | Iteration 2 local visual prototype                | End of Iteration 2 |
+| Browser retained-node budgets                                | Iteration 3 scale evidence and browser load tests | End of Iteration 4 |
 
 The following are explicitly outside v0.1 rather than unresolved:
 
