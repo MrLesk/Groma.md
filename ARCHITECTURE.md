@@ -90,13 +90,13 @@ relationships.
 and `iconDomain` are optional recognition metadata: `label` is a short display
 override for `name`, `summary` is concise intent for overview cards, and `iconDomain`
 is a favicon-domain recognition hint that never participates in identity or grants
-network or trust authority. Projection display text resolves deterministically from
-`label`, then `name`, then the stable canonical component ID when both display strings
-are absent. The model intentionally limits structured component meaning to five
-concepts: intent, inputs, outputs, actions, and relationships. This is enough to make a
-component understandable and connectable without forcing users or scanners to fill in
-a large architectural taxonomy. Other useful concepts map onto this vocabulary until
-real usage justifies promoting them:
+network or trust authority. For a projected node representing one component, display
+text resolves deterministically from `label`, then `name`, then the stable canonical
+component ID when both display strings are absent. The model intentionally limits
+structured component meaning to five concepts: intent, inputs, outputs, actions, and
+relationships. This is enough to make a component understandable and connectable
+without forcing users or scanners to fill in a large architectural taxonomy. Other
+useful concepts map onto this vocabulary until real usage justifies promoting them:
 
 | Richer concept     | v0.1 representation                                      |
 | ------------------ | -------------------------------------------------------- |
@@ -118,7 +118,9 @@ or control semantics.
 Presentation grouping normally follows canonical containment. A projection may also
 fold children, tools, ports, or sequential detail into a temporary visual group to
 keep its main layer readable. Such grouping is view-local and never changes parentage,
-relationships, or canonical files.
+relationships, or canonical files. A folded group receives a deterministic view-local
+label derived from its grouping rule and bounded member count; it never receives a
+synthetic canonical component ID or identity.
 
 Every scanner contribution is optional and partial. A scanner may observe only a
 component candidate, only actions, or only a relationship. It does not fail the
