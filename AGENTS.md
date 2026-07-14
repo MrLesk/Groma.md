@@ -1,4 +1,3 @@
-
 # Read This First
 
 At the beginning of every conversation, read [MANIFESTO.md](MANIFESTO.md) before
@@ -12,6 +11,35 @@ conflict and ask Alex rather than silently proceeding.
 
 Do not edit the manifesto as a side effect of implementation. Changes to it require
 an explicit product decision.
+
+## Product Delivery Guardrails
+
+Preserve the shortest end-to-end path to the first useful Groma experience:
+
+```text
+groma init -> groma scan -> groma
+```
+
+That path must produce a bounded, understandable, locally owned visual blueprint. When
+planning work, prefer a complete vertical slice that improves this experience over
+finishing generalized infrastructure, extension breadth, or extreme-scale hardening
+that the slice does not yet require. Delaying the visible first-run outcome for such
+work requires an explicit product decision from Alex.
+
+Keep canonical meaning and presentation separate:
+
+- a component is a canonical architectural entity;
+- a node is a disposable visual projection;
+- layout, folding, focus, zoom, and theme never enter canonical state;
+- renderers consume bounded shared application reads and never create a second
+  semantic path;
+- visual density belongs to the current main layer, while focus and detail views
+  reveal additional components.
+
+Do not weaken scanner blindness, stable identity, reconciliation, deterministic local
+state, or fail-closed ambiguity in the name of speed. These invariants are what let the
+visual blueprint remain useful after the first scan instead of becoming a stale
+diagram.
 
 ## Pull Requests
 
@@ -52,6 +80,7 @@ manifesto, implementation, and available checks.
 
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
+
 <CRITICAL_INSTRUCTION>
 
 ## Backlog.md Workflow
@@ -63,6 +92,7 @@ This project uses Backlog.md for task and project management.
 Use the overview to decide whether to search, read, create, or update Backlog tasks.
 
 Use the detailed guides when needed:
+
 - `backlog instructions task-creation` for creating or splitting tasks
 - `backlog instructions task-execution` for planning and implementation workflow
 - `backlog instructions task-finalization` for completion and handoff

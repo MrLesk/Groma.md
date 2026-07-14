@@ -1,13 +1,37 @@
 # The Groma Manifesto
 
-Groma is a local-first architectural blueprint for humans and AI agents. It gives
-large, heterogeneous projects a shared language for understanding what a system is,
-why its parts exist, how those parts relate, and what the system is intended to
-become.
+Groma is a local-first architectural blueprint for humans and AI agents. It is the
+place where a team makes architectural intent explicit, gives humans and agents a
+shared target for implementation, and sees whether the systems being built still
+match that intent. It gives large, heterogeneous projects a shared language for
+understanding what a system is, why its parts exist, how those parts relate, and what
+the system is intended to become.
 
 Its purpose is not to reproduce source code in diagram form. Groma preserves
 architectural intent while continuously reconciling that intent with evidence from
 the systems being built.
+
+## The Product Promise
+
+Groma must become useful before it becomes comprehensive. The first successful
+experience is a short local loop:
+
+```text
+groma init
+groma scan
+groma
+```
+
+The result is a bounded visual blueprint that a person can understand without asking
+an agent to translate raw data. It is an evidence-grounded starting point, not a claim
+that observation can invent intent. A person or agent then defines and improves the
+intended architecture, delegates implementation through external tools, and relies on
+later scans to expose drift without erasing meaning.
+
+Visual understanding is part of the core product loop, not presentation added after
+the model is complete. Correctness work should protect this loop. Generality,
+extension breadth, and extreme-scale optimization follow the first useful vertical
+slice unless they are required to preserve a named invariant.
 
 ## The First Users
 
@@ -54,18 +78,30 @@ Intent explains meaning:
 - declared relationships;
 - lifecycle and desired state.
 
-Every architectural node in the standard model is a **component**. A component has an
-open type token and zero or one structural parent. Components without a parent are
-roots of the blueprint; every other component belongs to exactly one parent. Parents
-may contain any number of components of the same or different types, recursively.
-Containment is acyclic and is separate from the component's other many-to-many
-relationships. The blueprint itself is the workspace around these roots, not another
-required entity. A domain is therefore an ordinary root component with a `domain`
-type, not a distinct container entity.
+Every canonical architectural entity in the standard model is a **component**. A
+**node** is something drawn in a projection; it may show one component or a folded,
+derived view of several components. Node is not a second canonical entity kind.
+
+A component has an open type token and zero or one structural parent. Components
+without a parent are roots of the blueprint; every other component belongs to exactly
+one parent. Parents may contain any number of components of the same or different
+types, recursively. Containment is acyclic and is separate from the component's other
+many-to-many relationships. The blueprint itself is the workspace around these
+roots, not another required entity. A domain is therefore an ordinary root component
+with a `domain` type, not a distinct container entity.
+
+Type remains open, but the official vocabulary may recommend small, legible tokens.
+`external` is the conventional type for an architecturally relevant system that the
+blueprint does not own. An external system is still an ordinary component with intent
+and relationships; it does not require a special graph primitive.
 
 For v0.1, the structured meaning carried by a component is deliberately limited to
-**intent, inputs, outputs, actions, and relationships**. Type and parent are small
-structural metadata, not a separate architectural taxonomy or questionnaire.
+**intent, inputs, outputs, actions, and relationships**. Name, type, parent, an
+optional short label, an optional one-sentence summary, and an optional favicon domain
+are small identity, structural, and recognition metadata, not a separate
+architectural taxonomy or questionnaire. A projection uses the short label when
+present and the name otherwise, and may use the summary and favicon domain to improve
+recognition. None of these fields determines identity.
 Requirements are expressed through relationships; important failures and events are
 inputs or outputs; state, guarantees, triggers, and effects remain readable intent
 prose until repeated use proves that they need independent structure. This small model
@@ -99,6 +135,8 @@ Markdown under `groma/`.
 - Intent, evidence, bindings, aliases, and plans are durable canonical records.
 - Disposable projections may accelerate search and graph traversal but must be fully
   reconstructable.
+- Layout coordinates, folded groups, zoom state, colors, themes, and other renderer
+  choices are never canonical architectural state.
 - Paths and names are not identity.
 - Stable opaque IDs survive moves, renames, merges, and changes in implementation.
 - Git is optional to the abstract architecture, but the official distribution treats
@@ -130,7 +168,10 @@ Every surface expresses one shared application model.
    the blueprint.
 4. **Scanners** are one-way observation producers, not alternative mutation surfaces.
 
-Bare `groma` opens the aggregate visual blueprint in an interactive terminal. CLI and
+Bare `groma` opens the aggregate visual blueprint. Before the long-lived web
+application is available, the official host may produce and open a self-contained
+local HTML or SVG projection from the same bounded application reads. That artifact is
+disposable, uploads nothing by default, and never becomes a mutation surface. CLI and
 web behavior must remain semantically equivalent, and neither may bypass shared
 transactions.
 
@@ -187,14 +228,18 @@ files of projects it observes.
 7. **Fail closed on ambiguity.** Never guess an entity, binding, merge, or plan target
    when identity is uncertain.
 8. **One semantic path.** CLI, web, and plugins use shared operations and validation.
-9. **Progressive scale.** Queries, scans, and visualizations operate on bounded pages
-   and subgraphs rather than loading the world.
+9. **Progressive disclosure and scale.** A main visual layer stays intentionally
+   dense but bounded. Focus, expansion, and detail views reveal recursive components
+   without loading or laying out the world.
 10. **Portability through contracts.** Operating-system and storage concerns stay
     behind replaceable capabilities.
 11. **Desired state, not work orchestration.** Groma explains architectural change;
     external tools coordinate its implementation.
 12. **Simplicity earns adoption.** Add abstractions only when they preserve a real
     invariant or enable a proven extension.
+13. **The useful vertical slice comes first.** Prefer the smallest complete path from
+    observation to understandable blueprint over finishing generalized infrastructure
+    that users cannot yet experience.
 
 ## Boundaries
 
@@ -246,6 +291,8 @@ Git and external collaboration systems handle authorship, review, and approval.
 - Are current, historical, and planned states kept conceptually distinct?
 - Does the change belong in Groma, or in the external workflow between iterations?
 - Is the complexity justified by an immediate invariant or use case?
+- Does this shorten or delay the path from an unfamiliar project to a useful visual
+  blueprint?
 
 If a proposed change conflicts with this manifesto, surface the conflict and request an
 explicit product decision. Do not silently reinterpret the manifesto or amend it as an
