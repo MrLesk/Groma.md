@@ -4,7 +4,7 @@ title: Manage and pin local plugin packages
 status: To Do
 assignee: []
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-14 20:37'
+updated_date: '2026-07-14 22:36'
 labels: []
 milestone: m-4
 dependencies:
@@ -21,7 +21,7 @@ ordinal: 21000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Support reproducible local plugin packages for the first delivery while keeping package installation, plugin enablement, runtime loading, and project package management separate.
+Support reproducible local plugin packages for the initial package-management delivery while keeping package installation, plugin enablement, runtime loading, and project package management separate.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

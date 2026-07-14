@@ -4,14 +4,13 @@ title: Permit concurrent read-only workspace access
 status: To Do
 assignee: []
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-14 20:37'
+updated_date: '2026-07-14 22:36'
 labels: []
 milestone: m-4
 dependencies: []
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
-  - backlog/tasks/grom-20 - Dogfood-Groma-against-Backlog.md.md
 priority: high
 type: bug
 ordinal: 28000

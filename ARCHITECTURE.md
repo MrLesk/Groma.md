@@ -21,7 +21,8 @@ recognition value:
 - **Parent:** the single structural parent component, or `None` for a root.
 - **Label:** optional short display label for bounded visual projections.
 - **Summary:** optional one-sentence overview used by bounded visual projections.
-- **Icon domain:** optional favicon domain used as a recognition hint.
+- **`iconDomain`:** optional favicon-domain recognition hint; never identity or
+  network authority.
 - **First delivery:** the first iteration expected to make the component real.
 - **Intent:** why the component exists, independent of implementation technology.
 - **Inputs:** concepts or information the component receives.
@@ -85,15 +86,17 @@ tokens, not a closed taxonomy. `external` identifies a system outside the bluepr
 ownership that is still architecturally relevant enough to carry intent and
 relationships.
 
-Name, type, and parent are identity and structural metadata. Label, summary, and icon
-domain are optional recognition metadata: label is a short display override for the
-name, summary is concise intent for overview cards, and icon domain gives a renderer a
-recognition hint without making an icon part of identity. The model intentionally
-limits structured component meaning to five concepts: intent, inputs, outputs,
-actions, and relationships. This is enough to make a component understandable and
-connectable without forcing users or scanners to fill in a large architectural
-taxonomy. Other useful concepts map onto this vocabulary until real usage justifies
-promoting them:
+`name`, `type`, and `parent` are identity and structural metadata. `label`, `summary`,
+and `iconDomain` are optional recognition metadata: `label` is a short display
+override for `name`, `summary` is concise intent for overview cards, and `iconDomain`
+is a favicon-domain recognition hint that never participates in identity or grants
+network or trust authority. Projection display text resolves deterministically from
+`label`, then `name`, then the stable canonical component ID when both display strings
+are absent. The model intentionally limits structured component meaning to five
+concepts: intent, inputs, outputs, actions, and relationships. This is enough to make a
+component understandable and connectable without forcing users or scanners to fill in
+a large architectural taxonomy. Other useful concepts map onto this vocabulary until
+real usage justifies promoting them:
 
 | Richer concept     | v0.1 representation                                      |
 | ------------------ | -------------------------------------------------------- |
@@ -536,8 +539,8 @@ the blueprint.
   self-contained local visual artifact without adding presentation state to the
   canonical blueprint.
 - **Inputs:** Bounded subgraph; containment and ordinary relationships; component
-  names, labels, summaries, icon domains, and types; evidence, binding, ambiguity, and
-  coverage states.
+  `name`, `label`, `summary`, `iconDomain`, and type metadata; evidence, binding,
+  ambiguity, and coverage states.
 - **Outputs:** Deterministic local HTML or SVG; bounded main-layer node set; focus and
   detail views; structured intent and evidence inspector.
 - **Actions:** Select a readable main layer; lay out nodes deterministically; fold

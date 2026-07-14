@@ -97,11 +97,13 @@ and relationships; it does not require a special graph primitive.
 
 For v0.1, the structured meaning carried by a component is deliberately limited to
 **intent, inputs, outputs, actions, and relationships**. Name, type, parent, an
-optional short label, an optional one-sentence summary, and an optional favicon domain
-are small identity, structural, and recognition metadata, not a separate
-architectural taxonomy or questionnaire. A projection uses the short label when
-present and the name otherwise, and may use the summary and favicon domain to improve
-recognition. None of these fields determines identity.
+optional short label, an optional one-sentence summary, and an optional `iconDomain`
+favicon-domain recognition hint are small identity, structural, and recognition
+metadata, not a separate architectural taxonomy or questionnaire. Projection display
+text uses the short label when present, the name when no label is present, and the
+stable canonical component ID when both are absent. A projection may use the summary
+and `iconDomain` to improve recognition. None of these fields determines identity,
+and `iconDomain` grants no network or trust authority.
 Requirements are expressed through relationships; important failures and events are
 inputs or outputs; state, guarantees, triggers, and effects remain readable intent
 prose until repeated use proves that they need independent structure. This small model
