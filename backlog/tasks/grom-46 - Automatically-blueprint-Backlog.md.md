@@ -4,7 +4,7 @@ title: Automatically blueprint Backlog.md
 status: To Do
 assignee: []
 created_date: "2026-07-14 19:58"
-updated_date: "2026-07-14 22:45"
+updated_date: "2026-07-14 23:05"
 labels: []
 milestone: m-4
 dependencies:
@@ -13,7 +13,7 @@ dependencies:
 references:
   - MANIFESTO.md
   - ARCHITECTURE.md
-  - ../backlog.md/MANIFESTO.md
+  - "https://github.com/MrLesk/Backlog.md"
 priority: high
 type: task
 ordinal: 43000

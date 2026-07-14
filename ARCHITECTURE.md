@@ -21,8 +21,9 @@ recognition value:
 - **Parent:** the single structural parent component, or `None` for a root.
 - **Label:** optional short display label for bounded visual projections.
 - **Summary:** optional one-sentence overview used by bounded visual projections.
-- **`iconDomain`:** optional favicon-domain recognition hint; never identity or
-  network authority.
+- **`iconDomain`:** optional canonical favicon-domain recognition metadata; the first
+  renderer derives only a deterministic offline domain badge, monogram, or text hint
+  from it, and it grants no identity, evidence, network, or trust authority.
 - **First delivery:** the first iteration expected to make the component real.
 - **Intent:** why the component exists, independent of implementation technology.
 - **Inputs:** concepts or information the component receives.
@@ -87,16 +88,21 @@ ownership that is still architecturally relevant enough to carry intent and
 relationships.
 
 `name`, `type`, and `parent` are identity and structural metadata. `label`, `summary`,
-and `iconDomain` are optional recognition metadata: `label` is a short display
-override for `name`, `summary` is concise intent for overview cards, and `iconDomain`
-is a favicon-domain recognition hint that never participates in identity or grants
-network or trust authority. For a projected node representing one component, display
-text resolves deterministically from `label`, then `name`, then the stable canonical
-component ID when both display strings are absent. The model intentionally limits
-structured component meaning to five concepts: intent, inputs, outputs, actions, and
-relationships. This is enough to make a component understandable and connectable
-without forcing users or scanners to fill in a large architectural taxonomy. Other
-useful concepts map onto this vocabulary until real usage justifies promoting them:
+and `iconDomain` are optional canonical recognition metadata: `label` is a short
+display override for `name`, `summary` is concise intent for overview cards, and
+`iconDomain` is a favicon-domain hint. When `iconDomain` is present, the first renderer
+derives only a deterministic, self-contained domain badge, monogram, or text hint from
+it; it never fetches a favicon or any other remote asset. `iconDomain` never
+participates in identity or evidence matching and grants no network or trust
+authority. A future explicit icon-resolution capability is separate from the first
+renderer and requires explicit user action and a privacy policy. For a projected node
+representing one component, display text resolves deterministically from `label`, then
+`name`, then the stable canonical component ID when both display strings are absent. The model
+intentionally limits structured component meaning to five concepts: intent, inputs,
+outputs, actions, and relationships. This is enough to make a component understandable
+and connectable without forcing users or scanners to fill in a large architectural
+taxonomy. Other useful concepts map onto this vocabulary until real usage justifies
+promoting them:
 
 | Richer concept     | v0.1 representation                                      |
 | ------------------ | -------------------------------------------------------- |
@@ -173,9 +179,10 @@ flowchart LR
 
     Index --> Operations
     Index --> Service
-    Operations -->|"bounded current-view read"| Renderer["Bounded Visual Renderer"]
+    Operations -->|"bounded renderer data"| Renderer["Bounded Visual Renderer"]
+    CLI -. "trigger and open lifecycle only" .-> Renderer
     Renderer --> Artifact["Local HTML or SVG"]
-    Artifact --> Human
+    Artifact -->|"return to CLI caller"| Actor
 
     Git["Git History"] --> Views["View Resolution and Comparison"]
     Plans --> Views
@@ -184,6 +191,11 @@ flowchart LR
 
     Backlog["Backlog.md"] -. "coordinates implementation between plans" .-> Actor
 ```
+
+The dashed CLI-to-renderer edge carries control only. Every renderer input comes from
+a bounded Shared Application Operations read, and the disposable artifact returns to
+the CLI caller represented by `Actor`; it does not route through the Web Surface or
+its Human node.
 
 ## Architectural Component Tree
 
@@ -544,14 +556,18 @@ the blueprint.
   `name`, `label`, `summary`, `iconDomain`, and type metadata; evidence, binding,
   ambiguity, and coverage states.
 - **Outputs:** Deterministic local HTML or SVG; bounded main-layer node set; focus and
-  detail views; structured intent and evidence inspector.
+  detail views; structured intent and evidence inspector; deterministic offline
+  domain badge, monogram, or text hint when `iconDomain` is present.
 - **Actions:** Select a readable main layer; lay out nodes deterministically; fold
   subordinate detail without changing canonical structure; expand or focus recursive
   components; trace relationships; distinguish curated intent, automatic candidates,
-  bound evidence, ambiguity, missing coverage, containment, and ordinary relations.
+  bound evidence, ambiguity, missing coverage, containment, and ordinary relations;
+  derive the offline `iconDomain` hint without fetching favicons or remote assets.
 - **Relationships:** Consumes presentation-neutral bounded reads from Shared
   Application Operations; produces an artifact opened by CLI Surface; its layout,
-  grouping, zoom, and theme are disposable and reconstructable.
+  grouping, zoom, and theme are disposable and reconstructable; it makes no network
+  request. Any future icon-resolution capability is separate and requires explicit
+  user action and a privacy policy.
 
 ### 6. Scanning and Reconciliation
 
@@ -1222,10 +1238,10 @@ groma init
   -> open the main blueprint layer
 ```
 
-This is the first release-defining product path. It performs no network upload or AI
-inference by default. The opened main layer uses a presentation budget rather than a
-canonical node cap: additional architecture remains available through component
-focus, recursive expansion, search, and detail views.
+This is the first release-defining product path. It performs no network request or AI
+call and uploads nothing by default. The opened main layer uses a presentation budget
+rather than a canonical node cap: additional architecture remains available through
+component focus, recursive expansion, search, and detail views.
 
 ### Initialize a Workspace
 
@@ -1411,16 +1427,17 @@ stable cross-references but retain separate responsibilities.
 These questions remain open until their scheduled iteration provides evidence. They
 must not be guessed during earlier implementation.
 
-| Decision                                                     | Earliest evidence                          | Freeze point       |
-| ------------------------------------------------------------ | ------------------------------------------ | ------------------ |
-| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                  | End of Iteration 2 |
-| External observation transport grammar                       | Synthetic scanner and agent submission     | End of Iteration 3 |
-| Plaintext grammar details                                    | Real agent use across scanning and binding | End of Iteration 2 |
-| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                | End of Iteration 3 |
-| Default CLI page size                                        | Real query and comparison benchmarks       | End of Iteration 3 |
-| Plan ordering UX                                             | Concurrent plan dogfood                    | End of Iteration 3 |
-| Event batching thresholds                                    | Viewer and scan load tests                 | End of Iteration 4 |
-| Main-layer, expansion, and retained-node budgets             | Iteration 2 local visual prototype         | End of Iteration 2 |
+| Decision                                                     | Earliest evidence                                 | Freeze point       |
+| ------------------------------------------------------------ | ------------------------------------------------- | ------------------ |
+| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                         | End of Iteration 2 |
+| External observation transport grammar                       | Synthetic scanner and agent submission            | End of Iteration 3 |
+| Plaintext grammar details                                    | Real agent use across scanning and binding        | End of Iteration 2 |
+| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                       | End of Iteration 3 |
+| Default CLI page size                                        | Real query and comparison benchmarks              | End of Iteration 3 |
+| Plan ordering UX                                             | Concurrent plan dogfood                           | End of Iteration 3 |
+| Event batching thresholds                                    | Viewer and scan load tests                        | End of Iteration 4 |
+| Local-artifact main-layer, focus, and expansion budgets      | Iteration 2 local visual prototype                | End of Iteration 2 |
+| Browser retained-node budgets                                | Iteration 3 scale evidence and browser load tests | End of Iteration 4 |
 
 The following are explicitly outside v0.1 rather than unresolved:
 

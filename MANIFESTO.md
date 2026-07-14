@@ -96,14 +96,17 @@ blueprint does not own. An external system is still an ordinary component with i
 and relationships; it does not require a special graph primitive.
 
 For v0.1, the structured meaning carried by a component is deliberately limited to
-**intent, inputs, outputs, actions, and relationships**. Name, type, parent, an
-optional short label, an optional one-sentence summary, and an optional `iconDomain`
-favicon-domain recognition hint are small identity, structural, and recognition
-metadata, not a separate architectural taxonomy or questionnaire. Projection display
-text uses the short label when present, the name when no label is present, and the
-stable canonical component ID when both are absent. A projection may use the summary
-and `iconDomain` to improve recognition. None of these fields determines identity,
-and `iconDomain` grants no network or trust authority.
+**intent, inputs, outputs, actions, and relationships**. Name, type, and parent are
+small identity and structural metadata. An optional short label, optional one-sentence
+summary, and optional `iconDomain` favicon-domain hint are canonical recognition
+metadata, not a separate architectural taxonomy or questionnaire. For a node
+projecting one component, display text uses the short label when present, the name
+when no label is present, and the stable canonical component ID when both are absent.
+When `iconDomain` is present, the first renderer uses it only to derive a deterministic,
+self-contained domain badge, monogram, or text hint. It never fetches a favicon or
+makes a network request, and `iconDomain` never determines identity, evidence, or
+trust. A future icon-resolution capability would be separate from the first renderer
+and would require explicit user action and a privacy policy.
 Requirements are expressed through relationships; important failures and events are
 inputs or outputs; state, guarantees, triggers, and effects remain readable intent
 prose until repeated use proves that they need independent structure. This small model
@@ -170,11 +173,13 @@ Every surface expresses one shared application model.
    the blueprint.
 4. **Scanners** are one-way observation producers, not alternative mutation surfaces.
 
-Bare `groma` opens the aggregate visual blueprint. Before the long-lived web
-application is available, the official host may produce and open a self-contained
-local HTML or SVG projection from the same bounded application reads. That artifact is
-disposable, uploads nothing by default, and never becomes a mutation surface. CLI and
-web behavior must remain semantically equivalent, and neither may bypass shared
+The shipped Iteration 1A bare `groma` opens a bounded aggregate terminal overview from
+shared application operations. Iteration 2 evolves that same entry point to
+reconstruct and open a disposable local HTML or SVG projection from the same bounded
+reads. The long-lived web application later replaces that artifact as the default
+human experience. The local artifact makes no network request, uploads nothing by
+default, and never becomes a mutation surface. Terminal, local-artifact, and web
+behavior must remain semantically equivalent, and none may bypass shared operations or
 transactions.
 
 ## Plugin Posture

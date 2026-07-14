@@ -5,7 +5,7 @@ status: Done
 assignee:
   - "@codex"
 created_date: "2026-07-14 20:33"
-updated_date: "2026-07-14 22:49"
+updated_date: "2026-07-14 23:10"
 labels:
   - product
   - architecture
@@ -49,9 +49,11 @@ Make Groma useful and legible in the first minute: users define architectural in
 
 <!-- SECTION:PLAN:BEGIN -->
 
-1. Route GROM-46 executable dogfood comparison to the fresh GROM-34 reference audit and scorecard, leaving the earlier 43-component, 83-relationship, five-root, generation-77 result as descriptive historical context only.
-2. Qualify the label -> name -> stable canonical component ID fallback for nodes that project one component; give folded groups deterministic view-local labels derived from their grouping rule and bounded member count, never synthetic canonical identity.
-3. Expand semantic assertions for both corrections, rerun formatting, diff hygiene, Backlog integrity, dependency and scope audits, and the full repository check, then objectively re-finalize all six GROM-50 criteria and commit within the existing 39-file scope.
+1. Define iconDomain as canonical recognition metadata with a deterministic offline badge, monogram, or text-hint use in the first renderer; prohibit renderer network requests and keep any future icon resolution outside GROM-51/GROM-52 behind explicit user action and privacy policy.
+2. Document the shipped Iteration 1A bare-groma terminal overview and its Iteration 2 evolution, and clarify the architecture diagram so CLI owns renderer triggering/opening while bounded Shared Application Operations remain the renderer's only data source and the artifact returns to the CLI caller.
+3. Split the Iteration 2 local-artifact presentation-budget freeze from the End-of-Iteration-4 browser retained-node freeze, with GROM-53 collecting organization-scale browser evidence for the later decision.
+4. Make Iteration 2 release limits explicit in GROM-48: one active CLI process is supported while concurrent independent readers remain GROM-31's fail-closed limitation, and incompatible preview schemas fail closed without migration until GROM-27 with state-preservation/export guidance before upgrades.
+5. Replace sibling dogfood references with the durable Backlog.md and codex-events remotes, keep task scopes coherent, expand semantic/dependency assertions, run formatting and the full repository check, re-finalize GROM-50, and commit within the unchanged 39-file branch scope.
 
 <!-- SECTION:PLAN:END -->
 
@@ -70,11 +72,15 @@ Benchmark provenance correction: historical findings and the earlier Backlog.md 
 Projection-label correction: the label -> name -> stable canonical component ID fallback applies only to a projected node representing one component. Folded groups receive deterministic view-local labels derived from the grouping rule and bounded member count and never receive synthetic canonical component IDs or identity.
 
 Final validation: Prettier passed the four files touched by this correction; git diff --check passed; backlog doctor found no duplicate IDs; 864 semantic, dependency, and scope assertions proved benchmark ownership, descriptive-only history, folded-label semantics, complete dependency existence, an acyclic task graph, no Iteration 1B/2 dependency on Iteration 3 work, all prior GROM-50 invariants, and the unchanged 39-file branch scope; bun run check passed formatting, TypeScript, architecture boundaries, 458 tests, native build, binary smoke, and Iteration 1A verification.
+
+Claude-review product decisions: iconDomain remains canonical recognition metadata but the first renderer uses it only for a deterministic self-contained domain badge, monogram, or text hint and makes no network request; favicon fetching is outside GROM-51/GROM-52, and any future resolver requires explicit user action and a privacy policy. The shipped Iteration 1A bare groma terminal overview and the Iteration 2 disposable local artifact are successive presentations of the same shared operations, with the web app later replacing the artifact. CLI controls renderer triggering/opening while bounded Shared Application Operations remain its only data source and the artifact returns to the CLI caller. Iteration 2 freezes only local-artifact main-layer, focus, and expansion budgets; browser retained-node limits remain evidence-driven until the End of Iteration 4, with GROM-53 collecting organization-scale evidence. Iteration 2 supports the single-active-CLI-process path: concurrent independent readers remain GROM-31's known fail-closed limitation and must not corrupt canonical state. Iteration 2 also publishes a preview schema contract: incompatible schemas fail closed, no silent or in-place migration is promised before GROM-27, and upgrade guidance must explain state preservation/export. External dogfood tasks use the durable Backlog.md and codex-events GitHub remotes.
+
+Claude-review correction validation: Prettier passed MANIFESTO.md, ARCHITECTURE.md, and eight affected task records; git diff --check passed; backlog doctor found no duplicate IDs; 908 semantic, dependency, and scope assertions proved deterministic offline iconDomain use and absolute renderer no-network behavior, split local/browser freeze points, explicit single-process and preview-schema release limits, current terminal-to-local-to-web entry-point evolution, CLI renderer control with Shared Application Operations data authority and CLI-caller delivery, durable external references, complete dependencies, an acyclic task graph, and the unchanged 39-file branch scope. bun run check passed formatting, TypeScript, architecture boundaries, 458 tests, native build, binary smoke, and Iteration 1A verification.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 
-Reframed Groma around the immediate local init-to-scan-to-visual blueprint loop and completed the final benchmark and projection-label clarifications: GROM-34 owns executable dogfood audit scoring while historical counts remain descriptive, and folded groups use deterministic view-local labels without synthetic canonical identity. Verified with Prettier, 864 semantic/dependency/scope assertions, Backlog integrity, diff hygiene, and the full 458-test repository check.
+Reframed Groma around the immediate init-to-scan-to-visual blueprint loop and resolved the final product review: iconDomain has a deterministic offline first-renderer use with no network access; local and browser budget freezes are separated; Iteration 2 documents its single-process and preview-schema limits; shipped bare-groma evolution and renderer authority are explicit; and dogfood tasks use durable remotes. Verified with Prettier, 908 semantic/dependency/scope assertions, Backlog integrity, diff hygiene, and the full 458-test repository check.
 <!-- SECTION:FINAL_SUMMARY:END -->
