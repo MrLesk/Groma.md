@@ -4,7 +4,7 @@ title: Accept external observation sessions
 status: To Do
 assignee: []
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-14 20:37'
+updated_date: '2026-07-14 22:20'
 labels: []
 milestone: m-4
 dependencies:
@@ -33,5 +33,5 @@ Let independent scanners, agents, and humans submit observations through the sam
 - [ ] #3 Malformed, contradictory, stale, incomplete, and trailing records fail with stable diagnostics and cannot commit partial evidence
 - [ ] #4 A valid external session reaches the same reconciliation and evidence path as a built-in scanner
 - [ ] #5 The observation framing remains independent of ordinary CLI result formatting and is documented for third-party producers
-- [ ] #6 The transport grammar is validated by a synthetic independent scanner and the resulting Iteration 2 evidence is recorded for the scheduled freeze decision
+- [ ] #6 The transport grammar is validated by a synthetic independent scanner, with resulting canonical evidence recorded in the current blueprint and existing canonical evidence preserved for the scheduled freeze decision
 <!-- AC:END -->

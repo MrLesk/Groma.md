@@ -4,7 +4,7 @@ title: Render a bounded local visual blueprint
 status: To Do
 assignee: []
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-14 22:07'
+updated_date: '2026-07-14 22:20'
 labels:
   - visualization
   - first-run
@@ -35,5 +35,5 @@ Give the living-blueprint release its immediate human payoff: a self-contained l
 - [ ] #3 The view visibly distinguishes curated intent, automatic candidates, bound evidence, ambiguity or missing coverage, containment, and ordinary relationships without relying on color alone
 - [ ] #4 Selecting a projected node opens concise intent plus structured provenance, binding, uncertainty, and coverage details
 - [ ] #5 Rendering the same generation is deterministic, performs no canonical write, network request, or upload by default, and stores no layout, folding, focus, zoom, or theme state in the blueprint
-- [ ] #6 Bare groma can open the artifact and a successful interactive first-run scan can proceed directly to it through supported CLI behavior
+- [ ] #6 Bare groma can deterministically reconstruct and open the artifact for the current blueprint generation through supported CLI behavior
 <!-- AC:END -->

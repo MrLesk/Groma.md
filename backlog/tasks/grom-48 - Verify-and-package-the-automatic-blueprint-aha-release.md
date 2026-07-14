@@ -4,7 +4,7 @@ title: Verify and package the automatic-blueprint aha release
 status: To Do
 assignee: []
 created_date: '2026-07-14 19:59'
-updated_date: '2026-07-14 20:39'
+updated_date: '2026-07-14 22:20'
 labels: []
 milestone: m-3
 dependencies:
@@ -35,5 +35,5 @@ Close Iteration 2 with black-box proof that a friend can run one standalone Grom
 - [ ] #4 The friend workflow demonstrates that dense main-layer presentation remains readable while focus and detail views expose deeper structure without changing canonical meaning
 - [ ] #5 One runner cross-compiles exact standalone artifacts for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, and the host-compatible artifact runs the complete workflow without an installed Bun runtime
 - [ ] #6 User documentation shows the no-AI first-run experience and how to inspect intent, raw evidence, automatic architecture, uncertainty, and coverage before optional agent curation
-- [ ] #7 The Iteration 2 evidence resolves and records the scheduled decisions for state taxonomy, plaintext grammar, visual presentation budget, and evidence-shard fanout without expanding the manifesto or v0.1 scope
+- [ ] #7 The Iteration 2 release resolves and records the scheduled state-taxonomy, plaintext-grammar, and visual-presentation-budget decisions, verifies and documents the bounded initial 256-bucket evidence strategy, and explicitly defers organization-scale fanout evidence and any fanout decision to GROM-53 in Iteration 3
 <!-- AC:END -->

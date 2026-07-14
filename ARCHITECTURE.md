@@ -168,7 +168,7 @@ flowchart LR
 
     Index --> Operations
     Index --> Service
-    Index --> Renderer["Bounded Visual Renderer"]
+    Operations -->|"bounded current-view read"| Renderer["Bounded Visual Renderer"]
     Renderer --> Artifact["Local HTML or SVG"]
     Artifact --> Human
 
@@ -544,9 +544,9 @@ the blueprint.
   subordinate detail without changing canonical structure; expand or focus recursive
   components; trace relationships; distinguish curated intent, automatic candidates,
   bound evidence, ambiguity, missing coverage, containment, and ordinary relations.
-- **Relationships:** Consumes Query Engine and presentation-neutral Shared Application
-  Operations; produces an artifact opened by CLI Surface; its layout, grouping, zoom,
-  and theme are disposable and reconstructable.
+- **Relationships:** Consumes presentation-neutral bounded reads from Shared
+  Application Operations; produces an artifact opened by CLI Surface; its layout,
+  grouping, zoom, and theme are disposable and reconstructable.
 
 ### 6. Scanning and Reconciliation
 
