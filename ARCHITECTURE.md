@@ -1046,7 +1046,6 @@ schema: groma/v0.1
 id: ent_00000000000000000000000000000010
 kind: component
 name: Ordering
-summary: Coordinates the durable lifecycle of a customer order.
 type: service
 parent: ent_00000000000000000000000000000001
 

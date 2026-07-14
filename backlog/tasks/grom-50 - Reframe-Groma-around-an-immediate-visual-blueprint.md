@@ -5,7 +5,7 @@ status: Done
 assignee:
   - "@codex"
 created_date: "2026-07-14 20:33"
-updated_date: "2026-07-14 23:10"
+updated_date: "2026-07-14 23:45"
 labels:
   - product
   - architecture
@@ -17,9 +17,64 @@ references:
   - ARCHITECTURE.md
   - AGENTS.md
 modified_files:
-  - MANIFESTO.md
-  - ARCHITECTURE.md
   - AGENTS.md
+  - ARCHITECTURE.md
+  - DEVELOPMENT.md
+  - MANIFESTO.md
+  - backlog/milestones/m-2 - iteration-1b-—-minimal-self-blueprint-foundation.md
+  - backlog/milestones/m-3 - iteration-2-—-living-visual-blueprint.md
+  - >-
+    backlog/milestones/m-4 -
+    iteration-3-—-plans,-history,-and-ecosystem-harden.md
+  - backlog/tasks/grom-21 - Implement-the-phased-plugin-runtime.md
+  - backlog/tasks/grom-22 - Load-bootstrap-workspace-configuration.md
+  - backlog/tasks/grom-23 - Publish-the-plugin-SDK-and-conformance-suites.md
+  - backlog/tasks/grom-24 - Manage-and-pin-local-plugin-packages.md
+  - backlog/tasks/grom-25 - Scaffold-a-conforming-local-plugin-package.md
+  - backlog/tasks/grom-26 - Persist-and-resolve-component-aliases.md
+  - backlog/tasks/grom-27 - Support-explicit-canonical-schema-migrations.md
+  - backlog/tasks/grom-28 - Build-the-reconstructable-projection-index.md
+  - backlog/tasks/grom-29 - Implement-the-bounded-graph-query-engine.md
+  - >-
+    backlog/tasks/grom-30 -
+    Expose-blueprint-search-traversal-and-export-through-the-CLI.md
+  - backlog/tasks/grom-31 - Permit-concurrent-read-only-workspace-access.md
+  - backlog/tasks/grom-32 - Create-Gromas-canonical-self-blueprint.md
+  - >-
+    backlog/tasks/grom-33 -
+    Verify-and-package-the-complete-Iteration-1B-foundation.md
+  - backlog/tasks/grom-34 - Define-the-automatic-blueprint-aha-benchmark.md
+  - backlog/tasks/grom-35 - Define-the-finite-observation-session-contract.md
+  - >-
+    backlog/tasks/grom-36 -
+    Persist-and-recover-provisional-observation-sessions.md
+  - backlog/tasks/grom-37 - Persist-canonical-evidence-coverage-and-bindings.md
+  - backlog/tasks/grom-38 - Register-projects-and-scanner-coverage.md
+  - backlog/tasks/grom-39 - Execute-blind-scanner-plugins.md
+  - backlog/tasks/grom-40 - Scan-TypeScript-and-Bun-project-architecture.md
+  - backlog/tasks/grom-41 - Reconcile-observations-without-destroying-intent.md
+  - backlog/tasks/grom-42 - Query-evidence-bindings-and-scan-coverage.md
+  - >-
+    backlog/tasks/grom-43 -
+    Expose-the-automatic-scan-workflow-through-the-CLI.md
+  - backlog/tasks/grom-44 - Accept-external-observation-sessions.md
+  - >-
+    backlog/tasks/grom-45 -
+    Self-scan-Groma-and-preserve-its-curated-architecture.md
+  - backlog/tasks/grom-46 - Automatically-blueprint-Backlog.md.md
+  - backlog/tasks/grom-47 - Automatically-blueprint-codex-events.md
+  - >-
+    backlog/tasks/grom-48 -
+    Verify-and-package-the-automatic-blueprint-aha-release.md
+  - backlog/tasks/grom-49 - Expose-binding-aware-blueprint-curation.md
+  - >-
+    backlog/tasks/grom-50 -
+    Reframe-Groma-around-an-immediate-visual-blueprint.md
+  - backlog/tasks/grom-51 - Add-lightweight-component-recognition-metadata.md
+  - backlog/tasks/grom-52 - Render-a-bounded-local-visual-blueprint.md
+  - >-
+    backlog/tasks/grom-53 -
+    Prove-organization-scale-living-blueprint-behavior.md
 priority: high
 type: task
 ordinal: 47000
@@ -49,11 +104,11 @@ Make Groma useful and legible in the first minute: users define architectural in
 
 <!-- SECTION:PLAN:BEGIN -->
 
-1. Define iconDomain as canonical recognition metadata with a deterministic offline badge, monogram, or text-hint use in the first renderer; prohibit renderer network requests and keep any future icon resolution outside GROM-51/GROM-52 behind explicit user action and privacy policy.
-2. Document the shipped Iteration 1A bare-groma terminal overview and its Iteration 2 evolution, and clarify the architecture diagram so CLI owns renderer triggering/opening while bounded Shared Application Operations remain the renderer's only data source and the artifact returns to the CLI caller.
-3. Split the Iteration 2 local-artifact presentation-budget freeze from the End-of-Iteration-4 browser retained-node freeze, with GROM-53 collecting organization-scale browser evidence for the later decision.
-4. Make Iteration 2 release limits explicit in GROM-48: one active CLI process is supported while concurrent independent readers remain GROM-31's fail-closed limitation, and incompatible preview schemas fail closed without migration until GROM-27 with state-preservation/export guidance before upgrades.
-5. Replace sibling dogfood references with the durable Backlog.md and codex-events remotes, keep task scopes coherent, expand semantic/dependency assertions, run formatting and the full repository check, re-finalize GROM-50, and commit within the unchanged 39-file branch scope.
+1. Verify the manifesto still limits label -> name -> canonical-ID fallback to nodes representing one component and keeps folded-group labels deterministic, view-local, and non-canonical; remove unsupported summary from the copyable current groma/v0.1 schema example while retaining recognition metadata as planned prose.
+2. Align DEVELOPMENT.md with the simplified roadmap: Iteration 2 proves the disposable local artifact, and Iteration 4 introduces Application Service plus complete web viewing and editing with no stale Iteration 5 editing claim.
+3. Attempt the required GROM-47 no-op and temporary-title/final-title Backlog CLI round trips; after they prove that the CLI preserves existing filePath and exposes no rename command, use the explicitly authorized path-only apply_patch move, prove byte identity by SHA-256, and verify the codex-events path, title, description, and durable remote agree.
+4. Populate GROM-50 modified_files from the exact final branch diff through Backlog's command surface; because repeated --modified-file values split the comma-containing m-4 path, use the CLI-hosted MCP task_edit array and verify exact 40-file metadata equality while excluding package, CLI, brand, GROM-20, and GROM-54 scope.
+5. Expand schema, roadmap, rename, metadata-equality, semantic, dependency, and scope assertions; run Prettier, diff hygiene, Backlog integrity, and the full repository check; re-finalize GROM-50 and commit the exact 40-file branch scope.
 
 <!-- SECTION:PLAN:END -->
 
@@ -76,11 +131,15 @@ Final validation: Prettier passed the four files touched by this correction; git
 Claude-review product decisions: iconDomain remains canonical recognition metadata but the first renderer uses it only for a deterministic self-contained domain badge, monogram, or text hint and makes no network request; favicon fetching is outside GROM-51/GROM-52, and any future resolver requires explicit user action and a privacy policy. The shipped Iteration 1A bare groma terminal overview and the Iteration 2 disposable local artifact are successive presentations of the same shared operations, with the web app later replacing the artifact. CLI controls renderer triggering/opening while bounded Shared Application Operations remain its only data source and the artifact returns to the CLI caller. Iteration 2 freezes only local-artifact main-layer, focus, and expansion budgets; browser retained-node limits remain evidence-driven until the End of Iteration 4, with GROM-53 collecting organization-scale evidence. Iteration 2 supports the single-active-CLI-process path: concurrent independent readers remain GROM-31's known fail-closed limitation and must not corrupt canonical state. Iteration 2 also publishes a preview schema contract: incompatible schemas fail closed, no silent or in-place migration is promised before GROM-27, and upgrade guidance must explain state preservation/export. External dogfood tasks use the durable Backlog.md and codex-events GitHub remotes.
 
 Claude-review correction validation: Prettier passed MANIFESTO.md, ARCHITECTURE.md, and eight affected task records; git diff --check passed; backlog doctor found no duplicate IDs; 908 semantic, dependency, and scope assertions proved deterministic offline iconDomain use and absolute renderer no-network behavior, split local/browser freeze points, explicit single-process and preview-schema release limits, current terminal-to-local-to-web entry-point evolution, CLI renderer control with Shared Application Operations data authority and CLI-caller delivery, durable external references, complete dependencies, an acyclic task graph, and the unchanged 39-file branch scope. bun run check passed formatting, TypeScript, architecture boundaries, 458 tests, native build, binary smoke, and Iteration 1A verification.
+
+Thread-aware Codex review corrections: verified without further change that the manifesto scopes label -> name -> stable canonical-ID fallback to nodes projecting one component while folded labels remain deterministic, view-local, and non-canonical. Removed the planned summary field from the copyable current groma/v0.1 YAML example so it contains only fields accepted before GROM-51. Aligned DEVELOPMENT.md with the simplified roadmap: Iteration 2 proves the disposable local artifact, and Iteration 4 introduces Application Service plus complete web viewing and editing with no Iteration 5 editing claim. Backlog CLI no-op and temporary-title/final-title round trips proved that task edits intentionally preserve an existing filePath and expose no supported task rename command; after explicit authorization, a one-time path-only apply_patch move renamed GROM-47 to the codex-events slug. SHA-256 was byte-identical before and after the move: 3f9cad6b3669b8b42cdb4cd3085f60d57de1e2072308fe89d2d9a4ba3efb6fce. GROM-50 modified_files now mirrors the exact 40-file final branch diff, including DEVELOPMENT.md, AGENTS.md, ARCHITECTURE.md, MANIFESTO.md, all three milestones, and GROM-21 through GROM-53 with the renamed GROM-47 path.
+
+Thread-aware Codex correction validation: Prettier passed ARCHITECTURE.md, DEVELOPMENT.md, the renamed GROM-47 record, and GROM-50; git diff --check passed; backlog doctor found no duplicate IDs; 970 expanded semantic, schema, roadmap, dependency, metadata, and scope checks proved the current groma/v0.1 example excludes pre-GROM-51 recognition fields, DEVELOPMENT.md and ARCHITECTURE.md agree on Iterations 2 and 4 with no Iteration 5, the renamed GROM-47 filename/title/description/reference agree, modified_files exactly equals the 40-file branch diff, dependencies are complete and acyclic, and all prior product invariants remain intact. The repeated --modified-file CLI parser split the comma-containing m-4 path, so the exact array was supplied through Backlog's CLI-hosted MCP task_edit command surface and then verified byte-for-byte against git diff. bun run check passed formatting including DEVELOPMENT.md, TypeScript, architecture boundaries, 458 tests, native build, binary smoke, and Iteration 1A verification.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 
-Reframed Groma around the immediate init-to-scan-to-visual blueprint loop and resolved the final product review: iconDomain has a deterministic offline first-renderer use with no network access; local and browser budget freezes are separated; Iteration 2 documents its single-process and preview-schema limits; shipped bare-groma evolution and renderer authority are explicit; and dogfood tasks use durable remotes. Verified with Prettier, 908 semantic/dependency/scope assertions, Backlog integrity, diff hygiene, and the full 458-test repository check.
+Reframed Groma around the immediate init-to-scan-to-visual blueprint loop and resolved the final Codex review: the current-schema example is copyable before GROM-51, DEVELOPMENT.md matches the Iteration 2 local-artifact and Iteration 4 complete-web roadmap, GROM-47 has a coherent codex-events filename and durable reference, and GROM-50 modified_files exactly records the final 40-file scope. Verified with Prettier, 970 expanded semantic/schema/roadmap/dependency/metadata/scope checks, Backlog integrity, diff hygiene, and the full 458-test repository check.
 <!-- SECTION:FINAL_SUMMARY:END -->
