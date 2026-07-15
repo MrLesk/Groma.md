@@ -39,7 +39,7 @@ export interface WorkspaceLocator {
 
 export interface RequestedRuntimePlugin {
   readonly id: string;
-  readonly source: "official" | "project";
+  readonly namespace: "official" | "project";
 }
 
 export interface BootstrapBaseConfiguration {
@@ -221,21 +221,27 @@ export function localBootstrapConvention(
     return failure(
       diagnostic(
         "unsupported-bootstrap-target",
-        "Workspace configuration discovery requires a supported target and absolute workspace root",
+        "Workspace bootstrap does not support this runtime platform or architecture",
       ),
     );
   }
-  const supported =
-    (target.platform === "darwin" && target.architecture === "arm64") ||
-    (target.platform === "linux" && target.architecture === "x64") ||
-    (target.platform === "win32" &&
-      (target.architecture === "x64" || target.architecture === "arm64"));
-  const paths = target.platform === "win32" ? path.win32 : path.posix;
-  if (!supported || !paths.isAbsolute(target.workspaceRoot)) {
+  const supportedPlatform =
+    target.platform === "darwin" || target.platform === "linux" || target.platform === "win32";
+  const supportedArchitecture = target.architecture === "x64" || target.architecture === "arm64";
+  if (!supportedPlatform || !supportedArchitecture) {
     return failure(
       diagnostic(
         "unsupported-bootstrap-target",
-        "Workspace configuration discovery requires a supported target and absolute workspace root",
+        "Workspace bootstrap does not support this runtime platform or architecture",
+      ),
+    );
+  }
+  const paths = target.platform === "win32" ? path.win32 : path.posix;
+  if (!paths.isAbsolute(target.workspaceRoot)) {
+    return failure(
+      diagnostic(
+        "invalid-bootstrap-workspace-root",
+        "Workspace configuration discovery requires an absolute workspace root",
       ),
     );
   }
@@ -396,7 +402,7 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
           requested.push(
             Object.freeze({
               id: entry,
-              source: entry.startsWith("official.") ? "official" : "project",
+              namespace: entry.startsWith("official.") ? "official" : "project",
             }),
           );
         }
@@ -486,7 +492,7 @@ export function parseBootstrapConfiguration(
   for (const item of requested.value) {
     const plugin = inspectHostRecord(
       item,
-      [["id", "source"]],
+      [["id", "namespace"]],
       "workspace-configuration-parser-failed",
       "Requested runtime plugin",
     );
@@ -495,8 +501,9 @@ export function parseBootstrapConfiguration(
       typeof plugin.value.id !== "string" ||
       plugin.value.id.length > bootstrapConfigurationBounds.maxTokenCharacters ||
       !pluginIdPattern.test(plugin.value.id) ||
-      (plugin.value.source !== "official" && plugin.value.source !== "project") ||
-      (plugin.value.id.startsWith("official.") ? "official" : "project") !== plugin.value.source ||
+      (plugin.value.namespace !== "official" && plugin.value.namespace !== "project") ||
+      (plugin.value.id.startsWith("official.") ? "official" : "project") !==
+        plugin.value.namespace ||
       seen.has(plugin.value.id)
     ) {
       return failure(
@@ -507,7 +514,9 @@ export function parseBootstrapConfiguration(
       );
     }
     seen.add(plugin.value.id);
-    canonicalRequested.push(Object.freeze({ id: plugin.value.id, source: plugin.value.source }));
+    canonicalRequested.push(
+      Object.freeze({ id: plugin.value.id, namespace: plugin.value.namespace }),
+    );
   }
   canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
   return success(
@@ -518,7 +527,7 @@ export function parseBootstrapConfiguration(
   );
 }
 
-export function sameBootstrapConfigurationLoad(
+export function bootstrapConfigurationStillUsable(
   expected: BootstrapConfigurationLoad,
   actual: BootstrapConfigurationLoad,
 ): boolean {
@@ -539,7 +548,8 @@ export function sameBootstrapConfigurationLoad(
     expectedPlugins.length === actualPlugins.length &&
     expectedPlugins.every(
       (plugin, index) =>
-        plugin.id === actualPlugins[index]?.id && plugin.source === actualPlugins[index]?.source,
+        plugin.id === actualPlugins[index]?.id &&
+        plugin.namespace === actualPlugins[index]?.namespace,
     )
   );
 }

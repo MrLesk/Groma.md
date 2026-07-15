@@ -9,10 +9,9 @@ assembles explicit capabilities without placing its technology choices in Core.
 eight explicit built-in plugin registrations and resolves them through Core's
 `PluginRuntime`: Phase 0 local resources, configuration discovery, and YAML parsing,
 then Phase 1 kernel, Standard Model, persistence, application/workspace, and surface
-plugins. These are ordinary runtime
-registrations with exact manifests, capability declarations, dependencies, and start
-results—the same path available to a third-party registration. They are not a wrapper
-around a second private composition path.
+plugins. These are ordinary runtime registrations with exact manifests, capability
+declarations, dependencies, and start results—the same path available to a third-party
+registration. They are not a wrapper around a second private composition path.
 
 Phase 0 starts once as an owned staged graph. The Host reads its replaceable
 `groma.resources/v1`, `groma.configuration-discovery/v1`, and
@@ -35,8 +34,10 @@ such as `groma.resources/v1`. It has no package acquisition, dynamic import, tru
 prompt, or project-code execution path. Optional registration inputs are explicitly
 Host-owned and already validated; configuration that requests any non-official plugin
 fails with `project-plugin-validation-required` before those inputs are inspected.
-GROM-24 owns package and trust validation and must cross that fence before it may supply
-a project registration.
+The diagnostic states that project plugins are unsupported in this release pending
+package and trust validation. GROM-24 owns that validation and must cross the fence
+before it may supply a project registration. A Host embedder that violates the
+prevalidated registration seam instead receives `host-runtime-registration-invalid`.
 
 Registry construction snapshots the selected coordination root, entropy source,
 verification-only resource fault injector, and surface before composition can await.
@@ -56,26 +57,29 @@ smallest canonical UTF-8 document, preserving every existing workspace:
 schema: groma/v0.1
 ```
 
-The bounded 1B schema also accepts one optional `plugins` sequence of unique plugin IDs:
+The bounded 1B schema reserves one optional `plugins` sequence for Host-profile
+selection:
 
 ```yaml
 schema: groma/v0.1
-plugins:
-  - official.optional
+plugins: []
 ```
 
 `schema` and `plugins` are the only keys. The parser rejects invalid UTF-8, anchors,
-aliases, explicit tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys, and more
-than 64 requests. Requests are sorted by code unit for deterministic selection. Built-in
-Phase 1 plugins remain the required local profile; requested Host-owned official plugins
-are added when available. An unavailable official ID produces
-`runtime-plugin-unavailable`. A project ID produces `project-plugin-validation-required`
+aliases, explicit tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys,
+and more than 64 requests. Requests are sorted by code unit for deterministic selection.
+The shipped default CLI has no optional official contributions today. Required built-in
+Phase 1 plugins already run; listing one of their IDs is accepted but redundant and adds
+nothing. A Host embedder may inject a prevalidated optional official registration. An
+official ID unavailable in that Host produces `runtime-plugin-unavailable`. A project ID
+produces `project-plugin-validation-required`, states the current release limitation,
 and executes no project code.
 
 The local discovery provider uses the same provider-relative
-`groma/groma.yaml` locator on macOS arm64, Linux x64, Windows x64, and Windows arm64.
-Pure target-convention validation uses POSIX paths for macOS/Linux and Windows path
-rules for both Windows architectures, while Core sees neither paths nor YAML.
+`groma/groma.yaml` locator for x64 and arm64 source execution on macOS, Linux, and
+Windows. Architecture does not change POSIX or Windows path syntax. Artifact verification
+remains limited to the four promised targets: macOS arm64, Linux x64, Windows x64, and
+Windows arm64. Core sees neither paths nor YAML.
 
 Zero candidates is the typed missing-workspace state. Multiple candidates fail with
 `workspace-discovery-conflict`; invalid YAML fails with

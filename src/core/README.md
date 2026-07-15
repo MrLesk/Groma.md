@@ -49,7 +49,8 @@ cannot swap a provider that has already executed. The staged prefix owns its pro
 failure before continuation shuts them down, a Phase 1 startup failure rolls every
 started plugin back in dependency order, and successful continuation transfers their
 lifecycle into the complete running graph. This is a reusable internal Core primitive,
-not the supported third-party API; GROM-23 owns the published SDK and its ergonomics.
+not the supported third-party API; its staged handle is nominally distinct from a
+complete running graph. GROM-23 owns the published SDK and its ergonomics.
 
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;

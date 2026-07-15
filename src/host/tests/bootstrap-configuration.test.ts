@@ -14,7 +14,7 @@ import {
   localBootstrapConvention,
   localWorkspaceLocator,
   parseBootstrapConfiguration,
-  sameBootstrapConfigurationLoad,
+  bootstrapConfigurationStillUsable,
   type ConfigurationDiscoveryProvider,
   type HostSurface,
   type WorkspaceConfigurationCandidate,
@@ -52,6 +52,18 @@ describe("bootstrap configuration", () => {
       },
       {
         architecture: "x64" as const,
+        expected: "/Users/alex/project/groma/groma.yaml",
+        platform: "darwin" as const,
+        workspaceRoot: "/Users/alex/project",
+      },
+      {
+        architecture: "x64" as const,
+        expected: "/srv/project/groma/groma.yaml",
+        platform: "linux" as const,
+        workspaceRoot: "/srv/project",
+      },
+      {
+        architecture: "arm64" as const,
         expected: "/srv/project/groma/groma.yaml",
         platform: "linux" as const,
         workspaceRoot: "/srv/project",
@@ -81,11 +93,26 @@ describe("bootstrap configuration", () => {
     }
     expect(
       localBootstrapConvention({
-        architecture: "arm64",
+        architecture: "riscv64" as never,
         platform: "linux",
         workspaceRoot: "/srv/project",
       }),
-    ).toMatchObject({ diagnostics: [{ code: "unsupported-bootstrap-target" }], ok: false });
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "unsupported-bootstrap-target",
+          message: "Workspace bootstrap does not support this runtime platform or architecture",
+        },
+      ],
+      ok: false,
+    });
+    expect(
+      localBootstrapConvention({
+        architecture: "arm64",
+        platform: "darwin",
+        workspaceRoot: "relative/workspace",
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-bootstrap-workspace-root" }], ok: false });
   });
 
   test("parses the legacy marker and bounded requested plugin selection deterministically", () => {
@@ -104,9 +131,9 @@ describe("bootstrap configuration", () => {
       ok: true,
       value: {
         requestedRuntimePlugins: [
-          { id: "acme.policy", source: "project" },
-          { id: "official.alpha", source: "official" },
-          { id: "official.zeta", source: "official" },
+          { id: "acme.policy", namespace: "project" },
+          { id: "official.alpha", namespace: "official" },
+          { id: "official.zeta", namespace: "official" },
         ],
         schema: "groma/v0.1",
       },
@@ -131,7 +158,7 @@ describe("bootstrap configuration", () => {
     }
   });
 
-  test("canonicalizes parser results once and compares discovery state semantically", () => {
+  test("canonicalizes parser results once and checks expected state remains usable", () => {
     const parser = createYamlConfigurationParser();
     const alpha = parseBootstrapConfiguration(
       parser,
@@ -158,20 +185,20 @@ describe("bootstrap configuration", () => {
       });
 
     expect(
-      sameBootstrapConfigurationLoad(configured(alpha.value), configured(alpha.value)),
+      bootstrapConfigurationStillUsable(configured(alpha.value), configured(alpha.value)),
     ).toBeTrue();
     expect(
-      sameBootstrapConfigurationLoad(configured(alpha.value), configured(beta.value)),
+      bootstrapConfigurationStillUsable(configured(alpha.value), configured(beta.value)),
     ).toBeFalse();
-    expect(sameBootstrapConfigurationLoad(configured(alpha.value), missing)).toBeFalse();
-    expect(sameBootstrapConfigurationLoad(missing, configured(empty.value))).toBeTrue();
-    expect(sameBootstrapConfigurationLoad(missing, configured(alpha.value))).toBeFalse();
+    expect(bootstrapConfigurationStillUsable(configured(alpha.value), missing)).toBeFalse();
+    expect(bootstrapConfigurationStillUsable(missing, configured(empty.value))).toBeTrue();
+    expect(bootstrapConfigurationStillUsable(missing, configured(alpha.value))).toBeFalse();
     expect(
       parseBootstrapConfiguration(
         {
           parse: () =>
             success({
-              requestedRuntimePlugins: [{ id: "official.alpha", source: "project" }],
+              requestedRuntimePlugins: [{ id: "official.alpha", namespace: "project" }],
               schema: "groma/v0.1",
             } as never),
         },
@@ -296,6 +323,28 @@ describe("bootstrap configuration", () => {
     expect(composed.value.plugins?.inspect().plugins.map((plugin) => plugin.id)).toContain(
       "official.optional",
     );
+    expect(await composed.value.plugins?.shutdown()).toMatchObject({ ok: true });
+  });
+
+  test("accepts a required built-in ID as a redundant profile selection", async () => {
+    const context = await temporaryWorkspace();
+    await Bun.write(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins:\n  - official.kernel\n",
+    );
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+    });
+
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(
+      composed.value.plugins?.inspect().plugins.filter((plugin) => plugin.id === "official.kernel"),
+    ).toHaveLength(1);
     expect(await composed.value.plugins?.shutdown()).toMatchObject({ ok: true });
   });
 
@@ -587,12 +636,49 @@ describe("bootstrap configuration", () => {
         {
           code: "project-plugin-validation-required",
           message:
-            "Project-provided plugins require validated package and trust state before loading",
+            "Project-provided plugins are unsupported in this release pending package and trust validation",
         },
       ],
       ok: false,
     });
     expect({ manifestReads, starts }).toEqual({ manifestReads: 0, starts: 0 });
+  });
+
+  test("classifies a non-official Host registration as a composition error", async () => {
+    const context = await temporaryWorkspace();
+    let starts = 0;
+    const registration: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "acme.host-registration",
+        phase: 1,
+        provides: [],
+        requires: [],
+        version: "1.0.0",
+      },
+      start: () => {
+        starts += 1;
+        return { capabilities: [] };
+      },
+    };
+    const registry = createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: [registration],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+    });
+
+    expect(await registry.compose({ workspaceRoot: context.workspaceRoot })).toEqual({
+      diagnostics: [
+        {
+          code: "host-runtime-registration-invalid",
+          message: "Host runtime registrations must use the official namespace",
+        },
+      ],
+      ok: false,
+    });
+    expect(starts).toBe(0);
   });
 
   test("reports ambiguous bootstrap providers before any provider starts", async () => {

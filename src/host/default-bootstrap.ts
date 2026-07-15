@@ -43,7 +43,7 @@ import {
   loadBootstrapConfiguration,
   localBootstrapConvention,
   parseBootstrapConfiguration,
-  sameBootstrapConfigurationLoad,
+  bootstrapConfigurationStillUsable,
   type BootstrapConfigurationLoad,
   type ConfigurationDiscoveryProvider,
   type ConfigurationParserProvider,
@@ -196,6 +196,21 @@ export function createDefaultBootstrapRegistry(
             ),
           );
     if (!convention.ok) {
+      const unsupported = convention.diagnostics[0];
+      if (
+        convention.diagnostics.length === 1 &&
+        unsupported?.code === "unsupported-bootstrap-target" &&
+        unsupported.message ===
+          "Workspace bootstrap does not support this runtime platform or architecture" &&
+        unsupported.details === undefined
+      ) {
+        return failure<HostComposition>(
+          diagnostic(
+            "unsupported-bootstrap-target",
+            "Workspace bootstrap does not support this runtime platform or architecture",
+          ),
+        );
+      }
       return failure<HostComposition>(
         diagnostic("invalid-host-process-context", "Host workspace root must be an absolute path"),
       );
@@ -434,7 +449,7 @@ export function createDefaultBootstrapRegistry(
                 isCompatible: (bytes: Uint8Array) => {
                   const parsed = parseBootstrapConfiguration(selectedParser, bytes);
                   if (!parsed.ok) return false;
-                  return sameBootstrapConfigurationLoad(bootstrap, {
+                  return bootstrapConfigurationStillUsable(bootstrap, {
                     configuration: parsed.value,
                     locator: bootstrap.locator,
                     state: "configured",
@@ -604,11 +619,11 @@ export function createDefaultBootstrapRegistry(
         bootstrap.state === "configured"
           ? bootstrap.configuration.requestedRuntimePlugins
           : Object.freeze([]);
-      if (requested.some((plugin) => plugin.source === "project")) {
+      if (requested.some((plugin) => plugin.namespace === "project")) {
         return failAfterStage(
           diagnostic(
             "project-plugin-validation-required",
-            "Project-provided plugins require validated package and trust state before loading",
+            "Project-provided plugins are unsupported in this release pending package and trust validation",
           ),
         );
       }
@@ -622,8 +637,8 @@ export function createDefaultBootstrapRegistry(
         if (!id.startsWith("official.")) {
           return failAfterStage(
             diagnostic(
-              "project-plugin-validation-required",
-              "Only host-owned official registrations can enter bootstrap selection",
+              "host-runtime-registration-invalid",
+              "Host runtime registrations must use the official namespace",
             ),
           );
         }
@@ -657,7 +672,7 @@ export function createDefaultBootstrapRegistry(
         configurationParser,
       );
       if (!reloaded.ok) return failAfterStage(...reloaded.diagnostics);
-      if (!sameBootstrapConfigurationLoad(bootstrap, reloaded.value)) {
+      if (!bootstrapConfigurationStillUsable(bootstrap, reloaded.value)) {
         return failAfterStage(
           diagnostic(
             "workspace-configuration-changed",

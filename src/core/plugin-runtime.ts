@@ -114,12 +114,16 @@ export interface RunningPluginGraph {
   shutdown(): Promise<Result<PluginShutdownReport>>;
 }
 
+declare const stagedPluginGraphBrand: unique symbol;
+
 /**
  * Internal bootstrap lifecycle for a dependency-safe Phase 0 prefix. A staged
  * graph owns its started providers until it is either continued into the full
  * graph or explicitly cleaned up.
  */
-export interface StagedPluginGraph extends RunningPluginGraph {}
+export interface StagedPluginGraph extends RunningPluginGraph {
+  readonly [stagedPluginGraphBrand]: void;
+}
 
 interface CanonicalPluginRegistration {
   readonly manifest: PluginManifest;
@@ -1194,12 +1198,12 @@ export class PluginRuntime {
       record.state = "stopped";
       return reason === "cancelled" ? base.cancel() : base.shutdown();
     };
-    const staged: StagedPluginGraph = Object.freeze({
+    const staged = Object.freeze({
       cancel: () => clean("cancelled"),
       capabilities: (id: string, version: string) => base.capabilities(id, version),
       inspect: () => record.continued?.inspect() ?? base.inspect(),
       shutdown: () => clean("stopped"),
-    });
+    }) as StagedPluginGraph;
     stagedGraphs.set(staged, record);
     return success(staged);
   }

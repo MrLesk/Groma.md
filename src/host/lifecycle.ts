@@ -162,9 +162,12 @@ type ObservedRecoveryOutcome =
 const bootstrapFailureMessages = Object.freeze({
   "bootstrap-provider-ambiguous":
     "Bootstrap capabilities must have exactly one compatible provider",
+  "host-runtime-registration-invalid": "Host runtime registrations must use the official namespace",
   "project-plugin-validation-required":
-    "Project-provided plugins require validated package and trust state before loading",
+    "Project-provided plugins are unsupported in this release pending package and trust validation",
   "runtime-plugin-unavailable": "A requested official runtime plugin is unavailable in this host",
+  "unsupported-bootstrap-target":
+    "Workspace bootstrap does not support this runtime platform or architecture",
   "workspace-configuration-conflict": "Workspace configuration is incompatible with this host",
   "workspace-configuration-changed":
     "Workspace configuration changed during bootstrap; restart after changes settle",

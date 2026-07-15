@@ -5,7 +5,13 @@ import path from "node:path";
 
 import { createDefaultBootstrapRegistry } from "../../host/index.ts";
 import { CLI_EXIT, type CliInputSource } from "../contracts.ts";
-import { GROMA_VERSION, HELP_TEXT, runProgram, type ProgramOutput } from "../program.ts";
+import {
+  GROMA_VERSION,
+  HELP_TEXT,
+  runProgram,
+  type ProgramOptions,
+  type ProgramOutput,
+} from "../program.ts";
 
 const roots: string[] = [];
 
@@ -596,6 +602,109 @@ describe("CLI program", () => {
         String(failureRead),
       ).toHaveLength(failureRead === 2 ? 0 : 1);
     }
+  });
+
+  test("separates unsupported project requests from invalid Host registrations", async () => {
+    const userRoot = await workspace();
+    await Bun.write(
+      path.join(userRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins:\n  - acme.project\n",
+    );
+    const userOutput = captureOutput();
+    const userExit = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      userOutput,
+      {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: userRoot,
+      },
+    );
+    expect(userExit).toBe(CLI_EXIT.workspace);
+    expect(JSON.parse(userOutput.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.workspace,
+      result: {
+        diagnostics: [
+          {
+            code: "project-plugin-validation-required",
+            message:
+              "Project-provided plugins are unsupported in this release pending package and trust validation",
+          },
+        ],
+      },
+    });
+
+    const embedderRoot = await workspace();
+    const embedderOutput = captureOutput();
+    const embedderExit = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      embedderOutput,
+      {
+        createRegistry: (surface) =>
+          createDefaultBootstrapRegistry({
+            additionalRuntimePlugins: [
+              {
+                manifest: {
+                  apiVersion: "groma.plugin/v1",
+                  id: "acme.host-registration",
+                  phase: 1,
+                  provides: [],
+                  requires: [],
+                  version: "1.0.0",
+                },
+                start: () => ({ capabilities: [] }),
+              },
+            ],
+            surface,
+          }),
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: embedderRoot,
+      },
+    );
+    expect(embedderExit).toBe(CLI_EXIT.infrastructure);
+    expect(JSON.parse(embedderOutput.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.infrastructure,
+      result: {
+        diagnostics: [
+          {
+            code: "host-runtime-registration-invalid",
+            message: "Host runtime registrations must use the official namespace",
+          },
+        ],
+      },
+    });
+  });
+
+  test("keeps unsupported runtime targets in the infrastructure exit class", async () => {
+    const root = await workspace();
+    const captured = captureOutput();
+    const createRegistry: NonNullable<ProgramOptions["createRegistry"]> = (surface) =>
+      createDefaultBootstrapRegistry({
+        surface,
+        target: { architecture: "x64", platform: "freebsd" as never },
+      });
+
+    const exitCode = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      captured,
+      {
+        createRegistry,
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      },
+    );
+
+    expect(exitCode).toBe(CLI_EXIT.infrastructure);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.infrastructure,
+      result: {
+        diagnostics: [
+          {
+            code: "unsupported-bootstrap-target",
+            message: "Workspace bootstrap does not support this runtime platform or architecture",
+          },
+        ],
+      },
+    });
   });
 
   test("rejects invalid UTF-8 file input without leaking the path", async () => {

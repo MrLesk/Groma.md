@@ -145,6 +145,23 @@ describe("default bootstrap registry", () => {
     });
   });
 
+  test("preserves an actionable unsupported runtime target diagnostic", async () => {
+    const registry = createDefaultBootstrapRegistry({
+      surface: idleSurface(),
+      target: { architecture: "x64", platform: "freebsd" as never },
+    });
+
+    expect(await registry.compose({ workspaceRoot: "/absolute/workspace" })).toEqual({
+      diagnostics: [
+        {
+          code: "unsupported-bootstrap-target",
+          message: "Workspace bootstrap does not support this runtime platform or architecture",
+        },
+      ],
+      ok: false,
+    });
+  });
+
   test("snapshots mutable bootstrap options before deferred composition", async () => {
     const context = await temporaryWorkspace();
     const surface = idleSurface() as Mutable<HostSurface>;
