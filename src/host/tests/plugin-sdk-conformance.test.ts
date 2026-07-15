@@ -192,6 +192,15 @@ describe("default host plugin SDK conformance", () => {
         if (!hasMethod(value, "load")) return false;
         return (await (value as { load(): Promise<{ readonly ok: boolean }> }).load()).ok;
       }),
+      check(defaultHostCapabilityIds.projection, defaultHostPluginIds.projection, async (value) => {
+        if (!hasMethod(value, "load")) return false;
+        const result = await (
+          value as {
+            load(): Promise<{ readonly ok: boolean; readonly value?: { generation: number } }>;
+          }
+        ).load();
+        return result.ok && result.value?.generation === 0;
+      }),
       check(
         defaultHostCapabilityIds.schemaMigrationCatalog,
         defaultHostPluginIds.persistence,

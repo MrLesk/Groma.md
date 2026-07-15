@@ -176,6 +176,45 @@ An indeterminate deletion result is retried and accepted only after the provider
 confirms `committed` and exact readback confirms absence; repeated uncertainty leaves
 the committing record recoverable.
 
+## Disposable projection index
+
+[`projection-index.ts`](projection-index.ts) is the official local implementation of
+Core's replaceable projection capability. Its index is
+`.groma-cache/projection-index.json`, outside the canonical `groma/` records and the
+Host's personal `.groma` user-data root. A provider-owned `.groma-cache/.gitignore`
+marker makes that disposable directory self-ignoring without changing a project's ignore
+rules; a current-cache load repairs a missing or changed marker before returning. The exact
+`groma.projection-index/v1` JSON stores one canonical generation, sorted entities and
+relationships, canonical aliases, deterministic searchable text, and incoming/outgoing
+relationship adjacency. It stores no revisions, timestamps, absolute paths, layout, or
+presentation state.
+
+The local provider fingerprints bounded canonical JSON for sorted aliases, entities, and
+relationships as lowercase SHA-256. Generation is deliberately excluded and compared as
+a separate field. A cached view is current only when both generation and content
+fingerprint match. A contiguous incremental candidate is published only when its complete
+content fingerprint matches the exact current canonical snapshot; otherwise the provider
+reconstructs instead of trusting a cache left by another checkout or branch.
+
+The transaction projection source obtains one complete semantic snapshot and generation
+from `TransactionProvider.snapshot([])`, validates it with the Standard Model, resolves
+aliased containment and relationship endpoints, and never writes through that provider. Rebuild derives
+the complete index deterministically. A contiguous `graph.committed` event replaces or
+removes its affected entity and relationship records, refreshes aliases and every
+alias-resolved containment or relationship endpoint, and re-derives adjacency; a missed, reversed,
+duplicate, absent, corrupt, or stale projection
+rebuilds from the current exact canonical snapshot instead of guessing across a gap.
+
+Publication holds a projection-local same-machine lease and uses the local resource
+provider's staged atomic replacement. Confirmed indeterminate publication is accepted
+only after exact-byte readback. Canonical source, coordination, read, size, and publication
+failures collapse to the stable `projection-index-unavailable` diagnostic. Deleting or
+damaging the self-ignored `.groma-cache` can therefore affect only query availability or rebuild cost;
+the projection provider has no canonical replacement target and cannot change intent or
+aliases.
+An oversized regular projection file is disposable corruption and is atomically replaced;
+provider failures that do not prove a replaceable regular cache still fail closed.
+
 ## Local resource capability
 
 [`contracts.ts`](contracts.ts) defines the provider-neutral boundary used by

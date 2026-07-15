@@ -166,6 +166,16 @@ rather than normalized during consumption.
 Provider-specific storage, projection, or transport details do not enter these
 contracts.
 
+Core's projection contract is likewise technology-neutral. A canonical source yields
+entities, relationships, aliases, and one exact graph generation; a replaceable index
+capability can load the current disposable view, rebuild it, or consume one committed
+event. Each view carries a bounded provider-defined canonical-content fingerprint in
+addition to its generation; Core prescribes neither a hashing algorithm nor a storage
+encoding. The view contains derived searchable text and relation adjacency, but no file
+locator, JSON schema, database primitive, layout coordinate, folding state, or theme.
+Missing generations are handled by the event sequencer and require reconstruction;
+projection state never participates in a canonical transaction.
+
 ## Transaction contracts
 
 `TransactionEngine` is the single Core coordination path for semantic writes. A

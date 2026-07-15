@@ -8,6 +8,7 @@ import type {
   Diagnostic,
   EntropySource,
   GraphGeneration,
+  ProjectionIndexCapability,
   PluginRegistration,
   Result,
   RunningPluginGraph,
@@ -97,6 +98,7 @@ export interface HostComposition {
   readonly packages: PluginPackageOperations;
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
   readonly plugins?: RunningPluginGraph;
+  readonly projection: ProjectionIndexCapability;
   readonly queries: BoundedQueryContracts;
   readonly resourceMapper: ComponentResourceMapper;
   readonly resources: LocalResourceProvider;

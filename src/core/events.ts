@@ -223,12 +223,7 @@ function sameIdentityOrder(input: readonly string[], canonical: readonly string[
   return true;
 }
 
-export function sequenceGraphCommittedEvent(
-  currentGenerationValue: unknown,
-  event: unknown,
-): Result<GraphEventSequence> {
-  const currentGeneration = parseGraphGeneration(currentGenerationValue);
-  if (!currentGeneration.ok) return currentGeneration;
+export function parseGraphCommittedEvent(event: unknown): Result<GraphCommittedEvent> {
   const inspectedEvent = inspectExactRecord(
     event,
     [["affected", "generation", "type"]],
@@ -273,7 +268,18 @@ export function sequenceGraphCommittedEvent(
       message: "Committed graph event affected identities must already be sorted and deduplicated",
     });
   }
-  const receivedGeneration = parseGraphGeneration(validatedEvent.value.generation);
+  return validatedEvent;
+}
+
+export function sequenceGraphCommittedEvent(
+  currentGenerationValue: unknown,
+  event: unknown,
+): Result<GraphEventSequence> {
+  const currentGeneration = parseGraphGeneration(currentGenerationValue);
+  if (!currentGeneration.ok) return currentGeneration;
+  const parsedEvent = parseGraphCommittedEvent(event);
+  if (!parsedEvent.ok) return parsedEvent;
+  const receivedGeneration = parseGraphGeneration(parsedEvent.value.generation);
   if (!receivedGeneration.ok) return receivedGeneration;
   if (receivedGeneration.value <= currentGeneration.value) {
     return success(
