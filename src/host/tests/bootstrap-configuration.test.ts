@@ -300,7 +300,7 @@ describe("bootstrap configuration", () => {
   });
 
   test("revalidates the canonical plugin selection before any selected optional starts", async () => {
-    for (const mutation of ["beta", "project", "missing"] as const) {
+    for (const mutation of ["beta", "project", "missing", "malformed"] as const) {
       const context = await temporaryWorkspace();
       const configurationPath = path.join(context.workspaceRoot, "groma", "groma.yaml");
       await Bun.write(configurationPath, "schema: groma/v0.1\nplugins:\n  - official.alpha\n");
@@ -357,7 +357,9 @@ describe("bootstrap configuration", () => {
               configurationPath,
               mutation === "beta"
                 ? "schema: groma/v0.1\nplugins:\n  - official.beta\n"
-                : "schema: groma/v0.1\nplugins:\n  - acme.project\n",
+                : mutation === "project"
+                  ? "schema: groma/v0.1\nplugins:\n  - acme.project\n"
+                  : "schema: [\n",
             );
           }
         },
@@ -366,11 +368,17 @@ describe("bootstrap configuration", () => {
 
       expect(await registry.compose({ workspaceRoot: context.workspaceRoot }), mutation).toEqual({
         diagnostics: [
-          {
-            code: "workspace-configuration-changed",
-            message:
-              "Workspace configuration changed during bootstrap; restart after changes settle",
-          },
+          mutation === "malformed"
+            ? {
+                code: "workspace-configuration-malformed",
+                message:
+                  "The workspace configuration must use the documented bounded groma/v0.1 schema",
+              }
+            : {
+                code: "workspace-configuration-changed",
+                message:
+                  "Workspace configuration changed during bootstrap; restart after changes settle",
+              },
         ],
         ok: false,
       });
@@ -480,6 +488,67 @@ describe("bootstrap configuration", () => {
     expect(events).toContain("optional:start");
     expect(events).toContain("optional:stop");
     expect(events.at(-1)).toBe("phase-zero:stop");
+  });
+
+  test("keeps cleanup failure precedence over a post-continuation provider failure", async () => {
+    const context = await temporaryWorkspace();
+    await Bun.write(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins:\n  - official.alpha\n",
+    );
+    const events: string[] = [];
+    let reads = 0;
+    const registration = (id: string, phase: 0 | 1, stop: () => void): PluginRegistration => ({
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id,
+        phase,
+        provides: [],
+        requires: [],
+        version: "1.0.0",
+      },
+      start: () => {
+        events.push(`${id}:start`);
+        return { capabilities: [], stop };
+      },
+    });
+    const probe = registration("official.bootstrap-cleanup-probe", 0, () => {
+      events.push("official.bootstrap-cleanup-probe:stop");
+    });
+    const optional = registration("official.alpha", 1, () => {
+      events.push("official.alpha:stop");
+      throw new Error("private cleanup failure");
+    });
+    const registry = createDefaultBootstrapRegistry({
+      additionalBootstrapPlugins: [probe],
+      additionalRuntimePlugins: [optional],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      resourceFaultInjector: (phase) => {
+        if (phase !== "read") return;
+        reads += 1;
+        if (reads === 3) throw new Error("transient read failure");
+      },
+      surface: idleSurface(),
+    });
+
+    expect(await registry.compose({ workspaceRoot: context.workspaceRoot })).toEqual({
+      diagnostics: [{ code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" }],
+      ok: false,
+    });
+    expect(reads).toBe(3);
+    for (const event of [
+      "official.bootstrap-cleanup-probe:start",
+      "official.bootstrap-cleanup-probe:stop",
+      "official.alpha:start",
+      "official.alpha:stop",
+    ]) {
+      expect(
+        events.filter((item) => item === event),
+        event,
+      ).toHaveLength(1);
+    }
   });
 
   test("rejects project requests before inspecting or executing supplied project code", async () => {

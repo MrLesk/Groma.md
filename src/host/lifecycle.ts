@@ -171,6 +171,7 @@ const bootstrapFailureMessages = Object.freeze({
   "workspace-configuration-malformed":
     "Workspace configuration must use the documented groma/v0.1 schema",
   "workspace-configuration-parser-failed": "Workspace configuration parsing failed",
+  "workspace-configuration-provider-failure": "Workspace configuration access failed",
   "workspace-discovery-conflict": "More than one workspace configuration was discovered",
   "workspace-discovery-failed": "Workspace configuration discovery failed",
 } as const);

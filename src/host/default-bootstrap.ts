@@ -656,7 +656,8 @@ export function createDefaultBootstrapRegistry(
         configurationDiscovery,
         configurationParser,
       );
-      if (!reloaded.ok || !sameBootstrapConfigurationLoad(bootstrap, reloaded.value)) {
+      if (!reloaded.ok) return failAfterStage(...reloaded.diagnostics);
+      if (!sameBootstrapConfigurationLoad(bootstrap, reloaded.value)) {
         return failAfterStage(
           diagnostic(
             "workspace-configuration-changed",
@@ -692,16 +693,34 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.workspace,
       );
-      if (workspace.status().state === "conflict") {
+      const workspaceStatus = workspace.status();
+      if (workspaceStatus.state === "conflict") {
+        const providerFailure =
+          workspaceStatus.diagnostic.code === "workspace-configuration-provider-failure" &&
+          workspaceStatus.diagnostic.message === "Workspace configuration access failed" &&
+          workspaceStatus.diagnostic.details === undefined;
+        const configurationConflict =
+          workspaceStatus.diagnostic.code === "workspace-configuration-conflict" &&
+          workspaceStatus.diagnostic.message ===
+            "The workspace configuration is malformed or incompatible with this Groma host" &&
+          workspaceStatus.diagnostic.details === undefined;
+        const startupDiagnostic = providerFailure
+          ? diagnostic(
+              "workspace-configuration-provider-failure",
+              "Workspace configuration access failed",
+            )
+          : configurationConflict
+            ? diagnostic(
+                "workspace-configuration-changed",
+                "Workspace configuration changed during bootstrap; restart after changes settle",
+              )
+            : diagnostic("host-composition-failed", "Default local host composition failed");
         const running = plugins;
         plugins = undefined;
         const cleanup = await running.shutdown();
         return failure<HostComposition>(
           cleanup.ok
-            ? diagnostic(
-                "workspace-configuration-changed",
-                "Workspace configuration changed during bootstrap; restart after changes settle",
-              )
+            ? startupDiagnostic
             : diagnostic("host-plugin-cleanup-failed", "Host plugin cleanup failed"),
         );
       }

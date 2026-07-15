@@ -85,7 +85,9 @@ The Host re-reads and compares the canonical configuration immediately before Ph
 non-equivalent changes fail with `workspace-configuration-changed` before a selected
 optional plugin starts. Workspace inspection repeats the same semantic comparison so a
 later change cannot produce a usable mismatched composition. A peer may only move an
-initially missing workspace to the same empty canonical configuration.
+initially missing workspace to the same empty canonical configuration. Transient
+discovery, parsing, or configuration-access failures retain their infrastructure
+diagnostic and are never presented as proven configuration drift.
 
 Discovery is bounded and read-only. A missing marker leaves initialization available
 and does not create a journal or canonical intent files. Initialization takes a
