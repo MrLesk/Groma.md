@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import path from "node:path";
 
 import {
   createApplicationOperations,
@@ -22,7 +21,9 @@ import {
   type PluginCapabilityDeclaration,
   type PluginRegistration,
   type PluginStartContext,
+  type Result,
   type RunningPluginGraph,
+  type StagedPluginGraph,
 } from "../core/index.ts";
 import {
   createLocalResourceProvider,
@@ -36,13 +37,22 @@ import {
   createStandardModelInvariant,
 } from "../standard-model/index.ts";
 import { isHostProxy } from "./runtime-validation.ts";
+import {
+  createLocalConfigurationDiscovery,
+  createYamlConfigurationParser,
+  loadBootstrapConfiguration,
+  localBootstrapConvention,
+  type BootstrapConfigurationLoad,
+  type ConfigurationDiscoveryProvider,
+  type ConfigurationParserProvider,
+} from "./bootstrap-configuration.ts";
 import type {
   DefaultBootstrapRegistryOptions,
   HostBootstrapRegistry,
   HostComposition,
   HostProcessContext,
 } from "./contracts.ts";
-import { createLocalWorkspaceCapability } from "./local-workspace.ts";
+import { createLocalWorkspaceCapability, defaultWorkspaceDocument } from "./local-workspace.ts";
 
 const intrinsicReflectApply = Reflect.apply;
 
@@ -66,6 +76,8 @@ const defaultCapabilityVersion = "1.0.0";
 
 export const defaultHostPluginIds = Object.freeze({
   application: "official.application",
+  configurationDiscovery: "official.configuration-discovery",
+  configurationParser: "official.configuration-parser",
   kernel: "official.kernel",
   model: "official.model",
   persistence: "official.persistence",
@@ -74,6 +86,8 @@ export const defaultHostPluginIds = Object.freeze({
 });
 
 export const defaultHostCapabilityIds = Object.freeze({
+  configurationDiscovery: "groma.configuration-discovery/v1",
+  configurationParser: "groma.configuration-parser/v1",
   graph: "groma.graph/v1",
   invariant: "groma.invariant/v1",
   model: "groma.model/v1",
@@ -138,9 +152,15 @@ function diagnostic(code: string, message: string): Diagnostic {
 export function createDefaultBootstrapRegistry(
   options: DefaultBootstrapRegistryOptions,
 ): HostBootstrapRegistry {
+  const additionalBootstrapPlugins = Object.freeze([...(options.additionalBootstrapPlugins ?? [])]);
+  const additionalRuntimePlugins = Object.freeze([...(options.additionalRuntimePlugins ?? [])]);
   const coordinationRoot = options.coordinationRoot;
   const entropyOption = options.entropy;
   const resourceFaultInjector = options.resourceFaultInjector;
+  const selectedTarget = Object.freeze({
+    architecture: options.target?.architecture ?? process.arch,
+    platform: options.target?.platform ?? process.platform,
+  });
   const surfaceReceiver = options.surface;
   const surfaceStart =
     typeof surfaceReceiver === "object" && surfaceReceiver !== null
@@ -160,13 +180,30 @@ export function createDefaultBootstrapRegistry(
   const entropy = entropyOption ?? ((length: number) => randomBytes(length));
 
   const compose = async (context: HostProcessContext) => {
-    if (typeof context.workspaceRoot !== "string" || !path.isAbsolute(context.workspaceRoot)) {
+    const convention =
+      typeof context.workspaceRoot === "string"
+        ? localBootstrapConvention({
+            architecture: selectedTarget.architecture as "arm64" | "x64",
+            platform: selectedTarget.platform as "darwin" | "linux" | "win32",
+            workspaceRoot: context.workspaceRoot,
+          })
+        : failure(
+            diagnostic(
+              "invalid-host-process-context",
+              "Host workspace root must be an absolute path",
+            ),
+          );
+    if (!convention.ok) {
       return failure<HostComposition>(
         diagnostic("invalid-host-process-context", "Host workspace root must be an absolute path"),
       );
     }
+    const isCancellationRequested = () => context.cancellation?.aborted === true;
     let plugins: RunningPluginGraph | undefined;
+    let staged: StagedPluginGraph | undefined;
     try {
+      let bootstrap: BootstrapConfigurationLoad;
+      let selectedParser: ConfigurationParserProvider;
       const registrations: readonly PluginRegistration[] = Object.freeze([
         Object.freeze({
           manifest: manifest(defaultHostPluginIds.resources, 0, [
@@ -178,10 +215,43 @@ export function createDefaultBootstrapRegistry(
               ...(resourceFaultInjector === undefined
                 ? {}
                 : { faultInjector: resourceFaultInjector }),
-              workspaceRoot: context.workspaceRoot,
+              workspaceRoot: convention.value.workspaceRoot,
             });
             return Object.freeze({
               capabilities: Object.freeze([output(defaultHostCapabilityIds.resources, resources)]),
+            });
+          },
+        }),
+        Object.freeze({
+          manifest: manifest(
+            defaultHostPluginIds.configurationDiscovery,
+            0,
+            [capability(defaultHostCapabilityIds.configurationDiscovery)],
+            [capability(defaultHostCapabilityIds.resources)],
+          ),
+          start: (pluginContext: PluginStartContext) => {
+            const resources = requiredCapability<HostComposition["resources"]>(
+              pluginContext,
+              defaultHostCapabilityIds.resources,
+            );
+            const discovery = createLocalConfigurationDiscovery(resources);
+            return Object.freeze({
+              capabilities: Object.freeze([
+                output(defaultHostCapabilityIds.configurationDiscovery, discovery),
+              ]),
+            });
+          },
+        }),
+        Object.freeze({
+          manifest: manifest(defaultHostPluginIds.configurationParser, 0, [
+            capability(defaultHostCapabilityIds.configurationParser),
+          ]),
+          start: () => {
+            const parser = createYamlConfigurationParser();
+            return Object.freeze({
+              capabilities: Object.freeze([
+                output(defaultHostCapabilityIds.configurationParser, parser),
+              ]),
             });
           },
         }),
@@ -357,6 +427,11 @@ export function createDefaultBootstrapRegistry(
                 maxSnapshotStateDepth: defaultHostBounds.maxSnapshotStateDepth,
                 maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
               },
+              configuration: Object.freeze({
+                initialDocument: new TextEncoder().encode(defaultWorkspaceDocument),
+                isCompatible: (bytes: Uint8Array) => selectedParser.parse(bytes).ok,
+                locator: bootstrap.locator.configuration,
+              }),
               operations: () => {
                 if (operations === undefined) {
                   throw new Error("application operations are not composed");
@@ -419,28 +494,161 @@ export function createDefaultBootstrapRegistry(
       const runtime = new PluginRuntime({
         maxCapabilitiesPerPlugin: 16,
         maxDiagnostics: defaultHostBounds.maxDiagnosticCount,
-        maxPlugins: 16,
+        maxPlugins: 128,
         maxTokenCharacters: 128,
       });
-      const resolved = runtime.resolve(registrations);
-      if (!resolved.ok) {
+      const builtInPhaseZero = registrations.filter(
+        (registration) => registration.manifest.phase === 0,
+      );
+      const builtInPhaseOne = registrations.filter(
+        (registration) => registration.manifest.phase === 1,
+      );
+      const phaseZeroRegistrations = Object.freeze([
+        ...builtInPhaseZero,
+        ...additionalBootstrapPlugins,
+      ]);
+      const phaseZero = runtime.resolve(phaseZeroRegistrations);
+      if (!phaseZero.ok) {
+        const bootstrapCapabilityIds = new Set<string>([
+          defaultHostCapabilityIds.resources,
+          defaultHostCapabilityIds.configurationDiscovery,
+          defaultHostCapabilityIds.configurationParser,
+        ]);
+        const ambiguous = phaseZero.diagnostics.some(
+          (item) =>
+            (item.code === "capability-provider-collision" ||
+              item.code === "invalid-capability-cardinality") &&
+            typeof item.details?.capabilityId === "string" &&
+            bootstrapCapabilityIds.has(item.details.capabilityId),
+        );
         return failure<HostComposition>(
-          diagnostic("host-composition-failed", "Built-in plugin resolution failed"),
+          ambiguous
+            ? diagnostic(
+                "bootstrap-provider-ambiguous",
+                "Bootstrap capabilities must have exactly one compatible provider",
+              )
+            : diagnostic("host-composition-failed", "Bootstrap plugin resolution failed"),
         );
       }
-      const started = await runtime.start(
-        resolved.value,
+      const phaseZeroStarted = await runtime.startPhaseZero(
+        phaseZero.value,
         Object.freeze({
-          isCancellationRequested: () => context.cancellation?.aborted === true,
+          isCancellationRequested,
+        }),
+      );
+      if (!phaseZeroStarted.ok) {
+        return failure<HostComposition>(
+          diagnostic("host-composition-failed", "Bootstrap plugin startup failed"),
+        );
+      }
+      staged = phaseZeroStarted.value;
+      const failAfterStage = async (
+        ...diagnostics: readonly Diagnostic[]
+      ): Promise<Result<HostComposition>> => {
+        const current = staged;
+        staged = undefined;
+        if (current !== undefined) {
+          const cleanup = await current.shutdown();
+          if (!cleanup.ok) {
+            return failure<HostComposition>(
+              diagnostic("host-plugin-cleanup-failed", "Host plugin cleanup failed"),
+            );
+          }
+        }
+        return failure<HostComposition>(...diagnostics);
+      };
+      const resources = runningCapability<HostComposition["resources"]>(
+        staged,
+        defaultHostCapabilityIds.resources,
+      );
+      const configurationDiscovery = runningCapability<ConfigurationDiscoveryProvider>(
+        staged,
+        defaultHostCapabilityIds.configurationDiscovery,
+      );
+      const configurationParser = runningCapability<ConfigurationParserProvider>(
+        staged,
+        defaultHostCapabilityIds.configurationParser,
+      );
+      selectedParser = configurationParser;
+      const loaded = await loadBootstrapConfiguration(configurationDiscovery, configurationParser);
+      if (!loaded.ok) return failAfterStage(...loaded.diagnostics);
+      bootstrap = loaded.value;
+      if (isCancellationRequested()) {
+        const current = staged;
+        staged = undefined;
+        if (current !== undefined) await current.cancel();
+        return failure<HostComposition>(
+          diagnostic("host-composition-failed", "Bootstrap plugin startup was cancelled"),
+        );
+      }
+      const requested =
+        bootstrap.state === "configured"
+          ? bootstrap.configuration.requestedRuntimePlugins
+          : Object.freeze([]);
+      if (requested.some((plugin) => plugin.source === "project")) {
+        return failAfterStage(
+          diagnostic(
+            "project-plugin-validation-required",
+            "Project-provided plugins require validated package and trust state before loading",
+          ),
+        );
+      }
+      const requestedIds = new Set(requested.map((plugin) => plugin.id));
+      const availableBuiltIns = new Set(
+        builtInPhaseOne.map((registration) => registration.manifest.id),
+      );
+      const selectedAdditional: PluginRegistration[] = [];
+      for (const registration of additionalRuntimePlugins) {
+        const id = registration.manifest.id;
+        if (!id.startsWith("official.")) {
+          return failAfterStage(
+            diagnostic(
+              "project-plugin-validation-required",
+              "Only host-owned official registrations can enter bootstrap selection",
+            ),
+          );
+        }
+        if (requestedIds.has(id)) {
+          availableBuiltIns.add(id);
+          selectedAdditional.push(registration);
+        }
+      }
+      const unavailable = [...requestedIds].filter((id) => !availableBuiltIns.has(id)).sort();
+      if (unavailable.length > 0) {
+        return failAfterStage(
+          diagnostic(
+            "runtime-plugin-unavailable",
+            "A requested official runtime plugin is unavailable in this host",
+          ),
+        );
+      }
+      const selectedRegistrations = Object.freeze([
+        ...phaseZeroRegistrations,
+        ...builtInPhaseOne,
+        ...selectedAdditional,
+      ]);
+      const resolved = runtime.resolve(selectedRegistrations);
+      if (!resolved.ok) {
+        return failAfterStage(
+          diagnostic("host-composition-failed", "Selected plugin resolution failed"),
+        );
+      }
+      const started = await runtime.continue(
+        resolved.value,
+        staged,
+        Object.freeze({
+          isCancellationRequested,
         }),
       );
       if (!started.ok) {
+        staged = undefined;
         return failure<HostComposition>(
-          diagnostic("host-composition-failed", "Built-in plugin startup failed"),
+          diagnostic("host-composition-failed", "Selected plugin startup failed"),
         );
       }
       plugins = started.value;
-      if (context.cancellation?.aborted === true) {
+      staged = undefined;
+      if (isCancellationRequested()) {
         const running = plugins;
         plugins = undefined;
         await running.cancel();
@@ -471,10 +679,6 @@ export function createDefaultBootstrapRegistry(
       const resourceMapper = runningCapability<HostComposition["resourceMapper"]>(
         plugins,
         defaultHostCapabilityIds.resourceMapper,
-      );
-      const resources = runningCapability<HostComposition["resources"]>(
-        plugins,
-        defaultHostCapabilityIds.resources,
       );
       const snapshotStateDecoder = runningCapability<HostComposition["snapshotStateDecoder"]>(
         plugins,
@@ -522,8 +726,13 @@ export function createDefaultBootstrapRegistry(
       if (plugins !== undefined) {
         const running = plugins;
         plugins = undefined;
-        if (context.cancellation?.aborted === true) await running.cancel();
+        if (isCancellationRequested()) await running.cancel();
         else await running.shutdown();
+      } else if (staged !== undefined) {
+        const current = staged;
+        staged = undefined;
+        if (isCancellationRequested()) await current.cancel();
+        else await current.shutdown();
       }
       return failure<HostComposition>(
         diagnostic("host-composition-failed", "Default local host composition failed"),

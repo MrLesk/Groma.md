@@ -7,9 +7,11 @@ import type {
   Diagnostic,
   EntropySource,
   GraphGeneration,
+  PluginRegistration,
   Result,
   RunningPluginGraph,
 } from "../core/index.ts";
+import type { LocalBootstrapTarget } from "./bootstrap-configuration.ts";
 import type {
   LocalResourceFaultInjector,
   LocalResourceProvider,
@@ -105,11 +107,17 @@ export interface HostBootstrapRegistry {
 }
 
 export interface DefaultBootstrapRegistryOptions {
+  /** Verification/composition seam for replaceable Phase 0 providers. */
+  readonly additionalBootstrapPlugins?: readonly PluginRegistration[];
+  /** Host-owned, already validated registrations; project configuration cannot create these. */
+  readonly additionalRuntimePlugins?: readonly PluginRegistration[];
   readonly coordinationRoot?: string;
   readonly entropy?: EntropySource;
   /** Explicit verification seam; production composition does not supply one. */
   readonly resourceFaultInjector?: LocalResourceFaultInjector;
   readonly surface: HostSurface;
+  /** Pure target-convention seam. Production derives this from the running binary. */
+  readonly target?: Omit<LocalBootstrapTarget, "workspaceRoot">;
 }
 
 export type HostRunOutcome =

@@ -120,7 +120,15 @@ function diagnosticResult(
 }
 
 function hostExit(diagnostics: readonly { readonly code: string }[], fallback: number): number {
-  return diagnostics.some((entry) => entry.code === "workspace-configuration-conflict")
+  return diagnostics.some((entry) =>
+    [
+      "project-plugin-validation-required",
+      "runtime-plugin-unavailable",
+      "workspace-configuration-conflict",
+      "workspace-configuration-malformed",
+      "workspace-discovery-conflict",
+    ].includes(entry.code),
+  )
     ? CLI_EXIT.workspace
     : fallback;
 }

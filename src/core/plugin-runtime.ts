@@ -114,6 +114,13 @@ export interface RunningPluginGraph {
   shutdown(): Promise<Result<PluginShutdownReport>>;
 }
 
+/**
+ * Internal bootstrap lifecycle for a dependency-safe Phase 0 prefix. A staged
+ * graph owns its started providers until it is either continued into the full
+ * graph or explicitly cleaned up.
+ */
+export interface StagedPluginGraph extends RunningPluginGraph {}
+
 interface CanonicalPluginRegistration {
   readonly manifest: PluginManifest;
   readonly receiver: object;
@@ -152,6 +159,14 @@ const exactVersionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0
 const intrinsicReflectApply = Reflect.apply;
 
 const resolvedGraphs = new WeakMap<object, ResolvedGraphRecord>();
+interface StagedGraphRecord {
+  readonly graph: ResolvedGraphRecord;
+  readonly started: readonly StartedPluginRecord[];
+  continued?: RunningPluginGraph;
+  continuation?: Promise<Result<RunningPluginGraph>>;
+  state: "available" | "continued" | "continuing" | "stopped";
+}
+const stagedGraphs = new WeakMap<object, StagedGraphRecord>();
 
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -737,6 +752,184 @@ function runningGraph(
   });
 }
 
+function phaseZeroRecord(graph: ResolvedGraphRecord): ResolvedGraphRecord {
+  const order = Object.freeze(
+    graph.order.filter((plugin) => plugin.registration.manifest.phase === 0),
+  );
+  return Object.freeze({
+    inspection: Object.freeze({
+      apiVersion: pluginRuntimeApiVersion,
+      plugins: Object.freeze(order.map(inspectionFor)),
+    }),
+    order,
+  });
+}
+
+function sameDeclarations(
+  left: readonly PluginCapabilityDeclaration[],
+  right: readonly PluginCapabilityDeclaration[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (item, index) =>
+        item.cardinality === right[index]?.cardinality &&
+        item.id === right[index]?.id &&
+        item.version === right[index]?.version,
+    )
+  );
+}
+
+function sameManifest(left: PluginManifest, right: PluginManifest): boolean {
+  return (
+    left.apiVersion === right.apiVersion &&
+    left.id === right.id &&
+    left.phase === right.phase &&
+    left.version === right.version &&
+    sameDeclarations(left.provides, right.provides) &&
+    sameDeclarations(left.requires, right.requires)
+  );
+}
+
+function equivalentPhaseZero(staged: ResolvedGraphRecord, target: ResolvedGraphRecord): boolean {
+  const left = staged.order.filter((plugin) => plugin.registration.manifest.phase === 0);
+  const right = target.order.filter((plugin) => plugin.registration.manifest.phase === 0);
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftPlugin = left[index]!;
+    const rightPlugin = right[index]!;
+    if (
+      leftPlugin.registration.receiver !== rightPlugin.registration.receiver ||
+      leftPlugin.registration.start !== rightPlugin.registration.start ||
+      !sameManifest(leftPlugin.registration.manifest, rightPlugin.registration.manifest)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function startResolvedPlugins(
+  order: readonly ResolvedPluginRecord[],
+  cancellation: PluginCancellation,
+  initialStarted: readonly StartedPluginRecord[] = Object.freeze([]),
+): Promise<Result<readonly StartedPluginRecord[]>> {
+  const containedCancellation = canonicalCancellation(cancellation);
+  if (!containedCancellation.ok) return containedCancellation;
+  const started: StartedPluginRecord[] = [...initialStarted];
+  const available = new Map<string, PluginCapabilityProvider[]>();
+  for (const plugin of started) {
+    for (const [key, output] of plugin.outputs) {
+      const providers = available.get(key) ?? [];
+      providers.push(
+        Object.freeze({ pluginId: plugin.plugin.registration.manifest.id, value: output.value }),
+      );
+      providers.sort((left, right) => compareCodeUnits(left.pluginId, right.pluginId));
+      available.set(key, providers);
+    }
+  }
+
+  for (const plugin of order) {
+    const requested = cancellationRequested(containedCancellation.value);
+    if (!requested.ok || requested.value) {
+      const cleanup = await cleanupStarted(started);
+      return failure(
+        ...(requested.ok
+          ? [
+              diagnostic(
+                "plugin-start-cancelled",
+                "Plugin startup was cancelled before the graph became running",
+                { pluginId: plugin.registration.manifest.id },
+              ),
+            ]
+          : requested.diagnostics),
+        ...cleanup,
+      );
+    }
+    const requirements = Object.freeze(
+      plugin.registration.manifest.requires.map((requirement) =>
+        Object.freeze({
+          cardinality: requirement.cardinality,
+          id: requirement.id,
+          providers: Object.freeze([
+            ...(available.get(capabilityKey(requirement.id, requirement.version)) ?? []),
+          ]),
+          version: requirement.version,
+        }),
+      ),
+    );
+    const context = Object.freeze({
+      cancellation: containedCancellation.value,
+      requirements,
+    });
+    let raw: unknown;
+    try {
+      raw = intrinsicReflectApply(plugin.registration.start, plugin.registration.receiver, [
+        context,
+      ]);
+    } catch {
+      const cleanup = await cleanupStarted(started);
+      return failure(
+        diagnostic("plugin-start-failed", "Plugin start callback failed", {
+          pluginId: plugin.registration.manifest.id,
+        }),
+        ...cleanup,
+      );
+    }
+    const observed = await observeCallbackResult(raw);
+    if (!observed.ok) {
+      const cleanup = await cleanupStarted(started);
+      return failure(
+        diagnostic("plugin-start-failed", "Plugin start callback failed", {
+          pluginId: plugin.registration.manifest.id,
+        }),
+        ...cleanup,
+      );
+    }
+    const result = canonicalStartResult(observed.value, plugin);
+    if (!result.ok) {
+      const cleanup = await cleanupStarted(started);
+      return failure(...result.diagnostics, ...cleanup);
+    }
+    const startedPlugin: StartedPluginRecord = {
+      outputs: result.value.outputs,
+      plugin,
+      ...(result.value.stop === undefined ? {} : { stop: result.value.stop }),
+      state: "running",
+      stopped: false,
+    };
+    started.push(startedPlugin);
+    for (const [key, output] of result.value.outputs) {
+      const providers = available.get(key) ?? [];
+      providers.push(
+        Object.freeze({
+          pluginId: plugin.registration.manifest.id,
+          value: output.value,
+        }),
+      );
+      providers.sort((left, right) => compareCodeUnits(left.pluginId, right.pluginId));
+      available.set(key, providers);
+    }
+    const after = cancellationRequested(containedCancellation.value);
+    if (!after.ok || after.value) {
+      const cleanup = await cleanupStarted(started);
+      return failure(
+        ...(after.ok
+          ? [
+              diagnostic(
+                "plugin-start-cancelled",
+                "Plugin startup was cancelled before the graph became running",
+                { pluginId: plugin.registration.manifest.id },
+              ),
+            ]
+          : after.diagnostics),
+        ...cleanup,
+      );
+    }
+  }
+  return success(Object.freeze(started));
+}
+
 export class PluginRuntime {
   readonly #bounds: PluginRuntimeBounds;
 
@@ -955,109 +1148,99 @@ export class PluginRuntime {
         ),
       );
     }
-    const containedCancellation = canonicalCancellation(cancellation);
-    if (!containedCancellation.ok) return containedCancellation;
-    const started: StartedPluginRecord[] = [];
-    const available = new Map<string, PluginCapabilityProvider[]>();
+    const started = await startResolvedPlugins(resolved.order, cancellation);
+    return started.ok ? success(runningGraph(resolved, started.value)) : started;
+  }
 
-    for (const plugin of resolved.order) {
-      const requested = cancellationRequested(containedCancellation.value);
-      if (!requested.ok || requested.value) {
-        const cleanup = await cleanupStarted(started);
-        return failure(
-          ...(requested.ok
-            ? [
-                diagnostic(
-                  "plugin-start-cancelled",
-                  "Plugin startup was cancelled before the graph became running",
-                  { pluginId: plugin.registration.manifest.id },
-                ),
-              ]
-            : requested.diagnostics),
-          ...cleanup,
-        );
-      }
-      const requirements = Object.freeze(
-        plugin.registration.manifest.requires.map((requirement) =>
-          Object.freeze({
-            cardinality: requirement.cardinality,
-            id: requirement.id,
-            providers: Object.freeze([
-              ...(available.get(capabilityKey(requirement.id, requirement.version)) ?? []),
-            ]),
-            version: requirement.version,
-          }),
+  async startPhaseZero(
+    graph: ResolvedPluginGraph,
+    cancellation: PluginCancellation = Object.freeze({ isCancellationRequested: () => false }),
+  ): Promise<Result<StagedPluginGraph>> {
+    const resolved = resolvedGraphs.get(graph as object);
+    if (resolved === undefined) {
+      return failure(
+        diagnostic(
+          "invalid-resolved-plugin-graph",
+          "Phase 0 startup requires a graph resolved by this runtime contract",
         ),
       );
-      const context = Object.freeze({
-        cancellation: containedCancellation.value,
-        requirements,
-      });
-      let raw: unknown;
-      try {
-        raw = intrinsicReflectApply(plugin.registration.start, plugin.registration.receiver, [
-          context,
-        ]);
-      } catch {
-        const cleanup = await cleanupStarted(started);
-        return failure(
-          diagnostic("plugin-start-failed", "Plugin start callback failed", {
-            pluginId: plugin.registration.manifest.id,
-          }),
-          ...cleanup,
-        );
-      }
-      const observed = await observeCallbackResult(raw);
-      if (!observed.ok) {
-        const cleanup = await cleanupStarted(started);
-        return failure(
-          diagnostic("plugin-start-failed", "Plugin start callback failed", {
-            pluginId: plugin.registration.manifest.id,
-          }),
-          ...cleanup,
-        );
-      }
-      const result = canonicalStartResult(observed.value, plugin);
-      if (!result.ok) {
-        const cleanup = await cleanupStarted(started);
-        return failure(...result.diagnostics, ...cleanup);
-      }
-      const startedPlugin: StartedPluginRecord = {
-        outputs: result.value.outputs,
-        plugin,
-        ...(result.value.stop === undefined ? {} : { stop: result.value.stop }),
-        state: "running",
-        stopped: false,
-      };
-      started.push(startedPlugin);
-      for (const [key, output] of result.value.outputs) {
-        const providers = available.get(key) ?? [];
-        providers.push(
-          Object.freeze({
-            pluginId: plugin.registration.manifest.id,
-            value: output.value,
-          }),
-        );
-        providers.sort((left, right) => compareCodeUnits(left.pluginId, right.pluginId));
-        available.set(key, providers);
-      }
-      const after = cancellationRequested(containedCancellation.value);
-      if (!after.ok || after.value) {
-        const cleanup = await cleanupStarted(started);
-        return failure(
-          ...(after.ok
-            ? [
-                diagnostic(
-                  "plugin-start-cancelled",
-                  "Plugin startup was cancelled before the graph became running",
-                  { pluginId: plugin.registration.manifest.id },
-                ),
-              ]
-            : after.diagnostics),
-          ...cleanup,
-        );
-      }
     }
-    return success(runningGraph(resolved, Object.freeze(started)));
+    const phaseZero = phaseZeroRecord(resolved);
+    const started = await startResolvedPlugins(phaseZero.order, cancellation);
+    if (!started.ok) return started;
+    const base = runningGraph(phaseZero, started.value);
+    const record: StagedGraphRecord = {
+      graph: phaseZero,
+      started: started.value,
+      state: "available",
+    };
+    const clean = async (
+      reason: "cancelled" | "stopped",
+    ): Promise<Result<PluginShutdownReport>> => {
+      if (record.continuation !== undefined) {
+        const continued = await record.continuation;
+        if (continued.ok) {
+          return reason === "cancelled" ? continued.value.cancel() : continued.value.shutdown();
+        }
+      }
+      record.state = "stopped";
+      return reason === "cancelled" ? base.cancel() : base.shutdown();
+    };
+    const staged: StagedPluginGraph = Object.freeze({
+      cancel: () => clean("cancelled"),
+      capabilities: (id: string, version: string) => base.capabilities(id, version),
+      inspect: () => record.continued?.inspect() ?? base.inspect(),
+      shutdown: () => clean("stopped"),
+    });
+    stagedGraphs.set(staged, record);
+    return success(staged);
+  }
+
+  async continue(
+    graph: ResolvedPluginGraph,
+    staged: StagedPluginGraph,
+    cancellation: PluginCancellation = Object.freeze({ isCancellationRequested: () => false }),
+  ): Promise<Result<RunningPluginGraph>> {
+    const resolved = resolvedGraphs.get(graph as object);
+    const stage = stagedGraphs.get(staged as object);
+    if (resolved === undefined || stage === undefined) {
+      return failure(
+        diagnostic(
+          "invalid-staged-plugin-graph",
+          "Plugin continuation requires graphs created by this runtime contract",
+        ),
+      );
+    }
+    if (stage.state !== "available") {
+      return failure(
+        diagnostic(
+          "plugin-stage-already-consumed",
+          "A Phase 0 graph can be continued exactly once",
+        ),
+      );
+    }
+    if (!equivalentPhaseZero(stage.graph, resolved)) {
+      return failure(
+        diagnostic(
+          "incompatible-plugin-stage",
+          "The resolved graph does not preserve the exact started Phase 0 registrations",
+        ),
+      );
+    }
+    stage.state = "continuing";
+    const phaseOne = resolved.order.filter((plugin) => plugin.registration.manifest.phase === 1);
+    const continuation = (async (): Promise<Result<RunningPluginGraph>> => {
+      const started = await startResolvedPlugins(phaseOne, cancellation, stage.started);
+      if (!started.ok) {
+        stage.state = "stopped";
+        return started;
+      }
+      const running = runningGraph(resolved, started.value);
+      stage.continued = running;
+      stage.state = "continued";
+      return success(running);
+    })();
+    stage.continuation = continuation;
+    return continuation;
   }
 }
