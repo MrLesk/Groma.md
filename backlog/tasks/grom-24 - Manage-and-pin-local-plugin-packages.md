@@ -1,11 +1,11 @@
 ---
 id: GROM-24
 title: Manage and pin local plugin packages
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 10:26'
+updated_date: '2026-07-15 10:55'
 labels: []
 milestone: m-4
 dependencies:
@@ -70,10 +70,10 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve existing GROM-24 package/trust invariants and make startup Host exit classification infrastructure-first for mixed canonical diagnostics while retaining every single-diagnostic contract.
-2. Add a program-level mixed bootstrap regression proving workspace-configuration-provider-failure plus plugin-package-lock-unavailable exits 5 with both canonical diagnostics.
-3. Keep the existing Ubuntu cross-platform binary job and add a native Windows job that installs exact dependencies, builds the native executable, and runs the real smoke verifier without --skip-run.
-4. Run focused CLI tests, full bun run check, bun run check:targets, local workflow validation, independent spec/quality review, Backlog doctor, Claude and Codex review; then record exact evidence and return GROM-24 to Done.
+1. Preserve the corrected all-workspace Host exit rule and diagnose the native Windows package-source failure across workspace canonicalization, realpath representation, and containment.
+2. Implement the smallest fail-closed platform-safe path correction and add deterministic Windows-shaped regression coverage without weakening symlink/cross-volume rejection.
+3. Re-run focused path/package/CLI tests, bun run check, bun run check:targets, workflow validation, Backlog doctor, and independent spec/quality review.
+4. Record evidence, return GROM-24 to Done, commit and push the existing PR, then require green native Windows CI and fresh Claude/Codex reviews; do not merge.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -116,10 +116,8 @@ Claude follow-up actions completed: package enable now maps enabled-capacity and
 Exact-head adversarial review reopened GROM-24 at bedd00ccdb0b5e71e2f36a8381c3517a7be630fc. Two P1s remain: mixed bootstrap diagnostics must give infrastructure precedence at the Host/CLI boundary, and the fail-closed Windows native smoke must run on an actual Windows CI runner rather than being cross-compiled with --skip-run on Ubuntu. Context Hunter classification is L2 because these changes affect a public exit contract and CI platform execution, but both fit existing seams without changing package semantics.
 
 Exact-head P1 closure completed. Host startup now returns workspace exit 3 only when every preserved canonical diagnostic is workspace-class; any mixed, unknown, or infrastructure diagnostic retains the infrastructure fallback. The program regression proves the original workspace-configuration-provider-failure plus plugin-package-lock-unavailable pair and four additional canonical infrastructure classes, while workspace-only and single-diagnostic contracts remain green. The existing Ubuntu four-target job remains unchanged, and a bounded windows-2025 job now installs Bun 1.3.14 and locked dependencies, builds the native executable, and runs the real platform-aware smoke verifier. DEVELOPMENT.md documents the three-job model. Final repeated validation passed: focused CLI 21 tests / 230 expectations, bun run check with 553 tests plus strict types, boundaries, native compiled smoke and Iteration 1A recovery, bun run check:targets across macOS arm64, Linux x64, Windows x64, and Windows arm64, local workflow YAML parsing, and git diff --check. Independent spec review passed; independent quality review found incomplete mixed precedence, the finding was corrected, and re-review passed with no remaining actionable findings.
+
+Native Windows CI exposed a real portability defect at ccea617714e07f8a49d553af24cd467e206b6311: the native executable built successfully, but package add ./local-package exited 4 with invalid-local-plugin-package-source before reaching the trust assertion (run 29408186655, job 87328673345). GROM-24 is reopened to fix canonical Windows local-path containment without weakening or skipping the smoke. Context Hunter remains L2 because the correction sits on a security-sensitive filesystem containment boundary.
+
+Windows path diagnosis completed. Bun 1.3.14 node:fs realpathSync uses the Node-compatible alias-preserving Windows walk, while node:fs/promises.realpath uses the native binding; under the GitHub runner temp path this left the workspace as RUNNER~1 while the package became runneradmin, so the mandatory post-realpath containment check correctly failed closed. The workspace root now uses realpathSync.native, matching package, entry, and attested user-root canonicalization without stripping aliases or weakening symlink, junction, or cross-volume rejection. Deterministic path tests cover 8.3 long/short and extended namespace mismatch as fail-closed, with equal canonical long paths accepted. Local validation passed: 44 focused path/package/CLI tests, bun run check with 554 tests plus strict types, boundaries, native compiled smoke and Iteration 1A recovery, bun run check:targets for all four artifacts, and git diff --check. Independent diagnosis, spec review, and quality review all confirmed the fix and found no remaining actionable issues. Native Windows CI remains required before final closure.
 <!-- SECTION:NOTES:END -->
-
-## Final Summary
-
-<!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Made Host bootstrap exit classification coherently fail closed for mixed diagnostics and added actual native Windows smoke execution to CI without removing cross-target coverage. Verified by a five-case program-level mixed-diagnostic regression, 553 repository tests, compiled Iteration 1A verification, all four target builds, workflow parsing, and independent spec plus post-fix quality review.
-<!-- SECTION:FINAL_SUMMARY:END -->

@@ -915,7 +915,9 @@ export function createLocalPluginPackageManager(
   if (!Number.isSafeInteger(options.maxEnabledPlugins) || options.maxEnabledPlugins < 0) {
     throw new TypeError("Local enabled plugin capacity must be a non-negative safe integer");
   }
-  const workspaceRoot = realpathSync(path.normalize(options.workspaceRoot));
+  // Package and entry paths use the native fs/promises realpath binding. Keep the
+  // parent in that same canonical namespace, including Windows 8.3 and substituted paths.
+  const workspaceRoot = realpathSync.native(path.normalize(options.workspaceRoot));
   const requestedUserDataRoot = path.normalize(options.userDataRoot);
   if (isPathWithin(workspaceRoot, requestedUserDataRoot)) {
     throw new TypeError("Plugin package user data must live outside the observed workspace");

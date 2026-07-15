@@ -9,4 +9,23 @@ describe("path containment", () => {
     expect(isPathWithin("C:\\repo", "C:\\repository", path.win32)).toBe(false);
     expect(isPathWithin("C:\\repo", "D:\\repo\\plugins\\example", path.win32)).toBe(false);
   });
+
+  test("fails closed across different Windows canonical path spellings", () => {
+    expect(
+      isPathWithin(
+        "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\workspace",
+        "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\workspace\\local-package",
+        path.win32,
+      ),
+    ).toBe(false);
+    expect(
+      isPathWithin(
+        "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\workspace",
+        "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\workspace\\local-package",
+        path.win32,
+      ),
+    ).toBe(true);
+    expect(isPathWithin("D:\\repo", "\\\\?\\D:\\repo\\plugins\\example", path.win32)).toBe(false);
+    expect(isPathWithin("\\\\?\\D:\\repo", "D:\\repo\\plugins\\example", path.win32)).toBe(false);
+  });
 });
