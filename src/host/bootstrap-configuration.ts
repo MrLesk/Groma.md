@@ -42,7 +42,14 @@ export interface RequestedRuntimePlugin {
   readonly namespace: "official" | "project";
 }
 
+export interface ConfiguredPluginPackage {
+  readonly enabled: readonly string[];
+  readonly name: string;
+  readonly source: string;
+}
+
 export interface BootstrapBaseConfiguration {
+  readonly packageDeclarations: readonly ConfiguredPluginPackage[];
   readonly requestedRuntimePlugins: readonly RequestedRuntimePlugin[];
   readonly schema: "groma/v0.1";
 }
@@ -74,8 +81,11 @@ export type BootstrapConfigurationLoad =
     };
 
 export const bootstrapConfigurationBounds = Object.freeze({
-  maxConfigurationBytes: 4_096,
+  maxConfigurationBytes: 64 * 1_024,
   maxDiscoveryCandidates: 8,
+  maxPackageDeclarations: 64,
+  maxPackageEntryCharacters: 512,
+  maxPackageSourceCharacters: 4_096,
   maxProviderDiagnostics: 100,
   maxRequestedRuntimePlugins: 64,
   maxTokenCharacters: 128,
@@ -90,6 +100,8 @@ export const localWorkspaceLocator: WorkspaceLocator = Object.freeze({
 });
 
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
+const packagePathSegmentPattern = /^[A-Za-z0-9@](?:[A-Za-z0-9._@-]*[A-Za-z0-9_@-])?$/;
 const intrinsicTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const intrinsicUint8Array = Uint8Array;
 const intrinsicUint8ArrayPrototype = Uint8Array.prototype;
@@ -124,6 +136,113 @@ function incompatible(): Result<never> {
       "The workspace configuration schema is incompatible with this Groma host",
     ),
   );
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function isPackageEntry(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > bootstrapConfigurationBounds.maxPackageEntryCharacters ||
+    !value.startsWith("./") ||
+    value.includes("\\") ||
+    value.includes("\0")
+  ) {
+    return false;
+  }
+  const segments = value.split("/");
+  return (
+    segments[0] === "." &&
+    segments.length > 1 &&
+    segments.slice(1).every((segment) => packagePathSegmentPattern.test(segment))
+  );
+}
+
+function isBlueprintPackageSource(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > bootstrapConfigurationBounds.maxPackageSourceCharacters ||
+    !value.startsWith("./") ||
+    value.includes("\\") ||
+    value.includes("\0")
+  ) {
+    return false;
+  }
+  const segments = value.split("/");
+  return (
+    segments[0] === "." &&
+    segments.length > 1 &&
+    segments.slice(1).every((segment) => packagePathSegmentPattern.test(segment))
+  );
+}
+
+function parseConfiguredPackages(value: unknown): Result<readonly ConfiguredPluginPackage[]> {
+  if (!Array.isArray(value) || value.length > bootstrapConfigurationBounds.maxPackageDeclarations) {
+    return malformed();
+  }
+  const packages: ConfiguredPluginPackage[] = [];
+  const names = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return malformed();
+    const record = item as Record<string, unknown>;
+    const keys = Object.keys(record).sort(compareCodeUnits);
+    if (
+      keys.length !== 3 ||
+      keys[0] !== "enabled" ||
+      keys[1] !== "name" ||
+      keys[2] !== "source" ||
+      typeof record.name !== "string" ||
+      record.name.length > 214 ||
+      !packageNamePattern.test(record.name) ||
+      names.has(record.name) ||
+      !isBlueprintPackageSource(record.source) ||
+      !Array.isArray(record.enabled) ||
+      record.enabled.length > 64
+    ) {
+      return malformed();
+    }
+    const enabled = record.enabled;
+    const entries = new Set<string>();
+    for (const entry of enabled) {
+      if (!isPackageEntry(entry) || entries.has(entry)) return malformed();
+      entries.add(entry);
+    }
+    names.add(record.name);
+    packages.push(
+      Object.freeze({
+        enabled: Object.freeze([...entries].sort(compareCodeUnits)),
+        name: record.name,
+        source: record.source,
+      }),
+    );
+  }
+  packages.sort((left, right) => compareCodeUnits(left.name, right.name));
+  return success(Object.freeze(packages));
+}
+
+export function serializeBootstrapConfiguration(configuration: BootstrapBaseConfiguration): string {
+  const lines = [`schema: ${configuration.schema}`];
+  if (configuration.requestedRuntimePlugins.length > 0) {
+    lines.push("plugins:");
+    for (const plugin of configuration.requestedRuntimePlugins) {
+      lines.push(`  - ${JSON.stringify(plugin.id)}`);
+    }
+  }
+  if (configuration.packageDeclarations.length > 0) {
+    lines.push("packages:");
+    for (const declaration of configuration.packageDeclarations) {
+      lines.push(`  - name: ${JSON.stringify(declaration.name)}`);
+      lines.push(`    source: ${JSON.stringify(declaration.source)}`);
+      lines.push("    enabled:");
+      for (const entry of declaration.enabled) lines.push(`      - ${JSON.stringify(entry)}`);
+      if (declaration.enabled.length === 0) lines[lines.length - 1] = "    enabled: []";
+    }
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function copyBytes(value: unknown): Result<Uint8Array> {
@@ -375,9 +494,10 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
         return incompatible();
       }
       if (
-        (keys.length !== 1 && keys.length !== 2) ||
+        keys.length < 1 ||
+        keys.length > 3 ||
         !keys.includes("schema") ||
-        (keys.length === 2 && !keys.includes("plugins")) ||
+        keys.some((key) => key !== "packages" && key !== "plugins" && key !== "schema") ||
         record.schema !== "groma/v0.1"
       ) {
         return malformed();
@@ -408,8 +528,13 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
         }
       }
       requested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+      const packageDeclarations = Object.hasOwn(record, "packages")
+        ? parseConfiguredPackages(record.packages)
+        : success(Object.freeze([]));
+      if (!packageDeclarations.ok) return packageDeclarations;
       return success(
         Object.freeze({
+          packageDeclarations: packageDeclarations.value,
           requestedRuntimePlugins: Object.freeze(requested),
           schema: "groma/v0.1" as const,
         }),
@@ -467,7 +592,7 @@ export function parseBootstrapConfiguration(
   }
   const configuration = inspectHostRecord(
     parsed.value.value,
-    [["requestedRuntimePlugins", "schema"]],
+    [["packageDeclarations", "requestedRuntimePlugins", "schema"]],
     "workspace-configuration-parser-failed",
     "Bootstrap base configuration",
   );
@@ -519,8 +644,15 @@ export function parseBootstrapConfiguration(
     );
   }
   canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  const packageDeclarations = parseConfiguredPackages(configuration.value.packageDeclarations);
+  if (!packageDeclarations.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
   return success(
     Object.freeze({
+      packageDeclarations: packageDeclarations.value,
       requestedRuntimePlugins: Object.freeze(canonicalRequested),
       schema: "groma/v0.1" as const,
     }),
@@ -543,6 +675,8 @@ export function bootstrapConfigurationStillUsable(
   if (actual.state === "missing") return false;
   const expectedPlugins = expected.configuration.requestedRuntimePlugins;
   const actualPlugins = actual.configuration.requestedRuntimePlugins;
+  const expectedPackages = expected.configuration.packageDeclarations;
+  const actualPackages = actual.configuration.packageDeclarations;
   return (
     expected.configuration.schema === actual.configuration.schema &&
     expectedPlugins.length === actualPlugins.length &&
@@ -550,7 +684,18 @@ export function bootstrapConfigurationStillUsable(
       (plugin, index) =>
         plugin.id === actualPlugins[index]?.id &&
         plugin.namespace === actualPlugins[index]?.namespace,
-    )
+    ) &&
+    expectedPackages.length === actualPackages.length &&
+    expectedPackages.every((declaration, index) => {
+      const current = actualPackages[index];
+      return (
+        current !== undefined &&
+        declaration.name === current.name &&
+        declaration.source === current.source &&
+        declaration.enabled.length === current.enabled.length &&
+        declaration.enabled.every((entry, entryIndex) => entry === current.enabled[entryIndex])
+      );
+    })
   );
 }
 

@@ -179,6 +179,32 @@ describe("architecture boundary checker", () => {
     ]);
   });
 
+  test("allows exactly one nonliteral import only at the audited local plugin loader boundary", async () => {
+    const allowed = await createSourceFixture({
+      "host/plugin-module-loader.ts": "export const load = (url: string) => import(url);",
+    });
+    expect(await checkArchitectureBoundaries(allowed)).toEqual([]);
+
+    const expanded = await createSourceFixture({
+      "host/plugin-module-loader.ts": [
+        "export const load = (url: string) => import(url);",
+        "export const loadAgain = (url: string) => import(url);",
+      ].join("\n"),
+    });
+    expect(await checkArchitectureBoundaries(expanded)).toEqual([
+      {
+        file: "host/plugin-module-loader.ts",
+        reason:
+          "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
+      },
+      {
+        file: "host/plugin-module-loader.ts",
+        reason:
+          "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
+      },
+    ]);
+  });
+
   test("reserves every bare require syntax in constrained production layers", async () => {
     const sourceRoot = await createSourceFixture({
       "application/type-only.ts": 'import type { X as require } from "./types.ts";',

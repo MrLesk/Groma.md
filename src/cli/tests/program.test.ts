@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -59,6 +59,7 @@ async function jsonCommand(
   root: string,
   args: readonly string[],
   input?: string,
+  extraOptions: Pick<ProgramOptions, "userDataRoot"> = {},
 ): Promise<{ readonly envelope: JsonEnvelope; readonly exitCode: number; readonly text: string }> {
   const captured = captureOutput();
   const inputReader =
@@ -70,6 +71,7 @@ async function jsonCommand(
   const exitCode = await runProgram(["--format", "json", ...args], captured, {
     ...(inputReader === undefined ? {} : { inputReader }),
     terminal: { stdin: false, stdout: false },
+    ...extraOptions,
     workspaceRoot: root,
   });
   expect(captured.errors).toEqual([]);
@@ -404,6 +406,134 @@ describe("CLI program", () => {
       ok: true,
       result: { value: grandchild },
     });
+  });
+
+  test("manages a trust-gated local package end to end without touching project package-manager files", async () => {
+    const root = await workspace();
+    const userDataRoot = await workspace();
+    await jsonCommand(root, ["init"], undefined, { userDataRoot });
+    const packageRoot = path.join(root, "plugins", "example");
+    await mkdir(path.join(packageRoot, "plugins"), { recursive: true });
+    await writeFile(
+      path.join(packageRoot, "groma.package.json"),
+      `${JSON.stringify({
+        apiVersion: "groma.package/v1",
+        name: "example-cli",
+        plugins: ["./plugins/alpha.js", "./plugins/beta.js"],
+        runtimeApiVersion: "groma.plugin/v1",
+        sdkApiVersion: "groma.sdk/v1",
+        version: "1.0.0",
+      })}\n`,
+    );
+    const moduleSource = (id: string) => `
+export const plugin = Object.freeze({
+  manifest: Object.freeze({
+    apiVersion: "groma.plugin/v1",
+    id: ${JSON.stringify(id)},
+    phase: 1,
+    provides: Object.freeze([]),
+    requires: Object.freeze([]),
+    version: "1.0.0"
+  }),
+  start: () => Object.freeze({ capabilities: Object.freeze([]) })
+});
+`;
+    await writeFile(path.join(packageRoot, "plugins", "alpha.js"), moduleSource("example.alpha"));
+    await writeFile(path.join(packageRoot, "plugins", "beta.js"), moduleSource("example.beta"));
+    const projectPackage = path.join(root, "package.json");
+    const projectLock = path.join(root, "bun.lock");
+    await writeFile(projectPackage, '{"private":true}\n');
+    await writeFile(projectLock, "project-owned\n");
+
+    expect(
+      await jsonCommand(root, ["package", "add", "./plugins/example"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: { command: "package add", exitCode: 0, ok: true },
+      exitCode: 0,
+    });
+    expect(
+      await jsonCommand(
+        root,
+        ["package", "enable", "example-cli", "./plugins/alpha.js"],
+        undefined,
+        { userDataRoot },
+      ),
+    ).toMatchObject({
+      envelope: {
+        command: "package enable",
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: { diagnostics: [{ code: "plugin-full-user-permissions-trust-required" }] },
+      },
+    });
+    expect(
+      await jsonCommand(
+        root,
+        ["package", "enable", "example-cli", "./plugins/alpha.js", "--trust-full-user-permissions"],
+        undefined,
+        { userDataRoot },
+      ),
+    ).toMatchObject({
+      envelope: { command: "package enable", exitCode: 0, ok: true },
+    });
+    expect(
+      await jsonCommand(root, ["package", "inspect", "example-cli"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: {
+        command: "package inspect",
+        exitCode: 0,
+        ok: true,
+        result: { value: { enabled: ["./plugins/alpha.js"], integrity: "exact" } },
+      },
+    });
+    await writeFile(
+      path.join(packageRoot, "plugins", "alpha.js"),
+      `${moduleSource("example.alpha")}\n// changed after enable\n`,
+    );
+    expect(
+      await jsonCommand(root, ["package", "inspect", "example-cli"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: {
+        exitCode: 0,
+        ok: true,
+        result: { value: { integrity: "entry-drift" } },
+      },
+    });
+    expect(
+      await jsonCommand(root, ["component", "roots", "--limit", "1"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+        result: {
+          diagnostics: [{ code: "plugin-package-integrity-drift" }],
+          status: "startup-failure",
+        },
+      },
+    });
+    expect(
+      await jsonCommand(
+        root,
+        ["package", "disable", "example-cli", "./plugins/alpha.js"],
+        undefined,
+        { userDataRoot },
+      ),
+    ).toMatchObject({ envelope: { command: "package disable", exitCode: 0, ok: true } });
+    expect(
+      await jsonCommand(root, ["package", "remove", "example-cli"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({ envelope: { command: "package remove", exitCode: 0, ok: true } });
+    expect(await readFile(projectPackage, "utf8")).toBe('{"private":true}\n');
+    expect(await readFile(projectLock, "utf8")).toBe("project-owned\n");
   });
 
   test("uses stable invocation, workspace, semantic, and signal exit classes", async () => {

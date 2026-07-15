@@ -391,6 +391,20 @@ function canonicalRegistration(
   );
 }
 
+/** Contains one untrusted registration without resolving dependencies or executing plugin code. */
+export function validatePluginRegistration(value: unknown): Result<PluginRegistration> {
+  const canonical = canonicalRegistration(value, defaultPluginRuntimeBounds, 0);
+  if (!canonical.ok) return failure(...canonical.diagnostics);
+  const receiver = canonical.value.receiver;
+  const start = canonical.value.start;
+  return success(
+    Object.freeze({
+      manifest: canonical.value.manifest,
+      start: (context: PluginStartContext) => intrinsicReflectApply(start, receiver, [context]),
+    }),
+  );
+}
+
 function capabilityKey(id: string, version: string): string {
   return `${id}\u0000${version}`;
 }

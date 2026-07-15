@@ -52,9 +52,10 @@ readable without evaluating a plugin entry point or any arbitrary package module
 Exactness describes the canonical result: the SDK reads only those six required
 enumerable data properties and returns a fresh frozen envelope containing no others.
 It never enumerates keys on a package-controlled in-memory object; unknown source
-properties are ignored and cannot influence or survive canonicalization. GROM-24 owns
-how static JSON is acquired and may additionally require the source document itself to
-contain only the six fields before passing its data to this bounded checker.
+properties are ignored and cannot influence or survive canonicalization. The official
+local Host reads this envelope from package-root `groma.package.json` and requires that
+source JSON document itself to contain exactly the six fields, with no duplicate or
+unknown keys, before passing its data to this bounded checker.
 
 Compatibility tokens and the exact package version are bounded to 128 characters.
 Every plugin entry is a bounded relative package subpath. Each segment starts with an
@@ -67,6 +68,8 @@ and platform-ambiguous trailing dots are rejected rather than normalized.
 while a build step emits that static data. Importing and calling the helper is not a
 Host discovery or compatibility-checking mechanism.
 
-The future Host package manager must reconcile discovery metadata, this canonical
-envelope, and its exact lock before execution. The SDK does not choose the envelope's
-materialization or lock format; that remains GROM-24 scope.
+The official local Host reconciles this envelope with its exact lock before execution.
+Every declared plugin path identifies a Phase 1 module with one named `plugin` export
+containing a `PluginRegistration`. The Host verifies the locked static-manifest and
+entry-module bytes and an exact full-user-permissions trust grant before importing that
+module. Acquisition and lock formats remain Host concerns rather than SDK contracts.

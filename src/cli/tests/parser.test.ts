@@ -8,6 +8,24 @@ describe("CLI provisional grammar", () => {
     const cases = [
       [[], { kind: "overview" }],
       [["init"], { kind: "init" }],
+      [["package", "add", "./plugins/example"], { kind: "package-add", scope: "blueprint" }],
+      [
+        ["package", "inspect", "example", "--personal"],
+        { kind: "package-inspect", scope: "personal" },
+      ],
+      [
+        [
+          "package",
+          "enable",
+          "example",
+          "./plugins/panel.js",
+          "--trust-full-user-permissions",
+          "--personal",
+        ],
+        { kind: "package-enable", scope: "personal", trustFullUserPermissions: true },
+      ],
+      [["package", "disable", "example", "./plugins/panel.js"], { kind: "package-disable" }],
+      [["package", "remove", "example"], { kind: "package-remove" }],
       [["component", "create", "--input", "request.json"], { kind: "component-create" }],
       [["component", "create", "--stdin"], { kind: "component-create" }],
       [
@@ -73,6 +91,16 @@ describe("CLI provisional grammar", () => {
       ["component", "create", "--stdin", "--input", "request.json"],
       ["component", "reparent", "ent_01", "--revision", "rev_01"],
       ["component", "reparent", "ent_01", "--revision", "rev_01", "--root", "--parent", "ent_02"],
+      [
+        "package",
+        "enable",
+        "example",
+        "./panel.js",
+        "--trust-full-user-permissions",
+        "--trust-full-user-permissions",
+      ],
+      ["package", "disable", "example", "./panel.js", "--trust-full-user-permissions"],
+      ["package", "add", "./example", "--personal", "--personal"],
       ["--format", "yaml", "init"],
     ]) {
       expect(parseInvocation(args)).toMatchObject({ ok: false });

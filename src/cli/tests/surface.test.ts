@@ -22,6 +22,28 @@ function context(code: string): HostSurfaceContext {
       requireWorkspace: () => unavailable,
       status: () => ({ state: "configured" as const }),
     }),
+    packages: Object.freeze({
+      add: async () => ({
+        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        ok: false as const,
+      }),
+      disable: async () => ({
+        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        ok: false as const,
+      }),
+      enable: async () => ({
+        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        ok: false as const,
+      }),
+      inspect: async () => ({
+        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        ok: false as const,
+      }),
+      remove: async () => ({
+        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        ok: false as const,
+      }),
+    }),
   });
 }
 

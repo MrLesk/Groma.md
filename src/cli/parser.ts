@@ -137,6 +137,55 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
   return undefined;
 }
 
+function packageScope(args: readonly string[]): "blueprint" | "personal" | undefined {
+  if (args.length === 0) return "blueprint";
+  return args.length === 1 && args[0] === "--personal" ? "personal" : undefined;
+}
+
+function packageCommand(args: readonly string[]): CliCommand | undefined {
+  const action = args[0];
+  const rest = args.slice(1);
+  if (action === "add") {
+    const source = rest[0];
+    const scope = packageScope(rest.slice(1));
+    return identifier(source) && scope !== undefined
+      ? Object.freeze({ kind: "package-add", scope, source })
+      : undefined;
+  }
+  if (action === "inspect" || action === "remove") {
+    const name = rest[0];
+    const scope = packageScope(rest.slice(1));
+    return identifier(name) && scope !== undefined
+      ? Object.freeze({ kind: `package-${action}` as const, name, scope })
+      : undefined;
+  }
+  if (action === "enable" || action === "disable") {
+    const name = rest[0];
+    const entry = rest[1];
+    if (!identifier(name) || !identifier(entry)) return undefined;
+    let scope: "blueprint" | "personal" = "blueprint";
+    let trustFullUserPermissions = false;
+    for (const option of rest.slice(2)) {
+      if (option === "--personal" && scope === "blueprint") scope = "personal";
+      else if (
+        action === "enable" &&
+        option === "--trust-full-user-permissions" &&
+        !trustFullUserPermissions
+      ) {
+        trustFullUserPermissions = true;
+      } else return undefined;
+    }
+    return Object.freeze({
+      entry,
+      kind: `package-${action}` as const,
+      name,
+      scope,
+      ...(trustFullUserPermissions ? { trustFullUserPermissions: true } : {}),
+    });
+  }
+  return undefined;
+}
+
 export function parseInvocation(args: readonly string[]): CliInvocationResult {
   const boundedFailureFormat: CliFormat =
     (args[0] === "--format" && args[1] === "json") || args[0] === "--format=json"
@@ -193,7 +242,11 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
     });
   }
   const command =
-    commandArgs[0] === "component" ? componentCommand(commandArgs.slice(1)) : undefined;
+    commandArgs[0] === "component"
+      ? componentCommand(commandArgs.slice(1))
+      : commandArgs[0] === "package"
+        ? packageCommand(commandArgs.slice(1))
+        : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

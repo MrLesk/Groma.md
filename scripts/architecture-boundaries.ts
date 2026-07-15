@@ -300,6 +300,11 @@ export async function checkArchitectureBoundaries(
     }
 
     for (const kind of dependencies.unverifiable) {
+      const authorizedLocalPluginImport =
+        kind === "dynamic import" &&
+        displayFile === "host/plugin-module-loader.ts" &&
+        dependencies.unverifiable.length === 1;
+      if (authorizedLocalPluginImport) continue;
       violations.push({
         file: displayFile,
         reason: `${kind === "dynamic import" ? "Dynamic import" : "Require"} dependency must use a string literal so its architectural boundary can be verified`,

@@ -98,11 +98,19 @@ function composition(
   operations: ApplicationOperations = applicationOperations(),
 ): HostComposition {
   const capability = Object.freeze({});
+  const packages = Object.freeze({
+    add: async () => failure({ code: "unused", message: "unused" }),
+    disable: async () => failure({ code: "unused", message: "unused" }),
+    enable: async () => failure({ code: "unused", message: "unused" }),
+    inspect: async () => failure({ code: "unused", message: "unused" }),
+    remove: async () => failure({ code: "unused", message: "unused" }),
+  });
   return Object.freeze({
     graph: capability,
     invariant: capability,
     model: capability,
     operations,
+    packages,
     queries: capability,
     resourceMapper: capability,
     resources: capability,
@@ -112,7 +120,7 @@ function composition(
     transactionEngine: capability,
     transactionProvider: capability,
     workspace: workspaceAccess,
-  }) as HostComposition;
+  }) as unknown as HostComposition;
 }
 
 function registry(value: HostComposition): HostBootstrapRegistry {

@@ -26,6 +26,7 @@ import type {
   TransactionProvider,
 } from "../core/index.ts";
 import type { ComponentResourceMapper } from "../application/index.ts";
+import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 
 export interface HostProcessContext {
   /** Listener methods must return undefined synchronously; non-void returns fail without being awaited. */
@@ -59,6 +60,7 @@ export type HostInitializationOperations = Readonly<Pick<ApplicationOperations, 
 export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
   readonly initialization: HostInitializationOperations;
+  readonly packages: PluginPackageOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly workspace: WorkspaceAccessCapability;
 }
@@ -89,6 +91,7 @@ export interface HostComposition {
   readonly invariant: TransactionInvariant;
   readonly model: StandardModelCapability;
   readonly operations: ApplicationOperations;
+  readonly packages: PluginPackageOperations;
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
   readonly plugins?: RunningPluginGraph;
   readonly queries: BoundedQueryContracts;
@@ -113,11 +116,15 @@ export interface DefaultBootstrapRegistryOptions {
   readonly additionalRuntimePlugins?: readonly PluginRegistration[];
   readonly coordinationRoot?: string;
   readonly entropy?: EntropySource;
+  /** Package-management recovery seam; ordinary startup always loads enabled packages. */
+  readonly loadLocalPluginPackages?: boolean;
   /** Explicit verification seam; production composition does not supply one. */
   readonly resourceFaultInjector?: LocalResourceFaultInjector;
   readonly surface: HostSurface;
   /** Pure target-convention seam. Production derives this from the running binary. */
   readonly target?: Omit<LocalBootstrapTarget, "workspaceRoot">;
+  /** Host-owned state for personal package declarations and exact trust grants. */
+  readonly userDataRoot?: string;
 }
 
 export type HostRunOutcome =

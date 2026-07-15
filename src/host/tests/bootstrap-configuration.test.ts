@@ -120,7 +120,7 @@ describe("bootstrap configuration", () => {
     const legacy = parser.parse(new TextEncoder().encode("schema: groma/v0.1\n"));
     expect(legacy).toEqual({
       ok: true,
-      value: { requestedRuntimePlugins: [], schema: "groma/v0.1" },
+      value: { packageDeclarations: [], requestedRuntimePlugins: [], schema: "groma/v0.1" },
     });
     const extended = parser.parse(
       new TextEncoder().encode(
@@ -130,11 +130,32 @@ describe("bootstrap configuration", () => {
     expect(extended).toEqual({
       ok: true,
       value: {
+        packageDeclarations: [],
         requestedRuntimePlugins: [
           { id: "acme.policy", namespace: "project" },
           { id: "official.alpha", namespace: "official" },
           { id: "official.zeta", namespace: "official" },
         ],
+        schema: "groma/v0.1",
+      },
+    });
+    const packages = parser.parse(
+      new TextEncoder().encode(
+        'schema: groma/v0.1\npackages:\n  - name: "example-zeta"\n    source: "./plugins/zeta"\n    enabled: ["./z.js", "./a.js"]\n  - name: "@example/alpha"\n    source: "./plugins/alpha"\n    enabled: []\n',
+      ),
+    );
+    expect(packages).toEqual({
+      ok: true,
+      value: {
+        packageDeclarations: [
+          { enabled: [], name: "@example/alpha", source: "./plugins/alpha" },
+          {
+            enabled: ["./a.js", "./z.js"],
+            name: "example-zeta",
+            source: "./plugins/zeta",
+          },
+        ],
+        requestedRuntimePlugins: [],
         schema: "groma/v0.1",
       },
     });
@@ -145,6 +166,9 @@ describe("bootstrap configuration", () => {
     for (const source of [
       "schema: groma/v0.1\nplugins: official.alpha\n",
       "schema: groma/v0.1\nplugins: [official.alpha, official.alpha]\n",
+      'schema: groma/v0.1\npackages:\n  - name: "example"\n    source: "npm:example@1.0.0"\n    enabled: []\n',
+      'schema: groma/v0.1\npackages:\n  - name: "example"\n    source: "./plugins/example"\n    enabled: ["../escape.js"]\n',
+      'schema: groma/v0.1\npackages:\n  - name: "example"\n    source: "./plugins/example"\n    enabled: []\n    extra: true\n',
       "schema: groma/v0.1\nunknown: true\n",
       "schema: &schema groma/v0.1\n",
       "schema: !!str groma/v0.1\n",

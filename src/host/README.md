@@ -25,9 +25,9 @@ Every named `HostComposition` capability is the exact opaque value registered in
 graph: local resources, Standard Model and invariant, Markdown intent store and
 transaction provider, Core transaction engine and graph kernel, bounded query
 contracts, component resource mapper, snapshot decoder, shared application
-operations, workspace access, and the injected surface. A running surface still
-receives only `WorkspaceAccessCapability`, not persistence, graph, runtime, or
-transaction internals.
+operations, workspace access, package operations, and the injected surface. A running
+surface receives `WorkspaceAccessCapability` plus the narrow add/inspect/enable/disable/
+remove package capability, not persistence, graph, runtime, or transaction internals.
 
 The complete default graph also runs through the runner-agnostic conformance suite
 published at `groma/plugin-sdk/conformance`. The suite exercises deterministic graph
@@ -41,14 +41,12 @@ failure: every other suite case must start the same fixture without cancellation
 all unmatched Host diagnostics pass through unchanged.
 
 The default profile uses exact capability version `1.0.0` and versioned capability IDs
-such as `groma.resources/v1`. It has no package acquisition, dynamic import, trust
-prompt, or project-code execution path. Optional registration inputs are explicitly
-Host-owned and already validated; configuration that requests any non-official plugin
-fails with `project-plugin-validation-required` before those inputs are inspected.
-The diagnostic states that project plugins are unsupported in this release pending
-package and trust validation. GROM-24 owns that validation and must cross the fence
-before it may supply a project registration. A Host embedder that violates the
-prevalidated registration seam instead receives `host-runtime-registration-invalid`.
+such as `groma.resources/v1`. Local package declarations use a separate Host package
+capability; the legacy `plugins` selector remains limited to official Host registrations.
+Package add and inspect read inert static data only. The one dynamic import path is
+isolated in the local package manager behind exact manifest/entry locks and a persisted
+full-user-permissions grant. A Host embedder that violates the prevalidated official
+registration seam receives `host-runtime-registration-invalid`.
 
 Registry construction snapshots the selected coordination root, entropy source,
 verification-only resource fault injector, and surface before composition can await.
@@ -68,29 +66,66 @@ smallest canonical UTF-8 document, preserving every existing workspace:
 schema: groma/v0.1
 ```
 
-The bounded 1B schema reserves one optional `plugins` sequence for Host-profile
-selection:
+The bounded schema reserves an optional `plugins` sequence for official Host-profile
+selection and an optional `packages` sequence for blueprint package declarations:
 
 ```yaml
 schema: groma/v0.1
 plugins: []
+packages: []
 ```
 
-`schema` and `plugins` are the only keys. The parser rejects invalid UTF-8, anchors,
-aliases, explicit tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys,
-and more than 64 requests. Requests are sorted by code unit for deterministic selection.
+These three fields are the only keys. Each package declaration contains exactly `name`,
+`source`, and sorted `enabled` entry paths. The parser rejects invalid UTF-8, anchors,
+aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
+entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
+and declarations are sorted by code unit for deterministic selection.
 The shipped default CLI has no optional official contributions today. Required built-in
 Phase 1 plugins already run; listing one of their IDs is accepted but redundant and adds
 nothing. A Host embedder may inject a prevalidated optional official registration. An
 official ID unavailable in that Host produces `runtime-plugin-unavailable`. A project ID
-produces `project-plugin-validation-required`, states the current release limitation,
-and executes no project code.
+still produces `project-plugin-validation-required`; project packages instead cross the
+static-manifest, exact-lock, and trust boundary before supplying Phase 1 registrations.
 
 The local discovery provider uses the same provider-relative
 `groma/groma.yaml` locator for x64 and arm64 source execution on macOS, Linux, and
 Windows. Architecture does not change POSIX or Windows path syntax. Artifact verification
 remains limited to the four promised targets: macOS arm64, Linux x64, Windows x64, and
 Windows arm64. Core sees neither paths nor YAML.
+
+## Local package boundary
+
+The initial manager supports local paths only. Blueprint packages use portable `./`
+sources contained by the workspace and write deterministic declarations to
+`groma/groma.yaml` plus exact locks to `groma/packages.lock`. Personal package records
+and trust grants use an injected Host user-data root outside the workspace. Remote-like
+`npm:`, `git:`, and URL inputs fail before source filesystem access. No operation edits
+an observed `package.json`, dependency lock, or dependency tree.
+
+Package-root `groma.package.json` must be strict duplicate-free JSON with exactly the
+six public SDK fields. Add reads that inert document; inspect may also hash enabled entry
+bytes to report drift, but neither imports code. Enable first checks
+an existing exact location-and-integrity-bound grant or requires
+`--trust-full-user-permissions`; only then may it import the selected Phase 1 module's
+named `plugin` export. The canonical lock records the exact manifest bytes, every
+enabled entry module's bytes, and resolved plugin ID. Startup rechecks all three before
+import. Local-path locks do not cover transitive imports and therefore detect bounded
+drift without claiming a remotely reproducible complete artifact.
+
+Personal entries must provide and require only `groma.presentation.*` capabilities.
+This keeps canonical mutation capabilities out of personal runtime resolution; it is
+not a security sandbox, because trusted plugins still execute with full user permissions.
+
+The official CLI composes package commands in management-only mode. Existing enabled
+entries are not loaded or started while add, inspect, enable, disable, or remove runs;
+the selected enable entry is the only code imported, after trust, for bounded registration
+validation. This keeps add and inspect inert and leaves disable/remove available when an
+ordinary startup fails closed on exact-byte drift.
+
+Every state write is byte-preflighted against its corresponding read bound. Blueprint
+publication writes the exact lock before configuration; disable and remove can reconcile
+that lock-first state after an interrupted second write, without requiring the package
+source to remain available.
 
 Zero candidates is the typed missing-workspace state. Multiple candidates fail with
 `workspace-discovery-conflict`; invalid YAML fails with
@@ -142,7 +177,8 @@ provider's private representation on replaceable providers.
 `ApplicationOperations` instance. The host exact-validates the complete application
 surface and captures `initialize` with its original receiver at composition time, so a
 missing-workspace surface can call `initialization.initialize({})` without receiving any
-other operation authority.
+other semantic operation authority. `HostSurfaceContext.packages` is a separate frozen
+five-operation view; it cannot expose the internal package loader or plugin runtime.
 
 `WorkspaceAccessCapability.requireWorkspace()` is the only gate to the complete
 semantic-operation surface provided to surfaces. It returns the shared
@@ -285,5 +321,7 @@ The build verifies Darwin arm64, Linux x64 baseline, Windows x64 baseline, and W
 arm64 by cross-compilation. Only the current native target is executed by this workflow;
 the other target claims are compilation portability, not native runtime certification.
 
-The Host contains no HTTP server, React bundling, dynamic project import, package
-acquisition, trust storage, or unvalidated project-code execution.
+The Host contains no HTTP server, React bundling, remote package acquisition, project
+package-manager invocation, or unvalidated project-code execution. Its single local
+dynamic import path is preceded by exact static-document validation, manifest and entry
+hash checks, and a trust grant stored outside the repository.

@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import path from "node:path";
 
 import {
   createApplicationOperations,
@@ -38,12 +40,13 @@ import {
 } from "../standard-model/index.ts";
 import { isHostProxy } from "./runtime-validation.ts";
 import {
+  bootstrapConfigurationBounds,
+  bootstrapConfigurationStillUsable,
   createLocalConfigurationDiscovery,
   createYamlConfigurationParser,
   loadBootstrapConfiguration,
   localBootstrapConvention,
   parseBootstrapConfiguration,
-  bootstrapConfigurationStillUsable,
   type BootstrapConfigurationLoad,
   type ConfigurationDiscoveryProvider,
   type ConfigurationParserProvider,
@@ -55,6 +58,7 @@ import type {
   HostProcessContext,
 } from "./contracts.ts";
 import { createLocalWorkspaceCapability, defaultWorkspaceDocument } from "./local-workspace.ts";
+import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
 
 const intrinsicReflectApply = Reflect.apply;
 
@@ -158,7 +162,9 @@ export function createDefaultBootstrapRegistry(
   const additionalRuntimePlugins = Object.freeze([...(options.additionalRuntimePlugins ?? [])]);
   const coordinationRoot = options.coordinationRoot;
   const entropyOption = options.entropy;
+  const loadLocalPluginPackages = options.loadLocalPluginPackages ?? true;
   const resourceFaultInjector = options.resourceFaultInjector;
+  const userDataRoot = options.userDataRoot ?? path.join(homedir(), ".groma");
   const selectedTarget = Object.freeze({
     architecture: options.target?.architecture ?? process.arch,
     platform: options.target?.platform ?? process.platform,
@@ -436,6 +442,7 @@ export function createDefaultBootstrapRegistry(
             let operations: ApplicationOperations | undefined;
             const workspace = await createLocalWorkspaceCapability({
               bounds: {
+                maxConfigurationBytes: bootstrapConfigurationBounds.maxConfigurationBytes,
                 maxProviderDiagnostics: defaultHostBounds.maxDiagnosticCount,
                 maxSnapshotResources: Math.max(
                   defaultHostBounds.maxComponents,
@@ -615,6 +622,28 @@ export function createDefaultBootstrapRegistry(
           diagnostic("host-composition-failed", "Bootstrap plugin startup was cancelled"),
         );
       }
+      const packageManager = createLocalPluginPackageManager({
+        bootstrap,
+        resources,
+        userDataRoot,
+        workspaceRoot: convention.value.workspaceRoot,
+      });
+      const packageOperations = Object.freeze({
+        add: packageManager.add,
+        disable: packageManager.disable,
+        enable: packageManager.enable,
+        inspect: packageManager.inspect,
+        remove: packageManager.remove,
+      });
+      const loadedPackages = loadLocalPluginPackages
+        ? await packageManager.loadEnabled()
+        : success(
+            Object.freeze({
+              personalPluginIds: Object.freeze([]),
+              registrations: Object.freeze([]),
+            }),
+          );
+      if (!loadedPackages.ok) return failAfterStage(...loadedPackages.diagnostics);
       const requested =
         bootstrap.state === "configured"
           ? bootstrap.configuration.requestedRuntimePlugins
@@ -660,12 +689,31 @@ export function createDefaultBootstrapRegistry(
         ...phaseZeroRegistrations,
         ...builtInPhaseOne,
         ...selectedAdditional,
+        ...loadedPackages.value.registrations,
       ]);
       const resolved = runtime.resolve(selectedRegistrations);
       if (!resolved.ok) {
         return failAfterStage(
           diagnostic("host-composition-failed", "Selected plugin resolution failed"),
         );
+      }
+      const resolvedInspection = resolved.value.inspect();
+      for (const pluginId of loadedPackages.value.personalPluginIds) {
+        const plugin = resolvedInspection.plugins.find((entry) => entry.id === pluginId);
+        if (
+          plugin === undefined ||
+          plugin.phase !== 1 ||
+          [...plugin.provides, ...plugin.requires].some(
+            (declaration) => !declaration.id.startsWith("groma.presentation."),
+          )
+        ) {
+          return failAfterStage(
+            diagnostic(
+              "personal-plugin-capability-forbidden",
+              "Personal plugins may provide or require only groma.presentation.* capabilities",
+            ),
+          );
+        }
       }
       const reloaded = await loadBootstrapConfiguration(
         configurationDiscovery,
@@ -789,6 +837,7 @@ export function createDefaultBootstrapRegistry(
           invariant,
           model,
           operations,
+          packages: packageOperations,
           plugins,
           queries,
           resourceMapper,

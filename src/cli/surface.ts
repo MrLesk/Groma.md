@@ -81,6 +81,8 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
     codes.some(
       (code) =>
         code === "no-workspace" ||
+        code === "plugin-package-integrity-drift" ||
+        code.includes("plugin-package-lock") ||
         code.includes("workspace-configuration") ||
         code.includes("workspace-initialization-conflict"),
     )
@@ -292,6 +294,21 @@ async function execute(
           ? CLI_EXIT.infrastructure
           : CLI_EXIT.success;
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
+  }
+  if (command.kind === "package-add") {
+    return applicationResult(command, await context.packages.add(command));
+  }
+  if (command.kind === "package-inspect") {
+    return applicationResult(command, await context.packages.inspect(command));
+  }
+  if (command.kind === "package-enable") {
+    return applicationResult(command, await context.packages.enable(command));
+  }
+  if (command.kind === "package-disable") {
+    return applicationResult(command, await context.packages.disable(command));
+  }
+  if (command.kind === "package-remove") {
+    return applicationResult(command, await context.packages.remove(command));
   }
   const operations = workspaceOperations(command, context);
   if (!("listRoots" in operations)) return operations;

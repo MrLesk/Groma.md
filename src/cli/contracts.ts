@@ -27,6 +27,23 @@ export type CliCommand =
   | { readonly kind: "version" }
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
+  | {
+      readonly kind: "package-add";
+      readonly scope: "blueprint" | "personal";
+      readonly source: string;
+    }
+  | {
+      readonly kind: "package-inspect" | "package-remove";
+      readonly name: string;
+      readonly scope: "blueprint" | "personal";
+    }
+  | {
+      readonly entry: string;
+      readonly kind: "package-disable" | "package-enable";
+      readonly name: string;
+      readonly scope: "blueprint" | "personal";
+      readonly trustFullUserPermissions?: boolean;
+    }
   | { readonly input: CliInputSource; readonly kind: "component-create" }
   | {
       readonly id: string;
@@ -120,6 +137,16 @@ export function commandName(command: CliCommand): string {
       return "component reparent";
     case "component-remove":
       return "component remove";
+    case "package-add":
+      return "package add";
+    case "package-inspect":
+      return "package inspect";
+    case "package-enable":
+      return "package enable";
+    case "package-disable":
+      return "package disable";
+    case "package-remove":
+      return "package remove";
     default:
       return command.kind;
   }

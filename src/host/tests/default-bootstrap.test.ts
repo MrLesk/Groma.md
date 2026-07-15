@@ -76,6 +76,7 @@ describe("default bootstrap registry", () => {
       "invariant",
       "model",
       "operations",
+      "packages",
       "plugins",
       "queries",
       "resourceMapper",
@@ -209,6 +210,7 @@ describe("default bootstrap registry", () => {
       initialization: Object.freeze({
         initialize: (request) => composed.value.operations.initialize(request),
       }),
+      packages: composed.value.packages,
       recovery: { status: "not-required" },
       workspace: composed.value.workspace,
     });
@@ -319,7 +321,7 @@ describe("default bootstrap registry", () => {
     expect(reads).toBe(13);
   });
 
-  test("contains no server, React, dynamic plugin, or project-code loading path", async () => {
+  test("keeps project-code loading isolated to the trust-gated local package boundary", async () => {
     const hostRoot = path.resolve(import.meta.dir, "..");
     const productionFiles = (await readdir(hostRoot)).filter((file) => file.endsWith(".ts")).sort();
     const sources = await Promise.all(
@@ -330,7 +332,12 @@ describe("default bootstrap registry", () => {
     expect(production).not.toContain("node:http");
     expect(production).not.toContain("Bun.serve");
     expect(production).not.toContain('from "react"');
-    expect(production).not.toContain("import(");
+    const dynamicLoadingFiles = sources.filter((source) => source.includes("import("));
+    expect(dynamicLoadingFiles).toHaveLength(1);
+    expect(productionFiles[sources.indexOf(dynamicLoadingFiles[0]!)]).toBe(
+      "plugin-module-loader.ts",
+    );
+    expect(production).toContain("plugin-full-user-permissions-trust-required");
     expect(production).not.toContain("projectPlugin");
   });
 });
