@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ApplicationOperations } from "../../application/index.ts";
-import { failure, parseGraphGeneration, success, type Result } from "../../core/index.ts";
+import {
+  failure,
+  parseGraphGeneration,
+  pluginRuntimeApiVersion,
+  success,
+  type Result,
+  type RunningPluginGraph,
+} from "../../core/index.ts";
 import {
   createProcessSignalSource,
   runHost,
@@ -112,7 +119,189 @@ function registry(value: HostComposition): HostBootstrapRegistry {
   return { compose: async () => success(value) };
 }
 
+function pluginLifecycle(
+  cancel: () => ReturnType<RunningPluginGraph["cancel"]>,
+  shutdown: () => ReturnType<RunningPluginGraph["shutdown"]>,
+): RunningPluginGraph {
+  return Object.freeze({
+    cancel,
+    capabilities: () => Object.freeze([]),
+    inspect: () =>
+      Object.freeze({
+        apiVersion: pluginRuntimeApiVersion,
+        plugins: Object.freeze([]),
+        state: "running" as const,
+      }),
+    shutdown,
+  });
+}
+
+function compositionWithPlugins(
+  surface: HostSurface,
+  workspaceAccess: WorkspaceAccessCapability,
+  plugins: RunningPluginGraph,
+): HostComposition {
+  return Object.freeze({ ...composition(surface, workspaceAccess), plugins });
+}
+
 describe("host lifecycle", () => {
+  test("shuts the plugin graph down after surface cleanup", async () => {
+    const events: string[] = [];
+    let cancels = 0;
+    const plugins = pluginLifecycle(
+      async () => {
+        cancels += 1;
+        return success({ state: "cancelled", stoppedPluginIds: [] });
+      },
+      async () => {
+        events.push("plugins:shutdown");
+        return success({ state: "stopped", stoppedPluginIds: ["official.surface"] });
+      },
+    );
+    const outcome = await runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => ({
+              completion: Promise.resolve(),
+              stop: async () => {
+                events.push("surface:stop");
+              },
+            }),
+          },
+          workspace({ state: "missing" }),
+          plugins,
+        ),
+      ),
+      signalSource: { subscribe: () => () => {} },
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(events).toEqual(["surface:stop", "plugins:shutdown"]);
+    expect(cancels).toBe(0);
+  });
+
+  test("adapts process cancellation to plugin cancellation after surface stop", async () => {
+    const events: string[] = [];
+    const source = signals();
+    const started = deferred<void>();
+    const completion = deferred<void>();
+    const plugins = pluginLifecycle(
+      async () => {
+        events.push("plugins:cancel");
+        return success({ state: "cancelled", stoppedPluginIds: ["official.surface"] });
+      },
+      async () => {
+        events.push("plugins:shutdown");
+        return success({ state: "stopped", stoppedPluginIds: ["official.surface"] });
+      },
+    );
+    const running = runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => {
+              started.resolve();
+              return {
+                completion: completion.promise,
+                stop: async () => {
+                  events.push("surface:stop");
+                },
+              };
+            },
+          },
+          workspace({ state: "missing" }),
+          plugins,
+        ),
+      ),
+      signalSource: source.source,
+    });
+    await started.promise;
+    source.emit("SIGTERM");
+
+    expect(await running).toEqual({ signal: "SIGTERM", status: "cancelled" });
+    expect(events).toEqual(["surface:stop", "plugins:cancel"]);
+  });
+
+  test("contains malformed or failed plugin cleanup exactly once", async () => {
+    let shutdowns = 0;
+    const plugins = pluginLifecycle(
+      async () => success({ state: "cancelled", stoppedPluginIds: [] }),
+      async () => {
+        shutdowns += 1;
+        return failure({ code: "private-plugin-error", message: "/private/plugin" });
+      },
+    );
+    const outcome = await runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => ({ completion: Promise.resolve(), stop: async () => {} }),
+          },
+          workspace({ state: "missing" }),
+          plugins,
+        ),
+      ),
+      signalSource: { subscribe: () => () => {} },
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" }],
+      status: "surface-failure",
+    });
+    expect(shutdowns).toBe(1);
+  });
+
+  test("contains nested rejected plugin cleanup values before reporting failure", async () => {
+    const secret = "/private/plugin-cleanup";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const plugins = pluginLifecycle(
+        async () => success({ state: "cancelled", stoppedPluginIds: [] }),
+        async () =>
+          ({
+            diagnostics: [
+              {
+                code: "private-plugin-error",
+                details: { rejected: Promise.reject(new Error(secret)) },
+                message: secret,
+              },
+            ],
+            ok: false,
+          }) as never,
+      );
+      const outcome = await runHost({
+        context: { workspaceRoot: "/workspace" },
+        registry: registry(
+          compositionWithPlugins(
+            { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+            workspace({ state: "missing" }),
+            plugins,
+          ),
+        ),
+        signalSource: { subscribe: () => () => {} },
+      });
+
+      expect(outcome).toEqual({
+        diagnostics: [
+          { code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" },
+        ],
+        status: "surface-failure",
+      });
+      expect(JSON.stringify(outcome)).not.toContain(secret);
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("process signal source forwards both signals and unsubscribes idempotently", () => {
     const listeners = new Map<HostSignal, Set<() => void>>();
     const onCalls: HostSignal[] = [];

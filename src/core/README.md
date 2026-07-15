@@ -4,6 +4,47 @@ The graph kernel is model-neutral. Entity kinds and relation types are validated
 tokens supplied by model plugins; Core does not hard-code groups, components, or any
 other standard-model vocabulary.
 
+## Phased plugin runtime
+
+`PluginRuntime` is Core's technology-neutral composition and lifecycle service. It
+accepts bounded, exact plugin registrations, resolves Phase 0 and Phase 1 into one
+immutable graph, and only then invokes plugin start callbacks. Core knows nothing about
+filesystems, configuration formats, package acquisition, module loading, process
+signals, or surfaces; a host constructs registrations and adapts its own cancellation
+mechanism to the small `PluginCancellation` contract.
+
+The first runtime API is deliberately narrow:
+
+- the exact API token is `groma.plugin/v1`;
+- plugin and capability versions use exact `major.minor.patch` values;
+- capability IDs carry their contract generation, such as `groma.graph/v1`;
+- a requirement matches only an identical capability ID and identical capability
+  version—there is no semver range solver;
+- every capability declares `single` or `multiple` provider cardinality, and the
+  requirement must agree with its providers.
+
+This keeps incompatibility diagnostics deterministic while the contract is still
+small. A Phase 0 plugin may depend only on Phase 0 providers. A Phase 1 plugin may
+depend on either phase. Independent Phase 0 plugins start before independent Phase 1
+plugins, and ties use plugin ID order. Requirements on a `multiple` capability receive
+every exact-version provider in plugin ID order. Missing providers, exact-version
+mismatches, cardinality disagreement, single-provider collisions, phase inversion,
+duplicate plugins, and dependency cycles all fail resolution before any plugin starts.
+
+Start contexts expose only the resolved requirement values and the technology-neutral
+cancellation check. Start results must return every declared capability exactly once;
+opaque capability values retain their identity. Resolved and running graph inspection
+is copied and frozen and contains only manifests, dependencies, phases, lifecycle
+states, and provider IDs—not layout or host configuration.
+
+Start proceeds in dependency order. A thrown, rejected, or malformed start rolls back
+already-started plugins in reverse order. Normal shutdown and cancellation use the
+same dependent-before-provider ordering, cache one cleanup Promise, and invoke every
+plugin cleanup at most once even if callers repeat or race lifecycle requests. Cleanup
+continues after a stop failure and reports stable plugin-owned diagnostics without
+leaking thrown values. Promise-returning lifecycle callbacks cross the same native
+Promise containment used by the application and Host boundaries.
+
 Entity and relation IDs contain 128 opaque entropy bits. Core formats and validates
 IDs while an injected capability supplies entropy, keeping crypto and host technology
 outside Core. Names and paths belong only in model payloads.

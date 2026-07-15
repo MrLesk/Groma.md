@@ -21,11 +21,17 @@ import type {
   WorkspaceRecoveryReport,
   WorkspaceStatus,
 } from "./contracts.ts";
-import { copyHostDiagnostics, inspectHostRecord, isHostProxy } from "./runtime-validation.ts";
+import {
+  copyHostDiagnostics,
+  inspectHostDenseArray,
+  inspectHostRecord,
+  isHostProxy,
+} from "./runtime-validation.ts";
 import {
   observeNativePromise,
   type NativePromiseObservation,
 } from "../application/promise-observation.ts";
+import { containCapabilityValue } from "../application/capability-value.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -38,8 +44,14 @@ interface ContainedHostSurfaceSession {
   readonly stop: () => unknown;
 }
 
-interface ContainedHostComposition extends HostComposition {
+interface ContainedPluginLifecycle {
+  cancel(): unknown;
+  shutdown(): unknown;
+}
+
+interface ContainedHostComposition extends Omit<HostComposition, "plugins"> {
   readonly initialization: HostInitializationOperations;
+  readonly plugins?: ContainedPluginLifecycle;
 }
 
 const intrinsicPromise = Promise;
@@ -277,6 +289,33 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   );
 }
 
+function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecycle> {
+  const plugins = inspectHostRecord(
+    value,
+    [["cancel", "capabilities", "inspect", "shutdown"]],
+    "invalid-host-composition",
+    "Plugin runtime",
+  );
+  if (
+    !plugins.ok ||
+    typeof plugins.value.cancel !== "function" ||
+    typeof plugins.value.capabilities !== "function" ||
+    typeof plugins.value.inspect !== "function" ||
+    typeof plugins.value.shutdown !== "function"
+  ) {
+    return failure(diagnostic("invalid-host-composition", "Plugin runtime is malformed"));
+  }
+  const receiver = value as object;
+  const cancel = plugins.value.cancel;
+  const shutdown = plugins.value.shutdown;
+  return success(
+    Object.freeze({
+      cancel: () => intrinsicReflectApply(cancel, receiver, []),
+      shutdown: () => intrinsicReflectApply(shutdown, receiver, []),
+    }),
+  );
+}
+
 function canonicalInitializationOperations(value: unknown): Result<HostInitializationOperations> {
   const operations = inspectHostRecord(
     value,
@@ -339,6 +378,22 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "transactionProvider",
         "workspace",
       ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "operations",
+        "plugins",
+        "queries",
+        "resourceMapper",
+        "resources",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
     ],
     "invalid-host-composition",
     "Host composition",
@@ -350,6 +405,10 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!surface.ok) return surface;
   const initialization = canonicalInitializationOperations(composition.value.operations);
   if (!initialization.ok) return initialization;
+  const plugins = Object.hasOwn(composition.value, "plugins")
+    ? canonicalPluginLifecycle(composition.value.plugins)
+    : undefined;
+  if (plugins !== undefined && !plugins.ok) return plugins;
   for (const field of [
     "graph",
     "invariant",
@@ -377,6 +436,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       invariant: composition.value.invariant,
       model: composition.value.model,
       operations: composition.value.operations,
+      ...(plugins === undefined ? {} : { plugins: plugins.value }),
       queries: composition.value.queries,
       resourceMapper: composition.value.resourceMapper,
       resources: composition.value.resources,
@@ -388,6 +448,64 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       workspace: workspace.value,
     }) as ContainedHostComposition,
   );
+}
+
+function validPluginShutdownReport(
+  value: unknown,
+  expectedState: "cancelled" | "stopped",
+): boolean {
+  const report = inspectHostRecord(
+    value,
+    [["state", "stoppedPluginIds"]],
+    "invalid-host-plugin-cleanup",
+    "Plugin shutdown report",
+  );
+  if (!report.ok || report.value.state !== expectedState) return false;
+  const ids = inspectHostDenseArray(
+    report.value.stoppedPluginIds,
+    256,
+    "invalid-host-plugin-cleanup",
+    "Stopped plugin IDs",
+  );
+  return (
+    ids.ok && ids.value.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128)
+  );
+}
+
+async function observePluginCleanup(
+  value: unknown,
+  expectedState: "cancelled" | "stopped",
+): Promise<void> {
+  const observed = observeHostNativePromise(
+    value,
+    (settled) => {
+      const contained = containCapabilityValue(settled, {
+        isProxy: isHostProxy,
+        maximumContainerEntries: 256,
+        maximumDepth: 8,
+        maximumValues: 4_096,
+      });
+      if (!contained.ok) return false;
+      const result = inspectHostRecord(
+        contained.value,
+        [
+          ["ok", "value"],
+          ["diagnostics", "ok"],
+        ],
+        "invalid-host-plugin-cleanup",
+        "Plugin cleanup result",
+      );
+      return (
+        result.ok &&
+        result.value.ok === true &&
+        validPluginShutdownReport(result.value.value, expectedState)
+      );
+    },
+    () => false,
+  );
+  if (observed.status !== "observed" || !(await observed.promise)) {
+    throw new Error("Host plugin cleanup failed");
+  }
 }
 
 function canonicalRegistry(value: unknown): Result<(context: HostProcessContext) => unknown> {
@@ -574,6 +692,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   let externalCancellationMayBeRegistered = false;
 
   let unsubscribe: (() => void | Promise<void>) | undefined;
+  let plugins: ContainedPluginLifecycle | undefined;
   let session: ContainedHostSurfaceSession | undefined;
   let stopPromise: Promise<void> | undefined;
   const stopOnce = (): Promise<void> => {
@@ -660,6 +779,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             outcome = cancelled(cancellationSignal);
           } else {
             const composition = first.composition;
+            plugins = composition.plugins;
             const rawStatus = composition.workspace.status();
             const status = canonicalStatus(rawStatus);
             let recovery: "completed" | "not-required" | undefined;
@@ -810,6 +930,17 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
     await stopOnce();
   } catch {
     outcome = surfaceFailure("host-surface-cleanup-failed", "Host surface cleanup failed");
+  }
+  if (plugins !== undefined) {
+    try {
+      const expectedState = outcome.status === "cancelled" ? "cancelled" : "stopped";
+      await observePluginCleanup(
+        expectedState === "cancelled" ? plugins.cancel() : plugins.shutdown(),
+        expectedState,
+      );
+    } catch {
+      outcome = surfaceFailure("host-plugin-cleanup-failed", "Host plugin cleanup failed");
+    }
   }
   if (externalCancellationMayBeRegistered && externalCancellation !== undefined) {
     try {

@@ -3,7 +3,13 @@ import type {
   ApplicationSnapshotStateDecoder,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
-import type { Diagnostic, EntropySource, GraphGeneration, Result } from "../core/index.ts";
+import type {
+  Diagnostic,
+  EntropySource,
+  GraphGeneration,
+  Result,
+  RunningPluginGraph,
+} from "../core/index.ts";
 import type {
   LocalResourceFaultInjector,
   LocalResourceProvider,
@@ -81,6 +87,8 @@ export interface HostComposition {
   readonly invariant: TransactionInvariant;
   readonly model: StandardModelCapability;
   readonly operations: ApplicationOperations;
+  /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
+  readonly plugins?: RunningPluginGraph;
   readonly queries: BoundedQueryContracts;
   readonly resourceMapper: ComponentResourceMapper;
   readonly resources: LocalResourceProvider;
