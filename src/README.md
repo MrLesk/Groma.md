@@ -6,5 +6,6 @@ implementation so later tasks add code intentionally rather than treating an emp
 directory as an API.
 
 `plugin-sdk/` is the one intentional public authoring boundary. Plugin packages use
-the `groma/plugin-sdk` package export and do not import implementation paths from any
-other source boundary.
+the `groma/plugin-sdk` package export for authoring and the dedicated
+`groma/plugin-sdk/conformance` export for reusable verification. They do not import
+implementation paths from any other source boundary.

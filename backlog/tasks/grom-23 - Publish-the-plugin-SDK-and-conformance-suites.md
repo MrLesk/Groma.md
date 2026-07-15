@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 05:03'
+updated_date: '2026-07-15 05:21'
 labels: []
 milestone: m-2
 dependencies:
@@ -53,9 +53,12 @@ Give built-in and third-party plugin authors one supported public contract for m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add a successful-start fake running graph whose single plugin repeats the same exact multiple-provider declaration and reports two matching provider entries, isolating declaration duplication from provider-count validation.
-2. Assert the public declared-cardinality conformance case returns plugin-conformance-cardinality-failed independently of runtime resolution and provider-count mismatch.
-3. Run focused and complete verification, re-check AC3 with objective evidence, re-finalize GROM-23, and commit the narrow regression follow-up without pushing.
+1. Resolve the exact groma/plugin-sdk and groma/plugin-sdk/conformance self-references through the plugin-sdk layer in the boundary checker, with allowed Host and forbidden relative/bare dependency regressions.
+2. Keep authoring and manifest contracts on groma/plugin-sdk, expose conformance only through groma/plugin-sdk/conformance, and update repository imports and guidance.
+3. Document the checked six-field envelope as inert static JSON/data obtained before arbitrary package code executes; describe definePluginPackage as a build-time authoring aid and correct the bounded subpath grammar wording without implementing GROM-24.
+4. Run deterministic conformance graphs sequentially, capture inspection before cleanup, retain cleanup diagnostics, and add an exclusive-resource fixture proving no overlap.
+5. Normalize the Host conformance adapter to a cancellation-specific diagnostic only when the already-aborted request returns the exact known Phase-0 startup wrapper; verify the aggregate suite and document the safety rationale.
+6. Run focused and full gates, inspect the cumulative diff, update the modified-file manifest and evidence, then re-finalize and commit without pushing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -76,10 +79,16 @@ Current-head evidence: focused SDK and default Host suites passed 6 tests with 3
 Reopened for one final quality-coverage gap: the duplicate-declaration predicate is implemented but lacked a successful-start fake-graph regression independent of Core runtime rejection. AC3 is pending that focused proof.
 
 Final duplicate-declaration coverage completed. A successful-start custom graph now reports two identical multiple-provider declarations and two matching provider entries for the same plugin, so provider-count comparison alone would pass; the suite still returns plugin-conformance-cardinality-failed through its direct duplicate-declaration predicate. Focused SDK/Host evidence passed 6 tests with 34 assertions. Full bun run check passed formatting, strict TypeScript, boundaries, 517 tests with 3,389 assertions, native build/smoke, and compiled Iteration 1A verification; git diff --check and backlog doctor passed.
+
+Reopened after Claude review found pre-publication boundary, API-surface, static-envelope documentation, sequential lifecycle, and Host cancellation-evidence gaps. All acceptance criteria are pending current-head evidence.
+
+Claude-review remediation implemented. Exact groma/plugin-sdk self-references now participate in the layer matrix; main and conformance exports are distinct; the checked envelope is documented as inert pre-execution data; deterministic graphs release forward resources before reverse startup; and the Host test adapter emits a narrow cancellation code only for the exact pre-aborted Phase-0 wrapper. Focused typecheck, actual boundary scan, and SDK/Host/boundary suites pass 17 tests with 54 assertions.
+
+Final current-head verification: focused SDK, Host, and boundary suites passed 17 tests with 54 assertions; strict TypeScript and the actual architecture boundary scan passed. Full bun run check passed formatting, strict TypeScript, boundaries, 520 tests with 3,397 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. Host cancellation assessment: adapter normalization is sufficiently narrow because it requires an already-cancelled request plus the exact single Phase-0 wrapper code, message, and absent details; unmatched failures remain visible, while every uncancelled case must successfully start the same Host fixture. Production Host behavior remains unchanged.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Published and quality-hardened the supported groma/plugin-sdk authoring façade, bounded exact package compatibility envelope, and runner-agnostic conformance suite. Successful custom-graph regressions independently prove mixed-cardinality and duplicate-declaration rejection, exact cancellation evidence, deterministic lifecycle, and provider behavior. A public-only external fixture and all 15 default Host capabilities pass the shared suite. The current 517-test gate, native build/smoke, and Iteration 1A workflow pass.
+Published a coherent two-subpath plugin SDK: authoring and static package compatibility at groma/plugin-sdk, reusable verification only at groma/plugin-sdk/conformance. Package self-references now obey repository layer rules; inert manifest guidance preserves the pre-execution trust boundary; deterministic conformance releases each graph before the next starts; and Host cancellation evidence is narrowly normalized without changing product diagnostics. Focused 17-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
 <!-- SECTION:FINAL_SUMMARY:END -->

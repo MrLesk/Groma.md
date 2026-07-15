@@ -176,7 +176,10 @@ export function definePlugin(
   return registration;
 }
 
-/** Compile-time helper for an already supported package manifest. */
+/**
+ * Build-time authoring helper for static package-manifest data. It preserves the
+ * supported literals but does not discover, load, or runtime-validate a package.
+ */
 export function definePluginPackage(
   manifest: SupportedPluginPackageManifest,
 ): SupportedPluginPackageManifest {
@@ -184,8 +187,8 @@ export function definePluginPackage(
 }
 
 /**
- * Canonicalize a package manifest and classify compatibility before any package entry
- * point is loaded or executed.
+ * Canonicalize an already materialized inert package manifest and classify
+ * compatibility before any package entry point or arbitrary package module executes.
  */
 export function checkPluginPackageCompatibility(
   value: unknown,

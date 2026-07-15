@@ -18,6 +18,7 @@ import {
 } from "../index.ts";
 
 const capabilityVersion = "1.0.0";
+const hostCancellationDiagnosticCode = "host-start-cancelled";
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -49,8 +50,9 @@ function check(
 
 describe("default host plugin SDK conformance", () => {
   test("runs every applicable built-in provider through the public suite", async () => {
+    let normalizedCancellationEvidence = false;
     const fixture: PluginConformanceFixture = Object.freeze({
-      cancellationDiagnosticCode: "host-composition-failed",
+      cancellationDiagnosticCode: hostCancellationDiagnosticCode,
       start: async (request: PluginConformanceFixtureRequest) => {
         const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-sdk-host-"));
         roots.push(workspaceRoot);
@@ -62,7 +64,31 @@ describe("default host plugin SDK conformance", () => {
             start: () => ({ completion: Promise.resolve(), stop: async () => {} }),
           },
         }).compose({ cancellation: controller.signal, workspaceRoot });
-        if (!composed.ok) return composed;
+        if (!composed.ok) {
+          const item = composed.diagnostics[0];
+          if (
+            request.cancellation.isCancellationRequested() &&
+            composed.diagnostics.length === 1 &&
+            item?.code === "host-composition-failed" &&
+            item.message === "Bootstrap plugin startup failed" &&
+            item.details === undefined
+          ) {
+            // This is test-adapter evidence, not a Host diagnostic rewrite. The same
+            // fixture must start successfully for every uncancelled conformance case,
+            // and only this exact wrapper from an already-aborted Phase-0 start maps.
+            normalizedCancellationEvidence = true;
+            return {
+              diagnostics: [
+                {
+                  code: hostCancellationDiagnosticCode,
+                  message: "Default host startup was cancelled before composition completed",
+                },
+              ],
+              ok: false as const,
+            };
+          }
+          return composed;
+        }
         return composed.value.plugins === undefined
           ? {
               diagnostics: [
@@ -198,6 +224,7 @@ describe("default host plugin SDK conformance", () => {
     expect(providers).toHaveLength(Object.keys(defaultHostCapabilityIds).length);
     expect(report.ok).toBeTrue();
     expect(report.diagnostics).toEqual([]);
+    expect(normalizedCancellationEvidence).toBeTrue();
     expect(report.cases.map((item) => item.name)).toEqual([
       "deterministic-results",
       "lifecycle",

@@ -131,16 +131,32 @@ async function deterministicResults(
   fixture: PluginConformanceFixture,
 ): Promise<PluginConformanceCaseResult> {
   const name = "deterministic-results" as const;
+  const diagnostics: Diagnostic[] = [];
   const forward = await startFixture(fixture, "forward", noCancellation);
-  const reverse = await startFixture(fixture, "reverse", noCancellation);
-  const running = [forward, reverse].flatMap((result) => (result.ok ? [result.value] : []));
-  const diagnostics: Diagnostic[] = [
-    ...(forward.ok ? [] : forward.diagnostics),
-    ...(reverse.ok ? [] : reverse.diagnostics),
-  ];
-  if (forward.ok && reverse.ok) {
+  let forwardInspection: string | undefined;
+  if (!forward.ok) {
+    diagnostics.push(...forward.diagnostics);
+  } else {
     try {
-      if (stable(forward.value.inspect()) !== stable(reverse.value.inspect())) {
+      forwardInspection = stable(forward.value.inspect());
+    } catch {
+      diagnostics.push(
+        diagnostic(
+          "plugin-conformance-inspection-failed",
+          "Plugin graph inspection failed during deterministic conformance",
+        ),
+      );
+    }
+    diagnostics.push(...(await cleanup([forward.value])));
+  }
+
+  const reverse = await startFixture(fixture, "reverse", noCancellation);
+  if (!reverse.ok) {
+    diagnostics.push(...reverse.diagnostics);
+  } else {
+    try {
+      const reverseInspection = stable(reverse.value.inspect());
+      if (forwardInspection !== undefined && forwardInspection !== reverseInspection) {
         diagnostics.push(
           diagnostic(
             "plugin-conformance-nondeterministic",
@@ -156,8 +172,8 @@ async function deterministicResults(
         ),
       );
     }
+    diagnostics.push(...(await cleanup([reverse.value])));
   }
-  diagnostics.push(...(await cleanup(running)));
   return caseResult(name, diagnostics);
 }
 

@@ -27,6 +27,11 @@ const allowedLayerDependencies: Readonly<Record<LayerName, ReadonlySet<LayerName
   cli: new Set(["application", "host", "cli"]),
 };
 
+const packageSelfReferenceLayers: ReadonlyMap<string, LayerName> = new Map([
+  ["groma/plugin-sdk", "plugin-sdk"],
+  ["groma/plugin-sdk/conformance", "plugin-sdk"],
+]);
+
 const layersWithoutProductionExternalDependencies = new Set<LayerName>([
   "core",
   "plugin-sdk",
@@ -304,6 +309,18 @@ export async function checkArchitectureBoundaries(
     for (const specifier of dependencies.specifiers) {
       if (!specifier.startsWith(".")) {
         if (isTest && specifier === "bun:test") {
+          continue;
+        }
+
+        const targetLayer = packageSelfReferenceLayers.get(specifier);
+        if (targetLayer !== undefined) {
+          if (!allowedLayerDependencies[importerLayer].has(targetLayer)) {
+            violations.push({
+              file: displayFile,
+              reason: `${importerLayer} cannot depend on ${targetLayer}`,
+              specifier,
+            });
+          }
           continue;
         }
 

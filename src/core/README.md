@@ -53,8 +53,9 @@ not the supported third-party API; its staged handle is nominally distinct from 
 complete running graph. The public SDK owns third-party authoring ergonomics.
 
 The supported authoring façade is now `groma/plugin-sdk`. It exposes manifest,
-capability, lifecycle, and conformance contracts without exposing staged continuation;
-Core retains that Host-only bootstrap primitive.
+capability, and lifecycle contracts without staged continuation. Reusable verification
+lives only at `groma/plugin-sdk/conformance`; Core retains the Host-only bootstrap
+primitive.
 
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;

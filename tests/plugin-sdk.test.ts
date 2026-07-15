@@ -3,14 +3,16 @@ import { readFile } from "node:fs/promises";
 
 import {
   checkPluginPackageCompatibility,
-  createPluginRuntimeConformanceFixture,
   pluginPackageManifestApiVersion,
   pluginRuntimeApiVersion,
   pluginSdkApiVersion,
-  runPluginConformanceSuite,
-  type PluginConformanceFixture,
   type RunningPluginGraph,
 } from "groma/plugin-sdk";
+import {
+  createPluginRuntimeConformanceFixture,
+  runPluginConformanceSuite,
+  type PluginConformanceFixture,
+} from "groma/plugin-sdk/conformance";
 
 import {
   createPluginRegistrations,
@@ -41,6 +43,14 @@ describe("public plugin SDK", () => {
         version: "1.0.0",
       },
     });
+  });
+
+  test("keeps authoring and conformance on distinct public subpaths", async () => {
+    const authoring = await import("groma/plugin-sdk");
+    const conformance = await import("groma/plugin-sdk/conformance");
+
+    expect("runPluginConformanceSuite" in authoring).toBeFalse();
+    expect(typeof conformance.runPluginConformanceSuite).toBe("function");
   });
 
   test("runs the reusable suite over a third-party-shaped package", async () => {
@@ -76,6 +86,64 @@ describe("public plugin SDK", () => {
       diagnostics: [],
       ok: true,
     });
+  });
+
+  test("does not overlap deterministic graph instances", async () => {
+    const base = createPluginRuntimeConformanceFixture(() => createPluginRegistrations());
+    let activeGraphs = 0;
+    let maximumActiveGraphs = 0;
+    const exclusive: PluginConformanceFixture = {
+      cancellationDiagnosticCode: "plugin-start-cancelled",
+      start: async (request) => {
+        if (activeGraphs !== 0) {
+          return {
+            diagnostics: [
+              {
+                code: "exclusive-resource-overlap",
+                message: "A second graph tried to acquire an exclusive resource",
+              },
+            ],
+            ok: false as const,
+          };
+        }
+        const started = await base.start(request);
+        if (!started.ok) return started;
+        activeGraphs += 1;
+        maximumActiveGraphs = Math.max(maximumActiveGraphs, activeGraphs);
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          activeGraphs -= 1;
+        };
+        const graph: RunningPluginGraph = {
+          cancel: async () => {
+            try {
+              return await started.value.cancel();
+            } finally {
+              release();
+            }
+          },
+          capabilities: (id, version) => started.value.capabilities(id, version),
+          inspect: () => started.value.inspect(),
+          shutdown: async () => {
+            try {
+              return await started.value.shutdown();
+            } finally {
+              release();
+            }
+          },
+        };
+        return { ok: true as const, value: graph };
+      },
+    };
+
+    const report = await runPluginConformanceSuite({ fixture: exclusive });
+
+    expect(report.ok).toBeTrue();
+    expect(report.diagnostics).toEqual([]);
+    expect(maximumActiveGraphs).toBe(1);
+    expect(activeGraphs).toBe(0);
   });
 
   test("reports deterministic, lifecycle, cancellation, cardinality, and provider defects", async () => {

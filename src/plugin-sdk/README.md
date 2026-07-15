@@ -1,21 +1,25 @@
 # Groma Plugin SDK
 
 `groma/plugin-sdk` is the supported authoring boundary for built-in and third-party
-plugins. Plugin packages import this subpath, never files under Groma's `src/core`,
-`src/host`, or other implementation layers.
+plugins. `groma/plugin-sdk/conformance` is the separate reusable verification surface.
+Plugin packages import these public subpaths, never files under Groma's `src/core`,
+`src/host`, or other implementation layers. The authoring subpath does not re-export
+the conformance suite.
 
 The SDK intentionally stays small:
 
 - `pluginRuntimeApiVersion` and `PluginRegistration` describe one runtime plugin;
 - `pluginSdkApiVersion`, `pluginPackageManifestApiVersion`, and
   `PluginPackageManifest` describe the exact public/package contract;
-- `definePlugin()` and `definePluginPackage()` preserve supported version literals;
+- `definePlugin()` and `definePluginPackage()` are build-time authoring aids that
+  preserve supported version literals;
 - `checkPluginPackageCompatibility()` validates a bounded package declaration before
   any entry point is loaded;
-- `runPluginConformanceSuite()` is runner-agnostic and checks deterministic results,
-  lifecycle, cancellation, declared cardinality, and caller-supplied provider behavior;
-- `createPluginRuntimeConformanceFixture()` gives package authors the same runtime
-  fixture used to prove official contributions.
+- `groma/plugin-sdk/conformance` exports `runPluginConformanceSuite()`, which checks
+  deterministic results, lifecycle, cancellation, declared cardinality, and
+  caller-supplied provider behavior without depending on a test runner;
+- that subpath also exports `createPluginRuntimeConformanceFixture()`, giving package
+  authors the same runtime fixture used to prove official contributions.
 
 The SDK reuses Core's runtime types and implementation. It does not introduce a
 second resolver, lifecycle, or semantic path. Staged Phase 0 continuation is an
@@ -31,7 +35,8 @@ Package-manager metadata and the SDK manifest have different jobs. A package reg
 or `package.json` may advertise a release and its entry points for discovery. That
 metadata is not trusted runtime compatibility evidence. Before an entry point executes,
 the Host must obtain the exact six-field envelope accepted by
-`checkPluginPackageCompatibility()`:
+`checkPluginPackageCompatibility()` as inert static JSON/data. The envelope must be
+readable without evaluating a plugin entry point or any arbitrary package module:
 
 ```json
 {
@@ -45,10 +50,15 @@ the Host must obtain the exact six-field envelope accepted by
 ```
 
 Compatibility tokens and the exact package version are bounded to 128 characters.
-Every plugin entry is a bounded relative package subpath composed only of conservative
-ASCII alphanumeric, dot, underscore, and hyphen segments. Traversal, empty or dot
-segments, percent encoding, URL query or fragment syntax, controls, backslashes, and
-platform-ambiguous trailing dots are rejected rather than normalized.
+Every plugin entry is a bounded relative package subpath. Each segment starts with an
+ASCII alphanumeric character; later characters may also use dot, underscore, or
+hyphen, but a segment cannot end with a dot. Traversal, empty or dot segments, percent
+encoding, URL query or fragment syntax, controls, backslashes, leading punctuation,
+and platform-ambiguous trailing dots are rejected rather than normalized.
+
+`definePluginPackage()` only helps TypeScript authors preserve the supported literals
+while a build step emits that static data. Importing and calling the helper is not a
+Host discovery or compatibility-checking mechanism.
 
 The future Host package manager must reconcile discovery metadata, this canonical
 envelope, and its exact lock before execution. The SDK does not choose the envelope's

@@ -19,5 +19,4 @@ export {
   type RunningPluginGraphInspection,
 } from "../core/index.ts";
 export type { Diagnostic, Result } from "../core/index.ts";
-export * from "./conformance.ts";
 export * from "./manifest.ts";

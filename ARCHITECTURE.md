@@ -887,12 +887,16 @@ The public SDK separately defines the exact checked compatibility envelope:
 }
 ```
 
-`checkPluginPackageCompatibility()` validates and canonicalizes this exact envelope
-before any declared entry point executes. Package-manager work must fail closed when
-package metadata, this envelope, or an exact lock disagree. Configuration may narrow
-the checked entry-point list with includes and exclusions, but it cannot load an entry
-point absent from that list. GROM-24 owns how a Host locates, materializes, and locks
-the envelope; the SDK defines its compatibility meaning without acquiring packages.
+The envelope is inert static JSON/data that a Host can obtain without evaluating a
+declared entry point or arbitrary package module. `checkPluginPackageCompatibility()`
+validates and canonicalizes that already materialized data before any package code
+executes. `definePluginPackage()` is only a build-time TypeScript authoring aid for
+producing the static envelope; calling package code is not a discovery mechanism.
+Package-manager work must fail closed when package metadata, this envelope, or an exact
+lock disagree. Configuration may narrow the checked entry-point list with includes and
+exclusions, but it cannot load an entry point absent from that list. GROM-24 owns where
+a Host locates, materializes, and locks the envelope; the SDK defines its compatibility
+meaning without acquiring packages.
 
 ### Sources and Scopes
 
