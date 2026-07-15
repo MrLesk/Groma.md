@@ -36,10 +36,32 @@ describe("architecture boundary checker", () => {
       "core/index.ts": "export interface Entity { readonly id: string }",
       "host/index.ts": 'import "../persistence/index.ts"; import "../application/index.ts";',
       "persistence/index.ts": 'import type { Entity } from "../core/index.ts";',
+      "plugin-sdk/index.ts": 'export type { Entity } from "../core/index.ts";',
       "standard-model/index.ts": 'export type { Entity } from "../core/index.ts";',
     });
 
     expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([]);
+  });
+
+  test("keeps the public plugin SDK as a one-way facade over Core", async () => {
+    const sourceRoot = await createSourceFixture({
+      "core/index.ts": 'import "../plugin-sdk/index.ts";',
+      "host/index.ts": "export interface Host {}",
+      "plugin-sdk/index.ts": 'export type { Host } from "../host/index.ts";',
+    });
+
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
+      {
+        file: "core/index.ts",
+        reason: "core cannot depend on plugin-sdk",
+        specifier: "../plugin-sdk/index.ts",
+      },
+      {
+        file: "plugin-sdk/index.ts",
+        reason: "plugin-sdk cannot depend on host",
+        specifier: "../host/index.ts",
+      },
+    ]);
   });
 
   test("rejects every prohibited Core dependency family", async () => {
