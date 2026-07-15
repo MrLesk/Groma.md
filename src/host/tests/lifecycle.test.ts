@@ -2067,6 +2067,33 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
+  test("preserves the canonical unattested Windows plugin trust diagnostic", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure({
+            code: "plugin-package-trust-root-unattested",
+            message: "untrusted platform detail",
+          }),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-trust-root-unattested",
+          message:
+            "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
   test("rejects non-exact compositions and statuses without invoking accessors", async () => {
     const signal = signals();
     let getterCalls = 0;

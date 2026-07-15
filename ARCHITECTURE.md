@@ -990,6 +990,15 @@ Immediately before the first import of a new exact entry, the Host requires the 
 and bound to both canonical locations and the exact manifest and entry hashes; moving or
 changing either invalidates it.
 
+This delivery attests a persisted trust root only on POSIX, where the Host can require
+the real directory to be owned by the current user with mode `0700`. POSIX mode bits do
+not attest Windows ACL ownership. Until a bounded Windows owner/ACL capability exists,
+the Windows Host never reads or writes persisted plugin trust and never executes an
+enabled local plugin. An enabled blueprint package or any existing plugin user-data root
+fails with `plugin-package-trust-root-unattested` before import. A fresh Windows
+workspace with neither condition still starts normally and simply has no personal local
+plugins.
+
 The trust message must explain:
 
 > Plugins run with your full user permissions. Groma verifies what was installed, not

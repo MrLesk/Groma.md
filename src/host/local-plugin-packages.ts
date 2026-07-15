@@ -38,6 +38,7 @@ import { importLocalPluginModule } from "./plugin-module-loader.ts";
 import { isPathWithin } from "./path-containment.ts";
 
 export type PluginPackageScope = "blueprint" | "personal";
+export type LocalPluginPackageTrustRootPlatform = "posix" | "win32";
 
 export interface AddPluginPackageRequest {
   readonly scope: PluginPackageScope;
@@ -95,6 +96,8 @@ export interface LocalPluginPackageManagerOptions {
   readonly fileReadObserver?: (event: LocalPluginPackageFileReadEvent) => Promise<void> | void;
   readonly importModule?: (url: string) => Promise<unknown>;
   readonly resources: LocalResourceProvider;
+  /** Host-owned platform seam; production derives this from the running target. */
+  readonly trustRootPlatform?: LocalPluginPackageTrustRootPlatform;
   readonly userDataRoot: string;
   readonly workspaceRoot: string;
 }
@@ -838,7 +841,13 @@ function exportedPlugin(
   }
 }
 
-async function secureUserDataRoot(root: string): Promise<string> {
+async function secureUserDataRoot(
+  root: string,
+  platform: LocalPluginPackageTrustRootPlatform,
+): Promise<string> {
+  if (platform === "win32") {
+    throw new TypeError("Windows plugin trust roots require owner and ACL attestation");
+  }
   try {
     await lstat(root);
   } catch (error) {
@@ -850,16 +859,14 @@ async function secureUserDataRoot(root: string): Promise<string> {
   if (before.isSymbolicLink() || !before.isDirectory()) {
     throw new TypeError("Plugin package user data must be one real directory");
   }
-  if (process.platform !== "win32") {
-    const currentUser = process.getuid?.();
-    if (
-      (currentUser !== undefined && before.uid !== currentUser) ||
-      (before.mode & 0o777) !== 0o700
-    ) {
-      throw new TypeError(
-        "Plugin package user data must be owner-controlled and inaccessible to group or other users",
-      );
-    }
+  const currentUser = process.getuid?.();
+  if (
+    (currentUser !== undefined && before.uid !== currentUser) ||
+    (before.mode & 0o777) !== 0o700
+  ) {
+    throw new TypeError(
+      "Plugin package user data must be owner-controlled and inaccessible to group or other users",
+    );
   }
   const canonical = await realpath(root);
   const after = await lstat(root);
@@ -896,9 +903,18 @@ export function createLocalPluginPackageManager(
   const userStateLocator = requiredLocator("workspaces", `${workspaceIdentity}.json`);
   const importModule = options.importModule ?? importLocalPluginModule;
   const fileReadObserver = options.fileReadObserver;
+  const trustRootPlatform =
+    options.trustRootPlatform ?? (process.platform === "win32" ? "win32" : "posix");
+
+  function unattestedWindowsTrustRoot<T>(): Result<T> {
+    return packageFailure(
+      "plugin-package-trust-root-unattested",
+      "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
+    );
+  }
 
   const userResources = async (): Promise<LocalResourceProvider> => {
-    const canonical = await secureUserDataRoot(requestedUserDataRoot);
+    const canonical = await secureUserDataRoot(requestedUserDataRoot, trustRootPlatform);
     if (isPathWithin(workspaceRoot, canonical)) {
       throw new TypeError("Plugin package user data must live outside the observed workspace");
     }
@@ -918,6 +934,7 @@ export function createLocalPluginPackageManager(
   };
 
   const readUserState = async (): Promise<Result<UserPackageState>> => {
+    if (trustRootPlatform === "win32") return unattestedWindowsTrustRoot();
     try {
       await lstat(requestedUserDataRoot);
     } catch (error) {
@@ -945,6 +962,7 @@ export function createLocalPluginPackageManager(
     state: UserPackageState,
     expected: UserPackageState,
   ): Promise<Result<void>> => {
+    if (trustRootPlatform === "win32") return unattestedWindowsTrustRoot();
     const preflight = preflightUserState(state);
     if (!preflight.ok) return preflight;
     const stateBytes = preflight.value;
@@ -1539,8 +1557,6 @@ export function createLocalPluginPackageManager(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
       }
-      const state = await readUserState();
-      if (!state.ok) return state;
       const lock =
         configuration.packageDeclarations.length === 0 ? success(emptyLock()) : await readLock();
       if (!lock.ok) return lock;
@@ -1568,6 +1584,22 @@ export function createLocalPluginPackageManager(
         }
         selections.push({ locked, scope: "blueprint" });
       }
+      if (trustRootPlatform === "win32") {
+        if (selections.some((selection) => selection.locked.enabled.length > 0)) {
+          return unattestedWindowsTrustRoot();
+        }
+        try {
+          await lstat(requestedUserDataRoot);
+          return unattestedWindowsTrustRoot();
+        } catch (error) {
+          if (errorCode(error) !== "ENOENT") return unattestedWindowsTrustRoot();
+        }
+        return success(
+          Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
+        );
+      }
+      const state = await readUserState();
+      if (!state.ok) return state;
       for (const locked of state.value.packages) selections.push({ locked, scope: "personal" });
       const registrations: PluginRegistration[] = [];
       const personalPluginIds: string[] = [];

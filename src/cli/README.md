@@ -38,6 +38,11 @@ The initial executable entry is a bounded bundled/self-contained module. TypeScr
 syntax and `node:` built-ins are supported, while relative and bare runtime imports are
 not; the Host and SDK READMEs document this exact-byte compatibility boundary.
 
+Persisted local-plugin trust and execution currently fail closed on Windows with
+`plugin-package-trust-root-unattested`, because this delivery has no bounded Windows ACL
+owner attestor. A fresh Windows workspace without enabled local plugins or an existing
+plugin user-data root still starts normally; POSIX trust behavior is unchanged.
+
 Package commands use a management-only Host composition: previously enabled entries are
 not loaded or started. Inspect reports manifest or enabled-entry drift without executing
 it, and disable/remove remain available as recovery operations when ordinary startup

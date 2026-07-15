@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   appendFile,
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -724,6 +725,62 @@ describe("local plugin package manager", () => {
       diagnostics: [{ code: "plugin-package-user-state-unavailable" }],
       ok: false,
     });
+  });
+
+  test("never authorizes execution from an unattested Windows trust root", async () => {
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-windows-trust", [
+      "./plugins/entry.js",
+    ]);
+    const trusted = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.windows-trust") }),
+      trustRootPlatform: "posix",
+      ...context,
+    });
+    await trusted.add({ scope: "blueprint", source });
+    expect(
+      await trusted.enable({
+        entry: "./plugins/entry.js",
+        name: "example-windows-trust",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+
+    let imports = 0;
+    const unattested = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration("example.windows-trust") };
+      },
+      trustRootPlatform: "win32",
+      ...context,
+    });
+    expect(await unattested.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "plugin-package-trust-root-unattested" }],
+      ok: false,
+    });
+    expect(imports).toBe(0);
+
+    const fresh = await fixture();
+    await rm(fresh.userDataRoot, { recursive: true });
+    const freshWindows = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(fresh.resources),
+      importModule: async () => {
+        imports += 1;
+        return {};
+      },
+      trustRootPlatform: "win32",
+      ...fresh,
+    });
+    expect(await freshWindows.loadEnabled()).toEqual({
+      ok: true,
+      value: { personalPluginIds: [], registrations: [] },
+    });
+    await expect(lstat(fresh.userDataRoot)).rejects.toThrow();
+    expect(imports).toBe(0);
   });
 
   test("compares the exact lock under coordination before publishing blueprint state", async () => {

@@ -625,6 +625,7 @@ export function createDefaultBootstrapRegistry(
       const packageManager = createLocalPluginPackageManager({
         bootstrap,
         resources,
+        trustRootPlatform: selectedTarget.platform === "win32" ? "win32" : "posix",
         userDataRoot,
         workspaceRoot: convention.value.workspaceRoot,
       });

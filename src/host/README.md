@@ -120,6 +120,13 @@ still load secondary code through absolute URL imports, computed dynamic imports
 other runtime facilities. Such secondary code is outside the lock, so local-path
 packages do not claim to be remotely reproducible complete artifacts.
 
+Persisted trust is currently available only on POSIX. The Host requires the real
+user-data root to belong to the current user with mode `0700`; it does not pretend those
+mode bits attest Windows ACLs. Without a bounded Windows owner/ACL attestor, Windows
+fails `plugin-package-trust-root-unattested` before reading or writing plugin trust or
+importing an enabled local entry. A fresh Windows workspace with no enabled blueprint
+entry and no plugin user-data root still starts normally without personal plugins.
+
 Personal entries must provide and require only `groma.presentation.*` capabilities.
 This keeps canonical mutation capabilities out of personal runtime resolution; it is
 not a security sandbox, because trusted plugins still execute with full user permissions.

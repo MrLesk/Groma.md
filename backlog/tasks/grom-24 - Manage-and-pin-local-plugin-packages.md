@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 07:47'
+updated_date: '2026-07-15 08:03'
 labels: []
 milestone: m-4
 dependencies:
@@ -16,6 +16,7 @@ references:
   - ARCHITECTURE.md
 modified_files:
   - ARCHITECTURE.md
+  - backlog/tasks/grom-24 - Manage-and-pin-local-plugin-packages.md
   - scripts/architecture-boundaries.ts
   - scripts/standalone-compiler.ts
   - scripts/tests/architecture-boundaries.test.ts
@@ -69,13 +70,15 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Make every package writer preflight the complete serialized configuration, lock, and user state through the same bounded semantic readers before publication; preserve prior bytes on invalid portable spelling or cardinality overflow.
-2. Replace path precheck plus readFile with a no-follow bounded open-handle snapshot that reads at most max+1 and revalidates the opened/path identity; add platform-aware containment and complete remote shorthand rejection.
-3. Bind plugin evaluation to the exact verified entry bytes using an immutable in-memory module URL, remove path/query integrity assumptions, and document the supported bundled-entry import semantics.
-4. Harden the user-data trust root against links/junctions, wrong ownership, and group/world access; add scope to canonical trust grants so removal prunes the stored identity without source availability.
-5. Add lock compare-and-swap under blueprint coordination while preserving explicit lock-first disable/remove reconciliation after interrupted publication.
-6. Add deterministic adversarial regressions for canonical writer symmetry, 65th-package refusal, byte swaps, file link/swap/growth, trust-root permissions, Windows cross-volume containment, stale lock CAS, Git shorthand, and symlink-source trust revocation; update architecture/Host/SDK docs.
-7. Run focused suites, full bun run check, four-target verification, Backlog validation, and diff review; update exact evidence and return GROM-24 to Done only when all findings are objectively green.
+1. Keep canonical configuration, lock, and user-state writers symmetric with bounded readers and preserve exact prior bytes on invalid inputs.
+2. Keep package file materialization bound to no-follow stable handle snapshots and platform-aware containment.
+3. Keep executable evaluation bound to captured verified bytes through an immutable in-memory module with the documented self-contained entry contract.
+4. Keep POSIX trust roots owner-controlled, real, and mode-private; bind and prune exact grants by stable scope and package identity.
+5. Keep blueprint configuration and lock publication compare-and-swap coordinated while preserving lock-first recovery.
+6. Keep remote shorthand rejection, adversarial filesystem regressions, and four-target compilation coverage.
+7. Add an explicit Host platform input and fail closed for persisted trust and local plugin execution on Windows until a bounded owner/ACL attestor exists; preserve fresh Windows startup without local plugin state.
+8. Add a deterministic platform-injected regression proving an existing exact grant under an unattested Windows root cannot authorize import, plus stable lifecycle diagnostics and honest architecture/Host/CLI documentation.
+9. Record the exact modified-file set including the Backlog task itself; run focused tests, bun run check, bun run check:targets, backlog doctor, and diff review before returning the task to Done.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -88,10 +91,16 @@ The first exact-byte implementation used a base64 data URL, but a full 4 MiB com
 Independent review findings are closed with adversarial coverage: invalid portable spellings and the 65th declaration preserve exact state bytes; verified entry path swaps still execute only the captured bytes; manifest link/swap/growth races fail closed; permissive and linked trust roots are rejected; Windows cross-volume containment rejects absolute relative() results; concurrent lock changes fail compare-and-swap without overwriting peer state; Git shorthand is rejected in both scopes before user-state work; and symlink-source remove/re-add requires trust again. Existing lock-first recovery remains green.
 
 Final validation: focused Host/CLI tests passed; bun run check passed format, strict typecheck, architecture boundaries, 535 tests / 0 failures, native compiled-binary package workflow at the exact 4 MiB entry bound, and Iteration 1A crash recovery. bun run check:targets passed for macOS arm64, Linux x64, Windows x64, and Windows arm64. backlog doctor reported no duplicate task IDs, and git diff --check passed.
+
+Closure review reopened GROM-24 at ea5c09a684cfd0b10e66b606dfa96b53b80623e7. The remaining P1 is Windows trust-root attestation: POSIX uid/mode checks do not attest Windows ACL ownership. The bounded delivery will fail closed instead of parsing localized shell output or treating Windows mode bits as ACL evidence.
+
+Windows trust follow-up: the local package manager now snapshots a Host-owned POSIX/Windows trust-root platform input. POSIX keeps real-directory, current-owner, and exact 0700 checks. Windows does not read or write persisted plugin trust and refuses enabled local-plugin execution with plugin-package-trust-root-unattested until a bounded owner/ACL attestor exists. Fresh Windows startup remains available only when no enabled blueprint plugin and no plugin user-data root exists; it starts without personal local plugins. No POSIX mode heuristic or localized shell-output parser was introduced.
+
+The deterministic regression creates and persists a valid exact grant under the POSIX path, then injects the Windows platform over that same workspace and proves the persisted grant cannot authorize execution (zero imports and the stable diagnostic). It also proves a fresh Windows workspace starts without creating a trust root. The Host lifecycle canonicalizes the diagnostic. Final validation: focused Host tests passed 73 tests / 0 failures; bun run check passed format, strict typecheck, architecture boundaries, 537 tests / 0 failures, native 4 MiB compiled plugin execution, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Hardened GROM-24 after independent review without changing its product scope. Every package-state writer now proves reader symmetry before publication; file reads use bounded no-follow handle snapshots; execution uses the exact captured bytes through an immutable in-memory module; the trust root and grants are fail-closed; blueprint updates compare-and-swap both configuration and lock; remote shorthand and cross-volume escapes are rejected; and trust pruning survives missing symlink sources. Added deterministic regressions for all eight findings and documented the bundled/self-contained entry contract, including its non-sandbox boundary. Verified with 535 repository tests, native 4 MiB compiled plugin execution, Iteration 1A recovery, and all four target builds.
+Completed GROM-24 with closure-review hardening. In addition to canonical writer symmetry, stable file snapshots, exact captured-byte execution, scoped trust, coordinated lock CAS, and adversarial package regressions, persisted local-plugin trust now fails closed on Windows because the Host cannot yet attest ACL ownership. Existing grants cannot authorize Windows execution, while a fresh Windows workspace without local-plugin state still starts normally. Documentation states the exact limitation and non-sandbox boundary. Verified by 537 repository tests, a platform-injected persisted-grant regression with zero imports, native 4 MiB compiled plugin execution, Iteration 1A recovery, four target builds, Backlog doctor, and diff checks.
 <!-- SECTION:FINAL_SUMMARY:END -->

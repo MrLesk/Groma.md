@@ -191,6 +191,8 @@ const bootstrapFailureMessages = Object.freeze({
   "plugin-package-source-unavailable": "Local plugin package source is unavailable",
   "plugin-package-state-limit-exceeded":
     "Local plugin package state exceeds its configured byte bound",
+  "plugin-package-trust-root-unattested":
+    "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
   "plugin-package-user-state-malformed": "Local plugin package state is malformed",
   "plugin-package-user-state-unavailable": "Local plugin package state is unavailable",
   "project-plugin-validation-required":
