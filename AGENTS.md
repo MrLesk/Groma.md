@@ -41,6 +41,24 @@ state, or fail-closed ambiguity in the name of speed. These invariants are what 
 visual blueprint remain useful after the first scan instead of becoming a stale
 diagram.
 
+## Brand and Visual Direction
+
+Before designing or implementing any public Groma surface, renderer, visual artifact,
+logo use, or presentation styling, read [brand/README.md](brand/README.md) and
+[brand/STYLE.md](brand/STYLE.md).
+
+The first visual renderer is a single luminous white architectural-sheet surface with
+graphite structure and exact Groma green `#1D9E75` as its restrained surveyed-point
+accent. It uses the lowercase `groma.md` identity, recursive technical-drawing
+containment, dense but bounded information, and soft neutral depth only where the
+style guide permits it. Do not introduce blueprint blue, a dark-mode switch,
+dashboard chrome, cartoon styling, or effects on the official marks without a new
+explicit product decision from Alex.
+
+The approved mockup in `brand/references/` is a non-normative visual reference. Brand
+rules, the written style guide, accessibility, and renderer semantics take precedence
+over generated-image details.
+
 ## Pull Requests
 
 Create every pull request in **ready-for-review** state, never as a draft. Automated
