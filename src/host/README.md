@@ -6,12 +6,19 @@ assembles explicit capabilities without placing its technology choices in Core.
 ## Default local plugin profile
 
 `createDefaultBootstrapRegistry` is the official local composition seam. It constructs
-six explicit built-in plugin registrations and resolves them through Core's
-`PluginRuntime`: Phase 0 local resources, then Phase 1 kernel, Standard Model,
-persistence, application/workspace, and surface plugins. These are ordinary runtime
-registrations with exact manifests, capability declarations, dependencies, and start
-results—the same path available to a third-party registration. They are not a wrapper
-around a second private composition path.
+eight explicit built-in plugin registrations and resolves them through Core's
+`PluginRuntime`: Phase 0 local resources, configuration discovery, and YAML parsing,
+then Phase 1 kernel, Standard Model, persistence, application/workspace, and surface
+plugins. These are ordinary runtime registrations with exact manifests, capability
+declarations, dependencies, and start results—the same path available to a third-party
+registration. They are not a wrapper around a second private composition path.
+
+Phase 0 starts once as an owned staged graph. The Host reads its replaceable
+`groma.resources/v1`, `groma.configuration-discovery/v1`, and
+`groma.configuration-parser/v1` capabilities into a typed workspace locator and base
+configuration, selects the Host-owned Phase 1 registration set, resolves the complete
+graph, and continues without restarting Phase 0. A discovery, parsing, selection, or
+continuation failure cleans the Phase 0 providers in dependency-safe order.
 
 The running graph exposes deterministic inspection for conformance and host tests.
 Every named `HostComposition` capability is the exact opaque value registered in that
@@ -23,9 +30,14 @@ receives only `WorkspaceAccessCapability`, not persistence, graph, runtime, or
 transaction internals.
 
 The default profile uses exact capability version `1.0.0` and versioned capability IDs
-such as `groma.resources/v1`. Package/configuration discovery, dynamic imports, trust,
-and acquisition are not part of this composition; later host work selects additional
-registrations before calling the same resolver.
+such as `groma.resources/v1`. It has no package acquisition, dynamic import, trust
+prompt, or project-code execution path. Optional registration inputs are explicitly
+Host-owned and already validated; configuration that requests any non-official plugin
+fails with `project-plugin-validation-required` before those inputs are inspected.
+The diagnostic states that project plugins are unsupported in this release pending
+package and trust validation. GROM-24 owns that validation and must cross the fence
+before it may supply a project registration. A Host embedder that violates the
+prevalidated registration seam instead receives `host-runtime-registration-invalid`.
 
 Registry construction snapshots the selected coordination root, entropy source,
 verification-only resource fault injector, and surface before composition can await.
@@ -36,19 +48,50 @@ the production CLI never supplies one and has no environment-controlled crash pa
 The process context supplies one absolute workspace root. The host does not search its
 ancestors. The 1A CLI uses its process working directory as that root.
 
-## Minimal workspace document
+## Bootstrap workspace document
 
-The only 1A marker is `groma/groma.yaml`, and its complete canonical UTF-8 content is:
+The configuration resource is `groma/groma.yaml`. Initialization still writes the
+smallest canonical UTF-8 document, preserving every existing workspace:
 
 ```yaml
 schema: groma/v0.1
 ```
 
-This intentionally minimal schema has exactly one field and one trailing newline.
-Different bytes, extra fields, aliases, package declarations, and plugin declarations
-are configuration conflicts in 1A and are never overwritten. Package and plugin
-configuration belongs to the 1B bootstrap schema and runtime path; the 1A host neither
-interprets nor executes it.
+The bounded 1B schema reserves one optional `plugins` sequence for Host-profile
+selection:
+
+```yaml
+schema: groma/v0.1
+plugins: []
+```
+
+`schema` and `plugins` are the only keys. The parser rejects invalid UTF-8, anchors,
+aliases, explicit tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys,
+and more than 64 requests. Requests are sorted by code unit for deterministic selection.
+The shipped default CLI has no optional official contributions today. Required built-in
+Phase 1 plugins already run; listing one of their IDs is accepted but redundant and adds
+nothing. A Host embedder may inject a prevalidated optional official registration. An
+official ID unavailable in that Host produces `runtime-plugin-unavailable`. A project ID
+produces `project-plugin-validation-required`, states the current release limitation,
+and executes no project code.
+
+The local discovery provider uses the same provider-relative
+`groma/groma.yaml` locator for x64 and arm64 source execution on macOS, Linux, and
+Windows. Architecture does not change POSIX or Windows path syntax. Artifact verification
+remains limited to the four promised targets: macOS arm64, Linux x64, Windows x64, and
+Windows arm64. Core sees neither paths nor YAML.
+
+Zero candidates is the typed missing-workspace state. Multiple candidates fail with
+`workspace-discovery-conflict`; invalid YAML fails with
+`workspace-configuration-malformed`; and competing single-provider Phase 0
+capabilities fail with `bootstrap-provider-ambiguous` before any provider starts.
+The Host re-reads and compares the canonical configuration immediately before Phase 1;
+non-equivalent changes fail with `workspace-configuration-changed` before a selected
+optional plugin starts. Workspace inspection repeats the same semantic comparison so a
+later change cannot produce a usable mismatched composition. A peer may only move an
+initially missing workspace to the same empty canonical configuration. Transient
+discovery, parsing, or configuration-access failures retain their infrastructure
+diagnostic and are never presented as proven configuration drift.
 
 Discovery is bounded and read-only. A missing marker leaves initialization available
 and does not create a journal or canonical intent files. Initialization takes a
@@ -69,7 +112,7 @@ the marker is absent, and only its canonical bounded `resource-too-large` failur
 a configuration conflict. Malformed, accessor-bearing, proxied, extra, or secret-bearing
 lookalikes are retryable `workspace-configuration-provider-failure` state. Successful
 bytes must be an intrinsic, non-proxy `Uint8Array`; the host makes one bounded owned copy
-before comparing the exact marker. A transient provider failure remains publicly visible
+before parsing it through the selected configuration capability. A transient provider failure remains publicly visible
 through the existing conflict status shape, but initialize and recover re-run inspection;
 a proven byte conflict remains stable and is never overwritten.
 
@@ -231,5 +274,5 @@ The build verifies Darwin arm64, Linux x64 baseline, Windows x64 baseline, and W
 arm64 by cross-compilation. Only the current native target is executed by this workflow;
 the other target claims are compilation portability, not native runtime certification.
 
-The 1A host contains no HTTP server, React bundling, project plugin discovery, dynamic
-project imports, or untrusted project-code execution.
+The Host contains no HTTP server, React bundling, dynamic project import, package
+acquisition, trust storage, or unvalidated project-code execution.

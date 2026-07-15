@@ -90,7 +90,9 @@ describe("default bootstrap registry", () => {
     expect(composed.value.plugins?.inspect()).toMatchObject({
       apiVersion: "groma.plugin/v1",
       plugins: [
+        { id: "official.configuration-parser", phase: 0 },
         { id: "official.resources", phase: 0 },
+        { id: "official.configuration-discovery", phase: 0 },
         { id: "official.kernel", phase: 1 },
         { id: "official.model", phase: 1 },
         { id: "official.persistence", phase: 1 },
@@ -119,6 +121,12 @@ describe("default bootstrap registry", () => {
       expect(providers).toHaveLength(1);
       expect(providers?.[0]?.value).toBe(composed.value[field]);
     }
+    for (const id of [
+      defaultHostCapabilityIds.configurationDiscovery,
+      defaultHostCapabilityIds.configurationParser,
+    ]) {
+      expect(composed.value.plugins?.capabilities(id, "1.0.0")).toHaveLength(1);
+    }
   });
 
   test("reports invalid process context without leaking the supplied path", async () => {
@@ -131,6 +139,23 @@ describe("default bootstrap registry", () => {
         {
           code: "invalid-host-process-context",
           message: "Host workspace root must be an absolute path",
+        },
+      ],
+      ok: false,
+    });
+  });
+
+  test("preserves an actionable unsupported runtime target diagnostic", async () => {
+    const registry = createDefaultBootstrapRegistry({
+      surface: idleSurface(),
+      target: { architecture: "x64", platform: "freebsd" as never },
+    });
+
+    expect(await registry.compose({ workspaceRoot: "/absolute/workspace" })).toEqual({
+      diagnostics: [
+        {
+          code: "unsupported-bootstrap-target",
+          message: "Workspace bootstrap does not support this runtime platform or architecture",
         },
       ],
       ok: false,
@@ -286,7 +311,7 @@ describe("default bootstrap registry", () => {
       diagnostics: [
         {
           code: "host-composition-failed",
-          message: "Built-in plugin startup was cancelled",
+          message: "Selected plugin startup failed",
         },
       ],
       ok: false,

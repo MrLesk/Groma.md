@@ -145,7 +145,10 @@ type ValidatedRecoveryOutcome =
   | { readonly report: WorkspaceRecoveryReport; readonly state: "completed" };
 
 type ObservedBootstrapOutcome =
-  | { readonly state: "bootstrap-failed" }
+  | {
+      readonly diagnostic?: Diagnostic;
+      readonly state: "bootstrap-failed";
+    }
   | { readonly state: "cancelled" }
   | { readonly state: "invalid-composition" }
   | { readonly composition: ContainedHostComposition; readonly state: "composed" };
@@ -155,6 +158,44 @@ type ObservedRecoveryOutcome =
   | { readonly state: "malformed" }
   | { readonly state: "rejected" }
   | { readonly recovered: ValidatedRecoveryOutcome; readonly state: "validated" };
+
+const bootstrapFailureMessages = Object.freeze({
+  "bootstrap-provider-ambiguous":
+    "Bootstrap capabilities must have exactly one compatible provider",
+  "host-runtime-registration-invalid": "Host runtime registrations must use the official namespace",
+  "project-plugin-validation-required":
+    "Project-provided plugins are unsupported in this release pending package and trust validation",
+  "runtime-plugin-unavailable": "A requested official runtime plugin is unavailable in this host",
+  "unsupported-bootstrap-target":
+    "Workspace bootstrap does not support this runtime platform or architecture",
+  "workspace-configuration-conflict": "Workspace configuration is incompatible with this host",
+  "workspace-configuration-changed":
+    "Workspace configuration changed during bootstrap; restart after changes settle",
+  "workspace-configuration-malformed":
+    "Workspace configuration must use the documented groma/v0.1 schema",
+  "workspace-configuration-parser-failed": "Workspace configuration parsing failed",
+  "workspace-configuration-provider-failure": "Workspace configuration access failed",
+  "workspace-discovery-conflict": "More than one workspace configuration was discovered",
+  "workspace-discovery-failed": "Workspace configuration discovery failed",
+} as const);
+
+function containedBootstrapFailure(value: unknown): ObservedBootstrapOutcome {
+  const diagnostics = copyHostDiagnostics(value, 100, "invalid-host-bootstrap-result");
+  if (!diagnostics.ok || diagnostics.value.length !== 1) {
+    return { state: "bootstrap-failed" };
+  }
+  const code = diagnostics.value[0]!.code;
+  if (!Object.hasOwn(bootstrapFailureMessages, code)) {
+    return { state: "bootstrap-failed" };
+  }
+  return {
+    diagnostic: diagnostic(
+      code,
+      bootstrapFailureMessages[code as keyof typeof bootstrapFailureMessages],
+    ),
+    state: "bootstrap-failed",
+  };
+}
 
 function validatedRecoveryOutcome(value: unknown): Result<ValidatedRecoveryOutcome> {
   const result = inspectHostRecord(
@@ -838,7 +879,13 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
               "invalid-host-bootstrap-result",
               "Host bootstrap result",
             );
-            if (!result.ok || result.value.ok !== true) {
+            if (!result.ok) {
+              return { state: "bootstrap-failed" as const };
+            }
+            if (result.value.ok === false) {
+              return containedBootstrapFailure(result.value.diagnostics);
+            }
+            if (result.value.ok !== true) {
               return { state: "bootstrap-failed" as const };
             }
             const composition = canonicalComposition(result.value.value);
@@ -861,7 +908,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             scheduleLateCompositionCleanup(composed.promise);
             outcome = cancelled(cancellationSignal);
           } else if (first.state === "bootstrap-failed") {
-            outcome = startupFailure("host-bootstrap-failed", "Host bootstrap failed");
+            outcome =
+              first.diagnostic === undefined
+                ? startupFailure("host-bootstrap-failed", "Host bootstrap failed")
+                : startupFailure(first.diagnostic.code, first.diagnostic.message);
           } else if (first.state === "invalid-composition") {
             outcome = startupFailure(
               "invalid-host-composition",

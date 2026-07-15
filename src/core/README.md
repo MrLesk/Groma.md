@@ -41,12 +41,16 @@ registered more than once, every registration with that ID is excluded from the 
 graph; registration order can never choose a first winner or leak one duplicate's
 capabilities into dependency resolution.
 
-In GROM-21, phases order and layer the registrations already supplied to one explicit
-`resolve()` call. This runtime does not use Phase 0 outputs to discover a new Phase 1
-membership set. GROM-22 owns workspace configuration discovery and selection of that
-later membership and may evolve this still-internal runtime. GROM-23 then publishes the
-supported SDK and settles third-party ergonomics; GROM-21 deliberately does not design
-staged loading or rename phases into a different abstraction.
+The internal bootstrap path may start the resolved Phase 0 prefix with
+`startPhaseZero()`, inspect its explicit capabilities, resolve a later graph whose Phase
+1 membership came from Host configuration, and continue it exactly once. Continuation
+requires the exact same Phase 0 registration objects and manifests, so configuration
+cannot swap a provider that has already executed. The staged prefix owns its providers:
+failure before continuation shuts them down, a Phase 1 startup failure rolls every
+started plugin back in dependency order, and successful continuation transfers their
+lifecycle into the complete running graph. This is a reusable internal Core primitive,
+not the supported third-party API; its staged handle is nominally distinct from a
+complete running graph. GROM-23 owns the published SDK and its ergonomics.
 
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;

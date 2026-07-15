@@ -3,8 +3,15 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { createDefaultBootstrapRegistry } from "../../host/index.ts";
 import { CLI_EXIT, type CliInputSource } from "../contracts.ts";
-import { GROMA_VERSION, HELP_TEXT, runProgram, type ProgramOutput } from "../program.ts";
+import {
+  GROMA_VERSION,
+  HELP_TEXT,
+  runProgram,
+  type ProgramOptions,
+  type ProgramOutput,
+} from "../program.ts";
 
 const roots: string[] = [];
 
@@ -481,6 +488,223 @@ describe("CLI program", () => {
     expect(captured.output[0]).toContain("command: overview\nexit-code: 3\nok: false\n");
     expect(captured.output[0]).toContain("workspace-configuration-conflict");
     expect(captured.output[0]).not.toContain(root);
+  });
+
+  test("keeps transient bootstrap reads in the infrastructure exit class and cleans once", async () => {
+    for (const failureRead of [2, 3] as const) {
+      const root = await workspace();
+      await Bun.write(
+        path.join(root, "groma", "groma.yaml"),
+        "schema: groma/v0.1\nplugins:\n  - official.alpha\n",
+      );
+      const events: string[] = [];
+      let reads = 0;
+      const probe = {
+        manifest: {
+          apiVersion: "groma.plugin/v1" as const,
+          id: `official.bootstrap-fault-probe-${failureRead}`,
+          phase: 0 as const,
+          provides: [],
+          requires: [],
+          version: "1.0.0",
+        },
+        start: () => {
+          events.push("phase-zero:start");
+          return {
+            capabilities: [],
+            stop: () => {
+              events.push("phase-zero:stop");
+            },
+          };
+        },
+      };
+      const optional = {
+        manifest: {
+          apiVersion: "groma.plugin/v1" as const,
+          id: "official.alpha",
+          phase: 1 as const,
+          provides: [],
+          requires: [],
+          version: "1.0.0",
+        },
+        start: () => {
+          events.push("optional:start");
+          return {
+            capabilities: [],
+            stop: () => {
+              events.push("optional:stop");
+            },
+          };
+        },
+      };
+      const captured = captureOutput();
+      const exitCode = await runProgram(
+        ["--format", "json", "component", "roots", "--limit", "1"],
+        captured,
+        {
+          createRegistry: (surface) =>
+            createDefaultBootstrapRegistry({
+              additionalBootstrapPlugins: [probe],
+              additionalRuntimePlugins: [optional],
+              resourceFaultInjector: (phase) => {
+                if (phase !== "read") return;
+                reads += 1;
+                if (reads === failureRead) throw new Error("transient read failure");
+              },
+              surface,
+            }),
+          terminal: { stdin: false, stdout: false },
+          workspaceRoot: root,
+        },
+      );
+
+      expect(exitCode, String(failureRead)).toBe(CLI_EXIT.infrastructure);
+      expect(captured.errors, String(failureRead)).toEqual([]);
+      expect(captured.output, String(failureRead)).toHaveLength(1);
+      const envelope = JSON.parse(captured.output[0]!) as JsonEnvelope;
+      expect(envelope, String(failureRead)).toMatchObject({
+        exitCode: CLI_EXIT.infrastructure,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code:
+                failureRead === 2
+                  ? "workspace-discovery-failed"
+                  : "workspace-configuration-provider-failure",
+              message:
+                failureRead === 2
+                  ? "Workspace configuration discovery failed"
+                  : "Workspace configuration access failed",
+            },
+          ],
+          status: "startup-failure",
+        },
+      });
+      expect(captured.output[0], String(failureRead)).not.toContain(
+        "workspace-configuration-changed",
+      );
+      expect(reads, String(failureRead)).toBe(failureRead);
+      expect(
+        events.filter((event) => event === "phase-zero:start"),
+        String(failureRead),
+      ).toHaveLength(1);
+      expect(
+        events.filter((event) => event === "phase-zero:stop"),
+        String(failureRead),
+      ).toHaveLength(1);
+      expect(
+        events.filter((event) => event === "optional:start"),
+        String(failureRead),
+      ).toHaveLength(failureRead === 2 ? 0 : 1);
+      expect(
+        events.filter((event) => event === "optional:stop"),
+        String(failureRead),
+      ).toHaveLength(failureRead === 2 ? 0 : 1);
+    }
+  });
+
+  test("separates unsupported project requests from invalid Host registrations", async () => {
+    const userRoot = await workspace();
+    await Bun.write(
+      path.join(userRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins:\n  - acme.project\n",
+    );
+    const userOutput = captureOutput();
+    const userExit = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      userOutput,
+      {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: userRoot,
+      },
+    );
+    expect(userExit).toBe(CLI_EXIT.workspace);
+    expect(JSON.parse(userOutput.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.workspace,
+      result: {
+        diagnostics: [
+          {
+            code: "project-plugin-validation-required",
+            message:
+              "Project-provided plugins are unsupported in this release pending package and trust validation",
+          },
+        ],
+      },
+    });
+
+    const embedderRoot = await workspace();
+    const embedderOutput = captureOutput();
+    const embedderExit = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      embedderOutput,
+      {
+        createRegistry: (surface) =>
+          createDefaultBootstrapRegistry({
+            additionalRuntimePlugins: [
+              {
+                manifest: {
+                  apiVersion: "groma.plugin/v1",
+                  id: "acme.host-registration",
+                  phase: 1,
+                  provides: [],
+                  requires: [],
+                  version: "1.0.0",
+                },
+                start: () => ({ capabilities: [] }),
+              },
+            ],
+            surface,
+          }),
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: embedderRoot,
+      },
+    );
+    expect(embedderExit).toBe(CLI_EXIT.infrastructure);
+    expect(JSON.parse(embedderOutput.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.infrastructure,
+      result: {
+        diagnostics: [
+          {
+            code: "host-runtime-registration-invalid",
+            message: "Host runtime registrations must use the official namespace",
+          },
+        ],
+      },
+    });
+  });
+
+  test("keeps unsupported runtime targets in the infrastructure exit class", async () => {
+    const root = await workspace();
+    const captured = captureOutput();
+    const createRegistry: NonNullable<ProgramOptions["createRegistry"]> = (surface) =>
+      createDefaultBootstrapRegistry({
+        surface,
+        target: { architecture: "x64", platform: "freebsd" as never },
+      });
+
+    const exitCode = await runProgram(
+      ["--format", "json", "component", "roots", "--limit", "1"],
+      captured,
+      {
+        createRegistry,
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      },
+    );
+
+    expect(exitCode).toBe(CLI_EXIT.infrastructure);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      exitCode: CLI_EXIT.infrastructure,
+      result: {
+        diagnostics: [
+          {
+            code: "unsupported-bootstrap-target",
+            message: "Workspace bootstrap does not support this runtime platform or architecture",
+          },
+        ],
+      },
+    });
   });
 
   test("rejects invalid UTF-8 file input without leaking the path", async () => {

@@ -23,10 +23,12 @@ import {
   type TransactionProvider,
 } from "../core/index.ts";
 import {
+  parseWorkspaceResourceLocator,
   workspaceResourceLocator,
   type LocalCoordinationLease,
   type LocalResourceProvider,
   type StagedReplacementHandle,
+  type WorkspaceResourceLocator,
 } from "../persistence/index.ts";
 import type {
   WorkspaceAccessCapability,
@@ -80,10 +82,18 @@ export interface LocalWorkspaceBounds {
  */
 export interface LocalWorkspaceCapabilityOptions {
   readonly bounds?: Partial<LocalWorkspaceBounds>;
+  readonly configuration?: LocalWorkspaceConfiguration;
   readonly operations: () => ApplicationOperations;
   readonly resources: LocalResourceProvider;
   readonly stateDecoder: ApplicationSnapshotStateDecoder;
   readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
+}
+
+export interface LocalWorkspaceConfiguration {
+  readonly initialDocument: Uint8Array;
+  isCompatible(bytes: Uint8Array): boolean;
+  readonly locator: WorkspaceResourceLocator;
+  readonly missingIsCompatible?: boolean;
 }
 
 const defaultBounds: LocalWorkspaceBounds = Object.freeze({
@@ -120,6 +130,7 @@ type LocalWorkspaceResources = Pick<
 
 interface CapturedLocalWorkspaceOptions {
   readonly bounds: LocalWorkspaceBounds;
+  readonly configuration: LocalWorkspaceConfiguration;
   readonly decoderProxyPolicy: (value: unknown) => boolean;
   readonly operations: () => ApplicationOperations;
   readonly resources: LocalWorkspaceResources;
@@ -323,6 +334,79 @@ function validateStateDecoder(
   return metadata;
 }
 
+function captureWorkspaceConfiguration(
+  value: unknown,
+  bounds: LocalWorkspaceBounds,
+): LocalWorkspaceConfiguration {
+  if (value === undefined) {
+    return Object.freeze({
+      initialDocument: canonicalBytes.slice(),
+      isCompatible: sameBytes,
+      locator: workspaceConfigurationLocator,
+      missingIsCompatible: true,
+    });
+  }
+  const inspected = inspectHostRecord(
+    value,
+    [
+      ["initialDocument", "isCompatible", "locator"],
+      ["initialDocument", "isCompatible", "locator", "missingIsCompatible"],
+    ],
+    "invalid-local-workspace-options",
+    "Local workspace configuration",
+  );
+  if (
+    !inspected.ok ||
+    typeof inspected.value.isCompatible !== "function" ||
+    typeof inspected.value.locator !== "string" ||
+    (Object.hasOwn(inspected.value, "missingIsCompatible") &&
+      typeof inspected.value.missingIsCompatible !== "boolean")
+  ) {
+    throw new TypeError("Local workspace configuration is malformed");
+  }
+  const parsedLocator = parseWorkspaceResourceLocator(inspected.value.locator);
+  if (!parsedLocator.ok || parsedLocator.value !== inspected.value.locator) {
+    throw new TypeError("Local workspace configuration locator is malformed");
+  }
+  const bytes = inspected.value.initialDocument;
+  if (
+    typeof bytes !== "object" ||
+    bytes === null ||
+    isHostProxy(bytes) ||
+    isNativeProxy(bytes) ||
+    intrinsicObjectGetPrototypeOf(bytes) !== intrinsicUint8ArrayPrototype
+  ) {
+    throw new TypeError("Local workspace initial configuration is malformed");
+  }
+  let byteLength: number;
+  try {
+    byteLength = intrinsicReflectApply(intrinsicTypedArrayByteLength, bytes, []) as number;
+  } catch {
+    throw new TypeError("Local workspace initial configuration is malformed");
+  }
+  if (
+    !Number.isSafeInteger(byteLength) ||
+    byteLength <= 0 ||
+    byteLength > bounds.maxConfigurationBytes
+  ) {
+    throw new TypeError("Local workspace initial configuration is malformed");
+  }
+  const copied = new intrinsicUint8Array(byteLength);
+  copied.set(bytes as Uint8Array);
+  const receiver = value as object;
+  const isCompatible = inspected.value.isCompatible;
+  const missingIsCompatible = inspected.value.missingIsCompatible;
+  return Object.freeze({
+    initialDocument: copied,
+    isCompatible: (candidate: Uint8Array) => {
+      const result = intrinsicReflectApply(isCompatible, receiver, [candidate]);
+      return result === true;
+    },
+    locator: parsedLocator.value,
+    missingIsCompatible: typeof missingIsCompatible === "boolean" ? missingIsCompatible : true,
+  });
+}
+
 function captureLocalWorkspaceOptions(
   value: LocalWorkspaceCapabilityOptions,
 ): CapturedLocalWorkspaceOptions {
@@ -331,6 +415,8 @@ function captureLocalWorkspaceOptions(
     [
       ["operations", "resources", "stateDecoder", "transactionProvider"],
       ["bounds", "operations", "resources", "stateDecoder", "transactionProvider"],
+      ["configuration", "operations", "resources", "stateDecoder", "transactionProvider"],
+      ["bounds", "configuration", "operations", "resources", "stateDecoder", "transactionProvider"],
     ],
     "invalid-local-workspace-options",
     "Local workspace options",
@@ -343,6 +429,7 @@ function captureLocalWorkspaceOptions(
     throw new TypeError("Local workspace operations must be a non-proxy function");
   }
   const bounds = captureBounds(inspected.value.bounds);
+  const configuration = captureWorkspaceConfiguration(inspected.value.configuration, bounds);
   const resourcesReceiver = requireCapabilityReceiver(
     inspected.value.resources,
     "Local workspace resources",
@@ -421,6 +508,7 @@ function captureLocalWorkspaceOptions(
 
   return Object.freeze({
     bounds,
+    configuration,
     decoderProxyPolicy: decoderMetadata.isProxy,
     operations: () => intrinsicReflectApply(operations, optionsReceiver, []),
     resources,
@@ -555,6 +643,7 @@ function copyConfigurationBytes(
 function validatedConfigurationRead(
   value: unknown,
   bounds: LocalWorkspaceBounds,
+  configuration: LocalWorkspaceConfiguration,
   decoderProxyPolicy: (value: unknown) => boolean,
 ): LocalWorkspaceState {
   const result = inspectHostRecord(
@@ -574,7 +663,11 @@ function validatedConfigurationRead(
       "invalid-workspace-provider-result",
     );
     if (!diagnostics.ok) return providerFailureState();
-    if (isCanonicalMissingFailure(diagnostics.value)) return missingState();
+    if (isCanonicalMissingFailure(diagnostics.value)) {
+      return configuration.missingIsCompatible === false
+        ? configurationConflictState()
+        : missingState();
+    }
     return isCanonicalTooLargeFailure(diagnostics.value, bounds)
       ? configurationConflictState()
       : providerFailureState();
@@ -589,7 +682,13 @@ function validatedConfigurationRead(
   if (!contents.ok) return providerFailureState();
   const bytes = copyConfigurationBytes(contents.value.bytes, bounds, decoderProxyPolicy);
   if (!bytes.ok) return providerFailureState();
-  return sameBytes(bytes.value) ? configuredState() : configurationConflictState();
+  try {
+    return configuration.isCompatible(bytes.value)
+      ? configuredState()
+      : configurationConflictState();
+  } catch {
+    return providerFailureState();
+  }
 }
 
 type ValidatedCoordinationAcquisition =
@@ -932,10 +1031,10 @@ export async function createLocalWorkspaceCapability(
   const inspect = async (): Promise<LocalWorkspaceState> => {
     try {
       const read = await captured.resources.read({
-        locator: workspaceConfigurationLocator,
+        locator: captured.configuration.locator,
         maxBytes: bounds.maxConfigurationBytes,
       });
-      return validatedConfigurationRead(read, bounds, decoderProxyPolicy);
+      return validatedConfigurationRead(read, bounds, captured.configuration, decoderProxyPolicy);
     } catch {
       return providerFailureState();
     }
@@ -1067,7 +1166,7 @@ export async function createLocalWorkspaceCapability(
         const acquired = validatedCoordinationAcquisition(
           await captured.resources.acquireCoordination({
             context: "local-machine",
-            locator: workspaceConfigurationLocator,
+            locator: captured.configuration.locator,
           }),
           bounds,
           decoderProxyPolicy,
@@ -1085,8 +1184,8 @@ export async function createLocalWorkspaceCapability(
         try {
           const staged = validatedStagedReplacement(
             await captured.resources.stageReplacement(
-              workspaceConfigurationLocator,
-              canonicalBytes.slice(),
+              captured.configuration.locator,
+              captured.configuration.initialDocument.slice(),
             ),
             bounds,
             decoderProxyPolicy,
