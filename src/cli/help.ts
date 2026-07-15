@@ -11,6 +11,9 @@ Usage:
   groma --help
   groma --version
   groma [--format plain|json] init
+  groma [--format plain|json] migrate status
+  groma [--format plain|json] migrate preview
+  groma [--format plain|json] migrate apply
   groma [--format plain|json] package scaffold <destination> --name <package-name> --plugin <plugin-id> --provides <capability-id> [--provides <capability-id> ...]
   groma [--format plain|json] package add <local-path> [--personal]
   groma [--format plain|json] package inspect <package-name> [--personal]
@@ -32,6 +35,10 @@ Parent changes for existing components use the explicit reparent command.
 Merge is the only operation that creates a component alias. It removes the obsolete component,
 keeps the survivor identity unchanged, and preserves old references through canonical supersession.
 Every ordinary read returns exactly one bounded page; page limits are explicit.
+
+Migration status and preview are read-only. Preview lists every canonical resource and the exact
+migrator path that would run. Apply is the only migration write boundary and publishes one exact
+all-resource catalog batch through a durable transaction; ordinary reads and mutations never migrate implicitly.
 
 Package add accepts local filesystem paths only; remote npm, Git, and URL acquisition is out of scope.
 Package scaffold creates one minimal Phase 1 plugin and a public conformance-test starting point.

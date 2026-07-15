@@ -100,6 +100,57 @@ describe("CLI surface", () => {
     await session.stop();
   });
 
+  test("maps transient migration catalog failures to the infrastructure exit class", async () => {
+    const base = context("unused");
+    for (const code of [
+      "resource-provider-failure",
+      "resource-missing",
+      "resource-unreadable",
+      "resource-unavailable",
+      "stale-resource-cursor",
+      "migration-resource-provider-failure",
+    ]) {
+      const unavailable = Object.freeze({
+        diagnostics: Object.freeze([Object.freeze({ code, message: "Unavailable" })]),
+        ok: false as const,
+      });
+      const migrationContext: HostSurfaceContext = Object.freeze({
+        ...base,
+        migrations: Object.freeze({
+          apply: async () =>
+            Object.freeze({
+              diagnostics: unavailable.diagnostics,
+              phase: "snapshot" as const,
+              status: "provider-failure" as const,
+            }),
+          preview: async () => unavailable,
+          status: async () => unavailable,
+        }),
+        workspace: Object.freeze({
+          ...base.workspace,
+          requireWorkspace: () =>
+            Object.freeze({ ok: true as const, value: Object.freeze({}) as never }),
+        }),
+      });
+
+      for (const kind of ["migrate-status", "migrate-preview", "migrate-apply"] as const) {
+        const controller = createCliSurfaceController(
+          Object.freeze({ command: Object.freeze({ kind }), format: "json" }),
+          { read: async () => "{}" },
+          { stdin: false, stdout: false },
+        );
+        const session = await controller.surface.start(migrationContext);
+        await session.completion;
+
+        expect(controller.result(), `${code}:${kind}`).toMatchObject({
+          exitCode: CLI_EXIT.infrastructure,
+          ok: false,
+        });
+        await session.stop();
+      }
+    }
+  });
+
   test("classifies scaffold publication failures as infrastructure failures", async () => {
     const invocation: CliInvocation = Object.freeze({
       command: Object.freeze({

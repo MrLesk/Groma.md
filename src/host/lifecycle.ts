@@ -24,6 +24,7 @@ import type {
   WorkspaceStatus,
 } from "./contracts.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
+import type { SchemaMigrationOperations } from "../application/index.ts";
 import {
   copyHostDiagnostics,
   inspectHostDenseArray,
@@ -444,6 +445,36 @@ function canonicalPackageOperations(value: unknown): Result<PluginPackageOperati
   );
 }
 
+function canonicalSchemaMigrationOperations(value: unknown): Result<SchemaMigrationOperations> {
+  const migrations = inspectHostRecord(
+    value,
+    [["apply", "preview", "status"]],
+    "invalid-host-composition",
+    "Schema migration operations",
+  );
+  if (
+    !migrations.ok ||
+    typeof migrations.value.apply !== "function" ||
+    typeof migrations.value.preview !== "function" ||
+    typeof migrations.value.status !== "function"
+  ) {
+    return failure(
+      diagnostic("invalid-host-composition", "Schema migration operations are malformed"),
+    );
+  }
+  const receiver = value as object;
+  const apply = migrations.value.apply as SchemaMigrationOperations["apply"];
+  const preview = migrations.value.preview as SchemaMigrationOperations["preview"];
+  const status = migrations.value.status as SchemaMigrationOperations["status"];
+  return success(
+    Object.freeze({
+      apply: () => intrinsicReflectApply(apply, receiver, []),
+      preview: () => intrinsicReflectApply(preview, receiver, []),
+      status: () => intrinsicReflectApply(status, receiver, []),
+    }),
+  );
+}
+
 function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecycle> {
   const plugins = inspectHostRecord(
     value,
@@ -540,6 +571,41 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "graph",
         "invariant",
         "model",
+        "migrations",
+        "operations",
+        "packages",
+        "queries",
+        "resourceMapper",
+        "resources",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "operations",
+        "packages",
+        "plugins",
+        "queries",
+        "resourceMapper",
+        "resources",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "migrations",
         "operations",
         "packages",
         "plugins",
@@ -566,6 +632,10 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!packages.ok) return packages;
   const initialization = canonicalInitializationOperations(composition.value.operations);
   if (!initialization.ok) return initialization;
+  const migrations = Object.hasOwn(composition.value, "migrations")
+    ? canonicalSchemaMigrationOperations(composition.value.migrations)
+    : undefined;
+  if (migrations !== undefined && !migrations.ok) return migrations;
   const plugins = Object.hasOwn(composition.value, "plugins")
     ? canonicalPluginLifecycle(composition.value.plugins)
     : undefined;
@@ -596,6 +666,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       initialization: initialization.value,
       invariant: composition.value.invariant,
       model: composition.value.model,
+      ...(migrations === undefined ? {} : { migrations: migrations.value }),
       operations: composition.value.operations,
       packages: packages.value,
       ...(plugins === undefined ? {} : { plugins: plugins.value }),
@@ -1129,6 +1200,9 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   const context = Object.freeze({
                     cancellation: hostCancellation.signal,
                     initialization: composition.initialization,
+                    ...(composition.migrations === undefined
+                      ? {}
+                      : { migrations: composition.migrations }),
                     packages: composition.packages,
                     recovery: Object.freeze({ status: recovery }),
                     workspace: composition.workspace,

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
+import { canonicalSchemaMigrationApiVersion } from "../../core/index.ts";
 
 import {
   createDefaultBootstrapRegistry,
@@ -74,6 +75,7 @@ describe("default bootstrap registry", () => {
     expect(Object.keys(composed.value).sort()).toEqual([
       "graph",
       "invariant",
+      "migrations",
       "model",
       "operations",
       "packages",
@@ -97,6 +99,7 @@ describe("default bootstrap registry", () => {
         { id: "official.kernel", phase: 1 },
         { id: "official.model", phase: 1 },
         { id: "official.persistence", phase: 1 },
+        { id: "official.schema-migrations", phase: 1 },
         { id: "official.application", phase: 1 },
         { id: "official.surface", phase: 1 },
       ],
@@ -106,6 +109,7 @@ describe("default bootstrap registry", () => {
       ["graph", defaultHostCapabilityIds.graph],
       ["invariant", defaultHostCapabilityIds.invariant],
       ["model", defaultHostCapabilityIds.model],
+      ["migrations", defaultHostCapabilityIds.schemaMigrationOperations],
       ["operations", defaultHostCapabilityIds.operations],
       ["queries", defaultHostCapabilityIds.queries],
       ["resourceMapper", defaultHostCapabilityIds.resourceMapper],
@@ -319,6 +323,80 @@ describe("default bootstrap registry", () => {
       ok: false,
     });
     expect(reads).toBe(13);
+  });
+
+  test("composes plugin migration contributions through the runtime and contains their failures", async () => {
+    const context = await temporaryWorkspace();
+    await mkdir(path.join(context.workspaceRoot, "groma", "records", "plugin.example"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins:\n  - official.test-schema-migrator\n",
+    );
+    await writeFile(
+      path.join(context.workspaceRoot, "groma", "records", "plugin.example", "state.json"),
+      '{"schema":"plugin.example/v0","value":true}\n',
+    );
+    const registration = Object.freeze({
+      manifest: Object.freeze({
+        apiVersion: "groma.plugin/v1" as const,
+        id: "official.test-schema-migrator",
+        phase: 1 as const,
+        provides: Object.freeze([
+          Object.freeze({
+            cardinality: "multiple" as const,
+            id: defaultHostCapabilityIds.schemaMigrators,
+            version: "1.0.0",
+          }),
+        ]),
+        requires: Object.freeze([]),
+        version: "1.0.0",
+      }),
+      start: () =>
+        Object.freeze({
+          capabilities: Object.freeze([
+            Object.freeze({
+              id: defaultHostCapabilityIds.schemaMigrators,
+              value: Object.freeze({
+                apiVersion: canonicalSchemaMigrationApiVersion,
+                id: "plugin.example-schemas",
+                migrators: Object.freeze([
+                  Object.freeze({
+                    fromSchema: "plugin.example/v0",
+                    fromVersion: 0,
+                    id: "plugin.example-throwing",
+                    migrate: () => {
+                      throw new Error("plugin failure");
+                    },
+                    toSchema: "plugin.example/v1",
+                    toVersion: 1,
+                  }),
+                ]),
+                schemas: Object.freeze([
+                  Object.freeze({ schema: "plugin.example/v0", version: 0 }),
+                  Object.freeze({ schema: "plugin.example/v1", version: 1 }),
+                ]),
+              }),
+              version: "1.0.0",
+            }),
+          ]),
+        }),
+    });
+    const composed = await createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: Object.freeze([registration]),
+      surface: idleSurface(),
+    }).compose({ workspaceRoot: context.workspaceRoot });
+
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok || composed.value.migrations === undefined) return;
+    expect(await composed.value.migrations.preview()).toMatchObject({
+      diagnostics: [{ code: "schema-migrator-threw" }],
+      ok: false,
+    });
+    expect(
+      composed.value.plugins?.capabilities(defaultHostCapabilityIds.schemaMigrators, "1.0.0"),
+    ).toHaveLength(2);
   });
 
   test("keeps project-code loading isolated to the trust-gated local package boundary", async () => {

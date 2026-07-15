@@ -293,7 +293,13 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
       ? componentCommand(commandArgs.slice(1))
       : commandArgs[0] === "package"
         ? packageCommand(commandArgs.slice(1))
-        : undefined;
+        : commandArgs[0] === "migrate" &&
+            commandArgs.length === 2 &&
+            (commandArgs[1] === "status" ||
+              commandArgs[1] === "preview" ||
+              commandArgs[1] === "apply")
+          ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
+          : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

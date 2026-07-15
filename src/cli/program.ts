@@ -230,6 +230,7 @@ export async function runProgram(
     options.createRegistry?.(controller.surface) ??
     createDefaultBootstrapRegistry({
       loadLocalPluginPackages: !invocation.command.kind.startsWith("package-"),
+      migrationOnly: invocation.command.kind.startsWith("migrate-"),
       surface: controller.surface,
       ...(options.userDataRoot === undefined ? {} : { userDataRoot: options.userDataRoot }),
     });

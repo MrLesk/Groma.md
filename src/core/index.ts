@@ -22,4 +22,5 @@ export {
   type QueryPageState,
 } from "./query.ts";
 export * from "./result.ts";
+export * from "./schema-migration.ts";
 export * from "./transaction.ts";

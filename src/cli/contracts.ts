@@ -27,6 +27,7 @@ export type CliCommand =
   | { readonly kind: "version" }
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
+  | { readonly kind: "migrate-apply" | "migrate-preview" | "migrate-status" }
   | {
       readonly kind: "package-add";
       readonly scope: "blueprint" | "personal";
@@ -164,6 +165,12 @@ export function commandName(command: CliCommand): string {
       return "package disable";
     case "package-remove":
       return "package remove";
+    case "migrate-apply":
+      return "migrate apply";
+    case "migrate-preview":
+      return "migrate preview";
+    case "migrate-status":
+      return "migrate status";
     default:
       return command.kind;
   }

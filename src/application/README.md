@@ -168,3 +168,17 @@ copying, identity minting, graph loading, or transaction execution.
 Auto-generated component IDs are minted against the validated current graph, and
 committed outcomes are accepted only when their affected identity sets exactly match the
 submitted transaction.
+
+## Explicit schema migration
+
+`createSchemaMigrationOperations` is the shared status, preview, and apply surface. It
+canonicalizes runtime plugin contributions, reports every resource's exact schema/version
+and unique bounded path, and derives floor/mixed/completeness without invoking migrators.
+Preview invokes the selected transforms twice over fresh byte copies and writes nothing.
+Apply rebuilds that plan, requires deterministic bytes whose declared target schema can be
+re-inspected, and submits every catalog resource/revision as one transaction read/write
+set. Path expansion, individual outputs, and retained aggregate bytes have independent
+bounds; exhaustion fails closed before callbacks or transaction preparation can grow work
+without limit. Transient catalog provider failures retain the transaction surface's
+provider-failure classification, while path and migrator defects remain semantic
+validation rejection. Component operations never call this capability implicitly.
