@@ -205,7 +205,7 @@ export function isStandardComponentIconDomain(value: string): boolean {
   const ipv4NumberShape =
     labels.length >= 2 &&
     labels.length <= 4 &&
-    labels.every((label) => /^[0-9]+$/u.test(label) || /^0x[0-9a-f]+$/u.test(label));
+    labels.every((label) => /^[0-9]+$/u.test(label) || /^0x[0-9a-f]*$/u.test(label));
   if (ipv4NumberShape) {
     return false;
   }

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-15 01:10'
+updated_date: '2026-07-15 01:18'
 labels:
   - model
   - visualization
@@ -76,10 +76,14 @@ Implemented the three optional fields through Standard Model normalization, pars
 Spec review correction: the initial four-decimal-label check admitted shortened and numeric-base IPv4 spellings accepted by URL/host parsers (for example 127.1, 127.0.1, 0x7f.1, 0177.1, and mixed decimal/hex forms). Reopened AC4 to replace it with a narrow pure validation rule and regression tests.
 
 Corrected iconDomain IP-literal validation after spec review. The pure validator now rejects any two-to-four-label hostname whose every label is an IPv4-number spelling (decimal digits, including octal-looking forms, or a valid 0x-prefixed hexadecimal value). Regression cases cover 127.1, 127.0.1, 0x7f.1, 0177.1, 123.456, 127.0x1, and mixed four-label forms at the model boundary, plus application mutation and Markdown decode coverage. Ordinary domains such as 123.example, 0x7f.example, 127.0xzz, and five-label numeric DNS names remain accepted. Local URL parsing confirmed the rejected inputs normalize to IPv4 addresses, including 123.456 -> 123.0.1.200. Final verification: focused suites passed 121 tests / 974 assertions; `bun run check` passed formatting, TypeScript, architecture boundaries, all 462 tests / 3065 assertions, native build/smoke, and Iteration 1A compiled-binary/crash recovery. `git diff --check` and `backlog doctor` passed.
+
+Quality review correction: WHATWG treats a bare 0x label as the IPv4 number zero, so the first pure numeric-shape predicate still admitted 0x.1, 0x.0x1, and 1.0x. Reopened AC4 to cover this last spelling without changing the bounded validation approach.
+
+Quality review follow-up completed. The pure IPv4-number predicate now recognizes a bare 0x label as hexadecimal zero, matching WHATWG host parsing without introducing a URL parser, network behavior, or dependency. Model-boundary regressions reject 0x.1, 0x.0x1, and 1.0x; ordinary domains 0x.example and 0x.0xzz remain accepted. Local URL verification resolved the rejected forms to 0.0.0.1, 0.0.0.1, and 1.0.0.0 respectively. The focused Standard Model suite passed 13 tests / 87 assertions. The full bun run check passed formatting, TypeScript, architecture boundaries, all tests, native build and smoke checks, and the Iteration 1A compiled-binary/crash-recovery workflow. git diff --check and backlog doctor passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added bounded canonical label, summary, and iconDomain recognition metadata across the shared model, application, Markdown, and CLI paths while preserving schema groma/v0.1, stable identity, open component types, and renderer separation. The CLI overview derives label -> name -> stable ID display text through the shared semantic helper. iconDomain now rejects two-to-four-label decimal, octal-looking, hexadecimal, and mixed IPv4-number spellings without URL parsing, dependencies, or network behavior, while preserving ordinary numeric-label domains. Verified malformed inputs, create/update/null-clear, reload, byte-stable serialization, repeated restart reads, and the IPv4 regression matrix with focused suites and full `bun run check` (462 tests, 3065 assertions, build/smoke/Iteration 1A verification).
+Added bounded optional component recognition metadata across the Standard Model, application projection and operations, deterministic Markdown persistence, and CLI workflows. Components support label, summary, and inert iconDomain metadata; display text follows label to name to stable canonical ID. The final iconDomain rule rejects IPv4 literals and WHATWG IPv4-number spellings, including bare-0x forms, while accepting ordinary DNS hostnames. No renderer state, identity semantics, favicon resolver, network access, trust behavior, URL parser, or new dependency was introduced. Focused and full repository checks, native and compiled-binary workflows, diff hygiene, and Backlog validation all pass.
 <!-- SECTION:FINAL_SUMMARY:END -->
