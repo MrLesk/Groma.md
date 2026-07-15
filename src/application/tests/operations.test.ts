@@ -2919,6 +2919,14 @@ describe("application component mutations", () => {
     });
     expect(malformed.status).toBe("validation-rejected");
     expect(fixture.executions()).toBe(executions);
+
+    const ipv4Shaped = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(updated),
+      id: ids.service,
+      patch: { iconDomain: "127.0x1" },
+    });
+    expect(ipv4Shaped.status).toBe("validation-rejected");
+    expect(fixture.executions()).toBe(executions);
   });
 
   test("rejects semantically identical component patches without executing", async () => {

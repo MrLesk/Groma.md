@@ -20,8 +20,10 @@ by `standardComponentDisplayText` and does not create a canonical node entity.
 `iconDomain` is a lowercase ASCII DNS hostname with at least two labels, no trailing
 dot, at most 253 characters and 63 characters per label. DNS labels may use letters,
 digits, and interior hyphens, so canonical punycode labels remain valid; IP-shaped
-four-numeric-label values and any scheme, credentials, port, path, query, fragment, or
-whitespace are rejected. The value is only a recognition hint. It never affects stable
+values made of two to four decimal or `0x`-prefixed numeric labels and any scheme,
+credentials, port, path, query, fragment, or whitespace are rejected. Ordinary domains
+may still use numeric or `0x`-looking labels when the complete hostname is not an IPv4
+number shape. The value is only a recognition hint. It never affects stable
 identity, evidence matching, trust, or network access, and the Standard Model provides
 no favicon fetcher or icon-resolution capability.
 

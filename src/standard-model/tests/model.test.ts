@@ -276,6 +276,13 @@ describe("standard v0.1 model", () => {
       [{ iconDomain: "example.com/icon.png" }, "invalid-component-icon-domain"],
       [{ iconDomain: "localhost" }, "invalid-component-icon-domain"],
       [{ iconDomain: "127.0.0.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.0.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x7f.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0177.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "123.456" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.0x1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x7f.0.0x0.1" }, "invalid-component-icon-domain"],
       [{ iconDomain: `${"a".repeat(64)}.example` }, "invalid-component-icon-domain"],
       [{ iconDomain: "-bad.example" }, "invalid-component-icon-domain"],
     ] as const;
@@ -290,6 +297,9 @@ describe("standard v0.1 model", () => {
         summary: "S".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS),
       }),
     ).toMatchObject({ ok: true });
+    for (const iconDomain of ["123.example", "0x7f.example", "127.0xzz", "1.2.3.4.5"]) {
+      expect(model.normalize({ iconDomain })).toMatchObject({ ok: true });
+    }
   });
 
   test("produces one canonical model for equivalent property and item insertion orders", () => {

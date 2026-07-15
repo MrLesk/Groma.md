@@ -312,6 +312,7 @@ Preserve **meaning**.
       ["label", '" padded"', "invalid-component-label"],
       ["summary", '"two\\nlines"', "invalid-component-summary"],
       ["iconDomain", "https://example.com", "invalid-component-icon-domain"],
+      ["iconDomain", "127.0x1", "invalid-component-icon-domain"],
     ] as const) {
       const malformed = store.decode(
         encoded.value.locator,
