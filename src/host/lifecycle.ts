@@ -1,8 +1,10 @@
 import {
   failure,
+  observeNativePromise,
   parseGraphGeneration,
   success,
   type Diagnostic,
+  type NativePromiseObservation,
   type Result,
 } from "../core/index.ts";
 import type {
@@ -21,11 +23,13 @@ import type {
   WorkspaceRecoveryReport,
   WorkspaceStatus,
 } from "./contracts.ts";
-import { copyHostDiagnostics, inspectHostRecord, isHostProxy } from "./runtime-validation.ts";
 import {
-  observeNativePromise,
-  type NativePromiseObservation,
-} from "../application/promise-observation.ts";
+  copyHostDiagnostics,
+  inspectHostDenseArray,
+  inspectHostRecord,
+  isHostProxy,
+} from "./runtime-validation.ts";
+import { containCapabilityValue } from "../application/capability-value.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -38,8 +42,20 @@ interface ContainedHostSurfaceSession {
   readonly stop: () => unknown;
 }
 
-interface ContainedHostComposition extends HostComposition {
+interface ContainedPluginLifecycle {
+  cancel(): unknown;
+  shutdown(): unknown;
+}
+
+type PluginCleanupMode = "cancelled" | "stopped";
+
+interface PluginCleanupCoordinator {
+  cleanup(mode: PluginCleanupMode): Promise<void>;
+}
+
+interface ContainedHostComposition extends Omit<HostComposition, "plugins"> {
   readonly initialization: HostInitializationOperations;
+  readonly plugins?: ContainedPluginLifecycle;
 }
 
 const intrinsicPromise = Promise;
@@ -277,6 +293,33 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   );
 }
 
+function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecycle> {
+  const plugins = inspectHostRecord(
+    value,
+    [["cancel", "capabilities", "inspect", "shutdown"]],
+    "invalid-host-composition",
+    "Plugin runtime",
+  );
+  if (
+    !plugins.ok ||
+    typeof plugins.value.cancel !== "function" ||
+    typeof plugins.value.capabilities !== "function" ||
+    typeof plugins.value.inspect !== "function" ||
+    typeof plugins.value.shutdown !== "function"
+  ) {
+    return failure(diagnostic("invalid-host-composition", "Plugin runtime is malformed"));
+  }
+  const receiver = value as object;
+  const cancel = plugins.value.cancel;
+  const shutdown = plugins.value.shutdown;
+  return success(
+    Object.freeze({
+      cancel: () => intrinsicReflectApply(cancel, receiver, []),
+      shutdown: () => intrinsicReflectApply(shutdown, receiver, []),
+    }),
+  );
+}
+
 function canonicalInitializationOperations(value: unknown): Result<HostInitializationOperations> {
   const operations = inspectHostRecord(
     value,
@@ -339,6 +382,22 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "transactionProvider",
         "workspace",
       ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "operations",
+        "plugins",
+        "queries",
+        "resourceMapper",
+        "resources",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
     ],
     "invalid-host-composition",
     "Host composition",
@@ -350,6 +409,10 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!surface.ok) return surface;
   const initialization = canonicalInitializationOperations(composition.value.operations);
   if (!initialization.ok) return initialization;
+  const plugins = Object.hasOwn(composition.value, "plugins")
+    ? canonicalPluginLifecycle(composition.value.plugins)
+    : undefined;
+  if (plugins !== undefined && !plugins.ok) return plugins;
   for (const field of [
     "graph",
     "invariant",
@@ -377,6 +440,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       invariant: composition.value.invariant,
       model: composition.value.model,
       operations: composition.value.operations,
+      ...(plugins === undefined ? {} : { plugins: plugins.value }),
       queries: composition.value.queries,
       resourceMapper: composition.value.resourceMapper,
       resources: composition.value.resources,
@@ -387,6 +451,149 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       transactionProvider: composition.value.transactionProvider,
       workspace: workspace.value,
     }) as ContainedHostComposition,
+  );
+}
+
+function validPluginShutdownReport(
+  value: unknown,
+  expectedState: "cancelled" | "stopped",
+): boolean {
+  const report = inspectHostRecord(
+    value,
+    [["state", "stoppedPluginIds"]],
+    "invalid-host-plugin-cleanup",
+    "Plugin shutdown report",
+  );
+  if (!report.ok || report.value.state !== expectedState) return false;
+  const ids = inspectHostDenseArray(
+    report.value.stoppedPluginIds,
+    256,
+    "invalid-host-plugin-cleanup",
+    "Stopped plugin IDs",
+  );
+  return (
+    ids.ok && ids.value.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128)
+  );
+}
+
+async function observePluginCleanup(
+  value: unknown,
+  expectedState: "cancelled" | "stopped",
+): Promise<void> {
+  const observed = observeHostNativePromise(
+    value,
+    (settled) => {
+      const contained = containCapabilityValue(settled, {
+        isProxy: isHostProxy,
+        maximumContainerEntries: 256,
+        maximumDepth: 8,
+        maximumValues: 4_096,
+      });
+      if (!contained.ok) return false;
+      const result = inspectHostRecord(
+        contained.value,
+        [
+          ["ok", "value"],
+          ["diagnostics", "ok"],
+        ],
+        "invalid-host-plugin-cleanup",
+        "Plugin cleanup result",
+      );
+      return (
+        result.ok &&
+        result.value.ok === true &&
+        validPluginShutdownReport(result.value.value, expectedState)
+      );
+    },
+    () => false,
+  );
+  if (observed.status !== "observed" || !(await observed.promise)) {
+    throw new Error("Host plugin cleanup failed");
+  }
+}
+
+function createPluginCleanupCoordinator(
+  plugins: ContainedPluginLifecycle,
+): PluginCleanupCoordinator {
+  let cleanup: Promise<void> | undefined;
+  return Object.freeze({
+    cleanup(mode: PluginCleanupMode): Promise<void> {
+      if (cleanup !== undefined) return cleanup;
+      let resolveCleanup!: () => void;
+      let rejectCleanup!: () => void;
+      cleanup = new Promise<void>((resolve, reject) => {
+        resolveCleanup = resolve;
+        rejectCleanup = () => reject(new Error("Host plugin cleanup failed"));
+      });
+      let raw: unknown;
+      try {
+        raw = mode === "cancelled" ? plugins.cancel() : plugins.shutdown();
+      } catch {
+        rejectCleanup();
+        return cleanup;
+      }
+      void observePluginCleanup(raw, mode).then(resolveCleanup, rejectCleanup);
+      return cleanup;
+    },
+  });
+}
+
+function containDetached(value: Promise<unknown>): void {
+  void value.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+function schedulePluginCleanupAfter(
+  settlement: Promise<unknown>,
+  plugins: PluginCleanupCoordinator,
+): void {
+  containDetached(
+    settlement.then(
+      () => plugins.cleanup("cancelled"),
+      () => plugins.cleanup("cancelled"),
+    ),
+  );
+}
+
+function scheduleLateSurfaceCleanup(
+  start: Promise<ObservedSurfaceStartOutcome>,
+  plugins?: PluginCleanupCoordinator,
+): void {
+  containDetached(
+    start.then(
+      async (late) => {
+        if (late.state === "started") {
+          try {
+            await observeRequiredCleanup(late.session.stop(), "Host surface cleanup failed");
+          } catch {
+            // A late surface stop failure must not skip provider cancellation.
+          }
+        }
+        if (plugins !== undefined) {
+          await plugins.cleanup("cancelled");
+        }
+      },
+      async () => {
+        if (plugins !== undefined) {
+          await plugins.cleanup("cancelled");
+        }
+      },
+    ),
+  );
+}
+
+function scheduleLateCompositionCleanup(composition: Promise<ObservedBootstrapOutcome>): void {
+  containDetached(
+    composition.then(
+      async (late) => {
+        if (late.state === "composed" && late.composition.plugins !== undefined) {
+          await createPluginCleanupCoordinator(late.composition.plugins).cleanup("cancelled");
+        }
+      },
+      () => undefined,
+    ),
   );
 }
 
@@ -555,12 +762,14 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
 
   const hostCancellation = new AbortController();
   let cancellationSignal: HostSignal | undefined;
+  let pluginCleanupMode: PluginCleanupMode = "stopped";
   let resolveCancellation!: () => void;
   const cancellation = new Promise<void>((resolve) => {
     resolveCancellation = resolve;
   });
   const requestCancellation = (signal?: unknown) => {
     if (hostCancellation.signal.aborted) return;
+    pluginCleanupMode = "cancelled";
     cancellationSignal = signal === "SIGINT" || signal === "SIGTERM" ? signal : undefined;
     hostCancellation.abort();
     resolveCancellation();
@@ -574,6 +783,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   let externalCancellationMayBeRegistered = false;
 
   let unsubscribe: (() => void | Promise<void>) | undefined;
+  let pluginCleanup: PluginCleanupCoordinator | undefined;
+  let pluginCleanupDeferred = false;
   let session: ContainedHostSurfaceSession | undefined;
   let stopPromise: Promise<void> | undefined;
   const stopOnce = (): Promise<void> => {
@@ -618,7 +829,6 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
         const composed = observeHostNativePromise<ObservedBootstrapOutcome>(
           rawComposition,
           (value) => {
-            if (hostCancellation.signal.aborted) return { state: "cancelled" as const };
             const result = inspectHostRecord(
               value,
               [
@@ -648,6 +858,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             cancellation.then(() => ({ state: "cancelled" as const })),
           ]);
           if (first.state === "cancelled") {
+            scheduleLateCompositionCleanup(composed.promise);
             outcome = cancelled(cancellationSignal);
           } else if (first.state === "bootstrap-failed") {
             outcome = startupFailure("host-bootstrap-failed", "Host bootstrap failed");
@@ -656,141 +867,141 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
               "invalid-host-composition",
               "Host bootstrap returned malformed capabilities",
             );
-          } else if (hostCancellation.signal.aborted) {
-            outcome = cancelled(cancellationSignal);
           } else {
             const composition = first.composition;
-            const rawStatus = composition.workspace.status();
-            const status = canonicalStatus(rawStatus);
-            let recovery: "completed" | "not-required" | undefined;
-            if (!status.ok) {
-              outcome = startupFailure(
-                "invalid-host-workspace-status",
-                "Workspace status capability returned malformed state",
-              );
-            } else if (status.value.state === "missing") {
-              recovery = "not-required";
-            } else if (status.value.state === "conflict") {
-              outcome =
-                status.value.diagnostic.code === "workspace-configuration-provider-failure"
-                  ? startupFailure(
-                      "workspace-configuration-provider-failure",
-                      "Workspace configuration access failed",
-                    )
-                  : startupFailure(
-                      "workspace-configuration-conflict",
-                      "Workspace configuration is incompatible with this host",
-                    );
-            } else if (hostCancellation.signal.aborted) {
+            pluginCleanup =
+              composition.plugins === undefined
+                ? undefined
+                : createPluginCleanupCoordinator(composition.plugins);
+            if (hostCancellation.signal.aborted) {
               outcome = cancelled(cancellationSignal);
             } else {
-              let rawRecovery: unknown;
-              try {
-                rawRecovery = composition.workspace.recover();
-              } catch {
-                rawRecovery = undefined;
-              }
-              const observedRecovery = observeHostNativePromise<ObservedRecoveryOutcome>(
-                rawRecovery,
-                (value) => {
-                  if (hostCancellation.signal.aborted) return { state: "cancelled" as const };
-                  const recovered = validatedRecoveryOutcome(value);
-                  return recovered.ok
-                    ? ({ recovered: recovered.value, state: "validated" } as const)
-                    : ({ state: "malformed" } as const);
-                },
-                () => ({ state: "rejected" as const }),
-              );
-              if (observedRecovery.status !== "observed") {
-                outcome = hostCancellation.signal.aborted
-                  ? cancelled(cancellationSignal)
-                  : startupFailure(
+              const rawStatus = composition.workspace.status();
+              const status = canonicalStatus(rawStatus);
+              let recovery: "completed" | "not-required" | undefined;
+              if (!status.ok) {
+                outcome = startupFailure(
+                  "invalid-host-workspace-status",
+                  "Workspace status capability returned malformed state",
+                );
+              } else if (status.value.state === "missing") {
+                recovery = "not-required";
+              } else if (status.value.state === "conflict") {
+                outcome =
+                  status.value.diagnostic.code === "workspace-configuration-provider-failure"
+                    ? startupFailure(
+                        "workspace-configuration-provider-failure",
+                        "Workspace configuration access failed",
+                      )
+                    : startupFailure(
+                        "workspace-configuration-conflict",
+                        "Workspace configuration is incompatible with this host",
+                      );
+              } else if (hostCancellation.signal.aborted) {
+                outcome = cancelled(cancellationSignal);
+              } else {
+                let rawRecovery: unknown;
+                try {
+                  rawRecovery = composition.workspace.recover();
+                } catch {
+                  rawRecovery = undefined;
+                }
+                const observedRecovery = observeHostNativePromise<ObservedRecoveryOutcome>(
+                  rawRecovery,
+                  (value) => {
+                    const recovered = validatedRecoveryOutcome(value);
+                    return recovered.ok
+                      ? ({ recovered: recovered.value, state: "validated" } as const)
+                      : ({ state: "malformed" } as const);
+                  },
+                  () => ({ state: "rejected" as const }),
+                );
+                if (observedRecovery.status !== "observed") {
+                  outcome = hostCancellation.signal.aborted
+                    ? cancelled(cancellationSignal)
+                    : startupFailure(
+                        "invalid-host-recovery-result",
+                        "Workspace recovery capability returned a malformed result",
+                      );
+                } else {
+                  const recovered = await Promise.race([
+                    observedRecovery.promise,
+                    cancellation.then(() => ({ state: "cancelled" as const })),
+                  ]);
+                  if (recovered.state === "cancelled") {
+                    if (pluginCleanup !== undefined) {
+                      pluginCleanupDeferred = true;
+                      schedulePluginCleanupAfter(observedRecovery.promise, pluginCleanup);
+                    }
+                    outcome = cancelled(cancellationSignal);
+                  } else if (recovered.state === "malformed") {
+                    outcome = startupFailure(
                       "invalid-host-recovery-result",
                       "Workspace recovery capability returned a malformed result",
                     );
-              } else {
-                const recovered = await Promise.race([
-                  observedRecovery.promise,
-                  cancellation.then(() => ({ state: "cancelled" as const })),
-                ]);
-                if (recovered.state === "cancelled") {
-                  outcome = cancelled(cancellationSignal);
-                } else if (recovered.state === "malformed") {
-                  outcome = startupFailure(
-                    "invalid-host-recovery-result",
-                    "Workspace recovery capability returned a malformed result",
-                  );
-                } else if (recovered.state === "rejected") {
-                  outcome = startupFailure(
-                    "workspace-recovery-failed",
-                    "Workspace recovery failed",
-                  );
-                } else if (recovered.recovered.state === "failed") {
-                  outcome = startupFailure(
-                    "workspace-recovery-failed",
-                    "Workspace recovery failed",
-                  );
-                } else {
-                  recovery = "completed";
+                  } else if (recovered.state === "rejected") {
+                    outcome = startupFailure(
+                      "workspace-recovery-failed",
+                      "Workspace recovery failed",
+                    );
+                  } else if (recovered.recovered.state === "failed") {
+                    outcome = startupFailure(
+                      "workspace-recovery-failed",
+                      "Workspace recovery failed",
+                    );
+                  } else {
+                    recovery = "completed";
+                  }
                 }
               }
-            }
 
-            if (recovery !== undefined) {
-              if (hostCancellation.signal.aborted) {
-                outcome = cancelled(cancellationSignal);
-              } else {
-                const context = Object.freeze({
-                  cancellation: hostCancellation.signal,
-                  initialization: composition.initialization,
-                  recovery: Object.freeze({ status: recovery }),
-                  workspace: composition.workspace,
-                });
-                let start: Promise<ObservedSurfaceStartOutcome>;
-                try {
-                  start = observeSurfaceStart(composition.surface.start(context));
-                } catch {
-                  start = resolvedValue({ state: "failed" });
-                }
-                const first = await Promise.race([
-                  start,
-                  cancellation.then(() => ({ state: "cancelled" as const })),
-                ]);
-                if (first.state === "cancelled") {
-                  void start.then(
-                    async (late) => {
-                      if (late.state !== "started") return;
-                      try {
-                        await observeRequiredCleanup(
-                          late.session.stop(),
-                          "Host surface cleanup failed",
-                        );
-                      } catch {
-                        // Late completion and cleanup are contained after cancellation returns.
-                      }
-                    },
-                    () => undefined,
-                  );
+              if (recovery !== undefined) {
+                if (hostCancellation.signal.aborted) {
                   outcome = cancelled(cancellationSignal);
-                } else if (first.state !== "started") {
-                  outcome = surfaceFailure(
-                    "host-surface-start-failed",
-                    "Host surface start failed",
-                  );
                 } else {
-                  session = first.session;
-                  const completed = first.session.completion;
-                  const winner = await Promise.race([
-                    completed,
+                  const context = Object.freeze({
+                    cancellation: hostCancellation.signal,
+                    initialization: composition.initialization,
+                    recovery: Object.freeze({ status: recovery }),
+                    workspace: composition.workspace,
+                  });
+                  let start: Promise<ObservedSurfaceStartOutcome>;
+                  try {
+                    start = observeSurfaceStart(composition.surface.start(context));
+                  } catch {
+                    start = resolvedValue({ state: "failed" });
+                  }
+                  const first = await Promise.race([
+                    start,
                     cancellation.then(() => ({ state: "cancelled" as const })),
                   ]);
-                  if (winner.state === "cancelled") {
-                    await stopOnce();
+                  if (first.state === "cancelled") {
+                    if (pluginCleanup !== undefined) pluginCleanupDeferred = true;
+                    scheduleLateSurfaceCleanup(start, pluginCleanup);
                     outcome = cancelled(cancellationSignal);
-                  } else if (winner.state === "failed") {
-                    outcome = surfaceFailure("host-surface-failed", "Host surface session failed");
+                  } else if (first.state !== "started") {
+                    outcome = surfaceFailure(
+                      "host-surface-start-failed",
+                      "Host surface start failed",
+                    );
                   } else {
-                    outcome = Object.freeze({ status: "completed" });
+                    session = first.session;
+                    const completed = first.session.completion;
+                    const winner = await Promise.race([
+                      completed,
+                      cancellation.then(() => ({ state: "cancelled" as const })),
+                    ]);
+                    if (winner.state === "cancelled") {
+                      await stopOnce();
+                      outcome = cancelled(cancellationSignal);
+                    } else if (winner.state === "failed") {
+                      outcome = surfaceFailure(
+                        "host-surface-failed",
+                        "Host surface session failed",
+                      );
+                    } else {
+                      outcome = Object.freeze({ status: "completed" });
+                    }
                   }
                 }
               }
@@ -810,6 +1021,13 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
     await stopOnce();
   } catch {
     outcome = surfaceFailure("host-surface-cleanup-failed", "Host surface cleanup failed");
+  }
+  if (pluginCleanup !== undefined && !pluginCleanupDeferred) {
+    try {
+      await pluginCleanup.cleanup(pluginCleanupMode);
+    } catch {
+      outcome = surfaceFailure("host-plugin-cleanup-failed", "Host plugin cleanup failed");
+    }
   }
   if (externalCancellationMayBeRegistered && externalCancellation !== undefined) {
     try {

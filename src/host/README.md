@@ -3,17 +3,29 @@
 The official composition root, process lifecycle, and bootstrap integration. The host
 assembles explicit capabilities without placing its technology choices in Core.
 
-## Iteration 1A local profile
+## Default local plugin profile
 
-`createDefaultBootstrapRegistry` is the replaceable 1A composition seam. It explicitly
-assembles the local resource provider, Standard Model and invariant, Markdown intent
-store and transaction adapter, local transaction journal, Core transaction engine and
-graph kernel, bounded query contracts, component resource mapper, shared application
-operations, workspace access capability, and an injected surface. The returned named
-capabilities exist for conformance and host tests; a running surface receives only
-`WorkspaceAccessCapability`, not persistence or transaction internals. Iteration 1B can
-replace this registry with the plugin runtime without changing Core or application
-operation contracts.
+`createDefaultBootstrapRegistry` is the official local composition seam. It constructs
+six explicit built-in plugin registrations and resolves them through Core's
+`PluginRuntime`: Phase 0 local resources, then Phase 1 kernel, Standard Model,
+persistence, application/workspace, and surface plugins. These are ordinary runtime
+registrations with exact manifests, capability declarations, dependencies, and start
+results—the same path available to a third-party registration. They are not a wrapper
+around a second private composition path.
+
+The running graph exposes deterministic inspection for conformance and host tests.
+Every named `HostComposition` capability is the exact opaque value registered in that
+graph: local resources, Standard Model and invariant, Markdown intent store and
+transaction provider, Core transaction engine and graph kernel, bounded query
+contracts, component resource mapper, snapshot decoder, shared application
+operations, workspace access, and the injected surface. A running surface still
+receives only `WorkspaceAccessCapability`, not persistence, graph, runtime, or
+transaction internals.
+
+The default profile uses exact capability version `1.0.0` and versioned capability IDs
+such as `groma.resources/v1`. Package/configuration discovery, dynamic imports, trust,
+and acquisition are not part of this composition; later host work selects additional
+registrations before calling the same resolver.
 
 Registry construction snapshots the selected coordination root, entropy source,
 verification-only resource fault injector, and surface before composition can await.
@@ -129,6 +141,32 @@ without waiting for a non-cooperative pending Promise; late resolve, reject, or 
 results are contained and never dispatch a surface. Only runtime values exactly equal to
 `SIGINT` or `SIGTERM` appear in a cancelled outcome. Any other injected signal value
 requests generic cancellation without exposing the value.
+
+Cancellation after composition has begun also owns any graph delivered later: the Host
+canonicalizes a late valid composition and cancels its plugin graph asynchronously,
+while malformed or rejected late values remain contained. During pending recovery,
+provider cancellation waits for the recovery Promise to settle. During pending surface
+start, it waits for that start to settle and, if a session appears, for its one `stop()`
+attempt. These fences prevent providers from disappearing underneath in-flight work
+without delaying the initial cancelled return. This deferred cleanup preserves
+surface-before-provider ordering and one graph cleanup traversal once the pending
+operation settles, but it may complete after `runHost` has returned its cancelled
+outcome. If a provider never settles, or the process exits first, that deferred cleanup
+cannot be guaranteed; no later public outcome is available to report its failure.
+
+Whenever dependent composition, recovery, and surface-start work has settled—including
+normal and failure exits and cancellation after an active surface session exists—the
+Host awaits surface cleanup and then the running plugin graph's shutdown or cancellation
+before `runHost` returns. The Core runtime supplies the dependency-safe, exactly-once
+plugin ordering; the Host only adapts its process cause to `cancel()` or `shutdown()` and
+exact-validates the native-Promise result. Failure of this awaited plugin cleanup becomes
+the stable `host-plugin-cleanup-failed` surface outcome. External cancellation and
+process-signal listener cleanup still run afterward with their existing deterministic
+precedence. The deferred late-work cases above retain the same surface-before-provider
+ordering but are deliberately contained outside that returned outcome.
+The cleanup mode is captured from the lifecycle cause rather than inferred from the
+mutable public outcome, so a surface-stop failure after `SIGINT` or `SIGTERM` still
+cancels providers instead of converting the traversal into normal shutdown.
 
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners

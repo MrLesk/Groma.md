@@ -7,6 +7,7 @@ import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
 
 import {
   createDefaultBootstrapRegistry,
+  defaultHostCapabilityIds,
   runHost,
   type DefaultBootstrapRegistryOptions,
   type HostSurface,
@@ -75,6 +76,7 @@ describe("default bootstrap registry", () => {
       "invariant",
       "model",
       "operations",
+      "plugins",
       "queries",
       "resourceMapper",
       "resources",
@@ -85,6 +87,38 @@ describe("default bootstrap registry", () => {
       "transactionProvider",
       "workspace",
     ]);
+    expect(composed.value.plugins?.inspect()).toMatchObject({
+      apiVersion: "groma.plugin/v1",
+      plugins: [
+        { id: "official.resources", phase: 0 },
+        { id: "official.kernel", phase: 1 },
+        { id: "official.model", phase: 1 },
+        { id: "official.persistence", phase: 1 },
+        { id: "official.application", phase: 1 },
+        { id: "official.surface", phase: 1 },
+      ],
+      state: "running",
+    });
+    const capabilityIdentities = [
+      ["graph", defaultHostCapabilityIds.graph],
+      ["invariant", defaultHostCapabilityIds.invariant],
+      ["model", defaultHostCapabilityIds.model],
+      ["operations", defaultHostCapabilityIds.operations],
+      ["queries", defaultHostCapabilityIds.queries],
+      ["resourceMapper", defaultHostCapabilityIds.resourceMapper],
+      ["resources", defaultHostCapabilityIds.resources],
+      ["snapshotStateDecoder", defaultHostCapabilityIds.snapshotStateDecoder],
+      ["store", defaultHostCapabilityIds.store],
+      ["surface", defaultHostCapabilityIds.surface],
+      ["transactionEngine", defaultHostCapabilityIds.transactionEngine],
+      ["transactionProvider", defaultHostCapabilityIds.transactionProvider],
+      ["workspace", defaultHostCapabilityIds.workspace],
+    ] as const;
+    for (const [field, id] of capabilityIdentities) {
+      const providers = composed.value.plugins?.capabilities(id, "1.0.0");
+      expect(providers).toHaveLength(1);
+      expect(providers?.[0]?.value).toBe(composed.value[field]);
+    }
   });
 
   test("reports invalid process context without leaking the supplied path", async () => {
@@ -222,6 +256,42 @@ describe("default bootstrap registry", () => {
       initializationFrozen: true,
       initializationKeys: ["initialize"],
     });
+  });
+
+  test("rechecks cancellation after the complete plugin graph starts", async () => {
+    const context = await temporaryWorkspace();
+    let reads = 0;
+    const cancellation = Object.create(null) as AbortSignal;
+    Object.defineProperty(cancellation, "aborted", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads >= 13;
+      },
+    });
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => new Uint8Array(length),
+      surface: idleSurface(),
+    });
+
+    const composed = await registry.compose({
+      cancellation,
+      workspaceRoot: context.workspaceRoot,
+    });
+
+    expect(composed).toEqual({
+      diagnostics: [
+        {
+          code: "host-composition-failed",
+          message: "Built-in plugin startup was cancelled",
+        },
+      ],
+      ok: false,
+    });
+    expect(reads).toBe(13);
   });
 
   test("contains no server, React, dynamic plugin, or project-code loading path", async () => {
