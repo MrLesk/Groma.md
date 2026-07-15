@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 02:32'
+updated_date: '2026-07-15 02:52'
 labels: []
 milestone: m-2
 dependencies: []
@@ -49,11 +49,7 @@ Make capability composition an explicit Core service so the official host, built
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Make resolver ambiguity and all ordering independent of registration order and locale by excluding every duplicate-ID registration and using one code-unit comparator throughout diagnostics, manifests, versions, providers, dependencies, and lifecycle views.
-2. Reserve the running graph cleanup Promise before invoking any stop callback so reentrant cancel/shutdown shares the first causal reason and one reverse dependency traversal.
-3. Refactor Host cancellation ownership into an exactly-once graph cleanup coordinator that preserves causal cancel versus shutdown separately from public outcome precedence.
-4. Fence late composition, recovery, and surface-start work: return promptly on cancellation, then contain settlement and cancel only after dependent work ends, stopping a late session before provider cancellation.
-5. Add focused reversal, comparator, reentrancy, late-work, ordering, exact-count, and stop-failure regressions; update docs and Backlog evidence; rerun focused/full gates and commit without pushing.
+1. Export Core-owned native-Promise observation from the Core barrel and switch Host lifecycle to that direct boundary while retaining the Application compatibility re-export byte-for-byte. 2. Clarify Core cardinality, reusable resolved-graph templates, and the GROM-21/GROM-22/GROM-23 scope boundary; clarify Host awaited active cleanup versus best-effort deferred late-work cleanup. 3. Retain PluginRuntimeState unless review finds a semantic defect, recording the compatibility/cosmetic assessment and rejecting broader SDK ergonomics or staged-loading changes as owned by GROM-23/GROM-22. 4. Run focused and full verification, update review rationale and evidence through Backlog CLI, restore Done, and commit without pushing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -70,10 +66,14 @@ Objective validation: focused Core plugin suite passed 10 tests/39 assertions; f
 Reopened after independent quality review found six lifecycle/determinism defects at commit 1f4cff2: duplicate-ID first-wins semantics, locale-sensitive ordering, reentrant cleanup before Promise reservation, late valid composition leakage, provider cleanup racing pending recovery/surface start, and cleanup-mode selection from a mutable public outcome. AC1, AC2, AC3, and AC5 are unchecked pending objective regression evidence.
 
 Quality-review remediation completed. Duplicate IDs are now treated as one ambiguous group and every duplicate registration is excluded before provider/dependency analysis; every PluginRuntime order uses a shared Unicode code-unit comparator. Running-graph and Host plugin cleanup reserve one Promise before callbacks, preserving the first causal mode through reentrancy. Host cancellation now canonicalizes and cancels late valid compositions, fences provider cancellation behind pending recovery and late surface start/stop settlement, contains late malformed/rejected values and stop failures, and retains cancellation as the provider cleanup cause even when surface cleanup changes the public outcome. Default bootstrap rechecks cancellation after the full built-in graph starts and cancels rather than publishing that graph. Regression evidence: focused Core/Host/default-bootstrap suites passed 70 tests and 428 assertions; full bun run check passed formatting, strict TypeScript, architecture boundaries, 484 tests and 3,202 assertions, native build, binary smoke, and compiled Iteration 1A crash recovery. git diff --check and backlog doctor passed.
+
+Follow-up Claude review assessment started. Accepted narrow findings: document deferred Host cleanup accurately, clarify system-wide single-provider cardinality and reusable resolved graphs, remove Host lifecycle dependency on the Application promise shim, and state the phase/discovery/SDK scope boundary. Broader context.require, provider-shape, cardinality-removal, semver/collision redesign, runHost decomposition, promise-style, and staged-loading suggestions are intentionally out of GROM-21 scope; GROM-22 owns configuration-discovered Phase-1 membership and GROM-23 owns supported SDK ergonomics.
+
+Follow-up Claude review completed. Host documentation now distinguishes awaited cleanup when dependent work has settled from contained late-work cleanup that may finish after the cancelled return and cannot be guaranteed across a never-settling provider or process exit; no new outcome or API was introduced. Core documentation now defines single as one system-wide provider role per capability ID across exact versions, describes reusable resolved-graph templates, and limits GROM-21 phases to ordering/layering one explicitly supplied registration set. Core now exports its existing promise-observation implementation directly, Host lifecycle consumes that Core export, and the Application compatibility re-export remains unchanged. PluginRuntimeState was retained: it is already exported, accurately covers the running graph lifecycle including transitional and terminal states, and renaming it would be source-breaking cosmetic churn before GROM-23 settles the supported SDK. Claude suggestions for context.require, discriminated provider ergonomics, removing requirement cardinality, semver/collision redesign, runHost decomposition, promise-style changes, and staged loading were not applied: AC2 explicitly retains cardinality validation, GROM-22 owns Phase-0-discovered Phase-1 membership, and GROM-23 owns public SDK ergonomics. Validation: focused Core/Host/default-bootstrap suites passed 70 tests and 428 assertions; full bun run check passed formatting, TypeScript, boundaries, 484 tests and 3,202 assertions, native build/smoke, and compiled Iteration 1A crash recovery; git diff --check and backlog doctor passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the bounded phased plugin runtime and moved the six official built-in capability groups onto that same Core registration path. Resolution is exact, deterministic, locale-independent, ambiguity-safe, and fail-closed before startup; lifecycle startup, rollback, cancellation, shutdown, and reentrant cleanup are dependency-safe and exactly once. Host integration preserves surface authority while safely coordinating cancellation across late composition, recovery, surface start/stop, and provider cleanup. Public contracts and architecture guidance are documented, hostile-boundary regressions are covered, and the complete repository verification gate passes.
+Implemented and hardened the bounded phased plugin runtime, moved all six official capability groups onto it, and documented its precise current scope. Resolution and lifecycle remain deterministic, fail-closed, dependency-safe, and exactly once; Host cancellation safely distinguishes awaited active cleanup from contained deferred late-work cleanup. Core owns and exports the shared native-Promise observation boundary while Application retains its compatibility re-export. The GROM-21/GROM-22/GROM-23 responsibility boundary, system-wide single-provider role, and reusable resolved-graph semantics are explicit. Focused suites and the complete 484-test repository gate pass.
 <!-- SECTION:FINAL_SUMMARY:END -->

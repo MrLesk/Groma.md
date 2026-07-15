@@ -1,8 +1,10 @@
 import {
   failure,
+  observeNativePromise,
   parseGraphGeneration,
   success,
   type Diagnostic,
+  type NativePromiseObservation,
   type Result,
 } from "../core/index.ts";
 import type {
@@ -27,10 +29,6 @@ import {
   inspectHostRecord,
   isHostProxy,
 } from "./runtime-validation.ts";
-import {
-  observeNativePromise,
-  type NativePromiseObservation,
-} from "../application/promise-observation.ts";
 import { containCapabilityValue } from "../application/capability-value.ts";
 
 export interface RunHostOptions {

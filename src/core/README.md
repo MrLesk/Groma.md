@@ -23,6 +23,12 @@ The first runtime API is deliberately narrow:
 - every capability declares `single` or `multiple` provider cardinality, and the
   requirement must agree with its providers.
 
+`single` reserves one system-wide provider role for a capability ID across all exact
+versions. Registering two providers for that ID is therefore a collision even when their
+versions differ; this version-blind collision is intentional. Once the sole role is
+unambiguous, exact version matching verifies that a requirement targets precisely the
+contract version that provider implements.
+
 This keeps incompatibility diagnostics deterministic while the contract is still
 small. A Phase 0 plugin may depend only on Phase 0 providers. A Phase 1 plugin may
 depend on either phase. Independent Phase 0 plugins start before independent Phase 1
@@ -35,11 +41,21 @@ registered more than once, every registration with that ID is excluded from the 
 graph; registration order can never choose a first winner or leak one duplicate's
 capabilities into dependency resolution.
 
+In GROM-21, phases order and layer the registrations already supplied to one explicit
+`resolve()` call. This runtime does not use Phase 0 outputs to discover a new Phase 1
+membership set. GROM-22 owns workspace configuration discovery and selection of that
+later membership and may evolve this still-internal runtime. GROM-23 then publishes the
+supported SDK and settles third-party ergonomics; GROM-21 deliberately does not design
+staged loading or rename phases into a different abstraction.
+
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;
 opaque capability values retain their identity. Resolved and running graph inspection
 is copied and frozen and contains only manifests, dependencies, phases, lifecycle
 states, and provider IDs—not layout or host configuration.
+The resolved graph is a reusable immutable template rather than a running singleton.
+Each `start()` call creates an independent running graph with its own callback results,
+capability values, lifecycle state, and cleanup traversal.
 
 Start proceeds in dependency order. A thrown, rejected, or malformed start rolls back
 already-started plugins in reverse order. Normal shutdown and cancellation use the
