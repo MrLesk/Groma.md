@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 08:03'
+updated_date: '2026-07-15 08:31'
 labels: []
 milestone: m-4
 dependencies:
@@ -78,7 +78,9 @@ Support reproducible local plugin packages for the initial package-management de
 6. Keep remote shorthand rejection, adversarial filesystem regressions, and four-target compilation coverage.
 7. Add an explicit Host platform input and fail closed for persisted trust and local plugin execution on Windows until a bounded owner/ACL attestor exists; preserve fresh Windows startup without local plugin state.
 8. Add a deterministic platform-injected regression proving an existing exact grant under an unattested Windows root cannot authorize import, plus stable lifecycle diagnostics and honest architecture/Host/CLI documentation.
-9. Record the exact modified-file set including the Backlog task itself; run focused tests, bun run check, bun run check:targets, backlog doctor, and diff review before returning the task to Done.
+9. Let fresh Windows workspaces remove an inert blueprint declaration only after conservatively proving the plugin user-data root is absent; otherwise retain the unattested-root failure.
+10. Supersede prior trust grants for the same logical package-entry subject only when explicit trust is granted for new exact bytes, preserving exact matching, canonical order, and bounded state.
+11. Run focused Host tests, bun run check, bun run check:targets, backlog doctor, and diff review; record evidence and return the task to Done.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -97,10 +99,16 @@ Closure review reopened GROM-24 at ea5c09a684cfd0b10e66b606dfa96b53b80623e7. The
 Windows trust follow-up: the local package manager now snapshots a Host-owned POSIX/Windows trust-root platform input. POSIX keeps real-directory, current-owner, and exact 0700 checks. Windows does not read or write persisted plugin trust and refuses enabled local-plugin execution with plugin-package-trust-root-unattested until a bounded owner/ACL attestor exists. Fresh Windows startup remains available only when no enabled blueprint plugin and no plugin user-data root exists; it starts without personal local plugins. No POSIX mode heuristic or localized shell-output parser was introduced.
 
 The deterministic regression creates and persists a valid exact grant under the POSIX path, then injects the Windows platform over that same workspace and proves the persisted grant cannot authorize execution (zero imports and the stable diagnostic). It also proves a fresh Windows workspace starts without creating a trust root. The Host lifecycle canonicalizes the diagnostic. Final validation: focused Host tests passed 73 tests / 0 failures; bun run check passed format, strict typecheck, architecture boundaries, 537 tests / 0 failures, native 4 MiB compiled plugin execution, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
+
+Claude closure review identified two actionable security-state gaps on PR #25: inert blueprint removal was blocked forever in a fresh unattested Windows workspace, and exact trust grants accumulated obsolete hashes for one logical package entry. GROM-24 is reopened on the existing branch for bounded corrections and regressions.
+
+Implemented the two closure corrections. Windows blueprint remove now uses the same conservative absent-root probe as fresh startup: existing or unclassifiable roots retain plugin-package-trust-root-unattested, while a proven-absent root permits inert declaration cleanup without trust-state access. Explicit new exact-byte trust now replaces prior grants for the same logical package-entry subject. Focused Host coverage passes 14 tests / 0 failures, including exact cleanup, unchanged bytes on existing-root refusal, repeated re-trust with one canonical bounded grant, and failed byte reversion before import.
+
+Final closure validation passed on the exact follow-up diff: focused local-package coverage passed 15 tests / 0 failures; bun run check passed formatting, strict typecheck, architecture boundaries, 539 tests / 0 failures, native compiled package workflow, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed GROM-24 with closure-review hardening. In addition to canonical writer symmetry, stable file snapshots, exact captured-byte execution, scoped trust, coordinated lock CAS, and adversarial package regressions, persisted local-plugin trust now fails closed on Windows because the Host cannot yet attest ACL ownership. Existing grants cannot authorize Windows execution, while a fresh Windows workspace without local-plugin state still starts normally. Documentation states the exact limitation and non-sandbox boundary. Verified by 537 repository tests, a platform-injected persisted-grant regression with zero imports, native 4 MiB compiled plugin execution, Iteration 1A recovery, four target builds, Backlog doctor, and diff checks.
+Completed GROM-24 including the two actionable PR closure findings. Fresh Windows workspaces can add, inspect, and remove inert blueprint packages without creating or reading trust state, while existing or unclassifiable trust roots retain the stable fail-closed diagnostic and preserve exact configuration/lock bytes. New exact-byte trust supersedes obsolete grants for the same logical package entry, so state remains canonical and bounded and byte reversion requires trust again. Verified with 15 focused Host tests, the full 539-test repository check, native compiled workflows, four target builds, Backlog doctor, and diff checks.
 <!-- SECTION:FINAL_SUMMARY:END -->

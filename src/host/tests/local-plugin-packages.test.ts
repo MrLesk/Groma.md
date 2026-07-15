@@ -783,6 +783,185 @@ describe("local plugin package manager", () => {
     expect(imports).toBe(0);
   });
 
+  test("removes an inert Windows blueprint package only when the trust root is absent", async () => {
+    const existing = await fixture();
+    const existingSource = await writePackage(existing.workspaceRoot, "example-existing-windows", [
+      "./plugins/entry.js",
+    ]);
+    const existingManager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(existing.resources),
+      trustRootPlatform: "win32",
+      ...existing,
+    });
+    expect(await existingManager.add({ scope: "blueprint", source: existingSource })).toMatchObject(
+      { ok: true },
+    );
+    const existingConfigurationFile = path.join(existing.workspaceRoot, "groma", "groma.yaml");
+    const existingLockFile = path.join(existing.workspaceRoot, "groma", "packages.lock");
+    const existingConfigurationBytes = await readFile(existingConfigurationFile);
+    const existingLockBytes = await readFile(existingLockFile);
+    expect(
+      await existingManager.remove({ name: "example-existing-windows", scope: "blueprint" }),
+    ).toMatchObject({
+      diagnostics: [{ code: "plugin-package-trust-root-unattested" }],
+      ok: false,
+    });
+    expect(await readFile(existingConfigurationFile)).toEqual(existingConfigurationBytes);
+    expect(await readFile(existingLockFile)).toEqual(existingLockBytes);
+
+    const absent = await fixture();
+    const absentSource = await writePackage(absent.workspaceRoot, "example-fresh-windows", [
+      "./plugins/entry.js",
+    ]);
+    const configurationFile = path.join(absent.workspaceRoot, "groma", "groma.yaml");
+    const configurationBefore = await readFile(configurationFile);
+    await rm(absent.userDataRoot, { recursive: true });
+    let imports = 0;
+    const absentManager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(absent.resources),
+      importModule: async () => {
+        imports += 1;
+        return {};
+      },
+      trustRootPlatform: "win32",
+      ...absent,
+    });
+    expect(await absentManager.add({ scope: "blueprint", source: absentSource })).toMatchObject({
+      ok: true,
+      value: { enabled: [], name: "example-fresh-windows", scope: "blueprint" },
+    });
+    expect(
+      await absentManager.inspect({ name: "example-fresh-windows", scope: "blueprint" }),
+    ).toMatchObject({
+      ok: true,
+      value: { enabled: [], name: "example-fresh-windows", scope: "blueprint" },
+    });
+    expect(
+      await absentManager.remove({ name: "example-fresh-windows", scope: "blueprint" }),
+    ).toEqual({ ok: true, value: { removed: "example-fresh-windows" } });
+    expect(await readFile(configurationFile)).toEqual(configurationBefore);
+    expect(await readFile(path.join(absent.workspaceRoot, "groma", "packages.lock"), "utf8")).toBe(
+      '{\n  "packages": [],\n  "schema": "groma.packages-lock/v1"\n}\n',
+    );
+    await expect(lstat(absent.userDataRoot)).rejects.toThrow();
+    expect(imports).toBe(0);
+  });
+
+  test("supersedes obsolete exact trust grants for one logical package entry", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-bounded-trust", [
+      "./plugins/entry.js",
+    ]);
+    const entryFile = path.resolve(context.workspaceRoot, source, "plugins", "entry.js");
+    const originalEntry = await readFile(entryFile);
+    let imports = 0;
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration("example.bounded-trust") };
+      },
+      ...context,
+    });
+    expect(await manager.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-bounded-trust",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const stateDirectory = path.join(context.userDataRoot, "workspaces");
+    const stateFiles = await readdir(stateDirectory);
+    expect(stateFiles).toHaveLength(1);
+    const stateFile = path.join(stateDirectory, stateFiles[0]!);
+    const integrities = new Set<string>();
+    const assertBoundedCanonicalTrust = async (): Promise<string> => {
+      const bytes = await readFile(stateFile, "utf8");
+      const state = JSON.parse(bytes) as {
+        readonly trust: readonly Record<string, unknown>[];
+      };
+      expect(Object.keys(state)).toEqual(["packages", "schema", "trust"]);
+      expect(state.trust).toHaveLength(1);
+      expect(Object.keys(state.trust[0]!)).toEqual([
+        "entry",
+        "entryIntegrity",
+        "manifestIntegrity",
+        "packageLocation",
+        "packageName",
+        "scope",
+        "workspaceLocation",
+      ]);
+      expect(bytes).toBe(`${JSON.stringify(state, null, 2)}\n`);
+      expect(new TextEncoder().encode(bytes).byteLength).toBeLessThan(1_024 * 1_024);
+      const integrity = state.trust[0]!.entryIntegrity;
+      expect(typeof integrity).toBe("string");
+      integrities.add(integrity as string);
+      return bytes;
+    };
+    await assertBoundedCanonicalTrust();
+
+    for (let revision = 1; revision <= 3; revision += 1) {
+      expect(
+        await manager.disable({
+          entry: "./plugins/entry.js",
+          name: "example-bounded-trust",
+          scope: "blueprint",
+        }),
+      ).toMatchObject({ ok: true });
+      await writeFile(entryFile, `export const marker = "revision-${revision}";\n`);
+      const beforeTrust = imports;
+      expect(
+        await manager.enable({
+          entry: "./plugins/entry.js",
+          name: "example-bounded-trust",
+          scope: "blueprint",
+        }),
+      ).toMatchObject({
+        diagnostics: [{ code: "plugin-full-user-permissions-trust-required" }],
+        ok: false,
+      });
+      expect(imports).toBe(beforeTrust);
+      expect(
+        await manager.enable({
+          entry: "./plugins/entry.js",
+          name: "example-bounded-trust",
+          scope: "blueprint",
+          trustFullUserPermissions: true,
+        }),
+      ).toMatchObject({ ok: true });
+      await assertBoundedCanonicalTrust();
+      expect(integrities.size).toBe(revision + 1);
+    }
+
+    expect(
+      await manager.disable({
+        entry: "./plugins/entry.js",
+        name: "example-bounded-trust",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({ ok: true });
+    await writeFile(entryFile, originalEntry);
+    const trustBeforeRevert = await readFile(stateFile);
+    const importsBeforeRevert = imports;
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-bounded-trust",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "plugin-full-user-permissions-trust-required" }],
+      ok: false,
+    });
+    expect(imports).toBe(importsBeforeRevert);
+    expect(await readFile(stateFile)).toEqual(trustBeforeRevert);
+  });
+
   test("compares the exact lock under coordination before publishing blueprint state", async () => {
     const context = await fixture();
     const source = await writePackage(context.workspaceRoot, "example-cas", ["./plugins/entry.js"]);

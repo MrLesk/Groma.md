@@ -988,7 +988,9 @@ Groma may read an inert local declaration and exact static manifest without trus
 Immediately before the first import of a new exact entry, the Host requires the explicit
 `--trust-full-user-permissions` grant. Persisted trust is stored outside the repository
 and bound to both canonical locations and the exact manifest and entry hashes; moving or
-changing either invalidates it.
+changing either invalidates it. Explicitly trusting new exact bytes supersedes obsolete
+grants for the same scope, workspace, package identity, and entry. Reverting those bytes
+therefore requires explicit trust again instead of reviving an older grant.
 
 This delivery attests a persisted trust root only on POSIX, where the Host can require
 the real directory to be owned by the current user with mode `0700`. POSIX mode bits do
@@ -997,7 +999,9 @@ the Windows Host never reads or writes persisted plugin trust and never executes
 enabled local plugin. An enabled blueprint package or any existing plugin user-data root
 fails with `plugin-package-trust-root-unattested` before import. A fresh Windows
 workspace with neither condition still starts normally and simply has no personal local
-plugins.
+plugins. Removing an inert blueprint declaration may skip trust pruning only when the
+Host proves the plugin user-data root is absent; an existing or unclassifiable root keeps
+the same fail-closed diagnostic.
 
 The trust message must explain:
 

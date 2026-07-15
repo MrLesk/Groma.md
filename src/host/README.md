@@ -125,7 +125,15 @@ user-data root to belong to the current user with mode `0700`; it does not prete
 mode bits attest Windows ACLs. Without a bounded Windows owner/ACL attestor, Windows
 fails `plugin-package-trust-root-unattested` before reading or writing plugin trust or
 importing an enabled local entry. A fresh Windows workspace with no enabled blueprint
-entry and no plugin user-data root still starts normally without personal plugins.
+entry and no plugin user-data root still starts normally without personal plugins. It
+may also remove an inert blueprint declaration without trust pruning, but only after the
+Host proves that user-data root is absent; an existing or unclassifiable root still
+fails closed.
+
+An explicit grant for changed exact bytes supersedes older grants for the same scope,
+workspace, package location, package name, and entry. Trust state therefore keeps one
+current exact grant per logical entry, and reverting to previously trusted bytes requires
+explicit trust again.
 
 Personal entries must provide and require only `groma.presentation.*` capabilities.
 This keeps canonical mutation capabilities out of personal runtime resolution; it is

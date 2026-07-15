@@ -572,7 +572,11 @@ function parseTrust(value: unknown): readonly TrustGrant[] | undefined {
 }
 
 function trustKey(grant: TrustGrant): string {
-  return `${grant.scope}\0${grant.workspaceLocation}\0${grant.packageName}\0${grant.packageLocation}\0${grant.entry}\0${grant.manifestIntegrity}\0${grant.entryIntegrity}`;
+  return `${trustSubjectKey(grant)}\0${grant.manifestIntegrity}\0${grant.entryIntegrity}`;
+}
+
+function trustSubjectKey(grant: TrustGrant): string {
+  return `${grant.scope}\0${grant.workspaceLocation}\0${grant.packageName}\0${grant.packageLocation}\0${grant.entry}`;
 }
 
 function emptyLock(): PackageLock {
@@ -912,6 +916,15 @@ export function createLocalPluginPackageManager(
       "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
     );
   }
+
+  const requireAbsentWindowsUserDataRoot = async (): Promise<Result<void>> => {
+    try {
+      await lstat(requestedUserDataRoot);
+      return unattestedWindowsTrustRoot();
+    } catch (error) {
+      return errorCode(error) === "ENOENT" ? success(undefined) : unattestedWindowsTrustRoot();
+    }
+  };
 
   const userResources = async (): Promise<LocalResourceProvider> => {
     const canonical = await secureUserDataRoot(requestedUserDataRoot, trustRootPlatform);
@@ -1342,9 +1355,12 @@ export function createLocalPluginPackageManager(
       const trust = trusted
         ? state.value.trust
         : Object.freeze(
-            [...state.value.trust, grant].sort((left, right) =>
-              compareCodeUnits(trustKey(left), trustKey(right)),
-            ),
+            [
+              ...state.value.trust.filter(
+                (existing) => trustSubjectKey(existing) !== trustSubjectKey(grant),
+              ),
+              grant,
+            ].sort((left, right) => compareCodeUnits(trustKey(left), trustKey(right))),
           );
       if (request.scope === "personal") {
         const packages = Object.freeze(
@@ -1499,19 +1515,24 @@ export function createLocalPluginPackageManager(
             "Disable every package entry before removing the package",
           );
         }
-        const state = await readUserState();
-        if (!state.ok) return state;
-        const trust = Object.freeze(
-          state.value.trust.filter(
-            (grant) => grant.scope !== "blueprint" || grant.packageName !== request.name,
-          ),
-        );
-        if (trust.length !== state.value.trust.length) {
-          const pruned = await writeUserState(
-            Object.freeze({ packages: state.value.packages, schema: state.value.schema, trust }),
-            state.value,
+        if (trustRootPlatform === "win32") {
+          const absent = await requireAbsentWindowsUserDataRoot();
+          if (!absent.ok) return absent;
+        } else {
+          const state = await readUserState();
+          if (!state.ok) return state;
+          const trust = Object.freeze(
+            state.value.trust.filter(
+              (grant) => grant.scope !== "blueprint" || grant.packageName !== request.name,
+            ),
           );
-          if (!pruned.ok) return pruned;
+          if (trust.length !== state.value.trust.length) {
+            const pruned = await writeUserState(
+              Object.freeze({ packages: state.value.packages, schema: state.value.schema, trust }),
+              state.value,
+            );
+            if (!pruned.ok) return pruned;
+          }
         }
         const packageDeclarations = Object.freeze(
           configuration.packageDeclarations.filter((item) => item.name !== request.name),
@@ -1588,12 +1609,8 @@ export function createLocalPluginPackageManager(
         if (selections.some((selection) => selection.locked.enabled.length > 0)) {
           return unattestedWindowsTrustRoot();
         }
-        try {
-          await lstat(requestedUserDataRoot);
-          return unattestedWindowsTrustRoot();
-        } catch (error) {
-          if (errorCode(error) !== "ENOENT") return unattestedWindowsTrustRoot();
-        }
+        const absent = await requireAbsentWindowsUserDataRoot();
+        if (!absent.ok) return absent;
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
