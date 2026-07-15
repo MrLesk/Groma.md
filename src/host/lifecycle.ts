@@ -23,6 +23,7 @@ import type {
   WorkspaceRecoveryReport,
   WorkspaceStatus,
 } from "./contracts.ts";
+import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 import {
   copyHostDiagnostics,
   inspectHostDenseArray,
@@ -125,6 +126,13 @@ function startupFailure(code: string, message: string): HostRunOutcome {
   });
 }
 
+function startupFailures(diagnostics: readonly Diagnostic[]): HostRunOutcome {
+  return Object.freeze({
+    diagnostics,
+    status: "startup-failure",
+  });
+}
+
 function surfaceFailure(code: string, message: string): HostRunOutcome {
   return Object.freeze({
     diagnostics: Object.freeze([diagnostic(code, message)]),
@@ -146,7 +154,7 @@ type ValidatedRecoveryOutcome =
 
 type ObservedBootstrapOutcome =
   | {
-      readonly diagnostic?: Diagnostic;
+      readonly diagnostics?: readonly Diagnostic[];
       readonly state: "bootstrap-failed";
     }
   | { readonly state: "cancelled" }
@@ -163,9 +171,55 @@ const bootstrapFailureMessages = Object.freeze({
   "bootstrap-provider-ambiguous":
     "Bootstrap capabilities must have exactly one compatible provider",
   "host-runtime-registration-invalid": "Host runtime registrations must use the official namespace",
+  "incompatible-plugin-runtime-version": "Plugin runtime API version is incompatible",
+  "incompatible-plugin-sdk-version": "Plugin SDK version is incompatible",
+  "invalid-local-plugin-package-source": "Local plugin package source is malformed",
+  "invalid-plugin-package-document":
+    "Plugin package JSON must contain exactly the documented fields",
+  "invalid-plugin-package-manifest":
+    "Plugin package manifest does not match the bounded public SDK contract",
+  "personal-plugin-capability-forbidden":
+    "Personal plugins may provide or require only groma.presentation.* capabilities",
+  "plugin-full-user-permissions-trust-required":
+    "Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe. Explicit trust is required before this exact entry can execute",
+  "plugin-package-entry-invalid":
+    "Plugin entry must export one bounded Phase 1 plugin registration as plugin",
+  "plugin-package-entry-undeclared":
+    "The selected plugin entry is absent from the exact package manifest",
+  "plugin-package-entry-load-failed": "A trusted local plugin entry could not be loaded",
+  "plugin-package-entry-unavailable": "The selected local plugin entry is unavailable",
+  "plugin-package-file-invalid": "Plugin package files must be bounded regular files, not links",
+  "plugin-package-file-unavailable": "A required local plugin package file is unavailable",
+  "plugin-package-integrity-drift": "A local package changed after its exact lock was written",
+  "plugin-package-enabled-limit-exceeded":
+    "Enabled local plugins exceed this Host's runtime capacity",
+  "plugin-package-lock-changed":
+    "Blueprint plugin package state changed during startup; restart after changes settle",
+  "plugin-package-lock-malformed": "The exact plugin package lock is malformed",
+  "plugin-package-lock-mismatch":
+    "Plugin package configuration does not match its exact lock entry",
+  "plugin-package-lock-missing": "A blueprint package declaration has no matching exact lock entry",
+  "plugin-package-lock-unavailable": "The exact plugin package lock is unavailable",
+  "plugin-package-plugin-id-reserved":
+    "Local plugin packages must not use the Host-reserved official.* plugin namespace",
+  "plugin-package-plugin-id-conflict": "Enabled local plugins must use distinct plugin IDs",
+  "plugin-package-source-unavailable": "Local plugin package source is unavailable",
+  "plugin-package-state-limit-exceeded":
+    "Local plugin package state exceeds its configured byte bound",
+  "plugin-package-state-unavailable":
+    "Local plugin package state is changing or unavailable; retry after changes settle",
+  "plugin-package-trust-root-unattested":
+    "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
+  "plugin-package-user-state-changed":
+    "Local plugin package state changed during startup; restart after changes settle",
+  "plugin-package-user-state-malformed": "Local plugin package state is malformed",
+  "plugin-package-user-state-unavailable": "Local plugin package state is unavailable",
   "project-plugin-validation-required":
     "Project-provided plugins are unsupported in this release pending package and trust validation",
   "runtime-plugin-unavailable": "A requested official runtime plugin is unavailable in this host",
+  "remote-plugin-package-acquisition-out-of-scope":
+    "Remote npm, Git, and URL plugin package acquisition is not supported in this delivery",
+  "unsupported-plugin-package-manifest-version": "Plugin package manifest version is unsupported",
   "unsupported-bootstrap-target":
     "Workspace bootstrap does not support this runtime platform or architecture",
   "workspace-configuration-conflict": "Workspace configuration is incompatible with this host",
@@ -181,18 +235,29 @@ const bootstrapFailureMessages = Object.freeze({
 
 function containedBootstrapFailure(value: unknown): ObservedBootstrapOutcome {
   const diagnostics = copyHostDiagnostics(value, 100, "invalid-host-bootstrap-result");
-  if (!diagnostics.ok || diagnostics.value.length !== 1) {
+  if (!diagnostics.ok || diagnostics.value.length === 0) {
     return { state: "bootstrap-failed" };
   }
-  const code = diagnostics.value[0]!.code;
-  if (!Object.hasOwn(bootstrapFailureMessages, code)) {
-    return { state: "bootstrap-failed" };
+
+  const canonical: Diagnostic[] = [];
+  for (const source of diagnostics.value) {
+    if (!Object.hasOwn(bootstrapFailureMessages, source.code)) {
+      return { state: "bootstrap-failed" };
+    }
+    let index = 0;
+    while (index < canonical.length && canonical[index]!.code < source.code) index += 1;
+    if (canonical[index]?.code === source.code) continue;
+    for (let move = canonical.length; move > index; move -= 1) {
+      canonical[move] = canonical[move - 1]!;
+    }
+    canonical[index] = diagnostic(
+      source.code,
+      bootstrapFailureMessages[source.code as keyof typeof bootstrapFailureMessages],
+    );
   }
+
   return {
-    diagnostic: diagnostic(
-      code,
-      bootstrapFailureMessages[code as keyof typeof bootstrapFailureMessages],
-    ),
+    diagnostics: Object.freeze(canonical),
     state: "bootstrap-failed",
   };
 }
@@ -334,6 +399,47 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   );
 }
 
+function canonicalPackageOperations(value: unknown): Result<PluginPackageOperations> {
+  const packages = inspectHostRecord(
+    value,
+    [["add", "disable", "enable", "inspect", "remove"]],
+    "invalid-host-composition",
+    "Plugin package operations",
+  );
+  if (
+    !packages.ok ||
+    typeof packages.value.add !== "function" ||
+    typeof packages.value.disable !== "function" ||
+    typeof packages.value.enable !== "function" ||
+    typeof packages.value.inspect !== "function" ||
+    typeof packages.value.remove !== "function"
+  ) {
+    return failure(
+      diagnostic("invalid-host-composition", "Plugin package operations are malformed"),
+    );
+  }
+  const receiver = value as object;
+  const add = packages.value.add as PluginPackageOperations["add"];
+  const disable = packages.value.disable as PluginPackageOperations["disable"];
+  const enable = packages.value.enable as PluginPackageOperations["enable"];
+  const inspect = packages.value.inspect as PluginPackageOperations["inspect"];
+  const remove = packages.value.remove as PluginPackageOperations["remove"];
+  return success(
+    Object.freeze({
+      add: (request: Parameters<PluginPackageOperations["add"]>[0]) =>
+        intrinsicReflectApply(add, receiver, [request]),
+      disable: (request: Parameters<PluginPackageOperations["disable"]>[0]) =>
+        intrinsicReflectApply(disable, receiver, [request]),
+      enable: (request: Parameters<PluginPackageOperations["enable"]>[0]) =>
+        intrinsicReflectApply(enable, receiver, [request]),
+      inspect: (request: Parameters<PluginPackageOperations["inspect"]>[0]) =>
+        intrinsicReflectApply(inspect, receiver, [request]),
+      remove: (request: Parameters<PluginPackageOperations["remove"]>[0]) =>
+        intrinsicReflectApply(remove, receiver, [request]),
+    }) as PluginPackageOperations,
+  );
+}
+
 function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecycle> {
   const plugins = inspectHostRecord(
     value,
@@ -413,6 +519,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "invariant",
         "model",
         "operations",
+        "packages",
         "queries",
         "resourceMapper",
         "resources",
@@ -428,6 +535,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "invariant",
         "model",
         "operations",
+        "packages",
         "plugins",
         "queries",
         "resourceMapper",
@@ -448,6 +556,8 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!workspace.ok) return workspace;
   const surface = canonicalSurface(composition.value.surface);
   if (!surface.ok) return surface;
+  const packages = canonicalPackageOperations(composition.value.packages);
+  if (!packages.ok) return packages;
   const initialization = canonicalInitializationOperations(composition.value.operations);
   if (!initialization.ok) return initialization;
   const plugins = Object.hasOwn(composition.value, "plugins")
@@ -481,6 +591,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       invariant: composition.value.invariant,
       model: composition.value.model,
       operations: composition.value.operations,
+      packages: packages.value,
       ...(plugins === undefined ? {} : { plugins: plugins.value }),
       queries: composition.value.queries,
       resourceMapper: composition.value.resourceMapper,
@@ -909,9 +1020,9 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             outcome = cancelled(cancellationSignal);
           } else if (first.state === "bootstrap-failed") {
             outcome =
-              first.diagnostic === undefined
+              first.diagnostics === undefined
                 ? startupFailure("host-bootstrap-failed", "Host bootstrap failed")
-                : startupFailure(first.diagnostic.code, first.diagnostic.message);
+                : startupFailures(first.diagnostics);
           } else if (first.state === "invalid-composition") {
             outcome = startupFailure(
               "invalid-host-composition",
@@ -1012,6 +1123,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   const context = Object.freeze({
                     cancellation: hostCancellation.signal,
                     initialization: composition.initialization,
+                    packages: composition.packages,
                     recovery: Object.freeze({ status: recovery }),
                     workspace: composition.workspace,
                   });

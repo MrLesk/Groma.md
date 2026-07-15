@@ -68,6 +68,10 @@ export interface PluginRuntimeBounds {
   readonly maxTokenCharacters: number;
 }
 
+export type PluginRegistrationValidationBounds = Readonly<
+  Pick<PluginRuntimeBounds, "maxCapabilitiesPerPlugin" | "maxTokenCharacters">
+>;
+
 export interface ResolvedPluginInspection {
   readonly dependencies: readonly string[];
   readonly id: string;
@@ -387,6 +391,30 @@ function canonicalRegistration(
       }),
       receiver: value as object,
       start: registration.value.start as PluginRegistration["start"],
+    }),
+  );
+}
+
+/** Contains one untrusted registration without resolving dependencies or executing plugin code. */
+export function validatePluginRegistration(
+  value: unknown,
+  bounds?: PluginRegistrationValidationBounds,
+): Result<PluginRegistration> {
+  const selectedBounds =
+    bounds === undefined
+      ? defaultPluginRuntimeBounds
+      : canonicalBounds({
+          maxCapabilitiesPerPlugin: bounds.maxCapabilitiesPerPlugin,
+          maxTokenCharacters: bounds.maxTokenCharacters,
+        });
+  const canonical = canonicalRegistration(value, selectedBounds, 0);
+  if (!canonical.ok) return failure(...canonical.diagnostics);
+  const receiver = canonical.value.receiver;
+  const start = canonical.value.start;
+  return success(
+    Object.freeze({
+      manifest: canonical.value.manifest,
+      start: (context: PluginStartContext) => intrinsicReflectApply(start, receiver, [context]),
     }),
   );
 }

@@ -118,7 +118,9 @@ quality job starts from a clean checkout, installs with `bun ci`, and invokes th
 `bun run check` command used locally. A second job uses one Linux runner to
 cross-compile all four promised 1A targets. It verifies the exact single-file output
 for every target and executes version, help, and the complete non-crash 1A workflow
-only for the Linux binary that the host can run.
+only for the Linux binary that the host can run. A bounded third job builds the native
+Windows executable on Windows and runs its version, help, and package safety smoke
+checks against the real process.
 
 `bun run check:targets` uses the same rule locally: it cross-compiles every target and
 black-box tests the target matching the current operating system and architecture. The

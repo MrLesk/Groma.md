@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import path from "node:path";
 
 import {
   createApplicationOperations,
@@ -38,12 +40,13 @@ import {
 } from "../standard-model/index.ts";
 import { isHostProxy } from "./runtime-validation.ts";
 import {
+  bootstrapConfigurationBounds,
+  bootstrapConfigurationStillUsable,
   createLocalConfigurationDiscovery,
   createYamlConfigurationParser,
   loadBootstrapConfiguration,
   localBootstrapConvention,
   parseBootstrapConfiguration,
-  bootstrapConfigurationStillUsable,
   type BootstrapConfigurationLoad,
   type ConfigurationDiscoveryProvider,
   type ConfigurationParserProvider,
@@ -55,6 +58,8 @@ import type {
   HostProcessContext,
 } from "./contracts.ts";
 import { createLocalWorkspaceCapability, defaultWorkspaceDocument } from "./local-workspace.ts";
+import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
+import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 
 const intrinsicReflectApply = Reflect.apply;
 
@@ -64,6 +69,7 @@ export const defaultHostBounds = Object.freeze({
   maxEmbeddedItems: 100,
   maxOwnerCharacters: 100,
   maxPageSize: 100,
+  maxPluginRegistrations: 128,
   maxPinnedComponentIds: 100,
   maxRelationshipMutations: 100,
   maxRelationships: 1_000,
@@ -151,6 +157,44 @@ function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
 
+function localPhaseOneProviderCanRepair(
+  item: Diagnostic,
+  registrations: readonly PluginRegistration[],
+): boolean {
+  if (
+    item.code !== "missing-capability-provider" &&
+    item.code !== "incompatible-capability-version"
+  ) {
+    return false;
+  }
+  const capabilityId = item.details?.capabilityId;
+  const pluginId = item.details?.pluginId;
+  const requiredVersion = item.details?.requiredVersion;
+  if (
+    typeof capabilityId !== "string" ||
+    typeof pluginId !== "string" ||
+    typeof requiredVersion !== "string"
+  ) {
+    return false;
+  }
+  const consumer = registrations.find(
+    (registration) => registration.manifest.id === pluginId && registration.manifest.phase === 1,
+  );
+  const requirement = consumer?.manifest.requires.find(
+    (candidate) => candidate.id === capabilityId && candidate.version === requiredVersion,
+  );
+  if (requirement === undefined) return false;
+  if (item.code === "missing-capability-provider") return true;
+  const existingProviders = registrations.flatMap((registration) =>
+    registration.manifest.provides.filter((provided) => provided.id === capabilityId),
+  );
+  return (
+    requirement.cardinality === "multiple" &&
+    existingProviders.length > 0 &&
+    existingProviders.every((provided) => provided.cardinality === "multiple")
+  );
+}
+
 export function createDefaultBootstrapRegistry(
   options: DefaultBootstrapRegistryOptions,
 ): HostBootstrapRegistry {
@@ -158,7 +202,9 @@ export function createDefaultBootstrapRegistry(
   const additionalRuntimePlugins = Object.freeze([...(options.additionalRuntimePlugins ?? [])]);
   const coordinationRoot = options.coordinationRoot;
   const entropyOption = options.entropy;
+  const loadLocalPluginPackages = options.loadLocalPluginPackages ?? true;
   const resourceFaultInjector = options.resourceFaultInjector;
+  const userDataRoot = options.userDataRoot ?? path.join(homedir(), ".groma");
   const selectedTarget = Object.freeze({
     architecture: options.target?.architecture ?? process.arch,
     platform: options.target?.platform ?? process.platform,
@@ -436,6 +482,7 @@ export function createDefaultBootstrapRegistry(
             let operations: ApplicationOperations | undefined;
             const workspace = await createLocalWorkspaceCapability({
               bounds: {
+                maxConfigurationBytes: bootstrapConfigurationBounds.maxConfigurationBytes,
                 maxProviderDiagnostics: defaultHostBounds.maxDiagnosticCount,
                 maxSnapshotResources: Math.max(
                   defaultHostBounds.maxComponents,
@@ -518,10 +565,10 @@ export function createDefaultBootstrapRegistry(
         }),
       ]);
       const runtime = new PluginRuntime({
-        maxCapabilitiesPerPlugin: 16,
+        maxCapabilitiesPerPlugin: defaultHostPluginRegistrationBounds.maxCapabilitiesPerPlugin,
         maxDiagnostics: defaultHostBounds.maxDiagnosticCount,
-        maxPlugins: 128,
-        maxTokenCharacters: 128,
+        maxPlugins: defaultHostBounds.maxPluginRegistrations,
+        maxTokenCharacters: defaultHostPluginRegistrationBounds.maxTokenCharacters,
       });
       const builtInPhaseZero = registrations.filter(
         (registration) => registration.manifest.phase === 0,
@@ -615,6 +662,27 @@ export function createDefaultBootstrapRegistry(
           diagnostic("host-composition-failed", "Bootstrap plugin startup was cancelled"),
         );
       }
+      const packageManager = createLocalPluginPackageManager({
+        bootstrap,
+        maxEnabledPlugins: Math.max(
+          0,
+          defaultHostBounds.maxPluginRegistrations -
+            phaseZeroRegistrations.length -
+            builtInPhaseOne.length -
+            bootstrapConfigurationBounds.maxRequestedRuntimePlugins,
+        ),
+        resources,
+        trustRootPlatform: selectedTarget.platform === "win32" ? "win32" : "posix",
+        userDataRoot,
+        workspaceRoot: convention.value.workspaceRoot,
+      });
+      const packageOperations = Object.freeze({
+        add: packageManager.add,
+        disable: packageManager.disable,
+        enable: packageManager.enable,
+        inspect: packageManager.inspect,
+        remove: packageManager.remove,
+      });
       const requested =
         bootstrap.state === "configured"
           ? bootstrap.configuration.requestedRuntimePlugins
@@ -656,16 +724,58 @@ export function createDefaultBootstrapRegistry(
           ),
         );
       }
-      const selectedRegistrations = Object.freeze([
+      const selectedHostRegistrations = Object.freeze([
         ...phaseZeroRegistrations,
         ...builtInPhaseOne,
         ...selectedAdditional,
+      ]);
+      const hostPreflight = runtime.resolve(selectedHostRegistrations);
+      if (
+        !hostPreflight.ok &&
+        hostPreflight.diagnostics.some(
+          (item) => !localPhaseOneProviderCanRepair(item, selectedHostRegistrations),
+        )
+      ) {
+        return failAfterStage(
+          diagnostic("host-composition-failed", "Selected plugin resolution failed"),
+        );
+      }
+      const loadedPackages = loadLocalPluginPackages
+        ? await packageManager.loadEnabled()
+        : success(
+            Object.freeze({
+              personalPluginIds: Object.freeze([]),
+              registrations: Object.freeze([]),
+            }),
+          );
+      if (!loadedPackages.ok) return failAfterStage(...loadedPackages.diagnostics);
+      const selectedRegistrations = Object.freeze([
+        ...selectedHostRegistrations,
+        ...loadedPackages.value.registrations,
       ]);
       const resolved = runtime.resolve(selectedRegistrations);
       if (!resolved.ok) {
         return failAfterStage(
           diagnostic("host-composition-failed", "Selected plugin resolution failed"),
         );
+      }
+      const resolvedInspection = resolved.value.inspect();
+      for (const pluginId of loadedPackages.value.personalPluginIds) {
+        const plugin = resolvedInspection.plugins.find((entry) => entry.id === pluginId);
+        if (
+          plugin === undefined ||
+          plugin.phase !== 1 ||
+          [...plugin.provides, ...plugin.requires].some(
+            (declaration) => !declaration.id.startsWith("groma.presentation."),
+          )
+        ) {
+          return failAfterStage(
+            diagnostic(
+              "personal-plugin-capability-forbidden",
+              "Personal plugins may provide or require only groma.presentation.* capabilities",
+            ),
+          );
+        }
       }
       const reloaded = await loadBootstrapConfiguration(
         configurationDiscovery,
@@ -789,6 +899,7 @@ export function createDefaultBootstrapRegistry(
           invariant,
           model,
           operations,
+          packages: packageOperations,
           plugins,
           queries,
           resourceMapper,

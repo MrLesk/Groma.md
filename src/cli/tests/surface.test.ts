@@ -22,6 +22,28 @@ function context(code: string): HostSurfaceContext {
       requireWorkspace: () => unavailable,
       status: () => ({ state: "configured" as const }),
     }),
+    packages: Object.freeze({
+      add: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
+      disable: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
+      enable: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
+      inspect: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
+      remove: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
+    }),
   });
 }
 
@@ -45,6 +67,68 @@ describe("CLI surface", () => {
       await session.completion;
 
       expect(controller.result()).toMatchObject({ exitCode, ok: false });
+      await session.stop();
+    }
+  });
+
+  test("keeps late package configuration provider failures in the infrastructure class", async () => {
+    const invocation: CliInvocation = Object.freeze({
+      command: Object.freeze({
+        entry: "./plugins/entry.js",
+        kind: "package-enable",
+        name: "example",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+      format: "json",
+    });
+    const controller = createCliSurfaceController(
+      invocation,
+      { read: async () => "{}" },
+      { stdin: false, stdout: false },
+    );
+    const session = await controller.surface.start(
+      context("workspace-configuration-provider-failure"),
+    );
+    await session.completion;
+
+    expect(controller.result()).toMatchObject({ exitCode: CLI_EXIT.infrastructure, ok: false });
+    await session.stop();
+  });
+
+  test("classifies local package configuration failures as workspace failures", async () => {
+    const invocation: CliInvocation = Object.freeze({
+      command: Object.freeze({
+        entry: "./plugins/entry.js",
+        kind: "package-enable",
+        name: "example",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+      format: "json",
+    });
+    for (const code of [
+      "plugin-package-enabled-limit-exceeded",
+      "plugin-package-lock-changed",
+      "plugin-package-plugin-id-conflict",
+      "plugin-package-state-limit-exceeded",
+      "plugin-package-state-unavailable",
+      "plugin-package-trust-root-unattested",
+      "plugin-package-user-state-changed",
+      "plugin-package-user-state-unavailable",
+    ]) {
+      const controller = createCliSurfaceController(
+        invocation,
+        { read: async () => "{}" },
+        { stdin: false, stdout: false },
+      );
+      const session = await controller.surface.start(context(code));
+      await session.completion;
+
+      expect(controller.result(), code).toMatchObject({
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+      });
       await session.stop();
     }
   });

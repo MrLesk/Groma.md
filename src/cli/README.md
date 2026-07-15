@@ -24,18 +24,58 @@ to plain text.
 The exact plain-text grammar remains provisional through Iteration 2 so the human
 experience can improve without changing the application contracts or JSON envelope.
 
+## Local plugin packages
+
+The complete supported local-path surface is `package add`, `inspect`, `enable`,
+`disable`, and `remove`; `groma --help` shows the exact grammar. Blueprint scope is the
+default. `--personal` keeps declaration and trust state outside the repository and only
+permits `groma.presentation.*` capability declarations. Add and inspect read the exact
+static `groma.package.json` document without importing package code. Enable is the code
+execution boundary and requires `--trust-full-user-permissions` unless an unchanged,
+location-bound exact grant already exists.
+Local registrations cannot use the Host-reserved `official.*` plugin namespace. Disable
+retains an unchanged exact-byte trust grant for later re-enable; remove is the explicit
+revocation boundary and prunes grants after every package entry has been disabled.
+
+The initial executable entry is a bounded bundled/self-contained module. TypeScript
+syntax and `node:` built-ins are supported, while relative and bare runtime imports are
+not; the Host and SDK READMEs document this exact-byte compatibility boundary.
+
+Persisted local-plugin trust and execution currently fail closed on Windows with
+`plugin-package-trust-root-unattested`, because this delivery has no bounded Windows ACL
+owner attestor. A fresh Windows workspace without enabled local plugins or an existing
+plugin user-data root still starts normally; POSIX trust behavior is unchanged.
+
+Package commands use a management-only Host composition: previously enabled entries are
+not loaded or started. Inspect reports manifest or enabled-entry drift without executing
+it, and disable/remove remain available as recovery operations when ordinary startup
+would fail closed.
+
+Remote npm, Git, and URL sources return the stable
+`remote-plugin-package-acquisition-out-of-scope` diagnostic before source filesystem
+access. Package commands write only `groma/groma.yaml`, `groma/packages.lock`, and the
+Host-owned user-data file. They never edit an observed project's `package.json`,
+lockfiles, or dependency tree. Package mutations canonically reserialize the Groma-owned
+sections of `groma/groma.yaml`; YAML comments and hand formatting are not preserved. If a
+package-state replacement may have committed or coordination release fails after a write,
+the command returns `plugin-package-state-indeterminate` in exit class 6 so automation
+does not retry blindly. Recovery compares `groma/groma.yaml` and `groma/packages.lock`,
+then uses `package disable` or `package remove` without loading package code only when
+those selections differ. Personal state is verified with `package inspect --personal`;
+a not-found result confirms that removal committed.
+
 Exit classes are stable:
 
-| Code | Class                                          |
-| ---: | ---------------------------------------------- |
-|    0 | Success                                        |
-|    2 | Invalid invocation or structured input         |
-|    3 | Workspace missing, incompatible, or conflicted |
-|    4 | Semantic validation or revision conflict       |
-|    5 | Provider or host infrastructure failure        |
-|    6 | Indeterminate commit outcome                   |
-|  130 | SIGINT or generic cancellation                 |
-|  143 | SIGTERM                                        |
+| Code | Class                                           |
+| ---: | ----------------------------------------------- |
+|    0 | Success                                         |
+|    2 | Invalid invocation or structured input          |
+|    3 | Workspace or persisted package-state failure    |
+|    4 | Command, package-source, or revision validation |
+|    5 | Provider or host infrastructure failure         |
+|    6 | Indeterminate semantic or package commit        |
+|  130 | SIGINT or generic cancellation                  |
+|  143 | SIGTERM                                         |
 
 Signal handling stops command-result publication and completes host cleanup promptly.
 The shared 1A application operations do not expose a mid-operation cancellation seam,

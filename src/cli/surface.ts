@@ -64,6 +64,9 @@ function failedResult(
 
 function diagnosticExit(diagnostics: readonly { readonly code: string }[]): number {
   const codes = diagnostics.map((entry) => entry.code);
+  if (codes.includes("plugin-package-state-indeterminate")) {
+    return CLI_EXIT.indeterminate;
+  }
   if (
     codes.some(
       (code) =>
@@ -81,6 +84,14 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
     codes.some(
       (code) =>
         code === "no-workspace" ||
+        code === "plugin-package-enabled-limit-exceeded" ||
+        code === "plugin-package-plugin-id-conflict" ||
+        code === "plugin-package-integrity-drift" ||
+        code === "plugin-package-state-limit-exceeded" ||
+        code === "plugin-package-state-unavailable" ||
+        code === "plugin-package-trust-root-unattested" ||
+        code.includes("plugin-package-lock") ||
+        code.includes("plugin-package-user-state") ||
         code.includes("workspace-configuration") ||
         code.includes("workspace-initialization-conflict"),
     )
@@ -292,6 +303,21 @@ async function execute(
           ? CLI_EXIT.infrastructure
           : CLI_EXIT.success;
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
+  }
+  if (command.kind === "package-add") {
+    return applicationResult(command, await context.packages.add(command));
+  }
+  if (command.kind === "package-inspect") {
+    return applicationResult(command, await context.packages.inspect(command));
+  }
+  if (command.kind === "package-enable") {
+    return applicationResult(command, await context.packages.enable(command));
+  }
+  if (command.kind === "package-disable") {
+    return applicationResult(command, await context.packages.disable(command));
+  }
+  if (command.kind === "package-remove") {
+    return applicationResult(command, await context.packages.remove(command));
   }
   const operations = workspaceOperations(command, context);
   if (!("listRoots" in operations)) return operations;

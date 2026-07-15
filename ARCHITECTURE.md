@@ -362,8 +362,9 @@ not part of Core.
   committed declarations and exact lock entries.
 - **Outputs:** Materialized package; enabled plugin entry points; integrity and
   compatibility diagnostics; deterministic lock changes.
-- **Actions:** Resolve npm, Git, and path sources; verify trust and integrity; install
-  missing locked packages; filter package contributions; update and remove packages.
+- **Actions:** Resolve local path sources; verify trust and exact locked bytes; filter
+  package contributions; add, inspect, enable, disable, and remove packages. Remote npm,
+  Git, URL acquisition, updates, and synchronization remain later work.
 - **Relationships:** Runs in Official Host; supplies plugin entry points to Plugin
   Runtime; uses Local Resource Provider and host-level acquisition capabilities;
   never changes a scanned project's `package.json`, lockfiles, or dependencies.
@@ -856,7 +857,7 @@ blueprint may enable only the contributions it needs.
 
 ### Package Declaration and Checked Manifest
 
-An npm package may declare discovery metadata in its `package.json`:
+A future npm acquisition flow may declare discovery metadata in its `package.json`:
 
 ```json
 {
@@ -887,43 +888,56 @@ The public SDK separately defines the exact checked compatibility envelope:
 }
 ```
 
-The envelope is inert static JSON/data that a Host can obtain without evaluating a
+For the local-path delivery, this exact envelope is the package-root
+`groma.package.json`. It is inert static JSON/data that a Host obtains without evaluating a
 declared entry point or arbitrary package module. `checkPluginPackageCompatibility()`
 reads the six required enumerable data properties and returns a fresh frozen canonical
-envelope containing exactly those fields before any package code executes. It does not
+envelope containing exactly those fields before any package code executes. The official
+Host first requires the source JSON document itself to contain exactly these six fields,
+with no duplicate or unknown keys. The SDK checker does not
 enumerate a package-controlled in-memory object's keys; unknown source properties are
 ignored and cannot influence or survive canonicalization. `definePluginPackage()` is
 only a build-time TypeScript authoring aid for producing the static envelope; calling
-package code is not a discovery mechanism. Package-manager work must fail closed when
+package code is not a discovery mechanism. Each declared plugin path identifies a Phase
+1 ES module with one named `plugin` export containing its runtime registration. Importing
+that module is the code-execution boundary, never the manifest-discovery mechanism.
+Package-manager work must fail closed when
 package metadata, this envelope, or an exact lock disagree. Configuration may narrow
-the checked entry-point list with includes and exclusions, but it cannot load an entry
-point absent from that list. GROM-24 owns where a Host locates, materializes, validates
+the checked entry-point list by enabling selected contributions, but it cannot load an
+entry point absent from that list. The official Host owns where it locates, validates
 the exact static source-document shape, and locks the envelope; the SDK defines its
 compatibility meaning without acquiring packages.
 
 ### Sources and Scopes
 
-The official host recognizes:
+The initial supported package operations recognize local filesystem paths only:
 
 ```text
-npm:@acme/groma-platform@1.4.0
-git:github.com/acme/groma-platform@v1.4.0
 ./local-plugin
-/absolute/path/plugin.ts
+/absolute/path/to/local-plugin
 ```
+
+Blueprint declarations require portable `./` paths contained by the observed workspace.
+Personal declarations may use absolute local paths and are canonicalized to their real
+local location. Inputs beginning with `npm:`, `git:`, or a URL scheme fail with
+`remote-plugin-package-acquisition-out-of-scope` before source filesystem access. The
+Host neither resolves a remote registry nor invokes a project package manager.
 
 Packages have two scopes:
 
-- **User scope:** available to the current user across blueprints. Presentation and
-  development plugins may activate here.
+- **Personal scope:** workspace-specific enablement stored in the user's Groma data
+  root, outside the repository. Only Phase 1 registrations whose provided and required
+  capability IDs use `groma.presentation.*` may activate here.
 - **Local blueprint scope:** declared in committed Groma configuration and shared by
   everyone working on the blueprint.
 
-Project-local sources are materialized into Groma-owned, ignored directories. User
-sources live in the user's Groma data directory. Neither scope uses or modifies the
-dependency tree of an observed project.
+Local sources remain read-only live references in this delivery; no source is copied or
+installed. Personal declaration and trust state live in the user's Groma data directory.
+Neither scope uses or modifies the dependency tree, `package.json`, lockfiles, or
+dependencies of an observed project.
 
-If the same package exists in both scopes, the local blueprint declaration wins.
+Scopes remain explicit on every operation; neither scope silently shadows or enables the
+other.
 
 ### Reproducibility
 
@@ -935,81 +949,160 @@ The blueprint commits:
 
 ```text
 groma/groma.yaml       package declarations and enabled contributions
-groma/packages.lock    exact versions, Git commits, integrity hashes, API versions,
-                       and resolved entry points
+groma/packages.lock    exact package versions, static-manifest hashes, enabled entry
+                       hashes, and resolved plugin IDs
 ```
 
-Startup may materialize a missing package only after the project is trusted and only
-at the exact locked resolution. Offline mode performs no network operation and reports
-which locked package is unavailable.
+Startup reads only declared local paths. Before import it requires the exact static
+manifest bytes and every enabled entry module byte to match the deterministic lock. It
+then requires an exact trust grant bound to scope, canonical workspace location,
+canonical package location, package name, manifest hash, entry path, and entry hash.
+Drift fails before module evaluation. Supported package mutations and startup share one
+workspace-scoped package-state coordination lease. Direct edits do not participate in
+that lease, so startup re-reads canonical configuration, exact lock, and exact user state
+after each entry is materialized and immediately before importing it. The Host evaluates
+the already-read entry bytes through one immutable in-memory module URL; it never reopens
+the mutable entry path for execution. Manifest and entry opens additionally re-check the
+post-open canonical path, current file identity, and containment within the previously
+resolved package root before accepting captured bytes.
 
-Local path packages remain live references for development. A path package that can
-affect canonical state marks the blueprint non-reproducible and fails strict
-validation until replaced by a pinned package source.
+The Host validates unsupported project requests, unavailable official selections,
+additional Host registration namespaces, and selected Host registration defects that
+local providers cannot satisfy before importing enabled local packages. Package loading
+also re-reads canonical configuration before resolving the exact lock, so a selection
+changed since bootstrap fails before local module evaluation. Runtime plugin IDs are
+unique across the complete enabled blueprint-lock and personal-state union. Enable
+evaluates only the newly selected trusted entry, then rejects an ID already reserved by
+any other logical package entry before writing trust or package state. The `official.*`
+plugin namespace is reserved for Host-owned registrations and is rejected for every local
+package entry at the same pre-write boundary. Ordinary startup reads the complete lock
+even when configuration has no blueprint declarations, and rejects duplicate stored IDs
+before importing either registration. Enable performs the same exact configuration, lock,
+and personal-state revalidation immediately before its selected trusted entry executes.
+
+Configuration, lock, and personal-state serialization are preflighted against their
+read bounds before publication. Blueprint updates publish the lock before configuration;
+if publication is interrupted between those resources, management-only disable and
+remove operations recognize the lock-first state and reconcile configuration without
+loading package code. The inverse damaged state is also recoverable: when configuration
+still enables an entry but the lock or its package record is absent, disable may clear
+only that configured selection and remove may then clear the declaration. Recovery does
+not inspect the source or execute an entry. Lock and personal-state access failures are
+mapped to stable Host diagnostics before crossing the lifecycle boundary.
+
+After a lock replacement commits, any failure replacing configuration or releasing the
+coordination lease makes the operation indeterminate, including a definite non-commit of
+the second replacement. Recovery compares `groma/groma.yaml` and `groma/packages.lock`,
+then uses management-only disable or remove only when the selections differ. Personal
+state is verified independently with personal package inspection. Inspection remains
+inert when a valid static manifest has changed: it reports `manifest-drift` from the
+current bounded manifest without trying to resolve locked entries that the changed
+manifest no longer declares. When the manifest remains exact, changed entry bytes
+continue to report `entry-drift`.
+
+The runtime's 128-registration ceiling is budgeted before local code can run. The
+default profile reserves eight built-ins and all 64 optional official-runtime slots,
+leaving at most 56 enabled local entries across blueprint and personal scopes together;
+additional embedder bootstrap registrations reduce that remainder. Configuration
+parsing, enable, and ordinary startup enforce the applicable bound before import, and
+capacity rejection leaves every persisted byte unchanged.
+
+The initial executable-entry contract is deliberately bounded: one entry is at most 4
+MiB, declares at most 16 provided capabilities and 16 required capabilities with the
+Host's 128-character token bound, and must be a bundled or otherwise self-contained ES
+module. Bun-compatible
+TypeScript syntax in that exact file and absolute `node:` built-in imports are supported.
+Relative and bare runtime imports are not supported because a data-backed module has no
+package-relative resolution base, and pretending otherwise would reintroduce unlocked
+mutable-path evaluation.
+
+This boundary is exact-byte execution, not a sandbox. Trusted code still has full user
+permissions and may explicitly evaluate other code through absolute URL imports,
+computed dynamic imports, filesystem APIs, subprocesses, or other runtime facilities.
+Those effects and secondary modules are outside the entry lock. Local path packages
+therefore remain live development references rather than remotely reproducible complete
+artifacts; a later pinned acquisition model must cover the whole artifact before making
+that stronger claim.
 
 ### Trust
 
-Before Groma reads local package configuration, downloads missing packages, or executes
-project-provided plugins, the official host asks the user to trust the blueprint.
-Trust is stored outside the repository and bound to both workspace identity and local
-location.
+Groma may read an inert local declaration and exact static manifest without trust.
+Immediately before the first import of a new exact entry, the Host requires the explicit
+`--trust-full-user-permissions` grant. Persisted trust is stored outside the repository
+and bound to both canonical locations and the exact manifest and entry hashes; moving or
+changing either invalidates it. Explicitly trusting new exact bytes supersedes obsolete
+grants for the same scope, workspace, package identity, and entry. Reverting those bytes
+therefore requires explicit trust again instead of reviving an older grant. Persisted
+state with more than one grant for a logical subject is ambiguous and fails as malformed
+before any import. Disable changes only the enabled selection and deliberately retains
+that exact-byte grant; remove is the explicit revocation boundary and prunes the package's
+grants after every entry has been disabled.
+
+This delivery attests a persisted trust root only on POSIX, where the Host can require
+the real directory to be owned by the current user with mode `0700`. POSIX mode bits do
+not attest Windows ACL ownership. Until a bounded Windows owner/ACL capability exists,
+the Windows Host never reads or writes persisted plugin trust and never executes an
+enabled local plugin. An enabled blueprint package or any existing plugin user-data root
+fails with `plugin-package-trust-root-unattested` before entry materialization, import,
+or creation of a user-data root. A fresh Windows
+workspace with neither condition still starts normally and simply has no personal local
+plugins. Removing an inert blueprint declaration may skip trust pruning only when the
+Host proves the plugin user-data root is absent; an existing or unclassifiable root keeps
+the same fail-closed diagnostic.
+
+Observing the user's home directory makes the default `.groma` path fall inside the
+workspace. When that contained root is absent, empty initialization and startup remain
+available without creating it. Access that would require persisted trust or personal
+package state fails closed before evaluating package code, and existing contained state
+is never authorized.
 
 The trust message must explain:
 
 > Plugins run with your full user permissions. Groma verifies what was installed, not
 > that it is safe.
 
-Declared capabilities are review information, not a permission boundary. Dependency
-lifecycle scripts are disabled by default; enabling them requires a separate explicit
-trust decision.
+Declared capabilities are review information, not a security sandbox. Personal plugins
+receive no canonical mutation capability through runtime resolution because both their
+provided and required declarations are restricted to `groma.presentation.*`. Trusted
+code still has the user's operating-system permissions, as the warning states. This
+delivery does not run dependency lifecycle scripts or a project package manager.
 
 ### Installation and Enablement
 
 Acquisition, declaration, enablement, and loading remain separate:
 
 ```text
-source -> acquire package -> verify exact artifact -> declare scope
-       -> select plugin entry points -> resolve capabilities -> load
+local path -> read exact static manifest -> declare scope
+           -> select entry -> grant exact trust -> lock entry bytes
+           -> re-verify lock and trust -> import -> resolve capabilities -> start
 ```
 
 Installing a package does not automatically enable every contribution. Removing a
-declaration does not immediately delete shared cached artifacts. Cache reclamation is
-an explicit maintenance operation.
+declaration removes Groma's record and exact lock; it never deletes the referenced local
+source directory.
 
-Temporary loading supports development and evaluation without changing configuration:
-
-```text
-groma --with ./my-plugin scan
-```
-
-A temporary plugin must receive explicit permission before making canonical changes.
+Temporary loading and acquisition updates are not part of this delivery.
 
 ### CLI Surface
 
 ```text
-groma install <source> [-l|--local]
-groma remove <source> [-l|--local]
-groma update [source]
-groma sync [--offline]
-groma config
-groma --with <source> <command>
-
-groma package list
-groma plugin init <name>
-groma plugin get <plugin>
-groma plugin doctor
+groma package add <local-path> [--personal]
+groma package inspect <package-name> [--personal]
+groma package enable <package-name> <entry> [--personal] [--trust-full-user-permissions]
+groma package disable <package-name> <entry> [--personal]
+groma package remove <package-name> [--personal]
 ```
 
-`install` defaults to user scope. `--local` writes the blueprint declaration and lock
-entry. `sync` materializes the exact lock without resolving newer versions. `config`
-selects package contributions without editing manifests manually.
+Blueprint scope is the default and writes the declaration and exact lock under `groma/`.
+`--personal` writes only outside-repository user state and is presentation-only. Add and
+inspect run in a management-only Host composition, so enabled package code is neither
+loaded nor started. Enable is the explicit execution boundary and does not enable sibling
+entries. This also leaves inspect, disable, and remove available to diagnose or recover
+from locked-byte drift. Remove requires every entry to be disabled first.
 
-Iteration 1B proves built-in contributions through the same public capability
-contracts used by future packages, without yet making package acquisition part of the
-first useful path. Local path packages, scaffolding, remote npm and Git acquisition,
-integrity locking, and automatic synchronization follow after the living visual
-blueprint has passed its first-run gate and the plugin API and long-running lifecycle
-have passed their conformance and self-hosting gates.
+Remote npm and Git acquisition, complete-artifact integrity, updates, automatic
+synchronization, temporary loading, and scaffolding remain later work after the living
+visual blueprint's first-run gate.
 
 ## Example: Recursive Shopify Blueprint
 

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   PluginRuntime,
   pluginRuntimeApiVersion,
+  validatePluginRegistration,
   type CapabilityCardinality,
   type PluginCapabilityDeclaration,
   type PluginPhase,
@@ -636,6 +637,36 @@ describe("phased plugin resolver", () => {
       ok: false,
     });
     expect(starts).toBe(0);
+  });
+
+  test("contains one registration with caller-selected manifest bounds", () => {
+    const oneCapability = registration({
+      id: "bounded.entry",
+      provides: [capability("groma.bounded/v1")],
+    });
+    const twoCapabilities = registration({
+      id: "bounded.entry",
+      provides: [capability("groma.alpha/v1"), capability("groma.beta/v1")],
+    });
+
+    expect(
+      validatePluginRegistration(oneCapability, {
+        maxCapabilitiesPerPlugin: 1,
+        maxTokenCharacters: 128,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validatePluginRegistration(twoCapabilities, {
+        maxCapabilitiesPerPlugin: 1,
+        maxTokenCharacters: 128,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-plugin-registration" }], ok: false });
+    expect(() =>
+      validatePluginRegistration(oneCapability, {
+        maxCapabilitiesPerPlugin: 0,
+        maxTokenCharacters: 128,
+      }),
+    ).toThrow("Plugin runtime bound maxCapabilitiesPerPlugin");
   });
 });
 

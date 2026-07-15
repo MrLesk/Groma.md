@@ -98,11 +98,19 @@ function composition(
   operations: ApplicationOperations = applicationOperations(),
 ): HostComposition {
   const capability = Object.freeze({});
+  const packages = Object.freeze({
+    add: async () => failure({ code: "unused", message: "unused" }),
+    disable: async () => failure({ code: "unused", message: "unused" }),
+    enable: async () => failure({ code: "unused", message: "unused" }),
+    inspect: async () => failure({ code: "unused", message: "unused" }),
+    remove: async () => failure({ code: "unused", message: "unused" }),
+  });
   return Object.freeze({
     graph: capability,
     invariant: capability,
     model: capability,
     operations,
+    packages,
     queries: capability,
     resourceMapper: capability,
     resources: capability,
@@ -112,7 +120,7 @@ function composition(
     transactionEngine: capability,
     transactionProvider: capability,
     workspace: workspaceAccess,
-  }) as HostComposition;
+  }) as unknown as HostComposition;
 }
 
 function registry(value: HostComposition): HostBootstrapRegistry {
@@ -2033,6 +2041,129 @@ describe("host lifecycle", () => {
     expect(serialized).not.toContain("source-secret");
   });
 
+  test("preserves every known bootstrap diagnostic in canonical deterministic order", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure(
+            {
+              code: "unsupported-plugin-package-manifest-version",
+              details: { token: "/private/manifest" },
+              message: "/private/manifest",
+            },
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/sdk",
+            },
+            {
+              code: "incompatible-plugin-runtime-version",
+              message: "/private/runtime",
+            },
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/duplicate-sdk",
+            },
+          ),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "incompatible-plugin-runtime-version",
+          message: "Plugin runtime API version is incompatible",
+        },
+        {
+          code: "incompatible-plugin-sdk-version",
+          message: "Plugin SDK version is incompatible",
+        },
+        {
+          code: "unsupported-plugin-package-manifest-version",
+          message: "Plugin package manifest version is unsupported",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(Object.isFrozen(outcome)).toBe(true);
+    if (!("diagnostics" in outcome)) throw new Error("expected startup diagnostics");
+    expect(Object.isFrozen(outcome.diagnostics)).toBe(true);
+    expect(outcome.diagnostics.every(Object.isFrozen)).toBe(true);
+    expect(JSON.stringify(outcome)).not.toContain("/private/");
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("fails closed when known and unknown bootstrap diagnostics are mixed", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure(
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/sdk",
+            },
+            { code: "unknown-bootstrap-failure", message: "/private/unknown" },
+          ),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-bootstrap-failed", message: "Host bootstrap failed" }],
+      status: "startup-failure",
+    });
+    expect(JSON.stringify(outcome)).not.toContain("/private/");
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("preserves stable package-store startup diagnostics", async () => {
+    for (const [code, message] of [
+      [
+        "plugin-package-lock-changed",
+        "Blueprint plugin package state changed during startup; restart after changes settle",
+      ],
+      ["plugin-package-lock-unavailable", "The exact plugin package lock is unavailable"],
+      [
+        "plugin-package-state-unavailable",
+        "Local plugin package state is changing or unavailable; retry after changes settle",
+      ],
+      ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
+      [
+        "plugin-package-user-state-changed",
+        "Local plugin package state changed during startup; restart after changes settle",
+      ],
+      [
+        "plugin-package-enabled-limit-exceeded",
+        "Enabled local plugins exceed this Host's runtime capacity",
+      ],
+      ["plugin-package-plugin-id-conflict", "Enabled local plugins must use distinct plugin IDs"],
+      [
+        "plugin-package-plugin-id-reserved",
+        "Local plugin packages must not use the Host-reserved official.* plugin namespace",
+      ],
+    ] as const) {
+      const signal = signals();
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: {
+          compose: async () => failure({ code, message: `/private/${code}` }),
+        },
+        signalSource: signal.source,
+      });
+
+      expect(outcome, code).toEqual({
+        diagnostics: [{ code, message }],
+        status: "startup-failure",
+      });
+      expect(JSON.stringify(outcome), code).not.toContain("/private/");
+      expect(signal.unsubscribes(), code).toBe(1);
+    }
+  });
+
   test("preserves the actionable canonical diagnostic for bootstrap configuration changes", async () => {
     const signal = signals();
     const outcome = await runHost({
@@ -2052,6 +2183,33 @@ describe("host lifecycle", () => {
         {
           code: "workspace-configuration-changed",
           message: "Workspace configuration changed during bootstrap; restart after changes settle",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("preserves the canonical unattested Windows plugin trust diagnostic", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure({
+            code: "plugin-package-trust-root-unattested",
+            message: "untrusted platform detail",
+          }),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-trust-root-unattested",
+          message:
+            "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
         },
       ],
       status: "startup-failure",

@@ -33,6 +33,7 @@ export interface ProgramOptions {
   readonly inputReader?: CliInputReader;
   readonly signalSource?: HostSignalSource;
   readonly terminal?: { readonly stdin: boolean; readonly stdout: boolean };
+  readonly userDataRoot?: string;
   readonly workspaceRoot?: string;
 }
 
@@ -120,16 +121,26 @@ function diagnosticResult(
 }
 
 function hostExit(diagnostics: readonly { readonly code: string }[], fallback: number): number {
-  return diagnostics.some((entry) =>
-    [
-      "project-plugin-validation-required",
-      "runtime-plugin-unavailable",
-      "workspace-configuration-changed",
-      "workspace-configuration-conflict",
-      "workspace-configuration-malformed",
-      "workspace-discovery-conflict",
-    ].includes(entry.code),
-  )
+  return diagnostics.length > 0 &&
+    diagnostics.every(
+      (entry) =>
+        [
+          "invalid-local-plugin-package-source",
+          "personal-plugin-capability-forbidden",
+          "project-plugin-validation-required",
+          "plugin-full-user-permissions-trust-required",
+          "remote-plugin-package-acquisition-out-of-scope",
+          "runtime-plugin-unavailable",
+          "workspace-configuration-changed",
+          "workspace-configuration-conflict",
+          "workspace-configuration-malformed",
+          "workspace-discovery-conflict",
+        ].includes(entry.code) ||
+        entry.code.startsWith("plugin-package-") ||
+        entry.code.startsWith("invalid-plugin-package-") ||
+        entry.code.startsWith("incompatible-plugin-") ||
+        entry.code === "unsupported-plugin-package-manifest-version",
+    )
     ? CLI_EXIT.workspace
     : fallback;
 }
@@ -217,7 +228,11 @@ export async function runProgram(
   );
   const registry =
     options.createRegistry?.(controller.surface) ??
-    createDefaultBootstrapRegistry({ surface: controller.surface });
+    createDefaultBootstrapRegistry({
+      loadLocalPluginPackages: !invocation.command.kind.startsWith("package-"),
+      surface: controller.surface,
+      ...(options.userDataRoot === undefined ? {} : { userDataRoot: options.userDataRoot }),
+    });
   const hostOutcome = await runHost({
     context: { workspaceRoot },
     registry,
