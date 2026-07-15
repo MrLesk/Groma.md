@@ -564,7 +564,9 @@ function parseTrust(value: unknown): readonly TrustGrant[] | undefined {
   }
   grants.sort((left, right) => compareCodeUnits(trustKey(left), trustKey(right)));
   if (
-    grants.some((grant, index) => index > 0 && trustKey(grant) === trustKey(grants[index - 1]!))
+    grants.some(
+      (grant, index) => index > 0 && trustSubjectKey(grant) === trustSubjectKey(grants[index - 1]!),
+    )
   ) {
     return undefined;
   }

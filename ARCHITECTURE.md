@@ -990,7 +990,9 @@ Immediately before the first import of a new exact entry, the Host requires the 
 and bound to both canonical locations and the exact manifest and entry hashes; moving or
 changing either invalidates it. Explicitly trusting new exact bytes supersedes obsolete
 grants for the same scope, workspace, package identity, and entry. Reverting those bytes
-therefore requires explicit trust again instead of reviving an older grant.
+therefore requires explicit trust again instead of reviving an older grant. Persisted
+state with more than one grant for a logical subject is ambiguous and fails as malformed
+before any import.
 
 This delivery attests a persisted trust root only on POSIX, where the Host can require
 the real directory to be owned by the current user with mode `0700`. POSIX mode bits do

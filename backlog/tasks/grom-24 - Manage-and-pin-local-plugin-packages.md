@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 08:31'
+updated_date: '2026-07-15 08:39'
 labels: []
 milestone: m-4
 dependencies:
@@ -80,7 +80,8 @@ Support reproducible local plugin packages for the initial package-management de
 8. Add a deterministic platform-injected regression proving an existing exact grant under an unattested Windows root cannot authorize import, plus stable lifecycle diagnostics and honest architecture/Host/CLI documentation.
 9. Let fresh Windows workspaces remove an inert blueprint declaration only after conservatively proving the plugin user-data root is absent; otherwise retain the unattested-root failure.
 10. Supersede prior trust grants for the same logical package-entry subject only when explicit trust is granted for new exact bytes, preserving exact matching, canonical order, and bounded state.
-11. Run focused Host tests, bun run check, bun run check:targets, backlog doctor, and diff review; record evidence and return the task to Done.
+11. Reject persisted trust state containing more than one grant for the same logical subject before any exact-match authorization; prove seeded canonical ambiguity fails without import or mutation.
+12. Run focused Host tests, bun run check, bun run check:targets, backlog doctor, and diff review; record evidence and return the task to Done.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -105,10 +106,16 @@ Claude closure review identified two actionable security-state gaps on PR #25: i
 Implemented the two closure corrections. Windows blueprint remove now uses the same conservative absent-root probe as fresh startup: existing or unclassifiable roots retain plugin-package-trust-root-unattested, while a proven-absent root permits inert declaration cleanup without trust-state access. Explicit new exact-byte trust now replaces prior grants for the same logical package-entry subject. Focused Host coverage passes 14 tests / 0 failures, including exact cleanup, unchanged bytes on existing-root refusal, repeated re-trust with one canonical bounded grant, and failed byte reversion before import.
 
 Final closure validation passed on the exact follow-up diff: focused local-package coverage passed 15 tests / 0 failures; bun run check passed formatting, strict typecheck, architecture boundaries, 539 tests / 0 failures, native compiled package workflow, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
+
+Final quality review found that pre-fix or seeded canonical state could retain multiple exact hashes for one logical trust subject. GROM-24 is reopened at ba82da2097e69fba93a3fde9b477c7aebb80cbc4 to reject that ambiguity at the parser boundary before authorization.
+
+Implemented subject-level uniqueness in parseTrust after deterministic full-key ordering. Exact duplicate rejection is subsumed. Added a seeded canonical user-state regression with one current matching grant plus an alternate hash for the same subject; loadEnabled and enable both return plugin-package-user-state-malformed, perform zero imports, and preserve exact state bytes. Normal one-grant and repeated re-trust coverage remains green at 16 focused tests / 0 failures.
+
+Final uniqueness validation passed on the exact follow-up diff: focused local-package coverage passed 16 tests / 0 failures; bun run check passed formatting, strict typecheck, architecture boundaries, 540 tests / 0 failures, native compiled package workflow, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed GROM-24 including the two actionable PR closure findings. Fresh Windows workspaces can add, inspect, and remove inert blueprint packages without creating or reading trust state, while existing or unclassifiable trust roots retain the stable fail-closed diagnostic and preserve exact configuration/lock bytes. New exact-byte trust supersedes obsolete grants for the same logical package entry, so state remains canonical and bounded and byte reversion requires trust again. Verified with 15 focused Host tests, the full 539-test repository check, native compiled workflows, four target builds, Backlog doctor, and diff checks.
+Completed GROM-24 with all closure hardening. Fresh Windows workspaces can manage inert blueprint declarations only when the trust root is proven absent, changed exact bytes supersede obsolete grants, and persisted trust now rejects multiple grants for one logical subject as malformed before any import. The seeded ambiguity regression proves startup and enable perform zero imports and preserve exact state bytes; normal re-trust and byte-reversion behavior remains green. Verified with 16 focused Host tests, the full 540-test repository check, native compiled workflows, four target builds, Backlog doctor, and diff checks.
 <!-- SECTION:FINAL_SUMMARY:END -->

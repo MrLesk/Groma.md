@@ -133,7 +133,8 @@ fails closed.
 An explicit grant for changed exact bytes supersedes older grants for the same scope,
 workspace, package location, package name, and entry. Trust state therefore keeps one
 current exact grant per logical entry, and reverting to previously trusted bytes requires
-explicit trust again.
+explicit trust again. Persisted state containing multiple exact grants for one logical
+entry is malformed and cannot authorize execution.
 
 Personal entries must provide and require only `groma.presentation.*` capabilities.
 This keeps canonical mutation capabilities out of personal runtime resolution; it is

@@ -962,6 +962,86 @@ describe("local plugin package manager", () => {
     expect(await readFile(stateFile)).toEqual(trustBeforeRevert);
   });
 
+  test("rejects persisted trust with multiple exact hashes for one logical subject", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-ambiguous-trust", [
+      "./plugins/entry.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.ambiguous-trust") }),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await setup.enable({
+        entry: "./plugins/entry.js",
+        name: "example-ambiguous-trust",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await setup.disable({
+        entry: "./plugins/entry.js",
+        name: "example-ambiguous-trust",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({ ok: true });
+
+    const stateFiles = await readdir(path.join(context.userDataRoot, "workspaces"));
+    expect(stateFiles).toHaveLength(1);
+    const stateFile = path.join(context.userDataRoot, "workspaces", stateFiles[0]!);
+    const state = JSON.parse(await readFile(stateFile, "utf8")) as {
+      trust: Array<Record<string, string>>;
+    };
+    expect(state.trust).toHaveLength(1);
+    const current = state.trust[0]!;
+    const zeroIntegrity = `sha256:${"0".repeat(64)}`;
+    const oneIntegrity = `sha256:${"1".repeat(64)}`;
+    const alternate = Object.freeze({
+      ...current,
+      entryIntegrity: current.entryIntegrity === zeroIntegrity ? oneIntegrity : zeroIntegrity,
+    });
+    state.trust = [current, alternate].sort((left, right) =>
+      left.entryIntegrity < right.entryIntegrity
+        ? -1
+        : left.entryIntegrity > right.entryIntegrity
+          ? 1
+          : 0,
+    );
+    const seededBytes = `${JSON.stringify(state, null, 2)}\n`;
+    await writeFile(stateFile, seededBytes);
+
+    let imports = 0;
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration("example.ambiguous-trust") };
+      },
+      ...context,
+    });
+    expect(await manager.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "plugin-package-user-state-malformed" }],
+      ok: false,
+    });
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-ambiguous-trust",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "plugin-package-user-state-malformed" }],
+      ok: false,
+    });
+    expect(imports).toBe(0);
+    expect(await readFile(stateFile, "utf8")).toBe(seededBytes);
+  });
+
   test("compares the exact lock under coordination before publishing blueprint state", async () => {
     const context = await fixture();
     const source = await writePackage(context.workspaceRoot, "example-cas", ["./plugins/entry.js"]);
