@@ -4,7 +4,7 @@ title: Render a bounded local visual blueprint
 status: To Do
 assignee: []
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-15 00:04'
+updated_date: '2026-07-15 00:21'
 labels:
   - visualization
   - first-run
@@ -40,5 +40,5 @@ Give the living-blueprint release its immediate human payoff: a self-contained l
 - [ ] #5 Selecting a projected node opens concise intent plus structured provenance, binding, uncertainty, and coverage details
 - [ ] #6 Rendering the same generation is deterministic, performs no canonical write or network request, uploads nothing by default, and stores no layout, folding, focus, zoom, or theme state in the blueprint
 - [ ] #7 Bare groma can deterministically reconstruct and open the artifact for the current blueprint generation through supported CLI behavior
-- [ ] #8 The first renderer follows brand/README.md and brand/STYLE.md: one white architectural-sheet theme, graphite structure, exact #1D9E75 surveyed-point accent, lowercase groma.md identity, technical-sheet content density, permitted neutral shadows, self-contained icon fallbacks, and no theme switch or remote favicon retrieval
+- [ ] #8 The first renderer follows brand/README.md and brand/STYLE.md: one white architectural-sheet theme, graphite structure, exact #1D9E75 surveyed-point accent, lowercase groma.md identity, technical-sheet content density, permitted neutral shadows, and flat official marks without shadows or gradients; it provides no theme switch, dashboard chrome, or cartoon visual direction
 <!-- AC:END -->

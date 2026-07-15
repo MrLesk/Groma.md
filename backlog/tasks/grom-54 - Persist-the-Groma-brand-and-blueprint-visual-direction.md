@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 21:44'
-updated_date: '2026-07-15 00:08'
+updated_date: '2026-07-15 00:23'
 labels:
   - brand
   - visualization
@@ -59,11 +59,11 @@ Make the approved Groma identity and blueprint UI direction durable inside the r
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Verify the clean GROM-50 base and the canonical brand/reference sources.
-2. Import the nine canonical brand files byte-for-byte, add the selected reference PNG, and author the durable product style guide.
-3. Add brand guardrails to AGENTS.md and ARCHITECTURE.md while preserving bounded shared reads, disposable renderer state, and offline iconDomain behavior.
-4. Update GROM-52 through Backlog with the GROM-54 dependency, brand references, brand-aware description, and one additive brand acceptance criterion while preserving its existing criteria and ownership.
-5. Validate asset identity, SVG/XML and PNG integrity, local links, brand assertions, formatting, Backlog metadata/dependencies, the exact 15-file manifest, and the full repository check.
+1. Preserve the byte-exact canonical README and SVG package while adding local interpretation only in brand/STYLE.md.
+2. Clarify the lockup accent exception, small-size identity-versus-motif use, unavailable illustrated hero, and committed dark-variant workflow without inventing assets or tooling.
+3. Narrow GROM-52 acceptance criterion 8 to brand and presentation ownership while preserving acceptance criteria 1-7 byte-for-byte and leaving icon/network ownership in criteria 3 and 6.
+4. Validate the new interpretation assertions, unchanged canonical bytes, SVG/XML and PNG integrity, links and formatting, nonduplicative GROM-52 ownership, Backlog health and dependencies, the exact 15-file scope, and the full repository check.
+5. Self-review, record evidence, re-check affected acceptance criteria, and finalize the task.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -74,10 +74,14 @@ Reopened on the clean merged GROM-50 base at 02f5078 for an isolated, evidence-b
 Imported all nine official brand source files with byte-for-byte cmp and SHA-256 verification; all eight SVGs passed xmllint. The selected reference PNG matched source hash b390df9d59f671510903c0f74b82f88501bcdab2fd8fd97ffcf1aeb2f772374f and validated as 1487 x 1058 RGB PNG. The authored STYLE.md matched its approved source. Validated 12 local Markdown links, 14 brand/style assertions, authored Markdown with Prettier, git diff --check, and the exact 15-file manifest. Verified GROM-52 preserved all seven merged acceptance criteria and task ownership, added one brand criterion, and depends on GROM-54 without introducing a cycle; backlog doctor found no duplicate IDs. Full bun run check passed formatting, typecheck, architecture boundaries, 458 tests, build, binary smoke, and Iteration 1A verification.
 
 Final self-review kept the Visual Blueprint Renderer runtime Inputs block byte-identical to merged GROM-50 and verified the bounded Shared Application Operations read, deterministic offline iconDomain fallback, no-network rule, and future icon-resolution boundary remain explicit. Brand assets and mood remain implementation/action constraints, not application data.
+
+Reopened after quality review identified ambiguity between canonical identity shorthand and shipped lockup geometry, plus unclear small-motif, unavailable-hero, dark-variant, and GROM-52 ownership guidance.
+
+Quality-review corrections added an explicit local identity interpretation without modifying canonical inputs: the shipped lockup `.md` accent is documented as the wordmark exception; the <=64 px rule is scoped to product identity while auxiliary motifs require a target-size legibility preview; the illustrated hero is explicitly unavailable; and committed dark variants are identified as upstream outputs with no local generator. GROM-52 AC8 now contains presentation requirements only, while AC3 and AC6 retain exclusive icon/fetch/network ownership. Revalidation passed nine canonical byte comparisons, eight SVG XML checks, unchanged 1487 x 1058 PNG hash, 13 local links, 14 baseline brand assertions, four package-interpretation assertions, the nonduplicative AC ownership assertion, authored-file Prettier, git diff --check, exact 15-file overall scope and modified_files match, backlog doctor, an acyclic dependency graph, and full bun run check with 458 tests plus build, smoke, and Iteration 1A verification.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Persisted the official Groma brand assets and single white architectural-sheet direction, aligned agent and architecture guidance, and made the bounded local renderer depend on the approved brand constraints without changing its finalized data, identity, or offline icon behavior. Verified exact assets, reference integrity, links, formatting, Backlog metadata and graph, the exact 15-file scope, and the complete repository check.
+Persisted the official Groma brand assets and white architectural-sheet direction; clarified the shipped lockup accent, small identity and auxiliary motif rules, unavailable hero, and upstream dark-variant workflow; and narrowed GROM-52 brand acceptance to presentation without duplicating icon or network ownership. Verified exact canonical assets, links, formatting, Backlog metadata and dependencies, the 15-file scope, and the complete repository check.
 <!-- SECTION:FINAL_SUMMARY:END -->
