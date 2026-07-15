@@ -14,6 +14,7 @@ import {
   success,
   type ProposedTransaction,
   type ContentRevision,
+  type GraphData,
   type ResourceKey,
 } from "../../core/index.ts";
 import {
@@ -23,6 +24,7 @@ import {
 import {
   createLocalResourceProvider,
   createLocalTransactionJournal,
+  createAliasStore,
   createMarkdownIntentStore,
   createMarkdownIntentTransactionAdapter,
   localTransactionStateLocator,
@@ -311,6 +313,300 @@ function createRequest() {
 }
 
 describe("local transaction journal", () => {
+  test("re-homes untouched outgoing relationships when aliasing their source", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const model = createStandardModelCapability();
+    const store = createMarkdownIntentStore({ model, resources });
+    const aliases = createAliasStore({ resources });
+    const obsolete = entityId(21);
+    const survivor = entityId(22);
+    const relation = relationId(21);
+
+    const canonicalEntity = (id: ReturnType<typeof entityId>, name: string) => {
+      const normalized = model.normalize({ id, name, type: "service" });
+      if (!normalized.ok || normalized.value.id === undefined) {
+        throw new Error("invalid component fixture");
+      }
+      return Object.freeze({
+        id,
+        kind: normalized.value.kind,
+        payload: normalized.value.payload as GraphData,
+      });
+    };
+    const survivorDocument = store.serialize(
+      canonicalEntity(survivor, "Survivor"),
+      Object.freeze([]),
+    );
+    const obsoleteDocument = store.serialize(
+      canonicalEntity(obsolete, "Obsolete"),
+      Object.freeze([
+        Object.freeze({
+          id: relation,
+          payload: Object.freeze({ description: "Must survive source migration." }),
+          source: obsolete,
+          target: survivor,
+          type: "requires",
+        }),
+      ]),
+    );
+    if (!survivorDocument.ok || !obsoleteDocument.ok) {
+      throw new Error("invalid intent document fixtures");
+    }
+    await seed(resources, survivorDocument.value.locator, survivorDocument.value.bytes);
+    await seed(resources, obsoleteDocument.value.locator, obsoleteDocument.value.bytes);
+
+    const emptyAliases = await aliases.load();
+    if (!emptyAliases.ok) throw new Error("expected empty aliases");
+    const provider = createLocalTransactionJournal({
+      adapter: createMarkdownIntentTransactionAdapter({
+        aliases,
+        maxAliases: invariantBounds.maxComponents,
+        model,
+        store,
+      }),
+      resources,
+    });
+    const engine = engineFor(provider);
+    const initial = await provider.snapshot([
+      emptyAliases.value.resource,
+      obsoleteDocument.value.resource,
+      survivorDocument.value.resource,
+    ]);
+    const request = (affected: {
+      readonly entities: readonly ReturnType<typeof entityId>[];
+      readonly relations: readonly ReturnType<typeof relationId>[];
+    }) => ({
+      affected,
+      context: {
+        ownership: { owner: "curated", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: initial.revisions.map((entry) => ({
+        expected: entry.revision,
+        resource: entry.resource,
+      })),
+      mutation: {
+        aliases: [{ source: obsolete, target: survivor, type: "upsert" }],
+        components: [{ id: obsolete, type: "remove" }],
+        relationships: [],
+      },
+    });
+    const underreported = await engine.execute(request({ entities: [obsolete], relations: [] }));
+    expect(underreported).toMatchObject({ committed: false, status: "provider-failure" });
+    const unchangedAliases = await aliases.load();
+    if (!unchangedAliases.ok) throw new Error("expected unchanged aliases to load");
+    expect(unchangedAliases.value.aliases).toEqual([]);
+
+    const merged = await engine.execute(
+      request({ entities: [obsolete, survivor], relations: [relation] }),
+    );
+    expect(merged).toMatchObject({ status: "committed" });
+    if (merged.status === "committed") {
+      expect(merged.event.affected).toEqual({
+        entities: [obsolete, survivor],
+        relations: [relation],
+      });
+    }
+
+    const loadedAliases = await aliases.load();
+    if (!loadedAliases.ok) throw new Error("expected aliases to load");
+    const loaded = await store.load(loadedAliases.value.aliases);
+    if (!loaded.ok) throw new Error("expected intent state to load");
+    expect(loaded.value.entities.map((entity) => entity.id)).toEqual([survivor]);
+    expect(loaded.value.relations).toEqual([
+      expect.objectContaining({ id: relation, source: survivor, target: survivor }),
+    ]);
+    expect(
+      await Bun.file(
+        path.join(roots.workspaceRoot, String(obsoleteDocument.value.locator)),
+      ).exists(),
+    ).toBeFalse();
+  });
+
+  test("loads aliases above Core's default through the configured store and adapter bound", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const model = createStandardModelCapability();
+    const maximumAliases = 100_001;
+    const target = entityId(200_000);
+    const store = createMarkdownIntentStore({
+      bounds: { maxDocuments: maximumAliases },
+      model,
+      resources,
+    });
+    const normalized = model.normalize({ id: target, name: "Target", type: "service" });
+    if (!normalized.ok || normalized.value.id === undefined) {
+      throw new Error("invalid target fixture");
+    }
+    const targetDocument = store.serialize(
+      Object.freeze({
+        id: target,
+        kind: normalized.value.kind,
+        payload: normalized.value.payload as GraphData,
+      }),
+      Object.freeze([]),
+    );
+    if (!targetDocument.ok) throw new Error("invalid target document fixture");
+    await seed(resources, targetDocument.value.locator, targetDocument.value.bytes);
+
+    const realAliases = createAliasStore({
+      bounds: { maxAliases: maximumAliases },
+      resources,
+    });
+    const emptyAliases = await realAliases.load();
+    if (!emptyAliases.ok) throw new Error("expected empty aliases");
+    const aliasRecords = Object.freeze(
+      Array.from({ length: maximumAliases }, (_, index) =>
+        Object.freeze({ source: entityId(index + 1), target }),
+      ),
+    );
+    const adapter = createMarkdownIntentTransactionAdapter({
+      aliases: Object.freeze({
+        decode: realAliases.decode,
+        load: async () => success(Object.freeze({ ...emptyAliases.value, aliases: aliasRecords })),
+        serialize: realAliases.serialize,
+      }),
+      maxAliases: maximumAliases,
+      model,
+      store,
+    });
+
+    const snapshot = await adapter.load();
+
+    expect(snapshot.ok).toBeTrue();
+    if (!snapshot.ok) return;
+    const snapshotState = snapshot.value.state as unknown as {
+      readonly aliases: readonly unknown[];
+    };
+    expect(snapshotState.aliases).toHaveLength(maximumAliases);
+  });
+
+  test("materializes relationship upserts and removals through obsolete source aliases", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const model = createStandardModelCapability();
+    const store = createMarkdownIntentStore({ model, resources });
+    const aliases = createAliasStore({ resources });
+    const obsolete = entityId(11);
+    const survivor = entityId(12);
+    const relation = relationId(11);
+    const obsoleteLocator = markdownIntentLocator(obsolete);
+    if (!obsoleteLocator.ok) throw new Error("invalid obsolete locator fixture");
+
+    const normalized = model.normalize({
+      id: survivor,
+      intent: "Own the surviving boundary.",
+      type: "service",
+    });
+    if (!normalized.ok || normalized.value.id === undefined) {
+      throw new Error("invalid survivor fixture");
+    }
+    const survivorDocument = store.serialize(
+      Object.freeze({
+        id: survivor,
+        kind: normalized.value.kind,
+        payload: normalized.value.payload as GraphData,
+      }),
+      Object.freeze([]),
+    );
+    if (!survivorDocument.ok) throw new Error("invalid survivor document fixture");
+    await seed(resources, survivorDocument.value.locator, survivorDocument.value.bytes);
+
+    const aliasDocument = aliases.serialize(
+      Object.freeze([Object.freeze({ source: obsolete, target: survivor })]),
+    );
+    if (!aliasDocument.ok || aliasDocument.value.bytes === undefined) {
+      throw new Error("invalid alias document fixture");
+    }
+    await seed(resources, aliasDocument.value.locator, aliasDocument.value.bytes);
+
+    const provider = createLocalTransactionJournal({
+      adapter: createMarkdownIntentTransactionAdapter({
+        aliases,
+        maxAliases: invariantBounds.maxComponents,
+        model,
+        store,
+      }),
+      resources,
+    });
+    const engine = engineFor(provider);
+    const initial = await provider.snapshot([survivorDocument.value.resource]);
+    const initialRevision = initial.revisions[0]?.revision;
+    if (initialRevision === null || initialRevision === undefined) {
+      throw new Error("missing survivor revision");
+    }
+
+    const upserted = await engine.execute({
+      affected: { entities: [survivor], relations: [relation] },
+      context: {
+        ownership: { owner: "curated", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: [{ expected: initialRevision, resource: survivorDocument.value.resource }],
+      mutation: {
+        components: [],
+        relationships: [
+          {
+            relationship: {
+              id: relation,
+              payload: { description: "Written through the retired identity." },
+              source: obsolete,
+              target: obsolete,
+              type: "requires",
+            },
+            type: "upsert",
+          },
+        ],
+      },
+    });
+    expect(upserted).toMatchObject({ status: "committed" });
+
+    const aliasSnapshot = await aliases.load();
+    if (!aliasSnapshot.ok) throw new Error("expected aliases to load");
+    const loadedAfterUpsert = await store.load(aliasSnapshot.value.aliases);
+    if (!loadedAfterUpsert.ok) throw new Error("expected intent state to load");
+    expect(loadedAfterUpsert.value.relations).toEqual([
+      expect.objectContaining({ id: relation, source: survivor, target: survivor }),
+    ]);
+    expect(
+      await Bun.file(path.join(roots.workspaceRoot, String(obsoleteLocator.value))).exists(),
+    ).toBeFalse();
+
+    const afterUpsert = await provider.snapshot([survivorDocument.value.resource]);
+    const updatedRevision = afterUpsert.revisions[0]?.revision;
+    if (updatedRevision === null || updatedRevision === undefined) {
+      throw new Error("missing updated survivor revision");
+    }
+    const removeRequest = (entities: readonly ReturnType<typeof entityId>[]) => ({
+      affected: { entities, relations: [relation] },
+      context: {
+        ownership: { owner: "curated", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: [{ expected: updatedRevision, resource: survivorDocument.value.resource }],
+      mutation: {
+        components: [],
+        relationships: [{ id: relation, type: "remove" }],
+      },
+    });
+    const underreportedRemoval = await engine.execute(removeRequest([]));
+    expect(underreportedRemoval).toMatchObject({
+      committed: false,
+      status: "provider-failure",
+    });
+
+    const removed = await engine.execute(removeRequest([survivor]));
+    expect(removed).toMatchObject({ status: "committed" });
+
+    const loadedAfterRemoval = await store.load(aliasSnapshot.value.aliases);
+    if (!loadedAfterRemoval.ok) throw new Error("expected final intent state to load");
+    expect(loadedAfterRemoval.value.relations).toEqual([]);
+    expect(
+      await Bun.file(path.join(roots.workspaceRoot, String(obsoleteLocator.value))).exists(),
+    ).toBeFalse();
+  });
+
   test("commits deterministic Markdown replacements and deletions with the generation marker last", async () => {
     const firstRoots = await workspace();
     const first = await harness(firstRoots);

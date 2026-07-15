@@ -39,6 +39,11 @@ export interface ComponentResourceMapper {
   resourceForComponent(id: string): Result<ResourceKey>;
 }
 
+/** Maps the shared canonical alias plane without exposing its persistence locator. */
+export interface AliasResourceMapper {
+  resourceForAliases(): Result<ResourceKey>;
+}
+
 /** Structural execution seam implemented by Core's TransactionEngine. */
 export interface TransactionExecutionCapability {
   execute(request: TransactionRequest): Promise<TransactionOutcome>;
@@ -57,6 +62,7 @@ export interface ApplicationOperationBounds {
 }
 
 export interface ApplicationOperationsOptions {
+  readonly aliasResourceMapper?: AliasResourceMapper;
   readonly bounds: ApplicationOperationBounds;
   readonly graph: GraphKernel;
   readonly initialization: WorkspaceInitializationCapability;
@@ -130,6 +136,12 @@ export interface RemoveComponentRequest {
   readonly id: string;
 }
 
+export interface MergeComponentRequest {
+  readonly expectedRevision: string;
+  readonly obsolete: string;
+  readonly survivor: string;
+}
+
 export interface ApplicationDiagnostic {
   readonly code: string;
   readonly details?: Readonly<Record<string, string | number | boolean>>;
@@ -197,6 +209,9 @@ export interface ApplicationOperations {
   listComponents(request: ListComponentsRequest): Promise<Result<ComponentPage>>;
   listRoots(request: ListRootComponentsRequest): Promise<Result<ComponentPage>>;
   listChildren(request: ListChildComponentsRequest): Promise<Result<ComponentPage>>;
+  mergeComponent(
+    request: MergeComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>>;
   createComponent(
     request: CreateComponentRequest,
   ): Promise<ApplicationMutationOutcome<StandardComponent>>;

@@ -100,6 +100,19 @@ with canonical resource details removed. Capability-supplied diagnostic codes ar
 exposed only when they are bounded lowercase kebab-case tokens; unsafe codes are
 replaced with application-owned category codes.
 
+`mergeComponent` is the only component operation that creates an alias. It requires the
+obsolete component's current revision, resolves the requested survivor to its final live
+identity, leaves that survivor's component content and ID unchanged, and submits obsolete
+removal, outgoing-relationship re-homing, and alias publication through one transaction.
+Reads by any obsolete ID return the live survivor and its revision; component parents and
+relationship endpoints use the same deterministic chain resolution. Self, missing,
+cyclic, already-superseded, and otherwise ambiguous requests are rejected before
+execution. New and explicitly reparented components serialize a supplied obsolete parent
+as its live identity, and merge re-homing does the same for relationship endpoints in the
+touched survivor document. A survivor referenced by an alias must be merged onward rather
+than removed directly. Ordinary update and reparent operations never manufacture
+continuity records.
+
 Resource mapping is also a containment boundary: mapper failures become one generic
 component-scoped diagnostic, and mapper messages, details, locators, and keys never
 reach application callers.

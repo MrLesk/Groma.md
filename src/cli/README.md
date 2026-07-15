@@ -12,6 +12,11 @@ limit and returns one page only. Cursors are printed but never followed implicit
 Optional component `label`, `summary`, and `iconDomain` values use this same JSON path;
 updates clear them with explicit `null`, and reads return their canonical values without
 resolving `iconDomain` or making a network request.
+`component merge <obsolete-id> --into <survivor-id> --revision <obsolete-revision>` is
+the explicit supersession boundary. It removes the obsolete component and preserves its
+stable references through a canonical alias while leaving the survivor identity and
+intent unchanged. Reads by an older ID return the current survivor. Renames, updates,
+and reparenting do not create aliases.
 Command output is buffered up to one MiB; an oversized page becomes a typed
 `cli-output-bound-exceeded` failure rather than partial or streamed output, so callers
 can retry with a smaller explicit page.

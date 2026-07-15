@@ -372,6 +372,15 @@ async function execute(
         await operations.updateComponent(request.value as unknown as UpdateComponentRequest),
       );
     }
+    case "component-merge":
+      return mutationResult(
+        command,
+        await operations.mergeComponent({
+          expectedRevision: command.expectedRevision,
+          obsolete: command.obsolete,
+          survivor: command.survivor,
+        }),
+      );
     case "component-reparent":
       return mutationResult(
         command,

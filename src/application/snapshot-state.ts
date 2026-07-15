@@ -1,10 +1,13 @@
 import {
+  createEntityAliasResolver,
   failure,
   parseEntityId,
   parseGraphGeneration,
   parseRelationId,
   success,
   type EntityDraft,
+  type EntityAlias,
+  type EntityId,
   type GraphData,
   type GraphEntity,
   type GraphRelation,
@@ -49,6 +52,7 @@ export interface ApplicationSnapshotStateDecoderOptions {
 }
 
 export interface DecodedApplicationSnapshotState {
+  readonly aliases: readonly EntityAlias[];
   readonly components: readonly StandardComponent[];
   readonly graph: GraphSnapshot;
   readonly relationships: readonly StandardRelationship[];
@@ -1422,11 +1426,21 @@ function decode(
   }
   const rawEnvelope = inspectExactRecord(
     value,
-    [["components", "relationships"]],
+    [
+      ["components", "relationships"],
+      ["aliases", "components", "relationships"],
+    ],
     "invalid-standard-model-state",
     "Standard Model transaction state",
   );
   if (!rawEnvelope.ok) return rawEnvelope;
+  const rawAliases = denseArray(
+    "aliases" in rawEnvelope.value ? rawEnvelope.value.aliases : Object.freeze([]),
+    "Standard Model transaction state aliases",
+    options.bounds.maxComponents,
+    options.isProxy,
+  );
+  if (!rawAliases.ok) return rawAliases;
   const rawComponents = denseArray(
     rawEnvelope.value.components,
     "Standard Model transaction state components",
@@ -1441,6 +1455,15 @@ function decode(
     options.isProxy,
   );
   if (!rawRelationships.ok) return rawRelationships;
+  for (const entry of rawAliases.value) {
+    const record = inspectExactRecord(
+      entry,
+      [["source", "target"]],
+      "invalid-standard-model-state",
+      "Standard Model alias",
+    );
+    if (!record.ok) return record;
+  }
   for (const entry of rawComponents.value) {
     if (typeof entry === "object" && entry !== null && options.isProxy(entry)) {
       return failure(
@@ -1496,11 +1519,21 @@ function decode(
   if (!copied.ok) return copied;
   const envelope = inspectExactRecord(
     copied.value,
-    [["components", "relationships"]],
+    [
+      ["components", "relationships"],
+      ["aliases", "components", "relationships"],
+    ],
     "invalid-standard-model-state",
     "Standard Model transaction state",
   );
   if (!envelope.ok) return envelope;
+  const aliasValues = denseArray(
+    "aliases" in envelope.value ? envelope.value.aliases : Object.freeze([]),
+    "Standard Model transaction state aliases",
+    options.bounds.maxComponents,
+    options.isProxy,
+  );
+  if (!aliasValues.ok) return aliasValues;
   const componentValues = denseArray(
     envelope.value.components,
     "Standard Model transaction state components",
@@ -1516,7 +1549,22 @@ function decode(
   );
   if (!relationshipValues.ok) return relationshipValues;
 
-  const entityDrafts: EntityDraft[] = [];
+  const aliases: EntityAlias[] = [];
+  for (let index = 0; index < aliasValues.value.length; index += 1) {
+    const record = inspectExactRecord(
+      aliasValues.value[index],
+      [["source", "target"]],
+      "invalid-standard-model-state",
+      `Standard Model alias ${index}`,
+    );
+    if (!record.ok) return record;
+    const source = parseEntityId(record.value.source as string);
+    const target = parseEntityId(record.value.target as string);
+    if (!source.ok || !target.ok) return decoderFailure();
+    aliases[index] = Object.freeze({ source: source.value, target: target.value });
+  }
+
+  let entityDrafts: EntityDraft[] = [];
   for (let index = 0; index < componentValues.value.length; index += 1) {
     const record = inspectExactRecord(
       componentValues.value[index],
@@ -1531,6 +1579,36 @@ function decode(
       payload: record.value.payload,
     });
   }
+  const liveIdentities = new Set<EntityId>();
+  for (const draft of entityDrafts) {
+    const id = parseEntityId(draft.id!);
+    if (!id.ok) return id;
+    liveIdentities.add(id.value);
+  }
+  const aliasResolver = createEntityAliasResolver(
+    Object.freeze(aliases),
+    liveIdentities,
+    options.bounds.maxComponents,
+  );
+  if (!aliasResolver.ok) return aliasResolver;
+  entityDrafts = entityDrafts.map((draft) => {
+    const payload = draft.payload as Readonly<Record<string, GraphData>>;
+    if (
+      typeof draft.payload !== "object" ||
+      draft.payload === null ||
+      Array.isArray(draft.payload) ||
+      typeof payload.parent !== "string"
+    ) {
+      return draft;
+    }
+    const parent = aliasResolver.value.resolve(payload.parent);
+    return parent.ok
+      ? Object.freeze({
+          ...draft,
+          payload: Object.freeze({ ...payload, parent: parent.value.resolved }),
+        })
+      : draft;
+  });
   const relationDrafts = [];
   for (let index = 0; index < relationshipValues.value.length; index += 1) {
     const record = inspectExactRecord(
@@ -1565,7 +1643,7 @@ function decode(
   );
   if (invariantDiagnostics.length > 0) return failure(...invariantDiagnostics);
 
-  const loaded = options.graph.load(entityDrafts, relationDrafts);
+  const loaded = options.graph.load(entityDrafts, relationDrafts, aliases);
   if (!loaded.ok) return loaded;
   const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
   const modelContext: ModelSuccessContext = {
@@ -1616,6 +1694,7 @@ function decode(
   return success(
     Object.freeze({
       components: canonical.value.components,
+      aliases: aliasResolver.value.records,
       graph: loaded.value,
       relationships: canonical.value.relationships,
     }),

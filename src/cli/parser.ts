@@ -103,6 +103,25 @@ function remove(args: readonly string[]): CliCommand | undefined {
   return Object.freeze({ expectedRevision, id, kind: "component-remove" });
 }
 
+function merge(args: readonly string[]): CliCommand | undefined {
+  const obsolete = args[0];
+  if (!identifier(obsolete)) return undefined;
+  let expectedRevision: string | undefined;
+  let survivor: string | undefined;
+  for (let index = 1; index < args.length; index += 1) {
+    const option = args[index];
+    const value = args[index + 1];
+    if (!identifier(value)) return undefined;
+    if (option === "--into" && survivor === undefined) survivor = value;
+    else if (option === "--revision" && expectedRevision === undefined) expectedRevision = value;
+    else return undefined;
+    index += 1;
+  }
+  return expectedRevision === undefined || survivor === undefined
+    ? undefined
+    : Object.freeze({ expectedRevision, kind: "component-merge", obsolete, survivor });
+}
+
 function componentCommand(args: readonly string[]): CliCommand | undefined {
   const action = args[0];
   const rest = args.slice(1);
@@ -135,6 +154,7 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
       : Object.freeze({ ...request, kind: "component-children", parent });
   }
   if (action === "reparent") return reparent(rest);
+  if (action === "merge") return merge(rest);
   if (action === "remove") return remove(rest);
   return undefined;
 }

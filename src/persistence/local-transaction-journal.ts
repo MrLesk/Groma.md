@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import {
+  createEntityAliasResolver,
   failure,
   parseContentRevision,
   parseEntityId,
@@ -9,10 +10,13 @@ import {
   success,
   type AffectedGraphIdentities,
   type ContentRevision,
+  type EntityAlias,
+  type EntityId,
   type GraphData,
   type GraphEntity,
   type GraphRelation,
   type ProposedTransaction,
+  type RelationId,
   type ResourceKey,
   type ResourceRevisionInput,
   type Result,
@@ -25,6 +29,7 @@ import { copyGraphPayload } from "../core/payload.ts";
 import {
   STANDARD_COMPONENT_KIND,
   type StandardModelCapability,
+  type StandardModelAliasRecord,
   type StandardModelTransactionMutation,
   type StandardModelTransactionState,
 } from "../standard-model/index.ts";
@@ -33,6 +38,7 @@ import {
   type MarkdownIntentStore,
   type MarkdownIntentSnapshot,
 } from "./markdown-intent-store.ts";
+import type { AliasStore, AliasStoreSnapshot } from "./alias-store.ts";
 import {
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
@@ -87,6 +93,8 @@ export interface CanonicalTransactionAdapter {
 }
 
 export interface MarkdownIntentTransactionAdapterOptions {
+  readonly aliases?: AliasStore;
+  readonly maxAliases?: number;
   readonly model: StandardModelCapability;
   readonly store: MarkdownIntentStore;
 }
@@ -264,7 +272,10 @@ function bounds(input: Partial<LocalTransactionJournalBounds> | undefined) {
   return Object.freeze(selected);
 }
 
-function stateFromSnapshot(snapshot: MarkdownIntentSnapshot): StandardModelTransactionState {
+function stateFromSnapshot(
+  snapshot: MarkdownIntentSnapshot,
+  aliases?: AliasStoreSnapshot,
+): StandardModelTransactionState {
   const components = snapshot.entities
     .map((entity) => Object.freeze({ id: entity.id, kind: entity.kind, payload: entity.payload }))
     .sort((left, right) => compareText(left.id, right.id));
@@ -280,6 +291,19 @@ function stateFromSnapshot(snapshot: MarkdownIntentSnapshot): StandardModelTrans
     )
     .sort((left, right) => compareText(left.id, right.id));
   return Object.freeze({
+    ...(aliases === undefined
+      ? {}
+      : {
+          aliases: Object.freeze(
+            aliases.aliases.map(
+              (alias) =>
+                Object.freeze({
+                  source: alias.source,
+                  target: alias.target,
+                }) as StandardModelAliasRecord,
+            ),
+          ),
+        }),
     components: Object.freeze(components),
     relationships: Object.freeze(relationships),
   });
@@ -288,7 +312,11 @@ function stateFromSnapshot(snapshot: MarkdownIntentSnapshot): StandardModelTrans
 function graphFromPriorState(
   priorState: GraphData,
   model: StandardModelCapability,
-): Result<{ components: Map<string, GraphEntity>; relationships: Map<string, GraphRelation> }> {
+): Result<{
+  aliases: Map<EntityId, EntityAlias>;
+  components: Map<EntityId, GraphEntity>;
+  relationships: Map<string, GraphRelation>;
+}> {
   if (typeof priorState !== "object" || priorState === null || Array.isArray(priorState)) {
     return failure(
       diagnostic("invalid-canonical-transaction-state", "Prior state must be a record"),
@@ -305,7 +333,31 @@ function graphFromPriorState(
       ),
     );
   }
-  const components = new Map<string, GraphEntity>();
+  const aliases = new Map<EntityId, EntityAlias>();
+  const aliasesInput = priorRecord.aliases;
+  if (aliasesInput !== undefined) {
+    if (!Array.isArray(aliasesInput)) {
+      return failure(
+        diagnostic("invalid-canonical-transaction-state", "Alias state must be an array"),
+      );
+    }
+    for (const value of aliasesInput) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return failure(
+          diagnostic("invalid-canonical-transaction-state", "Alias state is malformed"),
+        );
+      }
+      const source = parseEntityId(value.source);
+      const target = parseEntityId(value.target);
+      if (!source.ok || !target.ok || aliases.has(source.value)) {
+        return failure(
+          diagnostic("invalid-canonical-transaction-state", "Alias state is malformed"),
+        );
+      }
+      aliases.set(source.value, Object.freeze({ source: source.value, target: target.value }));
+    }
+  }
+  const components = new Map<EntityId, GraphEntity>();
   for (const value of componentsInput) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       return failure(
@@ -360,16 +412,19 @@ function graphFromPriorState(
     if (!parsed.ok) return parsed;
     relationships.set(id.value, relation);
   }
-  return success({ components, relationships });
+  return success({ aliases, components, relationships });
 }
 
 function applyStandardMutation(
   proposal: ProposedTransaction,
   model: StandardModelCapability,
+  maximumAliases: number,
 ): Result<{
+  aliases: Map<EntityId, EntityAlias>;
   components: Map<string, GraphEntity>;
   relationships: Map<string, GraphRelation>;
   touchedComponents: ReadonlySet<string>;
+  touchedAliases: boolean;
 }> {
   const graph = graphFromPriorState(proposal.priorState, model);
   if (!graph.ok) return graph;
@@ -380,6 +435,11 @@ function applyStandardMutation(
     );
   }
   const touched = new Set<string>();
+  const touchedRelationshipSources = new Set<EntityId>();
+  const affectedComponents = new Set<EntityId>(proposal.affected.entities);
+  const affectedRelationships = new Set<RelationId>(proposal.affected.relations);
+  const priorComponentIds = new Set(graph.value.components.keys());
+  let touchedAliases = false;
   for (const entry of mutation.components) {
     if (entry.type === "create") {
       const normalized = model.normalize(entry.component);
@@ -448,7 +508,7 @@ function applyStandardMutation(
         );
       }
       const prior = graph.value.relationships.get(id.value);
-      if (prior !== undefined) touched.add(prior.source);
+      if (prior !== undefined) touchedRelationshipSources.add(prior.source);
       const relation = Object.freeze({
         id: id.value,
         payload: input.payload,
@@ -459,7 +519,7 @@ function applyStandardMutation(
       const parsed = model.relationships([relation]);
       if (!parsed.ok) return parsed;
       graph.value.relationships.set(id.value, relation);
-      touched.add(source.value);
+      touchedRelationshipSources.add(source.value);
     } else if (entry.type === "remove") {
       const id = parseRelationId(entry.id);
       if (!id.ok) return id;
@@ -472,7 +532,7 @@ function applyStandardMutation(
           ),
         );
       }
-      touched.add(prior.source);
+      touchedRelationshipSources.add(prior.source);
       graph.value.relationships.delete(id.value);
     } else {
       return failure(
@@ -483,14 +543,123 @@ function applyStandardMutation(
       );
     }
   }
-  return success({ ...graph.value, touchedComponents: touched });
+  const aliasMutations = (
+    mutation as StandardModelTransactionMutation & {
+      readonly aliases?: readonly Readonly<Record<string, GraphData>>[];
+    }
+  ).aliases;
+  if (aliasMutations !== undefined) {
+    if (!Array.isArray(aliasMutations)) {
+      return failure(
+        diagnostic("invalid-canonical-transaction-mutation", "Alias mutation is malformed"),
+      );
+    }
+    for (const entry of aliasMutations) {
+      if (entry.type !== "upsert") {
+        return failure(
+          diagnostic(
+            "invalid-canonical-transaction-mutation",
+            "Alias mutation type is unsupported",
+          ),
+        );
+      }
+      const source = parseEntityId(entry.source);
+      const target = parseEntityId(entry.target);
+      if (!source.ok || !target.ok || graph.value.aliases.has(source.value)) {
+        return failure(
+          diagnostic("ambiguous-component-supersession", "Alias mutation is ambiguous"),
+        );
+      }
+      if (!priorComponentIds.has(source.value)) {
+        return failure(
+          diagnostic(
+            "unknown-component-alias-source",
+            "Alias source is missing from prior canonical state",
+          ),
+        );
+      }
+      graph.value.aliases.set(
+        source.value,
+        Object.freeze({ source: source.value, target: target.value }),
+      );
+      touchedAliases = true;
+    }
+  }
+  const validatedAliases = createEntityAliasResolver(
+    Object.freeze(Array.from(graph.value.aliases.values())),
+    new Set(graph.value.components.keys()),
+    maximumAliases,
+  );
+  if (!validatedAliases.ok) return validatedAliases;
+  const relationships = new Map<RelationId, GraphRelation>();
+  for (const relation of graph.value.relationships.values()) {
+    const source = validatedAliases.value.resolve(relation.source);
+    const target = validatedAliases.value.resolve(relation.target);
+    if (!source.ok || !target.ok) {
+      return failure(
+        diagnostic(
+          "invalid-canonical-transaction-mutation",
+          "Relationship endpoints must resolve to live components",
+        ),
+      );
+    }
+    if (source.value.resolved !== relation.source) {
+      if (
+        !affectedComponents.has(source.value.resolved) ||
+        !affectedRelationships.has(relation.id)
+      ) {
+        return failure(
+          diagnostic(
+            "canonical-effect-not-affected",
+            "Relationship source ownership changes must declare the live owner and relationship as affected",
+            { id: relation.id, owner: source.value.resolved },
+          ),
+        );
+      }
+      touched.add(source.value.resolved);
+    }
+    relationships.set(
+      relation.id,
+      Object.freeze({
+        ...relation,
+        source: source.value.resolved,
+        target: target.value.resolved,
+      }),
+    );
+  }
+  for (const source of touchedRelationshipSources) {
+    const resolved = validatedAliases.value.resolve(source);
+    if (!resolved.ok) return resolved;
+    if (!affectedComponents.has(resolved.value.resolved)) {
+      return failure(
+        diagnostic(
+          "canonical-effect-not-affected",
+          "Relationship document changes must declare their live source owner as affected",
+          { owner: resolved.value.resolved },
+        ),
+      );
+    }
+    touched.add(resolved.value.resolved);
+  }
+  return success({
+    ...graph.value,
+    relationships,
+    touchedAliases,
+    touchedComponents: touched,
+  });
 }
 
 export function createMarkdownIntentTransactionAdapter(
   options: MarkdownIntentTransactionAdapterOptions,
 ): CanonicalTransactionAdapter {
+  const maximumAliases = options.maxAliases ?? 100_000;
+  // Reuse Core's centralized bound validation and capture the value before any work.
+  createEntityAliasResolver(Object.freeze([]), new Set<EntityId>(), maximumAliases);
+
   const load = async (): Promise<Result<CanonicalTransactionSnapshot>> => {
-    const loaded = await options.store.load();
+    const aliasSnapshot = options.aliases === undefined ? undefined : await options.aliases.load();
+    if (aliasSnapshot !== undefined && !aliasSnapshot.ok) return aliasSnapshot;
+    const loaded = await options.store.load(aliasSnapshot?.value.aliases);
     if (!loaded.ok) return loaded;
     const resources = loaded.value.documents
       .map((document) =>
@@ -500,11 +669,22 @@ export function createMarkdownIntentTransactionAdapter(
           revision: document.revision,
         }),
       )
+      .concat(
+        aliasSnapshot?.value.revision === null || aliasSnapshot === undefined
+          ? []
+          : [
+              Object.freeze({
+                locator: aliasSnapshot.value.locator,
+                resource: aliasSnapshot.value.resource,
+                revision: aliasSnapshot.value.revision,
+              }),
+            ],
+      )
       .sort((left, right) => compareText(left.resource, right.resource));
     return success(
       Object.freeze({
         resources: Object.freeze(resources),
-        state: stateFromSnapshot(loaded.value),
+        state: stateFromSnapshot(loaded.value, aliasSnapshot?.value),
       }),
     );
   };
@@ -512,7 +692,7 @@ export function createMarkdownIntentTransactionAdapter(
   const materialize = (
     proposal: ProposedTransaction,
   ): Result<CanonicalTransactionMaterialization> => {
-    const applied = applyStandardMutation(proposal, options.model);
+    const applied = applyStandardMutation(proposal, options.model, maximumAliases);
     if (!applied.ok) return applied;
     const expected = new Map<string, ContentRevision | null>();
     for (const entry of proposal.expectedRevisions) expected.set(entry.resource, entry.expected);
@@ -560,6 +740,38 @@ export function createMarkdownIntentTransactionAdapter(
         }),
       );
     }
+    if (applied.value.touchedAliases) {
+      if (options.aliases === undefined) {
+        return failure(
+          diagnostic(
+            "alias-store-unavailable",
+            "Canonical alias persistence is unavailable for this transaction adapter",
+          ),
+        );
+      }
+      const current = options.aliases.serialize(
+        Object.freeze(Array.from(applied.value.aliases.values())),
+      );
+      if (!current.ok) return current;
+      if (!expected.has(current.value.resource)) {
+        return failure(
+          diagnostic(
+            "transaction-resource-set-mismatch",
+            "The canonical alias resource must have an expected revision",
+            { resource: current.value.resource },
+          ),
+        );
+      }
+      targets.push(
+        Object.freeze({
+          expected: expected.get(current.value.resource)!,
+          locator: current.value.locator,
+          replacement: current.value.bytes!,
+          resource: current.value.resource,
+          result: current.value.revision,
+        }),
+      );
+    }
     if (targets.length !== expected.size) {
       return failure(
         diagnostic(
@@ -587,6 +799,15 @@ export function createMarkdownIntentTransactionAdapter(
     return success(
       Object.freeze({
         state: Object.freeze({
+          ...(options.aliases === undefined
+            ? {}
+            : {
+                aliases: Object.freeze(
+                  Array.from(applied.value.aliases.values())
+                    .sort((left, right) => compareText(left.source, right.source))
+                    .map((alias) => Object.freeze({ source: alias.source, target: alias.target })),
+                ) as GraphData,
+              }),
           components: Object.freeze(components),
           relationships: Object.freeze(relationships),
         }),

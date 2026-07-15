@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -45,6 +45,301 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
 }
 
 describe("official local application operations composition", () => {
+  test("atomically persists merge aliases and resolves chained references after restart", async () => {
+    const workspace = await temporaryWorkspace();
+    const first = await composition(workspace);
+    expect(await first.operations.initialize({})).toMatchObject({ ok: true });
+
+    const survivor = await first.operations.createComponent({
+      component: { id: conformanceIds.rootB, name: "Survivor", type: "domain" },
+    });
+    const finalSurvivor = await first.operations.createComponent({
+      component: { id: conformanceIds.serviceB, name: "Final survivor", type: "service" },
+    });
+    const obsolete = await first.operations.createComponent({
+      component: { id: conformanceIds.rootA, name: "Obsolete", type: "domain" },
+      relationships: [
+        {
+          id: conformanceIds.crossBranch,
+          target: conformanceIds.rootB,
+          type: "depends-on",
+        },
+      ],
+    });
+    const child = await first.operations.createComponent({
+      component: {
+        id: conformanceIds.nestedService,
+        name: "Child",
+        parent: conformanceIds.rootA,
+        type: "service",
+      },
+    });
+    const observer = await first.operations.createComponent({
+      component: { id: conformanceIds.serviceA, name: "Observer", type: "service" },
+      relationships: [
+        {
+          id: conformanceIds.sibling,
+          target: conformanceIds.rootA,
+          type: "observes",
+        },
+      ],
+    });
+    for (const result of [survivor, finalSurvivor, obsolete, child, observer]) {
+      expect(result.status).toBe("committed");
+    }
+    if (obsolete.status !== "committed") return;
+    const obsoleteRevision = obsolete.revisions.find(
+      (entry) => entry.componentId === conformanceIds.rootA,
+    )?.revision;
+    if (obsoleteRevision === null || obsoleteRevision === undefined) {
+      throw new Error("missing obsolete revision");
+    }
+
+    const firstMerge = await first.operations.mergeComponent({
+      expectedRevision: obsoleteRevision,
+      obsolete: conformanceIds.rootA,
+      survivor: conformanceIds.rootB,
+    });
+    expect(firstMerge).toMatchObject({ status: "committed" });
+    if (firstMerge.status !== "committed") return;
+    expect(String(firstMerge.value.id)).toBe(conformanceIds.rootB);
+    const survivorRevision = firstMerge.revisions.find(
+      (entry) => entry.componentId === conformanceIds.rootB,
+    )?.revision;
+    if (survivorRevision === null || survivorRevision === undefined) {
+      throw new Error("missing survivor revision");
+    }
+
+    const secondMerge = await first.operations.mergeComponent({
+      expectedRevision: survivorRevision,
+      obsolete: conformanceIds.rootB,
+      survivor: conformanceIds.serviceB,
+    });
+    expect(secondMerge).toMatchObject({ status: "committed" });
+    if (secondMerge.status !== "committed") return;
+    expect(String(secondMerge.value.id)).toBe(conformanceIds.serviceB);
+
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const readThroughOldest = await restarted.operations.getComponent({
+      id: conformanceIds.rootA,
+      relationships: { limit: 10 },
+    });
+    expect(readThroughOldest.ok).toBeTrue();
+    if (!readThroughOldest.ok) return;
+    expect(String(readThroughOldest.value.item.component.id)).toBe(conformanceIds.serviceB);
+    expect(
+      readThroughOldest.value.relationships.items.map((item) => ({
+        id: String(item.relationship.id),
+        source: String(item.relationship.source),
+        target: String(item.relationship.target),
+      })),
+    ).toEqual([
+      {
+        id: conformanceIds.crossBranch,
+        source: conformanceIds.serviceB,
+        target: conformanceIds.serviceB,
+      },
+    ]);
+
+    const children = await restarted.operations.listChildren({
+      limit: 10,
+      parent: conformanceIds.rootA,
+    });
+    expect(children.ok).toBeTrue();
+    if (!children.ok) return;
+    expect(children.value.items.map((item) => String(item.component.id))).toEqual([
+      conformanceIds.nestedService,
+    ]);
+    const observerRead = await restarted.operations.getComponent({
+      id: conformanceIds.serviceA,
+      relationships: { limit: 10 },
+    });
+    expect(observerRead.ok).toBeTrue();
+    if (!observerRead.ok) return;
+    expect(String(observerRead.value.relationships.items[0]?.relationship.target)).toBe(
+      conformanceIds.serviceB,
+    );
+
+    const laterBinding = await restarted.operations.createComponent({
+      component: {
+        id: conformanceIds.module,
+        name: "Later binding",
+        parent: conformanceIds.rootA,
+        type: "module",
+      },
+      relationships: [
+        {
+          id: "rel_000000000000000000000000000000cb",
+          target: conformanceIds.rootA,
+          type: "depends-on",
+        },
+      ],
+    });
+    expect(laterBinding).toMatchObject({
+      status: "committed",
+      value: { parent: conformanceIds.serviceB },
+    });
+
+    const restartedAgain = await composition(workspace);
+    const canonicalStore = await restartedAgain.store.load();
+    expect(canonicalStore.ok).toBeTrue();
+    if (!canonicalStore.ok) return;
+    expect(canonicalStore.value.entities.map((entity) => String(entity.id))).toContain(
+      conformanceIds.nestedService,
+    );
+    const laterChildren = await restartedAgain.operations.listChildren({
+      limit: 10,
+      parent: conformanceIds.rootA,
+    });
+    expect(laterChildren.ok).toBeTrue();
+    if (!laterChildren.ok) return;
+    expect(laterChildren.value.items.map((item) => String(item.component.id))).toEqual([
+      conformanceIds.module,
+      conformanceIds.nestedService,
+    ]);
+    const laterRead = await restartedAgain.operations.getComponent({
+      id: conformanceIds.module,
+      relationships: { limit: 10 },
+    });
+    expect(laterRead.ok).toBeTrue();
+    if (!laterRead.ok) return;
+    expect(String(laterRead.value.item.component.parent)).toBe(conformanceIds.serviceB);
+    expect(String(laterRead.value.relationships.items[0]?.relationship.target)).toBe(
+      conformanceIds.serviceB,
+    );
+    const laterIntent = await readFile(
+      path.join(
+        workspace.workspaceRoot,
+        "groma",
+        "intent",
+        conformanceIds.module.slice(4, 6),
+        `${conformanceIds.module}.md`,
+      ),
+      "utf8",
+    );
+    expect(laterIntent).toContain(`parent: ${conformanceIds.serviceB}`);
+    expect(laterIntent).toContain(`target: ${conformanceIds.serviceB}`);
+    const survivorIntent = await readFile(
+      path.join(
+        workspace.workspaceRoot,
+        "groma",
+        "intent",
+        conformanceIds.serviceB.slice(4, 6),
+        `${conformanceIds.serviceB}.md`,
+      ),
+      "utf8",
+    );
+    expect(survivorIntent).toContain(`target: ${conformanceIds.serviceB}`);
+
+    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "aliases.md"), "utf8")).toBe(
+      `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${conformanceIds.rootA}\n    target: ${conformanceIds.rootB}\n  - source: ${conformanceIds.rootB}\n    target: ${conformanceIds.serviceB}\n---\n`,
+    );
+    expect(
+      await Bun.file(
+        path.join(
+          workspace.workspaceRoot,
+          "groma",
+          "intent",
+          conformanceIds.rootA.slice(4, 6),
+          `${conformanceIds.rootA}.md`,
+        ),
+      ).exists(),
+    ).toBeFalse();
+  });
+
+  test("rejects invalid and ambiguous supersession without changing canonical state", async () => {
+    const workspace = await temporaryWorkspace();
+    const first = await composition(workspace);
+    expect(await first.operations.initialize({})).toMatchObject({ ok: true });
+    const obsolete = await first.operations.createComponent({
+      component: { id: conformanceIds.rootA, name: "Obsolete" },
+    });
+    const survivor = await first.operations.createComponent({
+      component: { id: conformanceIds.rootB, name: "Survivor" },
+    });
+    const alternative = await first.operations.createComponent({
+      component: { id: conformanceIds.serviceB, name: "Alternative" },
+    });
+    expect(obsolete.status).toBe("committed");
+    expect(survivor.status).toBe("committed");
+    expect(alternative.status).toBe("committed");
+    if (obsolete.status !== "committed" || survivor.status !== "committed") return;
+    const obsoleteRevision = obsolete.revisions[0]?.revision;
+    const survivorRevision = survivor.revisions[0]?.revision;
+    if (
+      obsoleteRevision === null ||
+      obsoleteRevision === undefined ||
+      survivorRevision === null ||
+      survivorRevision === undefined
+    ) {
+      throw new Error("missing component revision");
+    }
+    const merged = await first.operations.mergeComponent({
+      expectedRevision: obsoleteRevision,
+      obsolete: conformanceIds.rootA,
+      survivor: conformanceIds.rootB,
+    });
+    expect(merged.status).toBe("committed");
+    if (merged.status !== "committed") return;
+    const aliasPath = path.join(workspace.workspaceRoot, "groma", "aliases.md");
+    const before = await readFile(aliasPath, "utf8");
+
+    const rejected = [
+      await first.operations.mergeComponent({
+        expectedRevision: survivorRevision,
+        obsolete: conformanceIds.rootB,
+        survivor: conformanceIds.rootB,
+      }),
+      await first.operations.mergeComponent({
+        expectedRevision: survivorRevision,
+        obsolete: conformanceIds.rootB,
+        survivor: "ent_ffffffffffffffffffffffffffffffff",
+      }),
+      await first.operations.mergeComponent({
+        expectedRevision: survivorRevision,
+        obsolete: conformanceIds.rootB,
+        survivor: conformanceIds.rootA,
+      }),
+      await first.operations.mergeComponent({
+        expectedRevision: survivorRevision,
+        obsolete: conformanceIds.rootA,
+        survivor: conformanceIds.serviceB,
+      }),
+      await first.operations.removeComponent({
+        expectedRevision: survivorRevision,
+        id: conformanceIds.rootB,
+      }),
+    ];
+    expect(rejected.map((result) => result.status)).toEqual([
+      "validation-rejected",
+      "validation-rejected",
+      "validation-rejected",
+      "validation-rejected",
+      "validation-rejected",
+    ]);
+    expect(
+      rejected.map((result) =>
+        result.status === "validation-rejected" ? result.diagnostics[0]?.code : "",
+      ),
+    ).toEqual([
+      "self-component-alias",
+      "missing-component-alias-target",
+      "component-alias-cycle",
+      "ambiguous-component-supersession",
+      "component-is-alias-target",
+    ]);
+    expect(await readFile(aliasPath, "utf8")).toBe(before);
+    const unchanged = await first.operations.getComponent({
+      id: conformanceIds.rootB,
+      relationships: { limit: 1 },
+    });
+    expect(unchanged.ok).toBeTrue();
+    if (!unchanged.ok) return;
+    expect(Number(unchanged.value.generation)).toBe(Number(merged.generation));
+    expect(unchanged.value.item.revision).toBe(survivorRevision);
+  });
+
   test("matches in-memory semantics and survives a complete restart", async () => {
     const workspace = await temporaryWorkspace();
     const first = await composition(workspace);

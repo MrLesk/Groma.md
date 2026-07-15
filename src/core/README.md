@@ -93,8 +93,12 @@ non-finite numbers, `undefined`, bigints, symbols, and functions are rejected wi
 portable across hosts and canonical persistence providers without admitting mutable
 caller aliases or behavior-bearing objects.
 
-Aliases are intentionally not persisted here. The Iteration 1B Alias Store will add
-continuity resolution without changing exact graph identity.
+Core accepts a bounded alias table when loading a snapshot. Each sorted record maps one
+obsolete entity ID to one later ID; chains must be acyclic and end at exactly one live
+entity. A source cannot also be live or occur twice. Exact entity reads, traversal, and
+loaded relationship endpoints resolve through this one table, while the survivor's
+identity never changes. Core owns these identity invariants but not their storage format;
+the official persistence plugin supplies the canonical alias records.
 
 ## Query and event contracts
 

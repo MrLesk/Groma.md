@@ -62,6 +62,15 @@ describe("CLI provisional grammar", () => {
       ],
       [["component", "update", "--input", "-"], { kind: "component-update" }],
       [
+        ["component", "merge", "ent_01", "--into", "ent_02", "--revision", "rev_01"],
+        {
+          expectedRevision: "rev_01",
+          kind: "component-merge",
+          obsolete: "ent_01",
+          survivor: "ent_02",
+        },
+      ],
+      [
         ["component", "reparent", "ent_01", "--revision", "rev_01", "--parent", "ent_02"],
         { expectedRevision: "rev_01", id: "ent_01", kind: "component-reparent", parent: "ent_02" },
       ],
@@ -112,6 +121,8 @@ describe("CLI provisional grammar", () => {
       ["component", "get", "ent_01", "--relationships-limit", "1", "extra"],
       ["component", "create", "--stdin", "--input", "request.json"],
       ["component", "reparent", "ent_01", "--revision", "rev_01"],
+      ["component", "merge", "ent_01", "--into", "ent_02"],
+      ["component", "merge", "ent_01", "--revision", "rev_01"],
       ["component", "reparent", "ent_01", "--revision", "rev_01", "--root", "--parent", "ent_02"],
       [
         "package",

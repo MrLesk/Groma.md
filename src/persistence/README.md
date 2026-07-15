@@ -52,13 +52,41 @@ document ceiling plus the 256 possible shard directories and one terminal page. 
 API intentionally has no direct write or commit operation; GROM-14 owns transactionally
 coordinated replacement.
 
+## Alias store
+
+[`alias-store.ts`](alias-store.ts) stores identity continuity separately at
+`groma/aliases.md`. Its exact `groma/aliases/v0.1` Markdown frontmatter contains only a
+source-sorted sequence of obsolete `source` IDs and their superseding `target` IDs. It
+has no timestamps, names, paths, layout, or component prose. The codec rejects duplicate
+sources, self-aliases, cycles, unsupported YAML features, malformed IDs, invalid UTF-8,
+and configured byte/item overflows. Missing targets and live-source ambiguity are
+validated against the complete intent snapshot before that state becomes readable.
+The official Host gives the alias codec, transaction adapter, Standard invariant,
+graph, and Markdown whole-graph resolver the same configured component ceiling.
+
+The Markdown store receives the alias set when checking whole-graph parents and
+relationship targets. It keeps the original references in their owning intent documents;
+alias resolution is a semantic read projection, not a rewrite of unrelated intent. The
+transaction adapter loads aliases before intent and materializes an explicit merge as one
+journal batch: remove the obsolete component document, re-home its outgoing relationships
+in the survivor document when needed, and replace the alias record. Incoming relationships
+and child parent references remain untouched and resolve through the same chain after
+restart. When a document is newly created, explicitly reparented, or re-homed, that
+materialization writes the current live identity instead of adding a new obsolete
+reference. The adapter also canonicalizes every endpoint in the post-mutation
+relationship set and attributes source-keyed writes to the resolved live component, so
+a later write through an obsolete source updates only the survivor document and cannot
+recreate the retired document. A write or implicit source-ownership migration must
+declare its live owner and relationship in the transaction's affected identities;
+under-reported effects fail before journal publication.
+
 ## Local transaction journal
 
 [`local-transaction-journal.ts`](local-transaction-journal.ts) implements Core's
 model-neutral transaction-provider contract without adding Markdown or filesystem
 policy to Core. A persistence-local adapter loads one semantic snapshot and turns an
 already validated mutation into an exact, sorted set of canonical replacements and
-deletions. The official adapter uses the Standard Model and Markdown intent store;
+deletions. The official adapter uses the Standard Model, Markdown intent store, and alias store;
 future canonical planes can supply the same small adapter contract.
 The journal independently requires those targets to form an exact bijection with the
 proposal's expected revisions, including the same resource and expected value. A
