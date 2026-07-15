@@ -2041,6 +2041,112 @@ describe("host lifecycle", () => {
     expect(serialized).not.toContain("source-secret");
   });
 
+  test("preserves every known bootstrap diagnostic in canonical deterministic order", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure(
+            {
+              code: "unsupported-plugin-package-manifest-version",
+              details: { token: "/private/manifest" },
+              message: "/private/manifest",
+            },
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/sdk",
+            },
+            {
+              code: "incompatible-plugin-runtime-version",
+              message: "/private/runtime",
+            },
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/duplicate-sdk",
+            },
+          ),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "incompatible-plugin-runtime-version",
+          message: "Plugin runtime API version is incompatible",
+        },
+        {
+          code: "incompatible-plugin-sdk-version",
+          message: "Plugin SDK version is incompatible",
+        },
+        {
+          code: "unsupported-plugin-package-manifest-version",
+          message: "Plugin package manifest version is unsupported",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(Object.isFrozen(outcome)).toBe(true);
+    if (!("diagnostics" in outcome)) throw new Error("expected startup diagnostics");
+    expect(Object.isFrozen(outcome.diagnostics)).toBe(true);
+    expect(outcome.diagnostics.every(Object.isFrozen)).toBe(true);
+    expect(JSON.stringify(outcome)).not.toContain("/private/");
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("fails closed when known and unknown bootstrap diagnostics are mixed", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure(
+            {
+              code: "incompatible-plugin-sdk-version",
+              message: "/private/sdk",
+            },
+            { code: "unknown-bootstrap-failure", message: "/private/unknown" },
+          ),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [{ code: "host-bootstrap-failed", message: "Host bootstrap failed" }],
+      status: "startup-failure",
+    });
+    expect(JSON.stringify(outcome)).not.toContain("/private/");
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
+  test("preserves stable package-store startup diagnostics", async () => {
+    for (const [code, message] of [
+      ["plugin-package-lock-unavailable", "The exact plugin package lock is unavailable"],
+      ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
+      [
+        "plugin-package-enabled-limit-exceeded",
+        "Enabled local plugins exceed this Host's runtime capacity",
+      ],
+    ] as const) {
+      const signal = signals();
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: {
+          compose: async () => failure({ code, message: `/private/${code}` }),
+        },
+        signalSource: signal.source,
+      });
+
+      expect(outcome, code).toEqual({
+        diagnostics: [{ code, message }],
+        status: "startup-failure",
+      });
+      expect(JSON.stringify(outcome), code).not.toContain("/private/");
+      expect(signal.unsubscribes(), code).toBe(1);
+    }
+  });
+
   test("preserves the actionable canonical diagnostic for bootstrap configuration changes", async () => {
     const signal = signals();
     const outcome = await runHost({

@@ -68,6 +68,7 @@ export const defaultHostBounds = Object.freeze({
   maxEmbeddedItems: 100,
   maxOwnerCharacters: 100,
   maxPageSize: 100,
+  maxPluginRegistrations: 128,
   maxPinnedComponentIds: 100,
   maxRelationshipMutations: 100,
   maxRelationships: 1_000,
@@ -527,7 +528,7 @@ export function createDefaultBootstrapRegistry(
       const runtime = new PluginRuntime({
         maxCapabilitiesPerPlugin: 16,
         maxDiagnostics: defaultHostBounds.maxDiagnosticCount,
-        maxPlugins: 128,
+        maxPlugins: defaultHostBounds.maxPluginRegistrations,
         maxTokenCharacters: 128,
       });
       const builtInPhaseZero = registrations.filter(
@@ -624,6 +625,13 @@ export function createDefaultBootstrapRegistry(
       }
       const packageManager = createLocalPluginPackageManager({
         bootstrap,
+        maxEnabledPlugins: Math.max(
+          0,
+          defaultHostBounds.maxPluginRegistrations -
+            phaseZeroRegistrations.length -
+            builtInPhaseOne.length -
+            bootstrapConfigurationBounds.maxRequestedRuntimePlugins,
+        ),
         resources,
         trustRootPlatform: selectedTarget.platform === "win32" ? "win32" : "posix",
         userDataRoot,

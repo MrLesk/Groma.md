@@ -6,6 +6,7 @@ import path from "node:path";
 import { pluginRuntimeApiVersion, success, type PluginRegistration } from "../../core/index.ts";
 import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
 import {
+  bootstrapConfigurationBounds,
   createDefaultBootstrapRegistry,
   createYamlConfigurationParser,
   defaultHostCapabilityIds,
@@ -196,10 +197,17 @@ describe("bootstrap configuration", () => {
       parser,
       new TextEncoder().encode("schema: groma/v0.1\n"),
     );
+    const packagesOnly = parseBootstrapConfiguration(
+      parser,
+      new TextEncoder().encode(
+        'schema: groma/v0.1\npackages:\n  - name: "example"\n    source: "./plugins/example"\n    enabled: []\n',
+      ),
+    );
     expect(alpha.ok).toBeTrue();
     expect(beta.ok).toBeTrue();
     expect(empty.ok).toBeTrue();
-    if (!alpha.ok || !beta.ok || !empty.ok) return;
+    expect(packagesOnly.ok).toBeTrue();
+    if (!alpha.ok || !beta.ok || !empty.ok || !packagesOnly.ok) return;
     const missing = Object.freeze({ locator: localWorkspaceLocator, state: "missing" as const });
     const configured = (configuration: typeof alpha.value) =>
       Object.freeze({
@@ -216,6 +224,7 @@ describe("bootstrap configuration", () => {
     ).toBeFalse();
     expect(bootstrapConfigurationStillUsable(configured(alpha.value), missing)).toBeFalse();
     expect(bootstrapConfigurationStillUsable(missing, configured(empty.value))).toBeTrue();
+    expect(bootstrapConfigurationStillUsable(missing, configured(packagesOnly.value))).toBeFalse();
     expect(bootstrapConfigurationStillUsable(missing, configured(alpha.value))).toBeFalse();
     expect(
       parseBootstrapConfiguration(
@@ -232,6 +241,85 @@ describe("bootstrap configuration", () => {
       diagnostics: [{ code: "workspace-configuration-parser-failed" }],
       ok: false,
     });
+
+    const boundaryEntries = Array.from(
+      { length: bootstrapConfigurationBounds.maxEnabledLocalPlugins },
+      (_, index) => `./entry-${index}.js`,
+    );
+    expect(
+      parser.parse(
+        new TextEncoder().encode(
+          `schema: groma/v0.1\npackages:\n  - name: example\n    source: ./plugins/example\n    enabled: ${JSON.stringify(boundaryEntries)}\n`,
+        ),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      parser.parse(
+        new TextEncoder().encode(
+          `schema: groma/v0.1\npackages:\n  - name: example\n    source: ./plugins/example\n    enabled: ${JSON.stringify([...boundaryEntries, "./overflow.js"])}\n`,
+        ),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-malformed" }],
+      ok: false,
+    });
+  });
+
+  test("contains hostile replacement-parser package declarations and enabled entries", () => {
+    let getterCalls = 0;
+    let traps = 0;
+    const accessorPackage = Object.create(null) as Record<string, unknown>;
+    Object.defineProperties(accessorPackage, {
+      enabled: {
+        enumerable: true,
+        get: () => {
+          getterCalls += 1;
+          return [];
+        },
+      },
+      name: { enumerable: true, value: "example" },
+      source: { enumerable: true, value: "./plugins/example" },
+    });
+    const proxiedPackages = new Proxy([], {
+      getOwnPropertyDescriptor: () => {
+        traps += 1;
+        throw new Error("private package proxy trap");
+      },
+    });
+    const proxiedEnabled = new Proxy([], {
+      getOwnPropertyDescriptor: () => {
+        traps += 1;
+        throw new Error("private enabled proxy trap");
+      },
+    });
+    for (const packageDeclarations of [
+      proxiedPackages,
+      [accessorPackage],
+      [{ enabled: proxiedEnabled, name: "example", source: "./plugins/example" }],
+    ]) {
+      expect(
+        parseBootstrapConfiguration(
+          {
+            parse: () =>
+              success({
+                packageDeclarations,
+                requestedRuntimePlugins: [],
+                schema: "groma/v0.1",
+              } as never),
+          },
+          new Uint8Array(),
+        ),
+      ).toEqual({
+        diagnostics: [
+          {
+            code: "workspace-configuration-parser-failed",
+            message: "Workspace configuration parsing failed",
+          },
+        ],
+        ok: false,
+      });
+    }
+    expect({ getterCalls, traps }).toEqual({ getterCalls: 0, traps: 0 });
   });
 
   test("distinguishes missing, conflicting, and malformed discovery outcomes", async () => {

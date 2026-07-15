@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -70,6 +70,67 @@ async function runPackageCommand(
   }
 }
 
+async function readBoundedCommandOutput(
+  stream: ReadableStream<Uint8Array>,
+  maximumBytes = 1_048_576,
+): Promise<string> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const item = await reader.read();
+      if (item.done) break;
+      total += item.value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel();
+        throw new Error("Standalone verification command output exceeds its byte bound");
+      }
+      chunks.push(item.value.slice());
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function capturePackageCommand(
+  executable: string,
+  workspace: string,
+  userHome: string,
+  args: readonly string[],
+): Promise<{ readonly exitCode: number; readonly stderr: string; readonly stdout: string }> {
+  const process = Bun.spawn({
+    cmd: [executable, "--format", "json", ...args],
+    cwd: workspace,
+    env: { ...Bun.env, HOME: userHome, USERPROFILE: userHome },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    process.exited,
+    readBoundedCommandOutput(process.stderr),
+    readBoundedCommandOutput(process.stdout),
+  ]);
+  return { exitCode, stderr, stdout };
+}
+
+async function requireMissing(candidate: string, message: string): Promise<void> {
+  try {
+    await lstat(candidate);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error(message);
+}
+
 async function verifyRuntimePluginImport(executable: string): Promise<void> {
   const root = await mkdtemp(path.join(tmpdir(), "groma-binary-plugin-"));
   try {
@@ -89,7 +150,6 @@ async function verifyRuntimePluginImport(executable: string): Promise<void> {
         version: "1.0.0",
       })}\n`,
     );
-    const maximumEntryBytes = 4 * 1_024 * 1_024;
     const evaluationFile = path.join(packageRoot, "evaluations.txt");
     const entrySource = `import { appendFileSync } from "node:fs";
 const evaluation: string = "evaluated\\n";
@@ -106,15 +166,75 @@ export const plugin = Object.freeze({
   start: () => Object.freeze({ capabilities: Object.freeze([]) })
 });\n`;
     const entryBytes = Buffer.from(entrySource);
-    if (entryBytes.byteLength > maximumEntryBytes) {
-      throw new Error("Binary smoke plugin exceeds the supported entry bound");
+    if (process.platform === "win32") {
+      await writeFile(path.join(packageRoot, "plugins", "smoke.js"), entryBytes);
+    } else {
+      const maximumEntryBytes = 4 * 1_024 * 1_024;
+      if (entryBytes.byteLength > maximumEntryBytes) {
+        throw new Error("Binary smoke plugin exceeds the supported entry bound");
+      }
+      await writeFile(
+        path.join(packageRoot, "plugins", "smoke.js"),
+        Buffer.concat([entryBytes, Buffer.alloc(maximumEntryBytes - entryBytes.byteLength, " ")]),
+      );
     }
-    await writeFile(
-      path.join(packageRoot, "plugins", "smoke.js"),
-      Buffer.concat([entryBytes, Buffer.alloc(maximumEntryBytes - entryBytes.byteLength, " ")]),
-    );
     await runPackageCommand(executable, workspace, userHome, ["init"]);
     await runPackageCommand(executable, workspace, userHome, ["package", "add", "./local-package"]);
+    if (process.platform === "win32") {
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "inspect",
+        "binary-smoke",
+      ]);
+      const rejected = await capturePackageCommand(executable, workspace, userHome, [
+        "package",
+        "enable",
+        "binary-smoke",
+        "./plugins/smoke.js",
+        "--trust-full-user-permissions",
+      ]);
+      if (rejected.exitCode !== 3 || rejected.stderr !== "") {
+        throw new Error("Windows package enable did not fail with the bounded workspace contract");
+      }
+      let envelope: unknown;
+      try {
+        envelope = JSON.parse(rejected.stdout);
+      } catch {
+        throw new Error("Windows package enable did not return bounded JSON");
+      }
+      const expected = JSON.stringify({
+        command: "package enable",
+        exitCode: 3,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code: "plugin-package-trust-root-unattested",
+              message:
+                "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
+            },
+          ],
+          ok: false,
+        },
+      });
+      if (JSON.stringify(envelope) !== expected) {
+        throw new Error("Windows package enable returned an unexpected trust diagnostic");
+      }
+      await requireMissing(
+        evaluationFile,
+        "Windows package enable evaluated an unattested plugin entry",
+      );
+      await requireMissing(
+        path.join(userHome, ".groma"),
+        "Windows package enable created an unattested user-data root",
+      );
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "remove",
+        "binary-smoke",
+      ]);
+      return;
+    }
     await runPackageCommand(executable, workspace, userHome, [
       "package",
       "enable",

@@ -124,6 +124,8 @@ function hostExit(diagnostics: readonly { readonly code: string }[], fallback: n
   return diagnostics.some(
     (entry) =>
       [
+        "invalid-local-plugin-package-source",
+        "personal-plugin-capability-forbidden",
         "project-plugin-validation-required",
         "plugin-full-user-permissions-trust-required",
         "remote-plugin-package-acquisition-out-of-scope",

@@ -64,6 +64,9 @@ function failedResult(
 
 function diagnosticExit(diagnostics: readonly { readonly code: string }[]): number {
   const codes = diagnostics.map((entry) => entry.code);
+  if (codes.includes("plugin-package-state-indeterminate")) {
+    return CLI_EXIT.indeterminate;
+  }
   if (
     codes.some(
       (code) =>
@@ -82,6 +85,7 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
       (code) =>
         code === "no-workspace" ||
         code === "plugin-package-integrity-drift" ||
+        code === "plugin-package-trust-root-unattested" ||
         code.includes("plugin-package-lock") ||
         code.includes("workspace-configuration") ||
         code.includes("workspace-initialization-conflict"),

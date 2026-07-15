@@ -79,7 +79,10 @@ These three fields are the only keys. Each package declaration contains exactly 
 `source`, and sorted `enabled` entry paths. The parser rejects invalid UTF-8, anchors,
 aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
 entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
-and declarations are sorted by code unit for deterministic selection.
+and declarations are sorted by code unit for deterministic selection. The document may
+enable at most 56 local package entries in the default profile. That is one shared Host
+capacity with enabled personal entries, not an independent per-scope allowance; an
+embedder that adds bootstrap registrations reduces the remaining local capacity.
 The shipped default CLI has no optional official contributions today. Required built-in
 Phase 1 plugins already run; listing one of their IDs is accepted but redundant and adds
 nothing. A Host embedder may inject a prevalidated optional official registration. An
@@ -124,11 +127,12 @@ Persisted trust is currently available only on POSIX. The Host requires the real
 user-data root to belong to the current user with mode `0700`; it does not pretend those
 mode bits attest Windows ACLs. Without a bounded Windows owner/ACL attestor, Windows
 fails `plugin-package-trust-root-unattested` before reading or writing plugin trust or
-importing an enabled local entry. A fresh Windows workspace with no enabled blueprint
-entry and no plugin user-data root still starts normally without personal plugins. It
-may also remove an inert blueprint declaration without trust pruning, but only after the
-Host proves that user-data root is absent; an existing or unclassifiable root still
-fails closed.
+importing an enabled local entry. Enable applies this check before materializing or
+importing the selected entry and before creating a user-data root. A fresh Windows
+workspace with no enabled blueprint entry and no plugin user-data root still starts
+normally without personal plugins. It may also remove an inert blueprint declaration
+without trust pruning, but only after the Host proves that user-data root is absent; an
+existing or unclassifiable root still fails closed.
 
 An explicit grant for changed exact bytes supersedes older grants for the same scope,
 workspace, package location, package name, and entry. Trust state therefore keeps one
@@ -149,7 +153,17 @@ ordinary startup fails closed on exact-byte drift.
 Every state write is byte-preflighted against its corresponding read bound. Blueprint
 publication writes the exact lock before configuration; disable and remove can reconcile
 that lock-first state after an interrupted second write, without requiring the package
-source to remain available.
+source to remain available. Disable also clears a configured enabled entry when the
+lock file or its package record is missing, then remove can finish the cleanup; neither
+recovery path evaluates package code. Unreadable, oversized, unsupported, or failed
+lock and personal-state reads cross startup as stable package-store diagnostics without
+provider paths or private failure details.
+
+The runtime accepts at most 128 registrations. The default profile reserves its eight
+built-ins and the full 64-entry official-runtime selection bound before admitting local
+entries, leaving 56 enabled local entries. Enable and ordinary startup count blueprint
+and personal selections together before any local import. Exceeding the remaining
+capacity fails closed without changing configuration, lock, or user-state bytes.
 
 Zero candidates is the typed missing-workspace state. Multiple candidates fail with
 `workspace-discovery-conflict`; invalid YAML fails with

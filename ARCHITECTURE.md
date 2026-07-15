@@ -965,7 +965,18 @@ Configuration, lock, and personal-state serialization are preflighted against th
 read bounds before publication. Blueprint updates publish the lock before configuration;
 if publication is interrupted between those resources, management-only disable and
 remove operations recognize the lock-first state and reconcile configuration without
-loading package code.
+loading package code. The inverse damaged state is also recoverable: when configuration
+still enables an entry but the lock or its package record is absent, disable may clear
+only that configured selection and remove may then clear the declaration. Recovery does
+not inspect the source or execute an entry. Lock and personal-state access failures are
+mapped to stable Host diagnostics before crossing the lifecycle boundary.
+
+The runtime's 128-registration ceiling is budgeted before local code can run. The
+default profile reserves eight built-ins and all 64 optional official-runtime slots,
+leaving at most 56 enabled local entries across blueprint and personal scopes together;
+additional embedder bootstrap registrations reduce that remainder. Configuration
+parsing, enable, and ordinary startup enforce the applicable bound before import, and
+capacity rejection leaves every persisted byte unchanged.
 
 The initial executable-entry contract is deliberately bounded: one entry is at most 4
 MiB and must be a bundled or otherwise self-contained ES module. Bun-compatible
@@ -999,7 +1010,8 @@ the real directory to be owned by the current user with mode `0700`. POSIX mode 
 not attest Windows ACL ownership. Until a bounded Windows owner/ACL capability exists,
 the Windows Host never reads or writes persisted plugin trust and never executes an
 enabled local plugin. An enabled blueprint package or any existing plugin user-data root
-fails with `plugin-package-trust-root-unattested` before import. A fresh Windows
+fails with `plugin-package-trust-root-unattested` before entry materialization, import,
+or creation of a user-data root. A fresh Windows
 workspace with neither condition still starts normally and simply has no personal local
 plugins. Removing an inert blueprint declaration may skip trust pruning only when the
 Host proves the plugin user-data root is absent; an existing or unclassifiable root keeps

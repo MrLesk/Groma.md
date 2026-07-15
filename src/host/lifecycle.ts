@@ -126,6 +126,13 @@ function startupFailure(code: string, message: string): HostRunOutcome {
   });
 }
 
+function startupFailures(diagnostics: readonly Diagnostic[]): HostRunOutcome {
+  return Object.freeze({
+    diagnostics,
+    status: "startup-failure",
+  });
+}
+
 function surfaceFailure(code: string, message: string): HostRunOutcome {
   return Object.freeze({
     diagnostics: Object.freeze([diagnostic(code, message)]),
@@ -147,7 +154,7 @@ type ValidatedRecoveryOutcome =
 
 type ObservedBootstrapOutcome =
   | {
-      readonly diagnostic?: Diagnostic;
+      readonly diagnostics?: readonly Diagnostic[];
       readonly state: "bootstrap-failed";
     }
   | { readonly state: "cancelled" }
@@ -184,10 +191,13 @@ const bootstrapFailureMessages = Object.freeze({
   "plugin-package-file-invalid": "Plugin package files must be bounded regular files, not links",
   "plugin-package-file-unavailable": "A required local plugin package file is unavailable",
   "plugin-package-integrity-drift": "A local package changed after its exact lock was written",
+  "plugin-package-enabled-limit-exceeded":
+    "Enabled local plugins exceed this Host's runtime capacity",
   "plugin-package-lock-malformed": "The exact plugin package lock is malformed",
   "plugin-package-lock-mismatch":
     "Plugin package configuration does not match its exact lock entry",
   "plugin-package-lock-missing": "A blueprint package declaration has no matching exact lock entry",
+  "plugin-package-lock-unavailable": "The exact plugin package lock is unavailable",
   "plugin-package-source-unavailable": "Local plugin package source is unavailable",
   "plugin-package-state-limit-exceeded":
     "Local plugin package state exceeds its configured byte bound",
@@ -216,18 +226,29 @@ const bootstrapFailureMessages = Object.freeze({
 
 function containedBootstrapFailure(value: unknown): ObservedBootstrapOutcome {
   const diagnostics = copyHostDiagnostics(value, 100, "invalid-host-bootstrap-result");
-  if (!diagnostics.ok || diagnostics.value.length !== 1) {
+  if (!diagnostics.ok || diagnostics.value.length === 0) {
     return { state: "bootstrap-failed" };
   }
-  const code = diagnostics.value[0]!.code;
-  if (!Object.hasOwn(bootstrapFailureMessages, code)) {
-    return { state: "bootstrap-failed" };
+
+  const canonical: Diagnostic[] = [];
+  for (const source of diagnostics.value) {
+    if (!Object.hasOwn(bootstrapFailureMessages, source.code)) {
+      return { state: "bootstrap-failed" };
+    }
+    let index = 0;
+    while (index < canonical.length && canonical[index]!.code < source.code) index += 1;
+    if (canonical[index]?.code === source.code) continue;
+    for (let move = canonical.length; move > index; move -= 1) {
+      canonical[move] = canonical[move - 1]!;
+    }
+    canonical[index] = diagnostic(
+      source.code,
+      bootstrapFailureMessages[source.code as keyof typeof bootstrapFailureMessages],
+    );
   }
+
   return {
-    diagnostic: diagnostic(
-      code,
-      bootstrapFailureMessages[code as keyof typeof bootstrapFailureMessages],
-    ),
+    diagnostics: Object.freeze(canonical),
     state: "bootstrap-failed",
   };
 }
@@ -990,9 +1011,9 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             outcome = cancelled(cancellationSignal);
           } else if (first.state === "bootstrap-failed") {
             outcome =
-              first.diagnostic === undefined
+              first.diagnostics === undefined
                 ? startupFailure("host-bootstrap-failed", "Host bootstrap failed")
-                : startupFailure(first.diagnostic.code, first.diagnostic.message);
+                : startupFailures(first.diagnostics);
           } else if (first.state === "invalid-composition") {
             outcome = startupFailure(
               "invalid-host-composition",

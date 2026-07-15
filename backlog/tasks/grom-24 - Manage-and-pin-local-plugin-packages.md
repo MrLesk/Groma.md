@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 08:39'
+updated_date: '2026-07-15 09:50'
 labels: []
 milestone: m-4
 dependencies:
@@ -70,18 +70,17 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Keep canonical configuration, lock, and user-state writers symmetric with bounded readers and preserve exact prior bytes on invalid inputs.
-2. Keep package file materialization bound to no-follow stable handle snapshots and platform-aware containment.
-3. Keep executable evaluation bound to captured verified bytes through an immutable in-memory module with the documented self-contained entry contract.
-4. Keep POSIX trust roots owner-controlled, real, and mode-private; bind and prune exact grants by stable scope and package identity.
-5. Keep blueprint configuration and lock publication compare-and-swap coordinated while preserving lock-first recovery.
-6. Keep remote shorthand rejection, adversarial filesystem regressions, and four-target compilation coverage.
-7. Add an explicit Host platform input and fail closed for persisted trust and local plugin execution on Windows until a bounded owner/ACL attestor exists; preserve fresh Windows startup without local plugin state.
-8. Add a deterministic platform-injected regression proving an existing exact grant under an unattested Windows root cannot authorize import, plus stable lifecycle diagnostics and honest architecture/Host/CLI documentation.
-9. Let fresh Windows workspaces remove an inert blueprint declaration only after conservatively proving the plugin user-data root is absent; otherwise retain the unattested-root failure.
-10. Supersede prior trust grants for the same logical package-entry subject only when explicit trust is granted for new exact bytes, preserving exact matching, canonical order, and bounded state.
-11. Reject persisted trust state containing more than one grant for the same logical subject before any exact-match authorization; prove seeded canonical ambiguity fails without import or mutation.
-12. Run focused Host tests, bun run check, bun run check:targets, backlog doctor, and diff review; record evidence and return the task to Done.
+1. Preserve exact canonical configuration, lock, user-state, file-snapshot, trust-root, and captured-byte execution invariants from the completed GROM-24 implementation.
+2. Require a missing-to-configured bootstrap recheck to observe both zero requested runtime plugins and zero package declarations.
+3. Contain replacement-parser package declarations and enabled arrays through Host runtime inspection before canonical validation.
+4. Recover blueprint disable when canonical configuration still enables an entry but the lock is absent or lacks that package, without source, trust, or import; preserve lock/config CAS and stable negative outcomes.
+5. Map lock and user-state resource failures to bounded package diagnostics and preserve every allowlisted bootstrap diagnostic through lifecycle containment without external details.
+6. Route package indeterminate mutations to exit 6 and classify invalid local sources and forbidden personal capabilities as workspace exits.
+7. Prove startup rejects enabled locked entries without exact trust, and Windows enable fails unattested without import or user-state creation.
+8. Enforce one explicit Host-derived total enabled-local-plugin budget across blueprint and personal state before enable/startup materialization or import, plus a canonical blueprint-view bound.
+9. Make native binary smoke platform-aware: POSIX retains the exact 4 MiB positive execution path; Windows covers inert management and the expected unattested enable failure through bounded JSON capture.
+10. Retain the split empty-string --allow-unresolved compiler form after independent official-doc, native, and four-target equivalence verification.
+11. Add focused regressions for every closure finding, run bun run check, bun run check:targets, Backlog doctor, and diff review; record exact evidence and return GROM-24 to Done.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -112,10 +111,14 @@ Final quality review found that pre-fix or seeded canonical state could retain m
 Implemented subject-level uniqueness in parseTrust after deterministic full-key ordering. Exact duplicate rejection is subsumed. Added a seeded canonical user-state regression with one current matching grant plus an alternate hash for the same subject; loadEnabled and enable both return plugin-package-user-state-malformed, perform zero imports, and preserve exact state bytes. Normal one-grant and repeated re-trust coverage remains green at 16 focused tests / 0 failures.
 
 Final uniqueness validation passed on the exact follow-up diff: focused local-package coverage passed 16 tests / 0 failures; bun run check passed formatting, strict typecheck, architecture boundaries, 540 tests / 0 failures, native compiled package workflow, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; backlog doctor and git diff --check passed.
+
+Consolidated external review reopened GROM-24 at f2c3270819c8fbcdf9aad40e46825812bf184663 for bounded bootstrap, recovery, lifecycle, CLI, persistence, capacity, Windows-smoke, and parser-containment corrections. Context Hunter classification is L2 because canonical bytes, fail-closed trust, runtime capacity, lifecycle containment, and CLI contracts interact. Independent compiler verification on Bun 1.3.14 confirmed the existing split argv form --allow-unresolved followed by an empty string is documented and equivalent to --allow-unresolved= for the Blob import, native build, and all four targets; it remains unchanged as non-actionable.
+
+Consolidated closure implementation completed. Bootstrap rechecks now require a fully empty configuration; replacement-parser package state crosses proxy/accessor-safe Host inspection; configured-only package enablement can be disabled and removed without source or import; lock and user-state access failures are stable and lifecycle containment preserves all known canonical diagnostics. CLI exit contracts now retain indeterminate package writes as exit 6 and classify local package/trust configuration failures consistently. Enable and startup enforce one Host-derived local registration budget across configuration, exact lock, and personal state before import, including lock-first interruption states. Windows native smoke covers inert management plus unattested enable with no evaluation or user-root mutation; POSIX retains the exact 4 MiB positive execution proof. Independent Bun 1.3.14 verification confirmed the unchanged split empty --allow-unresolved argument on native and all four targets. An independent closure-diff review found two actionable edge cases (Windows exit mismatch and lock-first capacity undercount); both were corrected and the reviewer confirmed no remaining actionable findings. Final validation passed: bun run check (552 tests, strict typecheck, boundaries, native compiled workflow, crash recovery), bun run check:targets (macOS arm64, Linux x64, Windows x64, Windows arm64), focused package/CLI/lifecycle suites, Backlog doctor, and git diff --check.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed GROM-24 with all closure hardening. Fresh Windows workspaces can manage inert blueprint declarations only when the trust root is proven absent, changed exact bytes supersede obsolete grants, and persisted trust now rejects multiple grants for one logical subject as malformed before any import. The seeded ambiguity regression proves startup and enable perform zero imports and preserve exact state bytes; normal re-trust and byte-reversion behavior remains green. Verified with 16 focused Host tests, the full 540-test repository check, native compiled workflows, four target builds, Backlog doctor, and diff checks.
+Closed the consolidated GROM-24 review findings across bootstrap containment, exact package-state recovery, trust ordering, stable diagnostics, lifecycle aggregation, CLI exits, Host-derived cross-scope capacity, and platform-aware binary smoke. Lock-first capacity is counted from the configuration/lock union before any import, and Windows enable now fails with the documented workspace contract without evaluating code or creating trust state. Verified by 552 repository tests, native compiled/crash workflows, all four target builds, independent compiler equivalence checks, and an independent final diff re-review with no remaining actionable findings.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -24,23 +24,23 @@ function context(code: string): HostSurfaceContext {
     }),
     packages: Object.freeze({
       add: async () => ({
-        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
       disable: async () => ({
-        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
       enable: async () => ({
-        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
       inspect: async () => ({
-        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
       remove: async () => ({
-        diagnostics: [{ code: "Unavailable", message: "Unavailable" }],
+        diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
     }),
@@ -69,5 +69,28 @@ describe("CLI surface", () => {
       expect(controller.result()).toMatchObject({ exitCode, ok: false });
       await session.stop();
     }
+  });
+
+  test("classifies unattested package trust as a workspace failure", async () => {
+    const invocation: CliInvocation = Object.freeze({
+      command: Object.freeze({
+        entry: "./plugins/entry.js",
+        kind: "package-enable",
+        name: "example",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+      format: "json",
+    });
+    const controller = createCliSurfaceController(
+      invocation,
+      { read: async () => "{}" },
+      { stdin: false, stdout: false },
+    );
+    const session = await controller.surface.start(context("plugin-package-trust-root-unattested"));
+    await session.completion;
+
+    expect(controller.result()).toMatchObject({ exitCode: CLI_EXIT.workspace, ok: false });
+    await session.stop();
   });
 });

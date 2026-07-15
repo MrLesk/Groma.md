@@ -95,6 +95,8 @@ export interface LocalPluginPackageManagerOptions {
   /** Verification-only observer for deterministic file race tests. */
   readonly fileReadObserver?: (event: LocalPluginPackageFileReadEvent) => Promise<void> | void;
   readonly importModule?: (url: string) => Promise<unknown>;
+  /** Total enabled blueprint and personal entries this Host can still compose. */
+  readonly maxEnabledPlugins: number;
   readonly resources: LocalResourceProvider;
   /** Host-owned platform seam; production derives this from the running target. */
   readonly trustRootPlatform?: LocalPluginPackageTrustRootPlatform;
@@ -759,6 +761,28 @@ function selectionSnapshot(
   });
 }
 
+function enabledEntryCount(packages: readonly LockedPackage[]): number {
+  return packages.reduce((total, item) => total + item.enabled.length, 0);
+}
+
+function configuredEnabledEntryCount(configuration: BootstrapBaseConfiguration): number {
+  return configuration.packageDeclarations.reduce((total, item) => total + item.enabled.length, 0);
+}
+
+function blueprintEnabledEntryCount(
+  configuration: BootstrapBaseConfiguration,
+  lock: PackageLock,
+): number {
+  const enabled = new Set<string>();
+  for (const declaration of configuration.packageDeclarations) {
+    for (const entry of declaration.enabled) enabled.add(`${declaration.name}\0${entry}`);
+  }
+  for (const locked of lock.packages) {
+    for (const entry of locked.enabled) enabled.add(`${locked.name}\0${entry.entry}`);
+  }
+  return enabled.size;
+}
+
 async function importVerifiedEntry(
   entry: MaterializedEntry,
   importer: (url: string) => Promise<unknown>,
@@ -888,6 +912,9 @@ export function createLocalPluginPackageManager(
   if (!path.isAbsolute(options.workspaceRoot) || !path.isAbsolute(options.userDataRoot)) {
     throw new TypeError("Plugin package roots must be absolute host paths");
   }
+  if (!Number.isSafeInteger(options.maxEnabledPlugins) || options.maxEnabledPlugins < 0) {
+    throw new TypeError("Local enabled plugin capacity must be a non-negative safe integer");
+  }
   const workspaceRoot = realpathSync(path.normalize(options.workspaceRoot));
   const requestedUserDataRoot = path.normalize(options.userDataRoot);
   if (isPathWithin(workspaceRoot, requestedUserDataRoot)) {
@@ -944,7 +971,12 @@ export function createLocalPluginPackageManager(
 
   const readLock = async (): Promise<Result<PackageLock>> => {
     const read = await readResource(options.resources, lockLocator, maximumUserStateBytes);
-    if (!read.ok) return read;
+    if (!read.ok) {
+      return packageFailure(
+        "plugin-package-lock-unavailable",
+        "The exact plugin package lock is unavailable",
+      );
+    }
     return read.value === undefined ? success(emptyLock()) : parseLock(read.value);
   };
 
@@ -969,7 +1001,12 @@ export function createLocalPluginPackageManager(
       );
     }
     const read = await readResource(resources, userStateLocator, maximumUserStateBytes);
-    if (!read.ok) return read;
+    if (!read.ok) {
+      return packageFailure(
+        "plugin-package-user-state-unavailable",
+        "Local plugin package state is unavailable",
+      );
+    }
     return read.value === undefined ? success(emptyUserState()) : parseUserState(read.value);
   };
 
@@ -994,7 +1031,12 @@ export function createLocalPluginPackageManager(
       { context: "local-machine", locator: userStateLocator },
       async () => {
         const currentBytes = await readResource(resources, userStateLocator, maximumUserStateBytes);
-        if (!currentBytes.ok) return ownedFailure<void>(...currentBytes.diagnostics);
+        if (!currentBytes.ok) {
+          return packageFailure(
+            "plugin-package-user-state-unavailable",
+            "Local plugin package state is unavailable",
+          );
+        }
         const current =
           currentBytes.value === undefined
             ? success(emptyUserState())
@@ -1301,6 +1343,24 @@ export function createLocalPluginPackageManager(
     serialize(async () => {
       const located = await locate(request);
       if (!located.ok) return located;
+      const state =
+        located.value.state === undefined ? await readUserState() : success(located.value.state);
+      if (!state.ok) return state;
+      const blueprintLock =
+        located.value.lock === undefined ? await readLock() : success(located.value.lock);
+      if (!blueprintLock.ok) return blueprintLock;
+      const alreadyEnabled = located.value.locked.enabled.some(
+        (item) => item.entry === request.entry,
+      );
+      const enabledCount =
+        blueprintEnabledEntryCount(configuration, blueprintLock.value) +
+        enabledEntryCount(state.value.packages);
+      if (enabledCount + (alreadyEnabled ? 0 : 1) > options.maxEnabledPlugins) {
+        return packageFailure(
+          "plugin-package-enabled-limit-exceeded",
+          "Enabled local plugins exceed this Host's runtime capacity",
+        );
+      }
       const materialized = await materializedFor(located.value.locked, request.scope);
       if (!materialized.ok) return materialized;
       if (materialized.value.manifestIntegrity !== located.value.locked.manifestIntegrity) {
@@ -1311,9 +1371,6 @@ export function createLocalPluginPackageManager(
       }
       const entry = await materializeEntry(materialized.value, request.entry, fileReadObserver);
       if (!entry.ok) return entry;
-      const state =
-        located.value.state === undefined ? await readUserState() : success(located.value.state);
-      if (!state.ok) return state;
       const trusted = state.value.trust.some((grant) =>
         grantMatches(grant, request.scope, workspaceRoot, materialized.value, entry.value),
       );
@@ -1416,6 +1473,42 @@ export function createLocalPluginPackageManager(
     request: SelectPluginPackageEntryRequest,
   ): Promise<Result<PluginPackageSelectionSnapshot>> =>
     serialize(async () => {
+      if (request.scope === "blueprint") {
+        if (!packageNamePattern.test(request.name)) {
+          return packageFailure("invalid-plugin-package-name", "Plugin package name is malformed");
+        }
+        const lock = await readLock();
+        if (!lock.ok) return lock;
+        const declaration = configuration.packageDeclarations.find(
+          (item) => item.name === request.name,
+        );
+        const locked = lock.value.packages.find((item) => item.name === request.name);
+        if (declaration !== undefined && locked === undefined) {
+          if (!declaration.enabled.includes(request.entry)) {
+            return packageFailure(
+              "plugin-package-entry-not-enabled",
+              "The selected plugin entry is not enabled",
+            );
+          }
+          const enabled = Object.freeze(
+            declaration.enabled.filter((entry) => entry !== request.entry),
+          );
+          const packageDeclarations = Object.freeze(
+            configuration.packageDeclarations.map((item) =>
+              item.name === request.name ? Object.freeze({ ...item, enabled }) : item,
+            ),
+          );
+          const repaired = await writeBlueprintState(
+            Object.freeze({ ...configuration, packageDeclarations }),
+            lock.value,
+            lock.value,
+          );
+          if (!repaired.ok) return repaired;
+          return success(
+            Object.freeze({ enabled, name: request.name, scope: "blueprint" as const }),
+          );
+        }
+      }
       const located = await locate(request);
       if (!located.ok) return located;
       if (!located.value.locked.enabled.some((item) => item.entry === request.entry)) {
@@ -1619,6 +1712,15 @@ export function createLocalPluginPackageManager(
       }
       const state = await readUserState();
       if (!state.ok) return state;
+      if (
+        configuredEnabledEntryCount(configuration) + enabledEntryCount(state.value.packages) >
+        options.maxEnabledPlugins
+      ) {
+        return packageFailure(
+          "plugin-package-enabled-limit-exceeded",
+          "Enabled local plugins exceed this Host's runtime capacity",
+        );
+      }
       for (const locked of state.value.packages) selections.push({ locked, scope: "personal" });
       const registrations: PluginRegistration[] = [];
       const personalPluginIds: string[] = [];

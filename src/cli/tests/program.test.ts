@@ -536,6 +536,64 @@ export const plugin = Object.freeze({
     expect(await readFile(projectLock, "utf8")).toBe("project-owned\n");
   });
 
+  test("returns the indeterminate exit class when a package-state commit cannot be acknowledged", async () => {
+    const root = await workspace();
+    const userDataRoot = await workspace();
+    await jsonCommand(root, ["init"], undefined, { userDataRoot });
+    const packageRoot = path.join(root, "plugins", "indeterminate");
+    await mkdir(path.join(packageRoot, "plugins"), { recursive: true });
+    await writeFile(
+      path.join(packageRoot, "groma.package.json"),
+      `${JSON.stringify({
+        apiVersion: "groma.package/v1",
+        name: "example-indeterminate",
+        plugins: ["./plugins/entry.js"],
+        runtimeApiVersion: "groma.plugin/v1",
+        sdkApiVersion: "groma.sdk/v1",
+        version: "1.0.0",
+      })}\n`,
+    );
+    await writeFile(path.join(packageRoot, "plugins", "entry.js"), "export const plugin = {};\n");
+    const captured = captureOutput();
+
+    const exitCode = await runProgram(
+      ["--format", "json", "package", "add", "./plugins/indeterminate"],
+      captured,
+      {
+        createRegistry: (surface) =>
+          createDefaultBootstrapRegistry({
+            resourceFaultInjector: (phase) => {
+              if (phase === "after-rename") throw new Error("private acknowledgement failure");
+            },
+            surface,
+            userDataRoot,
+          }),
+        terminal: { stdin: false, stdout: false },
+        userDataRoot,
+        workspaceRoot: root,
+      },
+    );
+
+    expect(exitCode, captured.output[0]).toBe(CLI_EXIT.indeterminate);
+    expect(captured.errors).toEqual([]);
+    expect(captured.output).toHaveLength(1);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      command: "package add",
+      exitCode: CLI_EXIT.indeterminate,
+      ok: false,
+      result: {
+        diagnostics: [
+          {
+            code: "plugin-package-state-indeterminate",
+            message: "Plugin package state may have committed; inspect it before retrying",
+          },
+        ],
+        ok: false,
+      },
+    });
+    expect(captured.output[0]).not.toContain("private acknowledgement failure");
+  });
+
   test("uses stable invocation, workspace, semantic, and signal exit classes", async () => {
     const root = await workspace();
     const invalid = await jsonCommand(root, ["component", "list"]);
@@ -802,6 +860,46 @@ export const plugin = Object.freeze({
         ],
       },
     });
+  });
+
+  test("classifies user-actionable local package bootstrap failures as workspace exits", async () => {
+    for (const [code, message] of [
+      ["invalid-local-plugin-package-source", "Local plugin package source is malformed"],
+      [
+        "personal-plugin-capability-forbidden",
+        "Personal plugins may provide or require only groma.presentation.* capabilities",
+      ],
+    ] as const) {
+      const root = await workspace();
+      const captured = captureOutput();
+      const exitCode = await runProgram(
+        ["--format", "json", "component", "roots", "--limit", "1"],
+        captured,
+        {
+          createRegistry: () => ({
+            compose: async () =>
+              Object.freeze({
+                diagnostics: Object.freeze([Object.freeze({ code, message: `/private/${code}` })]),
+                ok: false as const,
+              }),
+          }),
+          terminal: { stdin: false, stdout: false },
+          workspaceRoot: root,
+        },
+      );
+
+      expect(exitCode, code).toBe(CLI_EXIT.workspace);
+      expect(captured.errors, code).toEqual([]);
+      expect(JSON.parse(captured.output[0]!) as JsonEnvelope, code).toMatchObject({
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+        result: {
+          diagnostics: [{ code, message }],
+          status: "startup-failure",
+        },
+      });
+      expect(captured.output[0], code).not.toContain("/private/");
+    }
   });
 
   test("keeps unsupported runtime targets in the infrastructure exit class", async () => {

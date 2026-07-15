@@ -83,6 +83,7 @@ export type BootstrapConfigurationLoad =
 export const bootstrapConfigurationBounds = Object.freeze({
   maxConfigurationBytes: 64 * 1_024,
   maxDiscoveryCandidates: 8,
+  maxEnabledLocalPlugins: 56,
   maxPackageDeclarations: 64,
   maxPackageEntryCharacters: 512,
   maxPackageSourceCharacters: 4_096,
@@ -180,37 +181,61 @@ export function isBlueprintPackageSource(value: unknown): value is string {
   );
 }
 
-function parseConfiguredPackages(value: unknown): Result<readonly ConfiguredPluginPackage[]> {
-  if (!Array.isArray(value) || value.length > bootstrapConfigurationBounds.maxPackageDeclarations) {
-    return malformed();
-  }
+function parseConfiguredPackages(
+  value: unknown,
+  boundary: "configuration" | "parser" = "configuration",
+): Result<readonly ConfiguredPluginPackage[]> {
+  const invalid = () =>
+    boundary === "configuration"
+      ? malformed()
+      : failure(
+          diagnostic(
+            "workspace-configuration-parser-failed",
+            "Workspace configuration parsing failed",
+          ),
+        );
+  const inspected = inspectHostDenseArray(
+    value,
+    bootstrapConfigurationBounds.maxPackageDeclarations,
+    "workspace-configuration-parser-failed",
+    "Configured plugin packages",
+  );
+  if (!inspected.ok) return invalid();
   const packages: ConfiguredPluginPackage[] = [];
   const names = new Set<string>();
-  for (const item of value) {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) return malformed();
-    const record = item as Record<string, unknown>;
-    const keys = Object.keys(record).sort(compareCodeUnits);
+  let enabledCount = 0;
+  for (const item of inspected.value) {
+    const inspectedRecord = inspectHostRecord(
+      item,
+      [["enabled", "name", "source"]],
+      "workspace-configuration-parser-failed",
+      "Configured plugin package",
+    );
+    if (!inspectedRecord.ok) return invalid();
+    const record = inspectedRecord.value;
+    const enabled = inspectHostDenseArray(
+      record.enabled,
+      64,
+      "workspace-configuration-parser-failed",
+      "Configured plugin entries",
+    );
     if (
-      keys.length !== 3 ||
-      keys[0] !== "enabled" ||
-      keys[1] !== "name" ||
-      keys[2] !== "source" ||
+      !enabled.ok ||
       typeof record.name !== "string" ||
       record.name.length > 214 ||
       !packageNamePattern.test(record.name) ||
       names.has(record.name) ||
-      !isBlueprintPackageSource(record.source) ||
-      !Array.isArray(record.enabled) ||
-      record.enabled.length > 64
+      !isBlueprintPackageSource(record.source)
     ) {
-      return malformed();
+      return invalid();
     }
-    const enabled = record.enabled;
     const entries = new Set<string>();
-    for (const entry of enabled) {
-      if (!isPackageEntry(entry) || entries.has(entry)) return malformed();
+    for (const entry of enabled.value) {
+      if (!isPackageEntry(entry) || entries.has(entry)) return invalid();
       entries.add(entry);
     }
+    enabledCount += entries.size;
+    if (enabledCount > bootstrapConfigurationBounds.maxEnabledLocalPlugins) return invalid();
     names.add(record.name);
     packages.push(
       Object.freeze({
@@ -644,7 +669,10 @@ export function parseBootstrapConfiguration(
     );
   }
   canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-  const packageDeclarations = parseConfiguredPackages(configuration.value.packageDeclarations);
+  const packageDeclarations = parseConfiguredPackages(
+    configuration.value.packageDeclarations,
+    "parser",
+  );
   if (!packageDeclarations.ok) {
     return failure(
       diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
@@ -670,7 +698,11 @@ export function bootstrapConfigurationStillUsable(
     return false;
   }
   if (expected.state === "missing") {
-    return actual.state === "missing" || actual.configuration.requestedRuntimePlugins.length === 0;
+    return (
+      actual.state === "missing" ||
+      (actual.configuration.requestedRuntimePlugins.length === 0 &&
+        actual.configuration.packageDeclarations.length === 0)
+    );
   }
   if (actual.state === "missing") return false;
   const expectedPlugins = expected.configuration.requestedRuntimePlugins;
