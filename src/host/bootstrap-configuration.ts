@@ -466,7 +466,15 @@ export function createLocalConfigurationDiscovery(
   });
 }
 
-export function createYamlConfigurationParser(): ConfigurationParserProvider {
+export interface YamlConfigurationParserOptions {
+  /** Read-only compatibility used only to compose explicit migration commands. */
+  readonly allowLegacySchemaForMigration?: boolean;
+}
+
+export function createYamlConfigurationParser(
+  options: YamlConfigurationParserOptions = Object.freeze({}),
+): ConfigurationParserProvider {
+  const allowLegacySchemaForMigration = options.allowLegacySchemaForMigration === true;
   return Object.freeze({
     parse: (bytes: Uint8Array): Result<BootstrapBaseConfiguration> => {
       const copied = copyBytes(bytes);
@@ -500,11 +508,10 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
       if (typeof value !== "object" || value === null || Array.isArray(value)) return malformed();
       const record = value as Record<string, unknown>;
       const keys = Object.keys(record).sort();
-      if (
-        Object.hasOwn(record, "schema") &&
-        typeof record.schema === "string" &&
-        record.schema !== "groma/v0.1"
-      ) {
+      const schemaAccepted =
+        record.schema === "groma/v0.1" ||
+        (allowLegacySchemaForMigration && record.schema === "groma/v0");
+      if (Object.hasOwn(record, "schema") && typeof record.schema === "string" && !schemaAccepted) {
         return incompatible();
       }
       if (
@@ -512,7 +519,7 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
         keys.length > 3 ||
         !keys.includes("schema") ||
         keys.some((key) => key !== "packages" && key !== "plugins" && key !== "schema") ||
-        record.schema !== "groma/v0.1"
+        !schemaAccepted
       ) {
         return malformed();
       }

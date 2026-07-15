@@ -48,6 +48,20 @@ function check(
   });
 }
 
+function checkMultiple(
+  id: string,
+  pluginId: string,
+  verify: PluginProviderConformanceCheck["verify"],
+): PluginProviderConformanceCheck {
+  return Object.freeze({
+    cardinality: "multiple",
+    id,
+    pluginId,
+    verify,
+    version: capabilityVersion,
+  });
+}
+
 describe("default host plugin SDK conformance", () => {
   test("runs every applicable built-in provider through the public suite", async () => {
     let normalizedCancellationEvidence = false;
@@ -179,6 +193,35 @@ describe("default host plugin SDK conformance", () => {
         return (await (value as { load(): Promise<{ readonly ok: boolean }> }).load()).ok;
       }),
       check(
+        defaultHostCapabilityIds.schemaMigrationCatalog,
+        defaultHostPluginIds.persistence,
+        async (value) =>
+          hasMethod(value, "inspect") &&
+          hasMethod(value, "load") &&
+          (await (value as { load(): Promise<{ readonly ok: boolean }> }).load()).ok,
+      ),
+      check(
+        defaultHostCapabilityIds.schemaMigrationTransactionProvider,
+        defaultHostPluginIds.persistence,
+        async (value) => {
+          if (!hasMethod(value, "snapshot")) return false;
+          return (
+            typeof (await (
+              value as { snapshot(resources: readonly unknown[]): Promise<unknown> }
+            ).snapshot([])) === "object"
+          );
+        },
+      ),
+      checkMultiple(
+        defaultHostCapabilityIds.schemaMigrators,
+        defaultHostPluginIds.schemaMigrations,
+        (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          Array.isArray(Reflect.get(value, "schemas")) &&
+          Array.isArray(Reflect.get(value, "migrators")),
+      ),
+      check(
         defaultHostCapabilityIds.transactionProvider,
         defaultHostPluginIds.persistence,
         async (value) => {
@@ -209,6 +252,12 @@ describe("default host plugin SDK conformance", () => {
         defaultHostCapabilityIds.operations,
         defaultHostPluginIds.application,
         (value) => hasMethod(value, "initialize") && hasMethod(value, "listComponents"),
+      ),
+      check(
+        defaultHostCapabilityIds.schemaMigrationOperations,
+        defaultHostPluginIds.application,
+        (value) =>
+          hasMethod(value, "status") && hasMethod(value, "preview") && hasMethod(value, "apply"),
       ),
       check(defaultHostCapabilityIds.workspace, defaultHostPluginIds.application, (value) => {
         if (!hasMethod(value, "status")) return false;

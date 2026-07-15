@@ -5,6 +5,7 @@ import {
   type ComponentPage,
   type CreateComponentRequest,
   type UpdateComponentRequest,
+  type SchemaMigrationApplyOutcome,
 } from "../application/index.ts";
 import type { HostSurface, HostSurfaceContext } from "../host/index.ts";
 import {
@@ -75,6 +76,9 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
         code.includes("initialization-failed") ||
         code.includes("recovery") ||
         code.includes("snapshot") ||
+        code === "resource-missing" ||
+        code === "resource-unreadable" ||
+        code === "stale-resource-cursor" ||
         code.includes("resource-unavailable") ||
         code.includes("capability-failed"),
     )
@@ -124,6 +128,25 @@ function mutationResult<T>(
       return result(command, CLI_EXIT.indeterminate, false, value);
     case "provider-failure":
       return result(command, CLI_EXIT.infrastructure, false, value);
+    default:
+      return result(command, CLI_EXIT.semantic, false, value);
+  }
+}
+
+function migrationResult(
+  command: CliCommand,
+  value: SchemaMigrationApplyOutcome,
+): CliCommandResult {
+  switch (value.status) {
+    case "applied":
+    case "current":
+      return result(command, CLI_EXIT.success, true, value);
+    case "indeterminate":
+      return result(command, CLI_EXIT.indeterminate, false, value);
+    case "provider-failure":
+      return result(command, CLI_EXIT.infrastructure, false, value);
+    case "conflict":
+      return result(command, CLI_EXIT.workspace, false, value);
     default:
       return result(command, CLI_EXIT.semantic, false, value);
   }
@@ -322,6 +345,27 @@ async function execute(
   }
   if (command.kind === "package-remove") {
     return applicationResult(command, await context.packages.remove(command));
+  }
+  if (command.kind.startsWith("migrate-")) {
+    const available = context.workspace.requireWorkspace();
+    if (!available.ok) {
+      return result(command, diagnosticExit(available.diagnostics), false, available);
+    }
+    if (context.migrations === undefined) {
+      return failedResult(
+        command,
+        CLI_EXIT.infrastructure,
+        "schema-migration-capability-unavailable",
+        "Schema migration operations are unavailable in this host",
+      );
+    }
+    if (command.kind === "migrate-status") {
+      return applicationResult(command, await context.migrations.status());
+    }
+    if (command.kind === "migrate-preview") {
+      return applicationResult(command, await context.migrations.preview());
+    }
+    return migrationResult(command, await context.migrations.apply());
   }
   const operations = workspaceOperations(command, context);
   if (!("listRoots" in operations)) return operations;

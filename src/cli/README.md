@@ -79,6 +79,12 @@ not loaded or started. Inspect reports manifest or enabled-entry drift without e
 it, and disable/remove remain available as recovery operations when ordinary startup
 would fail closed.
 
+`migrate status`, `migrate preview`, and `migrate apply` are the explicit canonical schema
+surface. Status reports the floor, observed versions, mixed state, and per-resource path
+completeness without invoking migrators. Preview lists every resource and deterministic
+path but writes nothing. Apply is the only migration write boundary and uses one durable
+transaction; ordinary component and bare commands never repair or rewrite older schemas.
+
 Remote npm, Git, and URL sources return the stable
 `remote-plugin-package-acquisition-out-of-scope` diagnostic before source filesystem
 access. Package state commands write only `groma/groma.yaml`, `groma/packages.lock`, and

@@ -390,6 +390,25 @@ stale-age threshold in addition to the same double proof, avoiding a behavior ch
 for short scoped locks while allowing transaction startup to settle a crashed writer
 without a five-minute default delay.
 
+## Canonical schema migration
+
+The local migration catalog recognizes configuration, package lock, aliases, stable-ID
+intent shards, and flat plugin-owned records beneath `groma/records/<plugin-id>/`. It
+rejects malformed canonical-plane layouts and links instead of silently omitting them,
+while excluding `transaction-state.json` and unrelated workspace files. Discovery reads
+the three exact root records and enumerates only the bounded `groma/intent` and
+`groma/records` planes, so unrelated directory depth or size never consumes canonical
+bounds. Every resource is read with per-document, count, directory, and aggregate byte
+bounds and receives the same exact SHA-256 revision used by canonical transactions.
+
+`createCanonicalMigrationTransactionAdapter` is a raw-byte adapter for a separate
+`LocalTransactionJournal` instance over the same durable protocol and transaction-state
+resource. The complete catalog is an optimistic read set, every replacement is an exact
+target, and prepare re-enumerates that exact set so additions, removals, partial targets,
+and unrelated targets fail closed. Recovery uses only the journal's stored
+locators/revisions/bytes. A restarted ordinary or migration journal can therefore settle
+an interrupted batch without running a migrator again.
+
 ## Bun API rationale
 
 Bun documents [`Bun.file` and `Bun.write` as the recommended ordinary file I/O

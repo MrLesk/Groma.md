@@ -89,7 +89,10 @@ export interface CanonicalTransactionMaterialization {
 /** Persistence-local bridge from a semantic model to exact canonical resources. */
 export interface CanonicalTransactionAdapter {
   load(): Promise<Result<CanonicalTransactionSnapshot>>;
-  materialize(proposal: ProposedTransaction): Result<CanonicalTransactionMaterialization>;
+  materialize(
+    proposal: ProposedTransaction,
+    current: CanonicalTransactionSnapshot,
+  ): Result<CanonicalTransactionMaterialization>;
 }
 
 export interface MarkdownIntentTransactionAdapterOptions {
@@ -1522,7 +1525,7 @@ export function createLocalTransactionJournal(
           return Object.freeze({ reason: "revision", status: "conflict" });
         }
       }
-      const materialized = options.adapter.materialize(proposal);
+      const materialized = options.adapter.materialize(proposal, loaded.value);
       if (!materialized.ok) throw new Error(materialized.diagnostics[0]?.message);
       if (
         materialized.value.targets.length === 0 ||

@@ -217,3 +217,12 @@ idempotent and may classify repeated calls with the same committed result; the
 application or durable journal settles that result and routes its single event once.
 Filesystems, Markdown, journals, and surface concerns remain provider or application
 responsibilities.
+
+## Schema migration contracts
+
+Core exposes only the technology-neutral `groma.schema-migration/v1` contribution shape:
+bounded schema/version declarations and directed migrator callbacks over owned canonical
+bytes. It does not discover resources, choose paths, invoke callbacks, or publish writes.
+Those remain Application and provider responsibilities, while plugin delivery uses the
+ordinary runtime capability graph through the stable
+`canonicalSchemaMigratorCapabilityId` (`groma.schema-migrators/v1`).

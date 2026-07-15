@@ -26,6 +26,16 @@ second resolver, lifecycle, or semantic path. Staged Phase 0 continuation is an
 internal Host bootstrap primitive and is intentionally absent from this public
 surface.
 
+Schema-owning plugins may contribute `CanonicalSchemaMigrationContribution` as a
+multiple-provider `canonicalSchemaMigratorCapabilityId` capability. Its stable value is
+`groma.schema-migrators/v1`. A contribution declares exact schema tokens, integer document
+versions, and version-increasing migrator edges. It never receives a store or write
+capability. The Host keeps it inert until explicit status, preview, or apply work;
+Application chooses one bounded path and contains callback failure or
+malformed/nondeterministic bytes before Persistence prepares a transaction.
+Contribution, schema, and migrator declarations are plain records: required fields must be own,
+enumerable data properties. Prototype methods are outside the runtime contract.
+
 Package acquisition, trust, enablement, loading, exact locks, and project configuration
 belong to the Official Host and are not implemented by this SDK.
 

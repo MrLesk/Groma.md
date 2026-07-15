@@ -173,6 +173,21 @@ describe("CLI program", () => {
     expect(await readdir(root)).toEqual([]);
   });
 
+  test("requires an initialized workspace for explicit migration inspection", async () => {
+    const root = await workspace();
+
+    expect(await jsonCommand(root, ["migrate", "status"])).toMatchObject({
+      envelope: {
+        command: "migrate status",
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+        result: { diagnostics: [{ code: "no-workspace" }], ok: false },
+      },
+      exitCode: CLI_EXIT.workspace,
+    });
+    expect(await readdir(root)).toEqual([]);
+  });
+
   test("initializes and restarts an empty home-rooted workspace without creating contained user state", async () => {
     const root = await workspace();
     const containedUserDataRoot = path.join(root, ".groma");
@@ -493,6 +508,101 @@ describe("CLI program", () => {
     );
   });
 
+  test("previews and applies an older canonical document explicitly before public reload", async () => {
+    const root = await workspace();
+    const id = "ent_00000000000000000000000000000031";
+    await jsonCommand(root, ["init"]);
+    await jsonCommand(
+      root,
+      ["component", "create", "--stdin"],
+      JSON.stringify({ component: { id, name: "Legacy checkout", type: "service" } }),
+    );
+    const intentFile = path.join(root, "groma", "intent", "00", `${id}.md`);
+    const current = `${(await readFile(intentFile, "utf8")).replace(
+      "---\nschema: groma/v0.1",
+      '---\nlabel: Legacy checkout\nschema: "groma/v0.1"',
+    )}\n# Intent\n\nThe body token schema: groma/v0 is prose and must remain unchanged.\n`;
+    const older = current.replace("groma/v0.1", "groma/v0");
+    const configurationFile = path.join(root, "groma", "groma.yaml");
+    const currentConfiguration = "plugins: []\r\nschema: groma/v0.1\r\npackages: []\r\n";
+    const olderConfiguration = "plugins: []\r\nschema: >-\r\n  groma/v0\r\npackages: []\r\n";
+    const lockFile = path.join(root, "groma", "packages.lock");
+    const currentLock = '{"packages":[],"schema":"groma.packages-lock/v1"}\n';
+    const olderLock = currentLock.replace(
+      '"schema":"groma.packages-lock/v1"',
+      '"schema":"groma.packages-lock/v0"',
+    );
+    await writeFile(intentFile, older, "utf8");
+    await writeFile(configurationFile, olderConfiguration, "utf8");
+    await writeFile(lockFile, olderLock, "utf8");
+
+    const ordinaryRead = await jsonCommand(root, ["component", "list", "--limit", "10"]);
+    expect(ordinaryRead).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+        result: { diagnostics: [{ code: "workspace-configuration-conflict" }] },
+      },
+    });
+    expect(await readFile(intentFile, "utf8")).toBe(older);
+    expect(await readFile(configurationFile, "utf8")).toBe(olderConfiguration);
+    expect(await readFile(lockFile, "utf8")).toBe(olderLock);
+
+    const status = await jsonCommand(root, ["migrate", "status"]);
+    expect(status).toMatchObject({
+      envelope: {
+        command: "migrate status",
+        exitCode: 0,
+        ok: true,
+        result: {
+          ok: true,
+          value: {
+            completePath: true,
+            documentVersions: [0],
+            mixedVersions: false,
+            schemaFloor: 0,
+          },
+        },
+      },
+    });
+    const preview = await jsonCommand(root, ["migrate", "preview"]);
+    expect(preview).toMatchObject({
+      envelope: {
+        command: "migrate preview",
+        exitCode: 0,
+        ok: true,
+        result: { ok: true },
+      },
+    });
+    expect(await readFile(intentFile, "utf8")).toBe(older);
+    expect(await readFile(configurationFile, "utf8")).toBe(olderConfiguration);
+    expect(await readFile(lockFile, "utf8")).toBe(olderLock);
+
+    const applied = await jsonCommand(root, ["migrate", "apply"]);
+    expect(applied).toMatchObject({
+      envelope: { command: "migrate apply", exitCode: 0, ok: true, result: { status: "applied" } },
+    });
+    expect(await readFile(intentFile, "utf8")).toBe(current);
+    expect(await readFile(configurationFile, "utf8")).toBe(currentConfiguration);
+    expect(await readFile(lockFile, "utf8")).toBe(currentLock);
+
+    const reloaded = await jsonCommand(root, [
+      "component",
+      "get",
+      id,
+      "--relationships-limit",
+      "10",
+    ]);
+    expect(reloaded).toMatchObject({
+      envelope: {
+        command: "component get",
+        exitCode: 0,
+        ok: true,
+        result: { value: { item: { component: { id, name: "Legacy checkout" } } } },
+      },
+    });
+  });
+
   test("manages a trust-gated local package end to end without touching project package-manager files", async () => {
     const root = await workspace();
     const userDataRoot = await workspace();
@@ -523,7 +633,44 @@ export const plugin = Object.freeze({
   start: () => Object.freeze({ capabilities: Object.freeze([]) })
 });
 `;
-    await writeFile(path.join(packageRoot, "plugins", "alpha.js"), moduleSource("example.alpha"));
+    const migrationModuleSource = `
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+export const plugin = Object.freeze({
+  manifest: Object.freeze({
+    apiVersion: "groma.plugin/v1",
+    id: "example.alpha",
+    phase: 1,
+    provides: Object.freeze([{ cardinality: "multiple", id: "groma.schema-migrators/v1", version: "1.0.0" }]),
+    requires: Object.freeze([]),
+    version: "1.0.0"
+  }),
+  start: () => Object.freeze({ capabilities: Object.freeze([{
+    id: "groma.schema-migrators/v1",
+    version: "1.0.0",
+    value: Object.freeze({
+      apiVersion: "groma.schema-migration/v1",
+      id: "example.alpha.schemas",
+      migrators: Object.freeze([Object.freeze({
+        fromSchema: "example.records/v0",
+        fromVersion: 0,
+        id: "example.alpha.record-v0-to-v1",
+        migrate: (input) => Object.freeze({
+          ok: true,
+          value: Object.freeze({ bytes: encoder.encode(decoder.decode(input.bytes).replace("example.records/v0", "example.records/v1")) })
+        }),
+        toSchema: "example.records/v1",
+        toVersion: 1
+      })]),
+      schemas: Object.freeze([
+        Object.freeze({ schema: "example.records/v0", version: 0 }),
+        Object.freeze({ schema: "example.records/v1", version: 1 })
+      ])
+    })
+  }]) })
+});
+`;
+    await writeFile(path.join(packageRoot, "plugins", "alpha.js"), migrationModuleSource);
     await writeFile(path.join(packageRoot, "plugins", "beta.js"), moduleSource("example.beta"));
     const projectPackage = path.join(root, "package.json");
     const projectLock = path.join(root, "bun.lock");
@@ -563,6 +710,32 @@ export const plugin = Object.freeze({
     ).toMatchObject({
       envelope: { command: "package enable", exitCode: 0, ok: true },
     });
+    const pluginRecord = path.join(root, "groma", "records", "example.alpha", "record.json");
+    await mkdir(path.dirname(pluginRecord), { recursive: true });
+    const olderPluginRecord = '{"schema":"example.records/v0","value":1}\n';
+    const currentPluginRecord = '{"schema":"example.records/v1","value":1}\n';
+    await writeFile(pluginRecord, olderPluginRecord);
+    expect(
+      await jsonCommand(root, ["migrate", "status"], undefined, { userDataRoot }),
+    ).toMatchObject({
+      envelope: {
+        command: "migrate status",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { value: { completePath: true, schemaFloor: 0 } },
+      },
+    });
+    expect(
+      await jsonCommand(root, ["migrate", "apply"], undefined, { userDataRoot }),
+    ).toMatchObject({
+      envelope: {
+        command: "migrate apply",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { status: "applied" },
+      },
+    });
+    expect(await readFile(pluginRecord, "utf8")).toBe(currentPluginRecord);
     expect(
       await jsonCommand(root, ["package", "inspect", "example-cli"], undefined, {
         userDataRoot,
@@ -577,7 +750,7 @@ export const plugin = Object.freeze({
     });
     await writeFile(
       path.join(packageRoot, "plugins", "alpha.js"),
-      `${moduleSource("example.alpha")}\n// changed after enable\n`,
+      `${migrationModuleSource}\n// changed after enable\n`,
     );
     expect(
       await jsonCommand(root, ["package", "inspect", "example-cli"], undefined, {

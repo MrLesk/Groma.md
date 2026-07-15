@@ -1,15 +1,20 @@
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isAlias, isMap, isScalar, parseDocument, visit } from "yaml";
 
 import {
   createApplicationOperations,
   createApplicationSnapshotStateDecoder,
+  createSchemaMigrationOperations,
   type ApplicationOperations,
+  type CanonicalMigrationCatalogCapability,
   type ComponentResourceMapper,
+  type SchemaMigrationOperations,
 } from "../application/index.ts";
 import {
   BoundedQueryContracts,
+  canonicalSchemaMigrationApiVersion,
   createOpaqueIdSource,
   failure,
   GraphKernel,
@@ -24,14 +29,18 @@ import {
   type PluginRegistration,
   type PluginStartContext,
   type Result,
+  type ResourceKey,
   type RunningPluginGraph,
   type StagedPluginGraph,
+  type TransactionProvider,
 } from "../core/index.ts";
 import {
   aliasStoreLocator,
   createAliasStore,
   createLocalResourceProvider,
+  createLocalCanonicalMigrationCatalog,
   createLocalTransactionJournal,
+  createCanonicalMigrationTransactionAdapter,
   createMarkdownIntentStore,
   createMarkdownIntentTransactionAdapter,
   markdownIntentLocator,
@@ -67,6 +76,7 @@ import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-i
 const intrinsicReflectApply = Reflect.apply;
 
 export const defaultHostBounds = Object.freeze({
+  maxCanonicalMigrationResources: 2_003,
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
   maxEmbeddedItems: 100,
@@ -88,6 +98,150 @@ const defaultCapabilityVersion = "1.0.0";
 function capability(id: string): PluginCapabilityDeclaration {
   return Object.freeze({ cardinality: "single", id, version: defaultCapabilityVersion });
 }
+
+function multipleCapability(id: string): PluginCapabilityDeclaration {
+  return Object.freeze({ cardinality: "multiple", id, version: defaultCapabilityVersion });
+}
+
+const migrationUtf8 = new TextDecoder("utf-8", { fatal: true });
+const migrationEncoder = new TextEncoder();
+
+function replaceDeclaredSchema(
+  input: { readonly bytes: Uint8Array; readonly locator: string; readonly schema: string },
+  fromSchema: string,
+  toSchema: string,
+) {
+  try {
+    if (input.schema !== fromSchema) throw new Error();
+    const text = migrationUtf8.decode(input.bytes);
+    const json = input.locator === "groma/packages.lock";
+    let source = text;
+    let sourceOffset = 0;
+    if (input.locator.endsWith(".md")) {
+      const lines = text.split("\n");
+      if (lines[0] !== "---") throw new Error();
+      const closing = lines.indexOf("---", 1);
+      if (closing < 0) throw new Error();
+      source = lines.slice(1, closing).join("\n");
+      sourceOffset = 4;
+    }
+    const document = parseDocument(source, {
+      logLevel: "silent",
+      prettyErrors: false,
+      schema: json ? "json" : "core",
+      strict: true,
+      stringKeys: true,
+      uniqueKeys: true,
+    });
+    let unsupported = false;
+    visit(document, {
+      Alias: () => {
+        unsupported = true;
+        return visit.BREAK;
+      },
+      Node: (_key, node) => {
+        if (isAlias(node) || node.anchor !== undefined || node.tag !== undefined) {
+          unsupported = true;
+          return visit.BREAK;
+        }
+      },
+    });
+    if (
+      unsupported ||
+      document.errors.length > 0 ||
+      document.warnings.length > 0 ||
+      !isMap(document.contents)
+    )
+      throw new Error();
+    const schemas = document.contents.items.filter(
+      (pair) => isScalar(pair.key) && pair.key.value === "schema",
+    );
+    if (schemas.length !== 1) throw new Error();
+    const schema = schemas[0]!.value;
+    if (!isScalar(schema) || schema.value !== fromSchema || schema.range === undefined)
+      throw new Error();
+    const [rangeStart, rangeEnd] = schema.range;
+    if (
+      !Number.isSafeInteger(rangeStart) ||
+      !Number.isSafeInteger(rangeEnd) ||
+      rangeStart < 0 ||
+      rangeEnd < rangeStart ||
+      rangeEnd > source.length
+    )
+      throw new Error();
+    const replacementValue =
+      json || schema.type === "QUOTE_DOUBLE"
+        ? JSON.stringify(toSchema)
+        : schema.type === "QUOTE_SINGLE"
+          ? `'${toSchema}'`
+          : toSchema;
+    const scalarSource = source.slice(rangeStart, rangeEnd);
+    const trailingLineBreak = scalarSource.endsWith("\r\n")
+      ? "\r\n"
+      : scalarSource.endsWith("\n")
+        ? "\n"
+        : scalarSource.endsWith("\r")
+          ? "\r"
+          : "";
+    const replacement =
+      schema.type === "BLOCK_FOLDED" || schema.type === "BLOCK_LITERAL"
+        ? `${replacementValue}${trailingLineBreak}`
+        : replacementValue;
+    const absoluteStart = sourceOffset + rangeStart;
+    const absoluteEnd = sourceOffset + rangeEnd;
+    const replaced = `${text.slice(0, absoluteStart)}${replacement}${text.slice(absoluteEnd)}`;
+    return success(Object.freeze({ bytes: migrationEncoder.encode(replaced) }));
+  } catch {
+    return failure(
+      diagnostic(
+        "official-schema-migrator-input-invalid",
+        "Canonical resource does not match the declared older schema",
+      ),
+    );
+  }
+}
+
+const officialSchemaMigrationContribution = Object.freeze({
+  apiVersion: canonicalSchemaMigrationApiVersion,
+  id: "official.canonical-schemas",
+  migrators: Object.freeze([
+    Object.freeze({
+      fromSchema: "groma/v0",
+      fromVersion: 0,
+      id: "official.groma-v0-to-v1",
+      migrate: (input: Parameters<typeof replaceDeclaredSchema>[0]) =>
+        replaceDeclaredSchema(input, "groma/v0", "groma/v0.1"),
+      toSchema: "groma/v0.1",
+      toVersion: 1,
+    }),
+    Object.freeze({
+      fromSchema: "groma/aliases/v0",
+      fromVersion: 0,
+      id: "official.aliases-v0-to-v1",
+      migrate: (input: Parameters<typeof replaceDeclaredSchema>[0]) =>
+        replaceDeclaredSchema(input, "groma/aliases/v0", "groma/aliases/v0.1"),
+      toSchema: "groma/aliases/v0.1",
+      toVersion: 1,
+    }),
+    Object.freeze({
+      fromSchema: "groma.packages-lock/v0",
+      fromVersion: 0,
+      id: "official.packages-lock-v0-to-v1",
+      migrate: (input: Parameters<typeof replaceDeclaredSchema>[0]) =>
+        replaceDeclaredSchema(input, "groma.packages-lock/v0", "groma.packages-lock/v1"),
+      toSchema: "groma.packages-lock/v1",
+      toVersion: 1,
+    }),
+  ]),
+  schemas: Object.freeze([
+    Object.freeze({ schema: "groma/v0", version: 0 }),
+    Object.freeze({ schema: "groma/v0.1", version: 1 }),
+    Object.freeze({ schema: "groma/aliases/v0", version: 0 }),
+    Object.freeze({ schema: "groma/aliases/v0.1", version: 1 }),
+    Object.freeze({ schema: "groma.packages-lock/v0", version: 0 }),
+    Object.freeze({ schema: "groma.packages-lock/v1", version: 1 }),
+  ]),
+});
 
 function manifest(
   id: string,
@@ -177,6 +331,7 @@ export function createDefaultBootstrapRegistry(
   const coordinationRoot = options.coordinationRoot;
   const entropyOption = options.entropy;
   const loadLocalPluginPackages = options.loadLocalPluginPackages ?? true;
+  const migrationOnly = options.migrationOnly ?? false;
   const resourceFaultInjector = options.resourceFaultInjector;
   const userDataRoot = options.userDataRoot ?? path.join(homedir(), ".groma");
   const selectedTarget = Object.freeze({
@@ -284,7 +439,9 @@ export function createDefaultBootstrapRegistry(
             capability(defaultHostCapabilityIds.configurationParser),
           ]),
           start: () => {
-            const parser = createYamlConfigurationParser();
+            const parser = createYamlConfigurationParser({
+              allowLegacySchemaForMigration: migrationOnly,
+            });
             return Object.freeze({
               capabilities: Object.freeze([
                 output(defaultHostCapabilityIds.configurationParser, parser),
@@ -345,6 +502,8 @@ export function createDefaultBootstrapRegistry(
             defaultHostPluginIds.persistence,
             1,
             [
+              capability(defaultHostCapabilityIds.schemaMigrationCatalog),
+              capability(defaultHostCapabilityIds.schemaMigrationTransactionProvider),
               capability(defaultHostCapabilityIds.store),
               capability(defaultHostCapabilityIds.transactionProvider),
             ],
@@ -398,13 +557,55 @@ export function createDefaultBootstrapRegistry(
               bounds: { maxTargets: defaultHostBounds.maxComponents },
               resources,
             });
+            const schemaMigrationCatalog = createLocalCanonicalMigrationCatalog({
+              bounds: {
+                maxDocuments: defaultHostBounds.maxCanonicalMigrationResources,
+                maxEntriesPerDirectory: defaultHostBounds.maxCanonicalMigrationResources,
+                maxTotalBytes: 8 * 1024 * 1024,
+                pageSize: defaultHostBounds.maxPageSize,
+              },
+              resources,
+            });
+            const schemaMigrationTransactionProvider = createLocalTransactionJournal({
+              adapter: createCanonicalMigrationTransactionAdapter(schemaMigrationCatalog, {
+                maxReplacementBytes: 8 * 1024 * 1024,
+                maxTargetBytes: 8 * 1024 * 1024,
+                maxTargets: defaultHostBounds.maxCanonicalMigrationResources,
+              }),
+              bounds: {
+                maxJournalBytes: 16 * 1024 * 1024,
+                maxReplacementBytes: 8 * 1024 * 1024,
+                maxTargetBytes: 8 * 1024 * 1024,
+                maxTargets: defaultHostBounds.maxCanonicalMigrationResources,
+              },
+              resources,
+            });
             return Object.freeze({
               capabilities: Object.freeze([
+                output(defaultHostCapabilityIds.schemaMigrationCatalog, schemaMigrationCatalog),
+                output(
+                  defaultHostCapabilityIds.schemaMigrationTransactionProvider,
+                  schemaMigrationTransactionProvider,
+                ),
                 output(defaultHostCapabilityIds.store, store),
                 output(defaultHostCapabilityIds.transactionProvider, transactionProvider),
               ]),
             });
           },
+        }),
+        Object.freeze({
+          manifest: manifest(defaultHostPluginIds.schemaMigrations, 1, [
+            multipleCapability(defaultHostCapabilityIds.schemaMigrators),
+          ]),
+          start: () =>
+            Object.freeze({
+              capabilities: Object.freeze([
+                output(
+                  defaultHostCapabilityIds.schemaMigrators,
+                  officialSchemaMigrationContribution,
+                ),
+              ]),
+            }),
         }),
         Object.freeze({
           manifest: manifest(
@@ -416,6 +617,7 @@ export function createDefaultBootstrapRegistry(
               capability(defaultHostCapabilityIds.snapshotStateDecoder),
               capability(defaultHostCapabilityIds.transactionEngine),
               capability(defaultHostCapabilityIds.workspace),
+              capability(defaultHostCapabilityIds.schemaMigrationOperations),
             ],
             [
               capability(defaultHostCapabilityIds.graph),
@@ -423,6 +625,9 @@ export function createDefaultBootstrapRegistry(
               capability(defaultHostCapabilityIds.model),
               capability(defaultHostCapabilityIds.queries),
               capability(defaultHostCapabilityIds.resources),
+              capability(defaultHostCapabilityIds.schemaMigrationCatalog),
+              capability(defaultHostCapabilityIds.schemaMigrationTransactionProvider),
+              multipleCapability(defaultHostCapabilityIds.schemaMigrators),
               capability(defaultHostCapabilityIds.transactionProvider),
             ],
           ),
@@ -451,6 +656,52 @@ export function createDefaultBootstrapRegistry(
               pluginContext,
               defaultHostCapabilityIds.transactionProvider,
             );
+            const schemaMigrationCatalog = requiredCapability<CanonicalMigrationCatalogCapability>(
+              pluginContext,
+              defaultHostCapabilityIds.schemaMigrationCatalog,
+            );
+            const schemaMigrationTransactionProvider = requiredCapability<TransactionProvider>(
+              pluginContext,
+              defaultHostCapabilityIds.schemaMigrationTransactionProvider,
+            );
+            const schemaMigrationContributions = pluginContext.requirements.find(
+              (item) =>
+                item.id === defaultHostCapabilityIds.schemaMigrators &&
+                item.version === defaultCapabilityVersion,
+            )?.providers;
+            if (
+              schemaMigrationContributions === undefined ||
+              schemaMigrationContributions.length === 0
+            ) {
+              throw new Error("Built-in schema migration contributors are unavailable");
+            }
+            const schemaMigrationTransactionEngine = new TransactionEngine({
+              maxAffectedIdentities: 1,
+              maxRequestDataDepth: defaultHostBounds.maxRequestDataDepth,
+              maxRequestDataValues: defaultHostBounds.maxSnapshotStateValues,
+              maxSnapshotStateDepth: defaultHostBounds.maxSnapshotStateDepth,
+              maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
+              provider: schemaMigrationTransactionProvider,
+            });
+            const migrations = createSchemaMigrationOperations({
+              bounds: {
+                maxContributions: defaultHostBounds.maxPluginRegistrations,
+                maxDocumentBytes: 8 * 1024 * 1024,
+                maxMigrators: defaultHostBounds.maxPluginRegistrations,
+                maxPathCandidates: 2,
+                maxPathExpansions: 2_048,
+                maxPathSteps: 16,
+                maxSchemas: defaultHostBounds.maxPluginRegistrations * 2,
+                maxTokenCharacters: 128,
+                maxTotalBytes: 8 * 1024 * 1024,
+              },
+              catalog: schemaMigrationCatalog,
+              contributions: Object.freeze(
+                schemaMigrationContributions.map((provider) => provider.value),
+              ),
+              targetVersion: 1,
+              transactionExecution: schemaMigrationTransactionEngine,
+            });
             const transactionEngine = new TransactionEngine({
               maxAffectedIdentities:
                 defaultHostBounds.maxComponents + defaultHostBounds.maxRelationships,
@@ -516,7 +767,23 @@ export function createDefaultBootstrapRegistry(
               },
               resources,
               stateDecoder: snapshotStateDecoder,
-              transactionProvider,
+              transactionProvider: migrationOnly
+                ? Object.freeze({
+                    ...schemaMigrationTransactionProvider,
+                    snapshot: async (requested: readonly ResourceKey[]) => {
+                      const snapshot = await schemaMigrationTransactionProvider.snapshot(requested);
+                      return requested.length === 0
+                        ? Object.freeze({
+                            ...snapshot,
+                            state: Object.freeze({
+                              components: Object.freeze([]),
+                              relationships: Object.freeze([]),
+                            }),
+                          })
+                        : snapshot;
+                    },
+                  })
+                : transactionProvider,
             });
             operations = createApplicationOperations({
               aliasResourceMapper,
@@ -548,6 +815,7 @@ export function createDefaultBootstrapRegistry(
                 output(defaultHostCapabilityIds.snapshotStateDecoder, snapshotStateDecoder),
                 output(defaultHostCapabilityIds.transactionEngine, transactionEngine),
                 output(defaultHostCapabilityIds.workspace, workspace),
+                output(defaultHostCapabilityIds.schemaMigrationOperations, migrations),
               ]),
             });
           },
@@ -559,6 +827,7 @@ export function createDefaultBootstrapRegistry(
             [capability(defaultHostCapabilityIds.surface)],
             [
               capability(defaultHostCapabilityIds.operations),
+              capability(defaultHostCapabilityIds.schemaMigrationOperations),
               capability(defaultHostCapabilityIds.workspace),
             ],
           ),
@@ -667,6 +936,7 @@ export function createDefaultBootstrapRegistry(
         );
       }
       const packageManager = createLocalPluginPackageManager({
+        allowLegacySchemasForMigration: migrationOnly,
         bootstrap,
         maxEnabledPlugins: Math.max(
           0,
@@ -870,6 +1140,10 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.operations,
       );
+      const migrations = runningCapability<SchemaMigrationOperations>(
+        plugins,
+        defaultHostCapabilityIds.schemaMigrationOperations,
+      );
       const queries = runningCapability<HostComposition["queries"]>(
         plugins,
         defaultHostCapabilityIds.queries,
@@ -903,6 +1177,7 @@ export function createDefaultBootstrapRegistry(
           graph,
           invariant,
           model,
+          migrations,
           operations,
           packages: packageOperations,
           plugins,

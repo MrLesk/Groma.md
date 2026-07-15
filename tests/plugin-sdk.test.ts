@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 import {
+  canonicalSchemaMigratorCapabilityId,
   checkPluginPackageCompatibility,
   pluginPackageManifestApiVersion,
   pluginRuntimeApiVersion,
@@ -50,6 +51,7 @@ describe("public plugin SDK", () => {
     const conformance = await import("groma/plugin-sdk/conformance");
 
     expect("runPluginConformanceSuite" in authoring).toBeFalse();
+    expect(canonicalSchemaMigratorCapabilityId).toBe("groma.schema-migrators/v1");
     expect(typeof conformance.runPluginConformanceSuite).toBe("function");
   });
 

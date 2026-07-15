@@ -524,6 +524,34 @@ remain readable through the same canonical alias resolver.
 - **Relationships:** Exposed through CLI; applies to every canonical store; validated by
   Groma Check.
 
+Canonical schemas declare an integer document version independently of their schema-token
+family. The current intent/configuration token `groma/v0.1`, alias token
+`groma/aliases/v0.1`, and package-lock token `groma.packages-lock/v1` are all document
+version 1. A workspace floor is the minimum observed document version; mixed state means
+that more than one version is present. Schema tokens remain exact and are never compared
+lexically or rewritten by ordinary reads.
+
+Migrators are directed, version-increasing edges between exact schema tokens. They arrive
+as multiple-provider `groma.schema-migrators/v1` capabilities through the public plugin
+SDK. Status selects no code path speculatively: every canonical resource must have exactly
+one bounded simple path to the Host target version. No path, more than one path, a newer
+incompatible version, path-search exhaustion, a throwing callback, a malformed result, or
+nondeterministic output fails closed before journal preparation. Per-document and aggregate
+byte budgets bound retained migration results independently of resource count.
+
+The official local catalog covers `groma/groma.yaml`, `groma/packages.lock`,
+`groma/aliases.md`, every stable-ID intent shard, and flat plugin-owned records at
+`groma/records/<plugin-id>/<record>.{json,md,yaml,yml}`. It reads the three exact root
+records and enumerates only the bounded intent and records planes; transaction recovery
+state and unrelated files are never migration targets and cannot consume catalog depth or
+entry bounds. Status and preview are read-only; preview lists every catalogued resource
+and runs each selected transform twice in memory to prove byte determinism. Apply
+revalidates the complete resource/revision set and publishes one deterministic
+all-resource batch through the existing local transaction journal. A crash therefore
+restarts to the complete old or new generation. Prepare re-enumerates the exact catalog,
+so additions, removals, partial target sets, and unrelated targets cannot commit.
+Migration is never invoked by ordinary reads or semantic mutations.
+
 ### 5. Projection
 
 Projection provides disposable performance state. It can be deleted without losing

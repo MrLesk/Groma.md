@@ -403,3 +403,14 @@ The Host contains no HTTP server, React bundling, remote package acquisition, pr
 package-manager invocation, or unvalidated project-code execution. Its single local
 dynamic import path is preceded by exact static-document validation, manifest and entry
 hash checks, and a trust grant stored outside the repository.
+
+The default Phase 1 graph includes one multiple-provider schema-migrator contribution,
+the canonical migration catalog and journal provider, and shared migration operations.
+Additional trusted plugins contribute through the same public runtime capability. Normal
+startup still performs semantic recovery and rejects older unsupported documents. The CLI
+uses a narrow migration-only recovery composition for explicit migrate commands so it can
+read structurally compatible legacy configuration/lock schemas, settle the shared journal,
+and inspect older bytes without making ordinary application operations available against
+an un-migrated semantic snapshot. This read-only compatibility is not enabled for normal
+startup, and trusted pinned plugins still load so their schema contributions remain
+available.

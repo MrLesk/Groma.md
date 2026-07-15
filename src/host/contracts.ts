@@ -1,6 +1,7 @@
 import type {
   ApplicationOperations,
   ApplicationSnapshotStateDecoder,
+  SchemaMigrationOperations,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
 import type {
@@ -61,6 +62,7 @@ export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
   readonly initialization: HostInitializationOperations;
   readonly packages: PluginPackageOperations;
+  readonly migrations?: SchemaMigrationOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly workspace: WorkspaceAccessCapability;
 }
@@ -90,6 +92,7 @@ export interface HostComposition {
   readonly graph: GraphKernel;
   readonly invariant: TransactionInvariant;
   readonly model: StandardModelCapability;
+  readonly migrations?: SchemaMigrationOperations;
   readonly operations: ApplicationOperations;
   readonly packages: PluginPackageOperations;
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
@@ -118,6 +121,8 @@ export interface DefaultBootstrapRegistryOptions {
   readonly entropy?: EntropySource;
   /** Package-management recovery seam; ordinary startup always loads enabled packages. */
   readonly loadLocalPluginPackages?: boolean;
+  /** Explicit CLI recovery seam for workspaces whose canonical documents require migration. */
+  readonly migrationOnly?: boolean;
   /** Explicit verification seam; production composition does not supply one. */
   readonly resourceFaultInjector?: LocalResourceFaultInjector;
   readonly surface: HostSurface;

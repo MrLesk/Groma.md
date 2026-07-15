@@ -99,6 +99,8 @@ export interface LocalPluginPackageManager extends PluginPackageOperations {
 }
 
 export interface LocalPluginPackageManagerOptions {
+  /** Read-only compatibility used only to compose explicit migration commands. */
+  readonly allowLegacySchemasForMigration?: boolean;
   readonly bootstrap: BootstrapConfigurationLoad;
   /** Verification-only observer for deterministic file race tests. */
   readonly fileReadObserver?: (event: LocalPluginPackageFileReadEvent) => Promise<void> | void;
@@ -671,7 +673,7 @@ function emptyUserState(): UserPackageState {
   });
 }
 
-function parseLock(bytes: Uint8Array): Result<PackageLock> {
+function parseLock(bytes: Uint8Array, allowLegacySchemaForMigration = false): Result<PackageLock> {
   const parsed = exactJsonDocument(bytes, ["packages", "schema"]);
   if (!parsed.ok)
     return packageFailure(
@@ -680,7 +682,9 @@ function parseLock(bytes: Uint8Array): Result<PackageLock> {
     );
   const record = parsed.value as Record<string, unknown>;
   const packages = parsePackages(record.packages);
-  return record.schema === "groma.packages-lock/v1" && packages !== undefined
+  return (record.schema === "groma.packages-lock/v1" ||
+    (allowLegacySchemaForMigration && record.schema === "groma.packages-lock/v0")) &&
+    packages !== undefined
     ? success(Object.freeze({ packages, schema: "groma.packages-lock/v1" as const }))
     : packageFailure("plugin-package-lock-malformed", "The exact plugin package lock is malformed");
 }
@@ -1098,6 +1102,7 @@ export function createLocalPluginPackageManager(
   const userResourceFaultInjector = options.userResourceFaultInjector;
   const trustRootPlatform =
     options.trustRootPlatform ?? (process.platform === "win32" ? "win32" : "posix");
+  const allowLegacySchemasForMigration = options.allowLegacySchemasForMigration === true;
 
   function unattestedWindowsTrustRoot<T>(): Result<T> {
     return packageFailure(
@@ -1144,7 +1149,9 @@ export function createLocalPluginPackageManager(
         "The exact plugin package lock is unavailable",
       );
     }
-    return read.value === undefined ? success(emptyLock()) : parseLock(read.value);
+    return read.value === undefined
+      ? success(emptyLock())
+      : parseLock(read.value, allowLegacySchemasForMigration);
   };
 
   const readUserState = async (): Promise<Result<UserPackageState>> => {
@@ -1255,7 +1262,9 @@ export function createLocalPluginPackageManager(
         "Initialize a Groma workspace before managing blueprint packages",
       );
     }
-    const parsed = createYamlConfigurationParser().parse(read.value);
+    const parsed = createYamlConfigurationParser({
+      allowLegacySchemaForMigration: allowLegacySchemasForMigration,
+    }).parse(read.value);
     return parsed.ok ? success(parsed.value) : ownedFailure(...parsed.diagnostics);
   };
 
