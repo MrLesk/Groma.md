@@ -9,6 +9,9 @@ work. After the self-blueprint exists under `groma/`, this document remains the 
 entry point and the generated blueprint becomes the detailed source of truth.
 
 All decisions in this overview are subordinate to [MANIFESTO.md](MANIFESTO.md).
+Brand assets and product presentation follow [brand/README.md](brand/README.md) and
+[brand/STYLE.md](brand/STYLE.md). Those documents constrain the renderer without
+making presentation state canonical architectural meaning.
 
 ## Blueprint Legend
 
@@ -562,12 +565,17 @@ the blueprint.
   subordinate detail without changing canonical structure; expand or focus recursive
   components; trace relationships; distinguish curated intent, automatic candidates,
   bound evidence, ambiguity, missing coverage, containment, and ordinary relations;
+  render the approved single white architectural-sheet surface with graphite structure
+  and restrained Groma green `#1D9E75`; use recursive technical-drawing containment,
+  coordinate and registration notation, and permitted neutral depth; preserve
+  accessible non-color state cues;
   derive the offline `iconDomain` hint without fetching favicons or remote assets.
 - **Relationships:** Consumes presentation-neutral bounded reads from Shared
-  Application Operations; produces an artifact opened by CLI Surface; its layout,
-  grouping, zoom, and theme are disposable and reconstructable; it makes no network
-  request. Any future icon-resolution capability is separate and requires explicit
-  user action and a privacy policy.
+  Application Operations; follows the official brand and visual-direction guides;
+  produces an artifact opened by CLI Surface; its layout, grouping, zoom, and theme
+  are disposable and reconstructable; it makes no network request. Any future
+  icon-resolution capability is separate and requires explicit user action and a
+  privacy policy.
 
 ### 6. Scanning and Reconciliation
 
