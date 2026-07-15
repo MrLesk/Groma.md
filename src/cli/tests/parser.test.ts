@@ -101,6 +101,11 @@ describe("CLI provisional grammar", () => {
       ],
       ["package", "disable", "example", "./panel.js", "--trust-full-user-permissions"],
       ["package", "add", "./example", "--personal", "--personal"],
+      ["package", "add", "--personal"],
+      ["package", "inspect", "--personal"],
+      ["package", "enable", "example", "--personal"],
+      ["package", "disable", "example", "--personal"],
+      ["package", "remove", "--personal"],
       ["--format", "yaml", "init"],
     ]) {
       expect(parseInvocation(args)).toMatchObject({ ok: false });

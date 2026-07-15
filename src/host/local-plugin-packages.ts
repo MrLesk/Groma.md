@@ -22,6 +22,7 @@ import {
 import {
   createLocalResourceProvider,
   workspaceResourceLocator,
+  type LocalResourceFaultInjector,
   type LocalResourceProvider,
   type WorkspaceResourceLocator,
 } from "../persistence/index.ts";
@@ -36,6 +37,7 @@ import {
 } from "./bootstrap-configuration.ts";
 import { importLocalPluginModule } from "./plugin-module-loader.ts";
 import { isPathWithin } from "./path-containment.ts";
+import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 
 export type PluginPackageScope = "blueprint" | "personal";
 export type LocalPluginPackageTrustRootPlatform = "posix" | "win32";
@@ -100,6 +102,8 @@ export interface LocalPluginPackageManagerOptions {
   readonly resources: LocalResourceProvider;
   /** Host-owned platform seam; production derives this from the running target. */
   readonly trustRootPlatform?: LocalPluginPackageTrustRootPlatform;
+  /** Verification-only seam for deterministic personal-state publication faults. */
+  readonly userResourceFaultInjector?: LocalResourceFaultInjector;
   readonly userDataRoot: string;
   readonly workspaceRoot: string;
 }
@@ -162,6 +166,7 @@ const maximumEntryBytes = 4 * 1024 * 1024;
 const maximumUserStateBytes = 1024 * 1024;
 const lockLocator = requiredLocator("groma", "packages.lock");
 const configurationLocator = requiredLocator("groma", "groma.yaml");
+const packageStateCoordinationLocator = requiredLocator("groma", "package-state");
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const remoteSourcePattern =
@@ -173,6 +178,8 @@ const indeterminateBlueprintPackageStateMessage =
   "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove";
 const indeterminatePersonalPackageStateMessage =
   "Personal plugin package state may have committed; inspect the personal package before retrying; not found confirms removal";
+const indeterminateBlueprintTrustStateMessage =
+  "Blueprint plugin trust state may have committed; verify the exact package entry and current selection before retrying";
 
 function requiredLocator(...segments: string[]): WorkspaceResourceLocator {
   const locator = workspaceResourceLocator(...segments);
@@ -202,6 +209,13 @@ function ownedFailure<T>(...diagnostics: readonly Diagnostic[]): Result<T> {
 
 function packageFailure<T>(code: string, message: string): Result<T> {
   return failure(diagnostic(code, message));
+}
+
+function packageStateUnavailable<T>(): Result<T> {
+  return packageFailure(
+    "plugin-package-state-unavailable",
+    "Local plugin package state is changing or unavailable; retry after changes settle",
+  );
 }
 
 function hashBytes(bytes: Uint8Array): string {
@@ -944,13 +958,22 @@ function exportedPlugin(
     if (typeof module !== "object" || module === null) throw new Error();
     const descriptor = Object.getOwnPropertyDescriptor(module, "plugin");
     if (descriptor === undefined || !("value" in descriptor)) throw new Error();
-    const registration = validatePluginRegistration(descriptor.value);
+    const registration = validatePluginRegistration(
+      descriptor.value,
+      defaultHostPluginRegistrationBounds,
+    );
     if (
       !registration.ok ||
       registration.value.manifest.apiVersion !== pluginRuntimeApiVersion ||
       registration.value.manifest.phase !== 1
     )
       throw new Error();
+    if (registration.value.manifest.id.startsWith("official.")) {
+      return packageFailure(
+        "plugin-package-plugin-id-reserved",
+        "Local plugin packages must not use the Host-reserved official.* plugin namespace",
+      );
+    }
     if (scope === "personal" && !presentationOnly(registration.value)) {
       return packageFailure(
         "personal-plugin-capability-forbidden",
@@ -1039,6 +1062,7 @@ export function createLocalPluginPackageManager(
   const userStateLocator = requiredLocator("workspaces", `${workspaceIdentity}.json`);
   const importModule = options.importModule ?? importLocalPluginModule;
   const fileReadObserver = options.fileReadObserver;
+  const userResourceFaultInjector = options.userResourceFaultInjector;
   const trustRootPlatform =
     options.trustRootPlatform ?? (process.platform === "win32" ? "win32" : "posix");
 
@@ -1068,7 +1092,11 @@ export function createLocalPluginPackageManager(
     }
     if (userProviderPromise === undefined) {
       userProviderRoot = canonical;
-      userProviderPromise = createLocalResourceProvider({ workspaceRoot: canonical });
+      userProviderPromise = createLocalResourceProvider(
+        userResourceFaultInjector === undefined
+          ? { workspaceRoot: canonical }
+          : { faultInjector: userResourceFaultInjector, workspaceRoot: canonical },
+      );
     } else if (canonical !== userProviderRoot) {
       throw new TypeError("Plugin package user data identity changed");
     }
@@ -1119,6 +1147,7 @@ export function createLocalPluginPackageManager(
   const writeUserState = async (
     state: UserPackageState,
     expected: UserPackageState,
+    indeterminateMessage: string,
   ): Promise<Result<void>> => {
     if (trustRootPlatform === "win32") return unattestedWindowsTrustRoot();
     const preflight = preflightUserState(state);
@@ -1133,6 +1162,7 @@ export function createLocalPluginPackageManager(
         "Local plugin package state is unavailable",
       );
     }
+    let publicationMayHaveChanged = false;
     const coordinated = await resources.withCoordination<Result<void>>(
       { context: "local-machine", locator: userStateLocator },
       async () => {
@@ -1154,15 +1184,23 @@ export function createLocalPluginPackageManager(
             "Local plugin package state changed; retry after changes settle",
           );
         }
-        return replaceResource(
+        const written = await replaceResource(
           resources,
           userStateLocator,
           stateBytes,
-          indeterminatePersonalPackageStateMessage,
+          indeterminateMessage,
         );
+        publicationMayHaveChanged =
+          written.ok ||
+          written.diagnostics.some((item) => item.code === "plugin-package-state-indeterminate");
+        return written;
       },
     );
-    if (!coordinated.ok) return ownedFailure(...coordinated.diagnostics);
+    if (!coordinated.ok) {
+      return publicationMayHaveChanged
+        ? packageFailure("plugin-package-state-indeterminate", indeterminateMessage)
+        : packageStateUnavailable();
+    }
     return coordinated.value;
   };
 
@@ -1251,10 +1289,50 @@ export function createLocalPluginPackageManager(
             "plugin-package-state-indeterminate",
             indeterminateBlueprintPackageStateMessage,
           )
-        : ownedFailure(...coordinated.diagnostics);
+        : packageStateUnavailable();
     }
     if (!coordinated.value.ok) return coordinated.value;
     configuration = nextConfiguration;
+    return success(undefined);
+  };
+
+  const packageProjectionStillCurrent = async (
+    expectedConfiguration: typeof configuration,
+    expectedLock: PackageLock,
+    expectedUserState: UserPackageState,
+  ): Promise<Result<void>> => {
+    const currentConfiguration = await readConfiguration();
+    if (!currentConfiguration.ok) {
+      return packageFailure(
+        "workspace-configuration-changed",
+        "Workspace configuration changed during package startup; restart after changes settle",
+      );
+    }
+    if (
+      serializeBootstrapConfiguration(currentConfiguration.value) !==
+      serializeBootstrapConfiguration(expectedConfiguration)
+    ) {
+      return packageFailure(
+        "workspace-configuration-changed",
+        "Workspace configuration changed during package startup; restart after changes settle",
+      );
+    }
+    const currentLock = await readLock();
+    if (!currentLock.ok) return currentLock;
+    if (!sameBytes(encodeCanonical(currentLock.value), encodeCanonical(expectedLock))) {
+      return packageFailure(
+        "plugin-package-lock-changed",
+        "Blueprint plugin package state changed during startup; restart after changes settle",
+      );
+    }
+    const currentUserState = await readUserState();
+    if (!currentUserState.ok) return currentUserState;
+    if (!sameBytes(encodeCanonical(currentUserState.value), encodeCanonical(expectedUserState))) {
+      return packageFailure(
+        "plugin-package-user-state-changed",
+        "Local plugin package state changed during startup; restart after changes settle",
+      );
+    }
     return success(undefined);
   };
 
@@ -1272,6 +1350,54 @@ export function createLocalPluginPackageManager(
       () => undefined,
     );
     return next;
+  }
+
+  function serializeMutation<T>(
+    scope: PluginPackageScope,
+    action: (markChanged: (message?: string) => void) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    return serialize(async () => {
+      let completed: Result<T> | undefined;
+      let publicationMayHaveChanged = false;
+      let recoveryMessage =
+        scope === "blueprint"
+          ? indeterminateBlueprintPackageStateMessage
+          : indeterminatePersonalPackageStateMessage;
+      const coordinated = await options.resources.withCoordination<Result<T>>(
+        { context: "local-machine", locator: packageStateCoordinationLocator },
+        async () => {
+          completed = await action((message) => {
+            publicationMayHaveChanged = true;
+            if (message !== undefined) recoveryMessage = message;
+          });
+          return completed;
+        },
+      );
+      const completedIndeterminate =
+        completed !== undefined &&
+        !completed.ok &&
+        completed.diagnostics.some((item) => item.code === "plugin-package-state-indeterminate");
+      if (!coordinated.ok) {
+        if (completedIndeterminate) return completed!;
+        return publicationMayHaveChanged
+          ? packageFailure("plugin-package-state-indeterminate", recoveryMessage)
+          : packageStateUnavailable();
+      }
+      if (!coordinated.value.ok && publicationMayHaveChanged) {
+        return packageFailure("plugin-package-state-indeterminate", recoveryMessage);
+      }
+      return coordinated.value;
+    });
+  }
+
+  function serializeProjection<T>(action: () => Promise<Result<T>>): Promise<Result<T>> {
+    return serialize(async () => {
+      const coordinated = await options.resources.withCoordination<Result<T>>(
+        { context: "local-machine", locator: packageStateCoordinationLocator },
+        action,
+      );
+      return coordinated.ok ? coordinated.value : packageStateUnavailable();
+    });
   }
 
   const materializedFor = async (
@@ -1399,22 +1525,26 @@ export function createLocalPluginPackageManager(
       );
     });
 
-  const add = (request: AddPluginPackageRequest): Promise<Result<PluginPackageSnapshot>> =>
-    serialize(async () => {
-      if (request.scope !== "blueprint" && request.scope !== "personal") {
-        return packageFailure(
+  const add = (request: AddPluginPackageRequest): Promise<Result<PluginPackageSnapshot>> => {
+    if (request.scope !== "blueprint" && request.scope !== "personal") {
+      return Promise.resolve(
+        packageFailure(
           "invalid-plugin-package-scope",
           "Plugin package scope must be blueprint or personal",
-        );
-      }
-      if (typeof request.source !== "string") {
-        return packageFailure(
+        ),
+      );
+    }
+    if (typeof request.source !== "string") {
+      return Promise.resolve(
+        packageFailure(
           "invalid-local-plugin-package-source",
           "Local plugin package source is malformed",
-        );
-      }
-      const requested = requestedPackageLocation(workspaceRoot, request.source, request.scope);
-      if (!requested.ok) return requested;
+        ),
+      );
+    }
+    const requested = requestedPackageLocation(workspaceRoot, request.source, request.scope);
+    if (!requested.ok) return Promise.resolve(requested);
+    return serializeMutation(request.scope, async (markChanged) => {
       if (request.scope === "personal" && userDataRootUnusable) {
         return packageFailure(
           "plugin-package-user-state-unavailable",
@@ -1451,8 +1581,10 @@ export function createLocalPluginPackageManager(
         const written = await writeUserState(
           Object.freeze({ packages, schema: state.value.schema, trust: state.value.trust }),
           state.value,
+          indeterminatePersonalPackageStateMessage,
         );
         if (!written.ok) return written;
+        markChanged();
       } else {
         if (options.bootstrap.state !== "configured") {
           return packageFailure(
@@ -1484,6 +1616,7 @@ export function createLocalPluginPackageManager(
           lock.value,
         );
         if (!written.ok) return written;
+        markChanged();
       }
       return success(
         snapshot(
@@ -1494,11 +1627,12 @@ export function createLocalPluginPackageManager(
         ),
       );
     });
+  };
 
   const enable = (
     request: SelectPluginPackageEntryRequest,
   ): Promise<Result<PluginPackageSnapshot>> =>
-    serialize(async () => {
+    serializeMutation(request.scope, async (markChanged) => {
       const located = await locate(request);
       if (!located.ok) return located;
       if (request.scope === "blueprint") {
@@ -1616,15 +1750,19 @@ export function createLocalPluginPackageManager(
         const written = await writeUserState(
           Object.freeze({ packages, schema: state.value.schema, trust }),
           state.value,
+          indeterminatePersonalPackageStateMessage,
         );
         if (!written.ok) return written;
+        markChanged();
       } else {
         if (!trusted) {
           const trustedWrite = await writeUserState(
             Object.freeze({ packages: state.value.packages, schema: state.value.schema, trust }),
             state.value,
+            indeterminateBlueprintTrustStateMessage,
           );
           if (!trustedWrite.ok) return trustedWrite;
+          markChanged(indeterminateBlueprintTrustStateMessage);
         }
         const lock = located.value.lock!;
         const packages = Object.freeze(
@@ -1646,6 +1784,7 @@ export function createLocalPluginPackageManager(
           lock,
         );
         if (!written.ok) return written;
+        markChanged();
       }
       return success(
         snapshot(
@@ -1660,7 +1799,7 @@ export function createLocalPluginPackageManager(
   const disable = (
     request: SelectPluginPackageEntryRequest,
   ): Promise<Result<PluginPackageSelectionSnapshot>> =>
-    serialize(async () => {
+    serializeMutation(request.scope, async (markChanged) => {
       if (request.scope === "blueprint") {
         if (!packageNamePattern.test(request.name)) {
           return packageFailure("invalid-plugin-package-name", "Plugin package name is malformed");
@@ -1692,6 +1831,7 @@ export function createLocalPluginPackageManager(
             lock.value,
           );
           if (!repaired.ok) return repaired;
+          markChanged();
           return success(
             Object.freeze({ enabled, name: request.name, scope: "blueprint" as const }),
           );
@@ -1723,6 +1863,7 @@ export function createLocalPluginPackageManager(
               located.value.lock!,
             );
             if (!repaired.ok) return repaired;
+            markChanged();
             return success(selectionSnapshot(request.scope, located.value.locked));
           }
         }
@@ -1745,8 +1886,10 @@ export function createLocalPluginPackageManager(
         const written = await writeUserState(
           Object.freeze({ packages, schema: state.schema, trust: state.trust }),
           state,
+          indeterminatePersonalPackageStateMessage,
         );
         if (!written.ok) return written;
+        markChanged();
       } else {
         const lock = located.value.lock!;
         const packages = Object.freeze(
@@ -1768,6 +1911,7 @@ export function createLocalPluginPackageManager(
           lock,
         );
         if (!written.ok) return written;
+        markChanged();
       }
       return success(selectionSnapshot(request.scope, nextLocked));
     });
@@ -1775,7 +1919,7 @@ export function createLocalPluginPackageManager(
   const remove = (
     request: InspectPluginPackageRequest,
   ): Promise<Result<{ readonly removed: string }>> =>
-    serialize(async () => {
+    serializeMutation(request.scope, async (markChanged) => {
       if (request.scope === "blueprint") {
         if (!packageNamePattern.test(request.name)) {
           return packageFailure("invalid-plugin-package-name", "Plugin package name is malformed");
@@ -1813,8 +1957,10 @@ export function createLocalPluginPackageManager(
             const pruned = await writeUserState(
               Object.freeze({ packages: state.value.packages, schema: state.value.schema, trust }),
               state.value,
+              indeterminateBlueprintTrustStateMessage,
             );
             if (!pruned.ok) return pruned;
+            markChanged(indeterminateBlueprintTrustStateMessage);
           }
         }
         const packageDeclarations = Object.freeze(
@@ -1829,6 +1975,7 @@ export function createLocalPluginPackageManager(
           lock.value,
         );
         if (!written.ok) return written;
+        markChanged();
         return success(Object.freeze({ removed: request.name }));
       }
       const located = await locate(request);
@@ -1849,13 +1996,15 @@ export function createLocalPluginPackageManager(
       const written = await writeUserState(
         Object.freeze({ packages, schema: state.schema, trust }),
         state,
+        indeterminatePersonalPackageStateMessage,
       );
       if (!written.ok) return written;
+      markChanged();
       return success(Object.freeze({ removed: request.name }));
     });
 
   const loadEnabled = (): Promise<Result<LoadedLocalPluginPackages>> =>
-    serialize(async () => {
+    serializeProjection(async () => {
       if (options.bootstrap.state !== "configured") {
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
@@ -1999,6 +2148,12 @@ export function createLocalPluginPackageManager(
               "Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe. Explicit trust is required before this exact entry can execute",
             );
           }
+          const stillCurrent = await packageProjectionStillCurrent(
+            currentConfiguration.value,
+            lock.value,
+            state.value,
+          );
+          if (!stillCurrent.ok) return stillCurrent;
           let module: unknown;
           try {
             module = await importVerifiedEntry(entry.value, importModule);

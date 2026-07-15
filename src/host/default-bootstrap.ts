@@ -59,6 +59,7 @@ import type {
 } from "./contracts.ts";
 import { createLocalWorkspaceCapability, defaultWorkspaceDocument } from "./local-workspace.ts";
 import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
+import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 
 const intrinsicReflectApply = Reflect.apply;
 
@@ -154,6 +155,44 @@ function runningCapability<T>(plugins: RunningPluginGraph, id: string): T {
 
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
+}
+
+function localPhaseOneProviderCanRepair(
+  item: Diagnostic,
+  registrations: readonly PluginRegistration[],
+): boolean {
+  if (
+    item.code !== "missing-capability-provider" &&
+    item.code !== "incompatible-capability-version"
+  ) {
+    return false;
+  }
+  const capabilityId = item.details?.capabilityId;
+  const pluginId = item.details?.pluginId;
+  const requiredVersion = item.details?.requiredVersion;
+  if (
+    typeof capabilityId !== "string" ||
+    typeof pluginId !== "string" ||
+    typeof requiredVersion !== "string"
+  ) {
+    return false;
+  }
+  const consumer = registrations.find(
+    (registration) => registration.manifest.id === pluginId && registration.manifest.phase === 1,
+  );
+  const requirement = consumer?.manifest.requires.find(
+    (candidate) => candidate.id === capabilityId && candidate.version === requiredVersion,
+  );
+  if (requirement === undefined) return false;
+  if (item.code === "missing-capability-provider") return true;
+  const existingProviders = registrations.flatMap((registration) =>
+    registration.manifest.provides.filter((provided) => provided.id === capabilityId),
+  );
+  return (
+    requirement.cardinality === "multiple" &&
+    existingProviders.length > 0 &&
+    existingProviders.every((provided) => provided.cardinality === "multiple")
+  );
 }
 
 export function createDefaultBootstrapRegistry(
@@ -526,10 +565,10 @@ export function createDefaultBootstrapRegistry(
         }),
       ]);
       const runtime = new PluginRuntime({
-        maxCapabilitiesPerPlugin: 16,
+        maxCapabilitiesPerPlugin: defaultHostPluginRegistrationBounds.maxCapabilitiesPerPlugin,
         maxDiagnostics: defaultHostBounds.maxDiagnosticCount,
         maxPlugins: defaultHostBounds.maxPluginRegistrations,
-        maxTokenCharacters: 128,
+        maxTokenCharacters: defaultHostPluginRegistrationBounds.maxTokenCharacters,
       });
       const builtInPhaseZero = registrations.filter(
         (registration) => registration.manifest.phase === 0,
@@ -694,9 +733,7 @@ export function createDefaultBootstrapRegistry(
       if (
         !hostPreflight.ok &&
         hostPreflight.diagnostics.some(
-          (item) =>
-            item.code !== "missing-capability-provider" &&
-            item.code !== "incompatible-capability-version",
+          (item) => !localPhaseOneProviderCanRepair(item, selectedHostRegistrations),
         )
       ) {
         return failAfterStage(

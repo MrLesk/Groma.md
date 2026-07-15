@@ -33,6 +33,9 @@ permits `groma.presentation.*` capability declarations. Add and inspect read the
 static `groma.package.json` document without importing package code. Enable is the code
 execution boundary and requires `--trust-full-user-permissions` unless an unchanged,
 location-bound exact grant already exists.
+Local registrations cannot use the Host-reserved `official.*` plugin namespace. Disable
+retains an unchanged exact-byte trust grant for later re-enable; remove is the explicit
+revocation boundary and prunes grants after every package entry has been disabled.
 
 The initial executable entry is a bounded bundled/self-contained module. TypeScript
 syntax and `node:` built-ins are supported, while relative and bare runtime imports are

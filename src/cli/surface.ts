@@ -87,6 +87,8 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
         code === "plugin-package-enabled-limit-exceeded" ||
         code === "plugin-package-plugin-id-conflict" ||
         code === "plugin-package-integrity-drift" ||
+        code === "plugin-package-state-limit-exceeded" ||
+        code === "plugin-package-state-unavailable" ||
         code === "plugin-package-trust-root-unattested" ||
         code.includes("plugin-package-lock") ||
         code.includes("plugin-package-user-state") ||

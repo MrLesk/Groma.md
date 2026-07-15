@@ -2123,12 +2123,20 @@ describe("host lifecycle", () => {
   test("preserves stable package-store startup diagnostics", async () => {
     for (const [code, message] of [
       ["plugin-package-lock-unavailable", "The exact plugin package lock is unavailable"],
+      [
+        "plugin-package-state-unavailable",
+        "Local plugin package state is changing or unavailable; retry after changes settle",
+      ],
       ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
       [
         "plugin-package-enabled-limit-exceeded",
         "Enabled local plugins exceed this Host's runtime capacity",
       ],
       ["plugin-package-plugin-id-conflict", "Enabled local plugins must use distinct plugin IDs"],
+      [
+        "plugin-package-plugin-id-reserved",
+        "Local plugin packages must not use the Host-reserved official.* plugin namespace",
+      ],
     ] as const) {
       const signal = signals();
       const outcome = await runHost({

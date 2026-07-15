@@ -14,7 +14,9 @@ function diagnostic(message: string): CliDiagnostic {
 }
 
 function identifier(value: string | undefined): value is string {
-  return value !== undefined && value.length > 0 && value.length <= 4_096;
+  return (
+    value !== undefined && value.length > 0 && value.length <= 4_096 && !value.startsWith("--")
+  );
 }
 
 function failed(format: CliFormat, message: string): CliInvocationResult {

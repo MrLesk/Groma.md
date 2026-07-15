@@ -8,6 +8,11 @@ describe("path containment", () => {
     expect(isPathWithin("C:\\repo", "C:\\repo\\plugins\\example", path.win32)).toBe(true);
     expect(isPathWithin("C:\\repo", "C:\\repository", path.win32)).toBe(false);
     expect(isPathWithin("C:\\repo", "D:\\repo\\plugins\\example", path.win32)).toBe(false);
+    expect(isPathWithin("C:\\repo\\plugins", "C:\\repo", path.win32)).toBe(false);
+  });
+
+  test("rejects the exact parent path with the native implementation", () => {
+    expect(isPathWithin("/repo/plugins", "/repo")).toBe(false);
   });
 
   test("fails closed across different Windows canonical path spellings", () => {

@@ -957,9 +957,12 @@ Startup reads only declared local paths. Before import it requires the exact sta
 manifest bytes and every enabled entry module byte to match the deterministic lock. It
 then requires an exact trust grant bound to scope, canonical workspace location,
 canonical package location, package name, manifest hash, entry path, and entry hash.
-Drift fails before module evaluation. The Host evaluates the already-read entry bytes
-through one immutable in-memory module URL; it never reopens the mutable entry path for
-execution.
+Drift fails before module evaluation. Supported package mutations and startup share one
+workspace-scoped package-state coordination lease. Direct edits do not participate in
+that lease, so startup re-reads canonical configuration, exact lock, and exact user state
+after each entry is materialized and immediately before importing it. The Host evaluates
+the already-read entry bytes through one immutable in-memory module URL; it never reopens
+the mutable entry path for execution.
 
 The Host validates unsupported project requests, unavailable official selections,
 additional Host registration namespaces, and selected Host registration defects that
@@ -968,8 +971,10 @@ also re-reads canonical configuration before resolving the exact lock, so a sele
 changed since bootstrap fails before local module evaluation. Runtime plugin IDs are
 unique across the complete enabled blueprint-lock and personal-state union. Enable
 evaluates only the newly selected trusted entry, then rejects an ID already reserved by
-any other logical package entry before writing trust or package state. Ordinary startup
-rejects duplicate stored IDs before importing either registration.
+any other logical package entry before writing trust or package state. The `official.*`
+plugin namespace is reserved for Host-owned registrations and is rejected for every local
+package entry at the same pre-write boundary. Ordinary startup rejects duplicate stored
+IDs before importing either registration.
 
 Configuration, lock, and personal-state serialization are preflighted against their
 read bounds before publication. Blueprint updates publish the lock before configuration;
@@ -999,7 +1004,9 @@ parsing, enable, and ordinary startup enforce the applicable bound before import
 capacity rejection leaves every persisted byte unchanged.
 
 The initial executable-entry contract is deliberately bounded: one entry is at most 4
-MiB and must be a bundled or otherwise self-contained ES module. Bun-compatible
+MiB, declares at most 16 provided capabilities and 16 required capabilities with the
+Host's 128-character token bound, and must be a bundled or otherwise self-contained ES
+module. Bun-compatible
 TypeScript syntax in that exact file and absolute `node:` built-in imports are supported.
 Relative and bare runtime imports are not supported because a data-backed module has no
 package-relative resolution base, and pretending otherwise would reintroduce unlocked
@@ -1023,7 +1030,9 @@ changing either invalidates it. Explicitly trusting new exact bytes supersedes o
 grants for the same scope, workspace, package identity, and entry. Reverting those bytes
 therefore requires explicit trust again instead of reviving an older grant. Persisted
 state with more than one grant for a logical subject is ambiguous and fails as malformed
-before any import.
+before any import. Disable changes only the enabled selection and deliberately retains
+that exact-byte grant; remove is the explicit revocation boundary and prunes the package's
+grants after every entry has been disabled.
 
 This delivery attests a persisted trust root only on POSIX, where the Host can require
 the real directory to be owned by the current user with mode `0700`. POSIX mode bits do

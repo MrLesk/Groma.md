@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 12:33'
+updated_date: '2026-07-15 13:40'
 labels: []
 milestone: m-4
 dependencies:
@@ -33,6 +33,7 @@ modified_files:
   - src/cli/tests/program.test.ts
   - src/cli/tests/surface.test.ts
   - src/core/plugin-runtime.ts
+  - src/core/tests/plugin-runtime.test.ts
   - src/host/README.md
   - src/host/bootstrap-configuration.ts
   - src/host/contracts.ts
@@ -42,6 +43,7 @@ modified_files:
   - src/host/local-plugin-packages.ts
   - src/host/path-containment.ts
   - src/host/plugin-module-loader.ts
+  - src/host/plugin-runtime-bounds.ts
   - src/host/tests/bootstrap-configuration.test.ts
   - src/host/tests/default-bootstrap.test.ts
   - src/host/tests/lifecycle.test.ts
@@ -136,4 +138,14 @@ Post-push Claude exact-diff review produced nine findings. Accepted: (2) recover
 Fresh Codex review of bdc5255 returned four actionable findings, all accepted. loadEnabled now re-reads canonical configuration before lock resolution/import and fails changed, missing, malformed, or inaccessible state without local evaluation. The selected Host-only graph is resolved before local package imports, including malformed requested official registrations. Any coordination-release failure after package publication begins remains plugin-package-state-indeterminate even when both lock and configuration writes committed. Userless scp-style Git URLs are classified as remote before filesystem or user-state access. Focused regressions cover all four behaviors, the clearer declaration bound, and shifted bootstrap read/cleanup precedence.
 
 Independent final correction review found three P2 seams and all were closed before commit. Host-only preflight now defers both missing-provider and compatible-version diagnostics that local providers can legitimately satisfy; positive controls prove single and multiple local providers resolve the final combined graph. Indeterminate diagnostics are scope-specific: blueprint writes direct users to compare canonical YAML/lock and reconcile only an actual mismatch, while personal writes direct users to personal inspection and treat not-found as confirmed removal. Re-review passed with no remaining actionable findings. Final local validation passed bun run check with 569 tests / 3,904 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed.
+
+Final exact-head review follow-up at 296758325838356e22ff5192c4662acefdca9a59 accepted all four Codex P2 findings. Startup projection and every supported package mutation now share one workspace-scoped cross-process package-state lease; each captured entry is followed by exact canonical configuration, lock, and user-state revalidation immediately before import, with regressions for supported disable/remove races and direct configuration/lock edits proving zero stale imports. Blueprint and personal enables are serialized across scopes, so duplicate IDs and the combined registration budget cannot both commit concurrently. Local entries reject the Host-reserved official.* namespace before trust/state writes. The public single-registration validator now accepts explicit manifest bounds, and both local preflight and ordinary Host runtime share the 16-capability/128-character profile; 16 declarations pass and 17 fail without state mutation.
+
+The final Claude URL review reconstructed and confirmed the exact 2967583 head. Its blocking personal/trust coordination-release finding was accepted: user-state writes now retain a post-commit flag and return scope-appropriate plugin-package-state-indeterminate after release uncertainty; dedicated personal and blueprint-trust regressions prove committed state and safe retry behavior. The exact-parent Windows/POSIX containment cases, final bootstrap package-selection drift clause, option-as-positional parser rejection, disable-retains/remove-revokes trust documentation, package-state limit exit mapping, and bounded coordination diagnostics were accepted. A universal context-free exit table remained rejected because direct package validation and startup configuration intentionally have different public classes. Pre-planted trust-root symlink mode mutation was recorded as non-blocking without a bounded race-free fchmod design and was not half-fixed.
+
+Local closure validation after these changes passed the focused Core/Host/CLI/architecture suites (152 tests), bun run check (579 tests / 3,975 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery), bun run check:targets for macOS arm64, Linux x64, Windows x64, and Windows arm64, Backlog doctor, and git diff --check. Independent final diff review is still in progress before commit and push.
+
+Final independent re-review found the last Host repairability edge cases: local Phase 1 providers must never be imported for a Phase 0 consumer, and a multiple consumer cannot repair an incompatible Host single-provider graph. The preflight now defers only a matching Phase 1 requirement; incompatible-provider deferral additionally requires a multiple requirement and exclusively multiple existing providers. Zero-import regressions cover both negative branches while the existing positive single and multiple local-provider cases remain green. The independent reviewer returned PASS on the complete corrected diff.
+
+Final repeated validation passed bun run check with 580 tests / 3,993 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed.
 <!-- SECTION:NOTES:END -->

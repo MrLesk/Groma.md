@@ -124,6 +124,28 @@ function registration(id: string, capability?: string): PluginRegistration {
   });
 }
 
+function registrationWithCapabilities(id: string, count: number): PluginRegistration {
+  return Object.freeze({
+    manifest: Object.freeze({
+      apiVersion: "groma.plugin/v1",
+      id,
+      phase: 1 as const,
+      provides: Object.freeze(
+        Array.from({ length: count }, (_, index) =>
+          Object.freeze({
+            cardinality: "multiple" as const,
+            id: `example.capability-${index}/v1`,
+            version: "1.0.0",
+          }),
+        ),
+      ),
+      requires: Object.freeze([]),
+      version: "1.0.0",
+    }),
+    start: () => Object.freeze({ capabilities: Object.freeze([]) }),
+  });
+}
+
 async function verifiedModuleSource(url: string): Promise<string> {
   if (!url.startsWith("blob:")) throw new Error("expected verified in-memory module");
   return await (await fetch(url)).text();
@@ -470,6 +492,86 @@ describe("local plugin package manager", () => {
         registrations: [{ manifest: { id: "example.panel" } }],
       },
     });
+  });
+
+  test("rejects the reserved Host plugin namespace before trust or package state is written", async () => {
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-reserved-id", [
+      "./plugins/entry.js",
+    ]);
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("official.application") }),
+      ...context,
+    });
+    expect(await manager.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+    const before = await Promise.all([readFile(configurationFile), readFile(lockFile)]);
+
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-reserved-id",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "plugin-package-plugin-id-reserved" }],
+      ok: false,
+    });
+    expect(await Promise.all([readFile(configurationFile), readFile(lockFile)])).toEqual(before);
+    expect(await readdir(context.userDataRoot)).toEqual([]);
+  });
+
+  test("preflights local entries with the ordinary Host capability bound", async () => {
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-host-bounds", [
+      "./plugins/sixteen.js",
+      "./plugins/seventeen.js",
+    ]);
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async (url) => {
+        const source = await verifiedModuleSource(url);
+        const count = source.includes("seventeen.js") ? 17 : 16;
+        return { plugin: registrationWithCapabilities(`example.bound-${count}`, count) };
+      },
+      ...context,
+    });
+    expect(await manager.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await manager.enable({
+        entry: "./plugins/sixteen.js",
+        name: "example-host-bounds",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+    const stateFile = path.join(
+      context.userDataRoot,
+      "workspaces",
+      (await readdir(path.join(context.userDataRoot, "workspaces")))[0]!,
+    );
+    const before = await Promise.all([
+      readFile(configurationFile),
+      readFile(lockFile),
+      readFile(stateFile),
+    ]);
+
+    expect(
+      await manager.enable({
+        entry: "./plugins/seventeen.js",
+        name: "example-host-bounds",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "plugin-package-entry-invalid" }], ok: false });
+    expect(
+      await Promise.all([readFile(configurationFile), readFile(lockFile), readFile(stateFile)]),
+    ).toEqual(before);
   });
 
   test("repairs lock-first disable and remove after an interrupted blueprint state write", async () => {
@@ -1766,6 +1868,128 @@ describe("local plugin package manager", () => {
     expect(await readFile(lockFile, "utf8")).toContain("example.release-after-commit");
   });
 
+  test("reports committed personal state when its coordination release fails", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-personal-release", [
+      "./plugins/panel.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      ...context,
+    });
+    expect(await setup.add({ scope: "personal", source })).toMatchObject({ ok: true });
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({
+        plugin: registration("example.personal-release", "groma.presentation.panel/v1"),
+      }),
+      userResourceFaultInjector: (phase) => {
+        if (phase === "coordination-release") throw new Error("private release failure");
+      },
+      ...context,
+    });
+
+    expect(
+      await manager.enable({
+        entry: "./plugins/panel.js",
+        name: "example-personal-release",
+        scope: "personal",
+        trustFullUserPermissions: true,
+      }),
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-state-indeterminate",
+          message:
+            "Personal plugin package state may have committed; inspect the personal package before retrying; not found confirms removal",
+        },
+      ],
+      ok: false,
+    });
+    expect(
+      await manager.disable({
+        entry: "./plugins/panel.js",
+        name: "example-personal-release",
+        scope: "personal",
+      }),
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-state-unavailable",
+          message:
+            "Local plugin package state is changing or unavailable; retry after changes settle",
+        },
+      ],
+      ok: false,
+    });
+    const restarted = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      ...context,
+    });
+    expect(
+      await restarted.inspect({ name: "example-personal-release", scope: "personal" }),
+    ).toMatchObject({ ok: true, value: { enabled: ["./plugins/panel.js"] } });
+  });
+
+  test("reports committed blueprint trust when its coordination release fails", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-blueprint-trust-release", [
+      "./plugins/entry.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+    const before = await Promise.all([readFile(configurationFile), readFile(lockFile)]);
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.blueprint-trust-release") }),
+      userResourceFaultInjector: (phase) => {
+        if (phase === "coordination-release") throw new Error("private release failure");
+      },
+      ...context,
+    });
+
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-blueprint-trust-release",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-state-indeterminate",
+          message:
+            "Blueprint plugin trust state may have committed; verify the exact package entry and current selection before retrying",
+        },
+      ],
+      ok: false,
+    });
+    expect(await Promise.all([readFile(configurationFile), readFile(lockFile)])).toEqual(before);
+
+    const restarted = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.blueprint-trust-release") }),
+      ...context,
+    });
+    expect(
+      await restarted.enable({
+        entry: "./plugins/entry.js",
+        name: "example-blueprint-trust-release",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   test("rechecks current blueprint selections before startup imports", async () => {
     if (process.platform === "win32") return;
 
@@ -1816,6 +2040,146 @@ describe("local plugin package manager", () => {
       ok: false,
     });
     expect(imports).toBe(0);
+  });
+
+  test("coordinates startup with supported disable and remove mutations", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-startup-mutation", [
+      "./plugins/entry.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.startup-mutation") }),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await setup.enable({
+        entry: "./plugins/entry.js",
+        name: "example-startup-mutation",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+    const staleBootstrap = await bootstrap(context.resources);
+    let imports = 0;
+    const startup = createLocalPluginPackageManager({
+      bootstrap: staleBootstrap,
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration("example.startup-mutation") };
+      },
+      ...context,
+    });
+
+    for (const mutation of ["disable", "remove"] as const) {
+      let enteredWrite!: () => void;
+      let releaseWrite!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enteredWrite = resolve;
+      });
+      const release = new Promise<void>((resolve) => {
+        releaseWrite = resolve;
+      });
+      let paused = false;
+      const mutationResources = await createLocalResourceProvider({
+        faultInjector: async (phase, fault) => {
+          if (paused || phase !== "write" || fault?.locator !== "groma/packages.lock") return;
+          paused = true;
+          enteredWrite();
+          await release;
+        },
+        workspaceRoot: context.workspaceRoot,
+      });
+      const manager = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(mutationResources),
+        ...context,
+        resources: mutationResources,
+      });
+      const changing =
+        mutation === "disable"
+          ? manager.disable({
+              entry: "./plugins/entry.js",
+              name: "example-startup-mutation",
+              scope: "blueprint",
+            })
+          : manager.remove({ name: "example-startup-mutation", scope: "blueprint" });
+      await entered;
+      expect(await startup.loadEnabled(), mutation).toMatchObject({
+        diagnostics: [{ code: "plugin-package-state-unavailable" }],
+        ok: false,
+      });
+      expect(imports, mutation).toBe(0);
+      releaseWrite();
+      expect(await changing, mutation).toMatchObject({ ok: true });
+    }
+  });
+
+  test("revalidates direct configuration and lock edits after materialization before import", async () => {
+    if (process.platform === "win32") return;
+
+    for (const mutation of ["configuration", "lock"] as const) {
+      const context = await fixture();
+      const name = `example-direct-${mutation}`;
+      const source = await writePackage(context.workspaceRoot, name, ["./plugins/entry.js"]);
+      const setup = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        importModule: async () => ({ plugin: registration(`example.direct-${mutation}`) }),
+        ...context,
+      });
+      expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+      expect(
+        await setup.enable({
+          entry: "./plugins/entry.js",
+          name,
+          scope: "blueprint",
+          trustFullUserPermissions: true,
+        }),
+      ).toMatchObject({ ok: true });
+      const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+      const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+      let mutated = false;
+      let imports = 0;
+      const manager = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        fileReadObserver: async (event) => {
+          if (mutated || !event.file.endsWith(path.join("plugins", "entry.js"))) return;
+          mutated = true;
+          if (mutation === "configuration") {
+            const current = await readFile(configurationFile, "utf8");
+            await writeFile(
+              configurationFile,
+              current.replace('      - "./plugins/entry.js"\n', ""),
+            );
+          } else {
+            const current = JSON.parse(await readFile(lockFile, "utf8"));
+            current.packages = [];
+            await writeFile(lockFile, `${JSON.stringify(current, null, 2)}\n`);
+          }
+        },
+        importModule: async () => {
+          imports += 1;
+          return { plugin: registration(`example.direct-${mutation}`) };
+        },
+        ...context,
+      });
+
+      expect(await manager.loadEnabled(), mutation).toMatchObject({
+        diagnostics: [
+          {
+            code:
+              mutation === "configuration"
+                ? "workspace-configuration-changed"
+                : "plugin-package-lock-changed",
+          },
+        ],
+        ok: false,
+      });
+      expect(mutated, mutation).toBe(true);
+      expect(imports, mutation).toBe(0);
+    }
   });
 
   test("rejects duplicate stored plugin IDs before startup imports", async () => {
@@ -2118,6 +2482,123 @@ describe("local plugin package manager", () => {
     ).toEqual(combinedBytes);
   });
 
+  test("coordinates cross-scope enables before conflict and capacity commits", async () => {
+    if (process.platform === "win32") return;
+
+    for (const scenario of ["duplicate", "capacity"] as const) {
+      const context = await fixture();
+      const blueprintSource = await writePackage(
+        context.workspaceRoot,
+        `example-race-blueprint-${scenario}`,
+        ["./plugins/entry.js"],
+      );
+      const personalSource = await writePackage(
+        context.workspaceRoot,
+        `example-race-personal-${scenario}`,
+        ["./plugins/panel.js"],
+      );
+      const setup = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        ...context,
+        maxEnabledPlugins: scenario === "capacity" ? 1 : 2,
+      });
+      expect(await setup.add({ scope: "blueprint", source: blueprintSource })).toMatchObject({
+        ok: true,
+      });
+      expect(await setup.add({ scope: "personal", source: personalSource })).toMatchObject({
+        ok: true,
+      });
+      let enteredImport!: () => void;
+      let releaseImport!: () => void;
+      const imported = new Promise<void>((resolve) => {
+        enteredImport = resolve;
+      });
+      const release = new Promise<void>((resolve) => {
+        releaseImport = resolve;
+      });
+      const personalResources = await createLocalResourceProvider({
+        workspaceRoot: context.workspaceRoot,
+      });
+      const blueprintResources = await createLocalResourceProvider({
+        workspaceRoot: context.workspaceRoot,
+      });
+      const personalId = scenario === "duplicate" ? "example.race-shared" : "example.race-panel";
+      const personal = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(personalResources),
+        importModule: async () => {
+          enteredImport();
+          await release;
+          return { plugin: registration(personalId, "groma.presentation.panel/v1") };
+        },
+        ...context,
+        maxEnabledPlugins: scenario === "capacity" ? 1 : 2,
+        resources: personalResources,
+      });
+      let blueprintImports = 0;
+      const blueprint = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(blueprintResources),
+        importModule: async () => {
+          blueprintImports += 1;
+          return {
+            plugin: registration(
+              scenario === "duplicate" ? "example.race-shared" : "example.race-blueprint",
+            ),
+          };
+        },
+        ...context,
+        maxEnabledPlugins: scenario === "capacity" ? 1 : 2,
+        resources: blueprintResources,
+      });
+
+      const personalEnable = personal.enable({
+        entry: "./plugins/panel.js",
+        name: `example-race-personal-${scenario}`,
+        scope: "personal",
+        trustFullUserPermissions: true,
+      });
+      await imported;
+      expect(
+        await blueprint.add({ scope: "blueprint", source: "git@github.com:org/repo.git" }),
+        scenario,
+      ).toMatchObject({
+        diagnostics: [{ code: "remote-plugin-package-acquisition-out-of-scope" }],
+        ok: false,
+      });
+      const blueprintEnable = await blueprint.enable({
+        entry: "./plugins/entry.js",
+        name: `example-race-blueprint-${scenario}`,
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      });
+      releaseImport();
+
+      expect(blueprintEnable, scenario).toMatchObject({
+        diagnostics: [{ code: "plugin-package-state-unavailable" }],
+        ok: false,
+      });
+      expect(await personalEnable, scenario).toMatchObject({ ok: true });
+      expect(blueprintImports, scenario).toBe(0);
+      let startupImports = 0;
+      const restarted = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        importModule: async () => {
+          startupImports += 1;
+          return { plugin: registration(personalId, "groma.presentation.panel/v1") };
+        },
+        ...context,
+        maxEnabledPlugins: scenario === "capacity" ? 1 : 2,
+      });
+      expect(await restarted.loadEnabled(), scenario).toMatchObject({
+        ok: true,
+        value: {
+          personalPluginIds: [personalId],
+          registrations: [{ manifest: { id: personalId } }],
+        },
+      });
+      expect(startupImports, scenario).toBe(1);
+    }
+  });
+
   test("maps package lock and user-state resource failures to stable startup diagnostics", async () => {
     if (process.platform === "win32") return;
 
@@ -2242,7 +2723,13 @@ describe("local plugin package manager", () => {
     releaseImport();
 
     expect(await enabling).toMatchObject({
-      diagnostics: [{ code: "plugin-package-lock-changed" }],
+      diagnostics: [
+        {
+          code: "plugin-package-state-indeterminate",
+          message:
+            "Blueprint plugin trust state may have committed; verify the exact package entry and current selection before retrying",
+        },
+      ],
       ok: false,
     });
     expect(await readFile(configurationFile)).toEqual(configurationBefore);

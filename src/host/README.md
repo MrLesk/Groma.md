@@ -112,7 +112,10 @@ an existing exact location-and-integrity-bound grant or requires
 `--trust-full-user-permissions`; only then may it import the selected Phase 1 module's
 named `plugin` export. The canonical lock records the exact manifest bytes, every
 enabled entry module's bytes, and resolved plugin ID. Startup rechecks all three before
-import, then evaluates an immutable in-memory module made from those already-read entry
+import. Supported mutations and startup share one workspace-scoped package-state
+coordination lease; direct edits are detected by re-reading canonical configuration,
+exact lock, and exact user state after materialization and immediately before each import.
+The Host then evaluates an immutable in-memory module made from those already-read entry
 bytes instead of reopening the source path.
 
 One executable entry is bounded to 4 MiB and must be bundled or otherwise
@@ -144,7 +147,9 @@ An explicit grant for changed exact bytes supersedes older grants for the same s
 workspace, package location, package name, and entry. Trust state therefore keeps one
 current exact grant per logical entry, and reverting to previously trusted bytes requires
 explicit trust again. Persisted state containing multiple exact grants for one logical
-entry is malformed and cannot authorize execution.
+entry is malformed and cannot authorize execution. Disable retains the unchanged
+exact-byte grant; remove is the explicit revocation boundary and prunes grants only after
+every package entry is disabled.
 
 Personal entries must provide and require only `groma.presentation.*` capabilities.
 This keeps canonical mutation capabilities out of personal runtime resolution; it is
@@ -164,7 +169,8 @@ selection changed since bootstrap fails before local module evaluation. Enabled 
 across blueprint and personal package state must also have distinct runtime plugin IDs.
 Enable checks the selected registration against the complete blueprint-lock and
 personal-state union before writing trust or package state; startup rejects duplicate
-stored IDs before importing either entry.
+stored IDs before importing either entry. Local entries are also rejected before any
+state write when their ID uses the Host-reserved `official.*` namespace.
 
 Every state write is byte-preflighted against its corresponding read bound. Blueprint
 publication writes the exact lock before configuration; disable and remove can reconcile
@@ -189,6 +195,8 @@ built-ins and the full 64-entry official-runtime selection bound before admittin
 entries, leaving 56 enabled local entries. Enable and ordinary startup count blueprint
 and personal selections together before any local import. Exceeding the remaining
 capacity fails closed without changing configuration, lock, or user-state bytes.
+Each local registration is preflighted with the same ordinary Host manifest bounds:
+at most 16 provided and 16 required capabilities and 128 characters per identity token.
 
 Zero candidates is the typed missing-workspace state. Multiple candidates fail with
 `workspace-discovery-conflict`; invalid YAML fails with

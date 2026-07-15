@@ -198,10 +198,14 @@ const bootstrapFailureMessages = Object.freeze({
     "Plugin package configuration does not match its exact lock entry",
   "plugin-package-lock-missing": "A blueprint package declaration has no matching exact lock entry",
   "plugin-package-lock-unavailable": "The exact plugin package lock is unavailable",
+  "plugin-package-plugin-id-reserved":
+    "Local plugin packages must not use the Host-reserved official.* plugin namespace",
   "plugin-package-plugin-id-conflict": "Enabled local plugins must use distinct plugin IDs",
   "plugin-package-source-unavailable": "Local plugin package source is unavailable",
   "plugin-package-state-limit-exceeded":
     "Local plugin package state exceeds its configured byte bound",
+  "plugin-package-state-unavailable":
+    "Local plugin package state is changing or unavailable; retry after changes settle",
   "plugin-package-trust-root-unattested":
     "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
   "plugin-package-user-state-malformed": "Local plugin package state is malformed",

@@ -33,4 +33,6 @@ Package add accepts local filesystem paths only; remote npm, Git, and URL acquis
 Add and inspect read inert data and never execute package code. Enable is the execution boundary.
 Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe.
 The explicit --trust-full-user-permissions flag is required before a new exact entry executes.
+Local plugin IDs cannot use the Host-reserved official.* namespace.
+Disable retains unchanged exact-byte trust; remove revokes the package's grants.
 `;
