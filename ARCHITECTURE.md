@@ -854,9 +854,9 @@ Groma uses **packages** as the installation and distribution unit and **plugins*
 the runtime contribution unit. One package may provide multiple plugins, and a
 blueprint may enable only the contributions it needs.
 
-### Package Manifest
+### Package Declaration and Checked Manifest
 
-A package declares its Groma entry points explicitly:
+An npm package may declare discovery metadata in its `package.json`:
 
 ```json
 {
@@ -869,8 +869,30 @@ A package declares its Groma entry points explicitly:
 }
 ```
 
-Configuration may narrow the manifest with includes and exclusions. It cannot load an
-entry point the package did not declare.
+The nested `groma` record is package-manager metadata. Its `api` range helps a future
+acquisition workflow select candidate package releases; it is not the runtime plugin
+API token, a canonical Groma package manifest, or permission to execute an entry
+point.
+
+The public SDK separately defines the exact checked compatibility envelope:
+
+```json
+{
+  "apiVersion": "groma.package/v1",
+  "name": "@acme/groma-platform",
+  "plugins": ["./plugins/ownership.js", "./plugins/policy.js", "./plugins/typescript-scanner.js"],
+  "runtimeApiVersion": "groma.plugin/v1",
+  "sdkApiVersion": "groma.sdk/v1",
+  "version": "1.4.0"
+}
+```
+
+`checkPluginPackageCompatibility()` validates and canonicalizes this exact envelope
+before any declared entry point executes. Package-manager work must fail closed when
+package metadata, this envelope, or an exact lock disagree. Configuration may narrow
+the checked entry-point list with includes and exclusions, but it cannot load an entry
+point absent from that list. GROM-24 owns how a Host locates, materializes, and locks
+the envelope; the SDK defines its compatibility meaning without acquiring packages.
 
 ### Sources and Scopes
 

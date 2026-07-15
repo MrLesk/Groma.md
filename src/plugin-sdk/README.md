@@ -24,3 +24,32 @@ surface.
 
 Package acquisition, trust, enablement, loading, exact locks, and project configuration
 belong to the Official Host and are not implemented by this SDK.
+
+## Package metadata and compatibility
+
+Package-manager metadata and the SDK manifest have different jobs. A package registry
+or `package.json` may advertise a release and its entry points for discovery. That
+metadata is not trusted runtime compatibility evidence. Before an entry point executes,
+the Host must obtain the exact six-field envelope accepted by
+`checkPluginPackageCompatibility()`:
+
+```json
+{
+  "apiVersion": "groma.package/v1",
+  "name": "@acme/groma-platform",
+  "plugins": ["./plugins/ownership.js", "./plugins/policy.js"],
+  "runtimeApiVersion": "groma.plugin/v1",
+  "sdkApiVersion": "groma.sdk/v1",
+  "version": "1.4.0"
+}
+```
+
+Compatibility tokens and the exact package version are bounded to 128 characters.
+Every plugin entry is a bounded relative package subpath composed only of conservative
+ASCII alphanumeric, dot, underscore, and hyphen segments. Traversal, empty or dot
+segments, percent encoding, URL query or fragment syntax, controls, backslashes, and
+platform-ambiguous trailing dots are rejected rather than normalized.
+
+The future Host package manager must reconcile discovery metadata, this canonical
+envelope, and its exact lock before execution. The SDK does not choose the envelope's
+materialization or lock format; that remains GROM-24 scope.

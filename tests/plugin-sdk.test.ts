@@ -9,6 +9,7 @@ import {
   pluginSdkApiVersion,
   runPluginConformanceSuite,
   type PluginConformanceFixture,
+  type RunningPluginGraph,
 } from "groma/plugin-sdk";
 
 import {
@@ -151,6 +152,108 @@ describe("public plugin SDK", () => {
       cancellation.cases.find((item) => item.name === "cancellation")?.diagnostics,
     ).toMatchObject([{ code: "plugin-conformance-cancellation-failed" }]);
 
+    const maskedCancellation: PluginConformanceFixture = {
+      cancellationDiagnosticCode: "plugin-start-cancelled",
+      start: (request) =>
+        request.cancellation.isCancellationRequested()
+          ? Promise.resolve({
+              diagnostics: [
+                { code: "plugin-start-cancelled", message: "Plugin startup was cancelled" },
+                { code: "plugin-stop-failed", message: "Plugin cleanup also failed" },
+              ],
+              ok: false as const,
+            })
+          : forward.start(request),
+    };
+    const masked = await runPluginConformanceSuite({ fixture: maskedCancellation });
+    expect(
+      masked.cases
+        .find((item) => item.name === "cancellation")
+        ?.diagnostics.map((item) => item.code),
+    ).toEqual(["plugin-conformance-cancellation-failed", "plugin-stop-failed"]);
+
+    const mixedCardinality: PluginConformanceFixture = {
+      cancellationDiagnosticCode: "plugin-start-cancelled",
+      start: (request) => {
+        if (request.cancellation.isCancellationRequested()) {
+          return Promise.resolve({
+            diagnostics: [
+              { code: "plugin-start-cancelled", message: "Plugin startup was cancelled" },
+            ],
+            ok: false as const,
+          });
+        }
+        let state: "running" | "stopped" = "running";
+        const graph: RunningPluginGraph = {
+          cancel: async () => ({
+            ok: true,
+            value: {
+              state: "cancelled",
+              stoppedPluginIds: ["mixed.single", "mixed.multiple"],
+            },
+          }),
+          capabilities: (id, version) =>
+            id === "example.mixed-cardinality/v1" && version === "1.0.0"
+              ? [
+                  { pluginId: "mixed.multiple", value: {} },
+                  { pluginId: "mixed.single", value: {} },
+                ]
+              : [],
+          inspect: () => ({
+            apiVersion: pluginRuntimeApiVersion,
+            plugins: [
+              {
+                dependencies: [],
+                id: "mixed.multiple",
+                phase: 1,
+                provides: [
+                  {
+                    cardinality: "multiple",
+                    id: "example.mixed-cardinality/v1",
+                    version: "1.0.0",
+                  },
+                ],
+                requires: [],
+                state: state === "running" ? "running" : "stopped",
+                version: "1.0.0",
+              },
+              {
+                dependencies: [],
+                id: "mixed.single",
+                phase: 1,
+                provides: [
+                  {
+                    cardinality: "single",
+                    id: "example.mixed-cardinality/v1",
+                    version: "1.0.0",
+                  },
+                ],
+                requires: [],
+                state: state === "running" ? "running" : "stopped",
+                version: "1.0.0",
+              },
+            ],
+            state,
+          }),
+          shutdown: async () => {
+            state = "stopped";
+            return {
+              ok: true,
+              value: {
+                state: "stopped",
+                stoppedPluginIds: ["mixed.single", "mixed.multiple"],
+              },
+            };
+          },
+        };
+        return Promise.resolve({ ok: true as const, value: graph });
+      },
+    };
+    const mixed = await runPluginConformanceSuite({ fixture: mixedCardinality });
+    expect(
+      mixed.cases.find((item) => item.name === "declared-cardinality")?.diagnostics,
+    ).toMatchObject([{ code: "plugin-conformance-cardinality-failed" }]);
+
     const collision = await runPluginConformanceSuite({
       fixture: createPluginRuntimeConformanceFixture(() => [
         ...onePlugin("example.collision-a"),
@@ -226,12 +329,24 @@ describe("public plugin SDK", () => {
   });
 
   test("fails closed on malformed package manifests before entry-point use", () => {
-    expect(
-      checkPluginPackageCompatibility({ ...packageManifest, plugins: ["../private.ts"] }),
-    ).toMatchObject({
-      diagnostics: [{ code: "invalid-plugin-package-manifest" }],
-      ok: false,
-    });
+    for (const entry of [
+      "../private.ts",
+      "./%2e%2e/private.js",
+      "./%2E%2E/private.js",
+      "./plugins/%2fprivate.js",
+      "./plugins/%5Cprivate.js",
+      "./plugins/plugin.js?debug=true",
+      "./plugins/plugin.js#fragment",
+      "./plugins/plugin\n.js",
+      "./plugins/trailing.",
+    ]) {
+      expect(
+        checkPluginPackageCompatibility({ ...packageManifest, plugins: [entry] }),
+      ).toMatchObject({
+        diagnostics: [{ code: "invalid-plugin-package-manifest" }],
+        ok: false,
+      });
+    }
     expect(checkPluginPackageCompatibility({ ...packageManifest, surprise: true })).toMatchObject({
       diagnostics: [{ code: "invalid-plugin-package-manifest" }],
       ok: false,
@@ -250,5 +365,20 @@ describe("public plugin SDK", () => {
         ok: false,
       });
     }
+
+    const maximumVersion = `${"9".repeat(124)}.0.0`;
+    expect(maximumVersion).toHaveLength(128);
+    expect(
+      checkPluginPackageCompatibility({ ...packageManifest, version: maximumVersion }),
+    ).toMatchObject({
+      ok: true,
+      value: { version: maximumVersion },
+    });
+    expect(
+      checkPluginPackageCompatibility({ ...packageManifest, version: `${"9".repeat(125)}.0.0` }),
+    ).toMatchObject({
+      diagnostics: [{ code: "invalid-plugin-package-manifest" }],
+      ok: false,
+    });
   });
 });

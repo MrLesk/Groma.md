@@ -217,12 +217,13 @@ async function cancellation(
     ];
     return caseResult(name, diagnostics);
   }
-  return started.diagnostics.some((item) => item.code === fixture.cancellationDiagnosticCode)
+  return started.diagnostics.length === 1 &&
+    started.diagnostics[0]?.code === fixture.cancellationDiagnosticCode
     ? caseResult(name, [])
     : caseResult(name, [
         diagnostic(
           "plugin-conformance-cancellation-failed",
-          "Cancelled startup did not return the fixture's stable cancellation diagnostic",
+          "Cancelled startup did not return only the fixture's stable cancellation diagnostic",
           {
             actualCodes: started.diagnostics
               .map((item) => item.code)
@@ -231,6 +232,7 @@ async function cancellation(
             expectedCode: fixture.cancellationDiagnosticCode,
           },
         ),
+        ...started.diagnostics.filter((item) => item.code !== fixture.cancellationDiagnosticCode),
       ]);
 }
 
@@ -242,34 +244,65 @@ async function declaredCardinality(
   if (!started.ok) return caseResult(name, started.diagnostics);
   const diagnostics: Diagnostic[] = [];
   try {
-    const declarations = new Map<
+    const capabilityDeclarations = new Map<
       string,
-      { readonly cardinality: CapabilityCardinality; readonly pluginIds: string[] }
+      {
+        readonly cardinalities: Set<CapabilityCardinality>;
+        readonly declarationKeys: string[];
+      }
+    >();
+    const versionDeclarations = new Map<
+      string,
+      {
+        readonly pluginIds: string[];
+      }
     >();
     for (const plugin of started.value.inspect().plugins) {
       for (const declaration of plugin.provides) {
         const key = `${declaration.id}\0${declaration.version}`;
-        const current = declarations.get(key) ?? {
-          cardinality: declaration.cardinality,
+        const capability = capabilityDeclarations.get(declaration.id) ?? {
+          cardinalities: new Set<CapabilityCardinality>(),
+          declarationKeys: [],
+        };
+        capability.cardinalities.add(declaration.cardinality);
+        capability.declarationKeys.push(`${plugin.id}\0${declaration.version}`);
+        capabilityDeclarations.set(declaration.id, capability);
+        const current = versionDeclarations.get(key) ?? {
           pluginIds: [],
         };
         current.pluginIds.push(plugin.id);
-        declarations.set(key, current);
+        versionDeclarations.set(key, current);
       }
     }
-    for (const [key, declaration] of declarations) {
+    const invalidCapabilityIds = new Set<string>();
+    for (const [id, declaration] of capabilityDeclarations) {
+      const uniqueDeclarations = new Set(declaration.declarationKeys);
+      if (
+        declaration.cardinalities.size !== 1 ||
+        uniqueDeclarations.size !== declaration.declarationKeys.length ||
+        (declaration.cardinalities.has("single") && declaration.declarationKeys.length !== 1)
+      ) {
+        invalidCapabilityIds.add(id);
+        diagnostics.push(
+          diagnostic(
+            "plugin-conformance-cardinality-failed",
+            "Plugin manifests disagree about cardinality or contain duplicate provider declarations",
+            { capabilityId: id },
+          ),
+        );
+      }
+    }
+    for (const [key, declaration] of versionDeclarations) {
       const separator = key.indexOf("\0");
       const id = key.slice(0, separator);
       const version = key.slice(separator + 1);
+      if (invalidCapabilityIds.has(id)) continue;
       const expected = declaration.pluginIds.sort(compareCodeUnits);
       const actual = started.value
         .capabilities(id, version)
         .map((provider) => provider.pluginId)
         .sort(compareCodeUnits);
-      if (
-        stable(actual) !== stable(expected) ||
-        (declaration.cardinality === "single" && actual.length !== 1)
-      ) {
+      if (stable(actual) !== stable(expected)) {
         diagnostics.push(
           diagnostic(
             "plugin-conformance-cardinality-failed",

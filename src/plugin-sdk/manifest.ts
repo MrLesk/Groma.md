@@ -52,6 +52,7 @@ export const currentPluginPackageCompatibility: PluginPackageCompatibility = Obj
 });
 
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
+const packageSubpathSegmentPattern = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$/;
 const exactVersionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/;
 const maximumEntryPoints = 64;
 const maximumEntryPointCharacters = 512;
@@ -154,11 +155,8 @@ function entryPoints(value: unknown): Result<readonly string[]> {
       !entry.startsWith("./") ||
       entry.includes("\\") ||
       entry.includes("\0") ||
-      segments.some((segment, segmentIndex) =>
-        segmentIndex === 0
-          ? segment !== "."
-          : segment.length === 0 || segment === "." || segment === "..",
-      )
+      segments[0] !== "." ||
+      segments.slice(1).some((segment) => !packageSubpathSegmentPattern.test(segment))
     ) {
       return invalidPackageManifest("plugin entry points must be bounded relative package paths");
     }
@@ -210,9 +208,12 @@ export function checkPluginPackageCompatibility(
     typeof manifest.version !== "string" ||
     manifest.apiVersion.length > maximumTokenCharacters ||
     manifest.runtimeApiVersion.length > maximumTokenCharacters ||
-    manifest.sdkApiVersion.length > maximumTokenCharacters
+    manifest.sdkApiVersion.length > maximumTokenCharacters ||
+    manifest.version.length > maximumTokenCharacters
   ) {
-    return invalidPackageManifest("manifest identity and compatibility fields must be strings");
+    return invalidPackageManifest(
+      "manifest identity and compatibility fields must be bounded strings",
+    );
   }
 
   const incompatibilities: Diagnostic[] = [];
