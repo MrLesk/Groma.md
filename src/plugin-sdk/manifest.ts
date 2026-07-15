@@ -112,7 +112,6 @@ function exactRecord(value: unknown, fields: readonly string[]): Result<Record<s
 }
 
 function entryPoints(value: unknown): Result<readonly string[]> {
-  let keys: readonly PropertyKey[];
   let length: number;
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
@@ -131,17 +130,18 @@ function entryPoints(value: unknown): Result<readonly string[]> {
     if (length === 0 || length > maximumEntryPoints) {
       return invalidPackageManifest("plugins must contain between 1 and 64 dense entry points");
     }
-    keys = Reflect.ownKeys(value);
   } catch {
     return invalidPackageManifest("plugins inspection failed");
-  }
-  if (keys.length !== length + 1) {
-    return invalidPackageManifest("plugins must contain between 1 and 64 dense entry points");
   }
   const copied: string[] = [];
   const seen = new Set<string>();
   for (let index = 0; index < length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    } catch {
+      return invalidPackageManifest("plugins inspection failed");
+    }
     if (
       descriptor === undefined ||
       !("value" in descriptor) ||

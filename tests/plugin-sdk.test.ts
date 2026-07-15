@@ -533,6 +533,32 @@ describe("public plugin SDK", () => {
       });
     }
 
+    const boundedTarget = ["./plugins/bounded.js"];
+    Object.defineProperty(boundedTarget, "ignored", {
+      enumerable: true,
+      value: "must not survive canonicalization",
+    });
+    let boundedOwnKeysInvoked = false;
+    const boundedPlugins = new Proxy(boundedTarget, {
+      ownKeys: () => {
+        boundedOwnKeysInvoked = true;
+        throw new Error("bounded plugin entries must not enumerate arbitrary keys");
+      },
+    });
+    const bounded = checkPluginPackageCompatibility({
+      ...packageManifest,
+      plugins: boundedPlugins,
+    });
+    expect(bounded).toMatchObject({
+      ok: true,
+      value: { plugins: ["./plugins/bounded.js"] },
+    });
+    expect(boundedOwnKeysInvoked).toBeFalse();
+    if (!bounded.ok) throw new Error("bounded proxy manifest unexpectedly failed");
+    expect(bounded.value.plugins).not.toBe(boundedPlugins);
+    expect(Object.isFrozen(bounded.value.plugins)).toBeTrue();
+    expect(Reflect.ownKeys(bounded.value.plugins)).toEqual(["0", "length"]);
+
     let oversizedOwnKeysInvoked = false;
     const oversizedPlugins = new Proxy(new Array(65), {
       ownKeys: () => {

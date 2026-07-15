@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 05:33'
+updated_date: '2026-07-15 05:46'
 labels: []
 milestone: m-2
 dependencies:
@@ -53,10 +53,10 @@ Give built-in and third-party plugin authors one supported public contract for m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reject zero or over-64 intrinsic plugin-entry arrays immediately after validating the intrinsic length descriptor and before enumerating keys; add a proxy regression proving ownKeys is never invoked for oversized input.
-2. Build each deterministic snapshot from graph inspection plus ordered provider plugin IDs for every unique declared capability/version, sorting lookup keys but never provider results.
-3. Add a successful runtime-backed fixture whose forward and reverse inspections match while provider lookup order differs, and prove plugin-conformance-nondeterministic without weakening sequential shutdown, no-overlap, or cleanup diagnostics.
-4. Run focused and full gates, re-check AC3 and AC5 with current-head evidence, re-finalize GROM-23, and commit without pushing or resolving GitHub threads.
+1. Remove own-key enumeration from plugin entry-point canonicalization after validating the intrinsic array and bounded 1..64 length.
+2. Inspect only the bounded expected numeric descriptors, fail closed on descriptor reflection errors, and preserve dense enumerable string checks, grammar, uniqueness, and fresh frozen canonical output.
+3. Add an allowed-length proxy with a throwing ownKeys trap and an extra property, proving ownKeys is not invoked and only expected entries survive; retain the existing over-64 no-enumeration regression.
+4. Run focused and full gates, re-check AC5 with current-head evidence, re-finalize GROM-23, and commit without pushing or resolving GitHub threads.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -89,10 +89,16 @@ Reopened for two actionable pre-merge Codex findings: oversized plugin arrays mu
 Implemented both final Codex findings. entryPoints now rejects zero or over-64 intrinsic array lengths before Reflect.ownKeys, with a throwing ownKeys proxy proving bounded preflight. Deterministic snapshots now combine inspection with ordered provider plugin IDs for each unique declared capability/version; capability lookup keys are sorted but provider order is preserved. A runtime-backed successful fixture exposes identical inspections and reversed provider order, producing plugin-conformance-nondeterministic while the existing exclusive-resource fixture remains green. Focused strict typecheck plus SDK/Host suites passed 8 tests with 45 assertions.
 
 Final current-head evidence for the last two Codex findings: focused strict TypeScript and SDK/Host conformance suites passed 8 tests with 45 assertions. Full bun run check passed formatting, strict TypeScript, architecture boundaries, 520 tests with 3,401 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. The existing exclusive-resource regression remains green, proving the richer deterministic snapshot did not reintroduce forward/reverse overlap.
+
+Reopened for the final current-head P2: even a bounded-length proxy can make Reflect.ownKeys unbounded. AC5 is pending a descriptor-only canonicalization regression and current-head verification.
+
+Removed own-key enumeration from entryPoints entirely. After intrinsic array and 1..64 length validation, it now reflects only the bounded expected numeric descriptors, contains descriptor trap failures, and copies validated entries into the fresh frozen canonical array. The allowed-length proxy regression has a throwing ownKeys trap plus an extra enumerable property; compatibility succeeds without invoking the trap and returns only the clean numeric entry. The existing over-64 early-bound trap remains green. Focused strict typecheck plus SDK/Host suites passed 8 tests with 50 assertions.
+
+Final descriptor-only evidence: focused strict TypeScript and SDK/Host suites passed 8 tests with 50 assertions. Full bun run check passed formatting, strict TypeScript, architecture boundaries, 520 tests with 3,406 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. No path in entryPoints enumerates input keys; reflection is bounded to length plus at most 64 expected numeric descriptors, and only validated strings enter the fresh frozen output.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Published and review-hardened the two-subpath plugin SDK. Authoring and static package compatibility live at groma/plugin-sdk; reusable verification lives only at groma/plugin-sdk/conformance. Package self-references obey layer rules, oversized entry-point arrays fail before enumeration, static manifests preserve the pre-execution trust boundary, and deterministic conformance compares inspection plus observable provider order while releasing graphs sequentially. Focused 8-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
+Published and review-hardened the two-subpath plugin SDK. Authoring and static package compatibility live at groma/plugin-sdk; reusable verification lives only at groma/plugin-sdk/conformance. Package self-references obey layer rules, manifest entry points are canonicalized through bounded descriptor reads without key enumeration, static data preserves the pre-execution trust boundary, and deterministic conformance compares inspection plus observable provider order while releasing graphs sequentially. Focused 8-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
 <!-- SECTION:FINAL_SUMMARY:END -->
