@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 07:03'
+updated_date: '2026-07-15 07:06'
 labels: []
 milestone: m-4
 dependencies:
@@ -16,6 +16,7 @@ references:
   - ARCHITECTURE.md
 modified_files:
   - ARCHITECTURE.md
+  - backlog/tasks/grom-24 - Manage-and-pin-local-plugin-packages.md
   - scripts/architecture-boundaries.ts
   - scripts/standalone-compiler.ts
   - scripts/tests/architecture-boundaries.test.ts
