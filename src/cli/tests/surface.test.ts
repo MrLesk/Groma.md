@@ -84,6 +84,7 @@ describe("CLI surface", () => {
     });
     for (const code of [
       "plugin-package-enabled-limit-exceeded",
+      "plugin-package-plugin-id-conflict",
       "plugin-package-trust-root-unattested",
       "plugin-package-user-state-unavailable",
     ]) {

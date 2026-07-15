@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -160,6 +160,24 @@ describe("CLI program", () => {
     ).toBe(CLI_EXIT.success);
     expect(captured.output).toEqual(["No Groma workspace is initialized here.\nRun: groma init\n"]);
     expect(await readdir(root)).toEqual([]);
+  });
+
+  test("initializes and restarts an empty home-rooted workspace without creating contained user state", async () => {
+    const root = await workspace();
+    const containedUserDataRoot = path.join(root, ".groma");
+
+    expect(
+      await jsonCommand(root, ["init"], undefined, { userDataRoot: containedUserDataRoot }),
+    ).toMatchObject({ envelope: { command: "init", exitCode: CLI_EXIT.success, ok: true } });
+    await expect(lstat(containedUserDataRoot)).rejects.toThrow();
+    expect(
+      await jsonCommand(root, ["component", "roots", "--limit", "1"], undefined, {
+        userDataRoot: containedUserDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: { command: "component roots", exitCode: CLI_EXIT.success, ok: true },
+    });
+    await expect(lstat(containedUserDataRoot)).rejects.toThrow();
   });
 
   test("executes the complete one-shot component workflow across host restarts", async () => {
@@ -594,6 +612,102 @@ export const plugin = Object.freeze({
     expect(captured.output[0]).not.toContain("private acknowledgement failure");
   });
 
+  test("returns exit 6 when configuration publication fails after the package lock commits", async () => {
+    const root = await workspace();
+    const userDataRoot = await workspace();
+    await jsonCommand(root, ["init"], undefined, { userDataRoot });
+    const packageRoot = path.join(root, "plugins", "partial-publication");
+    await mkdir(path.join(packageRoot, "plugins"), { recursive: true });
+    await writeFile(
+      path.join(packageRoot, "groma.package.json"),
+      `${JSON.stringify({
+        apiVersion: "groma.package/v1",
+        name: "example-partial-publication",
+        plugins: ["./plugins/entry.js"],
+        runtimeApiVersion: "groma.plugin/v1",
+        sdkApiVersion: "groma.sdk/v1",
+        version: "1.0.0",
+      })}\n`,
+    );
+    await writeFile(
+      path.join(packageRoot, "plugins", "entry.js"),
+      `export const plugin = Object.freeze({
+  manifest: Object.freeze({
+    apiVersion: "groma.plugin/v1",
+    id: "example.partial-publication",
+    phase: 1,
+    provides: Object.freeze([]),
+    requires: Object.freeze([]),
+    version: "1.0.0"
+  }),
+  start: () => Object.freeze({ capabilities: Object.freeze([]) })
+});\n`,
+    );
+    expect(
+      await jsonCommand(root, ["package", "add", "./plugins/partial-publication"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({ exitCode: CLI_EXIT.success });
+    const configurationFile = path.join(root, "groma", "groma.yaml");
+    const lockFile = path.join(root, "groma", "packages.lock");
+    const configurationBefore = await readFile(configurationFile);
+    const lockBefore = await readFile(lockFile);
+    const captured = captureOutput();
+    let configurationReplacementFailed = false;
+    const exitCode = await runProgram(
+      [
+        "--format",
+        "json",
+        "package",
+        "enable",
+        "example-partial-publication",
+        "./plugins/entry.js",
+        "--trust-full-user-permissions",
+      ],
+      captured,
+      {
+        createRegistry: (surface) =>
+          createDefaultBootstrapRegistry({
+            resourceFaultInjector: (phase, fault) => {
+              if (phase === "rename" && fault?.locator === "groma/groma.yaml") {
+                configurationReplacementFailed = true;
+                throw new Error("private configuration replacement failure");
+              }
+              if (phase === "coordination-release" && configurationReplacementFailed) {
+                throw new Error("private coordination release failure");
+              }
+            },
+            surface,
+            userDataRoot,
+          }),
+        terminal: { stdin: false, stdout: false },
+        userDataRoot,
+        workspaceRoot: root,
+      },
+    );
+
+    expect(exitCode, captured.output[0]).toBe(CLI_EXIT.indeterminate);
+    expect(captured.errors).toEqual([]);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      command: "package enable",
+      exitCode: CLI_EXIT.indeterminate,
+      ok: false,
+      result: {
+        diagnostics: [
+          {
+            code: "plugin-package-state-indeterminate",
+            message: "Plugin package state may have committed; inspect it before retrying",
+          },
+        ],
+        ok: false,
+      },
+    });
+    expect(captured.output[0]).not.toContain("private");
+    expect(await readFile(configurationFile)).toEqual(configurationBefore);
+    expect(await readFile(lockFile)).not.toEqual(lockBefore);
+    expect(await readFile(lockFile, "utf8")).toContain("example.partial-publication");
+  });
+
   test("uses stable invocation, workspace, semantic, and signal exit classes", async () => {
     const root = await workspace();
     const invalid = await jsonCommand(root, ["component", "list"]);
@@ -869,6 +983,7 @@ export const plugin = Object.freeze({
         "plugin-package-enabled-limit-exceeded",
         "Enabled local plugins exceed this Host's runtime capacity",
       ],
+      ["plugin-package-plugin-id-conflict", "Enabled local plugins must use distinct plugin IDs"],
       ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
       [
         "personal-plugin-capability-forbidden",

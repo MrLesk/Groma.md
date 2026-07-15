@@ -961,6 +961,13 @@ Drift fails before module evaluation. The Host evaluates the already-read entry 
 through one immutable in-memory module URL; it never reopens the mutable entry path for
 execution.
 
+The Host validates unsupported project requests, unavailable official selections, and
+additional Host registration namespaces before importing enabled local packages. Runtime
+plugin IDs are unique across the complete enabled blueprint-lock and personal-state
+union. Enable evaluates only the newly selected trusted entry, then rejects an ID already
+reserved by any other logical package entry before writing trust or package state.
+Ordinary startup rejects duplicate stored IDs before importing either registration.
+
 Configuration, lock, and personal-state serialization are preflighted against their
 read bounds before publication. Blueprint updates publish the lock before configuration;
 if publication is interrupted between those resources, management-only disable and
@@ -970,6 +977,13 @@ still enables an entry but the lock or its package record is absent, disable may
 only that configured selection and remove may then clear the declaration. Recovery does
 not inspect the source or execute an entry. Lock and personal-state access failures are
 mapped to stable Host diagnostics before crossing the lifecycle boundary.
+
+After a lock replacement commits, any failure replacing configuration makes the
+two-resource operation indeterminate, including a definite non-commit of the second
+replacement. Inspection remains inert when a valid static manifest has changed: it
+reports `manifest-drift` from the current bounded manifest without trying to resolve
+locked entries that the changed manifest no longer declares. When the manifest remains
+exact, changed entry bytes continue to report `entry-drift`.
 
 The runtime's 128-registration ceiling is budgeted before local code can run. The
 default profile reserves eight built-ins and all 64 optional official-runtime slots,
@@ -1016,6 +1030,12 @@ workspace with neither condition still starts normally and simply has no persona
 plugins. Removing an inert blueprint declaration may skip trust pruning only when the
 Host proves the plugin user-data root is absent; an existing or unclassifiable root keeps
 the same fail-closed diagnostic.
+
+Observing the user's home directory makes the default `.groma` path fall inside the
+workspace. When that contained root is absent, empty initialization and startup remain
+available without creating it. Access that would require persisted trust or personal
+package state fails closed before evaluating package code, and existing contained state
+is never authorized.
 
 The trust message must explain:
 

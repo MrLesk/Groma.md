@@ -221,6 +221,22 @@ function errorCode(error: unknown): string | undefined {
     : undefined;
 }
 
+function canonicalProspectivePath(value: string): string | undefined {
+  const suffix: string[] = [];
+  let current = value;
+  for (;;) {
+    try {
+      return path.resolve(realpathSync.native(current), ...suffix);
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") return undefined;
+      const parent = path.dirname(current);
+      if (parent === current) return undefined;
+      suffix.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
 function exactJsonDocument(bytes: Uint8Array, expectedKeys: readonly string[]): Result<unknown> {
   let source: string;
   let value: unknown;
@@ -328,11 +344,11 @@ function sameFileIdentity(left: Stats, right: Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
-async function canonicalPackageLocation(
+function requestedPackageLocation(
   workspaceRoot: string,
   source: string,
   scope: PluginPackageScope,
-): Promise<Result<{ readonly location: string; readonly source: string }>> {
+): Result<string> {
   if (isRemoteSource(source)) {
     return packageFailure(
       "remote-plugin-package-acquisition-out-of-scope",
@@ -364,8 +380,18 @@ async function canonicalPackageLocation(
       "Blueprint plugin package sources must remain inside the observed workspace",
     );
   }
+  return success(requested);
+}
+
+async function canonicalPackageLocation(
+  workspaceRoot: string,
+  source: string,
+  scope: PluginPackageScope,
+): Promise<Result<{ readonly location: string; readonly source: string }>> {
+  const requested = requestedPackageLocation(workspaceRoot, source, scope);
+  if (!requested.ok) return requested;
   try {
-    const location = await realpath(requested);
+    const location = await realpath(requested.value);
     const stats = await lstat(location);
     if (!stats.isDirectory() || (scope === "blueprint" && !isPathWithin(workspaceRoot, location))) {
       return packageFailure(
@@ -783,6 +809,62 @@ function blueprintEnabledEntryCount(
   return enabled.size;
 }
 
+function sameBlueprintSelection(
+  declaration: ConfiguredPluginPackage,
+  locked: LockedPackage,
+): boolean {
+  return (
+    declaration.enabled.length === locked.enabled.length &&
+    declaration.enabled.every((entry, index) => entry === locked.enabled[index]?.entry)
+  );
+}
+
+function hasEnabledPluginIdConflict(
+  pluginId: string,
+  selected: {
+    readonly entry: string;
+    readonly name: string;
+    readonly scope: PluginPackageScope;
+  },
+  blueprintPackages: readonly LockedPackage[],
+  personalPackages: readonly LockedPackage[],
+): boolean {
+  for (const [scope, packages] of [
+    ["blueprint", blueprintPackages],
+    ["personal", personalPackages],
+  ] as const) {
+    for (const locked of packages) {
+      for (const enabled of locked.enabled) {
+        if (
+          scope === selected.scope &&
+          locked.name === selected.name &&
+          enabled.entry === selected.entry
+        ) {
+          continue;
+        }
+        if (enabled.pluginId === pluginId) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function hasDuplicateEnabledPluginIds(
+  blueprintPackages: readonly LockedPackage[],
+  personalPackages: readonly LockedPackage[],
+): boolean {
+  const pluginIds = new Set<string>();
+  for (const packages of [blueprintPackages, personalPackages]) {
+    for (const locked of packages) {
+      for (const enabled of locked.enabled) {
+        if (pluginIds.has(enabled.pluginId)) return true;
+        pluginIds.add(enabled.pluginId);
+      }
+    }
+  }
+  return false;
+}
+
 async function importVerifiedEntry(
   entry: MaterializedEntry,
   importer: (url: string) => Promise<unknown>,
@@ -919,9 +1001,10 @@ export function createLocalPluginPackageManager(
   // parent in that same canonical namespace, including Windows 8.3 and substituted paths.
   const workspaceRoot = realpathSync.native(path.normalize(options.workspaceRoot));
   const requestedUserDataRoot = path.normalize(options.userDataRoot);
-  if (isPathWithin(workspaceRoot, requestedUserDataRoot)) {
-    throw new TypeError("Plugin package user data must live outside the observed workspace");
-  }
+  const prospectiveUserDataRoot = canonicalProspectivePath(requestedUserDataRoot);
+  const userDataRootContained =
+    prospectiveUserDataRoot !== undefined && isPathWithin(workspaceRoot, prospectiveUserDataRoot);
+  const userDataRootUnusable = prospectiveUserDataRoot === undefined || userDataRootContained;
   const initialConfiguration =
     options.bootstrap.state === "configured"
       ? options.bootstrap.configuration
@@ -958,6 +1041,9 @@ export function createLocalPluginPackageManager(
   };
 
   const userResources = async (): Promise<LocalResourceProvider> => {
+    if (userDataRootUnusable) {
+      throw new TypeError("Plugin package user data must live outside the observed workspace");
+    }
     const canonical = await secureUserDataRoot(requestedUserDataRoot, trustRootPlatform);
     if (isPathWithin(workspaceRoot, canonical)) {
       throw new TypeError("Plugin package user data must live outside the observed workspace");
@@ -1087,6 +1173,7 @@ export function createLocalPluginPackageManager(
     if (!expectedLockPreflight.ok) return expectedLockPreflight;
     const configurationBytes = configurationPreflight.value;
     const lockBytes = lockPreflight.value;
+    let publicationIndeterminate = false;
     const coordinated = await options.resources.withCoordination(
       { context: "local-machine", locator: packageCoordinationLocator },
       async () => {
@@ -1110,11 +1197,36 @@ export function createLocalPluginPackageManager(
           );
         }
         const locked = await replaceResource(options.resources, lockLocator, lockBytes);
-        if (!locked.ok) return locked;
-        return replaceResource(options.resources, configurationLocator, configurationBytes);
+        if (!locked.ok) {
+          publicationIndeterminate = locked.diagnostics.some(
+            (item) => item.code === "plugin-package-state-indeterminate",
+          );
+          return locked;
+        }
+        publicationIndeterminate = true;
+        const configured = await replaceResource(
+          options.resources,
+          configurationLocator,
+          configurationBytes,
+        );
+        if (configured.ok) {
+          publicationIndeterminate = false;
+          return configured;
+        }
+        return packageFailure(
+          "plugin-package-state-indeterminate",
+          "Plugin package state may have committed; inspect it before retrying",
+        );
       },
     );
-    if (!coordinated.ok) return ownedFailure(...coordinated.diagnostics);
+    if (!coordinated.ok) {
+      return publicationIndeterminate
+        ? packageFailure(
+            "plugin-package-state-indeterminate",
+            "Plugin package state may have committed; inspect it before retrying",
+          )
+        : ownedFailure(...coordinated.diagnostics);
+    }
     if (!coordinated.value.ok) return coordinated.value;
     configuration = nextConfiguration;
     return success(undefined);
@@ -1212,23 +1324,33 @@ export function createLocalPluginPackageManager(
     serialize(async () => {
       const located = await locate(request);
       if (!located.ok) return located;
-      const materialized = await materializedFor(located.value.locked, request.scope);
+      const materialized = await materializePackage(
+        workspaceRoot,
+        located.value.locked.source,
+        request.scope,
+        fileReadObserver,
+      );
       if (!materialized.ok) return materialized;
       if (request.scope === "blueprint") {
         const declaration = configuration.packageDeclarations.find(
           (item) => item.name === request.name,
         )!;
-        if (
-          declaration.enabled.length !== located.value.locked.enabled.length ||
-          declaration.enabled.some(
-            (entry, index) => entry !== located.value.locked.enabled[index]?.entry,
-          )
-        ) {
+        if (!sameBlueprintSelection(declaration, located.value.locked)) {
           return packageFailure(
             "plugin-package-lock-mismatch",
             "Blueprint package enablement does not match its exact lock entry",
           );
         }
+      }
+      if (materialized.value.manifestIntegrity !== located.value.locked.manifestIntegrity) {
+        return success(
+          snapshot(
+            request.scope,
+            located.value.locked,
+            materialized.value.manifest,
+            materialized.value.manifestIntegrity,
+          ),
+        );
       }
       let entryIntegrity: "entry-drift" | "exact" = "exact";
       for (const lockedEntry of located.value.locked.enabled) {
@@ -1263,6 +1385,14 @@ export function createLocalPluginPackageManager(
         return packageFailure(
           "invalid-local-plugin-package-source",
           "Local plugin package source is malformed",
+        );
+      }
+      const requested = requestedPackageLocation(workspaceRoot, request.source, request.scope);
+      if (!requested.ok) return requested;
+      if (request.scope === "personal" && userDataRootUnusable) {
+        return packageFailure(
+          "plugin-package-user-state-unavailable",
+          "Local plugin package state is unavailable",
         );
       }
       const materialized = await materializePackage(
@@ -1345,6 +1475,23 @@ export function createLocalPluginPackageManager(
     serialize(async () => {
       const located = await locate(request);
       if (!located.ok) return located;
+      if (request.scope === "blueprint") {
+        const declaration = configuration.packageDeclarations.find(
+          (item) => item.name === request.name,
+        )!;
+        if (!sameBlueprintSelection(declaration, located.value.locked)) {
+          return packageFailure(
+            "plugin-package-lock-mismatch",
+            "Blueprint package enablement does not match its exact lock entry",
+          );
+        }
+      }
+      if (userDataRootUnusable) {
+        return packageFailure(
+          "plugin-package-user-state-unavailable",
+          "Local plugin package state is unavailable",
+        );
+      }
       const state =
         located.value.state === undefined ? await readUserState() : success(located.value.state);
       if (!state.ok) return state;
@@ -1398,6 +1545,19 @@ export function createLocalPluginPackageManager(
         return packageFailure(
           "plugin-package-lock-mismatch",
           "The plugin ID changed from its exact lock entry",
+        );
+      }
+      if (
+        hasEnabledPluginIdConflict(
+          exported.value.id,
+          { entry: request.entry, name: request.name, scope: request.scope },
+          blueprintLock.value.packages,
+          state.value.packages,
+        )
+      ) {
+        return packageFailure(
+          "plugin-package-plugin-id-conflict",
+          "Enabled local plugins must use distinct plugin IDs",
         );
       }
       const nextEntry = Object.freeze({
@@ -1690,11 +1850,7 @@ export function createLocalPluginPackageManager(
             "A blueprint package declaration has no matching exact lock entry",
           );
         }
-        const configured = declaration.enabled;
-        if (
-          configured.length !== locked.enabled.length ||
-          configured.some((entry, index) => entry !== locked.enabled[index]?.entry)
-        ) {
+        if (!sameBlueprintSelection(declaration, locked)) {
           return packageFailure(
             "plugin-package-lock-mismatch",
             "Blueprint package enablement does not match its exact lock entry",
@@ -1712,6 +1868,27 @@ export function createLocalPluginPackageManager(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
       }
+      if (userDataRootUnusable) {
+        try {
+          await lstat(requestedUserDataRoot);
+        } catch (error) {
+          if (
+            errorCode(error) === "ENOENT" &&
+            selections.every((selection) => selection.locked.enabled.length === 0)
+          ) {
+            return success(
+              Object.freeze({
+                personalPluginIds: Object.freeze([]),
+                registrations: Object.freeze([]),
+              }),
+            );
+          }
+        }
+        return packageFailure(
+          "plugin-package-user-state-unavailable",
+          "Local plugin package state is unavailable",
+        );
+      }
       const state = await readUserState();
       if (!state.ok) return state;
       if (
@@ -1721,6 +1898,12 @@ export function createLocalPluginPackageManager(
         return packageFailure(
           "plugin-package-enabled-limit-exceeded",
           "Enabled local plugins exceed this Host's runtime capacity",
+        );
+      }
+      if (hasDuplicateEnabledPluginIds(lock.value.packages, state.value.packages)) {
+        return packageFailure(
+          "plugin-package-plugin-id-conflict",
+          "Enabled local plugins must use distinct plugin IDs",
         );
       }
       for (const locked of state.value.packages) selections.push({ locked, scope: "personal" });

@@ -2128,6 +2128,7 @@ describe("host lifecycle", () => {
         "plugin-package-enabled-limit-exceeded",
         "Enabled local plugins exceed this Host's runtime capacity",
       ],
+      ["plugin-package-plugin-id-conflict", "Enabled local plugins must use distinct plugin IDs"],
     ] as const) {
       const signal = signals();
       const outcome = await runHost({

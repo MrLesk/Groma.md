@@ -198,6 +198,7 @@ const bootstrapFailureMessages = Object.freeze({
     "Plugin package configuration does not match its exact lock entry",
   "plugin-package-lock-missing": "A blueprint package declaration has no matching exact lock entry",
   "plugin-package-lock-unavailable": "The exact plugin package lock is unavailable",
+  "plugin-package-plugin-id-conflict": "Enabled local plugins must use distinct plugin IDs",
   "plugin-package-source-unavailable": "Local plugin package source is unavailable",
   "plugin-package-state-limit-exceeded":
     "Local plugin package state exceeds its configured byte bound",

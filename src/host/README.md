@@ -134,6 +134,12 @@ normally without personal plugins. It may also remove an inert blueprint declara
 without trust pruning, but only after the Host proves that user-data root is absent; an
 existing or unclassifiable root still fails closed.
 
+If the observed workspace is the user's home directory, the default `.groma` user-data
+path would fall inside that workspace. A missing contained root does not block empty
+initialization or startup and is never created as a side effect. Any operation that
+would require personal state or persisted trust fails closed before package evaluation,
+and an existing contained root is never accepted as plugin state.
+
 An explicit grant for changed exact bytes supersedes older grants for the same scope,
 workspace, package location, package name, and entry. Trust state therefore keeps one
 current exact grant per logical entry, and reverting to previously trusted bytes requires
@@ -150,6 +156,13 @@ the selected enable entry is the only code imported, after trust, for bounded re
 validation. This keeps add and inspect inert and leaves disable/remove available when an
 ordinary startup fails closed on exact-byte drift.
 
+Before ordinary startup imports any enabled local entry, the Host rejects unsupported
+project requests, unavailable official selections, and invalid Host registration
+namespaces. Enabled entries across blueprint and personal package state must also have
+distinct runtime plugin IDs. Enable checks the selected registration against the complete
+blueprint-lock and personal-state union before writing trust or package state; startup
+rejects duplicate stored IDs before importing either entry.
+
 Every state write is byte-preflighted against its corresponding read bound. Blueprint
 publication writes the exact lock before configuration; disable and remove can reconcile
 that lock-first state after an interrupted second write, without requiring the package
@@ -158,6 +171,13 @@ lock file or its package record is missing, then remove can finish the cleanup; 
 recovery path evaluates package code. Unreadable, oversized, unsupported, or failed
 lock and personal-state reads cross startup as stable package-store diagnostics without
 provider paths or private failure details.
+
+Once the lock replacement commits, any failure publishing configuration is reported as
+indeterminate even when that second replacement is known not to have committed, because
+the two-resource blueprint update has already partially published. Inspection reports a
+changed valid manifest as an inert `manifest-drift` snapshot without resolving entries
+that the changed manifest no longer declares; exact-manifest entry drift remains
+`entry-drift`.
 
 The runtime accepts at most 128 registrations. The default profile reserves its eight
 built-ins and the full 64-entry official-runtime selection bound before admitting local

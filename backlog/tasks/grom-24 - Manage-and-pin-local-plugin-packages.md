@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 10:55'
+updated_date: '2026-07-15 11:46'
 labels: []
 milestone: m-4
 dependencies:
@@ -70,10 +70,12 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the corrected all-workspace Host exit rule and diagnose the native Windows package-source failure across workspace canonicalization, realpath representation, and containment.
-2. Implement the smallest fail-closed platform-safe path correction and add deterministic Windows-shaped regression coverage without weakening symlink/cross-volume rejection.
-3. Re-run focused path/package/CLI tests, bun run check, bun run check:targets, workflow validation, Backlog doctor, and independent spec/quality review.
-4. Record evidence, return GROM-24 to Done, commit and push the existing PR, then require green native Windows CI and fresh Claude/Codex reviews; do not merge.
+1. Preserve the now-green mixed-diagnostic, native Windows, trust, exact-lock, and recovery invariants; map the six remaining Codex findings to existing package/bootstrap seams before editing.
+2. Defer workspace-contained user-data failure until user resources are actually accessed, and make manifest-drift inspection return its inert modeled snapshot before locked-entry materialization.
+3. Reject blueprint YAML/lock selection mismatch before materialization, and enforce one enabled plugin ID across blueprint/personal and lock-first union state before trust or state writes.
+4. Validate already-known Host selectors and additional runtime registrations before loading enabled local package code, without changing package-operation availability or runtime order.
+5. Classify every post-lock non-committed configuration publication as plugin-package-state-indeterminate with supported lock-first recovery.
+6. Add fail-before-import and exact-byte-preservation regressions, run focused/full/target/native-Windows verification, independent spec and quality review, fresh Claude and Codex review, then finalize GROM-24 on the existing PR without merging.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -120,4 +122,10 @@ Exact-head P1 closure completed. Host startup now returns workspace exit 3 only 
 Native Windows CI exposed a real portability defect at ccea617714e07f8a49d553af24cd467e206b6311: the native executable built successfully, but package add ./local-package exited 4 with invalid-local-plugin-package-source before reaching the trust assertion (run 29408186655, job 87328673345). GROM-24 is reopened to fix canonical Windows local-path containment without weakening or skipping the smoke. Context Hunter remains L2 because the correction sits on a security-sensitive filesystem containment boundary.
 
 Windows path diagnosis completed. Bun 1.3.14 node:fs realpathSync uses the Node-compatible alias-preserving Windows walk, while node:fs/promises.realpath uses the native binding; under the GitHub runner temp path this left the workspace as RUNNER~1 while the package became runneradmin, so the mandatory post-realpath containment check correctly failed closed. The workspace root now uses realpathSync.native, matching package, entry, and attested user-root canonicalization without stripping aliases or weakening symlink, junction, or cross-volume rejection. Deterministic path tests cover 8.3 long/short and extended namespace mismatch as fail-closed, with equal canonical long paths accepted. Local validation passed: 44 focused path/package/CLI tests, bun run check with 554 tests plus strict types, boundaries, native compiled smoke and Iteration 1A recovery, bun run check:targets for all four artifacts, and git diff --check. Independent diagnosis, spec review, and quality review all confirmed the fix and found no remaining actionable issues. Native Windows CI remains required before final closure.
+
+Consolidated Codex thread audit reopened GROM-24 at 665c63fa63f280f33822b508e986ab4d76707b22 after all three CI jobs passed. Six relevant findings remain on the same package/bootstrap delivery: home-rooted workspace startup, honest manifest-drift inspection, pre-enable YAML/lock mismatch rejection, enabled plugin-ID uniqueness across all package state, fail-before-import Host selector validation, and indeterminate classification after lock-first partial publication. Context Hunter is raised to L3 because canonical bytes, trust-state placement, module execution order, cross-scope runtime identity, and transaction recovery interact. The correction remains one Backlog task and one PR; the proven empty Bun argv claim remains non-actionable.
+
+Six-finding hardening implementation completed on the existing PR. Home-contained user state is deferred for empty startup but rejected before personal/trust access using prospective canonical containment, including symlink ancestors without directory creation. Inspect now reports any valid changed manifest as inert manifest-drift before locked-entry resolution, while exact-manifest entry drift remains entry-drift. Blueprint enable rejects YAML/lock selection mismatch before package access. Enabled runtime plugin IDs are unique across the complete blueprint-lock and personal-state union, with startup rejection before imports and stable lifecycle/CLI mapping. Host selector validation now precedes enabled local-package loading. Every post-lock configuration publication failure remains plugin-package-state-indeterminate through coordination-release failure and maps to CLI exit 6; lock-first disable recovery remains supported. Static remote/source diagnostics retain precedence over contained-root state failures.
+
+Independent spec review found and closed valid manifest name/version drift during inspect; re-review passed. Independent quality review found and closed coordination-release masking, static remote-source precedence, and alias-containment coverage; re-review passed. Final reviewed-diff validation passed bun run check with 565 tests, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed. Native Windows CI and fresh Claude/Codex review remain required after push.
 <!-- SECTION:NOTES:END -->

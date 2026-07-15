@@ -85,6 +85,7 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
       (code) =>
         code === "no-workspace" ||
         code === "plugin-package-enabled-limit-exceeded" ||
+        code === "plugin-package-plugin-id-conflict" ||
         code === "plugin-package-integrity-drift" ||
         code === "plugin-package-trust-root-unattested" ||
         code.includes("plugin-package-lock") ||

@@ -644,15 +644,6 @@ export function createDefaultBootstrapRegistry(
         inspect: packageManager.inspect,
         remove: packageManager.remove,
       });
-      const loadedPackages = loadLocalPluginPackages
-        ? await packageManager.loadEnabled()
-        : success(
-            Object.freeze({
-              personalPluginIds: Object.freeze([]),
-              registrations: Object.freeze([]),
-            }),
-          );
-      if (!loadedPackages.ok) return failAfterStage(...loadedPackages.diagnostics);
       const requested =
         bootstrap.state === "configured"
           ? bootstrap.configuration.requestedRuntimePlugins
@@ -694,6 +685,15 @@ export function createDefaultBootstrapRegistry(
           ),
         );
       }
+      const loadedPackages = loadLocalPluginPackages
+        ? await packageManager.loadEnabled()
+        : success(
+            Object.freeze({
+              personalPluginIds: Object.freeze([]),
+              registrations: Object.freeze([]),
+            }),
+          );
+      if (!loadedPackages.ok) return failAfterStage(...loadedPackages.diagnostics);
       const selectedRegistrations = Object.freeze([
         ...phaseZeroRegistrations,
         ...builtInPhaseOne,
