@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 11:46'
+updated_date: '2026-07-15 12:33'
 labels: []
 milestone: m-4
 dependencies:
@@ -15,7 +15,9 @@ references:
   - MANIFESTO.md
   - ARCHITECTURE.md
 modified_files:
+  - .github/workflows/verify.yml
   - ARCHITECTURE.md
+  - DEVELOPMENT.md
   - backlog/tasks/grom-24 - Manage-and-pin-local-plugin-packages.md
   - scripts/architecture-boundaries.ts
   - scripts/standalone-compiler.ts
@@ -128,4 +130,10 @@ Consolidated Codex thread audit reopened GROM-24 at 665c63fa63f280f33822b508e986
 Six-finding hardening implementation completed on the existing PR. Home-contained user state is deferred for empty startup but rejected before personal/trust access using prospective canonical containment, including symlink ancestors without directory creation. Inspect now reports any valid changed manifest as inert manifest-drift before locked-entry resolution, while exact-manifest entry drift remains entry-drift. Blueprint enable rejects YAML/lock selection mismatch before package access. Enabled runtime plugin IDs are unique across the complete blueprint-lock and personal-state union, with startup rejection before imports and stable lifecycle/CLI mapping. Host selector validation now precedes enabled local-package loading. Every post-lock configuration publication failure remains plugin-package-state-indeterminate through coordination-release failure and maps to CLI exit 6; lock-first disable recovery remains supported. Static remote/source diagnostics retain precedence over contained-root state failures.
 
 Independent spec review found and closed valid manifest name/version drift during inspect; re-review passed. Independent quality review found and closed coordination-release masking, static remote-source precedence, and alias-containment coverage; re-review passed. Final reviewed-diff validation passed bun run check with 565 tests, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed. Native Windows CI and fresh Claude/Codex review remain required after push.
+
+Post-push Claude exact-diff review produced nine findings. Accepted: (2) recovery text incorrectly named inspect, so the stable diagnostic now points to comparing groma.yaml/packages.lock and management-only disable/remove; (3) the 65th declaration now returns a clear bounded state-limit diagnostic instead of an internal canonical-reader message; (4) docs disclose canonical YAML reserialization does not preserve comments/formatting; (5) entry/source portable-path validation shares one bounded helper; (7) the verified Bun empty argv contract is documented inline without changing its proven behavior; (8) package coordination reuses the one exact lock locator; and (9) bounded reads allocate observed-size-plus-one while retaining growth/identity checks. Finding (1), one universal exit table for startup and package commands, was rejected as a behavioral conflation: startup classifies user-actionable invalid package state as workspace failure while direct package content/source validation remains semantic; CLI docs now state that contextual distinction. Finding (6), deriving the static 56 parser bound directly from Host runtime arithmetic, was rejected because additional embedder bootstrap registrations dynamically reduce the runtime remainder; existing startup/enable preflight is authoritative and the docs already describe that reduction.
+
+Fresh Codex review of bdc5255 returned four actionable findings, all accepted. loadEnabled now re-reads canonical configuration before lock resolution/import and fails changed, missing, malformed, or inaccessible state without local evaluation. The selected Host-only graph is resolved before local package imports, including malformed requested official registrations. Any coordination-release failure after package publication begins remains plugin-package-state-indeterminate even when both lock and configuration writes committed. Userless scp-style Git URLs are classified as remote before filesystem or user-state access. Focused regressions cover all four behaviors, the clearer declaration bound, and shifted bootstrap read/cleanup precedence.
+
+Independent final correction review found three P2 seams and all were closed before commit. Host-only preflight now defers both missing-provider and compatible-version diagnostics that local providers can legitimately satisfy; positive controls prove single and multiple local providers resolve the final combined graph. Indeterminate diagnostics are scope-specific: blueprint writes direct users to compare canonical YAML/lock and reconcile only an actual mismatch, while personal writes direct users to personal inspection and treat not-found as confirmed removal. Re-review passed with no remaining actionable findings. Final local validation passed bun run check with 569 tests / 3,904 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed.
 <!-- SECTION:NOTES:END -->

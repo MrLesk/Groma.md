@@ -46,6 +46,8 @@ function idleSurface(): HostSurface {
 async function trustedLocalPackageFixture(
   context: Awaited<ReturnType<typeof temporaryWorkspace>>,
   counterKey: string,
+  providedCapabilityId?: string,
+  providedCapabilityCardinality: "multiple" | "single" = "single",
 ): Promise<{ readonly configurationFile: string; readonly userDataRoot: string }> {
   const userDataRoot = await mkdtemp(path.join(tmpdir(), "groma-bootstrap-user-"));
   roots.push(userDataRoot);
@@ -74,11 +76,25 @@ export const plugin = Object.freeze({
     apiVersion: "groma.plugin/v1",
     id: "example.selector-probe",
     phase: 1,
-    provides: Object.freeze([]),
+    provides: Object.freeze(${JSON.stringify(
+      providedCapabilityId === undefined
+        ? []
+        : [
+            {
+              cardinality: providedCapabilityCardinality,
+              id: providedCapabilityId,
+              version: "1.0.0",
+            },
+          ],
+    )}),
     requires: Object.freeze([]),
     version: "1.0.0"
   }),
-  start: () => Object.freeze({ capabilities: Object.freeze([]) })
+  start: () => Object.freeze({ capabilities: Object.freeze(${JSON.stringify(
+    providedCapabilityId === undefined
+      ? []
+      : [{ id: providedCapabilityId, value: "local", version: "1.0.0" }],
+  )}) })
 });\n`,
   );
   const setupRegistry = createDefaultBootstrapRegistry({
@@ -730,7 +746,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: async (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 3) {
+        if (reads === 4) {
           await Bun.write(configurationPath, "schema: groma/v0.1\nplugins:\n  - acme.project\n");
         }
       },
@@ -746,7 +762,7 @@ describe("bootstrap configuration", () => {
       ],
       ok: false,
     });
-    expect(reads).toBe(3);
+    expect(reads).toBe(4);
     expect(events).toContain("optional:start");
     expect(events).toContain("optional:stop");
     expect(events.at(-1)).toBe("phase-zero:stop");
@@ -790,7 +806,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 3) throw new Error("transient read failure");
+        if (reads === 4) throw new Error("transient read failure");
       },
       surface: idleSurface(),
     });
@@ -799,7 +815,7 @@ describe("bootstrap configuration", () => {
       diagnostics: [{ code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" }],
       ok: false,
     });
-    expect(reads).toBe(3);
+    expect(reads).toBe(4);
     for (const event of [
       "official.bootstrap-cleanup-probe:start",
       "official.bootstrap-cleanup-probe:stop",
@@ -814,7 +830,12 @@ describe("bootstrap configuration", () => {
   });
 
   test("rejects known Host selector failures before importing trusted local packages", async () => {
-    for (const failureKind of ["project", "unavailable", "invalid-registration"] as const) {
+    for (const failureKind of [
+      "project",
+      "unavailable",
+      "invalid-registration",
+      "malformed-selected",
+    ] as const) {
       const context = await temporaryWorkspace();
       const counterKey = `groma.test.selector-import.${failureKind}.${context.workspaceRoot}`;
       const local = await trustedLocalPackageFixture(context, counterKey);
@@ -826,7 +847,9 @@ describe("bootstrap configuration", () => {
           ? Object.freeze([{ id: "acme.project", namespace: "project" as const }])
           : failureKind === "unavailable"
             ? Object.freeze([{ id: "official.missing", namespace: "official" as const }])
-            : Object.freeze([]);
+            : failureKind === "malformed-selected"
+              ? Object.freeze([{ id: "official.malformed", namespace: "official" as const }])
+              : Object.freeze([]);
       await writeFile(
         local.configurationFile,
         serializeBootstrapConfiguration(
@@ -844,10 +867,23 @@ describe("bootstrap configuration", () => {
         },
         start: () => ({ capabilities: [] }),
       };
+      const malformedSelectedRegistration: PluginRegistration = {
+        manifest: {
+          apiVersion: pluginRuntimeApiVersion,
+          id: "official.malformed",
+          phase: 1,
+          provides: [],
+          requires: [],
+          version: "1.0",
+        },
+        start: () => ({ capabilities: [] }),
+      };
       const registry = createDefaultBootstrapRegistry({
         ...(failureKind === "invalid-registration"
           ? { additionalRuntimePlugins: [invalidRegistration] }
-          : {}),
+          : failureKind === "malformed-selected"
+            ? { additionalRuntimePlugins: [malformedSelectedRegistration] }
+            : {}),
         ...(context.coordinationRoot === undefined
           ? {}
           : { coordinationRoot: context.coordinationRoot }),
@@ -869,10 +905,15 @@ describe("bootstrap configuration", () => {
                     code: "runtime-plugin-unavailable",
                     message: "A requested official runtime plugin is unavailable in this host",
                   }
-                : {
-                    code: "host-runtime-registration-invalid",
-                    message: "Host runtime registrations must use the official namespace",
-                  },
+                : failureKind === "invalid-registration"
+                  ? {
+                      code: "host-runtime-registration-invalid",
+                      message: "Host runtime registrations must use the official namespace",
+                    }
+                  : {
+                      code: "host-composition-failed",
+                      message: "Selected plugin resolution failed",
+                    },
           ],
           ok: false,
         },
@@ -924,6 +965,112 @@ describe("bootstrap configuration", () => {
       ok: false,
     });
     expect({ manifestReads, starts }).toEqual({ manifestReads: 0, starts: 0 });
+  });
+
+  test("allows a local package to satisfy a selected Host registration requirement", async () => {
+    const context = await temporaryWorkspace();
+    const capabilityId = "groma.test.local-provider/v1";
+    const counterKey = `groma.test.selector-local-provider.${context.workspaceRoot}`;
+    const local = await trustedLocalPackageFixture(context, counterKey, capabilityId);
+    const parser = createYamlConfigurationParser();
+    const parsed = parser.parse(Uint8Array.from(await readFile(local.configurationFile)));
+    if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.code);
+    await writeFile(
+      local.configurationFile,
+      serializeBootstrapConfiguration(
+        Object.freeze({
+          ...parsed.value,
+          requestedRuntimePlugins: Object.freeze([
+            { id: "official.local-consumer", namespace: "official" as const },
+          ]),
+        }),
+      ),
+    );
+    const consumer: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "official.local-consumer",
+        phase: 1,
+        provides: [],
+        requires: [{ cardinality: "single", id: capabilityId, version: "1.0.0" }],
+        version: "1.0.0",
+      },
+      start: () => ({ capabilities: [] }),
+    };
+    const registry = createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: [consumer],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+      userDataRoot: local.userDataRoot,
+    });
+
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    expect(composed).toMatchObject({ ok: true });
+    expect(Reflect.get(globalThis, Symbol.for(counterKey))).toBe(1);
+    if (composed.ok) expect(await composed.value.plugins?.shutdown()).toMatchObject({ ok: true });
+    Reflect.deleteProperty(globalThis, Symbol.for(counterKey));
+  });
+
+  test("allows a local multiple provider to satisfy a selected Host version mismatch", async () => {
+    const context = await temporaryWorkspace();
+    const capabilityId = "groma.test.local-versioned-provider/v1";
+    const counterKey = `groma.test.selector-local-versioned-provider.${context.workspaceRoot}`;
+    const local = await trustedLocalPackageFixture(context, counterKey, capabilityId, "multiple");
+    const parser = createYamlConfigurationParser();
+    const parsed = parser.parse(Uint8Array.from(await readFile(local.configurationFile)));
+    if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.code);
+    await writeFile(
+      local.configurationFile,
+      serializeBootstrapConfiguration(
+        Object.freeze({
+          ...parsed.value,
+          requestedRuntimePlugins: Object.freeze([
+            { id: "official.host-v2", namespace: "official" as const },
+            { id: "official.local-v1-consumer", namespace: "official" as const },
+          ]),
+        }),
+      ),
+    );
+    const hostV2: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "official.host-v2",
+        phase: 1,
+        provides: [{ cardinality: "multiple", id: capabilityId, version: "2.0.0" }],
+        requires: [],
+        version: "1.0.0",
+      },
+      start: () => ({
+        capabilities: [{ id: capabilityId, value: "host-v2", version: "2.0.0" }],
+      }),
+    };
+    const consumer: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "official.local-v1-consumer",
+        phase: 1,
+        provides: [],
+        requires: [{ cardinality: "multiple", id: capabilityId, version: "1.0.0" }],
+        version: "1.0.0",
+      },
+      start: () => ({ capabilities: [] }),
+    };
+    const registry = createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: [hostV2, consumer],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+      userDataRoot: local.userDataRoot,
+    });
+
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    expect(composed).toMatchObject({ ok: true });
+    expect(Reflect.get(globalThis, Symbol.for(counterKey))).toBe(1);
+    if (composed.ok) expect(await composed.value.plugins?.shutdown()).toMatchObject({ ok: true });
+    Reflect.deleteProperty(globalThis, Symbol.for(counterKey));
   });
 
   test("classifies a non-official Host registration as a composition error", async () => {

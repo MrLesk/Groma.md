@@ -162,14 +162,17 @@ const maximumEntryBytes = 4 * 1024 * 1024;
 const maximumUserStateBytes = 1024 * 1024;
 const lockLocator = requiredLocator("groma", "packages.lock");
 const configurationLocator = requiredLocator("groma", "groma.yaml");
-const packageCoordinationLocator = requiredLocator("groma", "packages.lock");
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const remoteSourcePattern =
-  /^(?:git:|git\+|git@[^:]+:|github:|https?:|npm:|ssh:|[a-z][a-z0-9+.-]*:\/\/)/i;
+  /^(?:git:|git\+|github:|https?:|npm:|ssh:|[a-z][a-z0-9+.-]*:\/\/|(?![a-z]:[\\/])(?:[^@/:\\\s]+@)?[^/:\\\s]+:)/i;
 const integrityPattern = /^sha256:[0-9a-f]{64}$/;
 const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const textEncoder = new TextEncoder();
+const indeterminateBlueprintPackageStateMessage =
+  "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove";
+const indeterminatePersonalPackageStateMessage =
+  "Personal plugin package state may have committed; inspect the personal package before retrying; not found confirms removal";
 
 function requiredLocator(...segments: string[]): WorkspaceResourceLocator {
   const locator = workspaceResourceLocator(...segments);
@@ -290,7 +293,7 @@ async function readBoundedRegularFile(
       );
     }
     await observer?.(Object.freeze({ file, phase: "opened" }));
-    const buffer = Buffer.allocUnsafe(maximumBytes + 1);
+    const buffer = Buffer.allocUnsafe(Math.min(before.size, maximumBytes) + 1);
     let total = 0;
     while (total < buffer.byteLength) {
       const read = await handle.read(buffer, total, buffer.byteLength - total, total);
@@ -680,6 +683,12 @@ function preflightUserState(state: UserPackageState): Result<Uint8Array> {
 }
 
 function preflightLock(lock: PackageLock): Result<Uint8Array> {
+  if (lock.packages.length > bootstrapConfigurationBounds.maxPackageDeclarations) {
+    return packageFailure(
+      "plugin-package-state-limit-exceeded",
+      `Blueprint plugin package declarations exceed the maximum of ${bootstrapConfigurationBounds.maxPackageDeclarations}`,
+    );
+  }
   const bytes = encodeCanonical(lock);
   if (bytes.byteLength > maximumUserStateBytes) {
     return packageFailure(
@@ -698,6 +707,14 @@ function preflightLock(lock: PackageLock): Result<Uint8Array> {
 }
 
 function preflightConfiguration(configuration: BootstrapBaseConfiguration): Result<Uint8Array> {
+  if (
+    configuration.packageDeclarations.length > bootstrapConfigurationBounds.maxPackageDeclarations
+  ) {
+    return packageFailure(
+      "plugin-package-state-limit-exceeded",
+      `Blueprint plugin package declarations exceed the maximum of ${bootstrapConfigurationBounds.maxPackageDeclarations}`,
+    );
+  }
   const source = serializeBootstrapConfiguration(configuration);
   const bytes = textEncoder.encode(source);
   if (bytes.byteLength > bootstrapConfigurationBounds.maxConfigurationBytes) {
@@ -730,6 +747,7 @@ async function replaceResource(
   resources: LocalResourceProvider,
   locator: WorkspaceResourceLocator,
   bytes: Uint8Array,
+  indeterminateMessage: string,
 ): Promise<Result<void>> {
   const staged = await resources.stageReplacement(locator, bytes);
   if (!staged.ok) return ownedFailure(...staged.diagnostics);
@@ -740,7 +758,7 @@ async function replaceResource(
       ? "plugin-package-state-indeterminate"
       : "plugin-package-state-not-committed",
     committed.state === "committed-indeterminate"
-      ? "Plugin package state may have committed; inspect it before retrying"
+      ? indeterminateMessage
       : "Plugin package state was not committed",
   );
 }
@@ -1136,7 +1154,12 @@ export function createLocalPluginPackageManager(
             "Local plugin package state changed; retry after changes settle",
           );
         }
-        return replaceResource(resources, userStateLocator, stateBytes);
+        return replaceResource(
+          resources,
+          userStateLocator,
+          stateBytes,
+          indeterminatePersonalPackageStateMessage,
+        );
       },
     );
     if (!coordinated.ok) return ownedFailure(...coordinated.diagnostics);
@@ -1173,9 +1196,9 @@ export function createLocalPluginPackageManager(
     if (!expectedLockPreflight.ok) return expectedLockPreflight;
     const configurationBytes = configurationPreflight.value;
     const lockBytes = lockPreflight.value;
-    let publicationIndeterminate = false;
+    let publicationMayHaveChanged = false;
     const coordinated = await options.resources.withCoordination(
-      { context: "local-machine", locator: packageCoordinationLocator },
+      { context: "local-machine", locator: lockLocator },
       async () => {
         const current = await readConfiguration();
         if (!current.ok) return current;
@@ -1196,34 +1219,37 @@ export function createLocalPluginPackageManager(
             "Blueprint plugin package lock changed; retry after changes settle",
           );
         }
-        const locked = await replaceResource(options.resources, lockLocator, lockBytes);
+        const locked = await replaceResource(
+          options.resources,
+          lockLocator,
+          lockBytes,
+          indeterminateBlueprintPackageStateMessage,
+        );
         if (!locked.ok) {
-          publicationIndeterminate = locked.diagnostics.some(
+          publicationMayHaveChanged = locked.diagnostics.some(
             (item) => item.code === "plugin-package-state-indeterminate",
           );
           return locked;
         }
-        publicationIndeterminate = true;
+        publicationMayHaveChanged = true;
         const configured = await replaceResource(
           options.resources,
           configurationLocator,
           configurationBytes,
+          indeterminateBlueprintPackageStateMessage,
         );
-        if (configured.ok) {
-          publicationIndeterminate = false;
-          return configured;
-        }
+        if (configured.ok) return configured;
         return packageFailure(
           "plugin-package-state-indeterminate",
-          "Plugin package state may have committed; inspect it before retrying",
+          indeterminateBlueprintPackageStateMessage,
         );
       },
     );
     if (!coordinated.ok) {
-      return publicationIndeterminate
+      return publicationMayHaveChanged
         ? packageFailure(
             "plugin-package-state-indeterminate",
-            "Plugin package state may have committed; inspect it before retrying",
+            indeterminateBlueprintPackageStateMessage,
           )
         : ownedFailure(...coordinated.diagnostics);
     }
@@ -1833,6 +1859,32 @@ export function createLocalPluginPackageManager(
       if (options.bootstrap.state !== "configured") {
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
+        );
+      }
+      const currentConfiguration = await readConfiguration();
+      if (!currentConfiguration.ok) {
+        if (currentConfiguration.diagnostics.some((item) => item.code === "no-workspace")) {
+          return packageFailure(
+            "workspace-configuration-changed",
+            "Workspace configuration changed during bootstrap; restart after changes settle",
+          );
+        }
+        return currentConfiguration.diagnostics.every((item) =>
+          item.code.startsWith("workspace-configuration-"),
+        )
+          ? currentConfiguration
+          : packageFailure(
+              "workspace-configuration-provider-failure",
+              "Workspace configuration access failed",
+            );
+      }
+      if (
+        serializeBootstrapConfiguration(currentConfiguration.value) !==
+        serializeBootstrapConfiguration(configuration)
+      ) {
+        return packageFailure(
+          "workspace-configuration-changed",
+          "Workspace configuration changed during bootstrap; restart after changes settle",
         );
       }
       const lock =

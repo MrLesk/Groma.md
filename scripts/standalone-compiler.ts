@@ -11,8 +11,10 @@ export async function compileStandalone(options: StandaloneCompileOptions): Prom
     "build",
     "--compile",
     "--minify",
-    // Keep exactly the audited opaque plugin import unresolved for runtime loading. Literal
-    // imports remain covered by type-checking and the repository's source-boundary checker.
+    // Keep exactly the audited opaque plugin import unresolved for runtime loading. The empty
+    // value is deliberate Bun argv syntax equivalent to --allow-unresolved=; it prevents the
+    // following flag from becoming an allowlist value while literal imports remain covered by
+    // type-checking and the repository's source-boundary checker.
     "--allow-unresolved",
     "",
     "--no-compile-autoload-dotenv",

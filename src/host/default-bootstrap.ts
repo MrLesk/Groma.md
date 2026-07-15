@@ -685,6 +685,24 @@ export function createDefaultBootstrapRegistry(
           ),
         );
       }
+      const selectedHostRegistrations = Object.freeze([
+        ...phaseZeroRegistrations,
+        ...builtInPhaseOne,
+        ...selectedAdditional,
+      ]);
+      const hostPreflight = runtime.resolve(selectedHostRegistrations);
+      if (
+        !hostPreflight.ok &&
+        hostPreflight.diagnostics.some(
+          (item) =>
+            item.code !== "missing-capability-provider" &&
+            item.code !== "incompatible-capability-version",
+        )
+      ) {
+        return failAfterStage(
+          diagnostic("host-composition-failed", "Selected plugin resolution failed"),
+        );
+      }
       const loadedPackages = loadLocalPluginPackages
         ? await packageManager.loadEnabled()
         : success(
@@ -695,9 +713,7 @@ export function createDefaultBootstrapRegistry(
           );
       if (!loadedPackages.ok) return failAfterStage(...loadedPackages.diagnostics);
       const selectedRegistrations = Object.freeze([
-        ...phaseZeroRegistrations,
-        ...builtInPhaseOne,
-        ...selectedAdditional,
+        ...selectedHostRegistrations,
         ...loadedPackages.value.registrations,
       ]);
       const resolved = runtime.resolve(selectedRegistrations);

@@ -895,7 +895,12 @@ describe("local plugin package manager", () => {
     const lockBefore = await readFile(lockFile);
 
     expect(await manager.add({ scope: "blueprint", source })).toMatchObject({
-      diagnostics: [{ code: "plugin-package-state-invalid" }],
+      diagnostics: [
+        {
+          code: "plugin-package-state-limit-exceeded",
+          message: "Blueprint plugin package declarations exceed the maximum of 64",
+        },
+      ],
       ok: false,
     });
     expect(await readFile(configurationFile)).toEqual(configurationBefore);
@@ -1696,7 +1701,8 @@ describe("local plugin package manager", () => {
       diagnostics: [
         {
           code: "plugin-package-state-indeterminate",
-          message: "Plugin package state may have committed; inspect it before retrying",
+          message:
+            "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove",
         },
       ],
       ok: false,
@@ -1704,6 +1710,112 @@ describe("local plugin package manager", () => {
     expect(await readFile(configurationFile)).toEqual(configurationBefore);
     expect(await readFile(lockFile)).not.toEqual(lockBefore);
     expect(await readFile(lockFile, "utf8")).toContain("example.release-failure");
+  });
+
+  test("reports an indeterminate result when coordination release fails after both blueprint writes", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-release-after-commit", [
+      "./plugins/entry.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+    const configurationBefore = await readFile(configurationFile);
+    const lockBefore = await readFile(lockFile);
+    const resources = await createLocalResourceProvider({
+      faultInjector: (phase) => {
+        if (phase === "coordination-release") {
+          throw new Error("private post-commit coordination release failure");
+        }
+      },
+      workspaceRoot: context.workspaceRoot,
+    });
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(resources),
+      importModule: async () => ({ plugin: registration("example.release-after-commit") }),
+      ...context,
+      resources,
+    });
+
+    expect(
+      await manager.enable({
+        entry: "./plugins/entry.js",
+        name: "example-release-after-commit",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "plugin-package-state-indeterminate",
+          message:
+            "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove",
+        },
+      ],
+      ok: false,
+    });
+    expect(await readFile(configurationFile)).not.toEqual(configurationBefore);
+    expect(await readFile(lockFile)).not.toEqual(lockBefore);
+    expect(await readFile(configurationFile, "utf8")).toContain("./plugins/entry.js");
+    expect(await readFile(lockFile, "utf8")).toContain("example.release-after-commit");
+  });
+
+  test("rechecks current blueprint selections before startup imports", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const source = await writePackage(context.workspaceRoot, "example-stale-startup", [
+      "./plugins/entry.js",
+    ]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration("example.stale-startup") }),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await setup.enable({
+        entry: "./plugins/entry.js",
+        name: "example-stale-startup",
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const staleBootstrap = await bootstrap(context.resources);
+    let imports = 0;
+    const stale = createLocalPluginPackageManager({
+      bootstrap: staleBootstrap,
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration("example.stale-startup") };
+      },
+      ...context,
+    });
+    expect(
+      await setup.disable({
+        entry: "./plugins/entry.js",
+        name: "example-stale-startup",
+        scope: "blueprint",
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(await stale.loadEnabled()).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-configuration-changed",
+          message: "Workspace configuration changed during bootstrap; restart after changes settle",
+        },
+      ],
+      ok: false,
+    });
+    expect(imports).toBe(0);
   });
 
   test("rejects duplicate stored plugin IDs before startup imports", async () => {
@@ -2027,9 +2139,10 @@ describe("local plugin package manager", () => {
           "x".repeat(1_048_577),
         );
       } else {
+        let resourceReads = 0;
         resources = await createLocalResourceProvider({
           faultInjector: (phase) => {
-            if (phase !== "read") return;
+            if (phase !== "read" || ++resourceReads !== 2) return;
             if (failureKind === "unreadable") {
               throw Object.assign(new Error("private unreadable lock"), { code: "EACCES" });
             }
@@ -2149,11 +2262,17 @@ describe("local plugin package manager", () => {
       },
       ...context,
     });
-    for (const scope of ["blueprint", "personal"] as const) {
-      expect(await manager.add({ scope, source: "git@github.com:org/repo.git" })).toMatchObject({
-        diagnostics: [{ code: "remote-plugin-package-acquisition-out-of-scope" }],
-        ok: false,
-      });
+    for (const source of [
+      "git@github.com:org/repo.git",
+      "github.com:org/repo.git",
+      "example.com:team/plugin.git",
+    ]) {
+      for (const scope of ["blueprint", "personal"] as const) {
+        expect(await manager.add({ scope, source }), `${scope}:${source}`).toMatchObject({
+          diagnostics: [{ code: "remote-plugin-package-acquisition-out-of-scope" }],
+          ok: false,
+        });
+      }
     }
     expect(imports).toBe(0);
     expect(await readdir(context.userDataRoot)).toEqual([]);

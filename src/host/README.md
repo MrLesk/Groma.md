@@ -157,11 +157,14 @@ validation. This keeps add and inspect inert and leaves disable/remove available
 ordinary startup fails closed on exact-byte drift.
 
 Before ordinary startup imports any enabled local entry, the Host rejects unsupported
-project requests, unavailable official selections, and invalid Host registration
-namespaces. Enabled entries across blueprint and personal package state must also have
-distinct runtime plugin IDs. Enable checks the selected registration against the complete
-blueprint-lock and personal-state union before writing trust or package state; startup
-rejects duplicate stored IDs before importing either entry.
+project requests, unavailable official selections, invalid Host registration namespaces,
+and selected Host registration defects that adding local providers cannot resolve. Package
+loading re-reads the current canonical configuration before resolving the exact lock, so a
+selection changed since bootstrap fails before local module evaluation. Enabled entries
+across blueprint and personal package state must also have distinct runtime plugin IDs.
+Enable checks the selected registration against the complete blueprint-lock and
+personal-state union before writing trust or package state; startup rejects duplicate
+stored IDs before importing either entry.
 
 Every state write is byte-preflighted against its corresponding read bound. Blueprint
 publication writes the exact lock before configuration; disable and remove can reconcile
@@ -172,12 +175,14 @@ recovery path evaluates package code. Unreadable, oversized, unsupported, or fai
 lock and personal-state reads cross startup as stable package-store diagnostics without
 provider paths or private failure details.
 
-Once the lock replacement commits, any failure publishing configuration is reported as
-indeterminate even when that second replacement is known not to have committed, because
-the two-resource blueprint update has already partially published. Inspection reports a
-changed valid manifest as an inert `manifest-drift` snapshot without resolving entries
-that the changed manifest no longer declares; exact-manifest entry drift remains
-`entry-drift`.
+Once the lock replacement commits, any failure publishing configuration or releasing the
+coordination lease is reported as indeterminate, because the command has already changed
+package state even when the second replacement is known not to have committed. Recovery
+reviews `groma/groma.yaml` and `groma/packages.lock`, then uses management-only disable or
+remove only when those selections differ. Personal state is verified independently with
+personal package inspection. Inspection reports a changed valid manifest as an inert
+`manifest-drift` snapshot without resolving entries that the changed manifest no longer
+declares; exact-manifest entry drift remains `entry-drift`.
 
 The runtime accepts at most 128 registrations. The default profile reserves its eight
 built-ins and the full 64-entry official-runtime selection bound before admitting local

@@ -143,11 +143,11 @@ function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function isPackageEntry(value: unknown): value is string {
+function isPortablePackagePath(value: unknown, maximumCharacters: number): value is string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
-    value.length > bootstrapConfigurationBounds.maxPackageEntryCharacters ||
+    value.length > maximumCharacters ||
     !value.startsWith("./") ||
     value.includes("\\") ||
     value.includes("\0")
@@ -162,23 +162,12 @@ function isPackageEntry(value: unknown): value is string {
   );
 }
 
+function isPackageEntry(value: unknown): value is string {
+  return isPortablePackagePath(value, bootstrapConfigurationBounds.maxPackageEntryCharacters);
+}
+
 export function isBlueprintPackageSource(value: unknown): value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > bootstrapConfigurationBounds.maxPackageSourceCharacters ||
-    !value.startsWith("./") ||
-    value.includes("\\") ||
-    value.includes("\0")
-  ) {
-    return false;
-  }
-  const segments = value.split("/");
-  return (
-    segments[0] === "." &&
-    segments.length > 1 &&
-    segments.slice(1).every((segment) => packagePathSegmentPattern.test(segment))
-  );
+  return isPortablePackagePath(value, bootstrapConfigurationBounds.maxPackageSourceCharacters);
 }
 
 function parseConfiguredPackages(

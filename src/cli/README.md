@@ -52,22 +52,27 @@ Remote npm, Git, and URL sources return the stable
 `remote-plugin-package-acquisition-out-of-scope` diagnostic before source filesystem
 access. Package commands write only `groma/groma.yaml`, `groma/packages.lock`, and the
 Host-owned user-data file. They never edit an observed project's `package.json`,
-lockfiles, or dependency tree. If a package-state replacement may have committed but
-cannot be acknowledged, the command returns `plugin-package-state-indeterminate` in
-exit class 6 so automation does not retry blindly.
+lockfiles, or dependency tree. Package mutations canonically reserialize the Groma-owned
+sections of `groma/groma.yaml`; YAML comments and hand formatting are not preserved. If a
+package-state replacement may have committed or coordination release fails after a write,
+the command returns `plugin-package-state-indeterminate` in exit class 6 so automation
+does not retry blindly. Recovery compares `groma/groma.yaml` and `groma/packages.lock`,
+then uses `package disable` or `package remove` without loading package code only when
+those selections differ. Personal state is verified with `package inspect --personal`;
+a not-found result confirms that removal committed.
 
 Exit classes are stable:
 
-| Code | Class                                            |
-| ---: | ------------------------------------------------ |
-|    0 | Success                                          |
-|    2 | Invalid invocation or structured input           |
-|    3 | Workspace or local-package configuration failure |
-|    4 | Semantic validation or revision conflict         |
-|    5 | Provider or host infrastructure failure          |
-|    6 | Indeterminate semantic or package commit         |
-|  130 | SIGINT or generic cancellation                   |
-|  143 | SIGTERM                                          |
+| Code | Class                                           |
+| ---: | ----------------------------------------------- |
+|    0 | Success                                         |
+|    2 | Invalid invocation or structured input          |
+|    3 | Workspace or persisted package-state failure    |
+|    4 | Command, package-source, or revision validation |
+|    5 | Provider or host infrastructure failure         |
+|    6 | Indeterminate semantic or package commit        |
+|  130 | SIGINT or generic cancellation                  |
+|  143 | SIGTERM                                         |
 
 Signal handling stops command-result publication and completes host cleanup promptly.
 The shared 1A application operations do not expose a mid-operation cancellation seam,

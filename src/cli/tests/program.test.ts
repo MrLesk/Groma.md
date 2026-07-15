@@ -603,7 +603,8 @@ export const plugin = Object.freeze({
         diagnostics: [
           {
             code: "plugin-package-state-indeterminate",
-            message: "Plugin package state may have committed; inspect it before retrying",
+            message:
+              "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove",
           },
         ],
         ok: false,
@@ -696,7 +697,8 @@ export const plugin = Object.freeze({
         diagnostics: [
           {
             code: "plugin-package-state-indeterminate",
-            message: "Plugin package state may have committed; inspect it before retrying",
+            message:
+              "Blueprint plugin package state may have committed; review groma/groma.yaml and groma/packages.lock before retrying, and reconcile a mismatch with package disable or remove",
           },
         ],
         ok: false,
@@ -793,7 +795,7 @@ export const plugin = Object.freeze({
   });
 
   test("keeps transient bootstrap reads in the infrastructure exit class and cleans once", async () => {
-    for (const failureRead of [2, 3] as const) {
+    for (const failureRead of [2, 3, 4] as const) {
       const root = await workspace();
       await Bun.write(
         path.join(root, "groma", "groma.yaml"),
@@ -871,11 +873,11 @@ export const plugin = Object.freeze({
           diagnostics: [
             {
               code:
-                failureRead === 2
+                failureRead === 3
                   ? "workspace-discovery-failed"
                   : "workspace-configuration-provider-failure",
               message:
-                failureRead === 2
+                failureRead === 3
                   ? "Workspace configuration discovery failed"
                   : "Workspace configuration access failed",
             },
@@ -898,11 +900,11 @@ export const plugin = Object.freeze({
       expect(
         events.filter((event) => event === "optional:start"),
         String(failureRead),
-      ).toHaveLength(failureRead === 2 ? 0 : 1);
+      ).toHaveLength(failureRead === 4 ? 1 : 0);
       expect(
         events.filter((event) => event === "optional:stop"),
         String(failureRead),
-      ).toHaveLength(failureRead === 2 ? 0 : 1);
+      ).toHaveLength(failureRead === 4 ? 1 : 0);
     }
   });
 

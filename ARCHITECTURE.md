@@ -961,12 +961,15 @@ Drift fails before module evaluation. The Host evaluates the already-read entry 
 through one immutable in-memory module URL; it never reopens the mutable entry path for
 execution.
 
-The Host validates unsupported project requests, unavailable official selections, and
-additional Host registration namespaces before importing enabled local packages. Runtime
-plugin IDs are unique across the complete enabled blueprint-lock and personal-state
-union. Enable evaluates only the newly selected trusted entry, then rejects an ID already
-reserved by any other logical package entry before writing trust or package state.
-Ordinary startup rejects duplicate stored IDs before importing either registration.
+The Host validates unsupported project requests, unavailable official selections,
+additional Host registration namespaces, and selected Host registration defects that
+local providers cannot satisfy before importing enabled local packages. Package loading
+also re-reads canonical configuration before resolving the exact lock, so a selection
+changed since bootstrap fails before local module evaluation. Runtime plugin IDs are
+unique across the complete enabled blueprint-lock and personal-state union. Enable
+evaluates only the newly selected trusted entry, then rejects an ID already reserved by
+any other logical package entry before writing trust or package state. Ordinary startup
+rejects duplicate stored IDs before importing either registration.
 
 Configuration, lock, and personal-state serialization are preflighted against their
 read bounds before publication. Blueprint updates publish the lock before configuration;
@@ -978,12 +981,15 @@ only that configured selection and remove may then clear the declaration. Recove
 not inspect the source or execute an entry. Lock and personal-state access failures are
 mapped to stable Host diagnostics before crossing the lifecycle boundary.
 
-After a lock replacement commits, any failure replacing configuration makes the
-two-resource operation indeterminate, including a definite non-commit of the second
-replacement. Inspection remains inert when a valid static manifest has changed: it
-reports `manifest-drift` from the current bounded manifest without trying to resolve
-locked entries that the changed manifest no longer declares. When the manifest remains
-exact, changed entry bytes continue to report `entry-drift`.
+After a lock replacement commits, any failure replacing configuration or releasing the
+coordination lease makes the operation indeterminate, including a definite non-commit of
+the second replacement. Recovery compares `groma/groma.yaml` and `groma/packages.lock`,
+then uses management-only disable or remove only when the selections differ. Personal
+state is verified independently with personal package inspection. Inspection remains
+inert when a valid static manifest has changed: it reports `manifest-drift` from the
+current bounded manifest without trying to resolve locked entries that the changed
+manifest no longer declares. When the manifest remains exact, changed entry bytes
+continue to report `entry-drift`.
 
 The runtime's 128-registration ceiling is budgeted before local code can run. The
 default profile reserves eight built-ins and all 64 optional official-runtime slots,
