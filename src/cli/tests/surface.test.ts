@@ -43,6 +43,10 @@ function context(code: string): HostSurfaceContext {
         diagnostics: [{ code, message: "Unavailable" }],
         ok: false as const,
       }),
+      scaffold: async () => ({
+        diagnostics: [{ code, message: "Unavailable" }],
+        ok: false as const,
+      }),
     }),
   });
 }
@@ -90,6 +94,29 @@ describe("CLI surface", () => {
     const session = await controller.surface.start(
       context("workspace-configuration-provider-failure"),
     );
+    await session.completion;
+
+    expect(controller.result()).toMatchObject({ exitCode: CLI_EXIT.infrastructure, ok: false });
+    await session.stop();
+  });
+
+  test("classifies scaffold publication failures as infrastructure failures", async () => {
+    const invocation: CliInvocation = Object.freeze({
+      command: Object.freeze({
+        destination: "./plugins/example",
+        kind: "package-scaffold",
+        name: "example-package",
+        pluginId: "example.plugin",
+        provides: Object.freeze(["example.capability/v1"]),
+      }),
+      format: "json",
+    });
+    const controller = createCliSurfaceController(
+      invocation,
+      { read: async () => "{}" },
+      { stdin: false, stdout: false },
+    );
+    const session = await controller.surface.start(context("plugin-scaffold-publication-failed"));
     await session.completion;
 
     expect(controller.result()).toMatchObject({ exitCode: CLI_EXIT.infrastructure, ok: false });

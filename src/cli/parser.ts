@@ -147,6 +147,31 @@ function packageScope(args: readonly string[]): "blueprint" | "personal" | undef
 function packageCommand(args: readonly string[]): CliCommand | undefined {
   const action = args[0];
   const rest = args.slice(1);
+  if (action === "scaffold") {
+    const destination = rest[0];
+    if (!identifier(destination)) return undefined;
+    let name: string | undefined;
+    let pluginId: string | undefined;
+    const provides: string[] = [];
+    for (let index = 1; index < rest.length; index += 2) {
+      const option = rest[index];
+      const value = rest[index + 1];
+      if (!identifier(value)) return undefined;
+      if (option === "--name" && name === undefined) name = value;
+      else if (option === "--plugin" && pluginId === undefined) pluginId = value;
+      else if (option === "--provides") provides.push(value);
+      else return undefined;
+    }
+    return name === undefined || pluginId === undefined || provides.length === 0
+      ? undefined
+      : Object.freeze({
+          destination,
+          kind: "package-scaffold",
+          name,
+          pluginId,
+          provides: Object.freeze(provides),
+        });
+  }
   if (action === "add") {
     const source = rest[0];
     const scope = packageScope(rest.slice(1));

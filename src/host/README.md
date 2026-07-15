@@ -26,8 +26,8 @@ graph: local resources, Standard Model and invariant, Markdown intent store and
 transaction provider, Core transaction engine and graph kernel, bounded query
 contracts, component resource mapper, snapshot decoder, shared application
 operations, workspace access, package operations, and the injected surface. A running
-surface receives `WorkspaceAccessCapability` plus the narrow add/inspect/enable/disable/
-remove package capability, not persistence, graph, runtime, or transaction internals.
+surface receives `WorkspaceAccessCapability` plus the narrow scaffold/add/inspect/enable/
+disable/remove package capability, not persistence, graph, runtime, or transaction internals.
 
 The complete default graph also runs through the runner-agnostic conformance suite
 published at `groma/plugin-sdk/conformance`. The suite exercises deterministic graph

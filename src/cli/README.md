@@ -26,8 +26,8 @@ experience can improve without changing the application contracts or JSON envelo
 
 ## Local plugin packages
 
-The complete supported local-path surface is `package add`, `inspect`, `enable`,
-`disable`, and `remove`; `groma --help` shows the exact grammar. Blueprint scope is the
+The complete supported local-path surface is `package scaffold`, `add`, `inspect`,
+`enable`, `disable`, and `remove`; `groma --help` shows the exact grammar. Blueprint scope is the
 default. `--personal` keeps declaration and trust state outside the repository and only
 permits `groma.presentation.*` capability declarations. Add and inspect read the exact
 static `groma.package.json` document without importing package code. Enable is the code
@@ -36,6 +36,29 @@ location-bound exact grant already exists.
 Local registrations cannot use the Host-reserved `official.*` plugin namespace. Disable
 retains an unchanged exact-byte trust grant for later re-enable; remove is the explicit
 revocation boundary and prunes grants after every package entry has been disabled.
+
+`package scaffold` creates one minimal Phase 1 plugin at an explicit portable `./`
+destination contained by the current workspace. The returned destination can be passed
+unchanged to blueprint `package add`; the Host-owned `groma/` state tree is reserved.
+The author supplies the package name, plugin ID, and one or more `--provides` capability
+IDs; Groma derives exact version `1.0.0` and single-provider cardinality rather than
+emitting unused placeholders. The generated package has an exact `groma.package.json`,
+a self-contained TypeScript entry with only an erased `groma/plugin-sdk` type import,
+package metadata, and a Bun test using `groma/plugin-sdk/conformance`. Generation uses a
+private same-parent staging directory, reserves the destination without replacement,
+and moves the static manifest last, so package add cannot recognize an incomplete tree. An
+invalid identity, SDK-shadowing `groma` package name, reserved `official.*` ID, duplicate
+or default-Host-conflicting contribution, existing destination, or failed write leaves
+the requested destination unchanged when its exact identity remains Host-owned. If
+another process changes that identity, Groma refuses to recursively delete unknown data.
+Abrupt process termination may leave a markerless destination that must be removed before
+retrying.
+The generated peer dependency makes the public `groma` package an explicit test
+prerequisite. Before a registry release, `bun add --dev --no-save
+groma@file:/path/to/groma`
+supplies a local checkout's public exports without writing scaffold metadata; the
+end-to-end verification uses that same package-manager path rather than importing a
+private source file.
 
 The initial executable entry is a bounded bundled/self-contained module. TypeScript
 syntax and `node:` built-ins are supported, while relative and bare runtime imports are
@@ -53,8 +76,9 @@ would fail closed.
 
 Remote npm, Git, and URL sources return the stable
 `remote-plugin-package-acquisition-out-of-scope` diagnostic before source filesystem
-access. Package commands write only `groma/groma.yaml`, `groma/packages.lock`, and the
-Host-owned user-data file. They never edit an observed project's `package.json`,
+access. Package state commands write only `groma/groma.yaml`, `groma/packages.lock`, and
+the Host-owned user-data file. Scaffold writes its new destination, including that new
+package's metadata. Package state commands never edit an observed project's `package.json`,
 lockfiles, or dependency tree. Package mutations canonically reserialize the Groma-owned
 sections of `groma/groma.yaml`; YAML comments and hand formatting are not preserved. If a
 package-state replacement may have committed or coordination release fails after a write,

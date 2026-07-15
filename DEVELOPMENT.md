@@ -40,6 +40,35 @@ The compiled executable disables runtime loading of `.env`, `bunfig.toml`,
 `tsconfig.json`, and `package.json`. Configuration needed by Groma must enter through
 supported application and host capabilities rather than ambient build-tool files.
 
+## Plugin author starting point
+
+Create a minimal local package without copying repository fixtures or private modules:
+
+```sh
+groma package scaffold ./plugins/example \
+  --name example-package \
+  --plugin example.plugin \
+  --provides example.capability/v1
+```
+
+The portable `./` destination stays inside the current workspace, must not already
+exist, and is returned unchanged for `groma package add`. The generated `package.json`
+exposes `bun test`; make the public `groma` package available in the authoring workspace,
+then run that script to exercise `groma/plugin-sdk/conformance`. Before a registry release,
+a source checkout can supply exactly those public package exports without changing the
+scaffold metadata:
+
+```sh
+cd ./plugins/example
+bun add --dev --no-save groma@file:/path/to/groma
+bun test
+```
+
+The TypeScript entry is self-contained at runtime: its sole authoring import is type-only and erased before the
+trusted exact-byte Host loader evaluates it. Run `groma init`, `groma package add`, and
+the explicit trust-gated `groma package enable` to exercise the same local workflow the
+Host uses at startup.
+
 ## Source Boundaries
 
 The repository remains one build workspace. Most source boundaries are private

@@ -29,6 +29,13 @@ surface.
 Package acquisition, trust, enablement, loading, exact locks, and project configuration
 belong to the Official Host and are not implemented by this SDK.
 
+The official CLI exposes the narrow authoring convenience
+`groma package scaffold <destination> --name <package-name> --plugin <plugin-id>
+--provides <capability-id>`. It generates one self-contained Phase 1 entry plus a test
+using this public conformance subpath. Scaffold output uses only erased type imports from
+the authoring subpath; it does not treat repository source modules or Host loading code
+as an SDK.
+
 ## Package metadata and compatibility
 
 Package-manager metadata and the SDK manifest have different jobs. A package registry
