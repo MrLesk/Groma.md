@@ -254,6 +254,39 @@ describe("public plugin SDK", () => {
       mixed.cases.find((item) => item.name === "declared-cardinality")?.diagnostics,
     ).toMatchObject([{ code: "plugin-conformance-cardinality-failed" }]);
 
+    const duplicateDeclaration: PluginConformanceFixture = {
+      cancellationDiagnosticCode: "plugin-start-cancelled",
+      start: async (request) => {
+        const started = await forward.start(request);
+        if (!started.ok) return started;
+        const base = started.value;
+        const graph: RunningPluginGraph = {
+          cancel: () => base.cancel(),
+          capabilities: (id, version) =>
+            base.capabilities(id, version).flatMap((provider) => [provider, provider]),
+          inspect: () => {
+            const inspection = base.inspect();
+            return {
+              ...inspection,
+              plugins: inspection.plugins.map((plugin) => ({
+                ...plugin,
+                provides: plugin.provides.flatMap((declaration) => {
+                  const duplicated = { ...declaration, cardinality: "multiple" as const };
+                  return [duplicated, duplicated];
+                }),
+              })),
+            };
+          },
+          shutdown: () => base.shutdown(),
+        };
+        return { ok: true, value: graph };
+      },
+    };
+    const duplicate = await runPluginConformanceSuite({ fixture: duplicateDeclaration });
+    expect(
+      duplicate.cases.find((item) => item.name === "declared-cardinality")?.diagnostics,
+    ).toMatchObject([{ code: "plugin-conformance-cardinality-failed" }]);
+
     const collision = await runPluginConformanceSuite({
       fixture: createPluginRuntimeConformanceFixture(() => [
         ...onePlugin("example.collision-a"),

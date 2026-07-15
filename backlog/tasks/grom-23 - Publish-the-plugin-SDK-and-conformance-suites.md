@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 04:58'
+updated_date: '2026-07-15 05:03'
 labels: []
 milestone: m-2
 dependencies:
@@ -53,11 +53,9 @@ Give built-in and third-party plugin authors one supported public contract for m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the public groma/plugin-sdk façade while hardening its canonical package-manifest grammar: conservative relative subpaths, bounded exact package versions, and stable fail-closed compatibility diagnostics.
-2. Strengthen the runner-agnostic suite so successful custom fixtures cannot hide provider-cardinality disagreement and cancellation passes only for the exact expected diagnostic evidence.
-3. Add focused successful-fixture regressions for encoded traversal, path metacharacters and controls, semver bounds, mixed cardinality, and cancellation plus cleanup failure.
-4. Reconcile ARCHITECTURE.md and SDK documentation by separating npm package.json discovery metadata from Groma's exact canonical compatibility envelope without implementing acquisition or locking.
-5. Run focused and complete gates, record objective evidence, re-finalize every acceptance criterion, and commit a GROM-23 quality follow-up without pushing.
+1. Add a successful-start fake running graph whose single plugin repeats the same exact multiple-provider declaration and reports two matching provider entries, isolating declaration duplication from provider-count validation.
+2. Assert the public declared-cardinality conformance case returns plugin-conformance-cardinality-failed independently of runtime resolution and provider-count mismatch.
+3. Run focused and complete verification, re-check AC3 with objective evidence, re-finalize GROM-23, and commit the narrow regression follow-up without pushing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -74,10 +72,14 @@ Reopened after independent quality review identified encoded package-subpath esc
 Quality remediation completed. Canonical entry points now use a conservative ASCII package-subpath grammar that rejects URL encodings, queries, fragments, controls, traversal, separators, and trailing dots without normalization; exact package versions are bounded to 128 characters. Cardinality conformance directly rejects declaration disagreement, duplicate provider declarations, and version-blind single-provider conflicts even when a custom fixture reports successful startup. Cancellation accepts exactly one expected diagnostic and retains unexpected cleanup evidence. ARCHITECTURE.md and the SDK guide now distinguish package.json discovery hints from the exact checked compatibility envelope while leaving acquisition, materialization, and locks to GROM-24.
 
 Current-head evidence: focused SDK and default Host suites passed 6 tests with 33 assertions. Full bun run check passed formatting, strict TypeScript, boundaries, 517 tests with 3,388 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed.
+
+Reopened for one final quality-coverage gap: the duplicate-declaration predicate is implemented but lacked a successful-start fake-graph regression independent of Core runtime rejection. AC3 is pending that focused proof.
+
+Final duplicate-declaration coverage completed. A successful-start custom graph now reports two identical multiple-provider declarations and two matching provider entries for the same plugin, so provider-count comparison alone would pass; the suite still returns plugin-conformance-cardinality-failed through its direct duplicate-declaration predicate. Focused SDK/Host evidence passed 6 tests with 34 assertions. Full bun run check passed formatting, strict TypeScript, boundaries, 517 tests with 3,389 assertions, native build/smoke, and compiled Iteration 1A verification; git diff --check and backlog doctor passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Published and quality-hardened the supported groma/plugin-sdk authoring façade, exact bounded package compatibility envelope, and runner-agnostic conformance suite. Plugin entry points fail closed under encoded or ambiguous paths; lifecycle evidence cannot mask cancellation or cardinality defects; package discovery metadata and exact compatibility are documented as separate concerns. A public-only external fixture and all 15 default Host capabilities pass the shared suite. The current complete 517-test gate, native build/smoke, and Iteration 1A workflow pass.
+Published and quality-hardened the supported groma/plugin-sdk authoring façade, bounded exact package compatibility envelope, and runner-agnostic conformance suite. Successful custom-graph regressions independently prove mixed-cardinality and duplicate-declaration rejection, exact cancellation evidence, deterministic lifecycle, and provider behavior. A public-only external fixture and all 15 default Host capabilities pass the shared suite. The current 517-test gate, native build/smoke, and Iteration 1A workflow pass.
 <!-- SECTION:FINAL_SUMMARY:END -->
