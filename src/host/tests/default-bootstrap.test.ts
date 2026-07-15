@@ -3,14 +3,22 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { allowsCustomLocalCoordinationRoot } from "../../persistence/index.ts";
-import { canonicalSchemaMigrationApiVersion } from "../../core/index.ts";
+import {
+  allowsCustomLocalCoordinationRoot,
+  markdownIntentLocator,
+} from "../../persistence/index.ts";
+import {
+  canonicalSchemaMigrationApiVersion,
+  parseEntityId,
+  TransactionEngine,
+} from "../../core/index.ts";
 
 import {
   createDefaultBootstrapRegistry,
   defaultHostCapabilityIds,
   runHost,
   type DefaultBootstrapRegistryOptions,
+  type HostComposition,
   type HostSurface,
   type HostSurfaceSession,
 } from "../index.ts";
@@ -42,7 +50,245 @@ function idleSurface(): HostSurface {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
+function directComponentRequest(composition: HostComposition, rawId: string, name: string) {
+  const id = parseEntityId(rawId);
+  if (!id.ok) throw new Error("invalid direct transaction entity fixture");
+  const resource = composition.resourceMapper.resourceForComponent(id.value);
+  if (!resource.ok) throw new Error("invalid direct transaction resource fixture");
+  const locator = markdownIntentLocator(id.value);
+  if (!locator.ok) throw new Error("invalid direct transaction locator fixture");
+  return {
+    locator: locator.value,
+    request: {
+      affected: { entities: [id.value], relations: [] },
+      context: {
+        ownership: { owner: "groma.application", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: [{ expected: null, resource: resource.value }],
+      mutation: {
+        components: [{ component: { id: id.value, name, type: "domain" }, type: "create" }],
+        relationships: [],
+      },
+    } satisfies Parameters<TransactionEngine["execute"]>[0],
+  };
+}
+
 describe("default bootstrap registry", () => {
+  test("publishes a projection-aware transaction engine for direct plugin commits", async () => {
+    const context = await temporaryWorkspace();
+    let failProjectionPublication = false;
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      resourceFaultInjector: (phase, fault) => {
+        if (
+          failProjectionPublication &&
+          phase === "write" &&
+          fault?.locator === ".groma-cache/projection-index.json"
+        ) {
+          throw new Error("injected projection publication failure");
+        }
+      },
+      surface: idleSurface(),
+    });
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    if (!composed.ok) throw new Error("default composition failed");
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect((await composed.value.projection.rebuild()).ok).toBeTrue();
+    expect(composed.value.transactionEngine).toBeInstanceOf(TransactionEngine);
+    const id = parseEntityId("ent_00000000000000000000000000000001");
+    if (!id.ok) throw new Error("invalid direct transaction entity fixture");
+    const resource = composed.value.resourceMapper.resourceForComponent(id.value);
+    if (!resource.ok) throw new Error("invalid direct transaction resource fixture");
+
+    const outcome = await composed.value.transactionEngine.execute({
+      affected: { entities: [id.value], relations: [] },
+      context: {
+        ownership: { owner: "groma.application", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: [{ expected: null, resource: resource.value }],
+      mutation: {
+        components: [
+          {
+            component: { id: id.value, name: "Direct plugin component", type: "domain" },
+            type: "create",
+          },
+        ],
+        relationships: [],
+      },
+    });
+    const stored = JSON.parse(
+      await readFile(
+        path.join(context.workspaceRoot, ".groma-cache", "projection-index.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly entities?: readonly { readonly searchableText?: string }[];
+      readonly generation?: number;
+    };
+
+    expect(outcome.status).toBe("committed");
+    expect(stored.generation).toBe(1);
+    expect(
+      stored.entities?.some((entity) => entity.searchableText?.includes("direct plugin component")),
+    ).toBeTrue();
+
+    failProjectionPublication = true;
+    const secondId = parseEntityId("ent_00000000000000000000000000000002");
+    if (!secondId.ok) throw new Error("invalid second direct transaction entity fixture");
+    const secondResource = composed.value.resourceMapper.resourceForComponent(secondId.value);
+    if (!secondResource.ok) throw new Error("invalid second direct transaction resource fixture");
+    const secondOutcome = await composed.value.transactionEngine.execute({
+      affected: { entities: [secondId.value], relations: [] },
+      context: {
+        ownership: { owner: "groma.application", plane: "intent" },
+        pinnedComponentIds: [],
+      },
+      expectedRevisions: [{ expected: null, resource: secondResource.value }],
+      mutation: {
+        components: [
+          {
+            component: {
+              id: secondId.value,
+              name: "Canonical despite projection failure",
+              type: "domain",
+            },
+            type: "create",
+          },
+        ],
+        relationships: [],
+      },
+    });
+    const staleProjection = JSON.parse(
+      await readFile(
+        path.join(context.workspaceRoot, ".groma-cache", "projection-index.json"),
+        "utf8",
+      ),
+    ) as { readonly generation?: number };
+    const canonical = await composed.value.transactionProvider.snapshot([]);
+    const canonicalState = canonical.state as {
+      readonly components?: readonly { readonly payload?: { readonly name?: string } }[];
+    };
+
+    expect(secondOutcome.status).toBe("committed");
+    expect(staleProjection.generation).toBe(1);
+    expect(canonical.generation).toBe(2);
+    expect(
+      canonicalState.components?.some(
+        (component) => component.payload?.name === "Canonical despite projection failure",
+      ),
+    ).toBeTrue();
+
+    failProjectionPublication = false;
+    const repaired = await composed.value.projection.load();
+    expect(repaired).toMatchObject({ ok: true, value: { generation: 2 } });
+  });
+
+  test("publishes confirmed direct recoveries without reclassifying canonical success", async () => {
+    const context = await temporaryWorkspace();
+    let blockedCanonicalLocator: string | undefined;
+    let failCanonicalPublication = false;
+    let failProjectionPublication = false;
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      resourceFaultInjector: (phase, fault) => {
+        if (
+          failCanonicalPublication &&
+          phase === "rename" &&
+          fault?.locator === blockedCanonicalLocator
+        ) {
+          throw new Error("injected canonical target publication interruption");
+        }
+        if (
+          failProjectionPublication &&
+          phase === "write" &&
+          fault?.locator === ".groma-cache/projection-index.json"
+        ) {
+          throw new Error("injected recovery projection publication failure");
+        }
+      },
+      surface: idleSurface(),
+    });
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    if (!composed.ok) throw new Error("default composition failed");
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+    expect((await composed.value.projection.rebuild()).ok).toBeTrue();
+
+    const first = directComponentRequest(
+      composed.value,
+      "ent_00000000000000000000000000000003",
+      "Recovered plugin component",
+    );
+    blockedCanonicalLocator = first.locator;
+    failCanonicalPublication = true;
+    const uncertain = await composed.value.transactionEngine.execute(first.request);
+    expect(uncertain.status).toBe("indeterminate");
+    if (uncertain.status !== "indeterminate") throw new Error("expected direct recovery fixture");
+
+    failCanonicalPublication = false;
+    const recovered = await composed.value.transactionEngine.recover(uncertain.recovery);
+    const recoveredProjection = JSON.parse(
+      await readFile(
+        path.join(context.workspaceRoot, ".groma-cache", "projection-index.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly entities?: readonly { readonly searchableText?: string }[];
+      readonly generation?: number;
+    };
+    expect(recovered.status).toBe("committed");
+    expect(recoveredProjection.generation).toBe(1);
+    expect(
+      recoveredProjection.entities?.some((entity) =>
+        entity.searchableText?.includes("recovered plugin component"),
+      ),
+    ).toBeTrue();
+
+    const second = directComponentRequest(
+      composed.value,
+      "ent_00000000000000000000000000000004",
+      "Recovered despite projection failure",
+    );
+    blockedCanonicalLocator = second.locator;
+    failCanonicalPublication = true;
+    const secondUncertain = await composed.value.transactionEngine.execute(second.request);
+    expect(secondUncertain.status).toBe("indeterminate");
+    if (secondUncertain.status !== "indeterminate") {
+      throw new Error("expected second direct recovery fixture");
+    }
+
+    failCanonicalPublication = false;
+    failProjectionPublication = true;
+    const secondRecovered = await composed.value.transactionEngine.recover(
+      secondUncertain.recovery,
+    );
+    const staleProjection = JSON.parse(
+      await readFile(
+        path.join(context.workspaceRoot, ".groma-cache", "projection-index.json"),
+        "utf8",
+      ),
+    ) as { readonly generation?: number };
+    const canonical = await composed.value.transactionProvider.snapshot([]);
+    expect(secondRecovered.status).toBe("committed");
+    expect(staleProjection.generation).toBe(1);
+    expect(canonical.generation).toBe(2);
+
+    failProjectionPublication = false;
+    const repaired = await composed.value.projection.load();
+    expect(repaired).toMatchObject({ ok: true, value: { generation: 2 } });
+    expect(
+      repaired.ok &&
+        repaired.value.entities.some((entity) =>
+          entity.searchableText.includes("recovered despite projection failure"),
+        ),
+    ).toBeTrue();
+  });
+
   test("composes every 1A capability explicitly with stable shared identity", async () => {
     const context = await temporaryWorkspace();
     let byte = 0;
@@ -66,6 +312,22 @@ describe("default bootstrap registry", () => {
       ok: false,
     });
     expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+    const created = await composed.value.operations.createComponent({
+      component: { name: "Projected component", type: "domain" },
+    });
+    expect(created.status).toBe("committed");
+    const projection = await composed.value.projection.load();
+    expect(
+      created.status === "committed" &&
+        projection.ok &&
+        projection.value.generation === created.generation,
+    ).toBeTrue();
+    expect(
+      projection.ok &&
+        projection.value.entities.some((item) =>
+          item.searchableText.includes("projected component"),
+        ),
+    ).toBeTrue();
     expect(composed.value.workspace.requireWorkspace()).toEqual({
       ok: true,
       value: composed.value.operations,
@@ -80,6 +342,7 @@ describe("default bootstrap registry", () => {
       "operations",
       "packages",
       "plugins",
+      "projection",
       "queries",
       "resourceMapper",
       "resources",
@@ -99,6 +362,7 @@ describe("default bootstrap registry", () => {
         { id: "official.kernel", phase: 1 },
         { id: "official.model", phase: 1 },
         { id: "official.persistence", phase: 1 },
+        { id: "official.projection", phase: 1 },
         { id: "official.schema-migrations", phase: 1 },
         { id: "official.application", phase: 1 },
         { id: "official.surface", phase: 1 },
@@ -111,6 +375,7 @@ describe("default bootstrap registry", () => {
       ["model", defaultHostCapabilityIds.model],
       ["migrations", defaultHostCapabilityIds.schemaMigrationOperations],
       ["operations", defaultHostCapabilityIds.operations],
+      ["projection", defaultHostCapabilityIds.projection],
       ["queries", defaultHostCapabilityIds.queries],
       ["resourceMapper", defaultHostCapabilityIds.resourceMapper],
       ["resources", defaultHostCapabilityIds.resources],

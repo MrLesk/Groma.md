@@ -6,10 +6,11 @@ assembles explicit capabilities without placing its technology choices in Core.
 ## Default local plugin profile
 
 `createDefaultBootstrapRegistry` is the official local composition seam. It constructs
-eight explicit built-in plugin registrations and resolves them through Core's
+ten explicit built-in plugin registrations and resolves them through Core's
 `PluginRuntime`: Phase 0 local resources, configuration discovery, and YAML parsing,
-then Phase 1 kernel, Standard Model, persistence, application/workspace, and surface
-plugins. These are ordinary runtime registrations with exact manifests, capability
+then Phase 1 kernel, Standard Model, canonical persistence, schema migration,
+disposable projection, application/workspace, and surface plugins. These are ordinary
+runtime registrations with exact manifests, capability
 declarations, dependencies, and start results—the same path available to a third-party
 registration. They are not a wrapper around a second private composition path.
 
@@ -24,7 +25,7 @@ The running graph exposes deterministic inspection for conformance and host test
 Every named `HostComposition` capability is the exact opaque value registered in that
 graph: local resources, Standard Model and invariant, Markdown intent store and
 transaction provider, Core transaction engine and graph kernel, bounded query
-contracts, component resource mapper, snapshot decoder, shared application
+contracts, the replaceable local projection index, component resource mapper, snapshot decoder, shared application
 operations, workspace access, package operations, and the injected surface. A running
 surface receives `WorkspaceAccessCapability` plus the narrow scaffold/add/inspect/enable/
 disable/remove package capability, not persistence, graph, runtime, or transaction internals.
@@ -57,6 +58,17 @@ the production CLI never supplies one and has no environment-controlled crash pa
 The process context supplies one absolute workspace root. The host does not search its
 ancestors. The 1A CLI uses its process working directory as that root.
 
+The projection plugin depends only on the Standard Model, canonical transaction
+snapshot, and local resources. The application plugin publishes a genuine projection-aware
+`TransactionEngine`: every supported direct or application transaction forwards a
+confirmed `graph.committed` event after canonical commit, including commits confirmed by
+transaction recovery. Projection failure cannot change
+or reclassify that already-committed outcome; the next projection load compares the stored
+generation and canonical-content fingerprint with current canonical state and rebuilds
+safely. The projection capability is exposed on `HostComposition` for the query engine,
+but it is not passed to the current terminal surface and is never added to a canonical
+journal target set.
+
 ## Bootstrap workspace document
 
 The configuration resource is `groma/groma.yaml`. Initialization still writes the
@@ -80,7 +92,7 @@ These three fields are the only keys. Each package declaration contains exactly 
 aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
 entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
 and declarations are sorted by code unit for deterministic selection. The document may
-enable at most 56 local package entries in the default profile. That is one shared Host
+enable at most 54 local package entries in the default profile. That is one shared Host
 capacity with enabled personal entries, not an independent per-scope allowance; an
 embedder that adds bootstrap registrations reduces the remaining local capacity.
 The shipped default CLI has no optional official contributions today. Required built-in
@@ -197,9 +209,9 @@ personal package inspection. Inspection reports a changed valid manifest as an i
 `manifest-drift` snapshot without resolving entries that the changed manifest no longer
 declares; exact-manifest entry drift remains `entry-drift`.
 
-The runtime accepts at most 128 registrations. The default profile reserves its eight
+The runtime accepts at most 128 registrations. The default profile reserves its ten
 built-ins and the full 64-entry official-runtime selection bound before admitting local
-entries, leaving 56 enabled local entries. Enable and ordinary startup count blueprint
+entries, leaving 54 enabled local entries. Enable and ordinary startup count blueprint
 and personal selections together before any local import. Exceeding the remaining
 capacity fails closed without changing configuration, lock, or user-state bytes.
 Each local registration is preflighted with the same ordinary Host manifest bounds:

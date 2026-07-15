@@ -28,10 +28,12 @@ import {
   type PluginCapabilityDeclaration,
   type PluginRegistration,
   type PluginStartContext,
+  type ProjectionIndexCapability,
   type Result,
   type ResourceKey,
   type RunningPluginGraph,
   type StagedPluginGraph,
+  type TransactionOutcome,
   type TransactionProvider,
 } from "../core/index.ts";
 import {
@@ -40,8 +42,10 @@ import {
   createLocalResourceProvider,
   createLocalCanonicalMigrationCatalog,
   createLocalTransactionJournal,
+  createLocalProjectionIndex,
   createCanonicalMigrationTransactionAdapter,
   createMarkdownIntentStore,
+  createTransactionProjectionCanonicalSource,
   createMarkdownIntentTransactionAdapter,
   markdownIntentLocator,
 } from "../persistence/index.ts";
@@ -94,6 +98,39 @@ export const defaultHostBounds = Object.freeze({
 });
 
 const defaultCapabilityVersion = "1.0.0";
+
+class ProjectionAwareTransactionEngine extends TransactionEngine {
+  readonly #projection: ProjectionIndexCapability;
+  readonly #update: ProjectionIndexCapability["update"];
+
+  constructor(
+    options: ConstructorParameters<typeof TransactionEngine>[0],
+    projection: ProjectionIndexCapability,
+  ) {
+    super(options);
+    this.#projection = projection;
+    this.#update = projection.update;
+  }
+
+  async #afterConfirmedCommit(outcome: TransactionOutcome): Promise<TransactionOutcome> {
+    if (outcome.status === "committed") {
+      try {
+        await Reflect.apply(this.#update, this.#projection, [outcome.event]);
+      } catch {
+        // Projection state is disposable. A later load rebuilds it from canonical state.
+      }
+    }
+    return outcome;
+  }
+
+  override async execute(request: Parameters<TransactionEngine["execute"]>[0]) {
+    return this.#afterConfirmedCommit(await super.execute(request));
+  }
+
+  override async recover(recovery: Parameters<TransactionEngine["recover"]>[0]) {
+    return this.#afterConfirmedCommit(await super.recover(recovery));
+  }
+}
 
 function capability(id: string): PluginCapabilityDeclaration {
   return Object.freeze({ cardinality: "single", id, version: defaultCapabilityVersion });
@@ -609,6 +646,54 @@ export function createDefaultBootstrapRegistry(
         }),
         Object.freeze({
           manifest: manifest(
+            defaultHostPluginIds.projection,
+            1,
+            [capability(defaultHostCapabilityIds.projection)],
+            [
+              capability(defaultHostCapabilityIds.model),
+              capability(defaultHostCapabilityIds.resources),
+              capability(defaultHostCapabilityIds.transactionProvider),
+            ],
+          ),
+          start: (pluginContext: PluginStartContext) => {
+            const model = requiredCapability<HostComposition["model"]>(
+              pluginContext,
+              defaultHostCapabilityIds.model,
+            );
+            const resources = requiredCapability<HostComposition["resources"]>(
+              pluginContext,
+              defaultHostCapabilityIds.resources,
+            );
+            const transactionProvider = requiredCapability<HostComposition["transactionProvider"]>(
+              pluginContext,
+              defaultHostCapabilityIds.transactionProvider,
+            );
+            const projection = createLocalProjectionIndex({
+              bounds: {
+                maxAliases: defaultHostBounds.maxComponents,
+                maxEntities: defaultHostBounds.maxComponents,
+                maxRelations: defaultHostBounds.maxRelationships,
+              },
+              canonical: createTransactionProjectionCanonicalSource({
+                bounds: {
+                  maxAliases: defaultHostBounds.maxComponents,
+                  maxEntities: defaultHostBounds.maxComponents,
+                  maxRelations: defaultHostBounds.maxRelationships,
+                },
+                model,
+                transactionProvider,
+              }),
+              resources,
+            });
+            return Object.freeze({
+              capabilities: Object.freeze([
+                output(defaultHostCapabilityIds.projection, projection),
+              ]),
+            });
+          },
+        }),
+        Object.freeze({
+          manifest: manifest(
             defaultHostPluginIds.application,
             1,
             [
@@ -623,6 +708,7 @@ export function createDefaultBootstrapRegistry(
               capability(defaultHostCapabilityIds.graph),
               capability(defaultHostCapabilityIds.invariant),
               capability(defaultHostCapabilityIds.model),
+              capability(defaultHostCapabilityIds.projection),
               capability(defaultHostCapabilityIds.queries),
               capability(defaultHostCapabilityIds.resources),
               capability(defaultHostCapabilityIds.schemaMigrationCatalog),
@@ -643,6 +729,10 @@ export function createDefaultBootstrapRegistry(
             const model = requiredCapability<HostComposition["model"]>(
               pluginContext,
               defaultHostCapabilityIds.model,
+            );
+            const projection = requiredCapability<HostComposition["projection"]>(
+              pluginContext,
+              defaultHostCapabilityIds.projection,
             );
             const queries = requiredCapability<HostComposition["queries"]>(
               pluginContext,
@@ -702,15 +792,18 @@ export function createDefaultBootstrapRegistry(
               targetVersion: 1,
               transactionExecution: schemaMigrationTransactionEngine,
             });
-            const transactionEngine = new TransactionEngine({
-              maxAffectedIdentities:
-                defaultHostBounds.maxComponents + defaultHostBounds.maxRelationships,
-              maxRequestDataDepth: defaultHostBounds.maxRequestDataDepth,
-              maxRequestDataValues: defaultHostBounds.maxRequestDataValues,
-              maxSnapshotStateDepth: defaultHostBounds.maxSnapshotStateDepth,
-              maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
-              provider: transactionProvider,
-            });
+            const transactionEngine = new ProjectionAwareTransactionEngine(
+              {
+                maxAffectedIdentities:
+                  defaultHostBounds.maxComponents + defaultHostBounds.maxRelationships,
+                maxRequestDataDepth: defaultHostBounds.maxRequestDataDepth,
+                maxRequestDataValues: defaultHostBounds.maxRequestDataValues,
+                maxSnapshotStateDepth: defaultHostBounds.maxSnapshotStateDepth,
+                maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
+                provider: transactionProvider,
+              },
+              projection,
+            );
             const registered = transactionEngine.registerInvariant(invariant);
             if (!registered.ok) throw new Error("Built-in invariant registration failed");
             const resourceMapper: ComponentResourceMapper = Object.freeze({
@@ -1148,6 +1241,10 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.queries,
       );
+      const projection = runningCapability<HostComposition["projection"]>(
+        plugins,
+        defaultHostCapabilityIds.projection,
+      );
       const resourceMapper = runningCapability<HostComposition["resourceMapper"]>(
         plugins,
         defaultHostCapabilityIds.resourceMapper,
@@ -1181,6 +1278,7 @@ export function createDefaultBootstrapRegistry(
           operations,
           packages: packageOperations,
           plugins,
+          projection,
           queries,
           resourceMapper,
           resources,

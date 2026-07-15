@@ -574,6 +574,38 @@ the blueprint.
 - **Relationships:** Implements projection capability for Query Engine; uses canonical
   stores but never becomes authoritative.
 
+The first official provider writes one bounded deterministic JSON cache at
+`.groma-cache/projection-index.json`, deliberately outside canonical `groma/` records
+and the Host's personal `.groma` user-data root. A provider-owned ignore marker inside
+the cache directory keeps its contents invisible to Git without changing project ignore
+rules. The cache records its exact graph generation and a separate canonical-content
+fingerprint, then contains sorted entities, relationships, canonical aliases,
+deterministic searchable text, and incoming/outgoing relationship adjacency. The Core
+contract keeps that fingerprint opaque and bounded; the official local provider owns its
+lowercase SHA-256 representation. It contains no layout, renderer theme, timestamps, or
+filesystem paths.
+
+Rebuild reads one complete canonical transaction snapshot at an exact generation. A
+contiguous `graph.committed` event updates its affected entity and relationship
+records, refreshes aliases and every alias-resolved containment or relationship endpoint,
+and re-derives adjacency. Missing, duplicate, reversed,
+absent, corrupt, or stale state triggers deterministic reconstruction rather than
+speculative repair across a gap. Projection publication uses its own local coordination
+lease and one atomic replacement; it never participates in the canonical transaction or
+targets canonical intent and alias resources. If reconstruction or publication cannot be
+completed safely, callers receive the stable `projection-index-unavailable` diagnostic.
+Deleting the cache can therefore change only query availability and rebuild cost, never
+blueprint meaning.
+
+A generation match alone never establishes currency because an ignored cache may survive
+a branch or checkout change. Load requires both generation and the exact canonical-content
+fingerprint. Incremental publication likewise verifies the complete candidate fingerprint
+against the current canonical snapshot and reconstructs on mismatch. Oversized regular
+cache files are replaceable corruption rather than permanent provider failure. The Host
+publishes one projection-aware transaction engine, so application operations and direct
+official-plugin transactions share this same post-commit continuity boundary for both
+initial execution and recovery.
+
 #### Query Engine
 
 - **Seed key:** `query-engine`
@@ -1045,8 +1077,8 @@ manifest no longer declares. When the manifest remains exact, changed entry byte
 continue to report `entry-drift`.
 
 The runtime's 128-registration ceiling is budgeted before local code can run. The
-default profile reserves eight built-ins and all 64 optional official-runtime slots,
-leaving at most 56 enabled local entries across blueprint and personal scopes together;
+default profile reserves ten built-ins and all 64 optional official-runtime slots,
+leaving at most 54 enabled local entries across blueprint and personal scopes together;
 additional embedder bootstrap registrations reduce that remainder. Configuration
 parsing, enable, and ordinary startup enforce the applicable bound before import, and
 capacity rejection leaves every persisted byte unchanged.

@@ -113,6 +113,7 @@ function composition(
     model: capability,
     operations,
     packages,
+    projection: capability,
     queries: capability,
     resourceMapper: capability,
     resources: capability,
