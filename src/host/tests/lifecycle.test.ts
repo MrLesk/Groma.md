@@ -2122,12 +2122,20 @@ describe("host lifecycle", () => {
 
   test("preserves stable package-store startup diagnostics", async () => {
     for (const [code, message] of [
+      [
+        "plugin-package-lock-changed",
+        "Blueprint plugin package state changed during startup; restart after changes settle",
+      ],
       ["plugin-package-lock-unavailable", "The exact plugin package lock is unavailable"],
       [
         "plugin-package-state-unavailable",
         "Local plugin package state is changing or unavailable; retry after changes settle",
       ],
       ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
+      [
+        "plugin-package-user-state-changed",
+        "Local plugin package state changed during startup; restart after changes settle",
+      ],
       [
         "plugin-package-enabled-limit-exceeded",
         "Enabled local plugins exceed this Host's runtime capacity",

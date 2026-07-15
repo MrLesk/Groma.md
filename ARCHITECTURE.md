@@ -962,7 +962,9 @@ workspace-scoped package-state coordination lease. Direct edits do not participa
 that lease, so startup re-reads canonical configuration, exact lock, and exact user state
 after each entry is materialized and immediately before importing it. The Host evaluates
 the already-read entry bytes through one immutable in-memory module URL; it never reopens
-the mutable entry path for execution.
+the mutable entry path for execution. Manifest and entry opens additionally re-check the
+post-open canonical path, current file identity, and containment within the previously
+resolved package root before accepting captured bytes.
 
 The Host validates unsupported project requests, unavailable official selections,
 additional Host registration namespaces, and selected Host registration defects that
@@ -973,8 +975,10 @@ unique across the complete enabled blueprint-lock and personal-state union. Enab
 evaluates only the newly selected trusted entry, then rejects an ID already reserved by
 any other logical package entry before writing trust or package state. The `official.*`
 plugin namespace is reserved for Host-owned registrations and is rejected for every local
-package entry at the same pre-write boundary. Ordinary startup rejects duplicate stored
-IDs before importing either registration.
+package entry at the same pre-write boundary. Ordinary startup reads the complete lock
+even when configuration has no blueprint declarations, and rejects duplicate stored IDs
+before importing either registration. Enable performs the same exact configuration, lock,
+and personal-state revalidation immediately before its selected trusted entry executes.
 
 Configuration, lock, and personal-state serialization are preflighted against their
 read bounds before publication. Blueprint updates publish the lock before configuration;

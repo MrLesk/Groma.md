@@ -110,7 +110,13 @@ export interface LocalPluginPackageManagerOptions {
 
 export interface LocalPluginPackageFileReadEvent {
   readonly file: string;
-  readonly phase: "opened";
+  readonly phase: "ancestry-checked" | "opened";
+}
+
+interface BoundedRegularFileContainment {
+  readonly code: "plugin-package-entry-invalid" | "plugin-package-file-invalid";
+  readonly message: string;
+  readonly root: string;
 }
 
 interface LockedEntry {
@@ -294,9 +300,13 @@ async function readBoundedRegularFile(
   file: string,
   maximumBytes: number,
   observer?: LocalPluginPackageManagerOptions["fileReadObserver"],
+  containment?: BoundedRegularFileContainment,
 ): Promise<Result<Uint8Array>> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
+    if (containment !== undefined) {
+      await observer?.(Object.freeze({ file, phase: "ancestry-checked" }));
+    }
     const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
     handle = await open(file, constants.O_RDONLY | noFollow);
     const before = await handle.stat();
@@ -307,6 +317,12 @@ async function readBoundedRegularFile(
       );
     }
     await observer?.(Object.freeze({ file, phase: "opened" }));
+    if (containment !== undefined) {
+      const canonicalAfterOpen = await realpath(file);
+      if (canonicalAfterOpen !== file || !isPathWithin(containment.root, canonicalAfterOpen)) {
+        return packageFailure(containment.code, containment.message);
+      }
+    }
     const buffer = Buffer.allocUnsafe(Math.min(before.size, maximumBytes) + 1);
     let total = 0;
     while (total < buffer.byteLength) {
@@ -316,8 +332,11 @@ async function readBoundedRegularFile(
     }
     const after = await handle.stat();
     const current = await lstat(file);
+    const canonicalAfterRead = containment === undefined ? undefined : await realpath(file);
     if (
       total > maximumBytes ||
+      (containment !== undefined &&
+        (canonicalAfterRead !== file || !isPathWithin(containment.root, canonicalAfterRead))) ||
       current.isSymbolicLink() ||
       !current.isFile() ||
       !sameFileIdentity(before, after) ||
@@ -434,7 +453,11 @@ async function materializePackage(
   const located = await canonicalPackageLocation(workspaceRoot, source, scope);
   if (!located.ok) return located;
   const manifestFile = path.join(located.value.location, "groma.package.json");
-  const bytes = await readBoundedRegularFile(manifestFile, maximumManifestBytes, observer);
+  const bytes = await readBoundedRegularFile(manifestFile, maximumManifestBytes, observer, {
+    code: "plugin-package-file-invalid",
+    message: "Plugin package files must remain within one stable package directory",
+    root: located.value.location,
+  });
   if (!bytes.ok) return bytes;
   const parsed = exactJsonDocument(bytes.value, [
     "apiVersion",
@@ -494,7 +517,11 @@ async function materializeEntry(
         );
       }
     }
-    const bytes = await readBoundedRegularFile(canonical, maximumEntryBytes, observer);
+    const bytes = await readBoundedRegularFile(canonical, maximumEntryBytes, observer, {
+      code: "plugin-package-entry-invalid",
+      message: "Plugin entry resolution escaped or changed its package directory",
+      root: materialized.location,
+    });
     if (!bytes.ok) return bytes;
     return success(Object.freeze({ bytes: bytes.value, entry, integrity: hashBytes(bytes.value) }));
   } catch {
@@ -1210,7 +1237,12 @@ export function createLocalPluginPackageManager(
       configurationLocator,
       bootstrapConfigurationBounds.maxConfigurationBytes,
     );
-    if (!read.ok) return read;
+    if (!read.ok) {
+      return packageFailure(
+        "workspace-configuration-provider-failure",
+        "Workspace configuration access failed",
+      );
+    }
     if (read.value === undefined) {
       return packageFailure(
         "no-workspace",
@@ -1300,38 +1332,43 @@ export function createLocalPluginPackageManager(
     expectedConfiguration: typeof configuration,
     expectedLock: PackageLock,
     expectedUserState: UserPackageState,
+    operation: "enable" | "startup",
   ): Promise<Result<void>> => {
+    const configurationChangedMessage =
+      operation === "startup"
+        ? "Workspace configuration changed during package startup; restart after changes settle"
+        : "Workspace configuration changed during plugin enablement; retry after changes settle";
+    const lockChangedMessage =
+      operation === "startup"
+        ? "Blueprint plugin package state changed during startup; restart after changes settle"
+        : "Blueprint plugin package state changed during plugin enablement; retry after changes settle";
+    const userStateChangedMessage =
+      operation === "startup"
+        ? "Local plugin package state changed during startup; restart after changes settle"
+        : "Local plugin package state changed during plugin enablement; retry after changes settle";
     const currentConfiguration = await readConfiguration();
     if (!currentConfiguration.ok) {
-      return packageFailure(
-        "workspace-configuration-changed",
-        "Workspace configuration changed during package startup; restart after changes settle",
-      );
+      return currentConfiguration.diagnostics.every(
+        (item) => item.code === "workspace-configuration-provider-failure",
+      )
+        ? currentConfiguration
+        : packageFailure("workspace-configuration-changed", configurationChangedMessage);
     }
     if (
       serializeBootstrapConfiguration(currentConfiguration.value) !==
       serializeBootstrapConfiguration(expectedConfiguration)
     ) {
-      return packageFailure(
-        "workspace-configuration-changed",
-        "Workspace configuration changed during package startup; restart after changes settle",
-      );
+      return packageFailure("workspace-configuration-changed", configurationChangedMessage);
     }
     const currentLock = await readLock();
     if (!currentLock.ok) return currentLock;
     if (!sameBytes(encodeCanonical(currentLock.value), encodeCanonical(expectedLock))) {
-      return packageFailure(
-        "plugin-package-lock-changed",
-        "Blueprint plugin package state changed during startup; restart after changes settle",
-      );
+      return packageFailure("plugin-package-lock-changed", lockChangedMessage);
     }
     const currentUserState = await readUserState();
     if (!currentUserState.ok) return currentUserState;
     if (!sameBytes(encodeCanonical(currentUserState.value), encodeCanonical(expectedUserState))) {
-      return packageFailure(
-        "plugin-package-user-state-changed",
-        "Local plugin package state changed during startup; restart after changes settle",
-      );
+      return packageFailure("plugin-package-user-state-changed", userStateChangedMessage);
     }
     return success(undefined);
   };
@@ -1689,6 +1726,13 @@ export function createLocalPluginPackageManager(
           "Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe. Re-run with --trust-full-user-permissions to execute this exact entry",
         );
       }
+      const stillCurrent = await packageProjectionStillCurrent(
+        configuration,
+        blueprintLock.value,
+        state.value,
+        "enable",
+      );
+      if (!stillCurrent.ok) return stillCurrent;
       let loaded: unknown;
       try {
         loaded = await importVerifiedEntry(entry.value, importModule);
@@ -2036,8 +2080,7 @@ export function createLocalPluginPackageManager(
           "Workspace configuration changed during bootstrap; restart after changes settle",
         );
       }
-      const lock =
-        configuration.packageDeclarations.length === 0 ? success(emptyLock()) : await readLock();
+      const lock = await readLock();
       if (!lock.ok) return lock;
       const selections: Array<{
         readonly locked: LockedPackage;
@@ -2152,6 +2195,7 @@ export function createLocalPluginPackageManager(
             currentConfiguration.value,
             lock.value,
             state.value,
+            "startup",
           );
           if (!stillCurrent.ok) return stillCurrent;
           let module: unknown;

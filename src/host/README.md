@@ -117,6 +117,8 @@ coordination lease; direct edits are detected by re-reading canonical configurat
 exact lock, and exact user state after materialization and immediately before each import.
 The Host then evaluates an immutable in-memory module made from those already-read entry
 bytes instead of reopening the source path.
+Manifest and entry paths are canonically checked again after their file descriptor opens;
+the open descriptor, current path identity, and package-root containment must still agree.
 
 One executable entry is bounded to 4 MiB and must be bundled or otherwise
 self-contained. Bun-compatible TypeScript syntax in that entry and absolute `node:`
@@ -169,8 +171,13 @@ selection changed since bootstrap fails before local module evaluation. Enabled 
 across blueprint and personal package state must also have distinct runtime plugin IDs.
 Enable checks the selected registration against the complete blueprint-lock and
 personal-state union before writing trust or package state; startup rejects duplicate
-stored IDs before importing either entry. Local entries are also rejected before any
-state write when their ID uses the Host-reserved `official.*` namespace.
+stored IDs before importing either entry. Startup reads that complete lock even when
+canonical configuration declares no blueprint packages, so lock-first recovery state
+cannot disappear from revalidation or ID-reservation checks. Local entries are also
+rejected before any state write when their ID uses the Host-reserved `official.*`
+namespace.
+The enable execution boundary performs the same exact configuration, lock, and personal-
+state revalidation immediately before importing the selected full-permissions entry.
 
 Every state write is byte-preflighted against its corresponding read bound. Blueprint
 publication writes the exact lock before configuration; disable and remove can reconcile

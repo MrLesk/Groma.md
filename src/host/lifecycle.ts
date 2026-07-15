@@ -193,6 +193,8 @@ const bootstrapFailureMessages = Object.freeze({
   "plugin-package-integrity-drift": "A local package changed after its exact lock was written",
   "plugin-package-enabled-limit-exceeded":
     "Enabled local plugins exceed this Host's runtime capacity",
+  "plugin-package-lock-changed":
+    "Blueprint plugin package state changed during startup; restart after changes settle",
   "plugin-package-lock-malformed": "The exact plugin package lock is malformed",
   "plugin-package-lock-mismatch":
     "Plugin package configuration does not match its exact lock entry",
@@ -208,6 +210,8 @@ const bootstrapFailureMessages = Object.freeze({
     "Local plugin package state is changing or unavailable; retry after changes settle",
   "plugin-package-trust-root-unattested":
     "Local plugin trust is unavailable because this Windows Host cannot attest exclusive control of its user-data root",
+  "plugin-package-user-state-changed":
+    "Local plugin package state changed during startup; restart after changes settle",
   "plugin-package-user-state-malformed": "Local plugin package state is malformed",
   "plugin-package-user-state-unavailable": "Local plugin package state is unavailable",
   "project-plugin-validation-required":

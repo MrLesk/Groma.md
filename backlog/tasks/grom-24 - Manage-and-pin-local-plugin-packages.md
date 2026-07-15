@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 13:40'
+updated_date: '2026-07-15 14:30'
 labels: []
 milestone: m-4
 dependencies:
@@ -148,4 +148,10 @@ Local closure validation after these changes passed the focused Core/Host/CLI/ar
 Final independent re-review found the last Host repairability edge cases: local Phase 1 providers must never be imported for a Phase 0 consumer, and a multiple consumer cannot repair an incompatible Host single-provider graph. The preflight now defers only a matching Phase 1 requirement; incompatible-provider deferral additionally requires a multiple requirement and exclusively multiple existing providers. Zero-import regressions cover both negative branches while the existing positive single and multiple local-provider cases remain green. The independent reviewer returned PASS on the complete corrected diff.
 
 Final repeated validation passed bun run check with 580 tests / 3,993 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed.
+
+Final post-push review closure combined the relevant Claude and Codex findings on the same PR. Startup now always reads the complete exact lock even when canonical configuration has no blueprint declarations, so personal entries can load through lock-first interrupted-add state and stored ID reservations remain visible. The lock-changed and user-state-changed revalidation diagnostics cross lifecycle and CLI boundaries canonically. Configuration resource faults are normalized and late enable-time provider failures retain infrastructure classification without import or state mutation.
+
+Manifest and entry reads now validate their native canonical path against the previously resolved package root both after opening and after reading while the file handle remains open; all existing descriptor/path identity, size, and timestamp checks remain intact. Deterministic package-root and nested entry-ancestor symlink swaps fail closed, with zero import and exact state preservation. Enable performs parameterized exact configuration, lock, and user-state revalidation immediately before the full-permissions import; direct-edit races on all three state surfaces fail before code evaluation or Groma writes.
+
+The independent final reviewer returned PASS. Claude's bounded correction review verified the production closures and found one test-only shifted read index; the Phase 1 optional-plugin start/cleanup fault case was restored at the new fifth read. Final repeated validation passed bun run check with 585 tests / 4,063 expectations, formatting, strict typecheck, architecture boundaries, native compiled package smoke, and Iteration 1A crash recovery; bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64; Backlog doctor and git diff --check passed. GROM-24 remains In Progress pending root-owned fresh Codex review, native CI, and merge.
 <!-- SECTION:NOTES:END -->

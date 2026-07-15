@@ -794,8 +794,8 @@ export const plugin = Object.freeze({
     expect(captured.output[0]).not.toContain(root);
   });
 
-  test("keeps transient bootstrap reads in the infrastructure exit class and cleans once", async () => {
-    for (const failureRead of [2, 3, 4] as const) {
+  test("classifies transient bootstrap and package-state reads and cleans once", async () => {
+    for (const failureRead of [2, 3, 4, 5] as const) {
       const root = await workspace();
       await Bun.write(
         path.join(root, "groma", "groma.yaml"),
@@ -862,24 +862,29 @@ export const plugin = Object.freeze({
         },
       );
 
-      expect(exitCode, String(failureRead)).toBe(CLI_EXIT.infrastructure);
+      const expectedExit = failureRead === 3 ? CLI_EXIT.workspace : CLI_EXIT.infrastructure;
+      expect(exitCode, String(failureRead)).toBe(expectedExit);
       expect(captured.errors, String(failureRead)).toEqual([]);
       expect(captured.output, String(failureRead)).toHaveLength(1);
       const envelope = JSON.parse(captured.output[0]!) as JsonEnvelope;
       expect(envelope, String(failureRead)).toMatchObject({
-        exitCode: CLI_EXIT.infrastructure,
+        exitCode: expectedExit,
         ok: false,
         result: {
           diagnostics: [
             {
               code:
                 failureRead === 3
-                  ? "workspace-discovery-failed"
-                  : "workspace-configuration-provider-failure",
+                  ? "plugin-package-lock-unavailable"
+                  : failureRead === 4
+                    ? "workspace-discovery-failed"
+                    : "workspace-configuration-provider-failure",
               message:
                 failureRead === 3
-                  ? "Workspace configuration discovery failed"
-                  : "Workspace configuration access failed",
+                  ? "The exact plugin package lock is unavailable"
+                  : failureRead === 4
+                    ? "Workspace configuration discovery failed"
+                    : "Workspace configuration access failed",
             },
           ],
           status: "startup-failure",
@@ -900,11 +905,11 @@ export const plugin = Object.freeze({
       expect(
         events.filter((event) => event === "optional:start"),
         String(failureRead),
-      ).toHaveLength(failureRead === 4 ? 1 : 0);
+      ).toHaveLength(failureRead === 5 ? 1 : 0);
       expect(
         events.filter((event) => event === "optional:stop"),
         String(failureRead),
-      ).toHaveLength(failureRead === 4 ? 1 : 0);
+      ).toHaveLength(failureRead === 5 ? 1 : 0);
     }
   });
 
@@ -985,7 +990,15 @@ export const plugin = Object.freeze({
         "plugin-package-enabled-limit-exceeded",
         "Enabled local plugins exceed this Host's runtime capacity",
       ],
+      [
+        "plugin-package-lock-changed",
+        "Blueprint plugin package state changed during startup; restart after changes settle",
+      ],
       ["plugin-package-plugin-id-conflict", "Enabled local plugins must use distinct plugin IDs"],
+      [
+        "plugin-package-user-state-changed",
+        "Local plugin package state changed during startup; restart after changes settle",
+      ],
       ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
       [
         "personal-plugin-capability-forbidden",

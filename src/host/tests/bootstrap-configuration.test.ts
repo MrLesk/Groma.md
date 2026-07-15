@@ -746,7 +746,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: async (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 4) {
+        if (reads === 5) {
           await Bun.write(configurationPath, "schema: groma/v0.1\nplugins:\n  - acme.project\n");
         }
       },
@@ -762,7 +762,7 @@ describe("bootstrap configuration", () => {
       ],
       ok: false,
     });
-    expect(reads).toBe(4);
+    expect(reads).toBe(5);
     expect(events).toContain("optional:start");
     expect(events).toContain("optional:stop");
     expect(events.at(-1)).toBe("phase-zero:stop");
@@ -855,7 +855,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 4) throw new Error("transient read failure");
+        if (reads === 5) throw new Error("transient read failure");
       },
       surface: idleSurface(),
     });
@@ -864,7 +864,7 @@ describe("bootstrap configuration", () => {
       diagnostics: [{ code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" }],
       ok: false,
     });
-    expect(reads).toBe(4);
+    expect(reads).toBe(5);
     for (const event of [
       "official.bootstrap-cleanup-probe:start",
       "official.bootstrap-cleanup-probe:stop",
