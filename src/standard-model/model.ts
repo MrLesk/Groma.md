@@ -15,16 +15,22 @@ import { copyGraphPayload } from "../core/payload.ts";
 
 export const STANDARD_COMPONENT_KIND = "component";
 export const STANDARD_MODEL_CAPABILITY_ID = "groma.standard-model/v0.1";
+export const STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS = 80;
+export const STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS = 280;
+export const STANDARD_COMPONENT_ICON_DOMAIN_MAX_CHARACTERS = 253;
 
 const knownComponentFields = new Set([
   "actions",
   "desired",
   "inputs",
   "intent",
+  "iconDomain",
+  "label",
   "lifecycle",
   "name",
   "outputs",
   "parent",
+  "summary",
   "type",
 ]);
 const knownItemFields = new Set(["description", "id", "name"]);
@@ -49,6 +55,9 @@ export interface StandardComponent {
   readonly id: EntityId;
   readonly kind: typeof STANDARD_COMPONENT_KIND;
   readonly name?: string;
+  readonly label?: string;
+  readonly summary?: string;
+  readonly iconDomain?: string;
   readonly type?: string;
   readonly parent?: EntityId;
   readonly intent?: string;
@@ -79,6 +88,9 @@ export interface StandardItemInput {
 export interface StandardComponentInput {
   readonly id?: string;
   readonly name?: string;
+  readonly label?: string;
+  readonly summary?: string;
+  readonly iconDomain?: string;
   readonly type?: string;
   readonly parent?: string;
   readonly intent?: string;
@@ -92,6 +104,9 @@ export interface StandardComponentInput {
 
 export interface StandardComponentPatch {
   readonly name?: string | null;
+  readonly label?: string | null;
+  readonly summary?: string | null;
+  readonly iconDomain?: string | null;
   readonly type?: string | null;
   readonly parent?: string | null;
   readonly intent?: string | null;
@@ -146,6 +161,95 @@ function optionalString(
         `${path}.${field} must be a string when present`,
         `${path}.${field}`,
       );
+}
+
+function isCanonicalBoundedLine(value: string, maximumCodePoints: number): boolean {
+  if (
+    value.length === 0 ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value)
+  ) {
+    return false;
+  }
+  let codePoints = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+    codePoints += 1;
+    if (codePoints > maximumCodePoints) return false;
+  }
+  return true;
+}
+
+export function isStandardComponentLabel(value: string): boolean {
+  return isCanonicalBoundedLine(value, STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS);
+}
+
+export function isStandardComponentSummary(value: string): boolean {
+  return isCanonicalBoundedLine(value, STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS);
+}
+
+export function isStandardComponentIconDomain(value: string): boolean {
+  if (
+    value.length === 0 ||
+    value.length > STANDARD_COMPONENT_ICON_DOMAIN_MAX_CHARACTERS ||
+    value !== value.toLowerCase() ||
+    !value.includes(".") ||
+    !/^[a-z0-9.-]+$/u.test(value)
+  ) {
+    return false;
+  }
+  const labels = value.split(".");
+  const ipv4NumberShape =
+    labels.length >= 2 &&
+    labels.length <= 4 &&
+    labels.every((label) => /^[0-9]+$/u.test(label) || /^0x[0-9a-f]*$/u.test(label));
+  if (ipv4NumberShape) {
+    return false;
+  }
+  return labels.every(
+    (label) =>
+      label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(label),
+  );
+}
+
+function recognitionString(
+  record: Readonly<Record<string, unknown>>,
+  field: "iconDomain" | "label" | "summary",
+  path: string,
+): Result<string | undefined> {
+  const parsed = optionalString(record, field, path);
+  if (!parsed.ok || parsed.value === undefined) return parsed;
+  const valid =
+    field === "label"
+      ? isStandardComponentLabel(parsed.value)
+      : field === "summary"
+        ? isStandardComponentSummary(parsed.value)
+        : isStandardComponentIconDomain(parsed.value);
+  if (valid) return parsed;
+  const expectation =
+    field === "label"
+      ? `a trimmed, non-empty, control-free single line of at most ${STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS} Unicode code points`
+      : field === "summary"
+        ? `a trimmed, non-empty, control-free single line of at most ${STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS} Unicode code points`
+        : "a lowercase ASCII DNS hostname with at least two labels, no trailing dot, and no IP literal";
+  return diagnostic(
+    `invalid-component-${field === "iconDomain" ? "icon-domain" : field}`,
+    `${path}.${field} must be ${expectation}`,
+    `${path}.${field}`,
+  );
+}
+
+export function standardComponentDisplayText(
+  component: Readonly<Pick<StandardComponent, "id" | "label" | "name">>,
+): string {
+  return component.label ?? component.name ?? component.id;
 }
 
 function openToken(
@@ -329,6 +433,9 @@ function itemRecord(item: StandardItem): GraphDataRecord {
 function componentPayload(component: Omit<StandardComponent, "id" | "kind">): GraphDataRecord {
   return {
     ...(component.name === undefined ? {} : { name: component.name }),
+    ...(component.label === undefined ? {} : { label: component.label }),
+    ...(component.summary === undefined ? {} : { summary: component.summary }),
+    ...(component.iconDomain === undefined ? {} : { iconDomain: component.iconDomain }),
     ...(component.type === undefined ? {} : { type: component.type }),
     ...(component.parent === undefined ? {} : { parent: component.parent }),
     ...(component.intent === undefined ? {} : { intent: component.intent }),
@@ -346,6 +453,12 @@ function parsePayload(value: unknown): Result<Omit<StandardComponent, "id" | "ki
   if (!record.ok) return record;
   const name = optionalString(record.value, "name", "component");
   if (!name.ok) return name;
+  const label = recognitionString(record.value, "label", "component");
+  if (!label.ok) return label;
+  const summary = recognitionString(record.value, "summary", "component");
+  if (!summary.ok) return summary;
+  const iconDomain = recognitionString(record.value, "iconDomain", "component");
+  if (!iconDomain.ok) return iconDomain;
   const type = openToken(record.value, "type", "component");
   if (!type.ok) return type;
   const intent = optionalString(record.value, "intent", "component");
@@ -381,6 +494,9 @@ function parsePayload(value: unknown): Result<Omit<StandardComponent, "id" | "ki
   return success(
     Object.freeze({
       ...(name.value === undefined ? {} : { name: name.value }),
+      ...(label.value === undefined ? {} : { label: label.value }),
+      ...(summary.value === undefined ? {} : { summary: summary.value }),
+      ...(iconDomain.value === undefined ? {} : { iconDomain: iconDomain.value }),
       ...(type.value === undefined ? {} : { type: type.value }),
       ...(parent === undefined ? {} : { parent }),
       ...(intent.value === undefined ? {} : { intent: intent.value }),

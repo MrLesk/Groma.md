@@ -10,8 +10,11 @@ import {
 } from "../../core/index.ts";
 import {
   createStandardModelCapability,
+  STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS,
   STANDARD_COMPONENT_KIND,
   STANDARD_MODEL_CAPABILITY_ID,
+  STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS,
+  standardComponentDisplayText,
   type StandardComponent,
   type StandardComponentInput,
 } from "../index.ts";
@@ -207,6 +210,118 @@ describe("standard v0.1 model", () => {
       "out_order_placed",
       "out_order_status",
     ]);
+  });
+
+  test("preserves bounded recognition metadata and derives one-component display text", () => {
+    const model = createStandardModelCapability();
+    const kernel = createKernel();
+    const normalized = model.normalize({
+      iconDomain: "xn--bcher-kva.example",
+      id: componentId(20),
+      label: "Orders",
+      name: "Order Management",
+      summary: "Owns the durable order lifecycle.",
+      type: "external",
+    });
+    if (!normalized.ok) throw new Error(normalized.diagnostics[0]?.message);
+    const added = kernel.addEntity(kernel.empty(), normalized.value);
+    if (!added.ok) throw new Error(added.diagnostics[0]?.message);
+    const parsed = model.parse(added.value.entity);
+    if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.message);
+
+    expect(parsed.value).toMatchObject({
+      iconDomain: "xn--bcher-kva.example",
+      label: "Orders",
+      name: "Order Management",
+      summary: "Owns the durable order lifecycle.",
+      type: "external",
+    });
+    expect(model.serialize(parsed.value)).toEqual(normalized);
+    expect(standardComponentDisplayText(parsed.value)).toBe("Orders");
+    expect(standardComponentDisplayText({ id: parsed.value.id, name: "Order Management" })).toBe(
+      "Order Management",
+    );
+    expect(standardComponentDisplayText({ id: parsed.value.id })).toBe(parsed.value.id);
+
+    const cleared = model.patch(added.value.entity, {
+      iconDomain: null,
+      label: null,
+      summary: null,
+    });
+    if (!cleared.ok) throw new Error(cleared.diagnostics[0]?.message);
+    expect(cleared.value.payload).toEqual({ name: "Order Management", type: "external" });
+  });
+
+  test("rejects non-canonical recognition metadata without rewriting it", () => {
+    const model = createStandardModelCapability();
+    const malformed = [
+      [{ label: "" }, "invalid-component-label"],
+      [{ label: " padded" }, "invalid-component-label"],
+      [{ label: "two\nlines" }, "invalid-component-label"],
+      [{ label: "bad\u0000value" }, "invalid-component-label"],
+      [{ label: "bad\tvalue" }, "invalid-component-label"],
+      [{ label: "bad\u001bvalue" }, "invalid-component-label"],
+      [{ label: `bad${String.fromCharCode(0xd800)}` }, "invalid-component-label"],
+      [{ label: `bad${String.fromCharCode(0xdc00)}` }, "invalid-component-label"],
+      [
+        { label: "🙂".repeat(STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS + 1) },
+        "invalid-component-label",
+      ],
+      [{ summary: "" }, "invalid-component-summary"],
+      [{ summary: "two\u2028lines" }, "invalid-component-summary"],
+      [{ summary: "bad\u007fvalue" }, "invalid-component-summary"],
+      [{ summary: "bad\u0080value" }, "invalid-component-summary"],
+      [
+        { summary: "🙂".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS + 1) },
+        "invalid-component-summary",
+      ],
+      [{ iconDomain: "example.com." }, "invalid-component-icon-domain"],
+      [{ iconDomain: "Example.com" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "https://example.com" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "example.com:443" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "example.com/icon.png" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "localhost" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.0.0.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.0.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x7f.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0177.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "123.456" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "127.0x1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x7f.0.0x0.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x.1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "0x.0x1" }, "invalid-component-icon-domain"],
+      [{ iconDomain: "1.0x" }, "invalid-component-icon-domain"],
+      [{ iconDomain: `${"a".repeat(64)}.example` }, "invalid-component-icon-domain"],
+      [{ iconDomain: "-bad.example" }, "invalid-component-icon-domain"],
+    ] as const;
+
+    for (const [input, code] of malformed) {
+      expect(model.normalize(input)).toMatchObject({ diagnostics: [{ code }], ok: false });
+    }
+    expect(
+      model.normalize({
+        iconDomain: "example.com",
+        label: "🙂".repeat(STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS),
+        summary: "🙂".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      model.normalize({
+        label: "Order 👩‍💻 operations",
+        summary: "Coordinates family 👨‍👩‍👧‍👦 workflows across regions.",
+      }),
+    ).toMatchObject({ ok: true });
+    for (const iconDomain of [
+      "123.example",
+      "0x.example",
+      "0x7f.example",
+      "0x.0xzz",
+      "127.0xzz",
+      "1.2.3.4.5",
+    ]) {
+      expect(model.normalize({ iconDomain })).toMatchObject({ ok: true });
+    }
   });
 
   test("produces one canonical model for equivalent property and item insertion orders", () => {

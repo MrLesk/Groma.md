@@ -100,13 +100,16 @@ export interface ComponentSemanticsTrace {
   readonly actions?: readonly StandardItemTrace[];
   readonly desired?: string;
   readonly extensions: Readonly<Record<string, GraphData>>;
+  readonly iconDomain?: string;
   readonly id: string;
   readonly inputs?: readonly StandardItemTrace[];
   readonly intent?: string;
+  readonly label?: string;
   readonly lifecycle?: string;
   readonly name?: string;
   readonly outputs?: readonly StandardItemTrace[];
   readonly parent?: string;
+  readonly summary?: string;
   readonly type?: string;
 }
 
@@ -141,13 +144,16 @@ export function projectComponentSemantics(component: StandardComponent): Compone
     ...(component.actions === undefined ? {} : { actions: component.actions.map(item) }),
     ...(component.desired === undefined ? {} : { desired: component.desired }),
     extensions: extensions(component.extensions),
+    ...(component.iconDomain === undefined ? {} : { iconDomain: component.iconDomain }),
     id: component.id,
     ...(component.inputs === undefined ? {} : { inputs: component.inputs.map(item) }),
     ...(component.intent === undefined ? {} : { intent: component.intent }),
+    ...(component.label === undefined ? {} : { label: component.label }),
     ...(component.lifecycle === undefined ? {} : { lifecycle: component.lifecycle }),
     ...(component.name === undefined ? {} : { name: component.name }),
     ...(component.outputs === undefined ? {} : { outputs: component.outputs.map(item) }),
     ...(component.parent === undefined ? {} : { parent: component.parent }),
+    ...(component.summary === undefined ? {} : { summary: component.summary }),
     ...(component.type === undefined ? {} : { type: component.type }),
   };
 }
@@ -257,7 +263,9 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
             name: "Cart",
           },
         ],
+        iconDomain: "checkout.example.com",
         intent: "Coordinate checkout.",
+        label: "Checkout flow",
         lifecycle: "active",
         name: "Checkout",
         outputs: [
@@ -269,6 +277,7 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
           },
         ],
         parent: conformanceIds.rootA,
+        summary: "Coordinates carts, identity, and accepted orders.",
         type: "service",
       },
       {
@@ -352,7 +361,9 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
           name: "Cart",
         },
       ],
+      iconDomain: "checkout.example.com",
       intent: "Coordinate checkout.",
+      label: "Checkout flow",
       lifecycle: "active",
       name: "Checkout",
       outputs: [
@@ -364,6 +375,7 @@ export const expectedApplicationOperationsTrace: ApplicationOperationsTrace = Ob
         },
       ],
       parent: conformanceIds.rootA,
+      summary: "Coordinates carts, identity, and accepted orders.",
       type: "service",
     },
     relationships: [
@@ -531,7 +543,9 @@ export async function exerciseApplicationOperations(
             name: "Cart",
           },
         ],
+        iconDomain: "checkout.example.com",
         intent: "Coordinate checkout.",
+        label: "Checkout flow",
         lifecycle: "active",
         name: "Checkout",
         outputs: [
@@ -543,6 +557,7 @@ export async function exerciseApplicationOperations(
           },
         ],
         parent: conformanceIds.rootA,
+        summary: "Coordinates carts, identity, and accepted orders.",
         type: "service",
       },
       relationships: [

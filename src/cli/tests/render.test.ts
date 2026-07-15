@@ -27,7 +27,15 @@ describe("CLI rendering", () => {
         result: {
           generation: 1,
           kind: "hierarchy",
-          nodes: [{ depth: 0, id: "ent_01\nforged", name: "\u001b[31mred", revision: "rev_01" }],
+          nodes: [
+            {
+              depth: 0,
+              displayText: "\u001b[32mdisplay",
+              id: "ent_01\nforged",
+              name: "\u001b[31mred",
+              revision: "rev_01",
+            },
+          ],
           truncations: [],
         },
       },
@@ -37,6 +45,7 @@ describe("CLI rendering", () => {
     expect(rendered).toMatchObject({ ok: true });
     if (rendered.ok) {
       expect(rendered.text).toContain('id="ent_01\\nforged"');
+      expect(rendered.text).toContain('display="\\u001b[32mdisplay"');
       expect(rendered.text).toContain('name="\\u001b[31mred"');
       expect(rendered.text).not.toContain("\u001b");
     }

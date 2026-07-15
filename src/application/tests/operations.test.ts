@@ -2082,6 +2082,9 @@ describe("application component reads", () => {
   test("binds every component view field exactly to its graph payload", async () => {
     for (const field of [
       "name",
+      "label",
+      "summary",
+      "iconDomain",
       "type",
       "parent",
       "intent",
@@ -2107,6 +2110,9 @@ describe("application component reads", () => {
           if (!parsed.ok || entity.id !== ids.service) return parsed;
           const changed = { ...parsed.value } as Record<string, unknown>;
           if (field === "name") changed.name = "Changed";
+          else if (field === "label") changed.label = "Changed label";
+          else if (field === "summary") changed.summary = "Changed summary.";
+          else if (field === "iconDomain") changed.iconDomain = "changed.example.com";
           else if (field === "type") changed.type = "module";
           else if (field === "parent") changed.parent = ids.secondRoot;
           else if (field === "intent") changed.intent = "Changed intent";
@@ -2858,6 +2864,69 @@ describe("application component mutations", () => {
     expect(updated.value.intent).toBe("Updated intent.");
     expect(updated.value.actions?.[0]?.id).toBe("ship");
     expect(updated.value.extensions).toEqual({ "example.dev/tier": 1 });
+  });
+
+  test("creates, updates, clears, and reads canonical recognition metadata", async () => {
+    const fixture = mutationOperations();
+    const created = await fixture.api.createComponent({
+      component: {
+        iconDomain: "orders.example.com",
+        id: ids.service,
+        label: "Orders",
+        name: "Order Management",
+        summary: "Owns the durable order lifecycle.",
+        type: "external",
+      },
+    });
+    expect(created.status).toBe("committed");
+    if (created.status !== "committed") return;
+    expect(created.value).toMatchObject({
+      iconDomain: "orders.example.com",
+      label: "Orders",
+      name: "Order Management",
+      summary: "Owns the durable order lifecycle.",
+      type: "external",
+    });
+
+    const updated = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(created),
+      id: ids.service,
+      patch: {
+        iconDomain: null,
+        label: "Order flow",
+        summary: null,
+      },
+    });
+    expect(updated.status).toBe("committed");
+    if (updated.status !== "committed") return;
+    expect(updated.value.label).toBe("Order flow");
+    expect(updated.value.summary).toBeUndefined();
+    expect(updated.value.iconDomain).toBeUndefined();
+
+    const read = await fixture.api.getComponent({
+      id: ids.service,
+      relationships: { limit: 1 },
+    });
+    expect(read.ok).toBeTrue();
+    if (!read.ok) return;
+    expect(read.value.item.component).toEqual(updated.value);
+
+    const executions = fixture.executions();
+    const malformed = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(updated),
+      id: ids.service,
+      patch: { label: " padded" },
+    });
+    expect(malformed.status).toBe("validation-rejected");
+    expect(fixture.executions()).toBe(executions);
+
+    const ipv4Shaped = await fixture.api.updateComponent({
+      expectedRevision: committedRevision(updated),
+      id: ids.service,
+      patch: { iconDomain: "127.0x1" },
+    });
+    expect(ipv4Shaped.status).toBe("validation-rejected");
+    expect(fixture.executions()).toBe(executions);
   });
 
   test("rejects semantically identical component patches without executing", async () => {

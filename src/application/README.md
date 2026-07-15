@@ -133,6 +133,10 @@ copied graph payloads. Every component field, embedded item, namespaced extensio
 relationship description, and relationship extension must have exactly the same presence
 and deep canonical value; object key order is irrelevant. A model cannot substitute
 semantic meaning and still receive canonical provenance or reach transaction execution.
+This includes optional `label`, `summary`, and `iconDomain` recognition metadata: all
+three travel through the same create, sparse-update, exact-read, and paged-read path as
+the rest of the canonical component, while renderer state remains outside application
+mutations.
 
 Each composition supplies explicit application bounds for component and relationship
 state, relationship mutations, embedded items, diagnostics, request-data structural

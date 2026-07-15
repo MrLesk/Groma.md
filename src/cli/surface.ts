@@ -1,9 +1,10 @@
-import type {
-  ApplicationMutationOutcome,
-  ApplicationOperations,
-  ComponentPage,
-  CreateComponentRequest,
-  UpdateComponentRequest,
+import {
+  standardComponentDisplayText,
+  type ApplicationMutationOutcome,
+  type ApplicationOperations,
+  type ComponentPage,
+  type CreateComponentRequest,
+  type UpdateComponentRequest,
 } from "../application/index.ts";
 import type { HostSurface, HostSurfaceContext } from "../host/index.ts";
 import {
@@ -214,6 +215,7 @@ async function overview(
     nodes.push(
       Object.freeze({
         depth,
+        displayText: standardComponentDisplayText(item.component),
         id,
         ...(item.component.name === undefined ? {} : { name: item.component.name }),
         revision: item.revision,

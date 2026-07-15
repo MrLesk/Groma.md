@@ -13,8 +13,12 @@ therefore never change the resource key. Each file owns only that component and 
 outgoing relationships. Relationship sources are implicit, while stable relationship
 IDs, types, targets, descriptions, and namespaced extensions remain explicit.
 
-The `groma/v0.1` frontmatter contains structural metadata, embedded inputs, outputs,
-actions, outgoing relationships, and extensions. For intent-bearing documents, the
+The `groma/v0.1` frontmatter contains structural metadata, optional `label`, `summary`,
+and `iconDomain` recognition metadata, embedded inputs, outputs, actions, outgoing
+relationships, and extensions. Existing documents omit those optional keys without a
+schema migration. Supplied values use the Standard Model's strict bounded validation
+and a fixed readable key order, while `iconDomain` remains inert text and never causes
+network access. For intent-bearing documents, the
 closing frontmatter delimiter is followed by one blank line, the exact `# Intent`
 heading, another blank line, the reversible prose, and one framing newline. The codec
 uses the injected Standard Model capability for every component and relationship

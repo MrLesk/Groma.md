@@ -18,6 +18,9 @@ import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   createStandardModelInvariant,
+  isStandardComponentIconDomain,
+  isStandardComponentLabel,
+  isStandardComponentSummary,
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
   type StandardComponentInput,
@@ -186,11 +189,14 @@ const componentFields = new Set([
   "id",
   "inputs",
   "intent",
+  "iconDomain",
   "kind",
+  "label",
   "lifecycle",
   "name",
   "outputs",
   "parent",
+  "summary",
   "type",
 ]);
 const componentRequiredFields = new Set(["extensions", "id", "kind"]);
@@ -630,10 +636,13 @@ function optionalModelString(
   record: Readonly<Record<string, unknown>>,
   field: string,
   tokenPattern?: RegExp,
+  canonical?: (value: string) => boolean,
 ): Result<string | undefined> {
   if (!Object.hasOwn(record, field)) return success(undefined);
   const value = record[field];
-  return typeof value === "string" && (tokenPattern === undefined || tokenPattern.test(value))
+  return typeof value === "string" &&
+    (tokenPattern === undefined || tokenPattern.test(value)) &&
+    (canonical === undefined || canonical(value))
     ? success(value)
     : decoderFailure();
 }
@@ -766,6 +775,9 @@ function modelComponentPayload(
   const outputs = items("outputs");
   return Object.freeze({
     ...(value.name === undefined ? {} : { name: value.name }),
+    ...(value.label === undefined ? {} : { label: value.label }),
+    ...(value.summary === undefined ? {} : { summary: value.summary }),
+    ...(value.iconDomain === undefined ? {} : { iconDomain: value.iconDomain }),
     ...(value.type === undefined ? {} : { type: value.type }),
     ...(value.parent === undefined ? {} : { parent: value.parent }),
     ...(value.intent === undefined ? {} : { intent: value.intent }),
@@ -837,11 +849,33 @@ function modelComponent(
     return decoderFailure();
   }
   const name = optionalModelString(record.value, "name");
+  const label = optionalModelString(record.value, "label", undefined, isStandardComponentLabel);
+  const summary = optionalModelString(
+    record.value,
+    "summary",
+    undefined,
+    isStandardComponentSummary,
+  );
+  const iconDomain = optionalModelString(
+    record.value,
+    "iconDomain",
+    undefined,
+    isStandardComponentIconDomain,
+  );
   const type = optionalModelString(record.value, "type", openTokenPattern);
   const intent = optionalModelString(record.value, "intent");
   const lifecycle = optionalModelString(record.value, "lifecycle", openTokenPattern);
   const desired = optionalModelString(record.value, "desired", openTokenPattern);
-  if (!name.ok || !type.ok || !intent.ok || !lifecycle.ok || !desired.ok) {
+  if (
+    !name.ok ||
+    !label.ok ||
+    !summary.ok ||
+    !iconDomain.ok ||
+    !type.ok ||
+    !intent.ok ||
+    !lifecycle.ok ||
+    !desired.ok
+  ) {
     return decoderFailure();
   }
   let parent: string | undefined;
@@ -863,6 +897,9 @@ function modelComponent(
     id: id.value,
     kind: STANDARD_COMPONENT_KIND,
     ...(name.value === undefined ? {} : { name: name.value }),
+    ...(label.value === undefined ? {} : { label: label.value }),
+    ...(summary.value === undefined ? {} : { summary: summary.value }),
+    ...(iconDomain.value === undefined ? {} : { iconDomain: iconDomain.value }),
     ...(type.value === undefined ? {} : { type: type.value }),
     ...(parent === undefined ? {} : { parent }),
     ...(intent.value === undefined ? {} : { intent: intent.value }),
