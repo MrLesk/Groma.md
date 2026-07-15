@@ -482,6 +482,7 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
         "listChildren",
         "listComponents",
         "listRoots",
+        "mergeComponent",
         "removeComponent",
         "reparentComponent",
         "updateComponent",
@@ -498,6 +499,7 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     typeof operations.value.listChildren !== "function" ||
     typeof operations.value.listComponents !== "function" ||
     typeof operations.value.listRoots !== "function" ||
+    typeof operations.value.mergeComponent !== "function" ||
     typeof operations.value.removeComponent !== "function" ||
     typeof operations.value.reparentComponent !== "function" ||
     typeof operations.value.updateComponent !== "function"

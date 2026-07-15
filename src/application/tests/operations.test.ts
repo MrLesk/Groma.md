@@ -2751,6 +2751,61 @@ function committedRevision(outcome: ApplicationMutationOutcome<unknown>): string
 }
 
 describe("application component mutations", () => {
+  test("allows the canonical alias resource beyond the component bound during an outgoing merge", async () => {
+    const fixture = new SnapshotFixture();
+    fixture.currentState = state(
+      [
+        component({ id: ids.domain, name: "Obsolete", type: "domain" }),
+        component({ id: ids.service, name: "Survivor", type: "service" }),
+      ],
+      [
+        {
+          id: relationIds.first,
+          payload: {},
+          source: ids.domain,
+          target: ids.service,
+          type: "depends-on",
+        },
+      ],
+    );
+    const aliasesResource = resource("aliases");
+    const obsoleteResource = resource(ids.domain);
+    const api = operations(fixture, undefined, {
+      aliasResourceMapper: { resourceForAliases: () => success(aliasesResource) },
+      bounds: { ...applicationBounds, maxComponents: 2 },
+      transactionExecution: {
+        execute: async (request) => {
+          const committedGeneration = generation(2);
+          return {
+            event: {
+              affected: request.affected,
+              generation: committedGeneration,
+              type: "graph.committed",
+            },
+            generation: committedGeneration,
+            revisions: request.expectedRevisions.map((entry) => ({
+              resource: entry.resource,
+              revision: entry.resource === obsoleteResource ? null : "committed-fake-revision",
+            })),
+            status: "committed",
+          } as never;
+        },
+      },
+    });
+
+    const result = await api.mergeComponent({
+      expectedRevision: `revision:${String(obsoleteResource).slice(-32)}`,
+      obsolete: ids.domain,
+      survivor: ids.service,
+    });
+
+    expect(result.status).toBe("committed");
+    expect(fixture.requested.at(-1)).toHaveLength(3);
+    expect(fixture.requested.at(-1)).toEqual(
+      [aliasesResource, obsoleteResource, resource(ids.service)].sort(),
+    );
+  });
+
   test("mints against canonical state and retries an existing identity before commit", async () => {
     const provider = new MutationProvider();
     const existing = "ent_0000000000000000000000000000000a";

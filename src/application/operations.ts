@@ -54,6 +54,7 @@ import type {
   ListChildComponentsRequest,
   ListComponentsRequest,
   ListRootComponentsRequest,
+  MergeComponentRequest,
   RemoveComponentRequest,
   ReparentComponentRequest,
   RelationshipPage,
@@ -84,12 +85,16 @@ interface SelectedPage<T> {
   readonly nextAnchor?: string;
 }
 
-type ComponentFilter = (component: StandardComponent) => boolean;
+type ComponentFilter = (state: ReadSnapshot) => (component: StandardComponent) => boolean;
 
 interface ApplicationCapabilityCalls {
+  readonly aliasResourceMapper?: NonNullable<ApplicationOperationsOptions["aliasResourceMapper"]>;
   readonly initialize: ApplicationOperationsOptions["initialization"]["initialize"];
   readonly queries: ApplicationOperationsOptions["queries"];
   readonly resourceForComponent: ApplicationOperationsOptions["resourceMapper"]["resourceForComponent"];
+  readonly resourceForAliases?: NonNullable<
+    ApplicationOperationsOptions["aliasResourceMapper"]
+  >["resourceForAliases"];
   readonly resourceMapper: ApplicationOperationsOptions["resourceMapper"];
   readonly snapshot: ApplicationOperationsOptions["transactionProvider"]["snapshot"];
   readonly transactionProvider: ApplicationOperationsOptions["transactionProvider"];
@@ -170,6 +175,12 @@ const absoluteBounds = Object.freeze({
   maxSnapshotStateValues: 10_000_000,
 });
 
+function maximumCanonicalResourceCount(bounds: ApplicationOperationBounds): number {
+  // Component mutations normally touch at most one resource per component. A merge may
+  // additionally persist the single canonical alias resource.
+  return bounds.maxComponents + 1;
+}
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -230,6 +241,50 @@ function componentResource(
   return resource.ok ? resource : frozenFailure(componentResourceDiagnostic(componentId));
 }
 
+function aliasResource(options: ApplicationOperationsContext): Result<ResourceKey> {
+  const mapper = options.calls.aliasResourceMapper;
+  const method = options.calls.resourceForAliases;
+  if (mapper === undefined || method === undefined) {
+    return frozenFailure(
+      diagnostic("alias-store-unavailable", "Canonical alias persistence is unavailable"),
+    );
+  }
+  let value: unknown;
+  try {
+    value = intrinsicReflectApply(method, mapper, []);
+  } catch {
+    return frozenFailure(
+      diagnostic("alias-store-unavailable", "Canonical alias persistence is unavailable"),
+    );
+  }
+  const contained = containApplicationCapabilityValue(value, options, 4, 16);
+  if (!contained.ok) {
+    return frozenFailure(
+      diagnostic("alias-store-unavailable", "Canonical alias persistence is unavailable"),
+    );
+  }
+  const result = inspectExactRecord(
+    contained.value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "invalid-alias-resource-result",
+    "Alias resource mapping result",
+  );
+  if (!result.ok || result.value.ok !== true) {
+    return frozenFailure(
+      diagnostic("alias-store-unavailable", "Canonical alias persistence is unavailable"),
+    );
+  }
+  const resource = parseResourceKey(result.value.value);
+  return resource.ok
+    ? resource
+    : frozenFailure(
+        diagnostic("alias-store-unavailable", "Canonical alias persistence is unavailable"),
+      );
+}
+
 function validatePositiveBound(value: number, name: string, maximum: number): void {
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
     throw new RangeError(`${name} must be a positive safe integer no greater than ${maximum}`);
@@ -251,6 +306,9 @@ function captureApplicationOperationsOptions(
     maxSnapshotStateValues: source.bounds.maxSnapshotStateValues,
   };
   return {
+    ...(source.aliasResourceMapper === undefined
+      ? {}
+      : { aliasResourceMapper: source.aliasResourceMapper }),
     bounds,
     graph: source.graph,
     initialization: source.initialization,
@@ -307,6 +365,12 @@ function captureApplicationCapabilityCalls(
   options: ApplicationOperationsOptions,
 ): ApplicationCapabilityCalls {
   const calls: ApplicationCapabilityCalls = {
+    ...(options.aliasResourceMapper === undefined
+      ? {}
+      : {
+          aliasResourceMapper: options.aliasResourceMapper,
+          resourceForAliases: options.aliasResourceMapper.resourceForAliases,
+        }),
     execute: options.transactionExecution.execute,
     initialization: options.initialization,
     initialize: options.initialization.initialize,
@@ -320,6 +384,7 @@ function captureApplicationCapabilityCalls(
   for (const [name, value] of Object.entries(calls)) {
     if (
       name !== "initialization" &&
+      name !== "aliasResourceMapper" &&
       name !== "queries" &&
       name !== "resourceMapper" &&
       name !== "transactionExecution" &&
@@ -370,7 +435,7 @@ function containApplicationCapabilityValue(
     isProxy: options.isProxy,
     maximumContainerEntries: Math.max(
       64,
-      options.bounds.maxComponents,
+      maximumCanonicalResourceCount(options.bounds),
       options.bounds.maxDiagnosticCount,
       options.bounds.maxEmbeddedItems,
       options.bounds.maxRelationships,
@@ -824,7 +889,7 @@ async function snapshot(
   const entries = denseArray(
     containedRevisions.value,
     "Transaction provider revisions",
-    options.bounds.maxComponents,
+    resources.length,
     options.isProxy,
   );
   if (!entries.ok) return entries;
@@ -915,11 +980,18 @@ function decodeSnapshotState(
     }
     const state = inspectExactRecord(
       result.value.value,
-      [["components", "graph", "relationships"]],
+      [["aliases", "components", "graph", "relationships"]],
       "application-snapshot-decode-failed",
       "Decoded application snapshot state",
     );
     if (!state.ok) return snapshotDecodeFailure();
+    const aliases = denseArray(
+      state.value.aliases,
+      "Decoded application snapshot aliases",
+      options.bounds.maxComponents,
+      isProxy,
+    );
+    if (!aliases.ok) return snapshotDecodeFailure();
     const components = denseArray(
       state.value.components,
       "Decoded application snapshot components",
@@ -985,6 +1057,7 @@ function decodeSnapshotState(
     }
     return success(
       Object.freeze({
+        aliases: aliases.value as DecodedApplicationSnapshotState["aliases"],
         components: components.value as readonly StandardComponent[],
         graph: graph as GraphSnapshot,
         relationships: relationships.value as readonly StandardRelationship[],
@@ -1337,7 +1410,7 @@ async function componentPage(
     if (!initial.ok) return readProviderFailure(initial.diagnostics);
     const prepared = prepareQuery(initial.value.generation, query, request, options);
     if (!prepared.ok) return prepared;
-    const initialItems = initial.value.components.filter(filter);
+    const initialItems = initial.value.components.filter(filter(initial.value));
     const initialPage = selectPage(initialItems, prepared.value);
     if (!initialPage.ok) return initialPage;
     const resources: ResourceKey[] = [];
@@ -1350,7 +1423,7 @@ async function componentPage(
     if (!confirmed.ok) return readProviderFailure(confirmed.diagnostics);
     if (confirmed.value.generation !== initial.value.generation) continue;
 
-    const confirmedItems = confirmed.value.components.filter(filter);
+    const confirmedItems = confirmed.value.components.filter(filter(confirmed.value));
     const confirmedPage = selectPage(confirmedItems, prepared.value);
     if (!confirmedPage.ok) return confirmedPage;
     if (
@@ -1410,11 +1483,17 @@ interface PlannedRelationshipChanges {
 type DiagnosticCategory = "conflict" | "indeterminate" | "provider" | "validation";
 
 const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
+  "alias-store-unavailable": "Canonical alias persistence is unavailable",
+  "ambiguous-component-supersession":
+    "An obsolete component identity can have only one superseding target",
   "application-request-data-too-large":
     "Mutation request data exceeds the configured structural budget",
+  "component-alias-cycle": "Component alias chains must remain acyclic",
   "component-containment-cycle": "Component containment must remain acyclic",
   "component-has-children": "Component children must be handled explicitly first",
   "component-has-relationships": "Component relationships must be handled explicitly first",
+  "component-is-alias-target":
+    "A component that preserves obsolete identities must be merged onward rather than removed",
   "component-resource-unavailable": "The component resource could not be resolved",
   "content-revision-conflict": "The component revision conflicts with canonical state",
   "continuation-anchor-too-large": "The continuation anchor exceeds the configured size budget",
@@ -1429,14 +1508,17 @@ const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
   "invalid-query-page-state": "The query page state is malformed",
   "malformed-continuation-cursor": "The continuation cursor is malformed",
   "missing-continuation-anchor": "A continuing page requires a deterministic anchor",
+  "missing-component-alias-target": "The component alias target does not exist",
   "non-advancing-continuation-anchor": "The continuation anchor must advance",
   "query-context-too-large": "The query context exceeds the configured size budget",
   "query-page-overflow": "The query page exceeds the validated item limit",
   "relationship-id-hijack": "The relationship identity belongs to another component",
   "self-component-parent": "A component cannot be its own structural parent",
+  "self-component-alias": "A component identity cannot supersede itself",
   "stale-cursor": "The continuation cursor belongs to a different graph generation",
   "unexpected-continuation-anchor": "A completed page must not include a continuation anchor",
   "unknown-component": "The exact component does not exist",
+  "unknown-component-alias-source": "The obsolete component identity does not exist",
   "unknown-component-parent": "The exact component parent does not exist",
   "unknown-relationship": "The exact relationship does not exist",
   "unsupported-continuation-cursor": "The continuation cursor version is not supported",
@@ -1753,7 +1835,7 @@ function preflightTransactionOutcome(
     const count = denseArray(
       envelope.value.revisions,
       "Committed revisions",
-      bounds.maxComponents,
+      maximumCanonicalResourceCount(bounds),
       isProxy,
     );
     if (!count.ok) return count;
@@ -1804,7 +1886,7 @@ function preflightTransactionOutcome(
     const resources = denseArray(
       recovery.value.resources,
       "Transaction recovery resources",
-      bounds.maxComponents,
+      maximumCanonicalResourceCount(bounds),
       isProxy,
     );
     if (!resources.ok) return resources;
@@ -1819,7 +1901,7 @@ function preflightTransactionOutcome(
 
 function mapTransactionOutcome<T>(
   outcome: unknown,
-  resourceOwners: ReadonlyMap<ResourceKey, string>,
+  resourceOwners: ReadonlyMap<ResourceKey, string | null>,
   expectedAffected: {
     readonly components: readonly string[];
     readonly relationships: readonly string[];
@@ -1832,7 +1914,7 @@ function mapTransactionOutcome<T>(
     isProxy,
     maximumContainerEntries: Math.max(
       64,
-      bounds.maxComponents,
+      maximumCanonicalResourceCount(bounds),
       bounds.maxDiagnosticCount,
       bounds.maxRelationships,
     ),
@@ -1909,7 +1991,7 @@ function mapTransactionOutcome<T>(
     const revisionEntries = denseArray(
       envelope.value.revisions,
       "Committed revisions",
-      bounds.maxComponents,
+      maximumCanonicalResourceCount(bounds),
       isProxy,
     );
     if (!revisionEntries.ok || revisionEntries.value.length !== resourceOwners.size) {
@@ -1932,7 +2014,9 @@ function mapTransactionOutcome<T>(
       const componentId = resourceOwners.get(resource.value);
       if (componentId === undefined) return malformedOutcome();
       received.add(resource.value);
-      revisions[index] = Object.freeze({ componentId, revision: revision.value });
+      if (componentId !== null) {
+        revisions.push(Object.freeze({ componentId, revision: revision.value }));
+      }
     }
     revisions.sort((left, right) => compareText(left.componentId, right.componentId));
     return Object.freeze({
@@ -1989,7 +2073,7 @@ function mapTransactionOutcome<T>(
     const recoveryResources = denseArray(
       recovery.value.resources,
       "Transaction recovery resources",
-      bounds.maxComponents,
+      maximumCanonicalResourceCount(bounds),
       isProxy,
     );
     if (!baseGeneration.ok || !recoveryGeneration.ok || !recoveryResources.ok) {
@@ -2005,7 +2089,7 @@ function mapTransactionOutcome<T>(
 
 async function executeMutation<T>(
   request: TransactionRequest,
-  resourceOwners: ReadonlyMap<ResourceKey, string>,
+  resourceOwners: ReadonlyMap<ResourceKey, string | null>,
   value: T,
   options: ApplicationOperationsContext,
 ): Promise<ApplicationMutationOutcome<T>> {
@@ -2141,7 +2225,7 @@ function relationshipInput(
       id: id.value,
       payload,
       source,
-      target: target.value,
+      target: resolvedTarget.value.id,
       type: record.type,
     });
   } else {
@@ -2297,6 +2381,11 @@ function standardTransactionRequest(
   affectedRelationships: readonly string[],
   resource: ResourceKey,
   expectedRevision: ContentRevision | null,
+  aliasMutations: readonly GraphDataRecord[] = Object.freeze([]),
+  additionalExpectedRevisions: readonly {
+    readonly expected: ContentRevision | null;
+    readonly resource: ResourceKey;
+  }[] = Object.freeze([]),
 ): TransactionRequest {
   return Object.freeze({
     affected: Object.freeze({
@@ -2307,8 +2396,14 @@ function standardTransactionRequest(
       ownership: Object.freeze({ owner: "groma.application", plane: "intent" }),
       pinnedComponentIds: Object.freeze([]),
     }),
-    expectedRevisions: Object.freeze([Object.freeze({ expected: expectedRevision, resource })]),
+    expectedRevisions: Object.freeze(
+      [
+        Object.freeze({ expected: expectedRevision, resource }),
+        ...additionalExpectedRevisions,
+      ].sort((left, right) => compareText(left.resource, right.resource)),
+    ),
     mutation: Object.freeze({
+      ...(aliasMutations.length === 0 ? {} : { aliases: Object.freeze(aliasMutations) }),
       components: Object.freeze(componentMutations),
       relationships: Object.freeze(relationshipMutations),
     }),
@@ -2398,37 +2493,71 @@ export function createApplicationOperations(
       "Outgoing relationship page request",
     );
     if (!relationshipsRequest.ok) return relationshipsRequest;
-    const mapped = componentResource(id.value, options);
-    if (!mapped.ok) return mapped;
-    const read = await snapshot(Object.freeze([mapped.value]), options);
-    if (!read.ok) return readProviderFailure(read.diagnostics);
-    const component = componentById(read.value, id.value);
-    if (component === undefined) {
-      return failure(
-        diagnostic("unknown-component", "No component exists for the exact stable identity"),
+    const requestedResource = componentResource(id.value, options);
+    if (!requestedResource.ok) return requestedResource;
+    for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
+      const initial = await snapshot(Object.freeze([requestedResource.value]), options);
+      if (!initial.ok) return readProviderFailure(initial.diagnostics);
+      const resolved = options.graph.resolveEntityIdentity(initial.value.graph, id.value);
+      if (!resolved.ok) {
+        return failure(
+          diagnostic("unknown-component", "No component exists for the stable identity or alias"),
+        );
+      }
+      const mapped =
+        resolved.value.resolved === id.value
+          ? requestedResource
+          : componentResource(resolved.value.resolved, options);
+      if (!mapped.ok) return mapped;
+      const read =
+        resolved.value.resolved === id.value
+          ? initial
+          : await snapshot(Object.freeze([mapped.value]), options);
+      if (!read.ok) return readProviderFailure(read.diagnostics);
+      if (read.value.generation !== initial.value.generation) continue;
+      const confirmed = options.graph.resolveEntityIdentity(read.value.graph, id.value);
+      if (!confirmed.ok || confirmed.value.resolved !== resolved.value.resolved) {
+        return failure(
+          diagnostic(
+            "inconsistent-provider-snapshot",
+            "Equal graph generations returned different component alias resolution",
+          ),
+        );
+      }
+      const component = componentById(read.value, confirmed.value.resolved);
+      if (component === undefined) {
+        return failure(
+          diagnostic("unknown-component", "No component exists for the stable identity or alias"),
+        );
+      }
+      const revision = revisionFor(read.value, mapped.value, "Component");
+      if (!revision.ok) return revision;
+      const relationships = relationshipPage(
+        read.value.generation,
+        component.id,
+        revision.value,
+        read.value.relationships,
+        relationshipsRequest.value,
+        options,
       );
+      if (!relationships.ok) return relationships;
+      const exact = exactQuery(
+        read.value.generation,
+        Object.freeze({
+          generation: read.value.generation,
+          item: Object.freeze({ component, revision: revision.value }),
+          relationships: relationships.value,
+        }),
+        options,
+      );
+      return exact.ok ? success(exact.value.item as ExactComponentRead) : exact;
     }
-    const revision = revisionFor(read.value, mapped.value, "Component");
-    if (!revision.ok) return revision;
-    const relationships = relationshipPage(
-      read.value.generation,
-      id.value,
-      revision.value,
-      read.value.relationships,
-      relationshipsRequest.value,
-      options,
+    return failure(
+      diagnostic(
+        "snapshot-generation-conflict",
+        "The graph generation changed during every bounded read attempt",
+      ),
     );
-    if (!relationships.ok) return relationships;
-    const exact = exactQuery(
-      read.value.generation,
-      Object.freeze({
-        generation: read.value.generation,
-        item: Object.freeze({ component, revision: revision.value }),
-        relationships: relationships.value,
-      }),
-      options,
-    );
-    return exact.ok ? success(exact.value.item as ExactComponentRead) : exact;
   };
 
   const createComponent = async (
@@ -2535,10 +2664,14 @@ export function createApplicationOperations(
         status: "conflict" as const,
       });
     }
-    if (component.parent !== undefined && componentById(current, component.parent) === undefined) {
-      return rejected(
-        diagnostic("unknown-component-parent", "Nested component parent does not exist"),
-      );
+    if (component.parent !== undefined) {
+      const parent = options.graph.resolveEntityIdentity(current.graph, component.parent);
+      if (!parent.ok) {
+        return rejected(
+          diagnostic("unknown-component-parent", "Nested component parent does not exist"),
+        );
+      }
+      component = Object.freeze({ ...component, parent: parent.value.resolved });
     }
     const relationshipMutations: GraphDataRecord[] = [];
     const affectedRelationships = new Set<string>();
@@ -2578,6 +2711,7 @@ export function createApplicationOperations(
     const componentInput = Object.freeze({
       id: component.id,
       ...(added.entity.payload as GraphDataRecord),
+      ...(component.parent === undefined ? {} : { parent: component.parent }),
     });
     relationshipMutations.sort((left, right) =>
       compareText(
@@ -2647,7 +2781,7 @@ export function createApplicationOperations(
     ) {
       return rejected(diagnostic("invalid-component-patch", "Component patch must be a record"));
     }
-    const patch = requestData.value.patch as GraphDataRecord;
+    let patch = requestData.value.patch as GraphDataRecord;
     if (!allowParent && Object.hasOwn(patch, "parent")) {
       return rejected(
         diagnostic(
@@ -2667,9 +2801,11 @@ export function createApplicationOperations(
       }
       const parent = parseEntityId(patch.parent);
       if (!parent.ok) return rejected(...parent.diagnostics);
-      if (componentById(current.value, parent.value) === undefined) {
+      const resolved = options.graph.resolveEntityIdentity(current.value.graph, parent.value);
+      if (!resolved.ok) {
         return rejected(diagnostic("unknown-component-parent", "Reparent target does not exist"));
       }
+      patch = Object.freeze({ ...patch, parent: resolved.value.resolved });
     }
     const entity = options.graph.resolveEntity(current.value.graph, {
       expectedKind: STANDARD_COMPONENT_KIND,
@@ -2776,6 +2912,179 @@ export function createApplicationOperations(
     );
   };
 
+  const mergeComponent = async (
+    request: MergeComponentRequest,
+  ): Promise<ApplicationMutationOutcome<StandardComponent>> => {
+    const validated = exactRequest(
+      request,
+      [["expectedRevision", "obsolete", "survivor"]],
+      "Merge component request",
+    );
+    if (!validated.ok) return rejected(...validated.diagnostics);
+    if (
+      typeof validated.value.obsolete !== "string" ||
+      typeof validated.value.survivor !== "string"
+    ) {
+      return rejected(diagnostic("invalid-entity-id", "Merge identities must be strings"));
+    }
+    const obsolete = parseEntityId(validated.value.obsolete);
+    const requestedSurvivor = parseEntityId(validated.value.survivor);
+    const expectedRevision = parseContentRevision(validated.value.expectedRevision);
+    if (!obsolete.ok) return rejected(...obsolete.diagnostics);
+    if (!requestedSurvivor.ok) return rejected(...requestedSurvivor.diagnostics);
+    if (!expectedRevision.ok) return rejected(...expectedRevision.diagnostics);
+    if (obsolete.value === requestedSurvivor.value) {
+      return rejected(
+        diagnostic("self-component-alias", "A component identity cannot supersede itself"),
+      );
+    }
+    const aliasesResource = aliasResource(options);
+    if (!aliasesResource.ok) return rejected(...aliasesResource.diagnostics);
+
+    for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
+      const initial = await snapshot(Object.freeze([]), options);
+      if (!initial.ok) return snapshotFailure(initial.diagnostics);
+      if (componentById(initial.value, obsolete.value) === undefined) {
+        return rejected(
+          initial.value.aliases.some((alias) => alias.source === obsolete.value)
+            ? diagnostic(
+                "ambiguous-component-supersession",
+                "The obsolete component identity is already superseded",
+              )
+            : diagnostic("unknown-component", "The obsolete component does not exist"),
+        );
+      }
+      const resolvedSurvivor = options.graph.resolveEntityIdentity(
+        initial.value.graph,
+        requestedSurvivor.value,
+      );
+      if (!resolvedSurvivor.ok) {
+        return rejected(
+          diagnostic(
+            "missing-component-alias-target",
+            "The surviving component identity does not exist",
+          ),
+        );
+      }
+      if (resolvedSurvivor.value.resolved === obsolete.value) {
+        return rejected(
+          diagnostic(
+            "component-alias-cycle",
+            "A merge cannot supersede a component through itself",
+          ),
+        );
+      }
+      const obsoleteResource = componentResource(obsolete.value, options);
+      const survivorResource = componentResource(resolvedSurvivor.value.resolved, options);
+      if (!obsoleteResource.ok) return rejected(...obsoleteResource.diagnostics);
+      if (!survivorResource.ok) return rejected(...survivorResource.diagnostics);
+      const outgoing = initial.value.relationships.filter(
+        (relationship) => relationship.source === obsolete.value,
+      );
+      const resources = Object.freeze(
+        [
+          aliasesResource.value,
+          obsoleteResource.value,
+          ...(outgoing.length === 0 ? [] : [survivorResource.value]),
+        ].sort(compareText),
+      );
+      const current = await snapshot(resources, options);
+      if (!current.ok) return snapshotFailure(current.diagnostics);
+      if (current.value.generation !== initial.value.generation) continue;
+      const currentObsolete = componentById(current.value, obsolete.value);
+      const currentSurvivorResolution = options.graph.resolveEntityIdentity(
+        current.value.graph,
+        requestedSurvivor.value,
+      );
+      if (
+        currentObsolete === undefined ||
+        !currentSurvivorResolution.ok ||
+        currentSurvivorResolution.value.resolved !== resolvedSurvivor.value.resolved
+      ) {
+        return revisionConflict();
+      }
+      if (current.value.revisions.get(obsoleteResource.value) !== expectedRevision.value) {
+        return revisionConflict();
+      }
+      const survivor = componentById(current.value, resolvedSurvivor.value.resolved);
+      if (survivor === undefined) {
+        return rejected(diagnostic("unknown-component", "The surviving component does not exist"));
+      }
+      const currentOutgoing = current.value.relationships
+        .filter((relationship) => relationship.source === obsolete.value)
+        .sort((left, right) => compareText(left.id, right.id));
+      if (
+        currentOutgoing.length !== outgoing.length ||
+        currentOutgoing.some((relationship, index) => relationship.id !== outgoing[index]!.id)
+      ) {
+        return revisionConflict();
+      }
+      const relationshipMutations = Object.freeze(
+        currentOutgoing.map((relationship) =>
+          relationshipMutation(
+            Object.freeze({
+              ...relationship,
+              source: survivor.id,
+              target: relationship.target === obsolete.value ? survivor.id : relationship.target,
+            }),
+          ),
+        ),
+      );
+      const affectedComponents = Object.freeze(
+        [obsolete.value, ...(relationshipMutations.length === 0 ? [] : [survivor.id])].sort(
+          compareText,
+        ),
+      );
+      const additionalExpected = [
+        Object.freeze({
+          expected: current.value.revisions.get(aliasesResource.value) ?? null,
+          resource: aliasesResource.value,
+        }),
+        ...(relationshipMutations.length === 0
+          ? []
+          : [
+              Object.freeze({
+                expected: current.value.revisions.get(survivorResource.value) ?? null,
+                resource: survivorResource.value,
+              }),
+            ]),
+      ];
+      const transaction = standardTransactionRequest(
+        Object.freeze([Object.freeze({ id: obsolete.value, type: "remove" })]),
+        relationshipMutations,
+        affectedComponents,
+        Object.freeze(currentOutgoing.map((relationship) => relationship.id)),
+        obsoleteResource.value,
+        expectedRevision.value,
+        Object.freeze([
+          Object.freeze({
+            source: obsolete.value,
+            target: survivor.id,
+            type: "upsert",
+          }),
+        ]),
+        Object.freeze(additionalExpected),
+      );
+      const owners = new Map<ResourceKey, string | null>([
+        [obsoleteResource.value, obsolete.value],
+        [aliasesResource.value, null],
+        ...(relationshipMutations.length === 0
+          ? []
+          : ([[survivorResource.value, survivor.id]] as [ResourceKey, string | null][])),
+      ]);
+      return executeMutation(transaction, owners, survivor, options);
+    }
+    return Object.freeze({
+      diagnostics: Object.freeze([
+        Object.freeze({
+          code: "snapshot-generation-conflict",
+          message: "The operation conflicts with current canonical state",
+        }),
+      ]),
+      status: "conflict" as const,
+    });
+  };
+
   const removeComponent = async (
     request: RemoveComponentRequest,
   ): Promise<ApplicationMutationOutcome<string>> => {
@@ -2802,6 +3111,14 @@ export function createApplicationOperations(
     }
     if (current.value.revisions.get(mapped.value) !== expectedRevision.value) {
       return revisionConflict();
+    }
+    if (current.value.aliases.some((alias) => alias.target === id.value)) {
+      return rejected(
+        diagnostic(
+          "component-is-alias-target",
+          "A merge survivor must be merged onward instead of removed directly",
+        ),
+      );
     }
     if (current.value.components.some((candidate) => candidate.parent === id.value)) {
       return rejected(
@@ -2840,7 +3157,7 @@ export function createApplicationOperations(
       ? componentPage(
           validated.value,
           Object.freeze({ operation: "list-components" }),
-          () => true,
+          () => () => true,
           options,
         )
       : validated;
@@ -2852,7 +3169,7 @@ export function createApplicationOperations(
       ? componentPage(
           validated.value,
           Object.freeze({ operation: "list-root-components" }),
-          (component) => component.parent === undefined,
+          () => (component) => component.parent === undefined,
           options,
         )
       : validated;
@@ -2888,7 +3205,12 @@ export function createApplicationOperations(
       ? componentPage(
           pageRequest.value,
           Object.freeze({ operation: "list-child-components", parent: parent.value }),
-          (component) => component.parent === parent.value,
+          (state) => {
+            const resolved = options.graph.resolveEntityIdentity(state.graph, parent.value);
+            return resolved.ok
+              ? (component) => component.parent === resolved.value.resolved
+              : () => false;
+          },
           options,
         )
       : pageRequest;
@@ -2901,6 +3223,7 @@ export function createApplicationOperations(
     listChildren,
     listComponents,
     listRoots,
+    mergeComponent,
     removeComponent,
     reparentComponent,
     updateComponent,

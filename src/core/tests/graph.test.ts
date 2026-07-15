@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
+import { createEntityAliasResolver } from "../aliases.ts";
 import { GraphKernel, type GraphSnapshot } from "../graph.ts";
-import { createOpaqueIdSource } from "../identity.ts";
+import { createOpaqueIdSource, parseEntityId } from "../identity.ts";
 
 function createKernel(maxPageSize = 3): GraphKernel {
   let value = 0;
@@ -412,6 +413,117 @@ describe("graph kernel", () => {
         limit: 1,
       }),
     ).toMatchObject({ diagnostics: [{ code: "invalid-traversal-direction" }], ok: false });
+  });
+
+  test("resolves deterministic alias chains for entities and relationship endpoints", () => {
+    const kernel = createKernel();
+    const id = (value: number) => `ent_${value.toString(16).padStart(32, "0")}`;
+    const relation = `rel_${"1".padStart(32, "0")}`;
+    const loaded = kernel.load(
+      [{ id: id(3), kind: "component", payload: { name: "Survivor" } }],
+      [
+        {
+          id: relation,
+          payload: {},
+          source: { id: id(1) },
+          target: { id: id(2) },
+          type: "depends-on",
+        },
+      ],
+      [
+        { source: id(2), target: id(3) },
+        { source: id(1), target: id(2) },
+      ],
+    );
+    expect(loaded.ok).toBeTrue();
+    if (!loaded.ok) return;
+    expect(kernel.resolveEntityIdentity(loaded.value, id(1))).toMatchObject({
+      ok: true,
+      value: { chain: [id(2), id(3)], requested: id(1), resolved: id(3) },
+    });
+    expect(kernel.resolveEntity(loaded.value, { id: id(1) })).toMatchObject({
+      ok: true,
+      value: { id: id(3), payload: { name: "Survivor" } },
+    });
+    expect(kernel.resolveRelation(loaded.value, relation)).toMatchObject({
+      ok: true,
+      value: { source: id(3), target: id(3) },
+    });
+  });
+
+  test("isolates alias resolution from caller-owned live identity sets", () => {
+    const id = (value: number) => {
+      const parsed = parseEntityId(`ent_${value.toString(16).padStart(32, "0")}`);
+      if (!parsed.ok) throw new Error("invalid test identity");
+      return parsed.value;
+    };
+    const live = new Set([id(2)]);
+    const resolver = createEntityAliasResolver([{ source: id(1), target: id(2) }], live);
+    expect(resolver.ok).toBeTrue();
+    if (!resolver.ok) return;
+    live.delete(id(2));
+    live.add(id(1));
+    expect(resolver.value.resolve(id(1))).toMatchObject({
+      ok: true,
+      value: { requested: id(1), resolved: id(2) },
+    });
+  });
+
+  test("retries implicit identity minting when an alias source is reserved", () => {
+    const id = (value: number) => `ent_${value.toString(16).padStart(32, "0")}`;
+    let entityCalls = 0;
+    const kernel = new GraphKernel({
+      idSource: {
+        nextEntityId: () => {
+          entityCalls += 1;
+          return entityCalls === 1 ? id(1) : id(3);
+        },
+        nextRelationId: () => `rel_${"1".padStart(32, "0")}`,
+      },
+      maxPageSize: 3,
+    });
+    const loaded = kernel.load(
+      [{ id: id(2), kind: "component", payload: {} }],
+      [],
+      [{ source: id(1), target: id(2) }],
+    );
+    expect(loaded.ok).toBeTrue();
+    if (!loaded.ok) return;
+    expect(kernel.addEntity(loaded.value, { kind: "component", payload: {} })).toMatchObject({
+      ok: true,
+      value: { entity: { id: id(3) } },
+    });
+    expect(entityCalls).toBe(2);
+  });
+
+  test("fails closed for invalid and ambiguous alias graphs", () => {
+    const kernel = createKernel();
+    const id = (value: number) => `ent_${value.toString(16).padStart(32, "0")}`;
+    const live = [{ id: id(3), kind: "component", payload: {} }];
+    for (const [aliases, code] of [
+      [[{ source: id(1), target: id(1) }], "self-component-alias"],
+      [[{ source: id(1), target: id(4) }], "missing-component-alias-target"],
+      [
+        [
+          { source: id(1), target: id(2) },
+          { source: id(2), target: id(1) },
+        ],
+        "component-alias-cycle",
+      ],
+      [
+        [
+          { source: id(1), target: id(2) },
+          { source: id(1), target: id(3) },
+        ],
+        "ambiguous-component-supersession",
+      ],
+      [[{ source: id(3), target: id(1) }], "ambiguous-component-supersession"],
+    ] as const) {
+      expect(kernel.load(live, [], aliases)).toMatchObject({
+        diagnostics: [{ code }],
+        ok: false,
+      });
+    }
   });
 
   test("loads a representative large graph as one validated snapshot", () => {

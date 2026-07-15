@@ -23,11 +23,14 @@ Usage:
   groma [--format plain|json] component roots --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] component children <parent-id> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] component update (--input <file|-> | --stdin)
+  groma [--format plain|json] component merge <obsolete-id> --into <survivor-id> --revision <obsolete-revision>
   groma [--format plain|json] component reparent <id> --revision <revision> (--parent <parent-id> | --root)
   groma [--format plain|json] component remove <id> --revision <revision>
 
 Create and update input is one bounded UTF-8 JSON application request envelope.
 Parent changes for existing components use the explicit reparent command.
+Merge is the only operation that creates a component alias. It removes the obsolete component,
+keeps the survivor identity unchanged, and preserves old references through canonical supersession.
 Every ordinary read returns exactly one bounded page; page limits are explicit.
 
 Package add accepts local filesystem paths only; remote npm, Git, and URL acquisition is out of scope.

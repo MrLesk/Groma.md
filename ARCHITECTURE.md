@@ -477,6 +477,22 @@ aliases, plans, and transaction recovery.
 - **Relationships:** Used by Graph Kernel, Reconciliation Engine, Plan Views, and Git
   comparison.
 
+The official local store serializes this plane as deterministic Markdown at
+`groma/aliases.md` using schema `groma/aliases/v0.1`. Frontmatter records contain only
+`source` and `target` opaque component IDs and are ordered by source. An explicit
+component merge removes the obsolete component,
+re-homes any outgoing relationships under the unchanged survivor, and publishes the
+alias in one canonical transaction. Incoming relationships and child parent references
+remain in their owning intent documents and resolve through the alias chain. Ordinary
+renames, updates, moves, and reparenting never create aliases. A source that remains live,
+multiple targets for one source, self-aliases, cycles, and chains without one live target
+all fail closed before canonical publication.
+
+Merge does not rewrite unrelated owning documents. When a component document is newly
+created, explicitly reparented, or re-homed by a merge, references accepted through an
+obsolete ID are serialized as the current surviving ID. Existing untouched references
+remain readable through the same canonical alias resolver.
+
 #### Transaction Journal
 
 - **Seed key:** `transaction-journal`

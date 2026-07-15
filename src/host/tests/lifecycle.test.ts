@@ -86,6 +86,7 @@ function applicationOperations(
     listChildren: unused,
     listComponents: unused,
     listRoots: unused,
+    mergeComponent: unused,
     removeComponent: unused,
     reparentComponent: unused,
     updateComponent: unused,

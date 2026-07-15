@@ -389,6 +389,7 @@ describe("CLI program", () => {
       ok: true,
       result: { value: { id: child, parent: target } },
     });
+    expect(await Bun.file(path.join(root, "groma", "aliases.md")).exists()).toBeFalse();
 
     const stableReadArgs = ["component", "get", child, "--relationships-limit", "10"] as const;
     const firstStableRead = await jsonCommand(root, stableReadArgs);
@@ -435,6 +436,61 @@ describe("CLI program", () => {
       ok: true,
       result: { value: grandchild },
     });
+  });
+
+  test("merges through the public CLI and resolves the obsolete ID after restart", async () => {
+    const root = await workspace();
+    const obsolete = "ent_00000000000000000000000000000021";
+    const survivor = "ent_00000000000000000000000000000022";
+    await jsonCommand(root, ["init"]);
+    const obsoleteCreate = await jsonCommand(
+      root,
+      ["component", "create", "--stdin"],
+      JSON.stringify({ component: { id: obsolete, name: "Old checkout" } }),
+    );
+    expect(obsoleteCreate.envelope).toMatchObject({
+      command: "component create",
+      exitCode: 0,
+      ok: true,
+    });
+    await jsonCommand(
+      root,
+      ["component", "create", "--stdin"],
+      JSON.stringify({ component: { id: survivor, name: "Checkout" } }),
+    );
+
+    const merged = await jsonCommand(root, [
+      "component",
+      "merge",
+      obsolete,
+      "--into",
+      survivor,
+      "--revision",
+      committedRevision(obsoleteCreate.envelope, obsolete),
+    ]);
+    expect(merged.envelope).toMatchObject({
+      command: "component merge",
+      exitCode: 0,
+      ok: true,
+      result: { value: { id: survivor, name: "Checkout" } },
+    });
+
+    const read = await jsonCommand(root, [
+      "component",
+      "get",
+      obsolete,
+      "--relationships-limit",
+      "1",
+    ]);
+    expect(read.envelope).toMatchObject({
+      command: "component get",
+      exitCode: 0,
+      ok: true,
+      result: { value: { item: { component: { id: survivor, name: "Checkout" } } } },
+    });
+    expect(await readFile(path.join(root, "groma", "aliases.md"), "utf8")).toBe(
+      `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${obsolete}\n    target: ${survivor}\n---\n`,
+    );
   });
 
   test("manages a trust-gated local package end to end without touching project package-manager files", async () => {

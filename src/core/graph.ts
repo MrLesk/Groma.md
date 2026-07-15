@@ -5,6 +5,11 @@ import {
   type OpaqueIdSource,
   type RelationId,
 } from "./identity.ts";
+import {
+  createEntityAliasResolver,
+  type EntityAliasInput,
+  type EntityAliasResolver,
+} from "./aliases.ts";
 import { copyGraphPayload, type GraphData } from "./payload.ts";
 import { failure, type Diagnostic, type Result, success } from "./result.ts";
 
@@ -73,11 +78,13 @@ export interface RelationTraversalRequest extends PageRequest<RelationId> {
 
 export interface GraphKernelOptions {
   readonly idSource: OpaqueIdSource;
+  readonly maxAliases?: number;
   readonly maxPageSize: number;
   readonly identityAttempts?: number;
 }
 
 interface SnapshotState {
+  readonly aliases: EntityAliasResolver;
   readonly entities: ReadonlyMap<EntityId, GraphEntity>;
   readonly relations: ReadonlyMap<RelationId, GraphRelation>;
 }
@@ -139,17 +146,21 @@ function freezeRelation(relation: GraphRelation): GraphRelation {
 }
 
 function resolveEntityFrom(
-  entities: ReadonlyMap<EntityId, GraphEntity>,
+  state: Pick<SnapshotState, "aliases" | "entities">,
   reference: EntityReference,
 ): Result<GraphEntity> {
   if (reference.expectedKind !== undefined) {
     const kindDiagnostic = validateToken(reference.expectedKind, "entity kind");
     if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
   }
-  const identity = parseEntityId(reference.id);
-  if (!identity.ok) return identity;
-
-  const entity = entities.get(identity.value);
+  const requested = parseEntityId(reference.id);
+  if (!requested.ok) return requested;
+  let entity = state.entities.get(requested.value);
+  if (entity === undefined) {
+    const identity = state.aliases.resolve(requested.value);
+    if (!identity.ok) return identity;
+    entity = state.entities.get(identity.value.resolved);
+  }
   if (entity === undefined) {
     return failure({
       code: "unknown-entity",
@@ -172,6 +183,7 @@ function resolveEntityFrom(
 export class GraphKernel {
   readonly #idSource: OpaqueIdSource;
   readonly #identityAttempts: number;
+  readonly #maxAliases: number;
   readonly #maxPageSize: number;
 
   constructor(options: GraphKernelOptions) {
@@ -185,16 +197,20 @@ export class GraphKernel {
 
     this.#idSource = options.idSource;
     this.#identityAttempts = identityAttempts;
+    this.#maxAliases = options.maxAliases ?? 100_000;
     this.#maxPageSize = options.maxPageSize;
   }
 
   empty(): GraphSnapshot {
-    return makeSnapshot({ entities: new Map(), relations: new Map() });
+    const aliases = createEntityAliasResolver(Object.freeze([]), new Set(), this.#maxAliases);
+    if (!aliases.ok) throw new Error("Empty alias resolver could not be created");
+    return makeSnapshot({ aliases: aliases.value, entities: new Map(), relations: new Map() });
   }
 
   load(
     entities: readonly EntityDraft[],
     relations: readonly RelationDraft[],
+    aliases: readonly EntityAliasInput[] = Object.freeze([]),
   ): Result<GraphSnapshot> {
     const loadedEntities = new Map<EntityId, GraphEntity>();
     const loadedRelations = new Map<RelationId, GraphRelation>();
@@ -223,6 +239,14 @@ export class GraphKernel {
       loadedEntities.set(entity.id, entity);
     }
 
+    const resolvedAliases = createEntityAliasResolver(
+      aliases,
+      new Set(loadedEntities.keys()),
+      this.#maxAliases,
+    );
+    if (!resolvedAliases.ok) return resolvedAliases;
+    const loadedState = { aliases: resolvedAliases.value, entities: loadedEntities };
+
     for (const draft of relations) {
       if (draft.id === undefined) {
         return failure({
@@ -232,9 +256,9 @@ export class GraphKernel {
       }
       const typeDiagnostic = validateToken(draft.type, "relation type");
       if (typeDiagnostic !== undefined) return failure(typeDiagnostic);
-      const source = resolveEntityFrom(loadedEntities, draft.source);
+      const source = resolveEntityFrom(loadedState, draft.source);
       if (!source.ok) return source;
-      const target = resolveEntityFrom(loadedEntities, draft.target);
+      const target = resolveEntityFrom(loadedState, draft.target);
       if (!target.ok) return target;
       const identity = parseRelationId(draft.id);
       if (!identity.ok) return identity;
@@ -257,7 +281,13 @@ export class GraphKernel {
       loadedRelations.set(relation.id, relation);
     }
 
-    return success(makeSnapshot({ entities: loadedEntities, relations: loadedRelations }));
+    return success(
+      makeSnapshot({
+        aliases: resolvedAliases.value,
+        entities: loadedEntities,
+        relations: loadedRelations,
+      }),
+    );
   }
 
   addEntity(
@@ -268,11 +298,10 @@ export class GraphKernel {
     const kindDiagnostic = validateToken(draft.kind, "entity kind");
     if (kindDiagnostic !== undefined) return failure(kindDiagnostic);
 
-    const identity =
-      draft.id === undefined ? this.#mintEntityId(state.entities) : parseEntityId(draft.id);
+    const identity = draft.id === undefined ? this.#mintEntityId(state) : parseEntityId(draft.id);
     if (!identity.ok) return identity;
 
-    if (state.entities.has(identity.value)) {
+    if (state.entities.has(identity.value) || state.aliases.has(identity.value)) {
       return failure({
         code: "ambiguous-entity-identity",
         message: "Entity identity occurs more than once and cannot be resolved safely",
@@ -285,7 +314,10 @@ export class GraphKernel {
     const entity = freezeEntity({ id: identity.value, kind: draft.kind, payload: payload.value });
     const entities = new Map(state.entities);
     entities.set(entity.id, entity);
-    return success({ entity, snapshot: makeSnapshot({ entities, relations: state.relations }) });
+    return success({
+      entity,
+      snapshot: makeSnapshot({ aliases: state.aliases, entities, relations: state.relations }),
+    });
   }
 
   updateEntity(
@@ -302,7 +334,10 @@ export class GraphKernel {
     const entity = freezeEntity({ ...resolved.value, payload: copiedPayload.value });
     const entities = new Map(state.entities);
     entities.set(entity.id, entity);
-    return success({ entity, snapshot: makeSnapshot({ entities, relations: state.relations }) });
+    return success({
+      entity,
+      snapshot: makeSnapshot({ aliases: state.aliases, entities, relations: state.relations }),
+    });
   }
 
   addRelation(
@@ -313,9 +348,9 @@ export class GraphKernel {
     const typeDiagnostic = validateToken(draft.type, "relation type");
     if (typeDiagnostic !== undefined) return failure(typeDiagnostic);
 
-    const source = resolveEntityFrom(state.entities, draft.source);
+    const source = resolveEntityFrom(state, draft.source);
     if (!source.ok) return source;
-    const target = resolveEntityFrom(state.entities, draft.target);
+    const target = resolveEntityFrom(state, draft.target);
     if (!target.ok) return target;
 
     const identity =
@@ -340,11 +375,29 @@ export class GraphKernel {
     });
     const relations = new Map(state.relations);
     relations.set(relation.id, relation);
-    return success({ relation, snapshot: makeSnapshot({ entities: state.entities, relations }) });
+    return success({
+      relation,
+      snapshot: makeSnapshot({ aliases: state.aliases, entities: state.entities, relations }),
+    });
   }
 
   resolveEntity(snapshot: GraphSnapshot, reference: EntityReference): Result<GraphEntity> {
-    return resolveEntityFrom(stateFor(snapshot).entities, reference);
+    return resolveEntityFrom(stateFor(snapshot), reference);
+  }
+
+  resolveEntityIdentity(snapshot: GraphSnapshot, id: string) {
+    const state = stateFor(snapshot);
+    const requested = parseEntityId(id);
+    if (!requested.ok) return requested;
+    return state.entities.has(requested.value)
+      ? success(
+          Object.freeze({
+            chain: Object.freeze([]),
+            requested: requested.value,
+            resolved: requested.value,
+          }),
+        )
+      : state.aliases.resolve(requested.value);
   }
 
   resolveRelation(snapshot: GraphSnapshot, id: string): Result<GraphRelation> {
@@ -416,7 +469,7 @@ export class GraphKernel {
     return this.#page(items, request.after, limit.value, (item) => item.id, parseRelationId);
   }
 
-  #mintEntityId(existing: ReadonlyMap<EntityId, GraphEntity>): Result<EntityId> {
+  #mintEntityId(existing: Pick<SnapshotState, "aliases" | "entities">): Result<EntityId> {
     for (let attempt = 0; attempt < this.#identityAttempts; attempt += 1) {
       let candidate: string;
       try {
@@ -429,7 +482,8 @@ export class GraphKernel {
       }
       const parsed = parseEntityId(candidate);
       if (!parsed.ok) return parsed;
-      if (!existing.has(parsed.value)) return parsed;
+      if (!existing.entities.has(parsed.value) && !existing.aliases.has(parsed.value))
+        return parsed;
     }
     return failure({
       code: "entity-id-collision",

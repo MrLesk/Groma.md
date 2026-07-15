@@ -100,6 +100,9 @@ describe("standard model transaction invariant", () => {
     expect(() => createStandardModelInvariant({ ...options, maxComponents: 0 })).toThrow(
       "maxComponents must be a positive safe integer",
     );
+    expect(() => createStandardModelInvariant({ ...options, maxComponents: 1_000_001 })).toThrow(
+      "maxComponents exceeds the supported component alias ceiling",
+    );
   });
 
   test("exports envelopes that are compile-time compatible with Core GraphData", () => {
@@ -306,6 +309,56 @@ describe("standard model transaction invariant", () => {
         details: { id: relationId(1), target: entityId(2) },
       },
     ]);
+  });
+
+  test("bounds the combined alias state after alias mutations", () => {
+    const invariant = createStandardModelInvariant({ ...options, maxComponents: 2 });
+    const diagnostics = invariant.validate(
+      proposal({
+        affected: { entities: [entityId(4)], relations: [] },
+        priorState: {
+          aliases: [
+            { source: entityId(1), target: entityId(3) },
+            { source: entityId(2), target: entityId(3) },
+          ],
+          components: [component(entityId(3)), component(entityId(4))],
+          relationships: [],
+        },
+        mutation: {
+          aliases: [{ source: entityId(4), target: entityId(3), type: "upsert" }],
+          components: [{ id: entityId(4), type: "remove" }],
+          relationships: [],
+        },
+      }),
+    );
+    expect(diagnostics).toMatchObject([
+      {
+        code: "standard-model-envelope-too-large",
+        details: { maximum: 2, path: "finalState.aliases" },
+      },
+    ]);
+  });
+
+  test("keeps a raised configured alias bound through final graph validation", () => {
+    const maxComponents = 100_001;
+    const target = entityId(200_000);
+    const aliases = Array.from({ length: maxComponents }, (_, index) => ({
+      source: entityId(index + 1),
+      target,
+    }));
+    const invariant = createStandardModelInvariant({ ...options, maxComponents });
+
+    expect(
+      invariant.validate(
+        proposal({
+          priorState: {
+            aliases,
+            components: [component(target)],
+            relationships: [],
+          },
+        }),
+      ),
+    ).toEqual([]);
   });
 
   test("accepts ordinary relationships across root trees and validates their semantic payload", () => {

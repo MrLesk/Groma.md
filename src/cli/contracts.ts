@@ -71,6 +71,12 @@ export type CliCommand =
   | { readonly input: CliInputSource; readonly kind: "component-update" }
   | {
       readonly expectedRevision: string;
+      readonly kind: "component-merge";
+      readonly obsolete: string;
+      readonly survivor: string;
+    }
+  | {
+      readonly expectedRevision: string;
       readonly id: string;
       readonly kind: "component-reparent";
       readonly parent: string | null;
@@ -140,6 +146,8 @@ export function commandName(command: CliCommand): string {
       return "component children";
     case "component-update":
       return "component update";
+    case "component-merge":
+      return "component merge";
     case "component-reparent":
       return "component reparent";
     case "component-remove":

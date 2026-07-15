@@ -28,6 +28,8 @@ import {
   type StagedPluginGraph,
 } from "../core/index.ts";
 import {
+  aliasStoreLocator,
+  createAliasStore,
   createLocalResourceProvider,
   createLocalTransactionJournal,
   createMarkdownIntentStore,
@@ -321,6 +323,7 @@ export function createDefaultBootstrapRegistry(
           start: () => {
             const graph = new GraphKernel({
               idSource: createOpaqueIdSource(entropy),
+              maxAliases: defaultHostBounds.maxComponents,
               maxPageSize: defaultHostBounds.maxPageSize,
             });
             const queries = new BoundedQueryContracts({
@@ -359,7 +362,7 @@ export function createDefaultBootstrapRegistry(
               pluginContext,
               defaultHostCapabilityIds.resources,
             );
-            const store = createMarkdownIntentStore({
+            const rawStore = createMarkdownIntentStore({
               bounds: {
                 maxDocuments: defaultHostBounds.maxComponents,
                 maxEntriesPerDirectory: defaultHostBounds.maxComponents,
@@ -368,8 +371,30 @@ export function createDefaultBootstrapRegistry(
               model,
               resources,
             });
+            const aliases = createAliasStore({
+              bounds: {
+                maxAliases: defaultHostBounds.maxComponents,
+              },
+              resources,
+            });
+            const store = Object.freeze({
+              decode: rawStore.decode,
+              load: async () => {
+                const loadedAliases = await aliases.load();
+                return loadedAliases.ok
+                  ? rawStore.load(loadedAliases.value.aliases)
+                  : loadedAliases;
+              },
+              read: rawStore.read,
+              serialize: rawStore.serialize,
+            });
             const transactionProvider = createLocalTransactionJournal({
-              adapter: createMarkdownIntentTransactionAdapter({ model, store }),
+              adapter: createMarkdownIntentTransactionAdapter({
+                aliases,
+                maxAliases: defaultHostBounds.maxComponents,
+                model,
+                store: rawStore,
+              }),
               bounds: { maxTargets: defaultHostBounds.maxComponents },
               resources,
             });
@@ -445,6 +470,12 @@ export function createDefaultBootstrapRegistry(
                 return intent.ok ? parseResourceKey(intent.value) : intent;
               },
             });
+            const aliasResourceMapper = Object.freeze({
+              resourceForAliases: () => {
+                const locator = aliasStoreLocator();
+                return locator.ok ? parseResourceKey(locator.value) : locator;
+              },
+            });
             const snapshotStateDecoder = createApplicationSnapshotStateDecoder({
               bounds: defaultHostBounds,
               graph,
@@ -488,6 +519,7 @@ export function createDefaultBootstrapRegistry(
               transactionProvider,
             });
             operations = createApplicationOperations({
+              aliasResourceMapper,
               bounds: {
                 maxComponents: defaultHostBounds.maxComponents,
                 maxDiagnosticCount: defaultHostBounds.maxDiagnosticCount,

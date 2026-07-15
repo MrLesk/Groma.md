@@ -1,5 +1,8 @@
 import {
+  createEntityAliasResolver,
   type Diagnostic,
+  type EntityAlias,
+  type EntityAliasResolver,
   type EntityId,
   type GraphData,
   type GraphDataRecord,
@@ -61,8 +64,14 @@ export interface StandardModelRelationshipRecord extends GraphDataRecord {
 }
 
 export interface StandardModelTransactionState extends GraphDataRecord {
+  readonly aliases?: readonly StandardModelAliasRecord[];
   readonly components: readonly StandardModelComponentRecord[];
   readonly relationships: readonly StandardModelRelationshipRecord[];
+}
+
+export interface StandardModelAliasRecord extends GraphDataRecord {
+  readonly source: string;
+  readonly target: string;
 }
 
 export interface StandardComponentCreateInput extends GraphDataRecord {
@@ -112,8 +121,15 @@ export type StandardRelationshipMutation =
   StandardRelationshipUpsertMutation | StandardRelationshipRemoveMutation;
 
 export interface StandardModelTransactionMutation extends GraphDataRecord {
+  readonly aliases?: readonly StandardModelAliasMutation[];
   readonly components: readonly StandardComponentMutation[];
   readonly relationships: readonly StandardRelationshipMutation[];
+}
+
+export interface StandardModelAliasMutation extends GraphDataRecord {
+  readonly source: string;
+  readonly target: string;
+  readonly type: "upsert";
 }
 
 interface ParsedContext {
@@ -121,11 +137,13 @@ interface ParsedContext {
 }
 
 interface ParsedState {
+  readonly aliases: Map<EntityId, EntityAlias>;
   readonly components: Map<EntityId, GraphEntity>;
   readonly relationships: Map<RelationId, GraphRelation>;
 }
 
 interface MutationTargets {
+  readonly aliases: ReadonlyMap<EntityId, string>;
   readonly components: ReadonlyMap<EntityId, string>;
   readonly relationships: ReadonlyMap<RelationId, string>;
 }
@@ -453,7 +471,10 @@ function parseState(
 ): Result<ParsedState> {
   const envelope = inspectExactRecord(
     value,
-    [["components", "relationships"]],
+    [
+      ["components", "relationships"],
+      ["aliases", "components", "relationships"],
+    ],
     "invalid-standard-model-envelope",
     "priorState",
   );
@@ -471,6 +492,39 @@ function parseState(
   );
   if (!relationshipValues.ok) return relationshipValues;
 
+  const aliases = new Map<EntityId, EntityAlias>();
+  if ("aliases" in envelope.value) {
+    const aliasValues = inspectDenseArray(
+      envelope.value.aliases,
+      options.maxComponents,
+      "priorState.aliases",
+    );
+    if (!aliasValues.ok) return aliasValues;
+    for (let index = 0; index < aliasValues.value.length; index += 1) {
+      const path = `priorState.aliases[${index}]`;
+      const record = inspectExactRecord(
+        aliasValues.value[index],
+        [["source", "target"]],
+        "invalid-standard-model-envelope",
+        path,
+      );
+      if (!record.ok) return record;
+      const source = parseEntityIdentity(record.value.source, `${path}.source`);
+      const target = parseEntityIdentity(record.value.target, `${path}.target`);
+      if (!source.ok) return source;
+      if (!target.ok) return target;
+      if (aliases.has(source.value)) {
+        return failure(
+          diagnostic(
+            "ambiguous-component-supersession",
+            "Prior state contains more than one alias for an obsolete component",
+            { id: source.value, path },
+          ),
+        );
+      }
+      aliases.set(source.value, Object.freeze({ source: source.value, target: target.value }));
+    }
+  }
   const components = new Map<EntityId, GraphEntity>();
   for (let index = 0; index < componentValues.value.length; index += 1) {
     const parsed = parseComponentRecord(
@@ -510,7 +564,66 @@ function parseState(
     }
     relationships.set(parsed.value.id, parsed.value);
   }
-  return success({ components, relationships });
+  const resolvedAliases = createEntityAliasResolver(
+    Object.freeze(Array.from(aliases.values())),
+    new Set(components.keys()),
+    options.maxComponents,
+  );
+  if (!resolvedAliases.ok) return resolvedAliases;
+  return success({ aliases, components, relationships });
+}
+
+function applyAliasMutations(
+  value: unknown,
+  aliases: Map<EntityId, EntityAlias>,
+  priorComponentIds: ReadonlySet<EntityId>,
+  maximum: number,
+): Result<ReadonlyMap<EntityId, string>> {
+  const mutations = inspectDenseArray(value, maximum, "mutation.aliases");
+  if (!mutations.ok) return mutations;
+  const targets = new Map<EntityId, string>();
+  for (let index = 0; index < mutations.value.length; index += 1) {
+    const path = `mutation.aliases[${index}]`;
+    const record = inspectExactRecord(
+      mutations.value[index],
+      [["source", "target", "type"]],
+      "invalid-standard-model-mutation",
+      path,
+    );
+    if (!record.ok) return record;
+    if (record.value.type !== "upsert") {
+      return failure(
+        diagnostic("invalid-standard-model-mutation", "Alias mutation type is unsupported", {
+          path: `${path}.type`,
+        }),
+      );
+    }
+    const source = parseEntityIdentity(record.value.source, `${path}.source`);
+    const target = parseEntityIdentity(record.value.target, `${path}.target`);
+    if (!source.ok) return source;
+    if (!target.ok) return target;
+    if (targets.has(source.value) || aliases.has(source.value)) {
+      return failure(
+        diagnostic(
+          "ambiguous-component-supersession",
+          "An obsolete component identity can have only one superseding target",
+          { id: source.value, path },
+        ),
+      );
+    }
+    if (!priorComponentIds.has(source.value)) {
+      return failure(
+        diagnostic(
+          "unknown-component-alias-source",
+          "An alias source must identify one component from the prior graph",
+          { id: source.value, path: `${path}.source` },
+        ),
+      );
+    }
+    aliases.set(source.value, Object.freeze({ source: source.value, target: target.value }));
+    targets.set(source.value, path);
+  }
+  return success(targets);
 }
 
 function applyComponentMutations(
@@ -714,9 +827,13 @@ function parseMutation(
   options: StandardModelInvariantOptions,
   model: StandardModelCapability,
 ): Result<MutationTargets> {
+  const priorComponentIds = new Set(state.components.keys());
   const envelope = inspectExactRecord(
     value,
-    [["components", "relationships"]],
+    [
+      ["components", "relationships"],
+      ["aliases", "components", "relationships"],
+    ],
     "invalid-standard-model-envelope",
     "mutation",
   );
@@ -735,7 +852,21 @@ function parseMutation(
     model,
   );
   if (!relationships.ok) return relationships;
-  return success({ components: components.value, relationships: relationships.value });
+  const aliases =
+    "aliases" in envelope.value
+      ? applyAliasMutations(
+          envelope.value.aliases,
+          state.aliases,
+          priorComponentIds,
+          options.maxComponents,
+        )
+      : success(Object.freeze(new Map<EntityId, string>()));
+  if (!aliases.ok) return aliases;
+  return success({
+    aliases: aliases.value,
+    components: components.value,
+    relationships: relationships.value,
+  });
 }
 
 function sortedIdentities<T extends string>(values: Iterable<T>): readonly T[] {
@@ -749,6 +880,17 @@ function validateAffectedTargets(
   targets: MutationTargets,
 ): readonly Diagnostic[] {
   const affectedComponents = new Set<EntityId>(proposal.affected.entities);
+  for (const id of sortedIdentities(targets.aliases.keys())) {
+    if (!affectedComponents.has(id)) {
+      return Object.freeze([
+        diagnostic(
+          "mutation-target-not-affected",
+          "Every alias source must be declared in affected.entities",
+          { id, path: targets.aliases.get(id) ?? "mutation.aliases" },
+        ),
+      ]);
+    }
+  }
   for (const id of sortedIdentities(targets.components.keys())) {
     if (!affectedComponents.has(id)) {
       return Object.freeze([
@@ -779,6 +921,7 @@ function validateAffectedTargets(
 function validateFinalGraph(
   state: ParsedState,
   model: StandardModelCapability,
+  resolver: EntityAliasResolver,
 ): readonly Diagnostic[] {
   const parents = new Map<EntityId, EntityId | undefined>();
   const componentIds = sortedIdentities(state.components.keys());
@@ -786,7 +929,18 @@ function validateFinalGraph(
     const entity = state.components.get(id)!;
     const parsed = model.parse(entity);
     if (!parsed.ok) return annotate(parsed.diagnostics, "finalState.components", id);
-    const parent = parsed.value.parent;
+    const rawParent = parsed.value.parent;
+    const parentResult = rawParent === undefined ? undefined : resolver.resolve(rawParent);
+    if (parentResult !== undefined && !parentResult.ok) {
+      return Object.freeze([
+        diagnostic(
+          "unknown-component-parent",
+          "A non-root component parent must resolve to one exact component in the final graph",
+          { id, parent: rawParent!, path: "finalState.components.parent" },
+        ),
+      ]);
+    }
+    const parent = parentResult?.value.resolved;
     if (parent === id) {
       return Object.freeze([
         diagnostic("self-component-parent", "A component cannot be its own structural parent", {
@@ -837,7 +991,8 @@ function validateFinalGraph(
 
   for (const id of sortedIdentities(state.relationships.keys())) {
     const relationship = state.relationships.get(id)!;
-    if (!state.components.has(relationship.source)) {
+    const source = resolver.resolve(relationship.source);
+    if (!source.ok) {
       return Object.freeze([
         diagnostic(
           "invalid-relationship-source",
@@ -850,7 +1005,8 @@ function validateFinalGraph(
         ),
       ]);
     }
-    if (!state.components.has(relationship.target)) {
+    const target = resolver.resolve(relationship.target);
+    if (!target.ok) {
       return Object.freeze([
         diagnostic(
           "invalid-relationship-target",
@@ -870,11 +1026,12 @@ function validateFinalGraph(
 
 function validatePinnedReferences(
   context: ParsedContext,
-  knownComponentIds: ReadonlySet<EntityId>,
+  knownBeforeMutation: ReadonlySet<EntityId>,
+  resolver: EntityAliasResolver,
 ): readonly Diagnostic[] {
   for (let index = 0; index < context.pinnedComponentIds.length; index += 1) {
     const id = context.pinnedComponentIds[index]!;
-    if (!knownComponentIds.has(id)) {
+    if (!knownBeforeMutation.has(id) && !resolver.resolve(id).ok) {
       return Object.freeze([
         diagnostic(
           "unknown-pinned-component",
@@ -896,11 +1053,20 @@ function validateProposal(
   if (!context.ok) return context.diagnostics;
   const state = parseState(proposal.priorState, options, model);
   if (!state.ok) return state.diagnostics;
-  const knownComponentIds = new Set<EntityId>(state.value.components.keys());
+  const knownBeforeMutation = new Set<EntityId>(state.value.components.keys());
   const mutation = parseMutation(proposal.mutation, state.value, options, model);
   if (!mutation.ok) return mutation.diagnostics;
   const affected = validateAffectedTargets(proposal, mutation.value);
   if (affected.length > 0) return affected;
+  if (state.value.aliases.size > options.maxComponents) {
+    return Object.freeze([
+      diagnostic(
+        "standard-model-envelope-too-large",
+        "The final alias state exceeds the configured item count",
+        { maximum: options.maxComponents, path: "finalState.aliases" },
+      ),
+    ]);
+  }
   if (state.value.components.size > options.maxComponents) {
     return Object.freeze([
       diagnostic(
@@ -919,10 +1085,15 @@ function validateProposal(
       ),
     ]);
   }
-  for (const id of state.value.components.keys()) knownComponentIds.add(id);
-  const pinned = validatePinnedReferences(context.value, knownComponentIds);
+  const finalAliases = createEntityAliasResolver(
+    Object.freeze(Array.from(state.value.aliases.values())),
+    new Set(state.value.components.keys()),
+    options.maxComponents,
+  );
+  if (!finalAliases.ok) return finalAliases.diagnostics;
+  const pinned = validatePinnedReferences(context.value, knownBeforeMutation, finalAliases.value);
   if (pinned.length > 0) return pinned;
-  return validateFinalGraph(state.value, model);
+  return validateFinalGraph(state.value, model, finalAliases.value);
 }
 
 export function createStandardModelInvariant(
@@ -930,6 +1101,11 @@ export function createStandardModelInvariant(
 ): TransactionInvariant {
   validatePositiveBound(options.maxComponentMutations, "maxComponentMutations");
   validatePositiveBound(options.maxComponents, "maxComponents");
+  try {
+    createEntityAliasResolver(Object.freeze([]), new Set<EntityId>(), options.maxComponents);
+  } catch {
+    throw new RangeError("maxComponents exceeds the supported component alias ceiling");
+  }
   validatePositiveBound(options.maxOwnerCharacters, "maxOwnerCharacters");
   validatePositiveBound(options.maxPinnedComponentIds, "maxPinnedComponentIds");
   validatePositiveBound(options.maxRelationshipMutations, "maxRelationshipMutations");

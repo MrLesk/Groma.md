@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isAlias, parseDocument, Scalar, stringify, visit } from "yaml";
 
 import {
+  createEntityAliasResolver,
   failure,
   parseContentRevision,
   parseEntityId,
@@ -12,6 +13,7 @@ import {
   type ContentRevision,
   type Diagnostic,
   type EntityId,
+  type EntityAliasInput,
   type GraphData,
   type GraphEntity,
   type GraphRelation,
@@ -88,7 +90,7 @@ export interface MarkdownIntentSnapshot {
 
 export interface MarkdownIntentStore {
   decode(locator: WorkspaceResourceLocator, bytes: Uint8Array): Result<MarkdownIntentDocument>;
-  load(): Promise<Result<MarkdownIntentSnapshot>>;
+  load(aliases?: readonly EntityAliasInput[]): Promise<Result<MarkdownIntentSnapshot>>;
   read(id: EntityId): Promise<Result<MarkdownIntentDocument>>;
   serialize(
     entity: GraphEntity,
@@ -852,6 +854,8 @@ function validateEntry(entry: ResourceEntry): Result<"document" | "shard"> {
 
 function validateWholeGraph(
   documents: readonly MarkdownIntentDocument[],
+  aliases: readonly EntityAliasInput[],
+  maximumAliases: number,
 ): Result<MarkdownIntentSnapshot> {
   const entities = new Map<EntityId, GraphEntity>();
   for (const document of documents) {
@@ -866,6 +870,13 @@ function validateWholeGraph(
     }
     entities.set(document.entity.id, document.entity);
   }
+  const aliasResolver = createEntityAliasResolver(
+    aliases,
+    new Set(entities.keys()),
+    // The store permits a zero-document bound; Core still requires a positive resolver bound.
+    Math.max(1, maximumAliases),
+  );
+  if (!aliasResolver.ok) return aliasResolver;
 
   const relations = new Map<string, GraphRelation>();
   for (const document of documents) {
@@ -902,7 +913,7 @@ function validateWholeGraph(
 
   for (const entity of entities.values()) {
     const parent = exactRecord(entity.payload) ? entity.payload.parent : undefined;
-    if (typeof parent === "string" && !entities.has(parent as EntityId)) {
+    if (typeof parent === "string" && !aliasResolver.value.resolve(parent).ok) {
       return failure(
         diagnostic("unknown-intent-parent", "Intent component refers to an unknown parent", {
           id: entity.id,
@@ -912,7 +923,7 @@ function validateWholeGraph(
     }
   }
   for (const relation of relations.values()) {
-    if (!entities.has(relation.target)) {
+    if (!aliasResolver.value.resolve(relation.target).ok) {
       return failure(
         diagnostic(
           "unknown-intent-relation-target",
@@ -944,7 +955,13 @@ function validateWholeGraph(
       const parent: unknown = exactRecord(currentEntity.payload)
         ? currentEntity.payload.parent
         : undefined;
-      current = typeof parent === "string" ? (parent as EntityId) : undefined;
+      if (typeof parent === "string") {
+        const resolved = aliasResolver.value.resolve(parent);
+        if (!resolved.ok) return resolved;
+        current = resolved.value.resolved;
+      } else {
+        current = undefined;
+      }
     }
     for (const member of path) containmentState.set(member, "visited");
   }
@@ -1218,7 +1235,9 @@ export function createMarkdownIntentStore(
     return document;
   };
 
-  const load = async (): Promise<Result<MarkdownIntentSnapshot>> => {
+  const load = async (
+    aliases: readonly EntityAliasInput[] = Object.freeze([]),
+  ): Promise<Result<MarkdownIntentSnapshot>> => {
     const root = intentRoot();
     const documentEntries: ResourceEntry[] = [];
     const maximumPages = bounds.maxDocuments + maximumCanonicalShardCount + 1;
@@ -1325,7 +1344,7 @@ export function createMarkdownIntentStore(
       if (!document.ok) return document;
       documents.push(document.value);
     }
-    return validateWholeGraph(documents);
+    return validateWholeGraph(documents, aliases, bounds.maxDocuments);
   };
 
   return Object.freeze({ decode, load, read, serialize });
