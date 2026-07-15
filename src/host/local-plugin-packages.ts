@@ -38,6 +38,11 @@ import {
 import { importLocalPluginModule } from "./plugin-module-loader.ts";
 import { isPathWithin } from "./path-containment.ts";
 import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
+import {
+  scaffoldLocalPluginPackage,
+  type PluginPackageScaffoldSnapshot,
+  type ScaffoldPluginPackageRequest,
+} from "./plugin-scaffolding.ts";
 
 export type PluginPackageScope = "blueprint" | "personal";
 export type LocalPluginPackageTrustRootPlatform = "posix" | "win32";
@@ -81,6 +86,7 @@ export interface PluginPackageOperations {
   enable(request: SelectPluginPackageEntryRequest): Promise<Result<PluginPackageSnapshot>>;
   inspect(request: InspectPluginPackageRequest): Promise<Result<PluginPackageSnapshot>>;
   remove(request: InspectPluginPackageRequest): Promise<Result<{ readonly removed: string }>>;
+  scaffold(request: ScaffoldPluginPackageRequest): Promise<Result<PluginPackageScaffoldSnapshot>>;
 }
 
 export interface LoadedLocalPluginPackages {
@@ -2227,5 +2233,10 @@ export function createLocalPluginPackageManager(
       );
     });
 
-  return Object.freeze({ add, disable, enable, inspect, loadEnabled, remove });
+  const scaffold = (request: ScaffoldPluginPackageRequest) =>
+    scaffoldLocalPluginPackage(request, {
+      workspaceRoot,
+    });
+
+  return Object.freeze({ add, disable, enable, inspect, loadEnabled, remove, scaffold });
 }

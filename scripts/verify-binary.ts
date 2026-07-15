@@ -148,6 +148,39 @@ async function verifyRuntimePluginImport(executable: string): Promise<void> {
     const userHome = path.join(root, "home");
     await mkdir(path.join(packageRoot, "plugins"), { recursive: true });
     await mkdir(userHome);
+    await runPackageCommand(executable, workspace, userHome, [
+      "package",
+      "scaffold",
+      "./scaffolded",
+      "--name",
+      "binary-scaffolded",
+      "--plugin",
+      "binary.scaffolded",
+      "--provides",
+      "binary.scaffolded/v1",
+    ]);
+    const scaffoldRoot = path.join(workspace, "scaffolded");
+    await Promise.all(
+      [
+        "groma.package.json",
+        "package.json",
+        path.join("plugins", "plugin.ts"),
+        path.join("tests", "conformance.test.ts"),
+      ].map((file) => lstat(path.join(scaffoldRoot, file))),
+    );
+    const scaffoldSources = await Promise.all([
+      readFile(path.join(scaffoldRoot, "plugins", "plugin.ts"), "utf8"),
+      readFile(path.join(scaffoldRoot, "tests", "conformance.test.ts"), "utf8"),
+    ]);
+    if (
+      scaffoldSources.some(
+        (source) =>
+          source.includes("/src/") ||
+          /\.\.\/.*(?:core|host|application|persistence|standard-model)/.test(source),
+      )
+    ) {
+      throw new Error("Compiled scaffold output imported a private Groma module");
+    }
     await writeFile(
       path.join(packageRoot, "groma.package.json"),
       `${JSON.stringify({
@@ -188,6 +221,44 @@ export const plugin = Object.freeze({
       );
     }
     await runPackageCommand(executable, workspace, userHome, ["init"]);
+    await runPackageCommand(executable, workspace, userHome, ["package", "add", "./scaffolded"]);
+    if (process.platform === "win32") {
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "inspect",
+        "binary-scaffolded",
+      ]);
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "remove",
+        "binary-scaffolded",
+      ]);
+    } else {
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "enable",
+        "binary-scaffolded",
+        "./plugins/plugin.ts",
+        "--trust-full-user-permissions",
+      ]);
+      await runPackageCommand(executable, workspace, userHome, [
+        "component",
+        "roots",
+        "--limit",
+        "1",
+      ]);
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "disable",
+        "binary-scaffolded",
+        "./plugins/plugin.ts",
+      ]);
+      await runPackageCommand(executable, workspace, userHome, [
+        "package",
+        "remove",
+        "binary-scaffolded",
+      ]);
+    }
     await runPackageCommand(executable, workspace, userHome, ["package", "add", "./local-package"]);
     if (process.platform === "win32") {
       await runPackageCommand(executable, workspace, userHome, [

@@ -11,6 +11,7 @@ Usage:
   groma --help
   groma --version
   groma [--format plain|json] init
+  groma [--format plain|json] package scaffold <destination> --name <package-name> --plugin <plugin-id> --provides <capability-id> [--provides <capability-id> ...]
   groma [--format plain|json] package add <local-path> [--personal]
   groma [--format plain|json] package inspect <package-name> [--personal]
   groma [--format plain|json] package enable <package-name> <entry> [--personal] [--trust-full-user-permissions]
@@ -30,6 +31,10 @@ Parent changes for existing components use the explicit reparent command.
 Every ordinary read returns exactly one bounded page; page limits are explicit.
 
 Package add accepts local filesystem paths only; remote npm, Git, and URL acquisition is out of scope.
+Package scaffold creates one minimal Phase 1 plugin and a public conformance-test starting point.
+Its destination must be a portable workspace-contained ./ path reusable by package add.
+Every --provides value becomes one single-provider capability at version 1.0.0.
+The generated test requires the public groma package in the authoring workspace.
 Add and inspect read inert data and never execute package code. Enable is the execution boundary.
 Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe.
 The explicit --trust-full-user-permissions flag is required before a new exact entry executes.

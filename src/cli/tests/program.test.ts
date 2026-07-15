@@ -14,6 +14,17 @@ import {
 } from "../program.ts";
 
 const roots: string[] = [];
+// This cold integration invokes the package manager, TypeScript, a nested Bun test process,
+// and several fresh Host compositions. Keep a finite CI allowance above Bun's 5s unit default.
+const generatedPackageWorkflowTimeoutMilliseconds = 15_000;
+
+function testGeneratedPackageWorkflow(run: () => Promise<void>): void {
+  test(
+    "scaffolds, tests, adds, enables, and reloads one package through public paths",
+    run,
+    generatedPackageWorkflowTimeoutMilliseconds,
+  );
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -552,6 +563,134 @@ export const plugin = Object.freeze({
     ).toMatchObject({ envelope: { command: "package remove", exitCode: 0, ok: true } });
     expect(await readFile(projectPackage, "utf8")).toBe('{"private":true}\n');
     expect(await readFile(projectLock, "utf8")).toBe("project-owned\n");
+  });
+
+  testGeneratedPackageWorkflow(async () => {
+    if (process.platform === "win32") return;
+    const root = await workspace();
+    const userDataRoot = await workspace();
+    const scaffolded = await jsonCommand(
+      root,
+      [
+        "package",
+        "scaffold",
+        "./plugins/scaffolded",
+        "--name",
+        "example-scaffolded",
+        "--plugin",
+        "example.scaffolded",
+        "--provides",
+        "example.scaffolded/v1",
+        "--provides",
+        "example.secondary/v1",
+      ],
+      undefined,
+      { userDataRoot },
+    );
+    expect(scaffolded).toMatchObject({
+      envelope: {
+        command: "package scaffold",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          value: {
+            destination: "./plugins/scaffolded",
+            entry: "./plugins/plugin.ts",
+            files: [
+              "groma.package.json",
+              "package.json",
+              "plugins/plugin.ts",
+              "tests/conformance.test.ts",
+            ],
+            name: "example-scaffolded",
+            pluginId: "example.scaffolded",
+            provides: ["example.scaffolded/v1", "example.secondary/v1"],
+          },
+        },
+      },
+      exitCode: CLI_EXIT.success,
+    });
+    const packageRoot = path.join(root, "plugins", "scaffolded");
+    const packageMetadata = await readFile(path.join(packageRoot, "package.json"));
+    const sdkInstall = Bun.spawn(
+      [process.execPath, "add", "--dev", "--no-save", `groma@file:${process.cwd()}`],
+      { cwd: packageRoot, stderr: "pipe", stdout: "pipe" },
+    );
+    const [sdkInstallExit, sdkInstallOutput, sdkInstallError] = await Promise.all([
+      sdkInstall.exited,
+      new Response(sdkInstall.stdout).text(),
+      new Response(sdkInstall.stderr).text(),
+    ]);
+    expect(sdkInstallExit, `${sdkInstallOutput}\n${sdkInstallError}`).toBe(CLI_EXIT.success);
+    expect(await readFile(path.join(packageRoot, "package.json"))).toEqual(packageMetadata);
+    await expect(lstat(path.join(packageRoot, "bun.lock"))).rejects.toThrow();
+    const typecheck = Bun.spawn(
+      [
+        path.join(process.cwd(), "node_modules", ".bin", "tsc"),
+        "--noEmit",
+        "--strict",
+        "--allowImportingTsExtensions",
+        "--target",
+        "ES2022",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        "--skipLibCheck",
+        path.join(packageRoot, "plugins", "plugin.ts"),
+      ],
+      { cwd: packageRoot, stderr: "pipe", stdout: "pipe" },
+    );
+    const [typecheckExit, typecheckOutput, typecheckError] = await Promise.all([
+      typecheck.exited,
+      new Response(typecheck.stdout).text(),
+      new Response(typecheck.stderr).text(),
+    ]);
+    expect(typecheckExit, `${typecheckOutput}\n${typecheckError}`).toBe(CLI_EXIT.success);
+    const conformance = Bun.spawn(
+      [process.execPath, "test", path.join(packageRoot, "tests", "conformance.test.ts")],
+      { cwd: packageRoot, stderr: "pipe", stdout: "pipe" },
+    );
+    const [conformanceExit, conformanceOutput, conformanceError] = await Promise.all([
+      conformance.exited,
+      new Response(conformance.stdout).text(),
+      new Response(conformance.stderr).text(),
+    ]);
+    expect(conformanceExit, `${conformanceOutput}\n${conformanceError}`).toBe(CLI_EXIT.success);
+    expect(`${conformanceOutput}\n${conformanceError}`).toContain("1 pass");
+    expect(`${conformanceOutput}\n${conformanceError}`).toContain("0 fail");
+
+    await jsonCommand(root, ["init"], undefined, { userDataRoot });
+    expect(
+      await jsonCommand(root, ["package", "add", "./plugins/scaffolded"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: { command: "package add", exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(
+      await jsonCommand(
+        root,
+        [
+          "package",
+          "enable",
+          "example-scaffolded",
+          "./plugins/plugin.ts",
+          "--trust-full-user-permissions",
+        ],
+        undefined,
+        { userDataRoot },
+      ),
+    ).toMatchObject({
+      envelope: { command: "package enable", exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(
+      await jsonCommand(root, ["component", "roots", "--limit", "1"], undefined, {
+        userDataRoot,
+      }),
+    ).toMatchObject({
+      envelope: { command: "component roots", exitCode: CLI_EXIT.success, ok: true },
+    });
   });
 
   test("returns the indeterminate exit class when a package-state commit cannot be acknowledged", async () => {

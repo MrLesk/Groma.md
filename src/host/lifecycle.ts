@@ -402,7 +402,7 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
 function canonicalPackageOperations(value: unknown): Result<PluginPackageOperations> {
   const packages = inspectHostRecord(
     value,
-    [["add", "disable", "enable", "inspect", "remove"]],
+    [["add", "disable", "enable", "inspect", "remove", "scaffold"]],
     "invalid-host-composition",
     "Plugin package operations",
   );
@@ -412,7 +412,8 @@ function canonicalPackageOperations(value: unknown): Result<PluginPackageOperati
     typeof packages.value.disable !== "function" ||
     typeof packages.value.enable !== "function" ||
     typeof packages.value.inspect !== "function" ||
-    typeof packages.value.remove !== "function"
+    typeof packages.value.remove !== "function" ||
+    typeof packages.value.scaffold !== "function"
   ) {
     return failure(
       diagnostic("invalid-host-composition", "Plugin package operations are malformed"),
@@ -424,6 +425,7 @@ function canonicalPackageOperations(value: unknown): Result<PluginPackageOperati
   const enable = packages.value.enable as PluginPackageOperations["enable"];
   const inspect = packages.value.inspect as PluginPackageOperations["inspect"];
   const remove = packages.value.remove as PluginPackageOperations["remove"];
+  const scaffold = packages.value.scaffold as PluginPackageOperations["scaffold"];
   return success(
     Object.freeze({
       add: (request: Parameters<PluginPackageOperations["add"]>[0]) =>
@@ -436,6 +438,8 @@ function canonicalPackageOperations(value: unknown): Result<PluginPackageOperati
         intrinsicReflectApply(inspect, receiver, [request]),
       remove: (request: Parameters<PluginPackageOperations["remove"]>[0]) =>
         intrinsicReflectApply(remove, receiver, [request]),
+      scaffold: (request: Parameters<PluginPackageOperations["scaffold"]>[0]) =>
+        intrinsicReflectApply(scaffold, receiver, [request]),
     }) as PluginPackageOperations,
   );
 }

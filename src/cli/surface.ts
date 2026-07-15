@@ -70,6 +70,7 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
   if (
     codes.some(
       (code) =>
+        code === "plugin-scaffold-publication-failed" ||
         code.includes("provider") ||
         code.includes("initialization-failed") ||
         code.includes("recovery") ||
@@ -306,6 +307,9 @@ async function execute(
   }
   if (command.kind === "package-add") {
     return applicationResult(command, await context.packages.add(command));
+  }
+  if (command.kind === "package-scaffold") {
+    return applicationResult(command, await context.packages.scaffold(command));
   }
   if (command.kind === "package-inspect") {
     return applicationResult(command, await context.packages.inspect(command));

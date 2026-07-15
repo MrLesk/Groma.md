@@ -33,6 +33,13 @@ export type CliCommand =
       readonly source: string;
     }
   | {
+      readonly destination: string;
+      readonly kind: "package-scaffold";
+      readonly name: string;
+      readonly pluginId: string;
+      readonly provides: readonly string[];
+    }
+  | {
       readonly kind: "package-inspect" | "package-remove";
       readonly name: string;
       readonly scope: "blueprint" | "personal";
@@ -139,6 +146,8 @@ export function commandName(command: CliCommand): string {
       return "component remove";
     case "package-add":
       return "package add";
+    case "package-scaffold":
+      return "package scaffold";
     case "package-inspect":
       return "package inspect";
     case "package-enable":

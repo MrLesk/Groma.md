@@ -104,6 +104,7 @@ function composition(
     enable: async () => failure({ code: "unused", message: "unused" }),
     inspect: async () => failure({ code: "unused", message: "unused" }),
     remove: async () => failure({ code: "unused", message: "unused" }),
+    scaffold: async () => failure({ code: "unused", message: "unused" }),
   });
   return Object.freeze({
     graph: capability,

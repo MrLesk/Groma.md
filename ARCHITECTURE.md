@@ -1086,12 +1086,31 @@ Temporary loading and acquisition updates are not part of this delivery.
 ### CLI Surface
 
 ```text
+groma package scaffold <destination> --name <package-name> --plugin <plugin-id> --provides <capability-id> [--provides <capability-id> ...]
 groma package add <local-path> [--personal]
 groma package inspect <package-name> [--personal]
 groma package enable <package-name> <entry> [--personal] [--trust-full-user-permissions]
 groma package disable <package-name> <entry> [--personal]
 groma package remove <package-name> [--personal]
 ```
+
+Scaffold is the bounded blueprint-package authoring starting point, not acquisition.
+Its destination uses the same portable workspace-contained `./` path accepted by
+blueprint `package add`, excludes the Host-owned `groma/` state tree, and the success
+result returns that reusable path. One invocation
+creates one Phase 1 plugin with only the explicitly named single-provider capability
+contributions at exact version `1.0.0`. It validates the package, plugin, and capability
+identities against the public SDK and Host runtime bounds before writing. The complete
+directory is staged beside its destination. Final publication reserves the destination
+without replacement and moves the static manifest last, so `package add` never recognizes
+an incomplete tree. Invalid or SDK-shadowing package identities, reserved `official.*`
+plugin IDs, duplicate or default-Host-conflicting contributions, and existing destinations
+fail before publication. Handled write/publication failures remove only an exact-owned
+destination; concurrent identity changes are never recursively deleted. Abrupt process
+termination may leave a markerless directory that the user must remove before retrying.
+The completed scaffold's exact
+`groma.package.json`, package metadata, self-contained TypeScript entry, and Bun
+conformance test import only `groma/plugin-sdk` or `groma/plugin-sdk/conformance`.
 
 Blueprint scope is the default and writes the declaration and exact lock under `groma/`.
 `--personal` writes only outside-repository user state and is presentation-only. Add and
@@ -1101,7 +1120,7 @@ entries. This also leaves inspect, disable, and remove available to diagnose or 
 from locked-byte drift. Remove requires every entry to be disabled first.
 
 Remote npm and Git acquisition, complete-artifact integrity, updates, automatic
-synchronization, temporary loading, and scaffolding remain later work after the living
+synchronization, and temporary loading remain later work after the living
 visual blueprint's first-run gate.
 
 ## Example: Recursive Shopify Blueprint
