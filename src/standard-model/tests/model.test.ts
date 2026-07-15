@@ -258,15 +258,21 @@ describe("standard v0.1 model", () => {
       [{ label: "" }, "invalid-component-label"],
       [{ label: " padded" }, "invalid-component-label"],
       [{ label: "two\nlines" }, "invalid-component-label"],
+      [{ label: "bad\u0000value" }, "invalid-component-label"],
+      [{ label: "bad\tvalue" }, "invalid-component-label"],
+      [{ label: "bad\u001bvalue" }, "invalid-component-label"],
       [{ label: `bad${String.fromCharCode(0xd800)}` }, "invalid-component-label"],
+      [{ label: `bad${String.fromCharCode(0xdc00)}` }, "invalid-component-label"],
       [
         { label: "🙂".repeat(STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS + 1) },
         "invalid-component-label",
       ],
       [{ summary: "" }, "invalid-component-summary"],
       [{ summary: "two\u2028lines" }, "invalid-component-summary"],
+      [{ summary: "bad\u007fvalue" }, "invalid-component-summary"],
+      [{ summary: "bad\u0080value" }, "invalid-component-summary"],
       [
-        { summary: "s".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS + 1) },
+        { summary: "🙂".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS + 1) },
         "invalid-component-summary",
       ],
       [{ iconDomain: "example.com." }, "invalid-component-icon-domain"],
@@ -296,8 +302,14 @@ describe("standard v0.1 model", () => {
     expect(
       model.normalize({
         iconDomain: "example.com",
-        label: "L".repeat(STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS),
-        summary: "S".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS),
+        label: "🙂".repeat(STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS),
+        summary: "🙂".repeat(STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      model.normalize({
+        label: "Order 👩‍💻 operations",
+        summary: "Coordinates family 👨‍👩‍👧‍👦 workflows across regions.",
       }),
     ).toMatchObject({ ok: true });
     for (const iconDomain of [

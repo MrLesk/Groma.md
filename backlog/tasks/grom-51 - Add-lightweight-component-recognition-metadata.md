@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-15 01:18'
+updated_date: '2026-07-15 01:30'
 labels:
   - model
   - visualization
@@ -64,6 +64,7 @@ Let components carry the small optional canonical recognition metadata needed fo
 4. Add focused Standard Model, application/conformance, persistence/reload/byte-stability, and CLI workflow coverage for create, update, clear, malformed input, and fallback behavior.
 5. Reject URL/host-parser IPv4-number spellings with a pure bounded iconDomain rule and regression coverage, without adding URL parsing, network behavior, or dependencies.
 6. Run focused checks, git diff --check, backlog doctor, and the full bun run check suite; inspect the cumulative diff, record exact modified files and verification evidence, then finalize GROM-51.
+7. Pin recognition text to Unicode code-point limits, reject interior C0/C1 controls and lone surrogate halves, preserve legitimate Unicode including ZWJ sequences and ordinary spaces, and verify the contract with boundary regressions.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -80,10 +81,14 @@ Corrected iconDomain IP-literal validation after spec review. The pure validator
 Quality review correction: WHATWG treats a bare 0x label as the IPv4 number zero, so the first pure numeric-shape predicate still admitted 0x.1, 0x.0x1, and 1.0x. Reopened AC4 to cover this last spelling without changing the bounded validation approach.
 
 Quality review follow-up completed. The pure IPv4-number predicate now recognizes a bare 0x label as hexadecimal zero, matching WHATWG host parsing without introducing a URL parser, network behavior, or dependency. Model-boundary regressions reject 0x.1, 0x.0x1, and 1.0x; ordinary domains 0x.example and 0x.0xzz remain accepted. Local URL verification resolved the rejected forms to 0.0.0.1, 0.0.0.1, and 1.0.0.0 respectively. The focused Standard Model suite passed 13 tests / 87 assertions. The full bun run check passed formatting, TypeScript, architecture boundaries, all tests, native build and smoke checks, and the Iteration 1A compiled-binary/crash-recovery workflow. git diff --check and backlog doctor passed.
+
+Claude review follow-up: reopened AC1 and AC6 to make the Unicode code-point and control-character policy explicit. The bounded-line validator will reject all C0 and C1 controls plus Unicode line separators while continuing to accept ordinary Unicode, emoji and ZWJ sequences, and interior spaces. Tests will pin accepted 80/280-code-point emoji boundaries, rejected plus-one inputs, and both lone surrogate directions.
+
+Claude review follow-up completed. Canonical label and summary validation now rejects every interior C0 control in U+0000 through U+001F and every C1 control in U+007F through U+009F, while retaining the existing Unicode line-separator and lone-surrogate protections. Regression coverage explicitly includes NUL, tab, ESC, DEL, a C1 character, lone high and low surrogates, accepted emoji at the exact 80/280 Unicode-code-point limits, rejected emoji at each plus-one limit, and accepted ordinary spaces plus emoji ZWJ sequences. Focused Standard Model verification passed 13 tests / 94 assertions. The full bun run check passed formatting, TypeScript, architecture boundaries, all 462 tests / 3077 assertions, native build and smoke checks, and Iteration 1A compiled-binary/crash recovery. No cosmetic ordering or redundant documentation work was taken.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added bounded optional component recognition metadata across the Standard Model, application projection and operations, deterministic Markdown persistence, and CLI workflows. Components support label, summary, and inert iconDomain metadata; display text follows label to name to stable canonical ID. The final iconDomain rule rejects IPv4 literals and WHATWG IPv4-number spellings, including bare-0x forms, while accepting ordinary DNS hostnames. No renderer state, identity semantics, favicon resolver, network access, trust behavior, URL parser, or new dependency was introduced. Focused and full repository checks, native and compiled-binary workflows, diff hygiene, and Backlog validation all pass.
+Added bounded optional component recognition metadata across the Standard Model, application projection and operations, deterministic Markdown persistence, and CLI workflows. Components support label, summary, and inert iconDomain metadata; display text follows label to name to stable canonical ID. Label and summary use explicit Unicode code-point limits, accept legitimate Unicode and ZWJ content, and reject C0/C1 controls, line separators, and lone surrogate halves. iconDomain rejects IPv4 literals and WHATWG IPv4-number spellings, including bare-0x forms, while accepting ordinary DNS hostnames. No renderer state, identity semantics, favicon resolver, network access, trust behavior, URL parser, or new dependency was introduced. Focused and full repository checks, native and compiled-binary workflows, diff hygiene, and Backlog validation pass.
 <!-- SECTION:FINAL_SUMMARY:END -->

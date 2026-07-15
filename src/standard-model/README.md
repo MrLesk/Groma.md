@@ -10,12 +10,16 @@ Sparse patches preserve omitted fields; `null` clears a known optional field whi
 extension values (including `null`) remain ordinary canonical graph data.
 
 Recognition metadata stays deliberately small. `label` is a trimmed, non-empty,
-single-line value of at most 80 Unicode code points. `summary` uses the same canonical
-line rules with a 280-code-point limit; “one sentence” is an authoring constraint, not
-language-specific punctuation parsing. Inputs outside these constraints are rejected,
-not trimmed or rewritten. A projection node representing one component uses `label`,
-then `name`, then the stable component ID as its display text. This fallback is exposed
-by `standardComponentDisplayText` and does not create a canonical node entity.
+control-free single-line value of at most 80 Unicode code points. `summary` uses the
+same canonical line rules with a 280-code-point limit; “one sentence” is an authoring
+constraint, not language-specific punctuation parsing. The limits count Unicode code
+points rather than UTF-16 code units or grapheme clusters. Emoji, ZWJ sequences, and
+ordinary interior spaces remain valid; C0 controls (`U+0000`–`U+001F`), C1 controls
+(`U+007F`–`U+009F`), lone surrogate halves, and Unicode line or paragraph separators
+are rejected. Inputs outside these constraints are rejected, not trimmed or rewritten.
+A projection node representing one component uses `label`, then `name`, then the stable
+component ID as its display text. This fallback is exposed by
+`standardComponentDisplayText` and does not create a canonical node entity.
 
 `iconDomain` is a lowercase ASCII DNS hostname with at least two labels, no trailing
 dot, at most 253 characters and 63 characters per label. DNS labels may use letters,

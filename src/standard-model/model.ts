@@ -164,7 +164,11 @@ function optionalString(
 }
 
 function isCanonicalBoundedLine(value: string, maximumCodePoints: number): boolean {
-  if (value.length === 0 || value !== value.trim() || /[\n\r\v\f\u0085\u2028\u2029]/u.test(value)) {
+  if (
+    value.length === 0 ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value)
+  ) {
     return false;
   }
   let codePoints = 0;
@@ -231,9 +235,9 @@ function recognitionString(
   if (valid) return parsed;
   const expectation =
     field === "label"
-      ? `a trimmed, non-empty single line of at most ${STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS} Unicode code points`
+      ? `a trimmed, non-empty, control-free single line of at most ${STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS} Unicode code points`
       : field === "summary"
-        ? `a trimmed, non-empty single line of at most ${STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS} Unicode code points`
+        ? `a trimmed, non-empty, control-free single line of at most ${STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS} Unicode code points`
         : "a lowercase ASCII DNS hostname with at least two labels, no trailing dot, and no IP literal";
   return diagnostic(
     `invalid-component-${field === "iconDomain" ? "icon-domain" : field}`,
