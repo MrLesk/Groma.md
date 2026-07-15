@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 02:06'
+updated_date: '2026-07-15 02:32'
 labels: []
 milestone: m-2
 dependencies: []
@@ -49,10 +49,11 @@ Make capability composition an explicit Core service so the official host, built
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add bounded, exact Core plugin manifest/registration contracts and a deterministic two-phase resolver that validates exact API/capability versions, cardinality, phase direction, provider collisions, missing requirements, and cycles before startup.
-2. Add a technology-neutral lifecycle runtime that starts providers before dependents, exposes immutable resolved/running graph inspection, adapts cancellation through a minimal Core token, and performs exactly-once reverse dependency cleanup with contained deterministic diagnostics.
-3. Recompose the official local host as meaningful built-in plugin registrations through that same Core runtime, preserve capability identity and existing CLI/surface lifecycle, and expose the running graph for conformance.
-4. Add focused Core resolver/lifecycle and Host parity tests plus Core/Host documentation, then run focused and full validation, audit the cumulative diff, update exact Backlog evidence/modified files, and commit a clean branch.
+1. Make resolver ambiguity and all ordering independent of registration order and locale by excluding every duplicate-ID registration and using one code-unit comparator throughout diagnostics, manifests, versions, providers, dependencies, and lifecycle views.
+2. Reserve the running graph cleanup Promise before invoking any stop callback so reentrant cancel/shutdown shares the first causal reason and one reverse dependency traversal.
+3. Refactor Host cancellation ownership into an exactly-once graph cleanup coordinator that preserves causal cancel versus shutdown separately from public outcome precedence.
+4. Fence late composition, recovery, and surface-start work: return promptly on cancellation, then contain settlement and cancel only after dependent work ends, stopping a late session before provider cancellation.
+5. Add focused reversal, comparator, reentrancy, late-work, ordering, exact-count, and stop-failure regressions; update docs and Backlog evidence; rerun focused/full gates and commit without pushing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -65,10 +66,14 @@ Implemented Core PluginRuntime with bounded exact manifest/registration validati
 Recomposed the official local profile as six meaningful built-in plugins: resources, kernel, model, persistence, application/workspace, and surface. Host conformance proves all 13 returned capabilities retain the exact runtime-registered object identity. runHost preserves surface authority and lifecycle, then adapts normal/failure outcomes to plugin shutdown and cancellation outcomes to plugin cancellation; the new cleanup boundary exact-validates and contains hostile nested values.
 
 Objective validation: focused Core plugin suite passed 10 tests/39 assertions; focused Host lifecycle suite passed 46 tests/283 assertions; default-host and persisted-operation parity tests passed. Final bun run check passed formatting, strict TypeScript, architecture boundaries, 476 tests/3,153 assertions, native build, binary smoke, and the compiled Iteration 1A workflow. git diff --check and backlog doctor also passed. Core imports no filesystem, configuration, package, process, AbortSignal, surface, dynamic-import, or external technology.
+
+Reopened after independent quality review found six lifecycle/determinism defects at commit 1f4cff2: duplicate-ID first-wins semantics, locale-sensitive ordering, reentrant cleanup before Promise reservation, late valid composition leakage, provider cleanup racing pending recovery/surface start, and cleanup-mode selection from a mutable public outcome. AC1, AC2, AC3, and AC5 are unchecked pending objective regression evidence.
+
+Quality-review remediation completed. Duplicate IDs are now treated as one ambiguous group and every duplicate registration is excluded before provider/dependency analysis; every PluginRuntime order uses a shared Unicode code-unit comparator. Running-graph and Host plugin cleanup reserve one Promise before callbacks, preserving the first causal mode through reentrancy. Host cancellation now canonicalizes and cancels late valid compositions, fences provider cancellation behind pending recovery and late surface start/stop settlement, contains late malformed/rejected values and stop failures, and retains cancellation as the provider cleanup cause even when surface cleanup changes the public outcome. Default bootstrap rechecks cancellation after the full built-in graph starts and cancels rather than publishing that graph. Regression evidence: focused Core/Host/default-bootstrap suites passed 70 tests and 428 assertions; full bun run check passed formatting, strict TypeScript, architecture boundaries, 484 tests and 3,202 assertions, native build, binary smoke, and compiled Iteration 1A crash recovery. git diff --check and backlog doctor passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the bounded technology-neutral phased PluginRuntime, exact capability compatibility and cardinality resolution, deterministic diagnostics, multi-provider delivery, and dependency-safe exactly-once lifecycle cleanup. Routed six official local built-in plugins and all 13 capability identities through the same runtime, exposed graph inspection, and adapted Host surface/process lifecycle without adding dynamic loading or technology to Core. Verified with focused lifecycle/conformance suites and the complete 476-test repository gate, build, smoke, compiled Iteration 1A workflow, diff check, Backlog health, and exact 13-file manifest.
+Implemented the bounded phased plugin runtime and moved the six official built-in capability groups onto that same Core registration path. Resolution is exact, deterministic, locale-independent, ambiguity-safe, and fail-closed before startup; lifecycle startup, rollback, cancellation, shutdown, and reentrant cleanup are dependency-safe and exactly once. Host integration preserves surface authority while safely coordinating cancellation across late composition, recovery, surface start/stop, and provider cleanup. Public contracts and architecture guidance are documented, hostile-boundary regressions are covered, and the complete repository verification gate passes.
 <!-- SECTION:FINAL_SUMMARY:END -->

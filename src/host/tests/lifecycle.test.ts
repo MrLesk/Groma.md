@@ -225,6 +225,59 @@ describe("host lifecycle", () => {
     expect(events).toEqual(["surface:stop", "plugins:cancel"]);
   });
 
+  test("preserves cancellation as the plugin cleanup cause after surface stop failure", async () => {
+    const events: string[] = [];
+    const source = signals();
+    const started = deferred<void>();
+    let cancels = 0;
+    let shutdowns = 0;
+    const plugins = pluginLifecycle(
+      async () => {
+        cancels += 1;
+        events.push("plugins:cancel");
+        return success({ state: "cancelled", stoppedPluginIds: ["official.surface"] });
+      },
+      async () => {
+        shutdowns += 1;
+        return success({ state: "stopped", stoppedPluginIds: ["official.surface"] });
+      },
+    );
+    const running = runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => {
+              started.resolve();
+              return {
+                completion: new Promise<void>(() => {}),
+                stop: async () => {
+                  events.push("surface:stop");
+                  throw new Error("/private/stop-failure");
+                },
+              };
+            },
+          },
+          workspace({ state: "missing" }),
+          plugins,
+        ),
+      ),
+      signalSource: source.source,
+    });
+    await started.promise;
+    source.emit("SIGTERM");
+
+    expect(await running).toEqual({
+      diagnostics: [
+        { code: "host-surface-cleanup-failed", message: "Host surface cleanup failed" },
+      ],
+      status: "surface-failure",
+    });
+    expect(events).toEqual(["surface:stop", "plugins:cancel"]);
+    expect(cancels).toBe(1);
+    expect(shutdowns).toBe(0);
+  });
+
   test("contains malformed or failed plugin cleanup exactly once", async () => {
     let shutdowns = 0;
     const plugins = pluginLifecycle(
@@ -1217,6 +1270,61 @@ describe("host lifecycle", () => {
     }
   });
 
+  test("cancels a valid plugin graph delivered after composition cancellation", async () => {
+    const entered = deferred<void>();
+    const late = deferred<Result<HostComposition>>();
+    const cancelledPlugins = deferred<void>();
+    const cancellation = new AbortController();
+    let cancels = 0;
+    let shutdowns = 0;
+    let starts = 0;
+    const plugins = pluginLifecycle(
+      async () => {
+        cancels += 1;
+        cancelledPlugins.resolve();
+        return success({ state: "cancelled", stoppedPluginIds: ["official.surface"] });
+      },
+      async () => {
+        shutdowns += 1;
+        return success({ state: "stopped", stoppedPluginIds: ["official.surface"] });
+      },
+    );
+    const running = runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () => {
+          entered.resolve();
+          return late.promise;
+        },
+      },
+      signalSource: signals().source,
+    });
+    await entered.promise;
+    cancellation.abort();
+
+    expect(await running).toEqual({ status: "cancelled" });
+    expect(cancels).toBe(0);
+    late.resolve(
+      success(
+        compositionWithPlugins(
+          {
+            start: () => {
+              starts += 1;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "missing" }),
+          plugins,
+        ),
+      ),
+    );
+    await cancelledPlugins.promise;
+
+    expect(cancels).toBe(1);
+    expect(shutdowns).toBe(0);
+    expect(starts).toBe(0);
+  });
+
   test("turns a malformed injected signal into generic cancellation with exact cleanup", async () => {
     const started = deferred<void>();
     let listener: ((signal: HostSignal) => void) | undefined;
@@ -1301,7 +1409,19 @@ describe("host lifecycle", () => {
         const cancellation = new AbortController();
         const entered = deferred<void>();
         const recovery = deferred<Result<WorkspaceRecoveryReport>>();
+        let cancels = 0;
+        let shutdowns = 0;
         let starts = 0;
+        const plugins = pluginLifecycle(
+          async () => {
+            cancels += 1;
+            return success({ state: "cancelled", stoppedPluginIds: [] });
+          },
+          async () => {
+            shutdowns += 1;
+            return success({ state: "stopped", stoppedPluginIds: [] });
+          },
+        );
         const malformed = Object.create(null) as Record<string, unknown>;
         Object.defineProperty(malformed, "ok", {
           enumerable: true,
@@ -1317,7 +1437,7 @@ describe("host lifecycle", () => {
         const running = runHost({
           context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
           registry: registry(
-            composition(
+            compositionWithPlugins(
               {
                 start: () => {
                   starts += 1;
@@ -1328,6 +1448,7 @@ describe("host lifecycle", () => {
                 entered.resolve();
                 return recovery.promise;
               }),
+              plugins,
             ),
           ),
           signalSource: signals().source,
@@ -1335,6 +1456,7 @@ describe("host lifecycle", () => {
         await entered.promise;
         cancellation.abort();
         expect(await running, settlement).toEqual({ status: "cancelled" });
+        expect(cancels, settlement).toBe(0);
         if (settlement === "reject") {
           recovery.reject(new Error(secret));
         } else {
@@ -1343,12 +1465,65 @@ describe("host lifecycle", () => {
         await Promise.resolve();
         await new Promise<void>((resolve) => setImmediate(resolve));
         expect(starts, settlement).toBe(0);
+        expect(cancels, settlement).toBe(1);
+        expect(shutdowns, settlement).toBe(0);
       }
       expect(getterCalls).toBe(0);
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+
+  test("waits for late recovery settlement before cancelling plugins", async () => {
+    const events: string[] = [];
+    const cancellation = new AbortController();
+    const entered = deferred<void>();
+    const recovery = deferred<Result<WorkspaceRecoveryReport>>();
+    const cancelledPlugins = deferred<void>();
+    let cancels = 0;
+    let starts = 0;
+    const plugins = pluginLifecycle(
+      async () => {
+        cancels += 1;
+        events.push("plugins:cancel");
+        cancelledPlugins.resolve();
+        return success({ state: "cancelled", stoppedPluginIds: [] });
+      },
+      async () => success({ state: "stopped", stoppedPluginIds: [] }),
+    );
+    const running = runHost({
+      context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => {
+              starts += 1;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "configured" }, async () => {
+            entered.resolve();
+            const result = await recovery.promise;
+            events.push("recovery:settled");
+            return result;
+          }),
+          plugins,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+    await entered.promise;
+    cancellation.abort();
+
+    expect(await running).toEqual({ status: "cancelled" });
+    expect(cancels).toBe(0);
+    recovery.resolve(success({ generation: generation(0), status: "completed" }));
+    await cancelledPlugins.promise;
+
+    expect(events).toEqual(["recovery:settled", "plugins:cancel"]);
+    expect(cancels).toBe(1);
+    expect(starts).toBe(0);
   });
 
   test("routes retryable workspace provider status without claiming incompatibility", async () => {
@@ -1618,11 +1793,28 @@ describe("host lifecycle", () => {
     const started = deferred<void>();
     const late = deferred<HostSurfaceSession>();
     const stopEntered = deferred<void>();
+    const stopReleased = deferred<void>();
+    const cancelledPlugins = deferred<void>();
+    const events: string[] = [];
+    let cancels = 0;
+    let shutdowns = 0;
     let stops = 0;
+    const plugins = pluginLifecycle(
+      async () => {
+        cancels += 1;
+        events.push("plugins:cancel");
+        cancelledPlugins.resolve();
+        return success({ state: "cancelled", stoppedPluginIds: [] });
+      },
+      async () => {
+        shutdowns += 1;
+        return success({ state: "stopped", stoppedPluginIds: [] });
+      },
+    );
     const running = runHost({
       context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
       registry: registry(
-        composition(
+        compositionWithPlugins(
           {
             start: () => {
               started.resolve();
@@ -1630,6 +1822,7 @@ describe("host lifecycle", () => {
             },
           },
           workspace({ state: "missing" }),
+          plugins,
         ),
       ),
       signalSource: signal.source,
@@ -1638,16 +1831,78 @@ describe("host lifecycle", () => {
     cancellation.abort();
     expect(await running).toEqual({ status: "cancelled" });
     expect(signal.unsubscribes()).toBe(1);
+    expect(cancels).toBe(0);
 
     late.resolve({
       completion: Promise.resolve(),
       stop: async () => {
         stops += 1;
+        events.push("surface:stop");
         stopEntered.resolve();
+        await stopReleased.promise;
       },
     });
     await stopEntered.promise;
     expect(stops).toBe(1);
+    expect(cancels).toBe(0);
+    stopReleased.resolve();
+    await cancelledPlugins.promise;
+    expect(events).toEqual(["surface:stop", "plugins:cancel"]);
+    expect(cancels).toBe(1);
+    expect(shutdowns).toBe(0);
+  });
+
+  test("cancels plugins after a late surface stop rejects without leaking", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const cancellation = new AbortController();
+      const started = deferred<void>();
+      const late = deferred<HostSurfaceSession>();
+      const cancelledPlugins = deferred<void>();
+      let cancels = 0;
+      const plugins = pluginLifecycle(
+        async () => {
+          cancels += 1;
+          cancelledPlugins.resolve();
+          return success({ state: "cancelled", stoppedPluginIds: [] });
+        },
+        async () => success({ state: "stopped", stoppedPluginIds: [] }),
+      );
+      const running = runHost({
+        context: { cancellation: cancellation.signal, workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          compositionWithPlugins(
+            {
+              start: () => {
+                started.resolve();
+                return late.promise as never;
+              },
+            },
+            workspace({ state: "missing" }),
+            plugins,
+          ),
+        ),
+        signalSource: signals().source,
+      });
+      await started.promise;
+      cancellation.abort();
+      expect(await running).toEqual({ status: "cancelled" });
+
+      late.resolve({
+        completion: Promise.resolve(),
+        stop: async () => {
+          throw new Error("/private/late-stop-secret");
+        },
+      });
+      await cancelledPlugins.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(cancels).toBe(1);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 
   test("contains rejecting and resolving completion from a late cancelled-start session", async () => {

@@ -30,6 +30,10 @@ plugins, and ties use plugin ID order. Requirements on a `multiple` capability r
 every exact-version provider in plugin ID order. Missing providers, exact-version
 mismatches, cardinality disagreement, single-provider collisions, phase inversion,
 duplicate plugins, and dependency cycles all fail resolution before any plugin starts.
+Every runtime ordering uses locale-independent Unicode code-unit comparison. If an ID is
+registered more than once, every registration with that ID is excluded from the candidate
+graph; registration order can never choose a first winner or leak one duplicate's
+capabilities into dependency resolution.
 
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;
@@ -41,7 +45,9 @@ Start proceeds in dependency order. A thrown, rejected, or malformed start rolls
 already-started plugins in reverse order. Normal shutdown and cancellation use the
 same dependent-before-provider ordering, cache one cleanup Promise, and invoke every
 plugin cleanup at most once even if callers repeat or race lifecycle requests. Cleanup
-continues after a stop failure and reports stable plugin-owned diagnostics without
+reserves that Promise and its first requested mode before invoking any callback, so a
+reentrant lifecycle request observes the same traversal and cannot replace its reason.
+Cleanup continues after a stop failure and reports stable plugin-owned diagnostics without
 leaking thrown values. Promise-returning lifecycle callbacks cross the same native
 Promise containment used by the application and Host boundaries.
 

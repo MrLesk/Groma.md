@@ -258,6 +258,42 @@ describe("default bootstrap registry", () => {
     });
   });
 
+  test("rechecks cancellation after the complete plugin graph starts", async () => {
+    const context = await temporaryWorkspace();
+    let reads = 0;
+    const cancellation = Object.create(null) as AbortSignal;
+    Object.defineProperty(cancellation, "aborted", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads >= 13;
+      },
+    });
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      entropy: (length) => new Uint8Array(length),
+      surface: idleSurface(),
+    });
+
+    const composed = await registry.compose({
+      cancellation,
+      workspaceRoot: context.workspaceRoot,
+    });
+
+    expect(composed).toEqual({
+      diagnostics: [
+        {
+          code: "host-composition-failed",
+          message: "Built-in plugin startup was cancelled",
+        },
+      ],
+      ok: false,
+    });
+    expect(reads).toBe(13);
+  });
+
   test("contains no server, React, dynamic plugin, or project-code loading path", async () => {
     const hostRoot = path.resolve(import.meta.dir, "..");
     const productionFiles = (await readdir(hostRoot)).filter((file) => file.endsWith(".ts")).sort();

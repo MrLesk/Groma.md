@@ -153,6 +153,10 @@ const intrinsicReflectApply = Reflect.apply;
 
 const resolvedGraphs = new WeakMap<object, ResolvedGraphRecord>();
 
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function diagnostic(
   code: string,
   message: string,
@@ -169,14 +173,14 @@ function diagnosticsKey(value: Diagnostic): string {
   const details = value.details;
   if (details === undefined) return `${value.code}\u0000${value.message}`;
   return `${value.code}\u0000${Object.keys(details)
-    .sort()
+    .sort(compareCodeUnits)
     .map((key) => `${key}=${String(details[key])}`)
     .join("\u0000")}\u0000${value.message}`;
 }
 
 function sortedDiagnostics(values: readonly Diagnostic[], limit: number): readonly Diagnostic[] {
   const sorted = [...values].sort((left, right) =>
-    diagnosticsKey(left).localeCompare(diagnosticsKey(right)),
+    compareCodeUnits(diagnosticsKey(left), diagnosticsKey(right)),
   );
   if (sorted.length <= limit) return Object.freeze(sorted);
   return Object.freeze([
@@ -300,7 +304,7 @@ function canonicalCapabilityDeclarations(
     Object.freeze(
       declarations.sort(
         (left, right) =>
-          left.id.localeCompare(right.id) || left.version.localeCompare(right.version),
+          compareCodeUnits(left.id, right.id) || compareCodeUnits(left.version, right.version),
       ),
     ),
   );
@@ -389,7 +393,7 @@ function cycleDiagnostics(
         visit(dependency);
       } else if (dependencyState === 1) {
         const start = stack.lastIndexOf(dependency);
-        const members = stack.slice(start).sort();
+        const members = stack.slice(start).sort(compareCodeUnits);
         cycles.add(members.join(","));
       }
     }
@@ -397,12 +401,12 @@ function cycleDiagnostics(
     state.set(id, 2);
   };
 
-  for (const id of [...plugins.keys()].sort()) {
+  for (const id of [...plugins.keys()].sort(compareCodeUnits)) {
     if ((state.get(id) ?? 0) === 0) visit(id);
   }
   return Object.freeze(
     [...cycles]
-      .sort()
+      .sort(compareCodeUnits)
       .map((pluginIds) =>
         diagnostic(
           "plugin-dependency-cycle",
@@ -426,7 +430,7 @@ function topologicalOrder(
       .sort((left, right) => {
         const leftPhase = plugins.get(left)!.registration.manifest.phase;
         const rightPhase = plugins.get(right)!.registration.manifest.phase;
-        return leftPhase - rightPhase || left.localeCompare(right);
+        return leftPhase - rightPhase || compareCodeUnits(left, right);
       });
     if (ready.length === 0) return Object.freeze([]);
     const next = ready[0]!;
@@ -671,7 +675,7 @@ function runningGraph(
     }
   }
   for (const values of providers.values()) {
-    values.sort((left, right) => left.pluginId.localeCompare(right.pluginId));
+    values.sort((left, right) => compareCodeUnits(left.pluginId, right.pluginId));
     Object.freeze(values);
   }
 
@@ -689,7 +693,11 @@ function runningGraph(
   const stop = (reason: "cancelled" | "stopped"): Promise<Result<PluginShutdownReport>> => {
     if (cleanup !== undefined) return cleanup;
     state = reason === "cancelled" ? "cancelling" : "stopping";
-    cleanup = (async () => {
+    let resolveCleanup!: (result: Result<PluginShutdownReport>) => void;
+    cleanup = new Promise<Result<PluginShutdownReport>>((resolve) => {
+      resolveCleanup = resolve;
+    });
+    const execute = async (): Promise<Result<PluginShutdownReport>> => {
       const diagnostics = await cleanupStarted(started);
       if (diagnostics.length > 0) {
         state = "failed";
@@ -704,7 +712,15 @@ function runningGraph(
           ),
         }),
       );
-    })();
+    };
+    void execute().then(resolveCleanup, () => {
+      state = "failed";
+      resolveCleanup(
+        failure(
+          diagnostic("plugin-stop-failed", "Plugin cleanup failed before lifecycle completion"),
+        ),
+      );
+    });
     return cleanup;
   };
 
@@ -747,9 +763,10 @@ export class PluginRuntime {
         canonical.push(registration.value);
       }
     }
-    canonical.sort((left, right) => left.manifest.id.localeCompare(right.manifest.id));
+    canonical.sort((left, right) => compareCodeUnits(left.manifest.id, right.manifest.id));
 
     const byId = new Map<string, ResolvedPluginRecord>();
+    const registrationsById = new Map<string, CanonicalPluginRegistration[]>();
     for (const registration of canonical) {
       if (registration.manifest.apiVersion !== pluginRuntimeApiVersion) {
         diagnostics.push(
@@ -764,17 +781,21 @@ export class PluginRuntime {
           ),
         );
       }
-      if (byId.has(registration.manifest.id)) {
+      const sameId = registrationsById.get(registration.manifest.id) ?? [];
+      sameId.push(registration);
+      registrationsById.set(registration.manifest.id, sameId);
+    }
+    for (const [pluginId, sameId] of registrationsById) {
+      if (sameId.length > 1) {
         diagnostics.push(
           diagnostic("duplicate-plugin-registration", "Plugin IDs must be unique", {
-            pluginId: registration.manifest.id,
+            pluginId,
+            registrationCount: sameId.length,
           }),
         );
       } else {
-        byId.set(
-          registration.manifest.id,
-          Object.freeze({ dependencies: Object.freeze([]), registration }),
-        );
+        const registration = sameId[0]!;
+        byId.set(pluginId, Object.freeze({ dependencies: Object.freeze([]), registration }));
       }
     }
 
@@ -792,8 +813,8 @@ export class PluginRuntime {
     for (const [id, providers] of providersById) {
       providers.sort(
         (left, right) =>
-          left.pluginId.localeCompare(right.pluginId) ||
-          left.declaration.version.localeCompare(right.declaration.version),
+          compareCodeUnits(left.pluginId, right.pluginId) ||
+          compareCodeUnits(left.declaration.version, right.declaration.version),
       );
       const cardinalities = new Set(providers.map((provider) => provider.declaration.cardinality));
       if (cardinalities.size > 1) {
@@ -852,7 +873,7 @@ export class PluginRuntime {
               "No provider supplies the exact required capability version",
               {
                 availableVersions: [...new Set(available.map((item) => item.declaration.version))]
-                  .sort()
+                  .sort(compareCodeUnits)
                   .join(","),
                 capabilityId: requirement.id,
                 pluginId: manifest.id,
@@ -901,7 +922,7 @@ export class PluginRuntime {
       resolvedById.set(
         id,
         Object.freeze({
-          dependencies: Object.freeze([...(dependencies.get(id) ?? [])].sort()),
+          dependencies: Object.freeze([...(dependencies.get(id) ?? [])].sort(compareCodeUnits)),
           registration: plugin.registration,
         }),
       );
@@ -1017,7 +1038,7 @@ export class PluginRuntime {
             value: output.value,
           }),
         );
-        providers.sort((left, right) => left.pluginId.localeCompare(right.pluginId));
+        providers.sort((left, right) => compareCodeUnits(left.pluginId, right.pluginId));
         available.set(key, providers);
       }
       const after = cancellationRequested(containedCancellation.value);

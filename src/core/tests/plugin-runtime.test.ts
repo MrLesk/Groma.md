@@ -9,6 +9,7 @@ import {
   type PluginRegistration,
   type PluginStartContext,
   type PluginStartResult,
+  type RunningPluginGraph,
 } from "../index.ts";
 
 const capability = (
@@ -48,6 +49,14 @@ function registration(options: RegistrationOptions): PluginRegistration {
         })),
       })),
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function diagnosticProjection(value: ReturnType<PluginRuntime["resolve"]>) {
@@ -231,6 +240,137 @@ describe("phased plugin resolver", () => {
     expect(diagnosticProjection(runtime.resolve(plugins))).toEqual(
       diagnosticProjection(runtime.resolve([...plugins].reverse())),
     );
+  });
+
+  test("excludes every duplicate ID without first-registration-wins behavior", () => {
+    const runtime = new PluginRuntime();
+    const providedOnlyByDuplicate = capability("groma.duplicate-only/v1");
+    const starts: string[] = [];
+    const duplicates = [
+      registration({
+        id: "duplicate.plugin",
+        provides: [providedOnlyByDuplicate],
+        start: () => {
+          starts.push("provider");
+          return {
+            capabilities: [
+              {
+                id: providedOnlyByDuplicate.id,
+                value: {},
+                version: providedOnlyByDuplicate.version,
+              },
+            ],
+          };
+        },
+      }),
+      registration({
+        id: "duplicate.plugin",
+        requires: [capability("groma.unavailable/v1")],
+        start: () => {
+          starts.push("consumer");
+          return { capabilities: [] };
+        },
+      }),
+    ];
+    const consumer = registration({
+      id: "ordinary.consumer",
+      requires: [providedOnlyByDuplicate],
+    });
+
+    const forward = runtime.resolve([...duplicates, consumer]);
+    const reverse = runtime.resolve([[...duplicates].reverse(), [consumer]].flat());
+
+    expect(diagnosticProjection(forward)).toEqual(diagnosticProjection(reverse));
+    expect(diagnosticProjection(forward)).toEqual([
+      {
+        code: "duplicate-plugin-registration",
+        details: { pluginId: "duplicate.plugin", registrationCount: 2 },
+      },
+      {
+        code: "missing-capability-provider",
+        details: {
+          capabilityId: "groma.duplicate-only/v1",
+          pluginId: "ordinary.consumer",
+          requiredVersion: "1.0.0",
+        },
+      },
+    ]);
+    expect(starts).toEqual([]);
+  });
+
+  test("uses code-unit ordering and rejects non-ASCII identity tokens", async () => {
+    const runtime = new PluginRuntime();
+    const multiple = capability("groma.code-unit/v1", "multiple");
+    const observedProviders: string[] = [];
+    const plugins = [
+      registration({
+        id: "provider.a.z",
+        provides: [multiple],
+        start: () => ({
+          capabilities: [{ id: multiple.id, value: "dot", version: multiple.version }],
+        }),
+      }),
+      registration({
+        id: "provider.a-z",
+        provides: [multiple],
+        start: () => ({
+          capabilities: [{ id: multiple.id, value: "hyphen", version: multiple.version }],
+        }),
+      }),
+      registration({
+        id: "consumer",
+        requires: [multiple],
+        start: (context) => {
+          observedProviders.push(
+            ...(context.requirements[0]?.providers.map((provider) => provider.pluginId) ?? []),
+          );
+          return { capabilities: [] };
+        },
+      }),
+    ];
+    const forward = runtime.resolve(plugins);
+    const reverse = runtime.resolve([...plugins].reverse());
+    expect(forward.ok).toBeTrue();
+    expect(reverse.ok).toBeTrue();
+    if (!forward.ok || !reverse.ok) return;
+    expect(forward.value.inspect()).toEqual(reverse.value.inspect());
+    expect(forward.value.inspect().plugins.map((plugin) => plugin.id)).toEqual([
+      "provider.a-z",
+      "provider.a.z",
+      "consumer",
+    ]);
+    expect((await runtime.start(forward.value)).ok).toBeTrue();
+    expect(observedProviders).toEqual(["provider.a-z", "provider.a.z"]);
+
+    expect(runtime.resolve([registration({ id: "plugin.é" })])).toMatchObject({
+      diagnostics: [{ code: "invalid-plugin-registration" }],
+      ok: false,
+    });
+    const incompatible = runtime.resolve([
+      registration({
+        id: "version.ten",
+        provides: [capability("groma.version-order/v1", "multiple", "10.0.0")],
+      }),
+      registration({
+        id: "version.two",
+        provides: [capability("groma.version-order/v1", "multiple", "2.0.0")],
+      }),
+      registration({
+        id: "version.consumer",
+        requires: [capability("groma.version-order/v1", "multiple", "3.0.0")],
+      }),
+    ]);
+    expect(diagnosticProjection(incompatible)).toEqual([
+      {
+        code: "incompatible-capability-version",
+        details: {
+          availableVersions: "10.0.0,2.0.0",
+          capabilityId: "groma.version-order/v1",
+          pluginId: "version.consumer",
+          requiredVersion: "3.0.0",
+        },
+      },
+    ]);
   });
 
   test("exact-validates registrations and enforces collection bounds before start", () => {
@@ -559,6 +699,65 @@ describe("plugin lifecycle", () => {
         { id: "dependent", state: "failed" },
       ],
       state: "failed",
+    });
+  });
+
+  test("reserves one cleanup Promise and first reason before reentrant stop callbacks", async () => {
+    const runtime = new PluginRuntime();
+    const events: string[] = [];
+    const releaseDependent = deferred<void>();
+    const base = capability("groma.reentrant-base/v1");
+    let graph!: RunningPluginGraph;
+    let reentrantCancel: Promise<unknown> | undefined;
+    let reentrantShutdown: Promise<unknown> | undefined;
+    const resolved = runtime.resolve([
+      registration({
+        id: "base",
+        provides: [base],
+        start: () => ({
+          capabilities: [{ id: base.id, value: {}, version: base.version }],
+          stop: () => {
+            events.push("base:stop");
+          },
+        }),
+      }),
+      registration({
+        id: "dependent",
+        requires: [base],
+        start: () => ({
+          capabilities: [],
+          stop: () => {
+            events.push("dependent:stop:start");
+            reentrantCancel = graph.cancel();
+            reentrantShutdown = graph.shutdown();
+            return releaseDependent.promise.then(() => {
+              events.push("dependent:stop:end");
+            });
+          },
+        }),
+      }),
+    ]);
+    expect(resolved.ok).toBeTrue();
+    if (!resolved.ok) return;
+    const started = await runtime.start(resolved.value);
+    expect(started.ok).toBeTrue();
+    if (!started.ok) return;
+    graph = started.value;
+
+    const first = graph.shutdown();
+    expect(reentrantCancel).toBe(first);
+    expect(reentrantShutdown).toBe(first);
+    expect(events).toEqual(["dependent:stop:start"]);
+    releaseDependent.resolve();
+
+    expect(await first).toEqual({
+      ok: true,
+      value: { state: "stopped", stoppedPluginIds: ["dependent", "base"] },
+    });
+    expect(events).toEqual(["dependent:stop:start", "dependent:stop:end", "base:stop"]);
+    expect(await graph.cancel()).toEqual({
+      ok: true,
+      value: { state: "stopped", stoppedPluginIds: ["dependent", "base"] },
     });
   });
 });

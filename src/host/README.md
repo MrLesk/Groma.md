@@ -142,6 +142,14 @@ results are contained and never dispatch a surface. Only runtime values exactly 
 `SIGINT` or `SIGTERM` appear in a cancelled outcome. Any other injected signal value
 requests generic cancellation without exposing the value.
 
+Cancellation after composition has begun also owns any graph delivered later: the Host
+canonicalizes a late valid composition and cancels its plugin graph asynchronously,
+while malformed or rejected late values remain contained. During pending recovery,
+provider cancellation waits for the recovery Promise to settle. During pending surface
+start, it waits for that start to settle and, if a session appears, for its one `stop()`
+attempt. These fences prevent providers from disappearing underneath in-flight work
+without delaying the initial cancelled return.
+
 When a composition includes a running plugin graph, the Host shuts it down after
 surface cleanup on normal and failure exits, or cancels it after surface cleanup on a
 cancelled exit. The Core runtime supplies the dependency-safe, exactly-once plugin
@@ -149,6 +157,9 @@ ordering; the Host only adapts its process outcome to `cancel()` or `shutdown()`
 exact-validates the native-Promise result. Plugin cleanup failure becomes the stable
 `host-plugin-cleanup-failed` surface outcome. External cancellation and process-signal
 listener cleanup still run afterward with their existing deterministic precedence.
+The cleanup mode is captured from the lifecycle cause rather than inferred from the
+mutable public outcome, so a surface-stop failure after `SIGINT` or `SIGTERM` still
+cancels providers instead of converting the traversal into normal shutdown.
 
 Once a surface session exists, normal completion, failure, cancellation, and SIGINT or
 SIGTERM all converge on one awaited `stop()` call. Signal and cancellation listeners

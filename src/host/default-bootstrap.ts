@@ -440,6 +440,14 @@ export function createDefaultBootstrapRegistry(
         );
       }
       plugins = started.value;
+      if (context.cancellation?.aborted === true) {
+        const running = plugins;
+        plugins = undefined;
+        await running.cancel();
+        return failure<HostComposition>(
+          diagnostic("host-composition-failed", "Built-in plugin startup was cancelled"),
+        );
+      }
       const graph = runningCapability<HostComposition["graph"]>(
         plugins,
         defaultHostCapabilityIds.graph,
@@ -511,7 +519,12 @@ export function createDefaultBootstrapRegistry(
         }),
       );
     } catch {
-      if (plugins !== undefined) await plugins.shutdown();
+      if (plugins !== undefined) {
+        const running = plugins;
+        plugins = undefined;
+        if (context.cancellation?.aborted === true) await running.cancel();
+        else await running.shutdown();
+      }
       return failure<HostComposition>(
         diagnostic("host-composition-failed", "Default local host composition failed"),
       );
