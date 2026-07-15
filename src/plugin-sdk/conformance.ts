@@ -127,23 +127,50 @@ async function cleanup(graphs: readonly RunningPluginGraph[]): Promise<readonly 
   return Object.freeze(diagnostics);
 }
 
+function deterministicGraphSnapshot(graph: RunningPluginGraph): string {
+  const inspection = graph.inspect();
+  const declaredVersions = new Map<string, Set<string>>();
+  for (const plugin of inspection.plugins) {
+    for (const declaration of plugin.provides) {
+      const versions = declaredVersions.get(declaration.id) ?? new Set<string>();
+      versions.add(declaration.version);
+      declaredVersions.set(declaration.id, versions);
+    }
+  }
+  const capabilities = [...declaredVersions].flatMap(([id, versions]) =>
+    [...versions].map((version) => ({ id, version })),
+  );
+  capabilities.sort(
+    (left, right) =>
+      compareCodeUnits(left.id, right.id) || compareCodeUnits(left.version, right.version),
+  );
+  return stable({
+    capabilities: capabilities.map(({ id, version }) => ({
+      id,
+      providerPluginIds: graph.capabilities(id, version).map((provider) => provider.pluginId),
+      version,
+    })),
+    inspection,
+  });
+}
+
 async function deterministicResults(
   fixture: PluginConformanceFixture,
 ): Promise<PluginConformanceCaseResult> {
   const name = "deterministic-results" as const;
   const diagnostics: Diagnostic[] = [];
   const forward = await startFixture(fixture, "forward", noCancellation);
-  let forwardInspection: string | undefined;
+  let forwardSnapshot: string | undefined;
   if (!forward.ok) {
     diagnostics.push(...forward.diagnostics);
   } else {
     try {
-      forwardInspection = stable(forward.value.inspect());
+      forwardSnapshot = deterministicGraphSnapshot(forward.value);
     } catch {
       diagnostics.push(
         diagnostic(
           "plugin-conformance-inspection-failed",
-          "Plugin graph inspection failed during deterministic conformance",
+          "Plugin graph snapshot failed during deterministic conformance",
         ),
       );
     }
@@ -155,12 +182,12 @@ async function deterministicResults(
     diagnostics.push(...reverse.diagnostics);
   } else {
     try {
-      const reverseInspection = stable(reverse.value.inspect());
-      if (forwardInspection !== undefined && forwardInspection !== reverseInspection) {
+      const reverseSnapshot = deterministicGraphSnapshot(reverse.value);
+      if (forwardSnapshot !== undefined && forwardSnapshot !== reverseSnapshot) {
         diagnostics.push(
           diagnostic(
             "plugin-conformance-nondeterministic",
-            "Equivalent registration sets produced different runtime inspections",
+            "Equivalent registration sets produced different observable runtime snapshots",
           ),
         );
       }
@@ -168,7 +195,7 @@ async function deterministicResults(
       diagnostics.push(
         diagnostic(
           "plugin-conformance-inspection-failed",
-          "Plugin graph inspection failed during deterministic conformance",
+          "Plugin graph snapshot failed during deterministic conformance",
         ),
       );
     }

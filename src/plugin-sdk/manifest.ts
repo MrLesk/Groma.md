@@ -128,11 +128,14 @@ function entryPoints(value: unknown): Result<readonly string[]> {
       return invalidPackageManifest("plugins length must be an intrinsic safe data value");
     }
     length = lengthDescriptor.value;
+    if (length === 0 || length > maximumEntryPoints) {
+      return invalidPackageManifest("plugins must contain between 1 and 64 dense entry points");
+    }
     keys = Reflect.ownKeys(value);
   } catch {
     return invalidPackageManifest("plugins inspection failed");
   }
-  if (length === 0 || length > maximumEntryPoints || keys.length !== length + 1) {
+  if (keys.length !== length + 1) {
     return invalidPackageManifest("plugins must contain between 1 and 64 dense entry points");
   }
   const copied: string[] = [];

@@ -191,6 +191,72 @@ describe("public plugin SDK", () => {
     expect(
       changing.cases.find((item) => item.name === "deterministic-results")?.diagnostics,
     ).toMatchObject([{ code: "plugin-conformance-nondeterministic" }]);
+
+    const orderedCapability = Object.freeze({
+      cardinality: "multiple" as const,
+      id: "example.ordered/v1",
+      version: "1.0.0",
+    });
+    const orderedProvider = (id: string) => {
+      const original = createPluginRegistrations()[0]!;
+      return {
+        ...original,
+        manifest: {
+          ...original.manifest,
+          id,
+          provides: [orderedCapability],
+          requires: [],
+        },
+        start: () => ({
+          capabilities: [
+            {
+              id: orderedCapability.id,
+              value: Object.freeze({}),
+              version: orderedCapability.version,
+            },
+          ],
+        }),
+      };
+    };
+    const orderedBase = createPluginRuntimeConformanceFixture(() => [
+      orderedProvider("example.ordered-a"),
+      orderedProvider("example.ordered-b"),
+    ]);
+    let forwardInspection: ReturnType<RunningPluginGraph["inspect"]> | undefined;
+    let reverseInspection: ReturnType<RunningPluginGraph["inspect"]> | undefined;
+    const changingProviderOrder: PluginConformanceFixture = {
+      cancellationDiagnosticCode: "plugin-start-cancelled",
+      start: async (request) => {
+        const started = await orderedBase.start(request);
+        if (!started.ok) return started;
+        const base = started.value;
+        const graph: RunningPluginGraph = {
+          cancel: () => base.cancel(),
+          capabilities: (id, version) => {
+            const providers = base.capabilities(id, version);
+            return request.registrationOrder === "reverse" ? [...providers].reverse() : providers;
+          },
+          inspect: () => {
+            const inspection = base.inspect();
+            if (request.registrationOrder === "reverse") reverseInspection = inspection;
+            else forwardInspection = inspection;
+            return inspection;
+          },
+          shutdown: () => base.shutdown(),
+        };
+        return { ok: true as const, value: graph };
+      },
+    };
+    const providerOrder = await runPluginConformanceSuite({ fixture: changingProviderOrder });
+    expect(forwardInspection).toEqual(reverseInspection);
+    expect(
+      providerOrder.cases.find((item) => item.name === "deterministic-results")?.diagnostics,
+    ).toEqual([
+      {
+        code: "plugin-conformance-nondeterministic",
+        message: "Equivalent registration sets produced different observable runtime snapshots",
+      },
+    ]);
     expect(
       changing.cases.find((item) => item.name === "provider-behavior")?.diagnostics,
     ).toMatchObject([{ code: "plugin-provider-conformance-failed" }]);
@@ -466,6 +532,21 @@ describe("public plugin SDK", () => {
         ok: false,
       });
     }
+
+    let oversizedOwnKeysInvoked = false;
+    const oversizedPlugins = new Proxy(new Array(65), {
+      ownKeys: () => {
+        oversizedOwnKeysInvoked = true;
+        throw new Error("oversized plugin entries must not be enumerated");
+      },
+    });
+    expect(
+      checkPluginPackageCompatibility({ ...packageManifest, plugins: oversizedPlugins }),
+    ).toMatchObject({
+      diagnostics: [{ code: "invalid-plugin-package-manifest" }],
+      ok: false,
+    });
+    expect(oversizedOwnKeysInvoked).toBeFalse();
 
     const maximumVersion = `${"9".repeat(124)}.0.0`;
     expect(maximumVersion).toHaveLength(128);

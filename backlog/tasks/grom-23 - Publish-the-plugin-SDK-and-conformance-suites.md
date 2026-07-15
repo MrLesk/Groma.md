@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 05:21'
+updated_date: '2026-07-15 05:33'
 labels: []
 milestone: m-2
 dependencies:
@@ -53,12 +53,10 @@ Give built-in and third-party plugin authors one supported public contract for m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Resolve the exact groma/plugin-sdk and groma/plugin-sdk/conformance self-references through the plugin-sdk layer in the boundary checker, with allowed Host and forbidden relative/bare dependency regressions.
-2. Keep authoring and manifest contracts on groma/plugin-sdk, expose conformance only through groma/plugin-sdk/conformance, and update repository imports and guidance.
-3. Document the checked six-field envelope as inert static JSON/data obtained before arbitrary package code executes; describe definePluginPackage as a build-time authoring aid and correct the bounded subpath grammar wording without implementing GROM-24.
-4. Run deterministic conformance graphs sequentially, capture inspection before cleanup, retain cleanup diagnostics, and add an exclusive-resource fixture proving no overlap.
-5. Normalize the Host conformance adapter to a cancellation-specific diagnostic only when the already-aborted request returns the exact known Phase-0 startup wrapper; verify the aggregate suite and document the safety rationale.
-6. Run focused and full gates, inspect the cumulative diff, update the modified-file manifest and evidence, then re-finalize and commit without pushing.
+1. Reject zero or over-64 intrinsic plugin-entry arrays immediately after validating the intrinsic length descriptor and before enumerating keys; add a proxy regression proving ownKeys is never invoked for oversized input.
+2. Build each deterministic snapshot from graph inspection plus ordered provider plugin IDs for every unique declared capability/version, sorting lookup keys but never provider results.
+3. Add a successful runtime-backed fixture whose forward and reverse inspections match while provider lookup order differs, and prove plugin-conformance-nondeterministic without weakening sequential shutdown, no-overlap, or cleanup diagnostics.
+4. Run focused and full gates, re-check AC3 and AC5 with current-head evidence, re-finalize GROM-23, and commit without pushing or resolving GitHub threads.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -85,10 +83,16 @@ Reopened after Claude review found pre-publication boundary, API-surface, static
 Claude-review remediation implemented. Exact groma/plugin-sdk self-references now participate in the layer matrix; main and conformance exports are distinct; the checked envelope is documented as inert pre-execution data; deterministic graphs release forward resources before reverse startup; and the Host test adapter emits a narrow cancellation code only for the exact pre-aborted Phase-0 wrapper. Focused typecheck, actual boundary scan, and SDK/Host/boundary suites pass 17 tests with 54 assertions.
 
 Final current-head verification: focused SDK, Host, and boundary suites passed 17 tests with 54 assertions; strict TypeScript and the actual architecture boundary scan passed. Full bun run check passed formatting, strict TypeScript, boundaries, 520 tests with 3,397 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. Host cancellation assessment: adapter normalization is sufficiently narrow because it requires an already-cancelled request plus the exact single Phase-0 wrapper code, message, and absent details; unmatched failures remain visible, while every uncancelled case must successfully start the same Host fixture. Production Host behavior remains unchanged.
+
+Reopened for two actionable pre-merge Codex findings: oversized plugin arrays must fail before key enumeration, and deterministic results must include observable provider order rather than graph inspection alone. AC3 and AC5 are pending current-head regressions.
+
+Implemented both final Codex findings. entryPoints now rejects zero or over-64 intrinsic array lengths before Reflect.ownKeys, with a throwing ownKeys proxy proving bounded preflight. Deterministic snapshots now combine inspection with ordered provider plugin IDs for each unique declared capability/version; capability lookup keys are sorted but provider order is preserved. A runtime-backed successful fixture exposes identical inspections and reversed provider order, producing plugin-conformance-nondeterministic while the existing exclusive-resource fixture remains green. Focused strict typecheck plus SDK/Host suites passed 8 tests with 45 assertions.
+
+Final current-head evidence for the last two Codex findings: focused strict TypeScript and SDK/Host conformance suites passed 8 tests with 45 assertions. Full bun run check passed formatting, strict TypeScript, architecture boundaries, 520 tests with 3,401 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. The existing exclusive-resource regression remains green, proving the richer deterministic snapshot did not reintroduce forward/reverse overlap.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Published a coherent two-subpath plugin SDK: authoring and static package compatibility at groma/plugin-sdk, reusable verification only at groma/plugin-sdk/conformance. Package self-references now obey repository layer rules; inert manifest guidance preserves the pre-execution trust boundary; deterministic conformance releases each graph before the next starts; and Host cancellation evidence is narrowly normalized without changing product diagnostics. Focused 17-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
+Published and review-hardened the two-subpath plugin SDK. Authoring and static package compatibility live at groma/plugin-sdk; reusable verification lives only at groma/plugin-sdk/conformance. Package self-references obey layer rules, oversized entry-point arrays fail before enumeration, static manifests preserve the pre-execution trust boundary, and deterministic conformance compares inspection plus observable provider order while releasing graphs sequentially. Focused 8-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
 <!-- SECTION:FINAL_SUMMARY:END -->
