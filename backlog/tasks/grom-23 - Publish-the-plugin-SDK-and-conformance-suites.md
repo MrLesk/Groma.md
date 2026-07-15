@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 05:46'
+updated_date: '2026-07-15 05:59'
 labels: []
 milestone: m-2
 dependencies:
@@ -53,9 +53,9 @@ Give built-in and third-party plugin authors one supported public contract for m
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Remove own-key enumeration from plugin entry-point canonicalization after validating the intrinsic array and bounded 1..64 length.
-2. Inspect only the bounded expected numeric descriptors, fail closed on descriptor reflection errors, and preserve dense enumerable string checks, grammar, uniqueness, and fresh frozen canonical output.
-3. Add an allowed-length proxy with a throwing ownKeys trap and an extra property, proving ownKeys is not invoked and only expected entries survive; retain the existing over-64 no-enumeration regression.
+1. Replace manifest own-key enumeration with exactly six bounded expected-field descriptor reads into a fresh safe record, containing all reflection failures and preserving required enumerable data-property validation.
+2. Define exactness as the canonical six-field output: ignore unknown source-object properties so they cannot influence or survive; leave exhaustive static source-document shape validation to GROM-24.
+3. Update diagnostics and SDK/architecture guidance, convert the surprise-property regression to successful exact canonicalization, add missing-required-field failure, and add a throwing-ownKeys manifest proxy proving bounded behavior and frozen exact output while retaining revoked-proxy containment.
 4. Run focused and full gates, re-check AC5 with current-head evidence, re-finalize GROM-23, and commit without pushing or resolving GitHub threads.
 <!-- SECTION:PLAN:END -->
 
@@ -95,10 +95,16 @@ Reopened for the final current-head P2: even a bounded-length proxy can make Ref
 Removed own-key enumeration from entryPoints entirely. After intrinsic array and 1..64 length validation, it now reflects only the bounded expected numeric descriptors, contains descriptor trap failures, and copies validated entries into the fresh frozen canonical array. The allowed-length proxy regression has a throwing ownKeys trap plus an extra enumerable property; compatibility succeeds without invoking the trap and returns only the clean numeric entry. The existing over-64 early-bound trap remains green. Focused strict typecheck plus SDK/Host suites passed 8 tests with 50 assertions.
 
 Final descriptor-only evidence: focused strict TypeScript and SDK/Host suites passed 8 tests with 50 assertions. Full bun run check passed formatting, strict TypeScript, architecture boundaries, 520 tests with 3,406 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. No path in entryPoints enumerates input keys; reflection is bounded to length plus at most 64 expected numeric descriptors, and only validated strings enter the fresh frozen output.
+
+Reopened for current-head P2: manifest canonicalization still enumerated package-controlled own keys. AC5 is pending bounded six-descriptor canonicalization, explicit exact-output semantics, and current-head verification.
+
+Removed manifest own-key enumeration. canonicalRecord now validates only the six required enumerable data descriptors into a null-prototype intermediate record; reflection faults are contained, unknown properties are ignored, and the final compatibility result remains a fresh frozen six-field object. Updated exactness wording in ARCHITECTURE.md and the SDK guide, assigning exhaustive static source-document shape validation to GROM-24. Tests now prove ordinary extras canonicalize away, missing required fields still fail, revoked proxies remain contained, and a manifest proxy with throwing ownKeys plus a throwing unknown getter succeeds without touching either. Focused strict typecheck plus SDK/Host suites passed 8 tests with 59 assertions.
+
+Final six-descriptor evidence: focused strict TypeScript and SDK/Host suites passed 8 tests with 59 assertions. Full bun run check passed formatting, strict TypeScript, architecture boundaries, 520 tests with 3,415 assertions, native build/smoke, and compiled Iteration 1A verification. git diff --check and backlog doctor passed. Manifest and entry-point canonicalization now use only bounded expected-descriptor reads; neither path enumerates package-controlled keys.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Published and review-hardened the two-subpath plugin SDK. Authoring and static package compatibility live at groma/plugin-sdk; reusable verification lives only at groma/plugin-sdk/conformance. Package self-references obey layer rules, manifest entry points are canonicalized through bounded descriptor reads without key enumeration, static data preserves the pre-execution trust boundary, and deterministic conformance compares inspection plus observable provider order while releasing graphs sequentially. Focused 8-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
+Published and review-hardened the two-subpath plugin SDK. Authoring and static package compatibility live at groma/plugin-sdk; reusable verification lives only at groma/plugin-sdk/conformance. Package self-references obey layer rules, package manifests and entry points canonicalize through bounded expected-descriptor reads without key enumeration, static source-shape validation remains with GROM-24, and deterministic conformance compares inspection plus observable provider order while releasing graphs sequentially. Focused 8-test evidence and the complete 520-test, native-build, and Iteration 1A gates pass.
 <!-- SECTION:FINAL_SUMMARY:END -->

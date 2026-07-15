@@ -49,6 +49,13 @@ readable without evaluating a plugin entry point or any arbitrary package module
 }
 ```
 
+Exactness describes the canonical result: the SDK reads only those six required
+enumerable data properties and returns a fresh frozen envelope containing no others.
+It never enumerates keys on a package-controlled in-memory object; unknown source
+properties are ignored and cannot influence or survive canonicalization. GROM-24 owns
+how static JSON is acquired and may additionally require the source document itself to
+contain only the six fields before passing its data to this bounded checker.
+
 Compatibility tokens and the exact package version are bounded to 128 characters.
 Every plugin entry is a bounded relative package subpath. Each segment starts with an
 ASCII alphanumeric character; later characters may also use dot, underscore, or

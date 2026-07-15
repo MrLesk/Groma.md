@@ -514,7 +514,15 @@ describe("public plugin SDK", () => {
         ok: false,
       });
     }
-    expect(checkPluginPackageCompatibility({ ...packageManifest, surprise: true })).toMatchObject({
+    const withSurprise = checkPluginPackageCompatibility({ ...packageManifest, surprise: true });
+    expect(withSurprise).toMatchObject({ ok: true, value: packageManifest });
+    if (!withSurprise.ok) throw new Error("manifest with ignored source property failed");
+    expect(Object.isFrozen(withSurprise.value)).toBeTrue();
+    expect("surprise" in withSurprise.value).toBeFalse();
+
+    const missingVersion: Record<string, unknown> = { ...packageManifest };
+    delete missingVersion.version;
+    expect(checkPluginPackageCompatibility(missingVersion)).toMatchObject({
       diagnostics: [{ code: "invalid-plugin-package-manifest" }],
       ok: false,
     });
@@ -532,6 +540,36 @@ describe("public plugin SDK", () => {
         ok: false,
       });
     }
+
+    const manifestTarget = { ...packageManifest };
+    Object.defineProperty(manifestTarget, "ignored", {
+      enumerable: true,
+      get: () => {
+        throw new Error("unknown manifest properties must not be read");
+      },
+    });
+    let manifestOwnKeysInvoked = false;
+    const manifestProxy = new Proxy(manifestTarget, {
+      ownKeys: () => {
+        manifestOwnKeysInvoked = true;
+        throw new Error("manifest keys must not be enumerated");
+      },
+    });
+    const canonicalManifest = checkPluginPackageCompatibility(manifestProxy);
+    expect(canonicalManifest).toMatchObject({ ok: true, value: packageManifest });
+    expect(manifestOwnKeysInvoked).toBeFalse();
+    if (!canonicalManifest.ok) throw new Error("bounded manifest proxy unexpectedly failed");
+    expect(canonicalManifest.value).not.toBe(manifestProxy);
+    expect(Object.isFrozen(canonicalManifest.value)).toBeTrue();
+    expect(Reflect.ownKeys(canonicalManifest.value)).toEqual([
+      "apiVersion",
+      "name",
+      "plugins",
+      "runtimeApiVersion",
+      "sdkApiVersion",
+      "version",
+    ]);
+    expect("ignored" in canonicalManifest.value).toBeFalse();
 
     const boundedTarget = ["./plugins/bounded.js"];
     Object.defineProperty(boundedTarget, "ignored", {

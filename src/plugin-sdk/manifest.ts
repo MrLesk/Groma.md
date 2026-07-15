@@ -81,7 +81,10 @@ function invalidPackageManifest(reason: string): Result<never> {
   );
 }
 
-function exactRecord(value: unknown, fields: readonly string[]): Result<Record<string, unknown>> {
+function canonicalRecord(
+  value: unknown,
+  fields: readonly string[],
+): Result<Record<string, unknown>> {
   try {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       return invalidPackageManifest("manifest must be a record");
@@ -90,18 +93,13 @@ function exactRecord(value: unknown, fields: readonly string[]): Result<Record<s
     if (prototype !== Object.prototype && prototype !== null) {
       return invalidPackageManifest("manifest must be a plain record");
     }
-    const keys = Reflect.ownKeys(value);
-    if (
-      keys.length !== fields.length ||
-      keys.some((key) => typeof key !== "string" || !fields.includes(key))
-    ) {
-      return invalidPackageManifest("manifest fields must match the versioned contract exactly");
-    }
-    const copied: Record<string, unknown> = {};
+    const copied = Object.create(null) as Record<string, unknown>;
     for (const field of fields) {
       const descriptor = Object.getOwnPropertyDescriptor(value, field);
       if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return invalidPackageManifest("manifest fields must be enumerable data properties");
+        return invalidPackageManifest(
+          "manifest must provide every required field as an enumerable data property",
+        );
       }
       copied[field] = descriptor.value;
     }
@@ -190,13 +188,15 @@ export function definePluginPackage(
 }
 
 /**
- * Canonicalize an already materialized inert package manifest and classify
- * compatibility before any package entry point or arbitrary package module executes.
+ * Canonicalize the six expected fields from already materialized inert package data
+ * and classify compatibility before any entry point or arbitrary package module
+ * executes. Unknown source-object properties are ignored and never enter the exact
+ * canonical output.
  */
 export function checkPluginPackageCompatibility(
   value: unknown,
 ): Result<SupportedPluginPackageManifest> {
-  const inspected = exactRecord(value, [
+  const inspected = canonicalRecord(value, [
     "apiVersion",
     "name",
     "plugins",
