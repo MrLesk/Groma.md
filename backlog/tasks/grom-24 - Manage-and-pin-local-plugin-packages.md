@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 10:01'
+updated_date: '2026-07-15 10:26'
 labels: []
 milestone: m-4
 dependencies:
@@ -70,17 +70,10 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve exact canonical configuration, lock, user-state, file-snapshot, trust-root, and captured-byte execution invariants from the completed GROM-24 implementation.
-2. Require a missing-to-configured bootstrap recheck to observe both zero requested runtime plugins and zero package declarations.
-3. Contain replacement-parser package declarations and enabled arrays through Host runtime inspection before canonical validation.
-4. Recover blueprint disable when canonical configuration still enables an entry but the lock is absent or lacks that package, without source, trust, or import; preserve lock/config CAS and stable negative outcomes.
-5. Map lock and user-state resource failures to bounded package diagnostics and preserve every allowlisted bootstrap diagnostic through lifecycle containment without external details.
-6. Route package indeterminate mutations to exit 6 and classify invalid local sources and forbidden personal capabilities as workspace exits.
-7. Prove startup rejects enabled locked entries without exact trust, and Windows enable fails unattested without import or user-state creation.
-8. Enforce one explicit Host-derived total enabled-local-plugin budget across blueprint and personal state before enable/startup materialization or import, plus a canonical blueprint-view bound.
-9. Make native binary smoke platform-aware: POSIX retains the exact 4 MiB positive execution path; Windows covers inert management and the expected unattested enable failure through bounded JSON capture.
-10. Retain the split empty-string --allow-unresolved compiler form after independent official-doc, native, and four-target equivalence verification.
-11. Add focused regressions for every closure finding, run bun run check, bun run check:targets, Backlog doctor, and diff review; record exact evidence and return GROM-24 to Done.
+1. Preserve existing GROM-24 package/trust invariants and make startup Host exit classification infrastructure-first for mixed canonical diagnostics while retaining every single-diagnostic contract.
+2. Add a program-level mixed bootstrap regression proving workspace-configuration-provider-failure plus plugin-package-lock-unavailable exits 5 with both canonical diagnostics.
+3. Keep the existing Ubuntu cross-platform binary job and add a native Windows job that installs exact dependencies, builds the native executable, and runs the real smoke verifier without --skip-run.
+4. Run focused CLI tests, full bun run check, bun run check:targets, local workflow validation, independent spec/quality review, Backlog doctor, Claude and Codex review; then record exact evidence and return GROM-24 to Done.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -119,10 +112,14 @@ Consolidated closure implementation completed. Bootstrap rechecks now require a 
 Post-push Claude review was run first by URL (blocked from reading by Claude sandbox permissions) and then against the exact streamed closure commit. One actionable contract gap was accepted: package-command capacity failures were not yet mapped to the workspace exit class. Two low-cost test/verification hardenings were also accepted: a benign replacement-parser positive control and deterministic child termination/reaping on smoke-output overflow. The claim that startup capacity lacked classification was rejected because hostExit already covers plugin-package-*; the hardcoded .groma native-smoke assertion remains the explicit current Host default and intentionally covers mutation across the complete inert-management sequence.
 
 Claude follow-up actions completed: package enable now maps enabled-capacity and stable user-state configuration diagnostics to workspace exit 3, with both surface and startup program coverage; replacement-parser containment has a benign positive control; bounded smoke capture terminates and reaps the child on read failure. Final post-Claude validation passed unchanged at 552 repository tests plus strict types, architecture boundaries, native compiled 4 MiB package execution, crash recovery, and all four target builds.
+
+Exact-head adversarial review reopened GROM-24 at bedd00ccdb0b5e71e2f36a8381c3517a7be630fc. Two P1s remain: mixed bootstrap diagnostics must give infrastructure precedence at the Host/CLI boundary, and the fail-closed Windows native smoke must run on an actual Windows CI runner rather than being cross-compiled with --skip-run on Ubuntu. Context Hunter classification is L2 because these changes affect a public exit contract and CI platform execution, but both fit existing seams without changing package semantics.
+
+Exact-head P1 closure completed. Host startup now returns workspace exit 3 only when every preserved canonical diagnostic is workspace-class; any mixed, unknown, or infrastructure diagnostic retains the infrastructure fallback. The program regression proves the original workspace-configuration-provider-failure plus plugin-package-lock-unavailable pair and four additional canonical infrastructure classes, while workspace-only and single-diagnostic contracts remain green. The existing Ubuntu four-target job remains unchanged, and a bounded windows-2025 job now installs Bun 1.3.14 and locked dependencies, builds the native executable, and runs the real platform-aware smoke verifier. DEVELOPMENT.md documents the three-job model. Final repeated validation passed: focused CLI 21 tests / 230 expectations, bun run check with 553 tests plus strict types, boundaries, native compiled smoke and Iteration 1A recovery, bun run check:targets across macOS arm64, Linux x64, Windows x64, and Windows arm64, local workflow YAML parsing, and git diff --check. Independent spec review passed; independent quality review found incomplete mixed precedence, the finding was corrected, and re-review passed with no remaining actionable findings.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Closed the consolidated GROM-24 review findings across bootstrap containment, exact package-state recovery, trust ordering, stable diagnostics, lifecycle aggregation, CLI exits, Host-derived cross-scope capacity, and platform-aware binary smoke. Lock-first capacity is counted from the configuration/lock union before any import; Windows enable fails with workspace exit 3 without evaluating code or creating trust state; and bounded smoke capture reaps failed children. Verified by 552 repository tests, native compiled/crash workflows, all four target builds, independent compiler equivalence checks, independent diff re-review, and evaluated Claude feedback.
+Made Host bootstrap exit classification coherently fail closed for mixed diagnostics and added actual native Windows smoke execution to CI without removing cross-target coverage. Verified by a five-case program-level mixed-diagnostic regression, 553 repository tests, compiled Iteration 1A verification, all four target builds, workflow parsing, and independent spec plus post-fix quality review.
 <!-- SECTION:FINAL_SUMMARY:END -->

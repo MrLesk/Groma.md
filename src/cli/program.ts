@@ -121,25 +121,26 @@ function diagnosticResult(
 }
 
 function hostExit(diagnostics: readonly { readonly code: string }[], fallback: number): number {
-  return diagnostics.some(
-    (entry) =>
-      [
-        "invalid-local-plugin-package-source",
-        "personal-plugin-capability-forbidden",
-        "project-plugin-validation-required",
-        "plugin-full-user-permissions-trust-required",
-        "remote-plugin-package-acquisition-out-of-scope",
-        "runtime-plugin-unavailable",
-        "workspace-configuration-changed",
-        "workspace-configuration-conflict",
-        "workspace-configuration-malformed",
-        "workspace-discovery-conflict",
-      ].includes(entry.code) ||
-      entry.code.startsWith("plugin-package-") ||
-      entry.code.startsWith("invalid-plugin-package-") ||
-      entry.code.startsWith("incompatible-plugin-") ||
-      entry.code === "unsupported-plugin-package-manifest-version",
-  )
+  return diagnostics.length > 0 &&
+    diagnostics.every(
+      (entry) =>
+        [
+          "invalid-local-plugin-package-source",
+          "personal-plugin-capability-forbidden",
+          "project-plugin-validation-required",
+          "plugin-full-user-permissions-trust-required",
+          "remote-plugin-package-acquisition-out-of-scope",
+          "runtime-plugin-unavailable",
+          "workspace-configuration-changed",
+          "workspace-configuration-conflict",
+          "workspace-configuration-malformed",
+          "workspace-discovery-conflict",
+        ].includes(entry.code) ||
+        entry.code.startsWith("plugin-package-") ||
+        entry.code.startsWith("invalid-plugin-package-") ||
+        entry.code.startsWith("incompatible-plugin-") ||
+        entry.code === "unsupported-plugin-package-manifest-version",
+    )
     ? CLI_EXIT.workspace
     : fallback;
 }

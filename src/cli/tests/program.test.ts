@@ -907,6 +907,72 @@ export const plugin = Object.freeze({
     }
   });
 
+  test("gives infrastructure precedence for mixed bootstrap diagnostics", async () => {
+    for (const [infrastructureCode, infrastructureMessage] of [
+      [
+        "host-runtime-registration-invalid",
+        "Host runtime registrations must use the official namespace",
+      ],
+      [
+        "unsupported-bootstrap-target",
+        "Workspace bootstrap does not support this runtime platform or architecture",
+      ],
+      ["workspace-configuration-parser-failed", "Workspace configuration parsing failed"],
+      ["workspace-configuration-provider-failure", "Workspace configuration access failed"],
+      ["workspace-discovery-failed", "Workspace configuration discovery failed"],
+    ] as const) {
+      const root = await workspace();
+      const captured = captureOutput();
+      const exitCode = await runProgram(
+        ["--format", "json", "component", "roots", "--limit", "1"],
+        captured,
+        {
+          createRegistry: () => ({
+            compose: async () =>
+              Object.freeze({
+                diagnostics: Object.freeze([
+                  Object.freeze({
+                    code: infrastructureCode,
+                    message: `/private/${infrastructureCode}`,
+                  }),
+                  Object.freeze({
+                    code: "plugin-package-lock-unavailable",
+                    message: "/private/lock",
+                  }),
+                ]),
+                ok: false as const,
+              }),
+          }),
+          terminal: { stdin: false, stdout: false },
+          workspaceRoot: root,
+        },
+      );
+      const packageDiagnostic = {
+        code: "plugin-package-lock-unavailable",
+        message: "The exact plugin package lock is unavailable",
+      };
+      const infrastructureDiagnostic = {
+        code: infrastructureCode,
+        message: infrastructureMessage,
+      };
+
+      expect(exitCode, infrastructureCode).toBe(CLI_EXIT.infrastructure);
+      expect(captured.errors, infrastructureCode).toEqual([]);
+      expect(JSON.parse(captured.output[0]!) as JsonEnvelope, infrastructureCode).toMatchObject({
+        exitCode: CLI_EXIT.infrastructure,
+        ok: false,
+        result: {
+          diagnostics:
+            infrastructureCode < packageDiagnostic.code
+              ? [infrastructureDiagnostic, packageDiagnostic]
+              : [packageDiagnostic, infrastructureDiagnostic],
+          status: "startup-failure",
+        },
+      });
+      expect(captured.output[0], infrastructureCode).not.toContain("/private/");
+    }
+  });
+
   test("keeps unsupported runtime targets in the infrastructure exit class", async () => {
     const root = await workspace();
     const captured = captureOutput();
