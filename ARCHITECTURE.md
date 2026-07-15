@@ -854,9 +854,9 @@ Groma uses **packages** as the installation and distribution unit and **plugins*
 the runtime contribution unit. One package may provide multiple plugins, and a
 blueprint may enable only the contributions it needs.
 
-### Package Manifest
+### Package Declaration and Checked Manifest
 
-A package declares its Groma entry points explicitly:
+An npm package may declare discovery metadata in its `package.json`:
 
 ```json
 {
@@ -869,8 +869,37 @@ A package declares its Groma entry points explicitly:
 }
 ```
 
-Configuration may narrow the manifest with includes and exclusions. It cannot load an
-entry point the package did not declare.
+The nested `groma` record is package-manager metadata. Its `api` range helps a future
+acquisition workflow select candidate package releases; it is not the runtime plugin
+API token, a canonical Groma package manifest, or permission to execute an entry
+point.
+
+The public SDK separately defines the exact checked compatibility envelope:
+
+```json
+{
+  "apiVersion": "groma.package/v1",
+  "name": "@acme/groma-platform",
+  "plugins": ["./plugins/ownership.js", "./plugins/policy.js", "./plugins/typescript-scanner.js"],
+  "runtimeApiVersion": "groma.plugin/v1",
+  "sdkApiVersion": "groma.sdk/v1",
+  "version": "1.4.0"
+}
+```
+
+The envelope is inert static JSON/data that a Host can obtain without evaluating a
+declared entry point or arbitrary package module. `checkPluginPackageCompatibility()`
+reads the six required enumerable data properties and returns a fresh frozen canonical
+envelope containing exactly those fields before any package code executes. It does not
+enumerate a package-controlled in-memory object's keys; unknown source properties are
+ignored and cannot influence or survive canonicalization. `definePluginPackage()` is
+only a build-time TypeScript authoring aid for producing the static envelope; calling
+package code is not a discovery mechanism. Package-manager work must fail closed when
+package metadata, this envelope, or an exact lock disagree. Configuration may narrow
+the checked entry-point list with includes and exclusions, but it cannot load an entry
+point absent from that list. GROM-24 owns where a Host locates, materializes, validates
+the exact static source-document shape, and locks the envelope; the SDK defines its
+compatibility meaning without acquiring packages.
 
 ### Sources and Scopes
 

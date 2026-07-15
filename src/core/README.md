@@ -50,7 +50,12 @@ failure before continuation shuts them down, a Phase 1 startup failure rolls eve
 started plugin back in dependency order, and successful continuation transfers their
 lifecycle into the complete running graph. This is a reusable internal Core primitive,
 not the supported third-party API; its staged handle is nominally distinct from a
-complete running graph. GROM-23 owns the published SDK and its ergonomics.
+complete running graph. The public SDK owns third-party authoring ergonomics.
+
+The supported authoring façade is now `groma/plugin-sdk`. It exposes manifest,
+capability, and lifecycle contracts without staged continuation. Reusable verification
+lives only at `groma/plugin-sdk/conformance`; Core retains the Host-only bootstrap
+primitive.
 
 Start contexts expose only the resolved requirement values and the technology-neutral
 cancellation check. Start results must return every declared capability exactly once;

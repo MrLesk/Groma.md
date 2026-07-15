@@ -42,12 +42,14 @@ supported application and host capabilities rather than ambient build-tool files
 
 ## Source Boundaries
 
-The initial repository uses internal source boundaries rather than separate
-publishable packages. These are dependency directions, not public package contracts.
+The repository remains one build workspace. Most source boundaries are private
+dependency directions; `groma/plugin-sdk` is the deliberate supported subpath for
+plugin packages. Package acquisition and publication are separate Host concerns.
 
 | Boundary             | Responsibility                                                                         | May depend on                            |
 | -------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
 | `src/core`           | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core                     |
+| `src/plugin-sdk`     | Public plugin-author contracts, package compatibility, and conformance                 | Core                                     |
 | `src/standard-model` | The official minimal blueprint model and its invariants                                | Core                                     |
 | `src/persistence`    | Official local-resource, Markdown, journal, and later projection providers             | Core and the standard model              |
 | `src/application`    | Presentation-neutral semantic operations                                               | Core, model, and capability contracts    |
@@ -56,7 +58,8 @@ publishable packages. These are dependency directions, not public package contra
 
 Core must never import Bun APIs, filesystem or Markdown implementations, CLI, HTTP,
 React, or any other surface technology. Application operations must never reach into
-provider implementations directly. The host is the composition root.
+provider implementations directly. The SDK may expose Core plugin contracts, but
+Core never depends on the SDK façade. The host is the composition root.
 
 `bun run check:boundaries` parses TypeScript imports, exports, dynamic imports, import
 types, and `require` calls. Production Core files may import only other Core files.
@@ -64,8 +67,8 @@ Tests may import `bun:test`, but test code still cannot cross architectural laye
 Unresolved relative imports fail the check rather than being ignored.
 
 The directory names follow the root component domains and seed terminology in
-`ARCHITECTURE.md`. They can be split into distributable packages only when an actual
-plugin or public API boundary requires it.
+`ARCHITECTURE.md`. The plugin SDK is a public package subpath today; splitting its
+source into an independently acquired package belongs to the later package workflow.
 
 ## Test Layout
 

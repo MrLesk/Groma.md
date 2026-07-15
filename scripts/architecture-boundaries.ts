@@ -3,7 +3,15 @@ import path from "node:path";
 
 import { parse } from "@babel/parser";
 
-const layerNames = ["core", "standard-model", "persistence", "application", "host", "cli"] as const;
+const layerNames = [
+  "core",
+  "plugin-sdk",
+  "standard-model",
+  "persistence",
+  "application",
+  "host",
+  "cli",
+] as const;
 
 type LayerName = (typeof layerNames)[number];
 
@@ -11,6 +19,7 @@ const knownLayers = new Set<string>(layerNames);
 
 const allowedLayerDependencies: Readonly<Record<LayerName, ReadonlySet<LayerName>>> = {
   core: new Set(["core"]),
+  "plugin-sdk": new Set(["core", "plugin-sdk"]),
   "standard-model": new Set(["core", "standard-model"]),
   persistence: new Set(["core", "standard-model", "persistence"]),
   application: new Set(["core", "standard-model", "application"]),
@@ -18,8 +27,14 @@ const allowedLayerDependencies: Readonly<Record<LayerName, ReadonlySet<LayerName
   cli: new Set(["application", "host", "cli"]),
 };
 
+const packageSelfReferenceLayers: ReadonlyMap<string, LayerName> = new Map([
+  ["groma/plugin-sdk", "plugin-sdk"],
+  ["groma/plugin-sdk/conformance", "plugin-sdk"],
+]);
+
 const layersWithoutProductionExternalDependencies = new Set<LayerName>([
   "core",
+  "plugin-sdk",
   "standard-model",
   "application",
 ]);
@@ -294,6 +309,18 @@ export async function checkArchitectureBoundaries(
     for (const specifier of dependencies.specifiers) {
       if (!specifier.startsWith(".")) {
         if (isTest && specifier === "bun:test") {
+          continue;
+        }
+
+        const targetLayer = packageSelfReferenceLayers.get(specifier);
+        if (targetLayer !== undefined) {
+          if (!allowedLayerDependencies[importerLayer].has(targetLayer)) {
+            violations.push({
+              file: displayFile,
+              reason: `${importerLayer} cannot depend on ${targetLayer}`,
+              specifier,
+            });
+          }
           continue;
         }
 

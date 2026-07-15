@@ -29,6 +29,17 @@ operations, workspace access, and the injected surface. A running surface still
 receives only `WorkspaceAccessCapability`, not persistence, graph, runtime, or
 transaction internals.
 
+The complete default graph also runs through the runner-agnostic conformance suite
+published at `groma/plugin-sdk/conformance`. The suite exercises deterministic graph
+inspection, lifecycle, cancellation, declared provider cardinality, and one
+capability-specific behavior check for every built-in provider. Third-party packages
+use the same suite and runtime fixture rather than copying Host tests.
+
+The Host conformance adapter maps only the exact wrapper produced by an already-aborted
+Phase-0 start to its narrower test diagnostic. It cannot hide an ordinary composition
+failure: every other suite case must start the same fixture without cancellation, and
+all unmatched Host diagnostics pass through unchanged.
+
 The default profile uses exact capability version `1.0.0` and versioned capability IDs
 such as `groma.resources/v1`. It has no package acquisition, dynamic import, trust
 prompt, or project-code execution path. Optional registration inputs are explicitly
