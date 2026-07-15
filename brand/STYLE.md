@@ -28,8 +28,22 @@ remain authoritative when details disagree or generated text is imperfect.
 - Reserve green for the surveyed point—active selection, binding, focus, or the
   sightline between intent and evidence—and for the canonical lockup's `.md` suffix
   described under Local Identity Interpretation. Do not wash whole surfaces in green.
+- Against white, `#1D9E75` is approximately `3.39:1`. Use it for non-text lines,
+  marks, and control boundaries or states; the canonical logotype; and sufficiently
+  large text that meets the applicable `3:1` threshold on its actual background. Never
+  use it for normal-size body text on white, including a subtly warm-white product
+  surface. As a practical minimum for large text, use at least 24 CSS px at regular
+  weight or 18.66 CSS px at bold weight, then verify the rendered contrast.
+- Green linework, points, and controls must remain clearly discernible at their actual
+  rendered size and meet the applicable non-text contrast requirement. Do not use a
+  fragile hairline or color alone as the only meaningful cue: give product-drawn
+  linework adequate weight and pair it with shape, line style, an outline, a surveyed
+  point, or a text label. Keep official marks unmodified and apply their target-size
+  legibility rules.
 - Semantic warnings may use a restrained amber only when paired with a non-color cue.
-  Amber is state communication, not a second brand accent.
+  Amber is state communication, not a second brand accent. This guide does not pin an
+  amber brand token; the first renderer chooses one fixed accessible implementation
+  token, tests it on the actual surface, and then uses it deterministically.
 - Do not use blueprint blue as the product accent in the first renderer.
 
 ## Composition
@@ -76,23 +90,27 @@ remain authoritative when details disagree or generated text is imperfect.
 ## Local Identity Interpretation
 
 Read these repository-specific clarifications together with the byte-exact canonical
-[README.md](README.md) and official SVGs. They resolve how the shipped package is used
-locally; they do not replace the canonical rules or authorize new assets.
+[README.md](README.md) and official SVGs. Most explain how the shipped package is used
+locally. The auxiliary-motif size rule below is an approved local product-surface
+interpretation and narrow override of the canonical word “everything”; it does not
+modify the canonical package, relax identity-mark rules, or authorize new assets.
 
 - **Accent exception.** The canonical lockup's green `.md` is the explicit wordmark
   exception to the shorthand that only the sightline and surveyed point receive the
   accent. Within glyphs, only the sightline and surveyed point are green. In the full
   lockup, `.md` is also green exactly as shipped. Do not recolor `groma` or any
   structural stroke.
-- **Small identity marks versus auxiliary motifs.** The canonical rule that sizes at
-  or below 64 px use the frontal mark applies to identity, avatar, favicon, and app-icon
-  use. The top-down and sightline assets are auxiliary survey, loading, registration,
-  and hero motifs, not replacement small identity marks. They may appear below 64 px
-  only when that specific non-identity context preserves their stroke legibility.
-  Preview the motif at its intended pixel size, at normal 100% viewing scale, on its
-  final background: every crossbar, plumb line, sightline, and surveyed point that is
-  present must remain distinct without zooming. If any stroke merges or disappears,
-  or if the motif could be read as the product identity, use the frontal mark.
+- **Approved local product-surface override for auxiliary motifs.** The canonical
+  README says everything at or below 64 px uses the frontal mark. That remains the rule
+  for identity, avatar, favicon, and app-icon use. Within Groma product surfaces, a
+  narrow local override permits the top-down and sightline assets below 64 px only as
+  auxiliary survey, loading, registration, or hero motifs when that specific
+  non-identity context preserves their stroke legibility. They are not replacement
+  small identity marks. Preview the motif at its intended pixel size, at normal 100%
+  viewing scale, on its final background: every crossbar, plumb line, sightline, and
+  surveyed point that is present must remain distinct without zooming. If any stroke
+  merges or disappears, or if the motif could be read as the product identity, use the
+  frontal mark.
 - **Illustrated hero availability.** The illustrated hero described by the canonical
   README is not included as an asset in this repository or in the selected blueprint
   reference PNG. Do not invent it, extract it from the reference, or treat it as an
