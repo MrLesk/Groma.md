@@ -223,6 +223,109 @@ describe("phased plugin resolver", () => {
     expect(events).toEqual(["bootstrap:stop"]);
   });
 
+  test("rejects synchronous reentrant staged shutdown while continuation owns Phase 0", async () => {
+    const runtime = new PluginRuntime();
+    const events: string[] = [];
+    const resources = capability("groma.reentrant-stage-sync/v1");
+    const bootstrap = registration({
+      id: "reentrant.sync.bootstrap",
+      phase: 0,
+      provides: [resources],
+      start: () => ({
+        capabilities: [{ id: resources.id, value: {}, version: "1.0.0" }],
+        stop: () => {
+          events.push("bootstrap:stop");
+        },
+      }),
+    });
+    const initial = runtime.resolve([bootstrap]);
+    expect(initial.ok).toBeTrue();
+    if (!initial.ok) return;
+    const staged = await runtime.startPhaseZero(initial.value);
+    expect(staged.ok).toBeTrue();
+    if (!staged.ok) return;
+    let reentrant!: Promise<unknown>;
+    const complete = runtime.resolve([
+      bootstrap,
+      registration({
+        id: "reentrant.sync.application",
+        requires: [resources],
+        start: () => {
+          reentrant = staged.value.shutdown();
+          return { capabilities: [] };
+        },
+      }),
+    ]);
+    expect(complete.ok).toBeTrue();
+    if (!complete.ok) return;
+    const continued = await runtime.continue(complete.value, staged.value);
+    expect(continued.ok).toBeTrue();
+    expect(await reentrant).toMatchObject({
+      diagnostics: [{ code: "plugin-stage-transition-in-progress" }],
+      ok: false,
+    });
+    expect(events).toEqual([]);
+    if (!continued.ok) return;
+    expect(continued.value.inspect().plugins).toMatchObject([
+      { id: "reentrant.sync.bootstrap", state: "running" },
+      { id: "reentrant.sync.application", state: "running" },
+    ]);
+    expect(await continued.value.shutdown()).toMatchObject({ ok: true });
+    expect(events).toEqual(["bootstrap:stop"]);
+  });
+
+  test("rejects awaited reentrant staged cancellation without self-awaiting continuation", async () => {
+    const runtime = new PluginRuntime();
+    const events: string[] = [];
+    const resources = capability("groma.reentrant-stage-async/v1");
+    const bootstrap = registration({
+      id: "reentrant.async.bootstrap",
+      phase: 0,
+      provides: [resources],
+      start: () => ({
+        capabilities: [{ id: resources.id, value: {}, version: "1.0.0" }],
+        stop: () => {
+          events.push("bootstrap:stop");
+        },
+      }),
+    });
+    const initial = runtime.resolve([bootstrap]);
+    expect(initial.ok).toBeTrue();
+    if (!initial.ok) return;
+    const staged = await runtime.startPhaseZero(initial.value);
+    expect(staged.ok).toBeTrue();
+    if (!staged.ok) return;
+    let reentrantResult: unknown;
+    const complete = runtime.resolve([
+      bootstrap,
+      registration({
+        id: "reentrant.async.application",
+        requires: [resources],
+        start: async () => {
+          reentrantResult = await staged.value.cancel();
+          events.push("application:start");
+          return { capabilities: [] };
+        },
+      }),
+    ]);
+    expect(complete.ok).toBeTrue();
+    if (!complete.ok) return;
+    const continued = await runtime.continue(complete.value, staged.value);
+    expect(reentrantResult).toMatchObject({
+      diagnostics: [{ code: "plugin-stage-transition-in-progress" }],
+      ok: false,
+    });
+    expect(events).toEqual(["application:start"]);
+    expect(continued.ok).toBeTrue();
+    if (!continued.ok) return;
+    expect(continued.value.inspect().plugins).toMatchObject([
+      { id: "reentrant.async.bootstrap", state: "running" },
+      { id: "reentrant.async.application", state: "running" },
+    ]);
+    expect(await continued.value.cancel()).toMatchObject({ ok: true });
+    expect(events).toEqual(["application:start", "bootstrap:stop"]);
+  });
+
   test("rejects continuation when the selected graph replaces a started provider", async () => {
     const runtime = new PluginRuntime();
     const first = registration({ id: "exact.bootstrap", phase: 0 });

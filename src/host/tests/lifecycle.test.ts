@@ -2033,6 +2033,32 @@ describe("host lifecycle", () => {
     expect(serialized).not.toContain("source-secret");
   });
 
+  test("preserves the actionable canonical diagnostic for bootstrap configuration changes", async () => {
+    const signal = signals();
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: {
+        compose: async () =>
+          failure({
+            code: "workspace-configuration-changed",
+            message: "/private/configuration-race",
+          }),
+      },
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-configuration-changed",
+          message: "Workspace configuration changed during bootstrap; restart after changes settle",
+        },
+      ],
+      status: "startup-failure",
+    });
+    expect(signal.unsubscribes()).toBe(1);
+  });
+
   test("rejects non-exact compositions and statuses without invoking accessors", async () => {
     const signal = signals();
     let getterCalls = 0;

@@ -166,6 +166,8 @@ const bootstrapFailureMessages = Object.freeze({
     "Project-provided plugins require validated package and trust state before loading",
   "runtime-plugin-unavailable": "A requested official runtime plugin is unavailable in this host",
   "workspace-configuration-conflict": "Workspace configuration is incompatible with this host",
+  "workspace-configuration-changed":
+    "Workspace configuration changed during bootstrap; restart after changes settle",
   "workspace-configuration-malformed":
     "Workspace configuration must use the documented groma/v0.1 schema",
   "workspace-configuration-parser-failed": "Workspace configuration parsing failed",

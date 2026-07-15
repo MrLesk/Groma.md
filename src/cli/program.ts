@@ -124,6 +124,7 @@ function hostExit(diagnostics: readonly { readonly code: string }[], fallback: n
     [
       "project-plugin-validation-required",
       "runtime-plugin-unavailable",
+      "workspace-configuration-changed",
       "workspace-configuration-conflict",
       "workspace-configuration-malformed",
       "workspace-discovery-conflict",

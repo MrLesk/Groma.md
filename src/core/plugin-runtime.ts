@@ -1177,6 +1177,14 @@ export class PluginRuntime {
     const clean = async (
       reason: "cancelled" | "stopped",
     ): Promise<Result<PluginShutdownReport>> => {
+      if (record.state === "continuing") {
+        return failure(
+          diagnostic(
+            "plugin-stage-transition-in-progress",
+            "A staged plugin graph cannot be cleaned while continuation is in progress",
+          ),
+        );
+      }
       if (record.continuation !== undefined) {
         const continued = await record.continuation;
         if (continued.ok) {

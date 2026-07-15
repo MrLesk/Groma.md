@@ -1,7 +1,7 @@
 import path from "node:path";
 import { isProxy as isNativeProxy } from "node:util/types";
 
-import { parseDocument } from "yaml";
+import { isAlias, parseDocument, visit } from "yaml";
 
 import { failure, success, type Diagnostic, type Result } from "../core/index.ts";
 import {
@@ -340,6 +340,20 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
           uniqueKeys: true,
         });
         if (document.errors.length > 0 || document.warnings.length > 0) return malformed();
+        let unsupported = false;
+        visit(document, {
+          Alias: () => {
+            unsupported = true;
+            return visit.BREAK;
+          },
+          Node: (_key, node) => {
+            if (isAlias(node) || node.anchor !== undefined || node.tag !== undefined) {
+              unsupported = true;
+              return visit.BREAK;
+            }
+          },
+        });
+        if (unsupported) return malformed();
         value = document.toJS({ maxAliasCount: 0 });
       } catch {
         return malformed();
@@ -396,6 +410,138 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
       );
     },
   });
+}
+
+export function parseBootstrapConfiguration(
+  parser: ConfigurationParserProvider,
+  bytes: Uint8Array,
+): Result<BootstrapBaseConfiguration> {
+  const copied = copyBytes(bytes);
+  if (!copied.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  let rawParsed: unknown;
+  try {
+    rawParsed = parser.parse(copied.value);
+  } catch {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const parsed = inspectHostRecord(
+    rawParsed,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "workspace-configuration-parser-failed",
+    "Workspace configuration parser result",
+  );
+  if (!parsed.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  if (parsed.value.ok === false) {
+    const diagnostics = copyHostDiagnostics(
+      parsed.value.diagnostics,
+      bootstrapConfigurationBounds.maxProviderDiagnostics,
+      "workspace-configuration-parser-failed",
+    );
+    return diagnostics.ok && diagnostics.value[0]?.code === "workspace-configuration-conflict"
+      ? incompatible()
+      : malformed();
+  }
+  if (parsed.value.ok !== true) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const configuration = inspectHostRecord(
+    parsed.value.value,
+    [["requestedRuntimePlugins", "schema"]],
+    "workspace-configuration-parser-failed",
+    "Bootstrap base configuration",
+  );
+  if (!configuration.ok || configuration.value.schema !== "groma/v0.1") {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const requested = inspectHostDenseArray(
+    configuration.value.requestedRuntimePlugins,
+    bootstrapConfigurationBounds.maxRequestedRuntimePlugins,
+    "workspace-configuration-parser-failed",
+    "Requested runtime plugins",
+  );
+  if (!requested.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const canonicalRequested: RequestedRuntimePlugin[] = [];
+  const seen = new Set<string>();
+  for (const item of requested.value) {
+    const plugin = inspectHostRecord(
+      item,
+      [["id", "source"]],
+      "workspace-configuration-parser-failed",
+      "Requested runtime plugin",
+    );
+    if (
+      !plugin.ok ||
+      typeof plugin.value.id !== "string" ||
+      plugin.value.id.length > bootstrapConfigurationBounds.maxTokenCharacters ||
+      !pluginIdPattern.test(plugin.value.id) ||
+      (plugin.value.source !== "official" && plugin.value.source !== "project") ||
+      (plugin.value.id.startsWith("official.") ? "official" : "project") !== plugin.value.source ||
+      seen.has(plugin.value.id)
+    ) {
+      return failure(
+        diagnostic(
+          "workspace-configuration-parser-failed",
+          "Workspace configuration parsing failed",
+        ),
+      );
+    }
+    seen.add(plugin.value.id);
+    canonicalRequested.push(Object.freeze({ id: plugin.value.id, source: plugin.value.source }));
+  }
+  canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  return success(
+    Object.freeze({
+      requestedRuntimePlugins: Object.freeze(canonicalRequested),
+      schema: "groma/v0.1" as const,
+    }),
+  );
+}
+
+export function sameBootstrapConfigurationLoad(
+  expected: BootstrapConfigurationLoad,
+  actual: BootstrapConfigurationLoad,
+): boolean {
+  if (
+    expected.locator.configuration !== actual.locator.configuration ||
+    expected.locator.root !== actual.locator.root
+  ) {
+    return false;
+  }
+  if (expected.state === "missing") {
+    return actual.state === "missing" || actual.configuration.requestedRuntimePlugins.length === 0;
+  }
+  if (actual.state === "missing") return false;
+  const expectedPlugins = expected.configuration.requestedRuntimePlugins;
+  const actualPlugins = actual.configuration.requestedRuntimePlugins;
+  return (
+    expected.configuration.schema === actual.configuration.schema &&
+    expectedPlugins.length === actualPlugins.length &&
+    expectedPlugins.every(
+      (plugin, index) =>
+        plugin.id === actualPlugins[index]?.id && plugin.source === actualPlugins[index]?.source,
+    )
+  );
 }
 
 export async function loadBootstrapConfiguration(
@@ -487,100 +633,11 @@ export async function loadBootstrapConfiguration(
       diagnostic("workspace-discovery-failed", "Workspace configuration discovery failed"),
     );
   }
-  let rawParsed: unknown;
-  try {
-    rawParsed = parser.parse(bytes.value);
-  } catch {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
-  const parsed = inspectHostRecord(
-    rawParsed,
-    [
-      ["ok", "value"],
-      ["diagnostics", "ok"],
-    ],
-    "workspace-configuration-parser-failed",
-    "Workspace configuration parser result",
-  );
-  if (!parsed.ok) {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
-  if (parsed.value.ok === false) {
-    const diagnostics = copyHostDiagnostics(
-      parsed.value.diagnostics,
-      bootstrapConfigurationBounds.maxProviderDiagnostics,
-      "workspace-configuration-parser-failed",
-    );
-    return diagnostics.ok && diagnostics.value[0]?.code === "workspace-configuration-conflict"
-      ? incompatible()
-      : malformed();
-  }
-  if (parsed.value.ok !== true) {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
-  const configuration = inspectHostRecord(
-    parsed.value.value,
-    [["requestedRuntimePlugins", "schema"]],
-    "workspace-configuration-parser-failed",
-    "Bootstrap base configuration",
-  );
-  if (!configuration.ok || configuration.value.schema !== "groma/v0.1") {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
-  const requested = inspectHostDenseArray(
-    configuration.value.requestedRuntimePlugins,
-    bootstrapConfigurationBounds.maxRequestedRuntimePlugins,
-    "workspace-configuration-parser-failed",
-    "Requested runtime plugins",
-  );
-  if (!requested.ok) {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
-  const canonicalRequested: RequestedRuntimePlugin[] = [];
-  const seen = new Set<string>();
-  for (const item of requested.value) {
-    const plugin = inspectHostRecord(
-      item,
-      [["id", "source"]],
-      "workspace-configuration-parser-failed",
-      "Requested runtime plugin",
-    );
-    if (
-      !plugin.ok ||
-      typeof plugin.value.id !== "string" ||
-      plugin.value.id.length > bootstrapConfigurationBounds.maxTokenCharacters ||
-      !pluginIdPattern.test(plugin.value.id) ||
-      (plugin.value.source !== "official" && plugin.value.source !== "project") ||
-      (plugin.value.id.startsWith("official.") ? "official" : "project") !== plugin.value.source ||
-      seen.has(plugin.value.id)
-    ) {
-      return failure(
-        diagnostic(
-          "workspace-configuration-parser-failed",
-          "Workspace configuration parsing failed",
-        ),
-      );
-    }
-    seen.add(plugin.value.id);
-    canonicalRequested.push(Object.freeze({ id: plugin.value.id, source: plugin.value.source }));
-  }
-  canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  const parsed = parseBootstrapConfiguration(parser, bytes.value);
+  if (!parsed.ok) return parsed;
   return success(
     Object.freeze({
-      configuration: Object.freeze({
-        requestedRuntimePlugins: Object.freeze(canonicalRequested),
-        schema: "groma/v0.1" as const,
-      }),
+      configuration: parsed.value,
       locator: Object.freeze({
         configuration: configurationLocator.value,
         root: rootLocator.value,

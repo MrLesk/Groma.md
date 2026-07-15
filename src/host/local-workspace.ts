@@ -93,6 +93,7 @@ export interface LocalWorkspaceConfiguration {
   readonly initialDocument: Uint8Array;
   isCompatible(bytes: Uint8Array): boolean;
   readonly locator: WorkspaceResourceLocator;
+  readonly missingIsCompatible?: boolean;
 }
 
 const defaultBounds: LocalWorkspaceBounds = Object.freeze({
@@ -342,18 +343,24 @@ function captureWorkspaceConfiguration(
       initialDocument: canonicalBytes.slice(),
       isCompatible: sameBytes,
       locator: workspaceConfigurationLocator,
+      missingIsCompatible: true,
     });
   }
   const inspected = inspectHostRecord(
     value,
-    [["initialDocument", "isCompatible", "locator"]],
+    [
+      ["initialDocument", "isCompatible", "locator"],
+      ["initialDocument", "isCompatible", "locator", "missingIsCompatible"],
+    ],
     "invalid-local-workspace-options",
     "Local workspace configuration",
   );
   if (
     !inspected.ok ||
     typeof inspected.value.isCompatible !== "function" ||
-    typeof inspected.value.locator !== "string"
+    typeof inspected.value.locator !== "string" ||
+    (Object.hasOwn(inspected.value, "missingIsCompatible") &&
+      typeof inspected.value.missingIsCompatible !== "boolean")
   ) {
     throw new TypeError("Local workspace configuration is malformed");
   }
@@ -388,6 +395,7 @@ function captureWorkspaceConfiguration(
   copied.set(bytes as Uint8Array);
   const receiver = value as object;
   const isCompatible = inspected.value.isCompatible;
+  const missingIsCompatible = inspected.value.missingIsCompatible;
   return Object.freeze({
     initialDocument: copied,
     isCompatible: (candidate: Uint8Array) => {
@@ -395,6 +403,7 @@ function captureWorkspaceConfiguration(
       return result === true;
     },
     locator: parsedLocator.value,
+    missingIsCompatible: typeof missingIsCompatible === "boolean" ? missingIsCompatible : true,
   });
 }
 
@@ -654,7 +663,11 @@ function validatedConfigurationRead(
       "invalid-workspace-provider-result",
     );
     if (!diagnostics.ok) return providerFailureState();
-    if (isCanonicalMissingFailure(diagnostics.value)) return missingState();
+    if (isCanonicalMissingFailure(diagnostics.value)) {
+      return configuration.missingIsCompatible === false
+        ? configurationConflictState()
+        : missingState();
+    }
     return isCanonicalTooLargeFailure(diagnostics.value, bounds)
       ? configurationConflictState()
       : providerFailureState();

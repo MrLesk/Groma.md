@@ -42,6 +42,8 @@ import {
   createYamlConfigurationParser,
   loadBootstrapConfiguration,
   localBootstrapConvention,
+  parseBootstrapConfiguration,
+  sameBootstrapConfigurationLoad,
   type BootstrapConfigurationLoad,
   type ConfigurationDiscoveryProvider,
   type ConfigurationParserProvider,
@@ -429,8 +431,17 @@ export function createDefaultBootstrapRegistry(
               },
               configuration: Object.freeze({
                 initialDocument: new TextEncoder().encode(defaultWorkspaceDocument),
-                isCompatible: (bytes: Uint8Array) => selectedParser.parse(bytes).ok,
+                isCompatible: (bytes: Uint8Array) => {
+                  const parsed = parseBootstrapConfiguration(selectedParser, bytes);
+                  if (!parsed.ok) return false;
+                  return sameBootstrapConfigurationLoad(bootstrap, {
+                    configuration: parsed.value,
+                    locator: bootstrap.locator,
+                    state: "configured",
+                  });
+                },
                 locator: bootstrap.locator.configuration,
+                missingIsCompatible: bootstrap.state === "missing",
               }),
               operations: () => {
                 if (operations === undefined) {
@@ -514,12 +525,20 @@ export function createDefaultBootstrapRegistry(
           defaultHostCapabilityIds.configurationDiscovery,
           defaultHostCapabilityIds.configurationParser,
         ]);
+        const bootstrapPluginIds = new Set<string>([
+          defaultHostPluginIds.resources,
+          defaultHostPluginIds.configurationDiscovery,
+          defaultHostPluginIds.configurationParser,
+        ]);
         const ambiguous = phaseZero.diagnostics.some(
           (item) =>
-            (item.code === "capability-provider-collision" ||
+            ((item.code === "capability-provider-collision" ||
               item.code === "invalid-capability-cardinality") &&
-            typeof item.details?.capabilityId === "string" &&
-            bootstrapCapabilityIds.has(item.details.capabilityId),
+              typeof item.details?.capabilityId === "string" &&
+              bootstrapCapabilityIds.has(item.details.capabilityId)) ||
+            (item.code === "duplicate-plugin-registration" &&
+              typeof item.details?.pluginId === "string" &&
+              bootstrapPluginIds.has(item.details.pluginId)),
         );
         return failure<HostComposition>(
           ambiguous
@@ -633,6 +652,19 @@ export function createDefaultBootstrapRegistry(
           diagnostic("host-composition-failed", "Selected plugin resolution failed"),
         );
       }
+      const reloaded = await loadBootstrapConfiguration(
+        configurationDiscovery,
+        configurationParser,
+      );
+      if (!reloaded.ok || !sameBootstrapConfigurationLoad(bootstrap, reloaded.value)) {
+        return failAfterStage(
+          diagnostic(
+            "workspace-configuration-changed",
+            "Workspace configuration changed during bootstrap; restart after changes settle",
+          ),
+        );
+      }
+      bootstrap = reloaded.value;
       const started = await runtime.continue(
         resolved.value,
         staged,
@@ -654,6 +686,23 @@ export function createDefaultBootstrapRegistry(
         await running.cancel();
         return failure<HostComposition>(
           diagnostic("host-composition-failed", "Built-in plugin startup was cancelled"),
+        );
+      }
+      const workspace = runningCapability<HostComposition["workspace"]>(
+        plugins,
+        defaultHostCapabilityIds.workspace,
+      );
+      if (workspace.status().state === "conflict") {
+        const running = plugins;
+        plugins = undefined;
+        const cleanup = await running.shutdown();
+        return failure<HostComposition>(
+          cleanup.ok
+            ? diagnostic(
+                "workspace-configuration-changed",
+                "Workspace configuration changed during bootstrap; restart after changes settle",
+              )
+            : diagnostic("host-plugin-cleanup-failed", "Host plugin cleanup failed"),
         );
       }
       const graph = runningCapability<HostComposition["graph"]>(
@@ -699,10 +748,6 @@ export function createDefaultBootstrapRegistry(
       const transactionProvider = runningCapability<HostComposition["transactionProvider"]>(
         plugins,
         defaultHostCapabilityIds.transactionProvider,
-      );
-      const workspace = runningCapability<HostComposition["workspace"]>(
-        plugins,
-        defaultHostCapabilityIds.workspace,
       );
       return success<HostComposition>(
         Object.freeze({

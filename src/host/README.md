@@ -64,8 +64,8 @@ plugins:
   - official.optional
 ```
 
-`schema` and `plugins` are the only keys. The parser rejects invalid UTF-8, aliases,
-custom tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys, and more
+`schema` and `plugins` are the only keys. The parser rejects invalid UTF-8, anchors,
+aliases, explicit tags, duplicate keys or plugin IDs, non-scalar entries, unknown keys, and more
 than 64 requests. Requests are sorted by code unit for deterministic selection. Built-in
 Phase 1 plugins remain the required local profile; requested Host-owned official plugins
 are added when available. An unavailable official ID produces
@@ -81,6 +81,11 @@ Zero candidates is the typed missing-workspace state. Multiple candidates fail w
 `workspace-discovery-conflict`; invalid YAML fails with
 `workspace-configuration-malformed`; and competing single-provider Phase 0
 capabilities fail with `bootstrap-provider-ambiguous` before any provider starts.
+The Host re-reads and compares the canonical configuration immediately before Phase 1;
+non-equivalent changes fail with `workspace-configuration-changed` before a selected
+optional plugin starts. Workspace inspection repeats the same semantic comparison so a
+later change cannot produce a usable mismatched composition. A peer may only move an
+initially missing workspace to the same empty canonical configuration.
 
 Discovery is bounded and read-only. A missing marker leaves initialization available
 and does not create a journal or canonical intent files. Initialization takes a
