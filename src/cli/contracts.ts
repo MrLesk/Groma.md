@@ -72,6 +72,7 @@ export interface CliCommandResult {
 
 export interface CliOverviewNode {
   readonly depth: number;
+  readonly displayText: string;
   readonly id: string;
   readonly name?: string;
   readonly revision: string;

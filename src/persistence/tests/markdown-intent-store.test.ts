@@ -81,9 +81,12 @@ describe("Markdown intent codec", () => {
         { id: "a-action", name: "First" },
       ],
       "acme.io/owner": "Architecture",
+      iconDomain: "orders.example.com",
       intent: "Café architecture\n\nPreserve **meaning**.\n",
+      label: "Orders",
       name: "Renamable name",
       parent: target,
+      summary: "Owns the durable order lifecycle.",
       type: "service.worker",
     });
     const relations: GraphRelation[] = [
@@ -107,6 +110,9 @@ schema: groma/v0.1
 id: ${source}
 kind: component
 name: Renamable name
+label: Orders
+summary: Owns the durable order lifecycle.
+iconDomain: orders.example.com
 type: service.worker
 parent: ${target}
 actions:
@@ -210,11 +216,14 @@ Preserve **meaning**.
       component(id, {
         actions: [{ id: "act" }],
         desired: "present",
+        iconDomain: "ordered.example.com",
         inputs: [{ id: "in" }],
+        label: "Ordered",
         lifecycle: "active",
         name: "Ordered",
         outputs: [{ id: "out" }],
         parent: entityId("66"),
+        summary: "Exercises canonical frontmatter ordering.",
         type: "service",
         "vendor.io/nested": nested,
       }),
@@ -227,6 +236,9 @@ Preserve **meaning**.
       "id:",
       "kind:",
       "name:",
+      "label:",
+      "summary:",
+      "iconDomain:",
       "type:",
       "parent:",
       "desired:",
@@ -263,6 +275,51 @@ Preserve **meaning**.
       const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
       if (!decoded.ok) throw new Error("expected decoding");
       expect((decoded.value.entity.payload as { readonly intent?: string }).intent).toBe(intent);
+    }
+  });
+
+  test("round-trips recognition metadata byte-stably and rejects malformed frontmatter", () => {
+    const id = entityId("701");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const encoded = store.serialize(
+      component(id, {
+        iconDomain: "xn--bcher-kva.example",
+        label: "Catalog",
+        name: "Product Catalog",
+        summary: "Owns searchable product recognition data.",
+        type: "external",
+      }),
+      [],
+    );
+    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
+    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
+    expect(decoded.value.entity.payload).toMatchObject({
+      iconDomain: "xn--bcher-kva.example",
+      label: "Catalog",
+      name: "Product Catalog",
+      summary: "Owns searchable product recognition data.",
+      type: "external",
+    });
+    const rewritten = store.serialize(decoded.value.entity, decoded.value.relations);
+    if (!rewritten.ok) throw new Error(rewritten.diagnostics[0]?.message);
+    expect(rewritten.value.bytes).toEqual(encoded.value.bytes);
+
+    for (const [field, value, code] of [
+      ["label", '" padded"', "invalid-component-label"],
+      ["summary", '"two\\nlines"', "invalid-component-summary"],
+      ["iconDomain", "https://example.com", "invalid-component-icon-domain"],
+    ] as const) {
+      const malformed = store.decode(
+        encoded.value.locator,
+        new TextEncoder().encode(
+          `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n${field}: ${value}\n---\n`,
+        ),
+      );
+      expect(malformed).toMatchObject({ diagnostics: [{ code }], ok: false });
     }
   });
 

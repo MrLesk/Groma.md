@@ -9,6 +9,9 @@ bounded UTF-8 JSON application request envelope from `--input <path>`, `--input 
 `--stdin`. Existing parent changes use `component reparent`; update deliberately rejects
 parent changes through the application contract. Every read requires an explicit page
 limit and returns one page only. Cursors are printed but never followed implicitly.
+Optional component `label`, `summary`, and `iconDomain` values use this same JSON path;
+updates clear them with explicit `null`, and reads return their canonical values without
+resolving `iconDomain` or making a network request.
 Command output is buffered up to one MiB; an oversized page becomes a typed
 `cli-output-bound-exceeded` failure rather than partial or streamed output, so callers
 can retry with a smaller explicit page.
@@ -41,6 +44,8 @@ force-aborted during local transaction publication.
 
 With no command, an uninitialized workspace prints the exact `groma init` next step and
 does not create files. An initialized interactive terminal receives a bounded hierarchy
-overview. The overview reads at most 10 roots, 10 children per visited component, four
+overview. Each overview node derives `displayText` through the Standard Model's
+`label`-then-`name`-then-stable-ID fallback while retaining canonical identity and name
+separately. The overview reads at most 10 roots, 10 children per visited component, four
 descendant levels, 50 components, and 50 queries, and reports truncation instead of
 following continuation cursors. Bare non-interactive use prints help.

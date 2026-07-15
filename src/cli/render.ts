@@ -100,6 +100,7 @@ function overviewPlain(result: CliOverviewResult): string | undefined {
       `id=${jsonString(node.id)}`,
       `revision=${jsonString(node.revision)}`,
       ...(node.type === undefined ? [] : [`type=${jsonString(node.type)}`]),
+      `display=${jsonString(node.displayText)}`,
       ...(node.name === undefined ? [] : [`name=${jsonString(node.name)}`]),
     ];
     lines.push(`${"  ".repeat(node.depth)}- ${fields.join(" ")}`);

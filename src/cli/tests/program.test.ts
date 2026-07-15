@@ -196,10 +196,13 @@ describe("CLI program", () => {
       JSON.stringify({
         component: {
           actions: [{ id: "checkout", name: "Checkout" }],
+          iconDomain: "shop.example.com",
           id: child,
           intent: "Own carts",
+          label: "Shopping cart",
           name: "Cart",
           parent: domain,
+          summary: "Owns the active shopping cart.",
           type: "service",
         },
         relationships: [
@@ -260,7 +263,17 @@ describe("CLI program", () => {
     expect(exact.envelope.result).toMatchObject({
       ok: true,
       value: {
-        item: { component: { id: child, name: "Cart", parent: domain, type: "service" } },
+        item: {
+          component: {
+            iconDomain: "shop.example.com",
+            id: child,
+            label: "Shopping cart",
+            name: "Cart",
+            parent: domain,
+            summary: "Owns the active shopping cart.",
+            type: "service",
+          },
+        },
         relationships: { items: [{ relationship: { id: relationship, target } }] },
       },
     });
@@ -279,21 +292,50 @@ describe("CLI program", () => {
     expect(plainRead.output[0]).toContain('"revision":"sha256:');
     expect(plainRead.output[0]).not.toMatch(/\u001b|\x1b/);
 
+    const labeledOverview = captureOutput();
+    expect(
+      await runProgram([], labeledOverview, {
+        terminal: { stdin: true, stdout: true },
+        workspaceRoot: root,
+      }),
+    ).toBe(0);
+    expect(labeledOverview.output[0]).toContain('display="Shopping cart"');
+    expect(labeledOverview.output[0]).toContain('name="Cart"');
+
     const updated = await jsonCommand(
       root,
       ["component", "update", "--stdin"],
       JSON.stringify({
         expectedRevision: childRevision,
         id: child,
-        patch: { name: "Shopping cart", type: "capability" },
+        patch: {
+          iconDomain: null,
+          label: null,
+          name: "Shopping cart",
+          summary: "Coordinates selected products and checkout readiness.",
+          type: "capability",
+        },
       }),
     );
     const updatedRevision = committedRevision(updated.envelope, child);
     expect(updated.envelope).toMatchObject({
       exitCode: 0,
       ok: true,
-      result: { value: { id: child, name: "Shopping cart", type: "capability" } },
+      result: {
+        value: {
+          id: child,
+          name: "Shopping cart",
+          summary: "Coordinates selected products and checkout readiness.",
+          type: "capability",
+        },
+      },
     });
+    const updatedValue = updated.envelope.result.value as {
+      readonly iconDomain?: string;
+      readonly label?: string;
+    };
+    expect(updatedValue.label).toBeUndefined();
+    expect(updatedValue.iconDomain).toBeUndefined();
 
     const reparented = await jsonCommand(root, [
       "component",
@@ -310,9 +352,21 @@ describe("CLI program", () => {
       result: { value: { id: child, parent: target } },
     });
 
-    const firstStableRead = await jsonCommand(root, ["component", "roots", "--limit", "10"]);
-    const secondStableRead = await jsonCommand(root, ["component", "roots", "--limit", "10"]);
+    const stableReadArgs = ["component", "get", child, "--relationships-limit", "10"] as const;
+    const firstStableRead = await jsonCommand(root, stableReadArgs);
+    const secondStableRead = await jsonCommand(root, stableReadArgs);
     expect(secondStableRead.text).toBe(firstStableRead.text);
+    expect(secondStableRead.envelope.result).toMatchObject({
+      value: {
+        item: {
+          component: {
+            id: child,
+            name: "Shopping cart",
+            summary: "Coordinates selected products and checkout readiness.",
+          },
+        },
+      },
+    });
     expect(
       (secondStableRead.envelope.result.value as { generation: number }).generation,
     ).toBeGreaterThan(firstValue.generation);
@@ -326,6 +380,7 @@ describe("CLI program", () => {
     ).toBe(0);
     expect(terminal.output).toHaveLength(1);
     expect(terminal.output[0]).toContain('name="Shopping cart"');
+    expect(terminal.output[0]).toContain('display="Shopping cart"');
     expect(terminal.output[0]).toContain(`  - id="${child}"`);
     expect(terminal.output[0]).toContain(`    - id="${grandchild}"`);
     expect(terminal.output[0]).not.toMatch(/\u001b|\x1b/);

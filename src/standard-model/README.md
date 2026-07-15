@@ -1,12 +1,34 @@
 # Standard Model
 
 The official minimal blueprint model is an explicit capability over Core. Every
-architectural node is a Core entity of kind `component`; its payload may contain
-`name`, an open `type`, one optional structural `parent`, `intent`, stable-ID
+architectural component is a Core entity of kind `component`; its payload may contain
+`name`, optional recognition metadata (`label`, `summary`, and `iconDomain`), an open
+`type`, one optional structural `parent`, `intent`, stable-ID
 `inputs`, `outputs`, and `actions`, plus open `lifecycle` and `desired` tokens.
 Omitted fields stay omitted, so sparse scanner and user contributions remain valid.
 Sparse patches preserve omitted fields; `null` clears a known optional field while
 extension values (including `null`) remain ordinary canonical graph data.
+
+Recognition metadata stays deliberately small. `label` is a trimmed, non-empty,
+single-line value of at most 80 Unicode code points. `summary` uses the same canonical
+line rules with a 280-code-point limit; “one sentence” is an authoring constraint, not
+language-specific punctuation parsing. Inputs outside these constraints are rejected,
+not trimmed or rewritten. A projection node representing one component uses `label`,
+then `name`, then the stable component ID as its display text. This fallback is exposed
+by `standardComponentDisplayText` and does not create a canonical node entity.
+
+`iconDomain` is a lowercase ASCII DNS hostname with at least two labels, no trailing
+dot, at most 253 characters and 63 characters per label. DNS labels may use letters,
+digits, and interior hyphens, so canonical punycode labels remain valid; IP-shaped
+four-numeric-label values and any scheme, credentials, port, path, query, fragment, or
+whitespace are rejected. The value is only a recognition hint. It never affects stable
+identity, evidence matching, trust, or network access, and the Standard Model provides
+no favicon fetcher or icon-resolution capability.
+
+The `type` token remains open. `external` is a conventional value for an
+architecturally relevant system outside the blueprint's ownership, not an enum member
+or special entity kind. Layout coordinates, colors, themes, folds, zoom state, and
+other renderer choices are not Standard Model fields.
 
 A missing `parent` makes a component a root. The capability derives deterministic
 direct-child views from a caller-provided, bounded entity collection. Parent
