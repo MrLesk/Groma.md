@@ -161,7 +161,7 @@ function isPackageEntry(value: unknown): value is string {
   );
 }
 
-function isBlueprintPackageSource(value: unknown): value is string {
+export function isBlueprintPackageSource(value: unknown): value is string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||

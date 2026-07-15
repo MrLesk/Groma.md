@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
+import { Buffer } from "node:buffer";
+import { constants, realpathSync, type Stats } from "node:fs";
+import { chmod, lstat, mkdir, open, realpath } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { parseDocument } from "yaml";
 
@@ -28,11 +28,14 @@ import {
 import {
   bootstrapConfigurationBounds,
   createYamlConfigurationParser,
+  isBlueprintPackageSource,
   serializeBootstrapConfiguration,
+  type BootstrapBaseConfiguration,
   type BootstrapConfigurationLoad,
   type ConfiguredPluginPackage,
 } from "./bootstrap-configuration.ts";
 import { importLocalPluginModule } from "./plugin-module-loader.ts";
+import { isPathWithin } from "./path-containment.ts";
 
 export type PluginPackageScope = "blueprint" | "personal";
 
@@ -88,10 +91,17 @@ export interface LocalPluginPackageManager extends PluginPackageOperations {
 
 export interface LocalPluginPackageManagerOptions {
   readonly bootstrap: BootstrapConfigurationLoad;
+  /** Verification-only observer for deterministic file race tests. */
+  readonly fileReadObserver?: (event: LocalPluginPackageFileReadEvent) => Promise<void> | void;
   readonly importModule?: (url: string) => Promise<unknown>;
   readonly resources: LocalResourceProvider;
   readonly userDataRoot: string;
   readonly workspaceRoot: string;
+}
+
+export interface LocalPluginPackageFileReadEvent {
+  readonly file: string;
+  readonly phase: "opened";
 }
 
 interface LockedEntry {
@@ -119,6 +129,7 @@ interface TrustGrant {
   readonly manifestIntegrity: string;
   readonly packageLocation: string;
   readonly packageName: string;
+  readonly scope: PluginPackageScope;
   readonly workspaceLocation: string;
 }
 
@@ -136,7 +147,7 @@ interface MaterializedPackage {
 }
 
 interface MaterializedEntry {
-  readonly absolutePath: string;
+  readonly bytes: Uint8Array;
   readonly entry: string;
   readonly integrity: string;
 }
@@ -149,7 +160,8 @@ const configurationLocator = requiredLocator("groma", "groma.yaml");
 const packageCoordinationLocator = requiredLocator("groma", "packages.lock");
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
-const remoteSourcePattern = /^(?:git:|git\+|github:|https?:|npm:|ssh:|[a-z][a-z0-9+.-]*:\/\/)/i;
+const remoteSourcePattern =
+  /^(?:git:|git\+|git@[^:]+:|github:|https?:|npm:|ssh:|[a-z][a-z0-9+.-]*:\/\/)/i;
 const integrityPattern = /^sha256:[0-9a-f]{64}$/;
 const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const textEncoder = new TextEncoder();
@@ -186,11 +198,6 @@ function packageFailure<T>(code: string, message: string): Result<T> {
 
 function hashBytes(bytes: Uint8Array): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
-
-function isWithin(parent: string, child: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== "..");
 }
 
 function isMissing(value: Result<unknown>): boolean {
@@ -248,29 +255,72 @@ function exactJsonDocument(bytes: Uint8Array, expectedKeys: readonly string[]): 
 async function readBoundedRegularFile(
   file: string,
   maximumBytes: number,
+  observer?: LocalPluginPackageManagerOptions["fileReadObserver"],
 ): Promise<Result<Uint8Array>> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    const stats = await lstat(file);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumBytes) {
+    const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+    handle = await open(file, constants.O_RDONLY | noFollow);
+    const before = await handle.stat();
+    if (!before.isFile() || before.size > maximumBytes) {
       return packageFailure(
         "plugin-package-file-invalid",
         "Plugin package files must be bounded regular files, not links",
       );
     }
-    const bytes = await readFile(file);
-    if (bytes.byteLength > maximumBytes) {
+    await observer?.(Object.freeze({ file, phase: "opened" }));
+    const buffer = Buffer.allocUnsafe(maximumBytes + 1);
+    let total = 0;
+    while (total < buffer.byteLength) {
+      const read = await handle.read(buffer, total, buffer.byteLength - total, total);
+      if (read.bytesRead === 0) break;
+      total += read.bytesRead;
+    }
+    const after = await handle.stat();
+    const current = await lstat(file);
+    if (
+      total > maximumBytes ||
+      current.isSymbolicLink() ||
+      !current.isFile() ||
+      !sameFileIdentity(before, after) ||
+      !sameFileIdentity(after, current) ||
+      before.size !== after.size ||
+      after.size !== total ||
+      after.size !== current.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs ||
+      after.mtimeMs !== current.mtimeMs ||
+      after.ctimeMs !== current.ctimeMs
+    ) {
       return packageFailure(
         "plugin-package-file-invalid",
-        "Plugin package files must be bounded regular files, not links",
+        "Plugin package files must remain bounded regular files with one stable identity",
       );
     }
-    return success(new Uint8Array(bytes));
+    return success(Uint8Array.from(buffer.subarray(0, total)));
   } catch {
+    try {
+      const current = await lstat(file);
+      if (current.isSymbolicLink() || !current.isFile()) {
+        return packageFailure(
+          "plugin-package-file-invalid",
+          "Plugin package files must be bounded regular files, not links",
+        );
+      }
+    } catch {
+      // Preserve the bounded unavailable diagnostic below.
+    }
     return packageFailure(
       "plugin-package-file-unavailable",
       "A required local plugin package file is unavailable",
     );
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
+}
+
+function sameFileIdentity(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
 async function canonicalPackageLocation(
@@ -294,7 +344,7 @@ async function canonicalPackageLocation(
       "Local plugin package source is malformed",
     );
   }
-  if (scope === "blueprint" && (!source.startsWith("./") || source.includes("\\"))) {
+  if (scope === "blueprint" && !isBlueprintPackageSource(source)) {
     return packageFailure(
       "invalid-blueprint-plugin-package-source",
       "Blueprint plugin package sources must be portable workspace-relative paths",
@@ -303,7 +353,7 @@ async function canonicalPackageLocation(
   const requested = path.isAbsolute(source)
     ? path.normalize(source)
     : path.resolve(workspaceRoot, source);
-  if (scope === "blueprint" && !isWithin(workspaceRoot, requested)) {
+  if (scope === "blueprint" && !isPathWithin(workspaceRoot, requested)) {
     return packageFailure(
       "invalid-blueprint-plugin-package-source",
       "Blueprint plugin package sources must remain inside the observed workspace",
@@ -312,7 +362,7 @@ async function canonicalPackageLocation(
   try {
     const location = await realpath(requested);
     const stats = await lstat(location);
-    if (!stats.isDirectory() || (scope === "blueprint" && !isWithin(workspaceRoot, location))) {
+    if (!stats.isDirectory() || (scope === "blueprint" && !isPathWithin(workspaceRoot, location))) {
       return packageFailure(
         "invalid-local-plugin-package-source",
         "Local plugin package source must identify one directory",
@@ -331,11 +381,12 @@ async function materializePackage(
   workspaceRoot: string,
   source: string,
   scope: PluginPackageScope,
+  observer?: LocalPluginPackageManagerOptions["fileReadObserver"],
 ): Promise<Result<MaterializedPackage>> {
   const located = await canonicalPackageLocation(workspaceRoot, source, scope);
   if (!located.ok) return located;
   const manifestFile = path.join(located.value.location, "groma.package.json");
-  const bytes = await readBoundedRegularFile(manifestFile, maximumManifestBytes);
+  const bytes = await readBoundedRegularFile(manifestFile, maximumManifestBytes, observer);
   if (!bytes.ok) return bytes;
   const parsed = exactJsonDocument(bytes.value, [
     "apiVersion",
@@ -361,6 +412,7 @@ async function materializePackage(
 async function materializeEntry(
   materialized: MaterializedPackage,
   entry: string,
+  observer?: LocalPluginPackageManagerOptions["fileReadObserver"],
 ): Promise<Result<MaterializedEntry>> {
   if (!materialized.manifest.plugins.includes(entry)) {
     return packageFailure(
@@ -369,7 +421,7 @@ async function materializeEntry(
     );
   }
   const requested = path.resolve(materialized.location, ...entry.slice(2).split("/"));
-  if (!isWithin(materialized.location, requested)) {
+  if (!isPathWithin(materialized.location, requested)) {
     return packageFailure(
       "plugin-package-entry-invalid",
       "Plugin entry resolution escaped its package directory",
@@ -377,7 +429,7 @@ async function materializeEntry(
   }
   try {
     const canonical = await realpath(requested);
-    if (!isWithin(materialized.location, canonical)) {
+    if (!isPathWithin(materialized.location, canonical)) {
       return packageFailure(
         "plugin-package-entry-invalid",
         "Plugin entry resolution escaped its package directory",
@@ -394,11 +446,9 @@ async function materializeEntry(
         );
       }
     }
-    const bytes = await readBoundedRegularFile(canonical, maximumEntryBytes);
+    const bytes = await readBoundedRegularFile(canonical, maximumEntryBytes, observer);
     if (!bytes.ok) return bytes;
-    return success(
-      Object.freeze({ absolutePath: canonical, entry, integrity: hashBytes(bytes.value) }),
-    );
+    return success(Object.freeze({ bytes: bytes.value, entry, integrity: hashBytes(bytes.value) }));
   } catch {
     return packageFailure(
       "plugin-package-entry-unavailable",
@@ -480,12 +530,13 @@ function parseTrust(value: unknown): readonly TrustGrant[] | undefined {
     const record = item as Record<string, unknown>;
     if (
       Object.keys(record).sort(compareCodeUnits).join("\0") !==
-        "entry\0entryIntegrity\0manifestIntegrity\0packageLocation\0packageName\0workspaceLocation" ||
+        "entry\0entryIntegrity\0manifestIntegrity\0packageLocation\0packageName\0scope\0workspaceLocation" ||
       typeof record.entry !== "string" ||
       typeof record.entryIntegrity !== "string" ||
       typeof record.manifestIntegrity !== "string" ||
       typeof record.packageLocation !== "string" ||
       typeof record.packageName !== "string" ||
+      (record.scope !== "blueprint" && record.scope !== "personal") ||
       typeof record.workspaceLocation !== "string" ||
       record.entry.length > bootstrapConfigurationBounds.maxPackageEntryCharacters ||
       record.packageLocation.length > bootstrapConfigurationBounds.maxPackageSourceCharacters ||
@@ -503,17 +554,22 @@ function parseTrust(value: unknown): readonly TrustGrant[] | undefined {
         manifestIntegrity: record.manifestIntegrity,
         packageLocation: record.packageLocation,
         packageName: record.packageName,
+        scope: record.scope,
         workspaceLocation: record.workspaceLocation,
       }),
     );
   }
-  grants.sort((left, right) =>
-    compareCodeUnits(
-      `${left.packageName}\0${left.entry}\0${left.entryIntegrity}`,
-      `${right.packageName}\0${right.entry}\0${right.entryIntegrity}`,
-    ),
-  );
+  grants.sort((left, right) => compareCodeUnits(trustKey(left), trustKey(right)));
+  if (
+    grants.some((grant, index) => index > 0 && trustKey(grant) === trustKey(grants[index - 1]!))
+  ) {
+    return undefined;
+  }
   return Object.freeze(grants);
+}
+
+function trustKey(grant: TrustGrant): string {
+  return `${grant.scope}\0${grant.workspaceLocation}\0${grant.packageName}\0${grant.packageLocation}\0${grant.entry}\0${grant.manifestIntegrity}\0${grant.entryIntegrity}`;
 }
 
 function emptyLock(): PackageLock {
@@ -562,6 +618,65 @@ function parseUserState(bytes: Uint8Array): Result<UserPackageState> {
 
 function encodeCanonical(value: PackageLock | UserPackageState): Uint8Array {
   return textEncoder.encode(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
+function preflightUserState(state: UserPackageState): Result<Uint8Array> {
+  const bytes = encodeCanonical(state);
+  if (bytes.byteLength > maximumUserStateBytes) {
+    return packageFailure(
+      "plugin-package-state-limit-exceeded",
+      "Local plugin package state exceeds its configured byte bound",
+    );
+  }
+  const parsed = parseUserState(bytes);
+  if (!parsed.ok || !sameBytes(bytes, encodeCanonical(parsed.value))) {
+    return packageFailure(
+      "plugin-package-state-invalid",
+      "Local plugin package state does not match its canonical bounded reader",
+    );
+  }
+  return success(bytes);
+}
+
+function preflightLock(lock: PackageLock): Result<Uint8Array> {
+  const bytes = encodeCanonical(lock);
+  if (bytes.byteLength > maximumUserStateBytes) {
+    return packageFailure(
+      "plugin-package-state-limit-exceeded",
+      "Blueprint plugin package state exceeds its configured byte bound",
+    );
+  }
+  const parsed = parseLock(bytes);
+  if (!parsed.ok || !sameBytes(bytes, encodeCanonical(parsed.value))) {
+    return packageFailure(
+      "plugin-package-state-invalid",
+      "Blueprint plugin package lock does not match its canonical bounded reader",
+    );
+  }
+  return success(bytes);
+}
+
+function preflightConfiguration(configuration: BootstrapBaseConfiguration): Result<Uint8Array> {
+  const source = serializeBootstrapConfiguration(configuration);
+  const bytes = textEncoder.encode(source);
+  if (bytes.byteLength > bootstrapConfigurationBounds.maxConfigurationBytes) {
+    return packageFailure(
+      "plugin-package-state-limit-exceeded",
+      "Blueprint plugin package state exceeds its configured byte bound",
+    );
+  }
+  const parsed = createYamlConfigurationParser().parse(bytes);
+  if (!parsed.ok || serializeBootstrapConfiguration(parsed.value) !== source) {
+    return packageFailure(
+      "plugin-package-state-invalid",
+      "Blueprint plugin package configuration does not match its canonical bounded reader",
+    );
+  }
+  return success(bytes);
 }
 
 async function readResource(
@@ -635,13 +750,27 @@ function selectionSnapshot(
   });
 }
 
+async function importVerifiedEntry(
+  entry: MaterializedEntry,
+  importer: (url: string) => Promise<unknown>,
+): Promise<unknown> {
+  const moduleUrl = URL.createObjectURL(new Blob([entry.bytes], { type: "text/javascript" }));
+  try {
+    return await importer(moduleUrl);
+  } finally {
+    URL.revokeObjectURL(moduleUrl);
+  }
+}
+
 function grantMatches(
   grant: TrustGrant,
+  scope: PluginPackageScope,
   workspaceLocation: string,
   materialized: MaterializedPackage,
   entry: MaterializedEntry,
 ): boolean {
   return (
+    grant.scope === scope &&
     grant.workspaceLocation === workspaceLocation &&
     grant.packageLocation === materialized.location &&
     grant.packageName === materialized.manifest.name &&
@@ -652,6 +781,7 @@ function grantMatches(
 }
 
 function trustGrant(
+  scope: PluginPackageScope,
   workspaceLocation: string,
   materialized: MaterializedPackage,
   entry: MaterializedEntry,
@@ -662,6 +792,7 @@ function trustGrant(
     manifestIntegrity: materialized.manifestIntegrity,
     packageLocation: materialized.location,
     packageName: materialized.manifest.name,
+    scope,
     workspaceLocation,
   });
 }
@@ -707,6 +838,37 @@ function exportedPlugin(
   }
 }
 
+async function secureUserDataRoot(root: string): Promise<string> {
+  try {
+    await lstat(root);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+    await mkdir(root, { mode: 0o700, recursive: true });
+    await chmod(root, 0o700);
+  }
+  const before = await lstat(root);
+  if (before.isSymbolicLink() || !before.isDirectory()) {
+    throw new TypeError("Plugin package user data must be one real directory");
+  }
+  if (process.platform !== "win32") {
+    const currentUser = process.getuid?.();
+    if (
+      (currentUser !== undefined && before.uid !== currentUser) ||
+      (before.mode & 0o777) !== 0o700
+    ) {
+      throw new TypeError(
+        "Plugin package user data must be owner-controlled and inaccessible to group or other users",
+      );
+    }
+  }
+  const canonical = await realpath(root);
+  const after = await lstat(root);
+  if (after.isSymbolicLink() || !after.isDirectory() || !sameFileIdentity(before, after)) {
+    throw new TypeError("Plugin package user data changed during validation");
+  }
+  return canonical;
+}
+
 export function createLocalPluginPackageManager(
   options: LocalPluginPackageManagerOptions,
 ): LocalPluginPackageManager {
@@ -715,7 +877,7 @@ export function createLocalPluginPackageManager(
   }
   const workspaceRoot = realpathSync(path.normalize(options.workspaceRoot));
   const requestedUserDataRoot = path.normalize(options.userDataRoot);
-  if (isWithin(workspaceRoot, requestedUserDataRoot)) {
+  if (isPathWithin(workspaceRoot, requestedUserDataRoot)) {
     throw new TypeError("Plugin package user data must live outside the observed workspace");
   }
   const initialConfiguration =
@@ -729,21 +891,24 @@ export function createLocalPluginPackageManager(
   let configuration = initialConfiguration;
   let operationTail = Promise.resolve();
   let userProviderPromise: Promise<LocalResourceProvider> | undefined;
+  let userProviderRoot: string | undefined;
   const workspaceIdentity = createHash("sha256").update(workspaceRoot).digest("hex");
   const userStateLocator = requiredLocator("workspaces", `${workspaceIdentity}.json`);
   const importModule = options.importModule ?? importLocalPluginModule;
+  const fileReadObserver = options.fileReadObserver;
 
-  const userResources = (): Promise<LocalResourceProvider> => {
-    if (userProviderPromise === undefined) {
-      userProviderPromise = (async () => {
-        await mkdir(requestedUserDataRoot, { mode: 0o700, recursive: true });
-        const canonical = await realpath(requestedUserDataRoot);
-        if (isWithin(workspaceRoot, canonical))
-          throw new TypeError("Plugin package user data must live outside the observed workspace");
-        return createLocalResourceProvider({ workspaceRoot: canonical });
-      })();
+  const userResources = async (): Promise<LocalResourceProvider> => {
+    const canonical = await secureUserDataRoot(requestedUserDataRoot);
+    if (isPathWithin(workspaceRoot, canonical)) {
+      throw new TypeError("Plugin package user data must live outside the observed workspace");
     }
-    return userProviderPromise;
+    if (userProviderPromise === undefined) {
+      userProviderRoot = canonical;
+      userProviderPromise = createLocalResourceProvider({ workspaceRoot: canonical });
+    } else if (canonical !== userProviderRoot) {
+      throw new TypeError("Plugin package user data identity changed");
+    }
+    return await userProviderPromise;
   };
 
   const readLock = async (): Promise<Result<PackageLock>> => {
@@ -780,13 +945,9 @@ export function createLocalPluginPackageManager(
     state: UserPackageState,
     expected: UserPackageState,
   ): Promise<Result<void>> => {
-    const stateBytes = encodeCanonical(state);
-    if (stateBytes.byteLength > maximumUserStateBytes) {
-      return packageFailure(
-        "plugin-package-state-limit-exceeded",
-        "Local plugin package state exceeds its configured byte bound",
-      );
-    }
+    const preflight = preflightUserState(state);
+    if (!preflight.ok) return preflight;
+    const stateBytes = preflight.value;
     let resources: LocalResourceProvider;
     try {
       resources = await userResources();
@@ -839,20 +1000,16 @@ export function createLocalPluginPackageManager(
   const writeBlueprintState = async (
     nextConfiguration: typeof configuration,
     nextLock: PackageLock,
+    expectedLock: PackageLock,
   ): Promise<Result<void>> => {
-    const configurationBytes = textEncoder.encode(
-      serializeBootstrapConfiguration(nextConfiguration),
-    );
-    const lockBytes = encodeCanonical(nextLock);
-    if (
-      configurationBytes.byteLength > bootstrapConfigurationBounds.maxConfigurationBytes ||
-      lockBytes.byteLength > maximumUserStateBytes
-    ) {
-      return packageFailure(
-        "plugin-package-state-limit-exceeded",
-        "Blueprint plugin package state exceeds its configured byte bound",
-      );
-    }
+    const configurationPreflight = preflightConfiguration(nextConfiguration);
+    if (!configurationPreflight.ok) return configurationPreflight;
+    const lockPreflight = preflightLock(nextLock);
+    if (!lockPreflight.ok) return lockPreflight;
+    const expectedLockPreflight = preflightLock(expectedLock);
+    if (!expectedLockPreflight.ok) return expectedLockPreflight;
+    const configurationBytes = configurationPreflight.value;
+    const lockBytes = lockPreflight.value;
     const coordinated = await options.resources.withCoordination(
       { context: "local-machine", locator: packageCoordinationLocator },
       async () => {
@@ -865,6 +1022,14 @@ export function createLocalPluginPackageManager(
           return packageFailure(
             "workspace-configuration-changed",
             "Workspace package configuration changed; retry after changes settle",
+          );
+        }
+        const currentLock = await readLock();
+        if (!currentLock.ok) return currentLock;
+        if (!sameBytes(encodeCanonical(currentLock.value), expectedLockPreflight.value)) {
+          return packageFailure(
+            "plugin-package-lock-changed",
+            "Blueprint plugin package lock changed; retry after changes settle",
           );
         }
         const locked = await replaceResource(options.resources, lockLocator, lockBytes);
@@ -898,7 +1063,12 @@ export function createLocalPluginPackageManager(
     locked: LockedPackage,
     scope: PluginPackageScope,
   ): Promise<Result<MaterializedPackage>> => {
-    const materialized = await materializePackage(workspaceRoot, locked.source, scope);
+    const materialized = await materializePackage(
+      workspaceRoot,
+      locked.source,
+      scope,
+      fileReadObserver,
+    );
     if (!materialized.ok) return materialized;
     if (
       materialized.value.manifest.name !== locked.name ||
@@ -985,7 +1155,11 @@ export function createLocalPluginPackageManager(
       }
       let entryIntegrity: "entry-drift" | "exact" = "exact";
       for (const lockedEntry of located.value.locked.enabled) {
-        const entry = await materializeEntry(materialized.value, lockedEntry.entry);
+        const entry = await materializeEntry(
+          materialized.value,
+          lockedEntry.entry,
+          fileReadObserver,
+        );
         if (!entry.ok) return entry;
         if (entry.value.integrity !== lockedEntry.integrity) entryIntegrity = "entry-drift";
       }
@@ -1014,7 +1188,12 @@ export function createLocalPluginPackageManager(
           "Local plugin package source is malformed",
         );
       }
-      const materialized = await materializePackage(workspaceRoot, request.source, request.scope);
+      const materialized = await materializePackage(
+        workspaceRoot,
+        request.source,
+        request.scope,
+        fileReadObserver,
+      );
       if (!materialized.ok) return materialized;
       const declaration = Object.freeze({
         enabled: Object.freeze([]),
@@ -1069,6 +1248,7 @@ export function createLocalPluginPackageManager(
         const written = await writeBlueprintState(
           Object.freeze({ ...configuration, packageDeclarations }),
           Object.freeze({ packages, schema: lock.value.schema }),
+          lock.value,
         );
         if (!written.ok) return written;
       }
@@ -1096,13 +1276,13 @@ export function createLocalPluginPackageManager(
           "The local package manifest changed after its exact lock was written",
         );
       }
-      const entry = await materializeEntry(materialized.value, request.entry);
+      const entry = await materializeEntry(materialized.value, request.entry, fileReadObserver);
       if (!entry.ok) return entry;
       const state =
         located.value.state === undefined ? await readUserState() : success(located.value.state);
       if (!state.ok) return state;
       const trusted = state.value.trust.some((grant) =>
-        grantMatches(grant, workspaceRoot, materialized.value, entry.value),
+        grantMatches(grant, request.scope, workspaceRoot, materialized.value, entry.value),
       );
       if (!trusted && request.trustFullUserPermissions !== true) {
         return packageFailure(
@@ -1112,9 +1292,7 @@ export function createLocalPluginPackageManager(
       }
       let loaded: unknown;
       try {
-        loaded = await importModule(
-          `${pathToFileURL(entry.value.absolutePath).href}?groma_integrity=${entry.value.integrity.slice(7)}`,
-        );
+        loaded = await importVerifiedEntry(entry.value, importModule);
       } catch {
         return packageFailure(
           "plugin-package-entry-load-failed",
@@ -1142,15 +1320,12 @@ export function createLocalPluginPackageManager(
         ].sort((left, right) => compareCodeUnits(left.entry, right.entry)),
       );
       const nextLocked = Object.freeze({ ...located.value.locked, enabled });
-      const grant = trustGrant(workspaceRoot, materialized.value, entry.value);
+      const grant = trustGrant(request.scope, workspaceRoot, materialized.value, entry.value);
       const trust = trusted
         ? state.value.trust
         : Object.freeze(
             [...state.value.trust, grant].sort((left, right) =>
-              compareCodeUnits(
-                `${left.packageName}\0${left.packageLocation}\0${left.entry}`,
-                `${right.packageName}\0${right.packageLocation}\0${right.entry}`,
-              ),
+              compareCodeUnits(trustKey(left), trustKey(right)),
             ),
           );
       if (request.scope === "personal") {
@@ -1187,6 +1362,7 @@ export function createLocalPluginPackageManager(
         const written = await writeBlueprintState(
           Object.freeze({ ...configuration, packageDeclarations }),
           Object.freeze({ packages, schema: lock.schema }),
+          lock,
         );
         if (!written.ok) return written;
       }
@@ -1226,6 +1402,7 @@ export function createLocalPluginPackageManager(
             );
             const repaired = await writeBlueprintState(
               Object.freeze({ ...configuration, packageDeclarations }),
+              located.value.lock!,
               located.value.lock!,
             );
             if (!repaired.ok) return repaired;
@@ -1271,6 +1448,7 @@ export function createLocalPluginPackageManager(
         const written = await writeBlueprintState(
           Object.freeze({ ...configuration, packageDeclarations }),
           Object.freeze({ packages, schema: lock.schema }),
+          lock,
         );
         if (!written.ok) return written;
       }
@@ -1305,11 +1483,9 @@ export function createLocalPluginPackageManager(
         }
         const state = await readUserState();
         if (!state.ok) return state;
-        const packageLocation = path.resolve(workspaceRoot, locked?.source ?? declaration!.source);
         const trust = Object.freeze(
           state.value.trust.filter(
-            (grant) =>
-              grant.packageName !== request.name || grant.packageLocation !== packageLocation,
+            (grant) => grant.scope !== "blueprint" || grant.packageName !== request.name,
           ),
         );
         if (trust.length !== state.value.trust.length) {
@@ -1328,6 +1504,7 @@ export function createLocalPluginPackageManager(
         const written = await writeBlueprintState(
           Object.freeze({ ...configuration, packageDeclarations }),
           Object.freeze({ packages, schema: lock.value.schema }),
+          lock.value,
         );
         if (!written.ok) return written;
         return success(Object.freeze({ removed: request.name }));
@@ -1344,9 +1521,7 @@ export function createLocalPluginPackageManager(
       const packages = Object.freeze(state.packages.filter((item) => item.name !== request.name));
       const trust = Object.freeze(
         state.trust.filter(
-          (grant) =>
-            grant.packageName !== request.name ||
-            grant.packageLocation !== located.value.locked.source,
+          (grant) => grant.scope !== "personal" || grant.packageName !== request.name,
         ),
       );
       const written = await writeUserState(
@@ -1412,7 +1587,11 @@ export function createLocalPluginPackageManager(
           );
         }
         for (const lockedEntry of selection.locked.enabled) {
-          const entry = await materializeEntry(materialized.value, lockedEntry.entry);
+          const entry = await materializeEntry(
+            materialized.value,
+            lockedEntry.entry,
+            fileReadObserver,
+          );
           if (!entry.ok) return entry;
           if (entry.value.integrity !== lockedEntry.integrity) {
             return packageFailure(
@@ -1422,7 +1601,7 @@ export function createLocalPluginPackageManager(
           }
           if (
             !state.value.trust.some((grant) =>
-              grantMatches(grant, workspaceRoot, materialized.value, entry.value),
+              grantMatches(grant, selection.scope, workspaceRoot, materialized.value, entry.value),
             )
           ) {
             return packageFailure(
@@ -1432,9 +1611,7 @@ export function createLocalPluginPackageManager(
           }
           let module: unknown;
           try {
-            module = await importModule(
-              `${pathToFileURL(entry.value.absolutePath).href}?groma_integrity=${entry.value.integrity.slice(7)}`,
-            );
+            module = await importVerifiedEntry(entry.value, importModule);
           } catch {
             return packageFailure(
               "plugin-package-entry-load-failed",

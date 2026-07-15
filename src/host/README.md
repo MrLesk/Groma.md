@@ -109,8 +109,16 @@ an existing exact location-and-integrity-bound grant or requires
 `--trust-full-user-permissions`; only then may it import the selected Phase 1 module's
 named `plugin` export. The canonical lock records the exact manifest bytes, every
 enabled entry module's bytes, and resolved plugin ID. Startup rechecks all three before
-import. Local-path locks do not cover transitive imports and therefore detect bounded
-drift without claiming a remotely reproducible complete artifact.
+import, then evaluates an immutable in-memory module made from those already-read entry
+bytes instead of reopening the source path.
+
+One executable entry is bounded to 4 MiB and must be bundled or otherwise
+self-contained. Bun-compatible TypeScript syntax in that entry and absolute `node:`
+built-in imports are supported; relative and bare runtime imports are not. This is an
+exact-byte boundary, not a sandbox: trusted code retains full user permissions and may
+still load secondary code through absolute URL imports, computed dynamic imports, or
+other runtime facilities. Such secondary code is outside the lock, so local-path
+packages do not claim to be remotely reproducible complete artifacts.
 
 Personal entries must provide and require only `groma.presentation.*` capabilities.
 This keeps canonical mutation capabilities out of personal runtime resolution; it is

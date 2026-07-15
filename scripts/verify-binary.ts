@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -88,10 +89,11 @@ async function verifyRuntimePluginImport(executable: string): Promise<void> {
         version: "1.0.0",
       })}\n`,
     );
-    await writeFile(
-      path.join(packageRoot, "plugins", "smoke.js"),
-      `import { appendFileSync } from "node:fs";
-appendFileSync(new URL("../evaluations.txt", import.meta.url), "evaluated\\n");
+    const maximumEntryBytes = 4 * 1_024 * 1_024;
+    const evaluationFile = path.join(packageRoot, "evaluations.txt");
+    const entrySource = `import { appendFileSync } from "node:fs";
+const evaluation: string = "evaluated\\n";
+appendFileSync(${JSON.stringify(evaluationFile)}, evaluation);
 export const plugin = Object.freeze({
   manifest: Object.freeze({
     apiVersion: "groma.plugin/v1",
@@ -102,7 +104,14 @@ export const plugin = Object.freeze({
     version: "1.0.0"
   }),
   start: () => Object.freeze({ capabilities: Object.freeze([]) })
-});\n`,
+});\n`;
+    const entryBytes = Buffer.from(entrySource);
+    if (entryBytes.byteLength > maximumEntryBytes) {
+      throw new Error("Binary smoke plugin exceeds the supported entry bound");
+    }
+    await writeFile(
+      path.join(packageRoot, "plugins", "smoke.js"),
+      Buffer.concat([entryBytes, Buffer.alloc(maximumEntryBytes - entryBytes.byteLength, " ")]),
     );
     await runPackageCommand(executable, workspace, userHome, ["init"]);
     await runPackageCommand(executable, workspace, userHome, ["package", "add", "./local-package"]);

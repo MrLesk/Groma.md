@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:56'
-updated_date: '2026-07-15 07:06'
+updated_date: '2026-07-15 07:47'
 labels: []
 milestone: m-4
 dependencies:
@@ -16,7 +16,6 @@ references:
   - ARCHITECTURE.md
 modified_files:
   - ARCHITECTURE.md
-  - backlog/tasks/grom-24 - Manage-and-pin-local-plugin-packages.md
   - scripts/architecture-boundaries.ts
   - scripts/standalone-compiler.ts
   - scripts/tests/architecture-boundaries.test.ts
@@ -38,11 +37,13 @@ modified_files:
   - src/host/index.ts
   - src/host/lifecycle.ts
   - src/host/local-plugin-packages.ts
+  - src/host/path-containment.ts
   - src/host/plugin-module-loader.ts
   - src/host/tests/bootstrap-configuration.test.ts
   - src/host/tests/default-bootstrap.test.ts
   - src/host/tests/lifecycle.test.ts
   - src/host/tests/local-plugin-packages.test.ts
+  - src/host/tests/path-containment.test.ts
   - src/plugin-sdk/README.md
 priority: medium
 type: feature
@@ -68,28 +69,29 @@ Support reproducible local plugin packages for the initial package-management de
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Extend the bounded workspace configuration model with exact sorted blueprint package declarations, deterministic serialization, and semantic revalidation while preserving the reserved official plugin selector.
-2. Add a Host-owned local package capability with exact six-field groma.package.json parsing, remote-source rejection before filesystem access, safe path/byte hashing, canonical lock/user-state formats, and serialized add/inspect/enable/disable/remove operations.
-3. Require the explicit --trust-full-user-permissions grant before dynamic import; bind persisted grants outside the repository to canonical workspace and package locations plus manifest/entry integrity, and enforce the one-registration plugin export.
-4. Load only trusted, exact locked enabled entries during Phase 1; constrain personal registrations to the groma.presentation.* capability namespace and keep blueprint packages canonical while personal package state remains outside the repository.
-5. Expose the capability through contained Host surface context and the complete CLI package command family, including stable remote-out-of-scope, trust, drift, and workspace diagnostics.
-6. Update architecture/Host/CLI/SDK documentation to replace the earlier package CLI sketch and state the local-path reproducibility and locked-byte boundary honestly.
-7. Add focused parser, package manager, bootstrap/lifecycle, and CLI end-to-end regressions proving multi-plugin selective enablement, trust-before-import, personal isolation, deterministic config/locks, drift rejection, no observed package-manager writes, and remote rejection before filesystem work.
-8. Run formatting, strict typecheck, boundaries, focused suites, full bun run check, diff/backlog validation, then finalize GROM-24 with objective evidence and commit only this task.
+1. Make every package writer preflight the complete serialized configuration, lock, and user state through the same bounded semantic readers before publication; preserve prior bytes on invalid portable spelling or cardinality overflow.
+2. Replace path precheck plus readFile with a no-follow bounded open-handle snapshot that reads at most max+1 and revalidates the opened/path identity; add platform-aware containment and complete remote shorthand rejection.
+3. Bind plugin evaluation to the exact verified entry bytes using an immutable in-memory module URL, remove path/query integrity assumptions, and document the supported bundled-entry import semantics.
+4. Harden the user-data trust root against links/junctions, wrong ownership, and group/world access; add scope to canonical trust grants so removal prunes the stored identity without source availability.
+5. Add lock compare-and-swap under blueprint coordination while preserving explicit lock-first disable/remove reconciliation after interrupted publication.
+6. Add deterministic adversarial regressions for canonical writer symmetry, 65th-package refusal, byte swaps, file link/swap/growth, trust-root permissions, Windows cross-volume containment, stale lock CAS, Git shorthand, and symlink-source trust revocation; update architecture/Host/SDK docs.
+7. Run focused suites, full bun run check, four-target verification, Backlog validation, and diff review; update exact evidence and return GROM-24 to Done only when all findings are objectively green.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Context review classified this as L2: package operations cross the CLI, contained Host surface, Phase 0 configuration, Phase 1 runtime, and local persistence. The accepted design keeps acquisition, declaration, enablement, trust, and loading separate; supports local filesystem paths only; and introduces the minimum one-registration plugin entry export plus groma.presentation.* personal capability namespace.
+Independent review hardening pass reopened GROM-24 at 4de1b51d7697ff90978463935146b7d16bdf5e45. Context Hunter classification remains L2 because canonical state, filesystem identity, trust, module execution, cross-platform paths, and lock recovery interact.
 
-Final design adds a management-only Host composition for package commands: add and inspect never load existing enabled code, inspect reports exact manifest or enabled-entry drift inertly, and disable/remove remain available for recovery. Ordinary startup verifies exact lock and trust before the single audited runtime import. State writes are byte-preflighted; lock-first blueprint publication can be reconciled by disable/remove after an interrupted configuration write. The standalone compiler permits only the opaque runtime specifier while the architecture checker constrains that import to host/plugin-module-loader.ts.
+The first exact-byte implementation used a base64 data URL, but a full 4 MiB compiled smoke exposed Bun resolver NameTooLong failures above roughly 1 KiB. The verified-byte boundary now uses a temporary immutable in-memory blob module URL, revoked after import. Native compiled verification proves the 4 MiB maximum with Bun-compatible TypeScript syntax and a node: built-in import. Relative and bare runtime imports are explicitly unsupported; absolute URL/computed dynamic imports and other full-user-permission effects remain possible outside the exact entry lock.
 
-Objective validation: bun run check passed (format, strict typecheck, architecture boundaries, 526 tests / 0 failures, native compiled-binary smoke, and Iteration 1A workflow/crash recovery). bun run check:targets passed for macOS arm64, Linux x64, Windows x64, and Windows arm64. The compiled smoke exercised init/add/trust/enable/fresh-process inspect/ordinary startup and proved inspect did not evaluate enabled code. Focused package tests prove multi-entry selective enablement, exact config/lock bytes, personal capability isolation, trust-before-import, drift-before-import, remote rejection, unchanged project package.json/bun.lock, and recovery from lock-first partial writes without source availability.
+Independent review findings are closed with adversarial coverage: invalid portable spellings and the 65th declaration preserve exact state bytes; verified entry path swaps still execute only the captured bytes; manifest link/swap/growth races fail closed; permissive and linked trust roots are rejected; Windows cross-volume containment rejects absolute relative() results; concurrent lock changes fail compare-and-swap without overwriting peer state; Git shorthand is rejected in both scopes before user-state work; and symlink-source remove/re-add requires trust again. Existing lock-first recovery remains green.
+
+Final validation: focused Host/CLI tests passed; bun run check passed format, strict typecheck, architecture boundaries, 535 tests / 0 failures, native compiled-binary package workflow at the exact 4 MiB entry bound, and Iteration 1A crash recovery. bun run check:targets passed for macOS arm64, Linux x64, Windows x64, and Windows arm64. backlog doctor reported no duplicate task IDs, and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the complete local-path plugin package lifecycle across bounded configuration, exact locks, external trust state, Host composition, and CLI operations. Blueprint packages are deterministic and shared; personal packages remain presentation-only and local; remote acquisition is explicitly rejected; package-manager files remain untouched. Verified through the full repository and four-target compiled-binary gates.
+Hardened GROM-24 after independent review without changing its product scope. Every package-state writer now proves reader symmetry before publication; file reads use bounded no-follow handle snapshots; execution uses the exact captured bytes through an immutable in-memory module; the trust root and grants are fail-closed; blueprint updates compare-and-swap both configuration and lock; remote shorthand and cross-volume escapes are rejected; and trust pruning survives missing symlink sources. Added deterministic regressions for all eight findings and documented the bundled/self-contained entry contract, including its non-sandbox boundary. Verified with 535 repository tests, native 4 MiB compiled plugin execution, Iteration 1A recovery, and all four target builds.
 <!-- SECTION:FINAL_SUMMARY:END -->

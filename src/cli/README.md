@@ -34,6 +34,10 @@ static `groma.package.json` document without importing package code. Enable is t
 execution boundary and requires `--trust-full-user-permissions` unless an unchanged,
 location-bound exact grant already exists.
 
+The initial executable entry is a bounded bundled/self-contained module. TypeScript
+syntax and `node:` built-ins are supported, while relative and bare runtime imports are
+not; the Host and SDK READMEs document this exact-byte compatibility boundary.
+
 Package commands use a management-only Host composition: previously enabled entries are
 not loaded or started. Inspect reports manifest or enabled-entry drift without executing
 it, and disable/remove remain available as recovery operations when ordinary startup

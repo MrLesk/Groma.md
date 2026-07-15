@@ -955,9 +955,11 @@ groma/packages.lock    exact package versions, static-manifest hashes, enabled e
 
 Startup reads only declared local paths. Before import it requires the exact static
 manifest bytes and every enabled entry module byte to match the deterministic lock. It
-then requires an exact trust grant bound to canonical workspace location, canonical
-package location, package name, manifest hash, entry path, and entry hash. Drift fails
-before module evaluation.
+then requires an exact trust grant bound to scope, canonical workspace location,
+canonical package location, package name, manifest hash, entry path, and entry hash.
+Drift fails before module evaluation. The Host evaluates the already-read entry bytes
+through one immutable in-memory module URL; it never reopens the mutable entry path for
+execution.
 
 Configuration, lock, and personal-state serialization are preflighted against their
 read bounds before publication. Blueprint updates publish the lock before configuration;
@@ -965,11 +967,20 @@ if publication is interrupted between those resources, management-only disable a
 remove operations recognize the lock-first state and reconcile configuration without
 loading package code.
 
-Local path packages remain live references for development. The lock detects changes to
-the static manifest and enabled entry modules; it does not freeze transitive imports or
-turn a path into a distributable artifact. A blueprint using such a package is locally
-exact for those locked bytes but is not remotely reproducible until a later pinned
-acquisition source covers the complete artifact.
+The initial executable-entry contract is deliberately bounded: one entry is at most 4
+MiB and must be a bundled or otherwise self-contained ES module. Bun-compatible
+TypeScript syntax in that exact file and absolute `node:` built-in imports are supported.
+Relative and bare runtime imports are not supported because a data-backed module has no
+package-relative resolution base, and pretending otherwise would reintroduce unlocked
+mutable-path evaluation.
+
+This boundary is exact-byte execution, not a sandbox. Trusted code still has full user
+permissions and may explicitly evaluate other code through absolute URL imports,
+computed dynamic imports, filesystem APIs, subprocesses, or other runtime facilities.
+Those effects and secondary modules are outside the entry lock. Local path packages
+therefore remain live development references rather than remotely reproducible complete
+artifacts; a later pinned acquisition model must cover the whole artifact before making
+that stronger claim.
 
 ### Trust
 

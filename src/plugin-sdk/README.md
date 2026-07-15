@@ -72,4 +72,13 @@ The official local Host reconciles this envelope with its exact lock before exec
 Every declared plugin path identifies a Phase 1 module with one named `plugin` export
 containing a `PluginRegistration`. The Host verifies the locked static-manifest and
 entry-module bytes and an exact full-user-permissions trust grant before importing that
-module. Acquisition and lock formats remain Host concerns rather than SDK contracts.
+module. The initial local Host accepts an entry of at most 4 MiB and evaluates those
+already-read bytes as one immutable in-memory module. That entry may use Bun-compatible
+TypeScript syntax and absolute `node:` built-ins, but it must be bundled or otherwise
+self-contained: relative and bare runtime imports are unsupported. Type-only SDK imports
+are compatible when the package build erases them.
+
+Exact entry evaluation is not a security sandbox. Trusted code has full user permissions
+and can use absolute URL imports, computed dynamic imports, filesystem APIs, subprocesses,
+and other runtime facilities to execute effects or secondary code outside the entry
+lock. Acquisition and lock formats remain Host concerns rather than SDK contracts.
