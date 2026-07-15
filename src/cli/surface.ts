@@ -84,9 +84,11 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
     codes.some(
       (code) =>
         code === "no-workspace" ||
+        code === "plugin-package-enabled-limit-exceeded" ||
         code === "plugin-package-integrity-drift" ||
         code === "plugin-package-trust-root-unattested" ||
         code.includes("plugin-package-lock") ||
+        code.includes("plugin-package-user-state") ||
         code.includes("workspace-configuration") ||
         code.includes("workspace-initialization-conflict"),
     )

@@ -113,12 +113,21 @@ async function capturePackageCommand(
     stderr: "pipe",
     stdout: "pipe",
   });
-  const [exitCode, stderr, stdout] = await Promise.all([
-    process.exited,
-    readBoundedCommandOutput(process.stderr),
-    readBoundedCommandOutput(process.stdout),
-  ]);
-  return { exitCode, stderr, stdout };
+  const exited = process.exited;
+  const stderr = readBoundedCommandOutput(process.stderr);
+  const stdout = readBoundedCommandOutput(process.stdout);
+  try {
+    const [exitCode, capturedStderr, capturedStdout] = await Promise.all([exited, stderr, stdout]);
+    return { exitCode, stderr: capturedStderr, stdout: capturedStdout };
+  } catch (error) {
+    try {
+      process.kill();
+    } catch {
+      // The child may already have exited after closing its output streams.
+    }
+    await Promise.allSettled([exited, stderr, stdout]);
+    throw error;
+  }
 }
 
 async function requireMissing(candidate: string, message: string): Promise<void> {

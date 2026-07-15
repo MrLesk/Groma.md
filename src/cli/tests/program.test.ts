@@ -866,6 +866,11 @@ export const plugin = Object.freeze({
     for (const [code, message] of [
       ["invalid-local-plugin-package-source", "Local plugin package source is malformed"],
       [
+        "plugin-package-enabled-limit-exceeded",
+        "Enabled local plugins exceed this Host's runtime capacity",
+      ],
+      ["plugin-package-user-state-unavailable", "Local plugin package state is unavailable"],
+      [
         "personal-plugin-capability-forbidden",
         "Personal plugins may provide or require only groma.presentation.* capabilities",
       ],

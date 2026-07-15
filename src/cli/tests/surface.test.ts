@@ -71,7 +71,7 @@ describe("CLI surface", () => {
     }
   });
 
-  test("classifies unattested package trust as a workspace failure", async () => {
+  test("classifies local package configuration failures as workspace failures", async () => {
     const invocation: CliInvocation = Object.freeze({
       command: Object.freeze({
         entry: "./plugins/entry.js",
@@ -82,15 +82,24 @@ describe("CLI surface", () => {
       }),
       format: "json",
     });
-    const controller = createCliSurfaceController(
-      invocation,
-      { read: async () => "{}" },
-      { stdin: false, stdout: false },
-    );
-    const session = await controller.surface.start(context("plugin-package-trust-root-unattested"));
-    await session.completion;
+    for (const code of [
+      "plugin-package-enabled-limit-exceeded",
+      "plugin-package-trust-root-unattested",
+      "plugin-package-user-state-unavailable",
+    ]) {
+      const controller = createCliSurfaceController(
+        invocation,
+        { read: async () => "{}" },
+        { stdin: false, stdout: false },
+      );
+      const session = await controller.surface.start(context(code));
+      await session.completion;
 
-    expect(controller.result()).toMatchObject({ exitCode: CLI_EXIT.workspace, ok: false });
-    await session.stop();
+      expect(controller.result(), code).toMatchObject({
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+      });
+      await session.stop();
+    }
   });
 });

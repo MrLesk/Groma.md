@@ -266,6 +266,39 @@ describe("bootstrap configuration", () => {
   });
 
   test("contains hostile replacement-parser package declarations and enabled entries", () => {
+    expect(
+      parseBootstrapConfiguration(
+        {
+          parse: () =>
+            success({
+              packageDeclarations: [
+                {
+                  enabled: ["./plugins/entry.js"],
+                  name: "example",
+                  source: "./plugins/example",
+                },
+              ],
+              requestedRuntimePlugins: [],
+              schema: "groma/v0.1",
+            }),
+        },
+        new Uint8Array(),
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        packageDeclarations: [
+          {
+            enabled: ["./plugins/entry.js"],
+            name: "example",
+            source: "./plugins/example",
+          },
+        ],
+        requestedRuntimePlugins: [],
+        schema: "groma/v0.1",
+      },
+    });
+
     let getterCalls = 0;
     let traps = 0;
     const accessorPackage = Object.create(null) as Record<string, unknown>;
