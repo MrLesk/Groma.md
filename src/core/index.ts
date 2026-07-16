@@ -2,6 +2,7 @@ export * from "./aliases.ts";
 export * from "./events.ts";
 export * from "./generation.ts";
 export * from "./graph.ts";
+export * from "./graph-query.ts";
 export * from "./identity.ts";
 export * from "./plugin-runtime.ts";
 export * from "./projection.ts";

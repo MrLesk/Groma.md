@@ -7,8 +7,10 @@ import type {
 import type {
   Diagnostic,
   EntropySource,
+  GraphQueryEngineCapability,
   GraphGeneration,
   ProjectionIndexCapability,
+  ProjectionReadCapability,
   PluginRegistration,
   Result,
   RunningPluginGraph,
@@ -99,6 +101,8 @@ export interface HostComposition {
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
   readonly plugins?: RunningPluginGraph;
   readonly projection: ProjectionIndexCapability;
+  readonly projectionRead: ProjectionReadCapability;
+  readonly queryEngine: GraphQueryEngineCapability;
   readonly queries: BoundedQueryContracts;
   readonly resourceMapper: ComponentResourceMapper;
   readonly resources: LocalResourceProvider;

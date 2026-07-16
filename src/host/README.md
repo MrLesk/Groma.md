@@ -6,10 +6,10 @@ assembles explicit capabilities without placing its technology choices in Core.
 ## Default local plugin profile
 
 `createDefaultBootstrapRegistry` is the official local composition seam. It constructs
-ten explicit built-in plugin registrations and resolves them through Core's
+eleven explicit built-in plugin registrations and resolves them through Core's
 `PluginRuntime`: Phase 0 local resources, configuration discovery, and YAML parsing,
 then Phase 1 kernel, Standard Model, canonical persistence, schema migration,
-disposable projection, application/workspace, and surface plugins. These are ordinary
+disposable projection, bounded graph query, application/workspace, and surface plugins. These are ordinary
 runtime registrations with exact manifests, capability
 declarations, dependencies, and start results—the same path available to a third-party
 registration. They are not a wrapper around a second private composition path.
@@ -25,7 +25,8 @@ The running graph exposes deterministic inspection for conformance and host test
 Every named `HostComposition` capability is the exact opaque value registered in that
 graph: local resources, Standard Model and invariant, Markdown intent store and
 transaction provider, Core transaction engine and graph kernel, bounded query
-contracts, the replaceable local projection index, component resource mapper, snapshot decoder, shared application
+contracts, the replaceable local projection index and bounded graph query engine,
+component resource mapper, snapshot decoder, shared application
 operations, workspace access, package operations, and the injected surface. A running
 surface receives `WorkspaceAccessCapability` plus the narrow scaffold/add/inspect/enable/
 disable/remove package capability, not persistence, graph, runtime, or transaction internals.
@@ -65,9 +66,29 @@ confirmed `graph.committed` event after canonical commit, including commits conf
 transaction recovery. Projection failure cannot change
 or reclassify that already-committed outcome; the next projection load compares the stored
 generation and canonical-content fingerprint with current canonical state and rebuilds
-safely. The projection capability is exposed on `HostComposition` for the query engine,
-but it is not passed to the current terminal surface and is never added to a canonical
-journal target set.
+safely. The complete `groma.projection-index/v1` capability is exposed as
+`HostComposition.projection` for the application transaction engine, but it is not passed
+to the current terminal surface and is never added to a canonical journal target set.
+
+The separate query-engine plugin depends only on `groma.projection-read/v1` and Core's
+bounded-query contracts. It publishes `groma.graph-query/v1` and is exposed as
+`HostComposition.queryEngine` for the next shared-operation slice. It is not passed to
+the current terminal surface, so this composition does not pull the GROM-30 CLI forward.
+The official projection plugin publishes the same object as the complete
+`groma.projection-index/v1` reconstructable index and the bounded
+`groma.projection-read/v1` partial-read capability; `HostComposition` keeps those
+contracts explicit as `projection` and `projectionRead`. The application consumes only
+the former ID, while the query plugin receives only the latter semantics:
+normal reads consume bounded cache catalogs and path-and-byte-verified shards, while
+first-open or stale continuity performs one full validation before anything is served.
+An unchanged first-open adopts only a manifest authorized by the durable transaction
+checkpoint; checkpoint failure cannot fall back to process-local trust or trigger a
+write. The Host configures one public page bound for both the query engine and projection
+read provider, while Persistence keeps physical shard sizing private. Core's bounded
+query contracts and the engine also receive the same derived context and cursor ceilings;
+the 2,504-character context and 3,864-character cursor ceilings include worst-case JSON
+escaping and nine-character BMP percent encoding so every accepted public search can
+produce a resumable page without an internal size contradiction.
 
 ## Bootstrap workspace document
 
@@ -92,7 +113,7 @@ These three fields are the only keys. Each package declaration contains exactly 
 aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
 entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
 and declarations are sorted by code unit for deterministic selection. The document may
-enable at most 54 local package entries in the default profile. That is one shared Host
+enable at most 53 local package entries in the default profile. That is one shared Host
 capacity with enabled personal entries, not an independent per-scope allowance; an
 embedder that adds bootstrap registrations reduces the remaining local capacity.
 The shipped default CLI has no optional official contributions today. Required built-in
@@ -209,9 +230,9 @@ personal package inspection. Inspection reports a changed valid manifest as an i
 `manifest-drift` snapshot without resolving entries that the changed manifest no longer
 declares; exact-manifest entry drift remains `entry-drift`.
 
-The runtime accepts at most 128 registrations. The default profile reserves its ten
+The runtime accepts at most 128 registrations. The default profile reserves its eleven
 built-ins and the full 64-entry official-runtime selection bound before admitting local
-entries, leaving 54 enabled local entries. Enable and ordinary startup count blueprint
+entries, leaving 53 enabled local entries. Enable and ordinary startup count blueprint
 and personal selections together before any local import. Exceeding the remaining
 capacity fails closed without changing configuration, lock, or user-state bytes.
 Each local registration is preflighted with the same ordinary Host manifest bounds:

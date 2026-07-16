@@ -101,11 +101,12 @@ aliases therefore fail before token or prepared-state publication on every platf
 The fixed `groma/transaction-state.json` record is the committed generation marker
 and recovery journal. It has deterministic canonical JSON, explicit byte/target
 bounds, exact SHA-256 revisions, and a `projectionWatermark` field reserved for the
-future disposable projection. Prepared and committing records contain the base and
+disposable projection plus its exact bounded `projectionFingerprint`. The pair is
+operational continuity metadata and never blueprint meaning. Prepared and committing records contain the base and
 target generations, affected identities, expected/result revisions, portable target
 locators, and exact replacement bytes. Their token is derived from that canonical
 evidence. PIDs, UUIDs, clocks, timestamps, and absolute paths never enter the record.
-Idle state retains only the current generation, projection watermark, and one bounded
+Idle state retains only the current generation, projection checkpoint, and one bounded
 settlement receipt, so repeated recovery returns provider-recorded affected identities
 and revisions rather than trusting caller-restored data.
 
@@ -179,7 +180,8 @@ the committing record recoverable.
 ## Disposable projection index
 
 [`projection-index.ts`](projection-index.ts) is the official local implementation of
-Core's replaceable projection capability. Its index is
+Core's replaceable `ProjectionIndexCapability`, published by the official Host as
+`groma.projection-index/v1`. Its index is
 `.groma-cache/projection-index.json`, outside the canonical `groma/` records and the
 Host's personal `.groma` user-data root. A provider-owned `.groma-cache/.gitignore`
 marker makes that disposable directory self-ignoring without changing a project's ignore
@@ -214,6 +216,113 @@ the projection provider has no canonical replacement target and cannot change in
 aliases.
 An oversized regular projection file is disposable corruption and is atomically replaced;
 provider failures that do not prove a replaceable regular cache still fail closed.
+
+The full JSON is only the reconstruction and incremental-materialization boundary.
+Normal graph queries use [`projection-read-index.ts`](projection-read-index.ts), which
+implements the distinct `ProjectionReadCapability` published by the official Host as
+`groma.projection-read/v1` and
+publishes immutable generation-and-fingerprint bundles under
+`.groma-cache/projection-reads/`. Each bundle contains bounded catalog chunks, exact
+entity/relation resources, bounded alias chunks, and bounded per-entity
+incoming/outgoing adjacency chunks. Every immutable resource has a bounded Merkle proof
+whose leaf hashes its stable logical path and exact bytes. The small
+`.groma-cache/projection-read-current.json` manifest carries the root and resource count
+and is replaced only
+after all referenced resources are durable. Partial publication is inert; old bundle
+files are cleaned only after the new manifest and checkpoint are current, with a bounded
+best-effort pass whose failure affects only disk use. It first enumerates at most 10,000
+bundle-root entries without descending into the current bundle, then spends a separate
+10,000-entry stale-subtree budget while collecting at most 10,000 stale files or 4 MiB of
+locator text. It deletes only after enumeration, and still removes everything collected
+before a bound is reached. Directory requests are clamped to the official local provider's
+10,000-entry default, so larger projection bounds do not make cleanup itself invalid. It
+does not yet reclaim empty provider namespaces or legacy directories; that disk-hygiene
+validation remains deferred to GROM-53.
+
+The tracked transaction journal stores a projection fingerprint, partial-read integrity
+root, and resource count beside its reserved generation watermark. All four fields are
+operational continuity metadata, never canonical graph state. Canonical prepare,
+rollback, commit, and recovery retain the prior checkpoint; the projection provider records it only
+after manifest publication for the current
+settled generation. A legacy marker without a fingerprint becomes unverified, marker
+lag forces validation/rebuild, and a same-generation branch fingerprint mismatch cannot
+authorize an ignored cache. The first partial read in each Host process performs one
+full canonical validation, so a fresh Host catches first-open, legacy, branch-switch,
+and out-of-band Markdown edits before serving. Later exact/page/search/traversal calls
+read only bounded projection resources and verify each resource's path-and-byte
+inclusion before decoding it. Direct Markdown mutation behind an already
+running Host is not a supported concurrent write path; supported edits use Host
+transactions, and reopening validates direct file edits.
+
+After that fresh canonical validation, an unchanged complete index adopts an existing
+partial bundle without rewriting it only when the current manifest and durable journal
+checkpoint agree exactly on generation, fingerprint, integrity root, and resource count.
+A missing, oversized, malformed, or semantically mismatched current manifest is
+replaceable disposable state. A missing or mismatched valid checkpoint republishes;
+manifest-provider or checkpoint I/O failure fails closed without publication, and a warm
+partial read does not force a canonical reload. Adoption authorizes the root, not every
+file eagerly: a missing, corrupt, or unauthenticated shard invokes a separate forced
+reconstruction once and never loops through the adoption path.
+
+The current journal checkpoint read deliberately shares the transaction's exclusive,
+fail-fast coordination lease. A read during a prepared transaction therefore returns
+unavailable without reading pending state, reloading canonical data, or publishing. The
+cross-process read/write concurrency and stale-lock evolution belongs to GROM-31. Lease
+release throws and failure results are contained as `projection-checkpoint-unavailable`
+after successful checkpoint work; an earlier validation or generation-mismatch diagnostic
+is preserved unchanged.
+
+## Projection query engine
+
+[`projection-query-engine.ts`](projection-query-engine.ts) implements Core's bounded
+graph-query capability over `ProjectionReadCapability` alone. It never imports or reads
+Markdown stores, resource locators, canonical component documents, or complete
+projection snapshots. Exact reads resolve both live IDs and canonical alias chains.
+Every exact result echoes the provider generation/fingerprint and the engine rejects a
+replacement provider that answers under a different identity.
+Entity pages scan bounded stable-ID catalog chunks, then fetch selected live records in
+one same-identity bounded batch; `kind: component` is the Standard Model component page.
+On resume, one exact live catalog entry proves that the cursor anchor still satisfies the
+exact filter or search predicate before catalog paging starts after that anchor, so prior
+prefixes are not rescanned. The local provider aggregates across private fixed-size
+storage chunks to satisfy the caller page limit; chunk size never enters Core or cursor
+semantics. Full-text search owns
+per-string NFKC/lowercase normalization even for replacement providers. The official
+publisher applies that normalization before charging the accumulated character bound, so
+no official catalog becomes unreadable through compatibility expansion; replacement
+providers satisfy the same post-normalization bound. Search treats normalized
+whitespace-separated terms as an order-independent conjunction, and fetches only the
+selected stable-ID page.
+
+Relationship traversal requests bounded incoming/outgoing adjacency pages for each
+expanded entity. It performs a deterministic breadth-first walk, sorts each frontier and
+discovered edge by stable identity, emits each relation once, and separately bounds
+depth, visited entities, emitted relations, every examined edge (including type-filtered
+nonmatches), provider page size, payload complexity, catalog scans, query text, terms,
+tokens, and cursor bytes before unbounded work.
+Cycles therefore close as finite relation hits rather than re-expanding entities. A page
+cursor binds the operation, normalized filters, exact graph generation, and provider-
+defined canonical fingerprint, while its small anchor is the last stable entity or
+relation ID. Resumption deterministically recomputes the bounded order and requires the
+anchor exactly once; `cursor-anchor-mismatch`, `cursor-query-mismatch`, and
+`stale-cursor` fail closed rather than guessing. Generation mismatch wins when both the
+generation and fingerprint changed, while same-generation fingerprint or query drift
+remains `cursor-query-mismatch`.
+
+Core's query contracts and the official engine share derived context and cursor ceilings
+of 2,504 and 3,864 characters. The cursor derivation includes the exact worst case where
+one literal BMP code unit becomes three percent-encoded UTF-8 triplets (nine characters),
+while term boundaries replace one raw whitespace character at the same encoded cost.
+Consequently every accepted kind, search text, term set, and bounded fingerprint can be
+represented in query context and, when a next page exists, resumed with its opaque cursor.
+If an embedder supplies a Core cursor contract with a larger budget than the engine, the
+engine fails the page instead of emitting a cursor above its own accepted bound.
+
+The engine receives the projection and Core bounded-query contracts by capability. Its
+callers and Core never learn whether the projection is JSON, an in-memory fixture, or a
+future database. Rebuild and incremental projection paths therefore share one query
+implementation and return semantically identical pages when they represent the same
+fingerprint and generation.
 
 ## Local resource capability
 

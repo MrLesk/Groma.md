@@ -114,6 +114,8 @@ function composition(
     operations,
     packages,
     projection: capability,
+    projectionRead: capability,
+    queryEngine: capability,
     queries: capability,
     resourceMapper: capability,
     resources: capability,

@@ -108,6 +108,27 @@ from. The graph kernel's raw stable-ID pages remain in-process primitives; a sur
 or provider uses `BoundedQueryContracts` when a page can cross an operation or process
 boundary.
 
+`ProjectionReadCapability` is the smaller storage-neutral partial-index boundary. It
+exposes one exact generation/fingerprint identity, exact entity-or-alias reads, exact
+live catalog-entry evidence, one bounded ordered batch of known live entities, bounded
+stable-ID catalog pages, and bounded per-entity directional relationship pages. It
+never exposes a whole projection snapshot. Every data-bearing read echoes the exact
+generation/fingerprint identity it served, so a replacement consumer can reject provider
+drift before stamping a public result. Core's continuity checkpoint also binds the
+current partial-read integrity root to the canonical generation/fingerprint without
+making storage proofs part of graph meaning; the paired bounded resource count prevents
+the same root proof from being reinterpreted with another tree shape.
+Hosts publish this partial-read contract independently from the complete
+`ProjectionIndexCapability`; the official Host uses `groma.projection-read/v1` and
+`groma.projection-index/v1` respectively, so a query consumer cannot mistake an
+index-only provider for a bounded-read provider.
+`GraphQueryEngineCapability` builds the
+public exact, filtered, full-text, and bounded traversal shapes on those reads and the
+cursor contracts. Traversal results describe one discovered relation, its orientation,
+the originating entity, reached entity, and breadth-first depth. Core knows neither an
+index encoding nor a database API; replaceable providers implement partial reads while
+the shared engine owns query semantics.
+
 Every bounded collection or traversal request supplies a positive safe limit no
 greater than the configured maximum. Providers remain responsible for executing a
 query and returning items in its declared deterministic order. Core canonicalizes the
@@ -116,6 +137,9 @@ explicit context, anchor, and cursor character budgets, and returns a branded op
 cursor. The cursor is self-contained so a later short-lived CLI process can continue
 the page. It is opaque as an API boundary, not encrypted or secret: callers must not
 interpret it, and providers must still treat it as untrusted input.
+Generation mismatch takes precedence over query mismatch when both changed; a changed
+generation therefore always produces `stale-cursor`, while a wrong query at the same
+generation produces `cursor-query-mismatch`.
 
 Canonical JSON is emitted directly from descriptors during the same traversal that
 copies and freezes query data. Character budgets reduce recursively for punctuation,
@@ -146,6 +170,11 @@ still noncanonical.
 Cursors carry their format version, graph generation, canonical query context, and
 continuation anchor. Decoding is fail-closed and rejects malformed or unsupported
 formats, noncanonical percent encoding, changed query context, and stale generations.
+Projection-backed providers include the bounded canonical-content fingerprint in that
+query context, so a cursor cannot resume across a same-generation branch or checkout
+whose canonical meaning differs. Deterministically recomputed result sets require the
+decoded anchor to occur exactly once; absence or duplication returns
+`cursor-anchor-mismatch` instead of skipping or restarting a page.
 URI encoding and decoding use captured intrinsics, so later global mutation cannot
 alter accepted envelopes. Prefix checking and suffix extraction likewise use captured
 string intrinsics. After decoding, Core reconstructs the complete canonical state and
@@ -173,6 +202,9 @@ event. Each view carries a bounded provider-defined canonical-content fingerprin
 addition to its generation; Core prescribes neither a hashing algorithm nor a storage
 encoding. The view contains derived searchable text and relation adjacency, but no file
 locator, JSON schema, database primitive, layout coordinate, folding state, or theme.
+Projection catalog providers keep searchable text within the configured
+post-NFKC/lowercase bound; query engines repeat normalization at the replacement-provider
+trust boundary instead of assuming the stored representation is already safe.
 Missing generations are handled by the event sequencer and require reconstruction;
 projection state never participates in a canonical transaction.
 

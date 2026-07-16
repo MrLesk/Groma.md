@@ -330,7 +330,7 @@ describe("bootstrap configuration", () => {
       { length: bootstrapConfigurationBounds.maxEnabledLocalPlugins },
       (_, index) => `./entry-${index}.js`,
     );
-    expect(bootstrapConfigurationBounds.maxEnabledLocalPlugins).toBe(54);
+    expect(bootstrapConfigurationBounds.maxEnabledLocalPlugins).toBe(53);
     expect(
       parser.parse(
         new TextEncoder().encode(

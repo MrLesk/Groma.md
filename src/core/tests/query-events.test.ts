@@ -584,6 +584,16 @@ describe("bounded query contracts", () => {
     expect(contracts.prepare(8, query, { cursor: first.value.nextCursor, limit: 1 })).toMatchObject(
       { diagnostics: [{ code: "stale-cursor" }], ok: false },
     );
+    expect(
+      contracts.prepare(
+        8,
+        { kind: "relation", order: "id" },
+        {
+          cursor: first.value.nextCursor,
+          limit: 1,
+        },
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "stale-cursor" }], ok: false });
   });
 
   test("enforces explicit query, anchor, and cursor budgets", () => {

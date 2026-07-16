@@ -606,6 +606,61 @@ publishes one projection-aware transaction engine, so application operations and
 official-plugin transactions share this same post-commit continuity boundary for both
 initial execution and recovery.
 
+The complete JSON remains the reconstructable `groma.projection-index/v1`
+materialization boundary, not the query API. The same official plugin publishes its
+provider object independently as the bounded `groma.projection-read/v1`
+`ProjectionReadCapability`, backed by immutable,
+generation-and-fingerprint-namespaced resources under `.groma-cache/projection-reads/`:
+bounded entity/search catalog chunks, exact entity and relation records, exact alias
+chunks, and bounded incoming/outgoing adjacency chunks. Every immutable resource has a
+bounded Merkle inclusion proof whose leaf commits to its logical bundle path and exact
+bytes. The manifest carries only the bounded root and resource count, while the tracked
+journal authorizes that root for the current generation and fingerprint. Reads verify a
+resource proof before decoding or using its JSON; corruption reconstructs the disposable
+bundle rather than serving bytes under an unrelated canonical identity. One small
+`projection-read-current.json` manifest becomes visible only after every referenced
+resource is durable. Publication that stops before that replacement is inert; a manifest
+whose journal checkpoint has not advanced is unavailable and is validated/rebuilt rather
+than trusted. Old bundles are disposable, and bounded best-effort cleanup can change only
+disk use or later rebuild cost. Bundle-root discovery does not descend into the current
+bundle and has a separate bound from stale-subtree traversal, so current resources cannot
+consume the stale-file budget. Reaching the cleanup entry or locator-character cap still
+removes the stale files already collected; reclaiming empty provider namespaces and legacy
+directories is deferred to the organization-scale validation in GROM-53.
+
+After a fresh canonical validation, an unchanged complete index may adopt the existing
+bundle without rewriting it only when its manifest and the durable journal checkpoint
+agree exactly. Missing, oversized, malformed, or semantically mismatched current
+manifests are reconstructable disposable state. Provider I/O and checkpoint I/O fail
+closed without publication, and a warm partial read does not force a canonical reload.
+Missing or corrupt authenticated resources use a distinct forced-publication repair path,
+so repair cannot be mistaken for ordinary unchanged-load adoption. Caller page and batch
+limits remain independent from the local provider's private chunk size; providers
+aggregate internal chunks behind the same Core read contract.
+
+Checkpoint reads currently share the canonical journal's exclusive fail-fast lease. A
+prepared writer therefore makes them deterministically unavailable without pending-state
+inspection or projection publication. General concurrent read-only processes, writer
+exclusion, recovery, stale-lock safety, and portability are the explicit scope of GROM-31.
+Checkpoint lease-release uncertainty is contained in the Result contract and never masks
+an earlier specific validation or generation diagnostic.
+
+The tracked transaction journal binds its reserved projection watermark to the exact
+bounded projection fingerprint, partial-read integrity root, and resource count. This
+four-field checkpoint is
+operational continuity metadata, not
+canonical architectural meaning. Prepare, rollback, commit, and recovery preserve the
+prior checkpoint; only a complete projection publication for the current settled canonical
+generation may advance it. Legacy journals without a fingerprint discard the old
+watermark as unverified. Canonical transactions therefore invalidate normal projection
+reads before post-commit projection work begins, and branch switches cannot authorize an
+ignored cache from a different same-generation history. A Host's first projection read
+per process performs one complete canonical validation, covering first-open, legacy, and
+out-of-band edits made while the Host was closed; subsequent reads use only bounded
+projection resources. Concurrent direct mutation of Markdown behind a running Host is not
+a supported write path. Host operations update through the transaction boundary, and a
+fresh Host detects direct file edits before serving a projection.
+
 #### Query Engine
 
 - **Seed key:** `query-engine`
@@ -622,6 +677,53 @@ initial execution and recovery.
   relations; enforce page and subgraph budgets.
 - **Relationships:** Uses Projection Index; serves Application Operations, Graph
   Comparator, CLI, and Application Service.
+
+The first engine is a replaceable `groma.graph-query/v1` capability. Its plugin requires
+only `groma.projection-read/v1`, never the complete `groma.projection-index/v1`
+materialization contract. Core defines only
+storage-neutral requests and results: exact entity reads, kind-filtered entity pages,
+normalized full-text entity pages, and relationship traversal by incoming, outgoing,
+or both directions, optional relation type, and bounded breadth-first depth. The
+official Persistence implementation consumes only Core's partial
+`ProjectionReadCapability`; it never opens canonical Markdown, requests a complete
+projection snapshot, or knows a resource locator. The local file provider and a future
+database provider implement the same exact-identity, exact live catalog evidence,
+catalog-page, bounded live-entity batch, exact entity-or-alias, and directional-adjacency
+reads without leaking their storage technology. Every data-bearing provider read echoes
+its exact generation/fingerprint identity, which the engine verifies before exposing a
+public generation.
+
+Searchable catalog text is bounded after per-string NFKC normalization and lowercase
+folding. The official projection applies that transformation before publication, and the
+query engine repeats it at the replaceable-provider boundary. Compatibility expansion
+therefore fails before an official manifest or continuity checkpoint becomes visible.
+
+Entity and search results are ordered by stable entity ID. Traversal sorts every
+frontier and edge by stable identity, visits each entity for expansion once, and emits
+each relationship once, so recursive and cyclic graphs remain finite. Page, catalog scan,
+search text, term, depth, visited-entity, emitted-relation, and examined-edge budgets are
+explicit; type-filtered nonmatches still consume the examined-edge budget. Continuation
+anchors are the last stable entity or relation ID and are interpreted only after Core
+validates the opaque cursor envelope. The cursor's canonical query binding includes the
+projection's bounded canonical-content fingerprint as well as the graph generation;
+same-generation branch changes therefore fail `cursor-query-mismatch`, generation
+changes always fail `stale-cursor` even when the fingerprint also changed, and a
+recomputed anchor that does not occur exactly once
+fails `cursor-anchor-mismatch` rather than silently skipping or restarting.
+
+Core's query contracts and the official engine share exact 2,504-character context and
+3,864-character cursor ceilings derived from every public maximum, worst-case JSON
+escaping, and percent encoding. The cursor bound charges nine characters when one
+literal BMP code unit becomes three encoded UTF-8 triplets. Every accepted search can
+therefore be represented in its query context and resumed when a bounded page has more
+results.
+An embedder may configure a larger Core cursor budget, but the engine checks every emitted
+cursor against its own bound and fails the page rather than returning an unresumable cursor.
+
+Entity-page resumption validates one exact live catalog entry against the bounded
+predicate, charges that lookup to the request work budget, and then begins provider paging
+after the anchor. Selected catalog identities are materialized in one ordered
+same-identity batch, not by repeating manifest and catalog validation for every result.
 
 #### Visual Blueprint Renderer
 
@@ -1077,8 +1179,8 @@ manifest no longer declares. When the manifest remains exact, changed entry byte
 continue to report `entry-drift`.
 
 The runtime's 128-registration ceiling is budgeted before local code can run. The
-default profile reserves ten built-ins and all 64 optional official-runtime slots,
-leaving at most 54 enabled local entries across blueprint and personal scopes together;
+default profile reserves eleven built-ins and all 64 optional official-runtime slots,
+leaving at most 53 enabled local entries across blueprint and personal scopes together;
 additional embedder bootstrap registrations reduce that remainder. Configuration
 parsing, enable, and ordinary startup enforce the applicable bound before import, and
 capacity rejection leaves every persisted byte unchanged.
