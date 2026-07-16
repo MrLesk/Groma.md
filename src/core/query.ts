@@ -266,12 +266,6 @@ export class BoundedQueryContracts {
 
     const decoded = this.#decodeCursor(inspectedRequest.value.cursor);
     if (!decoded.ok) return decoded;
-    if (decoded.value.queryCanonicalJson !== canonicalQuery.value.canonicalJson) {
-      return cursorFailure(
-        "cursor-query-mismatch",
-        "Continuation cursor belongs to a different canonical query",
-      );
-    }
     if (decoded.value.generation !== parsedGeneration.value) {
       return failure({
         code: "stale-cursor",
@@ -281,6 +275,12 @@ export class BoundedQueryContracts {
           currentGeneration: parsedGeneration.value,
         },
       });
+    }
+    if (decoded.value.queryCanonicalJson !== canonicalQuery.value.canonicalJson) {
+      return cursorFailure(
+        "cursor-query-mismatch",
+        "Continuation cursor belongs to a different canonical query",
+      );
     }
 
     return success(

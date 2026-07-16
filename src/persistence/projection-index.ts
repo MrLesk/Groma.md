@@ -22,8 +22,10 @@ import {
   type ProjectionCanonicalSnapshot,
   type ProjectionCanonicalFingerprint,
   type ProjectionCanonicalSource,
+  type ProjectionContinuityCapability,
   type ProjectedEntity,
   type ProjectionIndexCapability,
+  type ProjectionReadCapability,
   type ProjectionSnapshot,
   type RelationId,
   type Result,
@@ -32,6 +34,10 @@ import {
 import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import type { StandardModelCapability } from "../standard-model/index.ts";
+import {
+  createLocalProjectionReadIndex,
+  type LocalProjectionReadIndex,
+} from "./projection-read-index.ts";
 import {
   workspaceResourceLocator,
   type LocalResourceProvider,
@@ -56,6 +62,7 @@ export interface ProjectionIndexBounds {
   readonly maxAliases: number;
   readonly maxBytes: number;
   readonly maxEntities: number;
+  readonly maxPageSize: number;
   readonly maxRelations: number;
   readonly maxSearchableTextCharacters: number;
 }
@@ -63,6 +70,7 @@ export interface ProjectionIndexBounds {
 export interface LocalProjectionIndexOptions {
   readonly bounds?: Partial<ProjectionIndexBounds>;
   readonly canonical: ProjectionCanonicalSource;
+  readonly checkpoint?: ProjectionContinuityCapability;
   readonly resources: LocalResourceProvider;
 }
 
@@ -79,6 +87,7 @@ const defaultBounds: ProjectionIndexBounds = Object.freeze({
   maxAliases: 100_000,
   maxBytes: 16 * 1024 * 1024,
   maxEntities: 100_000,
+  maxPageSize: 100,
   maxRelations: 1_000_000,
   maxSearchableTextCharacters: 64 * 1024,
 });
@@ -87,6 +96,7 @@ const absoluteBounds: ProjectionIndexBounds = Object.freeze({
   maxAliases: 1_000_000,
   maxBytes: 1024 * 1024 * 1024,
   maxEntities: 1_000_000,
+  maxPageSize: 10_000,
   maxRelations: 10_000_000,
   maxSearchableTextCharacters: 1024 * 1024,
 });
@@ -130,6 +140,7 @@ function parseBounds(input: Partial<ProjectionIndexBounds> | undefined): Project
     "maxAliases",
     "maxBytes",
     "maxEntities",
+    "maxPageSize",
     "maxRelations",
     "maxSearchableTextCharacters",
   ] as const) {
@@ -890,13 +901,14 @@ async function ensureCacheIgnored(
 
 export function createLocalProjectionIndex(
   options: LocalProjectionIndexOptions,
-): ProjectionIndexCapability {
+): ProjectionIndexCapability & ProjectionReadCapability {
   const bounds = parseBounds(options.bounds);
   const canonical = options.canonical;
   const resources = options.resources;
   const locator = localProjectionIndexLocator();
   if (!locator.ok) throw new Error("The fixed local projection locator is invalid");
   const canonicalSnapshot = canonical.snapshot;
+  let partialReads: LocalProjectionReadIndex;
 
   const loadCanonical = async (): Promise<Result<ProjectionCanonicalSnapshot>> => {
     let value: unknown;
@@ -926,12 +938,21 @@ export function createLocalProjectionIndex(
     return result.value;
   };
 
+  const publishComplete = async (
+    snapshot: ProjectionSnapshot,
+  ): Promise<Result<ProjectionSnapshot>> => {
+    const complete = await publish(resources, locator.value, snapshot, bounds);
+    if (!complete.ok) return complete;
+    const partial = await partialReads.publish(complete.value);
+    return partial.ok ? complete : partial;
+  };
+
   const rebuild = () =>
     coordinated(async () => {
       const canonical = await loadCanonical();
       if (!canonical.ok) return canonical;
       const rebuilt = materialize(canonical.value, bounds);
-      return rebuilt.ok ? publish(resources, locator.value, rebuilt.value, bounds) : rebuilt;
+      return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
     });
 
   const load = () =>
@@ -947,13 +968,18 @@ export function createLocalProjectionIndex(
         current.snapshot.generation === canonical.value.generation &&
         current.snapshot.fingerprint === fingerprint.value
       ) {
+        const adopted = await partialReads.adopt(current.snapshot);
+        if (!adopted.ok) return adopted;
+        if (adopted.value === undefined) return publishComplete(current.snapshot);
         const ignoreLocator = localProjectionIgnoreLocator();
         if (!ignoreLocator.ok) return unavailable("projection-ignore-invalid");
         const ignored = await ensureCacheIgnored(resources, ignoreLocator.value);
-        return ignored.ok ? success(current.snapshot) : ignored;
+        if (!ignored.ok) return ignored;
+        const committed = adopted.value.commit();
+        return committed.ok ? success(current.snapshot) : committed;
       }
       const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
-      return rebuilt.ok ? publish(resources, locator.value, rebuilt.value, bounds) : rebuilt;
+      return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
     });
 
   const update = (event: GraphCommittedEvent) => {
@@ -1000,9 +1026,29 @@ export function createLocalProjectionIndex(
       } else {
         next = materialize(canonical.value, bounds, fingerprint.value);
       }
-      return next.ok ? publish(resources, locator.value, next.value, bounds) : next;
+      return next.ok ? publishComplete(next.value) : next;
     });
   };
 
-  return Object.freeze({ load, rebuild, update });
+  partialReads = createLocalProjectionReadIndex({
+    bounds: {
+      maxAliases: bounds.maxAliases,
+      maxBytes: bounds.maxBytes,
+      maxEntities: bounds.maxEntities,
+      maxPageSize: bounds.maxPageSize,
+      maxRelations: bounds.maxRelations,
+      maxSearchableTextCharacters: bounds.maxSearchableTextCharacters,
+    },
+    ...(options.checkpoint === undefined ? {} : { checkpoint: options.checkpoint }),
+    ensureProjection: load,
+    repairProjection: rebuild,
+    resources,
+  });
+
+  return Object.freeze({
+    ...partialReads.capability,
+    load,
+    rebuild,
+    update,
+  });
 }

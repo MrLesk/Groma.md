@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  createPluginRuntimeConformanceFixture,
   runPluginConformanceSuite,
   type PluginConformanceFixture,
   type PluginConformanceFixtureRequest,
   type PluginProviderConformanceCheck,
 } from "groma/plugin-sdk/conformance";
 
+import { pluginRuntimeApiVersion, type PluginRegistration } from "../../core/index.ts";
 import { parseWorkspaceResourceLocator } from "../../persistence/index.ts";
 import {
   createDefaultBootstrapRegistry,
@@ -59,6 +61,50 @@ function checkMultiple(
     pluginId,
     verify,
     version: capabilityVersion,
+  });
+}
+
+function projectionReadCheck(pluginId: string): PluginProviderConformanceCheck {
+  return check(defaultHostCapabilityIds.projectionRead, pluginId, async (value) => {
+    if (
+      ![
+        "exactCatalogEntry",
+        "exactEntities",
+        "exactEntity",
+        "identity",
+        "pageCatalog",
+        "pageRelations",
+      ].every((name) => hasMethod(value, name))
+    ) {
+      return false;
+    }
+    const projection = value as {
+      identity(): Promise<{
+        readonly ok: boolean;
+        readonly value?: { readonly fingerprint: string; readonly generation: number };
+      }>;
+      pageCatalog(
+        identity: unknown,
+        request: unknown,
+      ): Promise<{
+        readonly ok: boolean;
+        readonly value?: {
+          readonly hasMore: boolean;
+          readonly identity: { readonly fingerprint: string; readonly generation: number };
+          readonly items: readonly unknown[];
+        };
+      }>;
+    };
+    const identity = await projection.identity();
+    if (!identity.ok || identity.value === undefined) return false;
+    const page = await projection.pageCatalog(identity.value, { limit: 1 });
+    return (
+      page.ok &&
+      page.value?.hasMore === false &&
+      page.value.items.length === 0 &&
+      page.value.identity.fingerprint === identity.value.fingerprint &&
+      page.value.identity.generation === identity.value.generation
+    );
   });
 }
 
@@ -201,6 +247,29 @@ describe("default host plugin SDK conformance", () => {
         ).load();
         return result.ok && result.value?.generation === 0;
       }),
+      projectionReadCheck(defaultHostPluginIds.projection),
+      check(
+        defaultHostCapabilityIds.queryEngine,
+        defaultHostPluginIds.queryEngine,
+        async (value) => {
+          if (!hasMethod(value, "pageEntities")) return false;
+          const result = await (
+            value as {
+              pageEntities(
+                query: unknown,
+                request: unknown,
+              ): Promise<{
+                readonly ok: boolean;
+                readonly value?: {
+                  readonly generation: number;
+                  readonly items: readonly unknown[];
+                };
+              }>;
+            }
+          ).pageEntities({ kind: "component" }, { limit: 1 });
+          return result.ok && result.value?.generation === 0 && result.value.items.length === 0;
+        },
+      ),
       check(
         defaultHostCapabilityIds.schemaMigrationCatalog,
         defaultHostPluginIds.persistence,
@@ -290,5 +359,122 @@ describe("default host plugin SDK conformance", () => {
       "declared-cardinality",
       "provider-behavior",
     ]);
+  });
+
+  test("rejects an index-only replacement before bounded query use", async () => {
+    let consumerStarts = 0;
+    let indexMethodCalls = 0;
+    const indexOnly = Object.freeze({
+      load: async () => {
+        indexMethodCalls += 1;
+        return { diagnostics: [], ok: false as const };
+      },
+      rebuild: async () => {
+        indexMethodCalls += 1;
+        return { diagnostics: [], ok: false as const };
+      },
+      update: async () => {
+        indexMethodCalls += 1;
+        return { diagnostics: [], ok: false as const };
+      },
+    });
+    const declaration = (id: string) => ({
+      cardinality: "single" as const,
+      id,
+      version: capabilityVersion,
+    });
+    const indexProvider: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "official.test-projection-index",
+        phase: 1,
+        provides: [declaration(defaultHostCapabilityIds.projection)],
+        requires: [],
+        version: capabilityVersion,
+      },
+      start: () => ({
+        capabilities: [
+          {
+            id: defaultHostCapabilityIds.projection,
+            value: indexOnly,
+            version: capabilityVersion,
+          },
+        ],
+      }),
+    };
+    const readConsumer: PluginRegistration = {
+      manifest: {
+        apiVersion: pluginRuntimeApiVersion,
+        id: "official.test-query-engine",
+        phase: 1,
+        provides: [],
+        requires: [declaration(defaultHostCapabilityIds.projectionRead)],
+        version: capabilityVersion,
+      },
+      start: () => {
+        consumerStarts += 1;
+        return { capabilities: [] };
+      },
+    };
+    const unresolved = await createPluginRuntimeConformanceFixture(() => [
+      indexProvider,
+      readConsumer,
+    ]).start({
+      cancellation: { isCancellationRequested: () => false },
+      registrationOrder: "forward",
+    });
+
+    expect(unresolved).toMatchObject({
+      diagnostics: [
+        {
+          code: "missing-capability-provider",
+          details: {
+            capabilityId: defaultHostCapabilityIds.projectionRead,
+            pluginId: "official.test-query-engine",
+            requiredVersion: capabilityVersion,
+          },
+        },
+      ],
+      ok: false,
+    });
+    expect(consumerStarts).toBe(0);
+
+    const falselyAdvertisedRead: PluginRegistration = {
+      manifest: {
+        ...indexProvider.manifest,
+        id: "official.test-projection-read",
+        provides: [declaration(defaultHostCapabilityIds.projectionRead)],
+      },
+      start: () => ({
+        capabilities: [
+          {
+            id: defaultHostCapabilityIds.projectionRead,
+            value: indexOnly,
+            version: capabilityVersion,
+          },
+        ],
+      }),
+    };
+    const report = await runPluginConformanceSuite({
+      fixture: createPluginRuntimeConformanceFixture(() => [falselyAdvertisedRead]),
+      providers: [projectionReadCheck("official.test-projection-read")],
+    });
+
+    expect(report.ok).toBeFalse();
+    expect(report.cases.filter((item) => !item.ok).map((item) => item.name)).toEqual([
+      "provider-behavior",
+    ]);
+    expect(report.diagnostics).toEqual([
+      {
+        code: "plugin-provider-conformance-failed",
+        details: {
+          capabilityId: defaultHostCapabilityIds.projectionRead,
+          pluginId: "official.test-projection-read",
+          version: capabilityVersion,
+        },
+        message: "Provider failed its capability-specific conformance check",
+      },
+    ]);
+    expect(indexMethodCalls).toBe(0);
   });
 });

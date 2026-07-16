@@ -25,9 +25,11 @@ import {
   success,
   TransactionEngine,
   type Diagnostic,
+  type GraphQueryEngineCapability,
   type PluginCapabilityDeclaration,
   type PluginRegistration,
   type PluginStartContext,
+  type ProjectionContinuityCapability,
   type ProjectionIndexCapability,
   type Result,
   type ResourceKey,
@@ -43,10 +45,13 @@ import {
   createLocalCanonicalMigrationCatalog,
   createLocalTransactionJournal,
   createLocalProjectionIndex,
+  createProjectionQueryEngine,
   createCanonicalMigrationTransactionAdapter,
   createMarkdownIntentStore,
   createTransactionProjectionCanonicalSource,
   createMarkdownIntentTransactionAdapter,
+  DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
+  DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
   markdownIntentLocator,
 } from "../persistence/index.ts";
 import {
@@ -522,9 +527,9 @@ export function createDefaultBootstrapRegistry(
             });
             const queries = new BoundedQueryContracts({
               maxAnchorCharacters: 256,
-              maxCursorCharacters: 2_048,
+              maxCursorCharacters: DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
               maxPageSize: defaultHostBounds.maxPageSize,
-              maxQueryContextCharacters: 512,
+              maxQueryContextCharacters: DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
             });
             return Object.freeze({
               capabilities: Object.freeze([
@@ -648,7 +653,10 @@ export function createDefaultBootstrapRegistry(
           manifest: manifest(
             defaultHostPluginIds.projection,
             1,
-            [capability(defaultHostCapabilityIds.projection)],
+            [
+              capability(defaultHostCapabilityIds.projection),
+              capability(defaultHostCapabilityIds.projectionRead),
+            ],
             [
               capability(defaultHostCapabilityIds.model),
               capability(defaultHostCapabilityIds.resources),
@@ -664,14 +672,14 @@ export function createDefaultBootstrapRegistry(
               pluginContext,
               defaultHostCapabilityIds.resources,
             );
-            const transactionProvider = requiredCapability<HostComposition["transactionProvider"]>(
-              pluginContext,
-              defaultHostCapabilityIds.transactionProvider,
-            );
+            const transactionProvider = requiredCapability<
+              HostComposition["transactionProvider"] & ProjectionContinuityCapability
+            >(pluginContext, defaultHostCapabilityIds.transactionProvider);
             const projection = createLocalProjectionIndex({
               bounds: {
                 maxAliases: defaultHostBounds.maxComponents,
                 maxEntities: defaultHostBounds.maxComponents,
+                maxPageSize: defaultHostBounds.maxPageSize,
                 maxRelations: defaultHostBounds.maxRelationships,
               },
               canonical: createTransactionProjectionCanonicalSource({
@@ -683,11 +691,52 @@ export function createDefaultBootstrapRegistry(
                 model,
                 transactionProvider,
               }),
+              checkpoint: transactionProvider,
               resources,
             });
             return Object.freeze({
               capabilities: Object.freeze([
                 output(defaultHostCapabilityIds.projection, projection),
+                output(defaultHostCapabilityIds.projectionRead, projection),
+              ]),
+            });
+          },
+        }),
+        Object.freeze({
+          manifest: manifest(
+            defaultHostPluginIds.queryEngine,
+            1,
+            [capability(defaultHostCapabilityIds.queryEngine)],
+            [
+              capability(defaultHostCapabilityIds.projectionRead),
+              capability(defaultHostCapabilityIds.queries),
+            ],
+          ),
+          start: (pluginContext: PluginStartContext) => {
+            const projection = requiredCapability<HostComposition["projectionRead"]>(
+              pluginContext,
+              defaultHostCapabilityIds.projectionRead,
+            );
+            const queries = requiredCapability<HostComposition["queries"]>(
+              pluginContext,
+              defaultHostCapabilityIds.queries,
+            );
+            const queryEngine = createProjectionQueryEngine({
+              bounds: {
+                maxCursorCharacters: DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
+                maxEntities: defaultHostBounds.maxComponents,
+                maxPageSize: defaultHostBounds.maxPageSize,
+                maxProjectionPageSize: defaultHostBounds.maxPageSize,
+                maxTraversalEntities: defaultHostBounds.maxComponents,
+                maxTraversalRelationVisits: defaultHostBounds.maxRelationships * 2,
+                maxTraversalRelations: defaultHostBounds.maxRelationships,
+              },
+              projection,
+              queries,
+            });
+            return Object.freeze({
+              capabilities: Object.freeze([
+                output(defaultHostCapabilityIds.queryEngine, queryEngine),
               ]),
             });
           },
@@ -1245,6 +1294,14 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.projection,
       );
+      const projectionRead = runningCapability<HostComposition["projectionRead"]>(
+        plugins,
+        defaultHostCapabilityIds.projectionRead,
+      );
+      const queryEngine = runningCapability<GraphQueryEngineCapability>(
+        plugins,
+        defaultHostCapabilityIds.queryEngine,
+      );
       const resourceMapper = runningCapability<HostComposition["resourceMapper"]>(
         plugins,
         defaultHostCapabilityIds.resourceMapper,
@@ -1279,6 +1336,8 @@ export function createDefaultBootstrapRegistry(
           packages: packageOperations,
           plugins,
           projection,
+          projectionRead,
+          queryEngine,
           queries,
           resourceMapper,
           resources,

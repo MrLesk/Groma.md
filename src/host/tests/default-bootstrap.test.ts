@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   allowsCustomLocalCoordinationRoot,
+  localTransactionStateLocator,
   markdownIntentLocator,
 } from "../../persistence/index.ts";
 import {
@@ -316,7 +317,9 @@ describe("default bootstrap registry", () => {
       component: { name: "Projected component", type: "domain" },
     });
     expect(created.status).toBe("committed");
+    if (created.status !== "committed") throw new Error("expected committed component fixture");
     const projection = await composed.value.projection.load();
+    expect(composed.value.projectionRead as unknown).toBe(composed.value.projection);
     expect(
       created.status === "committed" &&
         projection.ok &&
@@ -328,6 +331,39 @@ describe("default bootstrap registry", () => {
           item.searchableText.includes("projected component"),
         ),
     ).toBeTrue();
+    const expectedProjection = projection.ok
+      ? projection.value.entities.find((item) =>
+          item.searchableText.includes("projected component"),
+        )
+      : undefined;
+    expect(expectedProjection).toBeDefined();
+    expect(
+      await composed.value.queryEngine.searchEntities(
+        { kind: "component", text: "projected component" },
+        { limit: 1 },
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        generation: created.generation,
+        hasMore: false,
+        items: expectedProjection === undefined ? [] : [expectedProjection.entity],
+      },
+    });
+    const maximumTermSearch = Array.from(
+      { length: 32 },
+      (_, index) => `a${index.toString(36).padStart(6, "0")}`,
+    ).join(" ");
+    expect(maximumTermSearch.length).toBe(255);
+    expect(
+      await composed.value.queryEngine.searchEntities(
+        { kind: "component", text: maximumTermSearch },
+        { limit: 1 },
+      ),
+    ).toEqual({
+      ok: true,
+      value: { generation: created.generation, hasMore: false, items: [] },
+    });
     expect(composed.value.workspace.requireWorkspace()).toEqual({
       ok: true,
       value: composed.value.operations,
@@ -343,7 +379,9 @@ describe("default bootstrap registry", () => {
       "packages",
       "plugins",
       "projection",
+      "projectionRead",
       "queries",
+      "queryEngine",
       "resourceMapper",
       "resources",
       "snapshotStateDecoder",
@@ -353,7 +391,8 @@ describe("default bootstrap registry", () => {
       "transactionProvider",
       "workspace",
     ]);
-    expect(composed.value.plugins?.inspect()).toMatchObject({
+    const pluginInspection = composed.value.plugins?.inspect();
+    expect(pluginInspection).toMatchObject({
       apiVersion: "groma.plugin/v1",
       plugins: [
         { id: "official.configuration-parser", phase: 0 },
@@ -363,12 +402,33 @@ describe("default bootstrap registry", () => {
         { id: "official.model", phase: 1 },
         { id: "official.persistence", phase: 1 },
         { id: "official.projection", phase: 1 },
+        { id: "official.query-engine", phase: 1 },
         { id: "official.schema-migrations", phase: 1 },
         { id: "official.application", phase: 1 },
         { id: "official.surface", phase: 1 },
       ],
       state: "running",
     });
+    const projectionContracts = (id: string) =>
+      pluginInspection?.plugins
+        .find((plugin) => plugin.id === id)
+        ?.provides.filter((item) => item.id.startsWith("groma.projection-"))
+        .map((item) => item.id);
+    const projectionRequirements = (id: string) =>
+      pluginInspection?.plugins
+        .find((plugin) => plugin.id === id)
+        ?.requires.filter((item) => item.id.startsWith("groma.projection-"))
+        .map((item) => item.id);
+    expect(projectionContracts("official.projection")).toEqual([
+      defaultHostCapabilityIds.projection,
+      defaultHostCapabilityIds.projectionRead,
+    ]);
+    expect(projectionRequirements("official.application")).toEqual([
+      defaultHostCapabilityIds.projection,
+    ]);
+    expect(projectionRequirements("official.query-engine")).toEqual([
+      defaultHostCapabilityIds.projectionRead,
+    ]);
     const capabilityIdentities = [
       ["graph", defaultHostCapabilityIds.graph],
       ["invariant", defaultHostCapabilityIds.invariant],
@@ -376,6 +436,8 @@ describe("default bootstrap registry", () => {
       ["migrations", defaultHostCapabilityIds.schemaMigrationOperations],
       ["operations", defaultHostCapabilityIds.operations],
       ["projection", defaultHostCapabilityIds.projection],
+      ["projectionRead", defaultHostCapabilityIds.projectionRead],
+      ["queryEngine", defaultHostCapabilityIds.queryEngine],
       ["queries", defaultHostCapabilityIds.queries],
       ["resourceMapper", defaultHostCapabilityIds.resourceMapper],
       ["resources", defaultHostCapabilityIds.resources],
@@ -412,6 +474,76 @@ describe("default bootstrap registry", () => {
         },
       ],
       ok: false,
+    });
+  });
+
+  test("fails graph reads at the durable checkpoint seam without republishing", async () => {
+    const context = await temporaryWorkspace();
+    let armedAfterManifest = false;
+    let failCheckpoint = false;
+    let writesAfterFault = 0;
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      resourceFaultInjector: (phase, fault) => {
+        if (failCheckpoint && phase === "write") writesAfterFault += 1;
+        if (
+          failCheckpoint &&
+          phase === "read" &&
+          fault?.locator === ".groma-cache/projection-read-current.json"
+        ) {
+          armedAfterManifest = true;
+          return;
+        }
+        if (
+          failCheckpoint &&
+          armedAfterManifest &&
+          phase === "read" &&
+          fault?.locator === localTransactionStateLocator
+        ) {
+          armedAfterManifest = false;
+          throw new Error("injected checkpoint-specific journal read failure");
+        }
+      },
+      surface: idleSurface(),
+    });
+    const composed = await registry.compose({ workspaceRoot: context.workspaceRoot });
+    if (!composed.ok) throw new Error("default composition failed");
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+    const created = await composed.value.operations.createComponent({
+      component: { name: "Checkpoint component", type: "domain" },
+    });
+    if (created.status !== "committed") throw new Error("expected committed component fixture");
+    const projection = await composed.value.projection.load();
+    if (!projection.ok) throw new Error("expected projection fixture");
+    const expected = projection.value.entities.find((item) =>
+      item.searchableText.includes("checkpoint component"),
+    );
+    if (expected === undefined) throw new Error("expected projected component fixture");
+
+    failCheckpoint = true;
+    expect(
+      await composed.value.queryEngine.searchEntities(
+        { kind: "component", text: "checkpoint component" },
+        { limit: 1 },
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "graph-query-unavailable" }], ok: false });
+    expect(writesAfterFault).toBe(0);
+
+    failCheckpoint = false;
+    expect(
+      await composed.value.queryEngine.searchEntities(
+        { kind: "component", text: "checkpoint component" },
+        { limit: 1 },
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        generation: created.generation,
+        hasMore: false,
+        items: [expected.entity],
+      },
     });
   });
 

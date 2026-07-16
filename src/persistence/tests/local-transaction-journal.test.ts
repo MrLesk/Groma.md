@@ -9,6 +9,9 @@ import {
   failure,
   parseContentRevision,
   parseEntityId,
+  parseGraphGeneration,
+  parseProjectionCanonicalFingerprint,
+  parseProjectionReadIntegrity,
   parseRelationId,
   parseResourceKey,
   success,
@@ -43,6 +46,19 @@ import {
 const roots: string[] = [];
 const decoder = new TextDecoder();
 const transactionCrashChild = path.join(import.meta.dir, "fixtures", "transaction-crash-child.ts");
+
+function projectionIdentity(generationValue: number, character: string) {
+  const generation = parseGraphGeneration(generationValue);
+  const fingerprint = parseProjectionCanonicalFingerprint(`sha256:${character.repeat(64)}`);
+  if (!generation.ok || !fingerprint.ok) throw new Error("invalid projection identity fixture");
+  return Object.freeze({ fingerprint: fingerprint.value, generation: generation.value });
+}
+
+function projectionIntegrity(character: string) {
+  const parsed = parseProjectionReadIntegrity(`sha256:${character.repeat(64)}`);
+  if (!parsed.ok) throw new Error("invalid projection integrity fixture");
+  return parsed.value;
+}
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -1546,7 +1562,7 @@ describe("local transaction journal", () => {
       resources,
       localTransactionStateLocator,
       new TextEncoder().encode(
-        '{"generation":0,"phase":"idle","projectionWatermark":0,"settlement":null,"version":1}\n',
+        '{"generation":0,"phase":"idle","projectionFingerprint":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","projectionIntegrity":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","projectionResourceCount":7,"projectionWatermark":0,"settlement":null,"version":1}\n',
       ),
     );
     const active = await harness(roots);
@@ -1572,9 +1588,436 @@ describe("local transaction journal", () => {
     });
     if (!stateRead.ok) throw new Error("expected transaction state");
     const state = JSON.parse(decoder.decode(stateRead.value.bytes)) as {
+      projectionFingerprint: string;
+      projectionIntegrity: string;
+      projectionResourceCount: number;
       projectionWatermark: number;
     };
     expect(state.projectionWatermark).toBe(0);
+    expect(state.projectionFingerprint).toBe(
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    expect(state.projectionIntegrity).toBe(
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    );
+    expect(state.projectionResourceCount).toBe(7);
+  });
+
+  test("ignores inherited legacy-token markers for modern checkpointed transactions", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const fingerprint = `sha256:${"a".repeat(64)}`;
+    const integrity = `sha256:${"b".repeat(64)}`;
+    await seed(
+      resources,
+      localTransactionStateLocator,
+      new TextEncoder().encode(
+        `${JSON.stringify({
+          generation: 0,
+          phase: "idle",
+          projectionFingerprint: fingerprint,
+          projectionIntegrity: integrity,
+          projectionResourceCount: 7,
+          projectionWatermark: 0,
+          settlement: null,
+          version: 1,
+        })}\n`,
+      ),
+    );
+    const active = await harness(roots);
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, "usesLegacyTokenEvidence");
+    let outcome: Awaited<ReturnType<typeof active.engine.execute>> | undefined;
+    try {
+      Object.defineProperty(Object.prototype, "usesLegacyTokenEvidence", {
+        configurable: true,
+        enumerable: true,
+        value: true,
+      });
+      outcome = await active.engine.execute(createRequest());
+    } finally {
+      if (original === undefined) {
+        delete (Object.prototype as { usesLegacyTokenEvidence?: unknown }).usesLegacyTokenEvidence;
+      } else {
+        Object.defineProperty(Object.prototype, "usesLegacyTokenEvidence", original);
+      }
+    }
+    expect(outcome).toMatchObject({ generation: 1, status: "committed" });
+    const settled = JSON.parse(
+      await readFile(path.join(roots.workspaceRoot, String(localTransactionStateLocator)), "utf8"),
+    ) as Record<string, unknown>;
+    expect(settled).toMatchObject({
+      generation: 1,
+      phase: "idle",
+      projectionFingerprint: fingerprint,
+      projectionIntegrity: integrity,
+      projectionResourceCount: 7,
+      projectionWatermark: 0,
+    });
+    expect(settled).not.toHaveProperty("usesLegacyTokenEvidence");
+    const restarted = await harness(roots);
+    expect(await restarted.provider.snapshot([])).toMatchObject({ generation: 1 });
+  });
+
+  test("records projection continuity only for the current settled generation", async () => {
+    const roots = await workspace();
+    const active = await harness(roots);
+    const initial = projectionIdentity(0, "a");
+    const initialIntegrity = projectionIntegrity("b");
+    expect(await active.provider.readProjectionCheckpoint()).toEqual({
+      ok: true,
+      value: {
+        generation: initial.generation,
+        projection: null,
+        projectionIntegrity: null,
+        projectionResourceCount: null,
+      },
+    });
+    expect(
+      await active.provider.recordProjectionCheckpoint(initial, initialIntegrity, 0),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-projection-checkpoint" }], ok: false });
+    expect(await active.provider.recordProjectionCheckpoint(initial, initialIntegrity, 7)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(await active.provider.readProjectionCheckpoint()).toEqual({
+      ok: true,
+      value: {
+        generation: initial.generation,
+        projection: initial,
+        projectionIntegrity: initialIntegrity,
+        projectionResourceCount: 7,
+      },
+    });
+
+    expect(await active.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    const current = projectionIdentity(1, "a");
+    expect(await active.provider.readProjectionCheckpoint()).toEqual({
+      ok: true,
+      value: {
+        generation: current.generation,
+        projection: initial,
+        projectionIntegrity: initialIntegrity,
+        projectionResourceCount: 7,
+      },
+    });
+    expect(
+      await active.provider.recordProjectionCheckpoint(initial, initialIntegrity, 7),
+    ).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-generation-mismatch" }],
+      ok: false,
+    });
+    expect(
+      await active.provider.recordProjectionCheckpoint(current, projectionIntegrity("c"), 9),
+    ).toEqual({
+      ok: true,
+      value: undefined,
+    });
+  });
+
+  test("contains checkpoint release throws and preserves earlier specific failures", async () => {
+    const roots = await workspace();
+    let failNextRelease = false;
+    const active = await harness(roots, undefined, (phase) => {
+      if (phase === "coordination-release" && failNextRelease) {
+        failNextRelease = false;
+        throw new Error("injected checkpoint release throw");
+      }
+    });
+    const initial = projectionIdentity(0, "d");
+    const integrity = projectionIntegrity("e");
+
+    failNextRelease = true;
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+      ok: true,
+      value: { generation: 0, projection: null },
+    });
+
+    failNextRelease = true;
+    expect(await active.provider.recordProjectionCheckpoint(initial, integrity, 7)).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
+    expect(await active.provider.recordProjectionCheckpoint(initial, integrity, 7)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+      ok: true,
+      value: { projection: initial, projectionIntegrity: integrity, projectionResourceCount: 7 },
+    });
+
+    failNextRelease = true;
+    expect(
+      await active.provider.recordProjectionCheckpoint(projectionIdentity(1, "f"), integrity, 9),
+    ).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-generation-mismatch" }],
+      ok: false,
+    });
+    expect(await active.provider.recordProjectionCheckpoint(initial, integrity, 7)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+  });
+
+  test("contains retryable and ownership-lost checkpoint release results", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    let releaseMode: "normal" | "ownership-lost" | "retryable" = "retryable";
+    const resources = providerWithOverrides(base, {
+      async releaseCoordination(lease) {
+        const mode = releaseMode;
+        releaseMode = "normal";
+        if (mode === "retryable") {
+          return failure({
+            code: "injected-checkpoint-release-failure",
+            message: "Injected checkpoint release failure",
+          });
+        }
+        if (mode === "ownership-lost") {
+          await base.releaseCoordination(lease);
+          return failure({
+            code: "resource-coordination-ownership-lost",
+            message: "Injected checkpoint ownership loss",
+          });
+        }
+        return base.releaseCoordination(lease);
+      },
+    });
+    const active = journalHarnessFor(resources);
+
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({ ok: true });
+
+    releaseMode = "ownership-lost";
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
+    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({ ok: true });
+  });
+
+  test("migrates legacy watermarks to an unverified checkpoint", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    await seed(
+      resources,
+      localTransactionStateLocator,
+      new TextEncoder().encode(
+        '{"generation":0,"phase":"idle","projectionWatermark":0,"settlement":null,"version":1}\n',
+      ),
+    );
+    const active = await harness(roots);
+    const genesis = projectionIdentity(0, "b");
+    const genesisIntegrity = projectionIntegrity("c");
+    expect(await active.provider.readProjectionCheckpoint()).toEqual({
+      ok: true,
+      value: {
+        generation: genesis.generation,
+        projection: null,
+        projectionIntegrity: null,
+        projectionResourceCount: null,
+      },
+    });
+    expect(await active.provider.recordProjectionCheckpoint(genesis, genesisIntegrity, 11)).toEqual(
+      {
+        ok: true,
+        value: undefined,
+      },
+    );
+    const read = await active.resources.read({
+      locator: localTransactionStateLocator,
+      maxBytes: 1_000_000,
+    });
+    if (!read.ok) throw new Error("expected migrated transaction state");
+    expect(decoder.decode(read.value.bytes)).toContain(
+      `"projectionFingerprint":"${genesis.fingerprint}"`,
+    );
+  });
+
+  test("preserves legacy pending token evidence across failed roll-forward retries", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    const locator = workspaceResourceLocator("groma", "records", "legacy-pending");
+    if (!locator.ok) throw new Error("invalid legacy pending fixture locator");
+    await seed(base, locator.value, new TextEncoder().encode("divergent current bytes\n"));
+    const affected = { entities: [], relations: [] };
+    const targets = [
+      {
+        expected: `sha256:${"a".repeat(64)}`,
+        locator: String(locator.value),
+        resource: String(locator.value),
+        result: null,
+      },
+    ];
+    const token = `groma-local-tx-v1:${createHash("sha256")
+      .update(JSON.stringify({ affected, baseGeneration: 0, generation: 1, targets, version: 1 }))
+      .digest("hex")}`;
+    const source = `${JSON.stringify({
+      affected,
+      baseGeneration: 0,
+      generation: 1,
+      phase: "committing",
+      projectionWatermark: 0,
+      targets,
+      token,
+      version: 1,
+    })}\n`;
+    await seed(base, localTransactionStateLocator, new TextEncoder().encode(source));
+    const journalHandles = new WeakSet<object>();
+    let rejectedWriteBack = false;
+    const resources = providerWithOverrides(base, {
+      async stageReplacement(target, bytes) {
+        const staged = await base.stageReplacement(target, bytes);
+        if (staged.ok && target === localTransactionStateLocator) {
+          journalHandles.add(staged.value as object);
+        }
+        return staged;
+      },
+      async commitReplacement(handle) {
+        if (!rejectedWriteBack && journalHandles.has(handle as object)) {
+          rejectedWriteBack = true;
+          return Object.freeze({
+            diagnostics: Object.freeze([
+              Object.freeze({
+                code: "injected-legacy-write-back-rejection",
+                message: "Injected legacy pending write-back rejection",
+              }),
+            ]),
+            state: "not-committed" as const,
+          });
+        }
+        return base.commitReplacement(handle);
+      },
+    });
+    const active = journalHarnessFor(resources);
+    await expect(active.provider.snapshot([])).rejects.toThrow();
+    expect(rejectedWriteBack).toBeTrue();
+    expect(
+      await readFile(path.join(roots.workspaceRoot, String(localTransactionStateLocator)), "utf8"),
+    ).toBe(source);
+    await expect(active.provider.snapshot([])).rejects.toThrow(
+      "interrupted transaction cannot be settled",
+    );
+    expect(
+      await readFile(path.join(roots.workspaceRoot, String(localTransactionStateLocator)), "utf8"),
+    ).toBe(source);
+
+    const restarted = await harness(roots);
+    await expect(restarted.provider.snapshot([])).rejects.toThrow(
+      "interrupted transaction cannot be settled",
+    );
+    expect(
+      await readFile(path.join(roots.workspaceRoot, String(localTransactionStateLocator)), "utf8"),
+    ).toBe(source);
+  });
+
+  test("migrates a legacy prepared token only after rollback settles it", async () => {
+    const roots = await workspace();
+    const resources = await createLocalResourceProvider(roots);
+    const locator = workspaceResourceLocator("groma", "records", "legacy-prepared");
+    if (!locator.ok) throw new Error("invalid legacy prepared fixture locator");
+    const affected = { entities: [], relations: [] };
+    const targets = [
+      {
+        expected: null,
+        locator: String(locator.value),
+        resource: String(locator.value),
+        result: null,
+      },
+    ];
+    const token = `groma-local-tx-v1:${createHash("sha256")
+      .update(JSON.stringify({ affected, baseGeneration: 0, generation: 1, targets, version: 1 }))
+      .digest("hex")}`;
+    await seed(
+      resources,
+      localTransactionStateLocator,
+      new TextEncoder().encode(
+        `${JSON.stringify({
+          affected,
+          baseGeneration: 0,
+          generation: 1,
+          phase: "prepared",
+          projectionWatermark: 0,
+          targets,
+          token,
+          version: 1,
+        })}\n`,
+      ),
+    );
+
+    const active = await harness(roots);
+    expect(await active.provider.snapshot([])).toMatchObject({ generation: 0 });
+    const settled = JSON.parse(
+      await readFile(path.join(roots.workspaceRoot, String(localTransactionStateLocator)), "utf8"),
+    ) as Record<string, unknown>;
+    expect(settled).toMatchObject({
+      generation: 0,
+      phase: "idle",
+      projectionFingerprint: null,
+      projectionIntegrity: null,
+      projectionResourceCount: null,
+      projectionWatermark: null,
+      settlement: { outcome: "not-committed", token },
+    });
+    expect(settled).not.toHaveProperty("usesLegacyTokenEvidence");
+  });
+
+  test("rejects noncanonical legacy journal bytes before migration", async () => {
+    const affected = { entities: [], relations: [] };
+    const targets = [
+      {
+        expected: null,
+        locator: "groma/records/legacy",
+        resource: "groma/records/legacy",
+        result: null,
+      },
+    ];
+    const token = `groma-local-tx-v1:${createHash("sha256")
+      .update(JSON.stringify({ affected, baseGeneration: 0, generation: 1, targets, version: 1 }))
+      .digest("hex")}`;
+    const variants = [
+      '{"generation":0, "phase":"idle","projectionWatermark":0,"settlement":null,"version":1}\n',
+      '{"phase":"idle","generation":0,"projectionWatermark":0,"settlement":null,"version":1}\n',
+      '{"generation":0,"generation":0,"phase":"idle","projectionWatermark":0,"settlement":null,"version":1}\n',
+      `${JSON.stringify({
+        affected,
+        baseGeneration: 0,
+        generation: 1,
+        phase: "prepared",
+        projectionWatermark: 0,
+        targets,
+        token,
+        version: 1,
+      }).replace('"phase"', ' "phase"')}\n`,
+      `${JSON.stringify({
+        affected,
+        baseGeneration: 0,
+        generation: 1,
+        phase: "prepared",
+        projectionWatermark: 0,
+        targets,
+        token,
+        usesLegacyTokenEvidence: true,
+        version: 1,
+      })}\n`,
+    ];
+    for (const source of variants) {
+      const roots = await workspace();
+      const resources = await createLocalResourceProvider(roots);
+      await seed(resources, localTransactionStateLocator, new TextEncoder().encode(source));
+      const active = await harness(roots);
+      await expect(active.provider.snapshot([])).rejects.toThrow("noncanonical");
+    }
   });
 
   test("fails closed for malformed and bounded journal records", async () => {
@@ -2423,6 +2866,10 @@ describe("local transaction journal", () => {
     expect(await second.provider.prepare(proposal)).toEqual({
       reason: "generation",
       status: "conflict",
+    });
+    expect(await second.provider.readProjectionCheckpoint()).toMatchObject({
+      diagnostics: [{ code: "resource-coordination-contended" }],
+      ok: false,
     });
     expect(await first.provider.commit(prepared.token)).toMatchObject({
       generation: 1,

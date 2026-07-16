@@ -83,7 +83,7 @@ export type BootstrapConfigurationLoad =
 export const bootstrapConfigurationBounds = Object.freeze({
   maxConfigurationBytes: 64 * 1_024,
   maxDiscoveryCandidates: 8,
-  maxEnabledLocalPlugins: 54,
+  maxEnabledLocalPlugins: 53,
   maxPackageDeclarations: 64,
   maxPackageEntryCharacters: 512,
   maxPackageSourceCharacters: 4_096,

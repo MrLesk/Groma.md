@@ -154,7 +154,7 @@ const defaultMaxReadBytes = 16 * 1024 * 1024;
 const defaultMaxReplacementBytes = 16 * 1024 * 1024;
 const defaultMaxPageSize = 1000;
 const defaultMaxDepth = 64;
-const defaultMaxEntriesPerDirectory = 10_000;
+export const localResourceProviderDefaultMaxEntriesPerDirectory = 10_000;
 const defaultMaxCursorBytes = 16 * 1024;
 const defaultStaleLockMilliseconds = 5 * 60 * 1000;
 const maximumOwnerBytes = 1024;
@@ -520,7 +520,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     );
     this.#maxEntriesPerDirectory = configuredBound(
       options.maxEntriesPerDirectory,
-      defaultMaxEntriesPerDirectory,
+      localResourceProviderDefaultMaxEntriesPerDirectory,
       localResourceProviderCeilings.maxEntriesPerDirectory,
       "maxEntriesPerDirectory",
     );
@@ -569,7 +569,7 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     if (!maxBytes.ok) return maxBytes;
 
     try {
-      await this.#inject("read");
+      await this.#inject("read", locator.value);
       const resolved = await this.#resolve(locator.value, false);
       if (!resolved.ok) return resolved;
       if (resolved.value.stats?.isSymbolicLink() || !resolved.value.stats?.isFile()) {
