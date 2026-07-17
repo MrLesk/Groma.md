@@ -1,9 +1,10 @@
 # Groma Development
 
 Groma is implemented in TypeScript on Bun and distributed as a compiled single-file
-executable. This document records implementation choices; product and architectural
-decisions remain governed by [MANIFESTO.md](MANIFESTO.md) and
-[ARCHITECTURE.md](ARCHITECTURE.md).
+executable. This document records implementation choices. [MANIFESTO.md](MANIFESTO.md)
+governs product and architectural principles, the canonical [`groma/`](groma/) workspace
+is the detailed architectural source of truth, and [ARCHITECTURE.md](ARCHITECTURE.md) is
+the compact cross-component navigator rather than a second component ledger.
 
 ## Toolchain
 
@@ -33,6 +34,7 @@ bun run check:targets # cross-compile every supported target and run the host-co
 bun run build         # compile the native standalone executable to dist/groma
 bun run smoke         # verify one native artifact and exercise version and help
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
+bun run verify:self-blueprint # verify the canonical architecture through the compiled public CLI
 bun run check         # run every required local verification gate
 ```
 
@@ -95,9 +97,13 @@ types, and `require` calls. Production Core files may import only other Core fil
 Tests may import `bun:test`, but test code still cannot cross architectural layers.
 Unresolved relative imports fail the check rather than being ignored.
 
-The directory names follow the root component domains and seed terminology in
-`ARCHITECTURE.md`. The plugin SDK is a public package subpath today; splitting its
-source into an independently acquired package belongs to the later package workflow.
+Directory names broadly follow the canonical root and component terminology. One-time
+migration seed keys are not authoritative source names: they are preserved as namespaced
+`groma.md/seed-key` metadata and can be inspected through the public bounded
+`blueprint export`. Use the canonical workspace for detailed architecture and
+`ARCHITECTURE.md` for navigation. The plugin SDK is a public package subpath today;
+splitting its source into an independently acquired package belongs to the later package
+workflow.
 
 ## Test Layout
 
@@ -107,8 +113,11 @@ discovers `*.test.ts` recursively, and keeping tests inside their owning boundar
 the architecture checker enforce the same dependency direction without cluttering
 production module roots. Release-level black-box verification lives in
 `tests/iteration-1a/` because it exercises the compiled artifact across every source
-boundary without importing a product implementation API. Add deeper fixture or
-golden-output directories only when a test suite demonstrates that need.
+boundary without importing a product implementation API. The self-blueprint verifier
+lives in `tests/iteration-1b/`; it copies canonical state and exercises only the compiled
+public CLI, including a disposable projection rebuild and byte-identical canonical proof.
+Add deeper fixture or golden-output directories only when a test suite demonstrates that
+need.
 
 ## Iteration 1A Build Targets
 
@@ -165,8 +174,9 @@ version from `package.json`.
 
 When verification fails, run `bun run check` first. Its fail-fast order is formatting,
 types, architectural boundaries, unit tests, standalone build and smoke behavior, then
-the complete Iteration 1A black-box and crash-recovery suite. Run the named subcommand
-directly after identifying the failing gate.
+the complete Iteration 1A black-box and crash-recovery suite, and finally the canonical
+self-blueprint verifier through the compiled public CLI. Run the named subcommand directly
+after identifying the failing gate.
 
 ## Iteration 1A Completion Verification
 
