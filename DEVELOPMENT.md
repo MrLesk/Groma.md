@@ -30,10 +30,11 @@ bun run test          # Bun tests
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
-bun run check:targets # cross-compile every supported target and run the host-compatible one
+bun run check:targets # cross-compile every baseline target and run the host-compatible one
 bun run build         # compile the native standalone executable to dist/groma
-bun run smoke         # verify one native artifact and exercise version and help
+bun run smoke         # verify one native artifact, public help, and package loading safety
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
+bun run verify:1b     # build and black-box verify the complete native 1B foundation
 bun run verify:self-blueprint # verify the canonical architecture through the compiled public CLI
 bun run check         # run every required local verification gate
 ```
@@ -112,24 +113,29 @@ Tests live in a `tests/` directory inside the boundary they verify, for example
 discovers `*.test.ts` recursively, and keeping tests inside their owning boundary lets
 the architecture checker enforce the same dependency direction without cluttering
 production module roots. Release-level black-box verification lives in
-`tests/iteration-1a/` because it exercises the compiled artifact across every source
-boundary without importing a product implementation API. The self-blueprint verifier
-lives in `tests/iteration-1b/`; it copies canonical state and exercises only the compiled
-public CLI, including a disposable projection rebuild and byte-identical canonical proof.
-Add deeper fixture or golden-output directories only when a test suite demonstrates that
-need.
+`tests/iteration-1a/` and `tests/iteration-1b/` because it exercises the compiled artifact
+across every source boundary without importing a product implementation API. The Iteration
+1B foundation verifier covers configuration, public operations, projection repair,
+complete export, trusted-package compatibility failure, stale cursors, interruption, and
+canonical-byte preservation. The self-blueprint verifier copies canonical state and
+exercises only the compiled public CLI, including a disposable projection rebuild,
+explicit root orientation, and byte-identical canonical proof. Add deeper fixture or
+golden-output directories only when a test suite demonstrates that need.
 
-## Iteration 1A Build Targets
+## Iteration 1B Build Targets
 
 One binary is produced per target; “single-file” describes the runtime artifact, not
-one universal binary for every operating system.
+one universal binary for every operating system. The target matrix proves
+cross-compilation, one exact artifact, and the executable format and architecture shown
+below. It does not claim native runtime verification for an artifact that the current
+runner cannot execute.
 
-| Bun target                 | Iteration 1A commitment               | CI verification                                         |
-| -------------------------- | ------------------------------------- | ------------------------------------------------------- |
-| `bun-darwin-arm64`         | Supported on Apple Silicon macOS      | Cross-compiled and checked as one Mach-O artifact       |
-| `bun-linux-x64-baseline`   | Supported on baseline x64 glibc Linux | Cross-compiled and smoke-tested on the Linux CI host    |
-| `bun-windows-x64-baseline` | Supported on baseline x64 Windows     | Cross-compiled and checked as one `.exe` artifact       |
-| `bun-windows-arm64`        | Supported on ARM64 Windows            | Cross-compiled and checked as one ARM64 `.exe` artifact |
+| Bun target                 | Packaged baseline artifact          | Matrix proof                                                   |
+| -------------------------- | ----------------------------------- | -------------------------------------------------------------- |
+| `bun-darwin-arm64`         | Apple Silicon macOS executable      | One Mach-O arm64 artifact; runtime only on a matching host     |
+| `bun-linux-x64-baseline`   | Baseline x64 glibc Linux executable | One ELF x86-64 artifact; full 1B workflow on the Linux CI host |
+| `bun-windows-x64-baseline` | Baseline x64 Windows executable     | One PE x86-64 artifact; runtime only on a matching host        |
+| `bun-windows-arm64`        | ARM64 Windows executable            | One PE arm64 artifact; runtime only on a matching host         |
 
 Build the Linux target explicitly:
 
@@ -145,66 +151,79 @@ bun run build -- --target=bun-windows-x64-baseline
 bun run build -- --target=bun-windows-arm64
 ```
 
-Intel macOS, Linux arm64, and musl targets are not promised for 1A. Adding a target
-requires cross-compiled artifact verification. Runtime smoke coverage is recorded
-separately and runs only on a compatible CI or local host.
+Intel macOS, Linux arm64, and musl targets are not Iteration 1B packaging baselines.
+Adding a target requires cross-compiled artifact verification. Runtime behavior is
+recorded separately and only for a compatible CI or local host.
 
 ## Continuous Verification
 
 GitHub Actions runs on every pull request and every push to `main`. The required
 quality job starts from a clean checkout, installs with `bun ci`, and invokes the same
 `bun run check` command used locally. A second job uses one Linux runner to
-cross-compile all four promised 1A targets. It verifies the exact single-file output
-for every target and executes version, help, and the complete non-crash 1A workflow
-only for the Linux binary that the host can run. A bounded third job builds the native
-Windows executable on Windows and runs its version, help, and package safety smoke
-checks against the real process.
+cross-compile all four Iteration 1B baseline targets. It verifies the exact single-file
+output and format-specific architecture header for every target. For the Linux artifact
+that the host can run, it then executes version, help, package loading safety, the
+complete non-crash 1A workflow, the Iteration 1B foundation verifier, and the
+self-blueprint verifier. A bounded third job builds the native Windows executable on
+Windows and runs version, help, and package safety smoke checks against the real process;
+that smoke job is not described as the complete Iteration 1B workflow.
 
 `bun run check:targets` uses the same rule locally: it cross-compiles every target and
-black-box tests the target matching the current operating system and architecture. The
-compiled child process is executed directly and does not use a separately installed
-Bun runtime; Bun remains only the development harness that builds and drives it. A
-successful cross-compile is not described as native runtime verification for a
-different operating system. After verifying the matrix, the command restores a native
-artifact so `bun run smoke` can run immediately.
+black-box tests the target matching the current operating system and architecture through
+the complete Iteration 1B workflow. The compiled child process is executed directly and
+does not use a separately installed Bun runtime; Bun remains only the development harness
+that builds and drives it. A successful cross-compile is not native runtime verification
+for a different operating system. After verifying the serial matrix, the command restores
+a native artifact so `bun run smoke` can run immediately.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
 retaining their release tags as comments for review. Setup Bun reads the exact Bun
 version from `package.json`.
 
 When verification fails, run `bun run check` first. Its fail-fast order is formatting,
-types, architectural boundaries, unit tests, standalone build and smoke behavior, then
-the complete Iteration 1A black-box and crash-recovery suite, and finally the canonical
+types, architectural boundaries, unit tests, then the single `verify:1b` completion
+workflow: standalone build and smoke behavior, the complete Iteration 1A black-box and
+crash-recovery suite, the Iteration 1B foundation verifier, and the canonical
 self-blueprint verifier through the compiled public CLI. Run the named subcommand directly
 after identifying the failing gate.
 
-## Iteration 1A Completion Verification
+## Iteration 1B Completion Verification
 
-`bun run verify:1a` is the clean-checkout completion command. It compiles the native
-single-file `groma` executable, checks its version and help surfaces, and then drives
-only that executable through initialization, recursive same- and mixed-type component
-workflows, cross-branch relationships, bounded queries, expected-revision updates,
-rename and reparent identity continuity, restart, deterministic output, malformed
-state, and negative invariants. The verifier compares canonical bytes and resource
-locations without importing product internals.
+`bun run verify:1b` is the clean-checkout completion command. It compiles the native
+single-file `groma` executable once, checks its public and trusted-package loading
+surfaces, and retains the complete Iteration 1A workflow through the earlier black-box
+suite. `bun run verify:1a` remains available as the compatibility command for the
+initialization, recursive component, relationship, bounded-query, expected-revision,
+identity-continuity, restart, deterministic-output, malformed-state, negative-invariant,
+and crash-recovery contract.
 
-The same command compiles a separate verification-only entry with an explicit host
+The Iteration 1A suite compiles a separate verification-only entry with an explicit host
 fault injector. Real child processes terminate at every prepared, committing,
 replacement, settlement, and deletion durability boundary. Recovery always exposes
 the complete old or complete new graph and must accept a later valid mutation. This
 fault control is not present in the production entry point or production executable.
 
-Iteration 1A deliberately stops at the correctness walking skeleton. Scanners,
-automatic architecture generation, reconciliation, disposable projection, dynamic
-plugin loading, plans, Git history, the embedded HTTP service, and the React UI remain
-later-iteration work.
+The additional Iteration 1B verifiers drive only the production executable and filesystem
+fixtures. They prove configuration, recognition metadata, trusted dynamic packages,
+built-in capability-backed bounded reads, deterministic complete paged export, projection
+rebuild and corrupt-cache repair, stale-cursor rejection, incompatible capability
+rejection before plugin start, interrupted-read recovery, and the canonical
+self-blueprint. Read-only and failure cases compare the complete canonical `groma/`
+bytes.
+
+Iteration 1B delivers a reconstructable projection index and the bounded terminal
+overview. It does not deliver the local visual artifact, visual navigation, or rendering;
+“projection” here is disposable query infrastructure, not a second semantic model or a
+completed visual surface.
 
 ## Deliberately Deferred
 
 The approved web stack is Bun's embedded HTTP server and Bun's React bundler. Neither
-HTTP nor React is installed or started in Iteration 1A or required for the disposable
+HTTP nor React is installed or started in Iteration 1B or required for the disposable
 local artifact that Iteration 2 proves. Iteration 4 introduces the application service
 and complete web viewing and editing together.
 
-Iteration 1A also does not implement scanning, reconciliation, disposable projection,
-dynamic plugin loading, plans, or Git history views.
+Iteration 2 remains responsible for scanning, observation and evidence, binding,
+reconciliation, the `groma scan` command, and local visual navigation and rendering.
+Iteration 1B makes no automatic architecture-generation claim. Plans and Git history
+views also remain later work.

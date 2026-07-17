@@ -69,6 +69,24 @@ const expectedBaseline: BaselineSummary = Object.freeze({
   statusCounts: Object.freeze({ ambiguous: 8, constraint: 17, edge: 53, partial: 9 }),
 });
 
+const expectedRootContract = Object.freeze(
+  [
+    { name: "Canonical Persistence", seed: "canonical-persistence", type: "domain" },
+    { name: "CLI, Service, and Web Surfaces", seed: "surfaces", type: "domain" },
+    { name: "Core", seed: "core", type: "domain" },
+    { name: "Official Host", seed: "official-host", type: "domain" },
+    { name: "Planning and History", seed: "planning-history", type: "domain" },
+    { name: "Plugin Development", seed: "plugin-development", type: "domain" },
+    { name: "Projection", seed: "projection", type: "domain" },
+    {
+      name: "Scanning and Reconciliation",
+      seed: "scanning-reconciliation",
+      type: "domain",
+    },
+    { name: "Standard Blueprint Model", seed: "standard-blueprint-model", type: "domain" },
+  ].sort((left, right) => compareText(left.name, right.name)),
+);
+
 interface JsonEnvelope {
   readonly command: string;
   readonly exitCode: number;
@@ -104,6 +122,7 @@ interface Component {
   readonly kind: "component";
   readonly label?: string;
   readonly lifecycle?: string;
+  readonly name?: string;
   readonly outputs?: readonly StandardItem[];
   readonly parent?: string;
   readonly summary?: string;
@@ -595,6 +614,32 @@ function assertExpectedBaseline(summary: BaselineSummary): void {
   assert.deepEqual(summary, expectedBaseline);
 }
 
+function assertCanonicalOrientation(items: readonly ExportItem[], architecture: string): void {
+  const roots = items
+    .filter((item) => item.component.parent === undefined)
+    .map((item) => ({
+      name: item.component.name,
+      seed: item.component.extensions["groma.md/seed-key"],
+      type: item.component.type,
+    }))
+    .sort((left, right) => compareText(left.name ?? "", right.name ?? ""));
+  assert.deepEqual(roots, expectedRootContract, "canonical root orientation changed");
+  assert.ok(
+    architecture.includes("The self-blueprint contains nine root components:"),
+    "ARCHITECTURE.md no longer introduces the nine canonical roots",
+  );
+  for (const root of expectedRootContract) {
+    assert.ok(
+      architecture.includes(`| ${root.name}`),
+      `ARCHITECTURE.md does not name canonical root ${root.name}`,
+    );
+  }
+  assert.ok(
+    architecture.includes("canonical workspace under [`groma/`](groma/)"),
+    "ARCHITECTURE.md must point readers to canonical groma/",
+  );
+}
+
 async function exerciseReportBaselineWithSupportedEdit(
   executable: string,
   temporaryRoot: string,
@@ -651,6 +696,10 @@ try {
   await requireMissing(cacheRoot);
 
   const first = await exportAll(options.executable, workspace);
+  assertCanonicalOrientation(
+    first.items,
+    await readFile(path.join(projectRoot, "ARCHITECTURE.md"), "utf8"),
+  );
   const firstSummary = integrityAudit(first.items);
   if (!options.reportBaseline) assertExpectedBaseline(firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
