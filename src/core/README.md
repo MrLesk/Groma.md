@@ -122,12 +122,17 @@ Hosts publish this partial-read contract independently from the complete
 `ProjectionIndexCapability`; the official Host uses `groma.projection-read/v1` and
 `groma.projection-index/v1` respectively, so a query consumer cannot mistake an
 index-only provider for a bounded-read provider.
-`GraphQueryEngineCapability` builds the
-public exact, filtered, full-text, and bounded traversal shapes on those reads and the
-cursor contracts. Traversal results describe one discovered relation, its orientation,
-the originating entity, reached entity, and breadth-first depth. Core knows neither an
-index encoding nor a database API; replaceable providers implement partial reads while
-the shared engine owns query semantics.
+`GraphQueryEngineCapability` builds the public exact, filtered, full-text, and bounded
+traversal shapes on those reads and the cursor contracts. A caller first captures one
+`ProjectionReadIdentity` through `identity()`, then supplies that exact generation and
+fingerprint to every data-bearing query in the logical read. The capability also exposes
+one immutable construction-captured `maxPageSize`, so callers can bound internal paging
+without learning provider storage details. Query engines never choose a newer identity
+inside a data-bearing call: every partial provider read is served under the caller's
+selected identity or fails closed. Traversal results describe one discovered relation,
+its orientation, the originating entity, reached entity, and breadth-first depth. Core
+knows neither an index encoding nor a database API; replaceable providers implement
+partial reads while the shared engine owns query semantics.
 
 Every bounded collection or traversal request supplies a positive safe limit no
 greater than the configured maximum. Providers remain responsible for executing a

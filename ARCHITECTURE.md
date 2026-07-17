@@ -678,13 +678,17 @@ fresh Host detects direct file edits before serving a projection.
 - **Relationships:** Uses Projection Index; serves Application Operations, Graph
   Comparator, and Application Service.
 
-The first engine is a replaceable `groma.graph-query/v1` capability. Its plugin requires
+The first engine is a replaceable `groma.graph-query/v2` capability. Its plugin requires
 only `groma.projection-read/v1`, never the complete `groma.projection-index/v1`
 materialization contract. Core defines only
 storage-neutral requests and results: exact entity reads, kind-filtered entity pages,
 normalized full-text entity pages, and relationship traversal by incoming, outgoing,
 or both directions, optional relation type, and bounded breadth-first depth. The
-official Persistence implementation consumes only Core's partial
+engine exposes a construction-captured immutable page bound. A caller captures one
+generation/fingerprint identity for a logical read and supplies it explicitly to every
+data-bearing query; the engine never silently advances that read to a newer identity.
+The fingerprint is continuity evidence and does not become public blueprint meaning.
+The official Persistence implementation consumes only Core's partial
 `ProjectionReadCapability`; it never opens canonical Markdown, requests a complete
 projection snapshot, or knows a resource locator. The local file provider and a future
 database provider implement the same exact-identity, exact live catalog evidence,
@@ -939,13 +943,25 @@ Surfaces never write stores directly. They call shared application operations.
 - **Relationships:** Uses Core, Standard Model, Projection, Query Engine, scanning, and
   planning capabilities; called by CLI and Application Service.
 
-One blueprint export page is a self-contained bounded aggregate. Each item carries one
-canonical Standard Model component plus every outgoing depth-1 Standard relationship
-from that component. Application pages those relationships
-sequentially inside the operation, enforces one generation and one page-wide relationship
-bound, and exposes only the query engine's fingerprint-bound component cursor. Search
-and traversal keep their own one-page cursors for independent exploration; neither is a
-second phase of export.
+One blueprint export page is a self-contained bounded aggregate ordered by ascending
+stable component identity. Each item carries one canonical Standard Model component plus
+every outgoing depth-1 Standard relationship from that component. Application pages
+those relationships sequentially inside the operation, enforces one generation and one
+page-wide relationship bound, and exposes only the query engine's fingerprint-bound
+component cursor. Each internal relationship request is bounded by the smaller of the
+engine's immutable page bound and the remaining relationship budget, independently of
+the caller's component page limit. Application captures one identity before the
+component page and reuses it for that page and every internal traversal; a
+same-generation branch switch therefore fails closed. Search and traversal keep their
+own one-page cursors for independent exploration; neither is a second phase of export.
+Traversal order remains breadth-first depth and then stable relationship identity.
+
+The official shared operation surface is published only as `groma.operations/v2`.
+Official full-workspace and blueprint registrations require that v2 identity; no v1
+operation or graph-query adapters are published. The Host lifecycle recognizes the exact
+legacy v1 operations object only as a narrow initialization compatibility shape, captures
+only its `initialize` method, and never promotes that object into v2 workspace or
+blueprint operations.
 
 #### CLI Surface
 

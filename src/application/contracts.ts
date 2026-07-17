@@ -219,7 +219,10 @@ export interface ComponentPage {
   readonly nextCursor?: ContinuationCursor;
 }
 
-/** Projection-backed component page without canonical resource revisions. */
+/**
+ * Projection-backed component page without canonical resource revisions.
+ * Items are ordered by ascending stable component identity.
+ */
 export interface BlueprintComponentPage {
   readonly generation: GraphGeneration;
   readonly hasMore: boolean;
@@ -249,7 +252,10 @@ export interface BlueprintTraversalHit {
   readonly relationship: StandardRelationship;
 }
 
-/** One bounded page from a deterministic projection-backed relationship traversal. */
+/**
+ * One bounded page from a deterministic projection-backed relationship traversal.
+ * Hits are ordered by breadth-first depth and then stable relationship identity.
+ */
 export interface BlueprintTraversalPage {
   readonly generation: GraphGeneration;
   readonly hasMore: boolean;

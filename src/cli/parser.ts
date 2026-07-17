@@ -80,7 +80,7 @@ function blueprintCommand(args: readonly string[]): CliCommand | undefined {
   }
   if (action === "search") {
     const text = rest[0];
-    if (text === undefined || text.length === 0 || text.length > 4_096 || text.startsWith("--")) {
+    if (text === undefined || text.length === 0 || text.length > 4_096) {
       return undefined;
     }
     const request = page(rest.slice(1), "--limit", "--cursor");

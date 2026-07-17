@@ -14,6 +14,10 @@ describe("CLI provisional grammar", () => {
         { kind: "blueprint-search", limit: 5, text: "order lifecycle" },
       ],
       [
+        ["blueprint", "search", "--legacy", "--limit", "1"],
+        { kind: "blueprint-search", limit: 1, text: "--legacy" },
+      ],
+      [
         [
           "blueprint",
           "traverse",

@@ -508,6 +508,18 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     [
       [
         "createComponent",
+        "getComponent",
+        "initialize",
+        "listChildren",
+        "listComponents",
+        "listRoots",
+        "mergeComponent",
+        "removeComponent",
+        "reparentComponent",
+        "updateComponent",
+      ],
+      [
+        "createComponent",
         "exportBlueprint",
         "getComponent",
         "initialize",
@@ -525,10 +537,10 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     "invalid-host-composition",
     "Application operations",
   );
+  const expanded = operations.ok && Object.hasOwn(operations.value, "exportBlueprint");
   if (
     !operations.ok ||
     typeof operations.value.createComponent !== "function" ||
-    typeof operations.value.exportBlueprint !== "function" ||
     typeof operations.value.getComponent !== "function" ||
     typeof operations.value.initialize !== "function" ||
     typeof operations.value.listChildren !== "function" ||
@@ -537,9 +549,11 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     typeof operations.value.mergeComponent !== "function" ||
     typeof operations.value.removeComponent !== "function" ||
     typeof operations.value.reparentComponent !== "function" ||
-    typeof operations.value.searchBlueprint !== "function" ||
-    typeof operations.value.traverseBlueprint !== "function" ||
-    typeof operations.value.updateComponent !== "function"
+    typeof operations.value.updateComponent !== "function" ||
+    (expanded &&
+      (typeof operations.value.exportBlueprint !== "function" ||
+        typeof operations.value.searchBlueprint !== "function" ||
+        typeof operations.value.traverseBlueprint !== "function"))
   ) {
     return failure(diagnostic("invalid-host-composition", "Application operations are malformed"));
   }

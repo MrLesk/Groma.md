@@ -277,9 +277,18 @@ is preserved unchanged.
 [`projection-query-engine.ts`](projection-query-engine.ts) implements Core's bounded
 graph-query capability over `ProjectionReadCapability` alone. It never imports or reads
 Markdown stores, resource locators, canonical component documents, or complete
-projection snapshots. Exact reads resolve both live IDs and canonical alias chains.
-Every exact result echoes the provider generation/fingerprint and the engine rejects a
-replacement provider that answers under a different identity.
+projection snapshots. Construction copies and validates its bounds, captures the partial
+provider receiver and methods once, and publishes a frozen capability whose
+`maxPageSize` cannot drift with caller-owned option objects. Construction rejects an
+advertised page maximum that the injected genuine Core bounded-query contracts do not
+accept, so `maxPageSize` always describes a usable public limit. A logical caller flow
+reads one frozen generation/fingerprint through `identity()` and passes it explicitly to
+every exact, entity-page, search, and traversal call. Data-bearing methods never call
+`identity()` internally; every partial provider access receives the copied expected
+identity, and every response must echo it exactly. Exact reads resolve both live IDs and
+canonical alias chains, while a replacement provider that answers under another
+generation or same-generation fingerprint fails closed before a public result is
+stamped.
 Entity pages scan bounded stable-ID catalog chunks, then fetch selected live records in
 one same-identity bounded batch; `kind: component` is the Standard Model component page.
 On resume, one exact live catalog entry proves that the cursor anchor still satisfies the
@@ -307,7 +316,9 @@ relation ID. Resumption deterministically recomputes the bounded order and requi
 anchor exactly once; `cursor-anchor-mismatch`, `cursor-query-mismatch`, and
 `stale-cursor` fail closed rather than guessing. Generation mismatch wins when both the
 generation and fingerprint changed, while same-generation fingerprint or query drift
-remains `cursor-query-mismatch`.
+remains `cursor-query-mismatch`. Entity and search pages remain ordered by stable entity
+identity; traversal pages remain ordered by breadth-first depth and then stable relation
+identity, independent of provider chunking.
 
 Core's query contracts and the official engine share derived context and cursor ceilings
 of 2,504 and 3,864 characters. The cursor derivation includes the exact worst case where

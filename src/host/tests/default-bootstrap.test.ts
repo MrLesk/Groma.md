@@ -337,8 +337,11 @@ describe("default bootstrap registry", () => {
         )
       : undefined;
     expect(expectedProjection).toBeDefined();
+    const queryIdentity = await composed.value.queryEngine.identity();
+    if (!queryIdentity.ok) throw new Error("expected graph-query identity");
     expect(
       await composed.value.queryEngine.searchEntities(
+        queryIdentity.value,
         { kind: "component", text: "projected component" },
         { limit: 1 },
       ),
@@ -370,6 +373,7 @@ describe("default bootstrap registry", () => {
     expect(maximumTermSearch.length).toBe(255);
     expect(
       await composed.value.queryEngine.searchEntities(
+        queryIdentity.value,
         { kind: "component", text: maximumTermSearch },
         { limit: 1 },
       ),
@@ -444,6 +448,10 @@ describe("default bootstrap registry", () => {
         .find((plugin) => plugin.id === "official.application")
         ?.requires.map((item) => item.id),
     ).toContain(defaultHostCapabilityIds.queryEngine);
+    expect(defaultHostCapabilityIds.operations).toBe("groma.operations/v2");
+    expect(defaultHostCapabilityIds.queryEngine).toBe("groma.graph-query/v2");
+    expect(composed.value.plugins?.capabilities("groma.operations/v1", "1.0.0")).toEqual([]);
+    expect(composed.value.plugins?.capabilities("groma.graph-query/v1", "1.0.0")).toEqual([]);
     expect(projectionRequirements("official.query-engine")).toEqual([
       defaultHostCapabilityIds.projectionRead,
     ]);
@@ -541,17 +549,18 @@ describe("default bootstrap registry", () => {
     if (expected === undefined) throw new Error("expected projected component fixture");
 
     failCheckpoint = true;
-    expect(
-      await composed.value.queryEngine.searchEntities(
-        { kind: "component", text: "checkpoint component" },
-        { limit: 1 },
-      ),
-    ).toMatchObject({ diagnostics: [{ code: "graph-query-unavailable" }], ok: false });
+    expect(await composed.value.queryEngine.identity()).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
     expect(writesAfterFault).toBe(0);
 
     failCheckpoint = false;
+    const queryIdentity = await composed.value.queryEngine.identity();
+    if (!queryIdentity.ok) throw new Error("expected graph-query identity");
     expect(
       await composed.value.queryEngine.searchEntities(
+        queryIdentity.value,
         { kind: "component", text: "checkpoint component" },
         { limit: 1 },
       ),

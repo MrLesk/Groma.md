@@ -96,6 +96,27 @@ function applicationOperations(
   };
 }
 
+function legacyApplicationOperations(
+  initialize: ApplicationOperations["initialize"] = async () =>
+    failure({ code: "unused", message: "unused" }),
+): ApplicationOperations {
+  const unused = async (): Promise<never> => {
+    throw new Error("unused application operation");
+  };
+  return {
+    createComponent: unused,
+    getComponent: unused,
+    initialize,
+    listChildren: unused,
+    listComponents: unused,
+    listRoots: unused,
+    mergeComponent: unused,
+    removeComponent: unused,
+    reparentComponent: unused,
+    updateComponent: unused,
+  } as unknown as ApplicationOperations;
+}
+
 function composition(
   surface: HostSurface,
   workspaceAccess: WorkspaceAccessCapability,
@@ -556,6 +577,104 @@ describe("host lifecycle", () => {
     expect(workspaceGate).toEqual({
       diagnostics: [{ code: "unused", message: "unused" }],
       ok: false,
+    });
+  });
+
+  test("accepts exact legacy v1 operations solely for missing-workspace initialization", async () => {
+    let initializeCalls = 0;
+    let initializationKeys: PropertyKey[] = [];
+    const operations = legacyApplicationOperations(async () => {
+      initializeCalls += 1;
+      return success({ generation: generation(1), status: "initialized" });
+    });
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: async (context) => {
+              initializationKeys = Reflect.ownKeys(context.initialization);
+              expect(await context.initialization.initialize({})).toEqual({
+                ok: true,
+                value: { generation: generation(1), status: "initialized" },
+              });
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "missing" }),
+          operations,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(initializeCalls).toBe(1);
+    expect(initializationKeys).toEqual(["initialize"]);
+  });
+
+  test("keeps exact legacy v1 operations initialization-only after ready recovery", async () => {
+    let initializeCalls = 0;
+    let initializationKeys: PropertyKey[] = [];
+    let exposesOperations = true;
+    let recoveryStatus: string | undefined;
+    const operations = legacyApplicationOperations(async () => {
+      initializeCalls += 1;
+      return success({ generation: generation(1), status: "initialized" });
+    });
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: (context) => {
+              initializationKeys = Reflect.ownKeys(context.initialization);
+              exposesOperations = Object.hasOwn(context, "operations");
+              recoveryStatus = context.recovery.status;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "ready" }),
+          operations,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect({ exposesOperations, initializationKeys, recoveryStatus }).toEqual({
+      exposesOperations: false,
+      initializationKeys: ["initialize"],
+      recoveryStatus: "completed",
+    });
+    expect(initializeCalls).toBe(0);
+  });
+
+  test("rejects partial legacy operation expansions instead of treating them as v2", async () => {
+    const operations = {
+      ...legacyApplicationOperations(),
+      exportBlueprint: async () => failure({ code: "unused", message: "unused" }),
+    } as unknown as ApplicationOperations;
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+          workspace({ state: "missing" }),
+          operations,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-host-composition",
+          message: "Host bootstrap returned malformed capabilities",
+        },
+      ],
+      status: "startup-failure",
     });
   });
 

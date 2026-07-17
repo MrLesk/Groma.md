@@ -18,11 +18,15 @@ configured number of times if the generation changes; empty canonical state rema
 valid empty graph because bootstrap representation belongs to the host.
 
 `exportBlueprint`, `searchBlueprint`, and `traverseBlueprint` consume only the injected
-`groma.graph-query/v1` capability. Application captures its receiver and methods once,
+`groma.graph-query/v2` capability. Application captures its receiver, methods, and
+immutable public page bound once,
 settles and contains each untrusted result, retains only allowlisted diagnostics with
 application-owned messages, validates page and traversal invariants, and canonicalizes
 every entity and relation through the same snapshot-state decoder used by canonical
-reads. The component page's generation, `hasMore`, and opaque cursor are preserved
+reads. Each logical operation captures exactly one frozen generation/fingerprint
+identity and supplies it explicitly to every data-bearing query. The fingerprint remains
+an internal continuity proof and never enters the public Application result. The
+component page's generation, `hasMore`, and opaque cursor are preserved
 exactly; Application does not wrap them in another cursor or open a canonical snapshot
 to answer the projection-backed read.
 
@@ -31,13 +35,20 @@ outgoing depth-1 relationship whose source is that component. Application gather
 required traversal pages sequentially inside the same export operation, requires every
 internal page to match the component page generation, rejects duplicate or non-advancing
 relationship pages, and caps the page-wide relationship aggregate at the configured
-relationship bound. One incremental structural-value budget also covers the complete
-export page across its components and accumulated relationships. The internal traversal
-cursor never escapes. A complete current blueprint therefore requires only paging
-`exportBlueprint` through its fingerprint-bound component cursor; a stale generation or
-same-generation projection mismatch requires restarting the export. Public search and
+relationship bound. Each internal relationship request uses the smaller of the query
+engine's immutable page bound and the remaining relationship budget; it is independent
+of the caller's component-page limit. One incremental structural-value budget also
+covers the complete export page across its components and accumulated relationships. The
+internal traversal cursor never escapes. A complete current blueprint therefore requires
+only paging `exportBlueprint` through its fingerprint-bound component cursor; a stale
+generation or same-generation projection mismatch requires restarting the export. Public search and
 traversal remain independent one-page exploration operations and never follow their
 surface cursors implicitly.
+
+Projection-backed component and export pages are ordered by ascending stable component
+identity. Traversal pages preserve deterministic breadth-first depth and then stable
+relationship identity. Application validates that order rather than introducing a
+second presentation-specific ordering rule.
 
 `createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
 provider snapshot state. `ApplicationOperationsOptions` requires that explicit

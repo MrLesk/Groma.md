@@ -3,6 +3,7 @@ import {
   parseContentRevision,
   parseEntityId,
   parseGraphGeneration,
+  parseProjectionCanonicalFingerprint,
   parseRelationId,
   parseResourceKey,
   success,
@@ -19,6 +20,7 @@ import {
   type GraphSnapshot,
   type GraphTraversalQuery,
   type PreparedBoundedQuery,
+  type ProjectionReadIdentity,
   type ResourceKey,
   type Result,
   type TransactionOutcome,
@@ -100,6 +102,8 @@ type ComponentFilter = (state: ReadSnapshot) => (component: StandardComponent) =
 interface ApplicationCapabilityCalls {
   readonly aliasResourceMapper?: NonNullable<ApplicationOperationsOptions["aliasResourceMapper"]>;
   readonly exactGraphEntity: ApplicationOperationsOptions["graphQueries"]["exactEntity"];
+  readonly graphQueryIdentity: ApplicationOperationsOptions["graphQueries"]["identity"];
+  readonly graphQueryMaxPageSize: number;
   readonly initialize: ApplicationOperationsOptions["initialization"]["initialize"];
   readonly graphQueries: ApplicationOperationsOptions["graphQueries"];
   readonly pageGraphEntities: ApplicationOperationsOptions["graphQueries"]["pageEntities"];
@@ -116,6 +120,16 @@ interface ApplicationCapabilityCalls {
   readonly execute: ApplicationOperationsOptions["transactionExecution"]["execute"];
   readonly transactionExecution: ApplicationOperationsOptions["transactionExecution"];
   readonly initialization: ApplicationOperationsOptions["initialization"];
+}
+
+interface CapturedGraphQueryEngineCalls {
+  readonly exactGraphEntity: ApplicationOperationsOptions["graphQueries"]["exactEntity"];
+  readonly graphQueryIdentity: ApplicationOperationsOptions["graphQueries"]["identity"];
+  readonly graphQueryMaxPageSize: number;
+  readonly graphQueries: ApplicationOperationsOptions["graphQueries"];
+  readonly pageGraphEntities: ApplicationOperationsOptions["graphQueries"]["pageEntities"];
+  readonly searchGraphEntities: ApplicationOperationsOptions["graphQueries"]["searchEntities"];
+  readonly traverseGraphRelations: ApplicationOperationsOptions["graphQueries"]["traverseRelations"];
 }
 
 interface ApplicationOperationsContext extends ApplicationOperationsOptions {
@@ -381,6 +395,7 @@ function validateSnapshotStateDecoder(
 
 function captureApplicationCapabilityCalls(
   options: ApplicationOperationsOptions,
+  graphQueryCalls: CapturedGraphQueryEngineCalls,
 ): ApplicationCapabilityCalls {
   const calls: ApplicationCapabilityCalls = {
     ...(options.aliasResourceMapper === undefined
@@ -390,25 +405,28 @@ function captureApplicationCapabilityCalls(
           resourceForAliases: options.aliasResourceMapper.resourceForAliases,
         }),
     execute: options.transactionExecution.execute,
-    exactGraphEntity: options.graphQueries.exactEntity,
-    graphQueries: options.graphQueries,
+    exactGraphEntity: graphQueryCalls.exactGraphEntity,
+    graphQueryIdentity: graphQueryCalls.graphQueryIdentity,
+    graphQueryMaxPageSize: graphQueryCalls.graphQueryMaxPageSize,
+    graphQueries: graphQueryCalls.graphQueries,
     initialization: options.initialization,
     initialize: options.initialization.initialize,
-    pageGraphEntities: options.graphQueries.pageEntities,
+    pageGraphEntities: graphQueryCalls.pageGraphEntities,
     queries: options.queries,
     resourceForComponent: options.resourceMapper.resourceForComponent,
     resourceMapper: options.resourceMapper,
     snapshot: options.transactionProvider.snapshot,
-    searchGraphEntities: options.graphQueries.searchEntities,
+    searchGraphEntities: graphQueryCalls.searchGraphEntities,
     transactionExecution: options.transactionExecution,
     transactionProvider: options.transactionProvider,
-    traverseGraphRelations: options.graphQueries.traverseRelations,
+    traverseGraphRelations: graphQueryCalls.traverseGraphRelations,
   };
   for (const [name, value] of Object.entries(calls)) {
     if (
       name !== "initialization" &&
       name !== "aliasResourceMapper" &&
       name !== "graphQueries" &&
+      name !== "graphQueryMaxPageSize" &&
       name !== "queries" &&
       name !== "resourceMapper" &&
       name !== "transactionExecution" &&
@@ -424,7 +442,8 @@ function captureApplicationCapabilityCalls(
 function validateGraphQueryEngineReceiver(
   graphQueries: unknown,
   isProxy: (value: unknown) => boolean,
-): asserts graphQueries is GraphQueryEngineCapability {
+  maximumPageSize: number,
+): CapturedGraphQueryEngineCalls {
   if (typeof graphQueries !== "object" || graphQueries === null) {
     throw new TypeError("graphQueries must be a GraphQueryEngineCapability");
   }
@@ -432,11 +451,49 @@ function validateGraphQueryEngineReceiver(
   try {
     recognizedProxy = isProxy(graphQueries);
   } catch {
-    // Capability results apply the same detector again before any reflection.
+    // Exact descriptor inspection below still fails closed for observable hostile shapes.
   }
-  if (recognizedProxy) {
-    throw new TypeError("graphQueries must not be a proxy");
+  if (recognizedProxy) throw new TypeError("graphQueries must not be a proxy");
+  const inspected = inspectExactRecord(
+    graphQueries,
+    [
+      [
+        "exactEntity",
+        "identity",
+        "maxPageSize",
+        "pageEntities",
+        "searchEntities",
+        "traverseRelations",
+      ],
+    ],
+    "graph-query-unavailable",
+    "Graph query engine",
+  );
+  if (
+    !inspected.ok ||
+    typeof inspected.value.exactEntity !== "function" ||
+    typeof inspected.value.identity !== "function" ||
+    typeof inspected.value.pageEntities !== "function" ||
+    typeof inspected.value.searchEntities !== "function" ||
+    typeof inspected.value.traverseRelations !== "function" ||
+    typeof inspected.value.maxPageSize !== "number" ||
+    !Number.isSafeInteger(inspected.value.maxPageSize) ||
+    inspected.value.maxPageSize <= 0 ||
+    inspected.value.maxPageSize > maximumPageSize
+  ) {
+    throw new TypeError("graphQueries must be an exact bounded GraphQueryEngineCapability");
   }
+  return Object.freeze({
+    exactGraphEntity: inspected.value.exactEntity as GraphQueryEngineCapability["exactEntity"],
+    graphQueryIdentity: inspected.value.identity as GraphQueryEngineCapability["identity"],
+    graphQueryMaxPageSize: inspected.value.maxPageSize,
+    graphQueries: graphQueries as GraphQueryEngineCapability,
+    pageGraphEntities: inspected.value.pageEntities as GraphQueryEngineCapability["pageEntities"],
+    searchGraphEntities: inspected.value
+      .searchEntities as GraphQueryEngineCapability["searchEntities"],
+    traverseGraphRelations: inspected.value
+      .traverseRelations as GraphQueryEngineCapability["traverseRelations"],
+  });
 }
 
 function validateBoundedQueryReceiver(
@@ -2422,17 +2479,11 @@ const graphQueryDiagnosticMessages = Object.freeze({
   "cursor-query-mismatch": "The continuation cursor belongs to a different query",
   "entity-scan-bound-exceeded": "The bounded entity query exceeded its work budget",
   "graph-query-unavailable": "The bounded graph query engine is unavailable",
-  "invalid-bounded-query-request": "The bounded graph query request is malformed",
-  "invalid-entity-id": "The component identity is malformed",
   "invalid-entity-kind": "The component kind filter is malformed",
-  "invalid-graph-entity-query": "The component query is malformed",
-  "invalid-graph-search-query": "The component search query is malformed",
-  "invalid-graph-traversal-query": "The component traversal query is malformed",
   "invalid-page-limit": "The bounded graph query page limit is invalid",
   "invalid-relation-type": "The relationship type filter is malformed",
   "invalid-search-text": "The component search text is invalid",
   "invalid-traversal-depth": "The relationship traversal depth is invalid",
-  "invalid-traversal-direction": "The relationship traversal direction is invalid",
   "malformed-continuation-cursor": "The continuation cursor is malformed",
   "query-context-too-large": "The bounded graph query context exceeds its size budget",
   "stale-cursor": "The continuation cursor belongs to a different graph generation",
@@ -2451,7 +2502,7 @@ function graphQueryUnavailable<T>(): Result<T> {
   );
 }
 
-type GraphQueryInvocationOperation = "export" | "search" | "traverse";
+type GraphQueryInvocationOperation = "export" | "identity" | "search" | "traverse";
 
 interface GraphQueryDiagnosticScope {
   readonly hasCursor: boolean;
@@ -2459,6 +2510,7 @@ interface GraphQueryDiagnosticScope {
 }
 
 function graphQueryDiagnosticAllowed(code: string, scope: GraphQueryDiagnosticScope): boolean {
+  if (scope.operation === "identity") return code === "graph-query-unavailable";
   if (
     code === "graph-query-unavailable" ||
     code === "invalid-page-limit" ||
@@ -2580,6 +2632,38 @@ async function invokeGraphQueryCapability(
     return diagnostics.ok ? frozenFailure(...diagnostics.value) : diagnostics;
   }
   return envelope.value.ok === true ? success(envelope.value.value) : graphQueryUnavailable();
+}
+
+function canonicalGraphQueryIdentity(value: unknown): Result<ProjectionReadIdentity> {
+  const identity = inspectExactRecord(
+    value,
+    [["fingerprint", "generation"]],
+    "graph-query-unavailable",
+    "Graph query identity",
+  );
+  if (!identity.ok) return graphQueryUnavailable();
+  const generation = parseGraphGeneration(identity.value.generation);
+  const fingerprint = parseProjectionCanonicalFingerprint(identity.value.fingerprint);
+  return generation.ok && fingerprint.ok
+    ? success(
+        Object.freeze({
+          fingerprint: fingerprint.value,
+          generation: generation.value,
+        }),
+      )
+    : graphQueryUnavailable();
+}
+
+async function projectedGraphQueryIdentity(
+  options: ApplicationOperationsContext,
+): Promise<Result<ProjectionReadIdentity>> {
+  const invoked = await invokeGraphQueryCapability(
+    options.calls.graphQueryIdentity,
+    [],
+    Object.freeze({ hasCursor: false, operation: "identity" }),
+    options,
+  );
+  return invoked.ok ? canonicalGraphQueryIdentity(invoked.value) : invoked;
 }
 
 function graphPageRequest(
@@ -2834,6 +2918,7 @@ function canonicalGraphRelationship(
 }
 
 async function projectedComponentPage(
+  identity: ProjectionReadIdentity,
   method:
     | ApplicationOperationsOptions["graphQueries"]["pageEntities"]
     | ApplicationOperationsOptions["graphQueries"]["searchEntities"],
@@ -2844,7 +2929,7 @@ async function projectedComponentPage(
 ): Promise<Result<BlueprintComponentPage>> {
   const invoked = await invokeGraphQueryCapability(
     method,
-    [query, request],
+    [identity, query, request],
     Object.freeze({ hasCursor: request.cursor !== undefined, operation }),
     options,
   );
@@ -2856,6 +2941,7 @@ async function projectedComponentPage(
     options,
   );
   if (!page.ok) return page;
+  if (page.value.generation !== identity.generation) return graphQueryUnavailable();
   const items: StandardComponent[] = [];
   let previous: string | undefined;
   for (let index = 0; index < page.value.items.length; index += 1) {
@@ -2877,6 +2963,7 @@ async function projectedComponentPage(
 }
 
 async function projectedTraversalPage(
+  identity: ProjectionReadIdentity,
   query: GraphTraversalQuery,
   request: BoundedPageRequest,
   options: ApplicationOperationsContext,
@@ -2884,7 +2971,7 @@ async function projectedTraversalPage(
 ): Promise<Result<BlueprintTraversalPage>> {
   const invoked = await invokeGraphQueryCapability(
     options.calls.traverseGraphRelations,
-    [query, request],
+    [identity, query, request],
     Object.freeze({ hasCursor: request.cursor !== undefined, operation: "traverse" }),
     options,
   );
@@ -2895,24 +2982,34 @@ async function projectedTraversalPage(
     options.bounds.maxRelationships,
     options,
   );
-  if (!page.ok) return page;
+  if (!page.ok || page.value.generation !== identity.generation) {
+    return graphQueryUnavailable();
+  }
   let canonicalRoot = expectedRoot;
   if (canonicalRoot === undefined) {
     const invokedRoot = await invokeGraphQueryCapability(
       options.calls.exactGraphEntity,
-      [query.entity],
+      [identity, query.entity],
       Object.freeze({ hasCursor: false, operation: "traverse" }),
       options,
     );
     if (!invokedRoot.ok) return invokedRoot;
     const root = canonicalExactGraphComponent(invokedRoot.value, options);
-    if (!root.ok || root.value.generation !== page.value.generation) {
+    if (
+      !root.ok ||
+      root.value.generation !== identity.generation ||
+      root.value.generation !== page.value.generation
+    ) {
       return graphQueryUnavailable();
     }
     canonicalRoot = root.value.component.id;
   }
   const items: BlueprintTraversalHit[] = [];
   const relations = new Set<string>();
+  const validateFrontier = request.cursor === undefined;
+  const visitedEntities = new Set<string>(canonicalRoot === undefined ? [] : [canonicalRoot]);
+  let frontier = new Set<string>(canonicalRoot === undefined ? [] : [canonicalRoot]);
+  let nextFrontier = new Set<string>();
   let previousDepth: number | undefined;
   let previousRelation: string | undefined;
   for (let index = 0; index < page.value.items.length; index += 1) {
@@ -2941,8 +3038,13 @@ async function projectedTraversalPage(
     const component = canonicalGraphComponent(hit.value.entity, options);
     const relationship = canonicalGraphRelationship(hit.value.relation, options);
     if (!from.ok || !component.ok || !relationship.ok) return graphQueryUnavailable();
+    if (validateFrontier && previousDepth !== undefined && hit.value.depth > previousDepth) {
+      frontier = nextFrontier;
+      nextFrontier = new Set<string>();
+    }
     if (
       (hit.value.depth === 1 && from.value !== canonicalRoot) ||
+      (validateFrontier && !frontier.has(from.value)) ||
       (hit.value.depth === previousDepth &&
         previousRelation !== undefined &&
         previousRelation >= relationship.value.id) ||
@@ -2957,6 +3059,10 @@ async function projectedTraversalPage(
       hit.value.direction === "incoming" ? relationship.value.source : relationship.value.target;
     if (expectedFrom !== from.value || expectedNeighbor !== component.value.id) {
       return graphQueryUnavailable();
+    }
+    if (validateFrontier && !visitedEntities.has(component.value.id)) {
+      visitedEntities.add(component.value.id);
+      nextFrontier.add(component.value.id);
     }
     relations.add(relationship.value.id);
     previousDepth = hit.value.depth;
@@ -3040,10 +3146,14 @@ export function createApplicationOperations(
   const metadata = validateSnapshotStateDecoder(captured);
   const frozenOptions = freezeApplicationOperationsOptions(captured);
   validateBoundedQueryReceiver(frozenOptions.queries, metadata.isProxy);
-  validateGraphQueryEngineReceiver(frozenOptions.graphQueries, metadata.isProxy);
+  const graphQueryCalls = validateGraphQueryEngineReceiver(
+    frozenOptions.graphQueries,
+    metadata.isProxy,
+    Math.max(absoluteBounds.maxComponents, absoluteBounds.maxRelationships),
+  );
   const options: ApplicationOperationsContext = Object.freeze({
     ...frozenOptions,
-    calls: captureApplicationCapabilityCalls(frozenOptions),
+    calls: captureApplicationCapabilityCalls(frozenOptions, graphQueryCalls),
     isProxy: metadata.isProxy,
   });
 
@@ -3094,7 +3204,10 @@ export function createApplicationOperations(
       options,
     );
     if (!page.ok) return page;
+    const identity = await projectedGraphQueryIdentity(options);
+    if (!identity.ok) return identity;
     const components = await projectedComponentPage(
+      identity.value,
       options.calls.pageGraphEntities,
       Object.freeze({ kind: STANDARD_COMPONENT_KIND }),
       page.value,
@@ -3102,6 +3215,7 @@ export function createApplicationOperations(
       options,
     );
     if (!components.ok) return components;
+    if (components.value.generation !== identity.value.generation) return graphQueryUnavailable();
     const items: BlueprintExportItem[] = [];
     const exportedRelationshipIds = new Set<string>();
     const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
@@ -3126,9 +3240,10 @@ export function createApplicationOperations(
         const remaining = options.bounds.maxRelationships - exportedRelationshipIds.size;
         const traversalRequest = Object.freeze({
           ...(traversalCursor === undefined ? {} : { cursor: traversalCursor }),
-          limit: Math.max(1, Math.min(page.value.limit, Math.max(1, remaining))),
+          limit: remaining === 0 ? 1 : Math.min(options.calls.graphQueryMaxPageSize, remaining),
         });
         const traversal = await projectedTraversalPage(
+          identity.value,
           Object.freeze({
             depth: 1,
             direction: "outgoing",
@@ -3138,7 +3253,11 @@ export function createApplicationOperations(
           options,
           component.id,
         );
-        if (!traversal.ok || traversal.value.generation !== components.value.generation) {
+        if (
+          !traversal.ok ||
+          traversal.value.generation !== identity.value.generation ||
+          traversal.value.generation !== components.value.generation
+        ) {
           return graphQueryUnavailable();
         }
         for (let hitIndex = 0; hitIndex < traversal.value.items.length; hitIndex += 1) {
@@ -3210,15 +3329,18 @@ export function createApplicationOperations(
       options.bounds.maxComponents,
       options,
     );
-    return page.ok
+    if (!page.ok) return page;
+    const identity = await projectedGraphQueryIdentity(options);
+    return identity.ok
       ? projectedComponentPage(
+          identity.value,
           options.calls.searchGraphEntities,
           Object.freeze({ kind: STANDARD_COMPONENT_KIND, text: inspected.value.text }),
           page.value,
           "search",
           options,
         )
-      : page;
+      : identity;
   };
 
   const traverseBlueprint = async (
@@ -3289,7 +3411,10 @@ export function createApplicationOperations(
       entity: id.value,
       ...(relationType === undefined ? {} : { relationType }),
     });
-    return projectedTraversalPage(query, pageRequest.value, options);
+    const identity = await projectedGraphQueryIdentity(options);
+    return identity.ok
+      ? projectedTraversalPage(identity.value, query, pageRequest.value, options)
+      : identity;
   };
 
   const getComponent = async (

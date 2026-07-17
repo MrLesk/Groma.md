@@ -29,6 +29,9 @@ groma blueprint search <text> --limit N [--cursor C]
 groma blueprint traverse <id> --direction incoming|outgoing|both --depth N [--relation-type T] --limit N [--cursor C]
 ```
 
+Blueprint search treats its first fixed positional value as text even when it begins
+with `--`; options are parsed only from the remaining arguments.
+
 The CLI accepts opaque cursors up to 4,096 characters so every cursor emitted by the
 official graph query engine can be resumed. It does not parse, rewrite, or auto-follow
 them. Plain and JSON formats serialize the same semantic result object, including exact

@@ -128,6 +128,8 @@ try {
     graph,
     graphQueries: Object.freeze({
       exactEntity: async () => failure({ code: "unused", message: "unused" }),
+      identity: async () => failure({ code: "unused", message: "unused" }),
+      maxPageSize: 100,
       pageEntities: async () => failure({ code: "unused", message: "unused" }),
       searchEntities: async () => failure({ code: "unused", message: "unused" }),
       traverseRelations: async () => failure({ code: "unused", message: "unused" }),
