@@ -676,7 +676,7 @@ fresh Host detects direct file edits before serving a projection.
 - **Actions:** Search; filter by project and state; traverse incoming and outgoing
   relations; enforce page and subgraph budgets.
 - **Relationships:** Uses Projection Index; serves Application Operations, Graph
-  Comparator, CLI, and Application Service.
+  Comparator, and Application Service.
 
 The first engine is a replaceable `groma.graph-query/v1` capability. Its plugin requires
 only `groma.projection-read/v1`, never the complete `groma.projection-index/v1`
@@ -931,12 +931,21 @@ Surfaces never write stores directly. They call shared application operations.
   of surface.
 - **Inputs:** Validated operation request; expected revisions; caller presentation
   preferences.
-- **Outputs:** Domain result; bounded page; conflict or validation diagnostic; committed
-  transaction result.
-- **Actions:** Coordinate queries and mutations; enforce workspace requirements; call
-  registered invariants; return presentation-neutral results.
-- **Relationships:** Uses Core, Standard Model, Projection, scanning, and planning
-  capabilities; called by CLI and Application Service.
+- **Outputs:** Domain result; bounded component page or traversal subgraph; conflict or
+  validation diagnostic; committed transaction result.
+- **Actions:** Coordinate queries and mutations; canonicalize projection-backed graph
+  results; enforce workspace requirements; call registered invariants; return
+  presentation-neutral results.
+- **Relationships:** Uses Core, Standard Model, Projection, Query Engine, scanning, and
+  planning capabilities; called by CLI and Application Service.
+
+One blueprint export page is a self-contained bounded aggregate. Each item carries one
+canonical Standard Model component plus every outgoing depth-1 Standard relationship
+from that component. Application pages those relationships
+sequentially inside the operation, enforces one generation and one page-wide relationship
+bound, and exposes only the query engine's fingerprint-bound component cursor. Search
+and traversal keep their own one-page cursors for independent exploration; neither is a
+second phase of export.
 
 #### CLI Surface
 

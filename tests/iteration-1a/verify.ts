@@ -37,6 +37,7 @@ const ids = Object.freeze({
   freshShardCrash: "ent_ab000000000000000000000000000000",
 });
 const relationshipId = "rel_00000000000000000000000000000001";
+const maximumExpansionSearchTerm = "\u0800".repeat(255);
 
 interface VerificationOptions {
   readonly executable: string;
@@ -212,6 +213,66 @@ function componentIds(result: JsonResult): string[] {
   });
 }
 
+function blueprintComponentIds(result: JsonResult): string[] {
+  const items = valueRecord(result).items;
+  assert.ok(Array.isArray(items));
+  return items.map((item) => {
+    assert.equal(typeof item, "object");
+    assert.notEqual(item, null);
+    const id = (item as { id?: unknown }).id;
+    assert(typeof id === "string");
+    return id;
+  });
+}
+
+function exportComponentIds(result: JsonResult): string[] {
+  const items = valueRecord(result).items;
+  assert.ok(Array.isArray(items));
+  return items.map((item) => {
+    assert.equal(typeof item, "object");
+    assert.notEqual(item, null);
+    const component = (item as { component?: unknown }).component;
+    assert.equal(typeof component, "object");
+    assert.notEqual(component, null);
+    const id = (component as { id?: unknown }).id;
+    assert(typeof id === "string");
+    return id;
+  });
+}
+
+function exportRelationshipIds(result: JsonResult): string[] {
+  const items = valueRecord(result).items;
+  assert.ok(Array.isArray(items));
+  return items.flatMap((item) => {
+    assert.equal(typeof item, "object");
+    assert.notEqual(item, null);
+    const relationships = (item as { relationships?: unknown }).relationships;
+    assert.ok(Array.isArray(relationships));
+    return relationships.map((relationship) => {
+      assert.equal(typeof relationship, "object");
+      assert.notEqual(relationship, null);
+      const id = (relationship as { id?: unknown }).id;
+      assert(typeof id === "string");
+      return id;
+    });
+  });
+}
+
+function traversalRelationshipIds(result: JsonResult): string[] {
+  const items = valueRecord(result).items;
+  assert.ok(Array.isArray(items));
+  return items.map((item) => {
+    assert.equal(typeof item, "object");
+    assert.notEqual(item, null);
+    const relationship = (item as { relationship?: unknown }).relationship;
+    assert.equal(typeof relationship, "object");
+    assert.notEqual(relationship, null);
+    const id = (relationship as { id?: unknown }).id;
+    assert(typeof id === "string");
+    return id;
+  });
+}
+
 async function component(
   executable: string,
   workspaceRoot: string,
@@ -336,7 +397,12 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
 
   await success(executable, workspaceRoot, ["init"]);
   await createComponent(executable, workspaceRoot, {
-    component: { id: ids.users, name: "Users", type: "domain" },
+    component: {
+      id: ids.users,
+      intent: maximumExpansionSearchTerm,
+      name: "Users",
+      type: "domain",
+    },
   });
   await createComponent(executable, workspaceRoot, {
     component: {
@@ -358,7 +424,12 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     },
   });
   await createComponent(executable, workspaceRoot, {
-    component: { id: ids.shop, name: "Shop", type: "domain" },
+    component: {
+      id: ids.shop,
+      intent: maximumExpansionSearchTerm,
+      name: "Shop",
+      type: "domain",
+    },
   });
   const orders = await createComponent(executable, workspaceRoot, {
     component: {
@@ -449,6 +520,96 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.ok(exactOrders.stdout.includes(relationshipId));
   assert.ok(exactOrders.stdout.includes(ids.login));
 
+  const beforeBlueprintReads = await gromaSnapshot(workspaceRoot);
+  const exportedIds: string[] = [];
+  const exportedRelationshipIds: string[] = [];
+  let exportCursor: string | undefined;
+  let exportGeneration: unknown;
+  do {
+    const page = await success(executable, workspaceRoot, [
+      "blueprint",
+      "export",
+      "--limit",
+      "3",
+      ...(exportCursor === undefined ? [] : ["--cursor", exportCursor]),
+    ]);
+    exportedIds.push(...exportComponentIds(page));
+    exportedRelationshipIds.push(...exportRelationshipIds(page));
+    const value = valueRecord(page);
+    exportGeneration ??= value.generation;
+    assert.equal(value.generation, exportGeneration);
+    exportCursor = value.hasMore === true ? (value.nextCursor as string) : undefined;
+  } while (exportCursor !== undefined);
+  assert.deepEqual(exportedIds, expectedIds);
+  assert.deepEqual(exportedRelationshipIds, [relationshipId]);
+
+  const searched = await success(executable, workspaceRoot, [
+    "blueprint",
+    "search",
+    "durable ordering lifecycle",
+    "--limit",
+    "10",
+  ]);
+  assert.deepEqual(blueprintComponentIds(searched), [ids.orders]);
+  const searchedOrders = (valueRecord(searched).items as Array<Record<string, unknown>>)[0]!;
+  assert.equal(searchedOrders.intent, "Own the durable ordering lifecycle.");
+  assert.equal(searchedOrders.parent, ids.shop);
+  assert.ok(Array.isArray(searchedOrders.actions));
+  assert.ok(Array.isArray(searchedOrders.inputs));
+  assert.ok(Array.isArray(searchedOrders.outputs));
+
+  const incoming = await success(executable, workspaceRoot, [
+    "blueprint",
+    "traverse",
+    ids.login,
+    "--direction",
+    "incoming",
+    "--depth",
+    "1",
+    "--relation-type",
+    "depends-on",
+    "--limit",
+    "10",
+  ]);
+  assert.deepEqual(traversalRelationshipIds(incoming), [relationshipId]);
+  assert.ok(incoming.stdout.includes('"direction":"incoming"'));
+  assert.ok(incoming.stdout.includes(`"from":"${ids.login}"`));
+
+  const maximumSearch = await success(executable, workspaceRoot, [
+    "blueprint",
+    "search",
+    maximumExpansionSearchTerm,
+    "--limit",
+    "1",
+  ]);
+  const maximumSearchCursor = valueRecord(maximumSearch).nextCursor;
+  assert(typeof maximumSearchCursor === "string");
+  assert.ok(maximumSearchCursor.length > 2_048);
+  assert.ok(maximumSearchCursor.length <= 4_096);
+  await success(executable, workspaceRoot, [
+    "blueprint",
+    "search",
+    maximumExpansionSearchTerm,
+    "--limit",
+    "1",
+    "--cursor",
+    maximumSearchCursor,
+  ]);
+  const repeatExport = await success(executable, workspaceRoot, [
+    "blueprint",
+    "export",
+    "--limit",
+    "3",
+  ]);
+  const sameExport = await success(executable, workspaceRoot, [
+    "blueprint",
+    "export",
+    "--limit",
+    "3",
+  ]);
+  assert.equal(sameExport.stdout, repeatExport.stdout);
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeBlueprintReads);
+
   const beforeRepeat = await gromaSnapshot(workspaceRoot);
   await failure(
     executable,
@@ -490,6 +651,21 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
       id: ids.orders,
       patch: { name: "Ordering" },
     }),
+  );
+  await failure(
+    executable,
+    workspaceRoot,
+    [
+      "blueprint",
+      "search",
+      maximumExpansionSearchTerm,
+      "--limit",
+      "1",
+      "--cursor",
+      maximumSearchCursor,
+    ],
+    4,
+    "stale-cursor",
   );
   const reparented = await success(executable, workspaceRoot, [
     "component",
@@ -600,6 +776,43 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     2,
     "cli-invalid-input",
     '{"component":',
+  );
+}
+
+async function verifyExportCursorContinuity(
+  executable: string,
+  temporaryRoot: string,
+): Promise<void> {
+  const historyA = path.join(temporaryRoot, "history-a");
+  const historyB = path.join(temporaryRoot, "history-b");
+  await mkdir(historyA);
+  await mkdir(historyB);
+  for (const [workspaceRoot, suffix] of [
+    [historyA, "A"],
+    [historyB, "B"],
+  ] as const) {
+    await success(executable, workspaceRoot, ["init"]);
+    await createComponent(executable, workspaceRoot, {
+      component: { id: ids.shop, name: `Shop ${suffix}`, type: "domain" },
+    });
+    await createComponent(executable, workspaceRoot, {
+      component: { id: ids.users, name: `Users ${suffix}`, type: "domain" },
+    });
+  }
+  const first = await success(executable, historyA, ["blueprint", "export", "--limit", "1"]);
+  const firstValue = valueRecord(first);
+  assert.equal(firstValue.hasMore, true);
+  assert.equal(typeof firstValue.nextCursor, "string");
+  const historyBGeneration = valueRecord(
+    await success(executable, historyB, ["component", "list", "--limit", "2"]),
+  ).generation;
+  assert.equal(historyBGeneration, firstValue.generation);
+  await expectFailureWithoutChanges(
+    executable,
+    historyB,
+    ["blueprint", "export", "--limit", "1", "--cursor", firstValue.nextCursor as string],
+    4,
+    "cursor-query-mismatch",
   );
 }
 
@@ -825,6 +1038,8 @@ try {
   const workflowRoot = path.join(temporaryRoot, "workflow");
   await mkdir(workflowRoot);
   await verifyWorkflow(options.executable, workflowRoot);
+
+  await verifyExportCursorContinuity(options.executable, temporaryRoot);
 
   const malformedRoot = path.join(temporaryRoot, "malformed");
   await mkdir(malformedRoot);

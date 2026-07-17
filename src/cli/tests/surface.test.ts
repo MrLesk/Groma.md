@@ -52,6 +52,44 @@ function context(code: string): HostSurfaceContext {
 }
 
 describe("CLI surface", () => {
+  test("maps graph-query availability failures to infrastructure without reclassifying stale cursors", async () => {
+    for (const [code, exitCode] of [
+      ["graph-query-unavailable", CLI_EXIT.infrastructure],
+      ["stale-cursor", CLI_EXIT.semantic],
+    ] as const) {
+      const base = context("unused");
+      const unavailable = Object.freeze({
+        diagnostics: Object.freeze([Object.freeze({ code, message: "Unavailable" })]),
+        ok: false as const,
+      });
+      const operations = Object.freeze({
+        exportBlueprint: async () => unavailable,
+        listRoots: async () => unavailable,
+      });
+      const controller = createCliSurfaceController(
+        Object.freeze({
+          command: Object.freeze({ kind: "blueprint-export", limit: 1 }),
+          format: "json",
+        }),
+        { read: async () => "{}" },
+        { stdin: false, stdout: false },
+      );
+      const session = await controller.surface.start(
+        Object.freeze({
+          ...base,
+          workspace: Object.freeze({
+            ...base.workspace,
+            requireWorkspace: () =>
+              Object.freeze({ ok: true as const, value: operations as never }),
+          }),
+        }),
+      );
+      await session.completion;
+      expect(controller.result()).toMatchObject({ exitCode, ok: false });
+      await session.stop();
+    }
+  });
+
   test("distinguishes provider infrastructure from workspace conflicts", async () => {
     const invocation: CliInvocation = Object.freeze({
       command: Object.freeze({ kind: "component-roots", limit: 1 }),

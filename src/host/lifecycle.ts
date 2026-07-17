@@ -508,6 +508,7 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     [
       [
         "createComponent",
+        "exportBlueprint",
         "getComponent",
         "initialize",
         "listChildren",
@@ -516,6 +517,8 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
         "mergeComponent",
         "removeComponent",
         "reparentComponent",
+        "searchBlueprint",
+        "traverseBlueprint",
         "updateComponent",
       ],
     ],
@@ -525,6 +528,7 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
   if (
     !operations.ok ||
     typeof operations.value.createComponent !== "function" ||
+    typeof operations.value.exportBlueprint !== "function" ||
     typeof operations.value.getComponent !== "function" ||
     typeof operations.value.initialize !== "function" ||
     typeof operations.value.listChildren !== "function" ||
@@ -533,6 +537,8 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     typeof operations.value.mergeComponent !== "function" ||
     typeof operations.value.removeComponent !== "function" ||
     typeof operations.value.reparentComponent !== "function" ||
+    typeof operations.value.searchBlueprint !== "function" ||
+    typeof operations.value.traverseBlueprint !== "function" ||
     typeof operations.value.updateComponent !== "function"
   ) {
     return failure(diagnostic("invalid-host-composition", "Application operations are malformed"));

@@ -1,5 +1,6 @@
 export const CLI_MAX_ARGUMENTS = 256;
 export const CLI_MAX_ARGUMENT_CHARACTERS = 65_536;
+export const CLI_MAX_CURSOR_CHARACTERS = 4_096;
 export const CLI_MAX_INPUT_BYTES = 1_048_576;
 export const CLI_MAX_JSON_DEPTH = 30;
 export const CLI_MAX_JSON_VALUES = 10_000;
@@ -27,6 +28,26 @@ export type CliCommand =
   | { readonly kind: "version" }
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
+  | {
+      readonly cursor?: string;
+      readonly kind: "blueprint-export";
+      readonly limit: number;
+    }
+  | {
+      readonly cursor?: string;
+      readonly kind: "blueprint-search";
+      readonly limit: number;
+      readonly text: string;
+    }
+  | {
+      readonly cursor?: string;
+      readonly depth: number;
+      readonly direction: "incoming" | "outgoing" | "both";
+      readonly id: string;
+      readonly kind: "blueprint-traverse";
+      readonly limit: number;
+      readonly relationType?: string;
+    }
   | { readonly kind: "migrate-apply" | "migrate-preview" | "migrate-status" }
   | {
       readonly kind: "package-add";
@@ -135,6 +156,12 @@ export type CliInvocationResult =
 
 export function commandName(command: CliCommand): string {
   switch (command.kind) {
+    case "blueprint-export":
+      return "blueprint export";
+    case "blueprint-search":
+      return "blueprint search";
+    case "blueprint-traverse":
+      return "blueprint traverse";
     case "component-create":
       return "component create";
     case "component-get":

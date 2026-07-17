@@ -2,7 +2,7 @@ import { GraphKernel } from "../../../core/graph.ts";
 import { parseGraphGeneration } from "../../../core/generation.ts";
 import type { GraphData } from "../../../core/payload.ts";
 import { BoundedQueryContracts } from "../../../core/query.ts";
-import { success } from "../../../core/result.ts";
+import { failure, success } from "../../../core/result.ts";
 import {
   parseResourceKey,
   type ResourceKey,
@@ -126,6 +126,12 @@ try {
   const base = {
     bounds,
     graph,
+    graphQueries: Object.freeze({
+      exactEntity: async () => failure({ code: "unused", message: "unused" }),
+      pageEntities: async () => failure({ code: "unused", message: "unused" }),
+      searchEntities: async () => failure({ code: "unused", message: "unused" }),
+      traverseRelations: async () => failure({ code: "unused", message: "unused" }),
+    }),
     initialization: {
       initialize: async () => ({ generation: initialGeneration, status: "initialized" as const }),
     },

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { CLI_MAX_ARGUMENTS } from "../contracts.ts";
+import { CLI_MAX_ARGUMENTS, CLI_MAX_CURSOR_CHARACTERS } from "../contracts.ts";
 import { parseInvocation } from "../parser.ts";
 
 describe("CLI provisional grammar", () => {
@@ -8,6 +8,34 @@ describe("CLI provisional grammar", () => {
     const cases = [
       [[], { kind: "overview" }],
       [["init"], { kind: "init" }],
+      [["blueprint", "export", "--limit", "5"], { kind: "blueprint-export", limit: 5 }],
+      [
+        ["blueprint", "search", "order lifecycle", "--limit", "5"],
+        { kind: "blueprint-search", limit: 5, text: "order lifecycle" },
+      ],
+      [
+        [
+          "blueprint",
+          "traverse",
+          "ent_01",
+          "--limit",
+          "5",
+          "--relation-type",
+          "depends-on",
+          "--depth",
+          "3",
+          "--direction",
+          "both",
+        ],
+        {
+          depth: 3,
+          direction: "both",
+          id: "ent_01",
+          kind: "blueprint-traverse",
+          limit: 5,
+          relationType: "depends-on",
+        },
+      ],
       [
         [
           "package",
@@ -110,10 +138,54 @@ describe("CLI provisional grammar", () => {
       },
       ok: true,
     });
+    const maximumCursor = "c".repeat(CLI_MAX_CURSOR_CHARACTERS);
+    expect(
+      parseInvocation([
+        "blueprint",
+        "traverse",
+        "ent_01",
+        "--direction",
+        "incoming",
+        "--depth",
+        "1",
+        "--limit",
+        "1",
+        "--cursor",
+        maximumCursor,
+      ]),
+    ).toMatchObject({
+      invocation: { command: { cursor: maximumCursor, kind: "blueprint-traverse" } },
+      ok: true,
+    });
   });
 
   test("requires finite explicit pages and exact option sets", () => {
     for (const args of [
+      ["blueprint", "export"],
+      ["blueprint", "export", "--limit", "0"],
+      ["blueprint", "search", "orders"],
+      ["blueprint", "search", "--limit", "1"],
+      [
+        "blueprint",
+        "traverse",
+        "ent_01",
+        "--direction",
+        "sideways",
+        "--depth",
+        "1",
+        "--limit",
+        "1",
+      ],
+      ["blueprint", "traverse", "ent_01", "--direction", "both", "--limit", "1"],
+      ["blueprint", "traverse", "ent_01", "--direction", "both", "--depth", "0", "--limit", "1"],
+      [
+        "blueprint",
+        "export",
+        "--limit",
+        "1",
+        "--cursor",
+        "c".repeat(CLI_MAX_CURSOR_CHARACTERS + 1),
+      ],
       ["component", "list"],
       ["component", "list", "--limit", "0"],
       ["component", "list", "--limit", "101"],

@@ -36,6 +36,22 @@ async function workspace(): Promise<string> {
   return root;
 }
 
+async function fileTreeSnapshot(directory: string): Promise<readonly string[]> {
+  const entries: string[] = [];
+  const visit = async (current: string, prefix: string): Promise<void> => {
+    const children = await readdir(current, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const relative = prefix.length === 0 ? child.name : `${prefix}/${child.name}`;
+      const absolute = path.join(current, child.name);
+      if (child.isDirectory()) await visit(absolute, relative);
+      else entries.push(`${relative}:${Buffer.from(await readFile(absolute)).toString("base64")}`);
+    }
+  };
+  await visit(directory, "");
+  return Object.freeze(entries);
+}
+
 function captureOutput(): ProgramOutput & { errors: string[]; output: string[] } {
   const errors: string[] = [];
   const output: string[] = [];
@@ -213,6 +229,7 @@ describe("CLI program", () => {
     const child = "ent_00000000000000000000000000000003";
     const grandchild = "ent_00000000000000000000000000000004";
     const relationship = "rel_00000000000000000000000000000001";
+    const maximumExpansionSearchTerm = "\u0800".repeat(255);
 
     const initialized = await jsonCommand(root, ["init"]);
     expect(initialized).toMatchObject({
@@ -224,7 +241,14 @@ describe("CLI program", () => {
     const requestFile = path.join(root, "create-domain.json");
     await writeFile(
       requestFile,
-      JSON.stringify({ component: { id: domain, name: "Shop", type: "domain" } }),
+      JSON.stringify({
+        component: {
+          id: domain,
+          intent: maximumExpansionSearchTerm,
+          name: "Shop",
+          type: "domain",
+        },
+      }),
       "utf8",
     );
     const createdDomain = await jsonCommand(root, [
@@ -241,7 +265,14 @@ describe("CLI program", () => {
     await jsonCommand(
       root,
       ["component", "create", "--stdin"],
-      JSON.stringify({ component: { id: target, name: "Users", type: "domain" } }),
+      JSON.stringify({
+        component: {
+          id: target,
+          intent: maximumExpansionSearchTerm,
+          name: "Users",
+          type: "domain",
+        },
+      }),
     );
     const createdChild = await jsonCommand(
       root,
@@ -330,6 +361,147 @@ describe("CLI program", () => {
         relationships: { items: [{ relationship: { id: relationship, target } }] },
       },
     });
+
+    const canonicalBeforeBlueprintReads = await fileTreeSnapshot(path.join(root, "groma"));
+    const exportedComponents: Array<{ readonly id: string }> = [];
+    const exportedRelationships: Array<{ readonly id: string }> = [];
+    let exportCursor: string | undefined;
+    let exportGeneration: number | undefined;
+    do {
+      const page = await jsonCommand(root, [
+        "blueprint",
+        "export",
+        "--limit",
+        "2",
+        ...(exportCursor === undefined ? [] : ["--cursor", exportCursor]),
+      ]);
+      expect(page.envelope).toMatchObject({
+        command: "blueprint export",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true },
+      });
+      const value = page.envelope.result.value as {
+        readonly generation: number;
+        readonly hasMore: boolean;
+        readonly items: Array<{
+          readonly component: { readonly id: string };
+          readonly relationships: Array<{ readonly id: string }>;
+        }>;
+        readonly nextCursor?: string;
+      };
+      expect(Array.isArray(value.items), page.text).toBeTrue();
+      exportGeneration ??= value.generation;
+      expect(value.generation).toBe(exportGeneration);
+      exportedComponents.push(...value.items.map((item) => item.component));
+      exportedRelationships.push(...value.items.flatMap((item) => item.relationships));
+      exportCursor = value.nextCursor;
+      expect(value.hasMore).toBe(exportCursor !== undefined);
+    } while (exportCursor !== undefined);
+    expect(exportedComponents.map((item) => item.id)).toEqual([domain, target, child, grandchild]);
+    expect(exportedRelationships.map((item) => item.id)).toEqual([relationship]);
+
+    const firstExport = await jsonCommand(root, ["blueprint", "export", "--limit", "2"]);
+    const plainExport = captureOutput();
+    expect(
+      await runProgram(["blueprint", "export", "--limit", "2"], plainExport, {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.success);
+    const plainExportResult = plainExport.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(JSON.parse(plainExportResult!.slice("result: ".length))).toEqual(
+      firstExport.envelope.result,
+    );
+
+    const incoming = await jsonCommand(root, [
+      "blueprint",
+      "traverse",
+      target,
+      "--direction",
+      "incoming",
+      "--depth",
+      "1",
+      "--relation-type",
+      "depends-on",
+      "--limit",
+      "10",
+    ]);
+    expect(incoming.envelope.result).toMatchObject({
+      ok: true,
+      value: {
+        generation: exportGeneration,
+        items: [
+          {
+            component: { id: child, intent: "Own carts", parent: domain },
+            direction: "incoming",
+            from: target,
+            relationship: { id: relationship, source: child, target },
+          },
+        ],
+      },
+    });
+    const searched = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      "active shopping cart",
+      "--limit",
+      "10",
+    ]);
+    expect(searched.envelope.result).toMatchObject({
+      ok: true,
+      value: {
+        generation: exportGeneration,
+        items: [
+          {
+            actions: [{ id: "checkout", name: "Checkout" }],
+            id: child,
+            intent: "Own carts",
+            parent: domain,
+          },
+        ],
+      },
+    });
+    const plainSearch = captureOutput();
+    expect(
+      await runProgram(
+        ["blueprint", "search", "active shopping cart", "--limit", "10"],
+        plainSearch,
+        { terminal: { stdin: false, stdout: false }, workspaceRoot: root },
+      ),
+    ).toBe(CLI_EXIT.success);
+    const plainResultLine = plainSearch.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResultLine).toBeDefined();
+    expect(JSON.parse(plainResultLine!.slice("result: ".length))).toEqual(searched.envelope.result);
+
+    const maximumSearch = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      maximumExpansionSearchTerm,
+      "--limit",
+      "1",
+    ]);
+    const maximumSearchValue = maximumSearch.envelope.result.value as {
+      readonly nextCursor: string;
+    };
+    expect(maximumSearchValue.nextCursor.length).toBeGreaterThan(2_048);
+    expect(maximumSearchValue.nextCursor.length).toBeLessThanOrEqual(4_096);
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "search",
+        maximumExpansionSearchTerm,
+        "--limit",
+        "1",
+        "--cursor",
+        maximumSearchValue.nextCursor,
+      ]),
+    ).toMatchObject({ envelope: { exitCode: CLI_EXIT.success, ok: true } });
+    expect(await fileTreeSnapshot(path.join(root, "groma"))).toEqual(canonicalBeforeBlueprintReads);
     const plainRead = captureOutput();
     expect(
       await runProgram(["component", "get", child, "--relationships-limit", "10"], plainRead, {
@@ -405,6 +577,23 @@ describe("CLI program", () => {
       result: { value: { id: child, parent: target } },
     });
     expect(await Bun.file(path.join(root, "groma", "aliases.md")).exists()).toBeFalse();
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "search",
+        maximumExpansionSearchTerm,
+        "--limit",
+        "1",
+        "--cursor",
+        maximumSearchValue.nextCursor,
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: { diagnostics: [{ code: "stale-cursor" }], ok: false },
+      },
+    });
 
     const stableReadArgs = ["component", "get", child, "--relationships-limit", "10"] as const;
     const firstStableRead = await jsonCommand(root, stableReadArgs);
@@ -453,10 +642,66 @@ describe("CLI program", () => {
     });
   });
 
+  test("rejects an export cursor from different content at the same generation", async () => {
+    const historyA = await workspace();
+    const historyB = await workspace();
+    const first = "ent_00000000000000000000000000000011";
+    const second = "ent_00000000000000000000000000000012";
+    for (const [root, suffix] of [
+      [historyA, "A"],
+      [historyB, "B"],
+    ] as const) {
+      await jsonCommand(root, ["init"]);
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id: first, name: `First ${suffix}` } }),
+      );
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id: second, name: `Second ${suffix}` } }),
+      );
+    }
+    const fromA = await jsonCommand(historyA, ["blueprint", "export", "--limit", "1"]);
+    const aValue = fromA.envelope.result.value as {
+      readonly generation: number;
+      readonly hasMore: boolean;
+      readonly nextCursor: string;
+    };
+    expect(aValue.hasMore).toBeTrue();
+    const bGeneration = (
+      (await jsonCommand(historyB, ["component", "list", "--limit", "2"])).envelope.result
+        .value as { readonly generation: number }
+    ).generation;
+    expect(bGeneration).toBe(aValue.generation);
+    const before = await fileTreeSnapshot(path.join(historyB, "groma"));
+
+    expect(
+      await jsonCommand(historyB, [
+        "blueprint",
+        "export",
+        "--limit",
+        "1",
+        "--cursor",
+        aValue.nextCursor,
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: { diagnostics: [{ code: "cursor-query-mismatch" }], ok: false },
+      },
+    });
+    expect(await fileTreeSnapshot(path.join(historyB, "groma"))).toEqual(before);
+  });
+
   test("merges through the public CLI and resolves the obsolete ID after restart", async () => {
     const root = await workspace();
     const obsolete = "ent_00000000000000000000000000000021";
     const survivor = "ent_00000000000000000000000000000022";
+    const target = "ent_00000000000000000000000000000023";
+    const relationship = "rel_00000000000000000000000000000021";
     await jsonCommand(root, ["init"]);
     const obsoleteCreate = await jsonCommand(
       root,
@@ -471,7 +716,15 @@ describe("CLI program", () => {
     await jsonCommand(
       root,
       ["component", "create", "--stdin"],
-      JSON.stringify({ component: { id: survivor, name: "Checkout" } }),
+      JSON.stringify({ component: { id: target, name: "Payments" } }),
+    );
+    await jsonCommand(
+      root,
+      ["component", "create", "--stdin"],
+      JSON.stringify({
+        component: { id: survivor, name: "Checkout" },
+        relationships: [{ id: relationship, target, type: "depends-on" }],
+      }),
     );
 
     const merged = await jsonCommand(root, [
@@ -502,6 +755,35 @@ describe("CLI program", () => {
       exitCode: 0,
       ok: true,
       result: { value: { item: { component: { id: survivor, name: "Checkout" } } } },
+    });
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "traverse",
+        obsolete,
+        "--direction",
+        "outgoing",
+        "--depth",
+        "1",
+        "--limit",
+        "1",
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          value: {
+            items: [
+              {
+                component: { id: target },
+                from: survivor,
+                relationship: { id: relationship, source: survivor, target },
+              },
+            ],
+          },
+        },
+      },
     });
     expect(await readFile(path.join(root, "groma", "aliases.md"), "utf8")).toBe(
       `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${obsolete}\n    target: ${survivor}\n---\n`,

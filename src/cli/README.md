@@ -21,6 +21,28 @@ Command output is buffered up to one MiB; an oversized page becomes a typed
 `cli-output-bound-exceeded` failure rather than partial or streamed output, so callers
 can retry with a smaller explicit page.
 
+Projection-backed raw blueprint reads use the shared application path:
+
+```text
+groma blueprint export --limit N [--cursor C]
+groma blueprint search <text> --limit N [--cursor C]
+groma blueprint traverse <id> --direction incoming|outgoing|both --depth N [--relation-type T] --limit N [--cursor C]
+```
+
+The CLI accepts opaque cursors up to 4,096 characters so every cursor emitted by the
+official graph query engine can be resumed. It does not parse, rewrite, or auto-follow
+them. Plain and JSON formats serialize the same semantic result object, including exact
+generation, `hasMore`, and continuation information.
+
+Each `blueprint export` item contains one canonical component and all of that source
+component's outgoing depth-1 relationships. To export the complete current blueprint,
+consume only `blueprint export` pages until `hasMore` is false, preserving one generation
+and passing the emitted component cursor unchanged. A stale generation or
+same-generation projection mismatch requires restarting from the first page. Internal
+relationship paging stays inside the shared bounded operation; no relationship cursor or
+composite cursor is exposed. `blueprint search` and `blueprint traverse` remain
+independent exploration commands rather than phases of export.
+
 `--format json` is the stable machine-facing envelope. Each response has `command`,
 `exitCode`, `ok`, and `result`; object keys are emitted canonically. Plain output is
 deterministic, contains no ANSI styling or prompts, and quotes component-controlled text.
@@ -101,16 +123,16 @@ a not-found result confirms that removal committed.
 
 Exit classes are stable:
 
-| Code | Class                                           |
-| ---: | ----------------------------------------------- |
-|    0 | Success                                         |
-|    2 | Invalid invocation or structured input          |
-|    3 | Workspace or persisted package-state failure    |
-|    4 | Command, package-source, or revision validation |
-|    5 | Provider or host infrastructure failure         |
-|    6 | Indeterminate semantic or package commit        |
-|  130 | SIGINT or generic cancellation                  |
-|  143 | SIGTERM                                         |
+| Code | Class                                                 |
+| ---: | ----------------------------------------------------- |
+|    0 | Success                                               |
+|    2 | Invalid invocation or structured input                |
+|    3 | Workspace or persisted package-state failure          |
+|    4 | Command, package-source, or revision validation       |
+|    5 | Provider, graph-query, or host infrastructure failure |
+|    6 | Indeterminate semantic or package commit              |
+|  130 | SIGINT or generic cancellation                        |
+|  143 | SIGTERM                                               |
 
 Signal handling stops command-result publication and completes host cleanup promptly.
 The shared 1A application operations do not expose a mid-operation cancellation seam,

@@ -1,6 +1,7 @@
 import {
   CLI_MAX_ARGUMENTS,
   CLI_MAX_ARGUMENT_CHARACTERS,
+  CLI_MAX_CURSOR_CHARACTERS,
   CLI_MAX_PAGE_SIZE,
   type CliCommand,
   type CliDiagnostic,
@@ -49,7 +50,7 @@ function page(
       if (!Number.isSafeInteger(limit) || limit > CLI_MAX_PAGE_SIZE) return undefined;
       index += 1;
     } else if (argument === cursorName && value !== undefined && cursor === undefined) {
-      if (value.length === 0 || value.length > 2_048) return undefined;
+      if (value.length === 0 || value.length > CLI_MAX_CURSOR_CHARACTERS) return undefined;
       cursor = value;
       index += 1;
     } else {
@@ -58,6 +59,78 @@ function page(
   }
   if (limit === undefined) return undefined;
   return Object.freeze({ ...(cursor === undefined ? {} : { cursor }), limit });
+}
+
+function positiveInteger(value: string | undefined, maximum?: number): number | undefined {
+  if (value === undefined || !/^[1-9][0-9]*$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && (maximum === undefined || parsed <= maximum)
+    ? parsed
+    : undefined;
+}
+
+function blueprintCommand(args: readonly string[]): CliCommand | undefined {
+  const action = args[0];
+  const rest = args.slice(1);
+  if (action === "export") {
+    const request = page(rest, "--limit", "--cursor");
+    return request === undefined
+      ? undefined
+      : Object.freeze({ ...request, kind: "blueprint-export" });
+  }
+  if (action === "search") {
+    const text = rest[0];
+    if (text === undefined || text.length === 0 || text.length > 4_096 || text.startsWith("--")) {
+      return undefined;
+    }
+    const request = page(rest.slice(1), "--limit", "--cursor");
+    return request === undefined
+      ? undefined
+      : Object.freeze({ ...request, kind: "blueprint-search", text });
+  }
+  if (action !== "traverse") return undefined;
+  const id = rest[0];
+  if (!identifier(id)) return undefined;
+  let cursor: string | undefined;
+  let depth: number | undefined;
+  let direction: "incoming" | "outgoing" | "both" | undefined;
+  let limit: number | undefined;
+  let relationType: string | undefined;
+  for (let index = 1; index < rest.length; index += 2) {
+    const option = rest[index];
+    const value = rest[index + 1];
+    if (option === "--cursor" && cursor === undefined) {
+      if (value === undefined || value.length === 0 || value.length > CLI_MAX_CURSOR_CHARACTERS) {
+        return undefined;
+      }
+      cursor = value;
+    } else if (option === "--depth" && depth === undefined) {
+      depth = positiveInteger(value);
+      if (depth === undefined) return undefined;
+    } else if (option === "--direction" && direction === undefined) {
+      if (value !== "incoming" && value !== "outgoing" && value !== "both") return undefined;
+      direction = value;
+    } else if (option === "--limit" && limit === undefined) {
+      limit = positiveInteger(value, CLI_MAX_PAGE_SIZE);
+      if (limit === undefined) return undefined;
+    } else if (option === "--relation-type" && relationType === undefined) {
+      if (!identifier(value)) return undefined;
+      relationType = value;
+    } else {
+      return undefined;
+    }
+  }
+  return depth === undefined || direction === undefined || limit === undefined
+    ? undefined
+    : Object.freeze({
+        ...(cursor === undefined ? {} : { cursor }),
+        depth,
+        direction,
+        id,
+        kind: "blueprint-traverse",
+        limit,
+        ...(relationType === undefined ? {} : { relationType }),
+      });
 }
 
 function reparent(args: readonly string[]): CliCommand | undefined {
@@ -289,17 +362,19 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
     });
   }
   const command =
-    commandArgs[0] === "component"
-      ? componentCommand(commandArgs.slice(1))
-      : commandArgs[0] === "package"
-        ? packageCommand(commandArgs.slice(1))
-        : commandArgs[0] === "migrate" &&
-            commandArgs.length === 2 &&
-            (commandArgs[1] === "status" ||
-              commandArgs[1] === "preview" ||
-              commandArgs[1] === "apply")
-          ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
-          : undefined;
+    commandArgs[0] === "blueprint"
+      ? blueprintCommand(commandArgs.slice(1))
+      : commandArgs[0] === "component"
+        ? componentCommand(commandArgs.slice(1))
+        : commandArgs[0] === "package"
+          ? packageCommand(commandArgs.slice(1))
+          : commandArgs[0] === "migrate" &&
+              commandArgs.length === 2 &&
+              (commandArgs[1] === "status" ||
+                commandArgs[1] === "preview" ||
+                commandArgs[1] === "apply")
+            ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
+            : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

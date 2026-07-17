@@ -14,8 +14,10 @@ import {
   type GraphDataRecord,
   type GraphEntity,
   type GraphGeneration,
+  type GraphQueryEngineCapability,
   type GraphRelation,
   type GraphSnapshot,
+  type GraphTraversalQuery,
   type PreparedBoundedQuery,
   type ResourceKey,
   type Result,
@@ -43,12 +45,18 @@ import type {
   ApplicationOperations,
   ApplicationOperationsOptions,
   BoundedPageRequest,
+  BlueprintComponentPage,
+  BlueprintExportItem,
+  BlueprintExportPage,
+  BlueprintTraversalHit,
+  BlueprintTraversalPage,
   ComponentPage,
   ComponentRelationshipChanges,
   ComponentRelationshipInput,
   ComponentView,
   CreateComponentRequest,
   ExactComponentRead,
+  ExportBlueprintRequest,
   GetComponentRequest,
   InitializeWorkspaceRequest,
   ListChildComponentsRequest,
@@ -57,8 +65,10 @@ import type {
   MergeComponentRequest,
   RemoveComponentRequest,
   ReparentComponentRequest,
+  SearchBlueprintRequest,
   RelationshipPage,
   RelationshipView,
+  TraverseBlueprintRequest,
   UpdateComponentRequest,
   WorkspaceInitializationOutcome,
 } from "./contracts.ts";
@@ -89,7 +99,12 @@ type ComponentFilter = (state: ReadSnapshot) => (component: StandardComponent) =
 
 interface ApplicationCapabilityCalls {
   readonly aliasResourceMapper?: NonNullable<ApplicationOperationsOptions["aliasResourceMapper"]>;
+  readonly exactGraphEntity: ApplicationOperationsOptions["graphQueries"]["exactEntity"];
   readonly initialize: ApplicationOperationsOptions["initialization"]["initialize"];
+  readonly graphQueries: ApplicationOperationsOptions["graphQueries"];
+  readonly pageGraphEntities: ApplicationOperationsOptions["graphQueries"]["pageEntities"];
+  readonly searchGraphEntities: ApplicationOperationsOptions["graphQueries"]["searchEntities"];
+  readonly traverseGraphRelations: ApplicationOperationsOptions["graphQueries"]["traverseRelations"];
   readonly queries: ApplicationOperationsOptions["queries"];
   readonly resourceForComponent: ApplicationOperationsOptions["resourceMapper"]["resourceForComponent"];
   readonly resourceForAliases?: NonNullable<
@@ -110,9 +125,11 @@ interface ApplicationOperationsContext extends ApplicationOperationsOptions {
 
 const intrinsicReflectApply = Reflect.apply;
 const intrinsicObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const intrinsicObjectGetPrototypeOf = Object.getPrototypeOf;
 const applicationCapabilityContainmentFailure = Object.freeze({ ok: false as const });
 const rejectedApplicationCapabilitySettlement = Object.freeze({ status: "rejected" as const });
 const failedApplicationProxyPolicy = Object.freeze({ status: "proxy-policy-failed" as const });
+const APPLICATION_MAX_GRAPH_QUERY_CURSOR_CHARACTERS = 4_096;
 
 type ApplicationCapabilitySettlement =
   | typeof failedApplicationProxyPolicy
@@ -311,6 +328,7 @@ function captureApplicationOperationsOptions(
       : { aliasResourceMapper: source.aliasResourceMapper }),
     bounds,
     graph: source.graph,
+    graphQueries: source.graphQueries,
     initialization: source.initialization,
     maxSnapshotAttempts: source.maxSnapshotAttempts,
     model: source.model,
@@ -372,19 +390,25 @@ function captureApplicationCapabilityCalls(
           resourceForAliases: options.aliasResourceMapper.resourceForAliases,
         }),
     execute: options.transactionExecution.execute,
+    exactGraphEntity: options.graphQueries.exactEntity,
+    graphQueries: options.graphQueries,
     initialization: options.initialization,
     initialize: options.initialization.initialize,
+    pageGraphEntities: options.graphQueries.pageEntities,
     queries: options.queries,
     resourceForComponent: options.resourceMapper.resourceForComponent,
     resourceMapper: options.resourceMapper,
     snapshot: options.transactionProvider.snapshot,
+    searchGraphEntities: options.graphQueries.searchEntities,
     transactionExecution: options.transactionExecution,
     transactionProvider: options.transactionProvider,
+    traverseGraphRelations: options.graphQueries.traverseRelations,
   };
   for (const [name, value] of Object.entries(calls)) {
     if (
       name !== "initialization" &&
       name !== "aliasResourceMapper" &&
+      name !== "graphQueries" &&
       name !== "queries" &&
       name !== "resourceMapper" &&
       name !== "transactionExecution" &&
@@ -395,6 +419,24 @@ function captureApplicationCapabilityCalls(
     }
   }
   return Object.freeze(calls);
+}
+
+function validateGraphQueryEngineReceiver(
+  graphQueries: unknown,
+  isProxy: (value: unknown) => boolean,
+): asserts graphQueries is GraphQueryEngineCapability {
+  if (typeof graphQueries !== "object" || graphQueries === null) {
+    throw new TypeError("graphQueries must be a GraphQueryEngineCapability");
+  }
+  let recognizedProxy = false;
+  try {
+    recognizedProxy = isProxy(graphQueries);
+  } catch {
+    // Capability results apply the same detector again before any reflection.
+  }
+  if (recognizedProxy) {
+    throw new TypeError("graphQueries must not be a proxy");
+  }
 }
 
 function validateBoundedQueryReceiver(
@@ -2374,6 +2416,569 @@ function planRelationshipChanges(
   );
 }
 
+const graphQueryDiagnosticMessages = Object.freeze({
+  "continuation-cursor-too-large": "The continuation cursor exceeds the supported size budget",
+  "cursor-anchor-mismatch": "The continuation cursor anchor is absent from this result set",
+  "cursor-query-mismatch": "The continuation cursor belongs to a different query",
+  "entity-scan-bound-exceeded": "The bounded entity query exceeded its work budget",
+  "graph-query-unavailable": "The bounded graph query engine is unavailable",
+  "invalid-bounded-query-request": "The bounded graph query request is malformed",
+  "invalid-entity-id": "The component identity is malformed",
+  "invalid-entity-kind": "The component kind filter is malformed",
+  "invalid-graph-entity-query": "The component query is malformed",
+  "invalid-graph-search-query": "The component search query is malformed",
+  "invalid-graph-traversal-query": "The component traversal query is malformed",
+  "invalid-page-limit": "The bounded graph query page limit is invalid",
+  "invalid-relation-type": "The relationship type filter is malformed",
+  "invalid-search-text": "The component search text is invalid",
+  "invalid-traversal-depth": "The relationship traversal depth is invalid",
+  "invalid-traversal-direction": "The relationship traversal direction is invalid",
+  "malformed-continuation-cursor": "The continuation cursor is malformed",
+  "query-context-too-large": "The bounded graph query context exceeds its size budget",
+  "stale-cursor": "The continuation cursor belongs to a different graph generation",
+  "traversal-entity-bound-exceeded": "The relationship traversal exceeded its entity budget",
+  "traversal-relation-bound-exceeded":
+    "The relationship traversal exceeded its emitted-relationship budget",
+  "traversal-relation-visit-bound-exceeded":
+    "The relationship traversal exceeded its examined-relationship budget",
+  "unknown-entity": "No component exists for the stable identity or alias",
+  "unsupported-continuation-cursor": "The continuation cursor version is not supported",
+} as const);
+
+function graphQueryUnavailable<T>(): Result<T> {
+  return frozenFailure(
+    diagnostic("graph-query-unavailable", graphQueryDiagnosticMessages["graph-query-unavailable"]),
+  );
+}
+
+type GraphQueryInvocationOperation = "export" | "search" | "traverse";
+
+interface GraphQueryDiagnosticScope {
+  readonly hasCursor: boolean;
+  readonly operation: GraphQueryInvocationOperation;
+}
+
+function graphQueryDiagnosticAllowed(code: string, scope: GraphQueryDiagnosticScope): boolean {
+  if (
+    code === "graph-query-unavailable" ||
+    code === "invalid-page-limit" ||
+    code === "query-context-too-large" ||
+    code === "continuation-cursor-too-large"
+  ) {
+    return true;
+  }
+  if (
+    scope.hasCursor &&
+    (code === "cursor-anchor-mismatch" ||
+      code === "cursor-query-mismatch" ||
+      code === "malformed-continuation-cursor" ||
+      code === "stale-cursor" ||
+      code === "unsupported-continuation-cursor")
+  ) {
+    return true;
+  }
+  if (scope.operation === "export") {
+    return code === "entity-scan-bound-exceeded" || code === "invalid-entity-kind";
+  }
+  if (scope.operation === "search") {
+    return (
+      code === "entity-scan-bound-exceeded" ||
+      code === "invalid-entity-kind" ||
+      code === "invalid-search-text"
+    );
+  }
+  return (
+    code === "invalid-relation-type" ||
+    code === "invalid-traversal-depth" ||
+    code === "traversal-entity-bound-exceeded" ||
+    code === "traversal-relation-bound-exceeded" ||
+    code === "traversal-relation-visit-bound-exceeded" ||
+    code === "unknown-entity"
+  );
+}
+
+function graphQueryFailureDiagnostics(
+  value: unknown,
+  scope: GraphQueryDiagnosticScope,
+  options: ApplicationOperationsContext,
+): Result<readonly Diagnostic[]> {
+  const entries = denseArray(
+    value,
+    "Graph query diagnostics",
+    options.bounds.maxDiagnosticCount,
+    options.isProxy,
+  );
+  if (!entries.ok || entries.value.length === 0) return graphQueryUnavailable();
+  const copied: Diagnostic[] = [];
+  for (let index = 0; index < entries.value.length; index += 1) {
+    const entry = inspectExactRecord(
+      entries.value[index],
+      [
+        ["code", "message"],
+        ["code", "details", "message"],
+      ],
+      "graph-query-unavailable",
+      "Graph query diagnostic",
+    );
+    if (
+      !entry.ok ||
+      typeof entry.value.code !== "string" ||
+      typeof entry.value.message !== "string" ||
+      entry.value.message.length === 0 ||
+      entry.value.message.length > 4_096
+    ) {
+      return graphQueryUnavailable();
+    }
+    const code = entry.value.code;
+    if (
+      !Object.hasOwn(graphQueryDiagnosticMessages, code) ||
+      !graphQueryDiagnosticAllowed(code, scope)
+    ) {
+      return graphQueryUnavailable();
+    }
+    const details = safeDiagnosticDetails(entry.value.details, options.isProxy);
+    if (!details.ok) return graphQueryUnavailable();
+    copied[index] = Object.freeze({
+      code,
+      ...(details.value === undefined || code === "graph-query-unavailable"
+        ? {}
+        : { details: details.value }),
+      message: graphQueryDiagnosticMessages[code as keyof typeof graphQueryDiagnosticMessages],
+    });
+  }
+  return success(Object.freeze(copied));
+}
+
+async function invokeGraphQueryCapability(
+  method: CallableFunction,
+  args: readonly unknown[],
+  scope: GraphQueryDiagnosticScope,
+  options: ApplicationOperationsContext,
+): Promise<Result<unknown>> {
+  let invoked: unknown;
+  try {
+    invoked = intrinsicReflectApply(method, options.calls.graphQueries, args);
+  } catch {
+    return graphQueryUnavailable();
+  }
+  const settled = await settleApplicationCapabilityValue(invoked, options.isProxy);
+  if (settled.status !== "fulfilled") return graphQueryUnavailable();
+  const contained = containApplicationCapabilityValue(settled.value, options, 12);
+  if (!contained.ok) return graphQueryUnavailable();
+  const envelope = inspectExactRecord(
+    contained.value,
+    [
+      ["ok", "value"],
+      ["diagnostics", "ok"],
+    ],
+    "graph-query-unavailable",
+    "Graph query result",
+  );
+  if (!envelope.ok) return graphQueryUnavailable();
+  if (envelope.value.ok === false) {
+    const diagnostics = graphQueryFailureDiagnostics(envelope.value.diagnostics, scope, options);
+    return diagnostics.ok ? frozenFailure(...diagnostics.value) : diagnostics;
+  }
+  return envelope.value.ok === true ? success(envelope.value.value) : graphQueryUnavailable();
+}
+
+function graphPageRequest(
+  value: unknown,
+  subject: string,
+  maximumLimit: number,
+  options: ApplicationOperationsContext,
+): Result<BoundedPageRequest> {
+  const request = boundedRequest(value, subject);
+  if (!request.ok) return request;
+  if (
+    !Number.isSafeInteger(request.value.limit) ||
+    request.value.limit <= 0 ||
+    request.value.limit > maximumLimit
+  ) {
+    return failure(
+      diagnostic(
+        "invalid-page-limit",
+        "The graph query page limit is outside the application bound",
+      ),
+    );
+  }
+  if (
+    request.value.cursor !== undefined &&
+    (typeof request.value.cursor !== "string" ||
+      request.value.cursor.length === 0 ||
+      request.value.cursor.length > APPLICATION_MAX_GRAPH_QUERY_CURSOR_CHARACTERS)
+  ) {
+    return failure(
+      diagnostic("malformed-continuation-cursor", "The continuation cursor is malformed"),
+    );
+  }
+  return request;
+}
+
+interface ValidatedGraphQueryPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly unknown[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
+function validatedGraphQueryPage(
+  value: unknown,
+  request: BoundedPageRequest,
+  maximumItems: number,
+  options: ApplicationOperationsContext,
+): Result<ValidatedGraphQueryPage> {
+  const page = inspectExactRecord(
+    value,
+    [
+      ["generation", "hasMore", "items"],
+      ["generation", "hasMore", "items", "nextCursor"],
+    ],
+    "graph-query-unavailable",
+    "Graph query page",
+  );
+  if (!page.ok || typeof page.value.hasMore !== "boolean") return graphQueryUnavailable();
+  const generation = parseGraphGeneration(page.value.generation);
+  const items = denseArray(
+    page.value.items,
+    "Graph query page items",
+    Math.min(request.limit, maximumItems),
+    options.isProxy,
+  );
+  const hasCursor = Object.hasOwn(page.value, "nextCursor");
+  if (
+    !generation.ok ||
+    !items.ok ||
+    hasCursor !== page.value.hasMore ||
+    (page.value.hasMore && items.value.length === 0) ||
+    (request.cursor !== undefined && page.value.nextCursor === request.cursor)
+  ) {
+    return graphQueryUnavailable();
+  }
+  if (
+    hasCursor &&
+    (typeof page.value.nextCursor !== "string" ||
+      page.value.nextCursor.length === 0 ||
+      page.value.nextCursor.length > APPLICATION_MAX_GRAPH_QUERY_CURSOR_CHARACTERS)
+  ) {
+    return graphQueryUnavailable();
+  }
+  return success(
+    Object.freeze({
+      generation: generation.value,
+      hasMore: page.value.hasMore,
+      items: items.value,
+      ...(hasCursor ? { nextCursor: page.value.nextCursor as ContinuationCursor } : {}),
+    }),
+  );
+}
+
+function consumeBlueprintStructuralValues(
+  value: unknown,
+  remaining: { value: number },
+  options: ApplicationOperationsContext,
+): boolean {
+  const active = new WeakSet<object>();
+  const visit = (candidate: unknown, depth: number): boolean => {
+    if (depth > options.bounds.maxSnapshotStateDepth || remaining.value < 1) return false;
+    remaining.value -= 1;
+    if (
+      candidate === null ||
+      typeof candidate === "string" ||
+      typeof candidate === "boolean" ||
+      (typeof candidate === "number" && Number.isFinite(candidate))
+    ) {
+      return true;
+    }
+    if (typeof candidate !== "object" || options.isProxy(candidate) || active.has(candidate)) {
+      return false;
+    }
+    active.add(candidate);
+    try {
+      if (Array.isArray(candidate)) {
+        if (intrinsicObjectGetPrototypeOf(candidate) !== Array.prototype) return false;
+        const length = inspectIntrinsicArrayLength(
+          candidate,
+          "graph-query-unavailable",
+          "Blueprint aggregate array",
+        );
+        if (!length.ok || length.value > remaining.value) return false;
+        const keys = Reflect.ownKeys(candidate);
+        if (keys.length !== length.value + 1) return false;
+        for (let index = 0; index < length.value; index += 1) {
+          const descriptor = intrinsicObjectGetOwnPropertyDescriptor(candidate, String(index));
+          if (
+            descriptor === undefined ||
+            !("value" in descriptor) ||
+            !descriptor.enumerable ||
+            !visit(descriptor.value, depth + 1)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      }
+      const prototype = intrinsicObjectGetPrototypeOf(candidate);
+      if (prototype !== Object.prototype && prototype !== null) return false;
+      const keys = Reflect.ownKeys(candidate);
+      if (keys.length > remaining.value) return false;
+      for (const key of keys) {
+        const descriptor = intrinsicObjectGetOwnPropertyDescriptor(candidate, key);
+        if (
+          typeof key !== "string" ||
+          descriptor === undefined ||
+          !("value" in descriptor) ||
+          !descriptor.enumerable ||
+          !visit(descriptor.value, depth + 1)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      active.delete(candidate);
+    }
+  };
+  try {
+    return visit(value, 1);
+  } catch {
+    return false;
+  }
+}
+
+function canonicalGraphComponent(
+  value: unknown,
+  options: ApplicationOperationsContext,
+): Result<StandardComponent> {
+  const entity = inspectExactRecord(
+    value,
+    [["id", "kind", "payload"]],
+    "graph-query-unavailable",
+    "Projected component entity",
+  );
+  if (
+    !entity.ok ||
+    typeof entity.value.id !== "string" ||
+    entity.value.kind !== STANDARD_COMPONENT_KIND
+  ) {
+    return graphQueryUnavailable();
+  }
+  const id = parseEntityId(entity.value.id);
+  if (!id.ok) return graphQueryUnavailable();
+  const canonical = options.snapshotStateDecoder.canonicalizeEntity(entity.value, {
+    id: id.value,
+    kind: STANDARD_COMPONENT_KIND,
+  });
+  return canonical.ok ? success(canonical.value.component) : graphQueryUnavailable();
+}
+
+function canonicalExactGraphComponent(
+  value: unknown,
+  options: ApplicationOperationsContext,
+): Result<{ readonly component: StandardComponent; readonly generation: GraphGeneration }> {
+  const exact = inspectExactRecord(
+    value,
+    [["generation", "item"]],
+    "graph-query-unavailable",
+    "Exact projected component",
+  );
+  if (!exact.ok) return graphQueryUnavailable();
+  const generation = parseGraphGeneration(exact.value.generation);
+  const component = canonicalGraphComponent(exact.value.item, options);
+  return generation.ok && component.ok
+    ? success(Object.freeze({ component: component.value, generation: generation.value }))
+    : graphQueryUnavailable();
+}
+
+function canonicalGraphRelationship(
+  value: unknown,
+  options: ApplicationOperationsContext,
+): Result<StandardRelationship> {
+  const relation = inspectExactRecord(
+    value,
+    [["id", "payload", "source", "target", "type"]],
+    "graph-query-unavailable",
+    "Projected component relationship",
+  );
+  if (
+    !relation.ok ||
+    typeof relation.value.id !== "string" ||
+    typeof relation.value.source !== "string" ||
+    typeof relation.value.target !== "string" ||
+    typeof relation.value.type !== "string"
+  ) {
+    return graphQueryUnavailable();
+  }
+  const id = parseRelationId(relation.value.id);
+  const source = parseEntityId(relation.value.source);
+  const target = parseEntityId(relation.value.target);
+  if (!id.ok || !source.ok || !target.ok || !relationTypePattern.test(relation.value.type)) {
+    return graphQueryUnavailable();
+  }
+  const canonical = options.snapshotStateDecoder.canonicalizeRelationships(
+    Object.freeze([
+      Object.freeze({
+        id: id.value,
+        payload: relation.value.payload as GraphData,
+        source: source.value,
+        target: target.value,
+        type: relation.value.type,
+      }),
+    ]),
+  );
+  return canonical.ok && canonical.value.length === 1
+    ? success(canonical.value[0]!)
+    : graphQueryUnavailable();
+}
+
+async function projectedComponentPage(
+  method:
+    | ApplicationOperationsOptions["graphQueries"]["pageEntities"]
+    | ApplicationOperationsOptions["graphQueries"]["searchEntities"],
+  query: Readonly<Record<string, string>>,
+  request: BoundedPageRequest,
+  operation: "export" | "search",
+  options: ApplicationOperationsContext,
+): Promise<Result<BlueprintComponentPage>> {
+  const invoked = await invokeGraphQueryCapability(
+    method,
+    [query, request],
+    Object.freeze({ hasCursor: request.cursor !== undefined, operation }),
+    options,
+  );
+  if (!invoked.ok) return invoked;
+  const page = validatedGraphQueryPage(
+    invoked.value,
+    request,
+    options.bounds.maxComponents,
+    options,
+  );
+  if (!page.ok) return page;
+  const items: StandardComponent[] = [];
+  let previous: string | undefined;
+  for (let index = 0; index < page.value.items.length; index += 1) {
+    const component = canonicalGraphComponent(page.value.items[index], options);
+    if (!component.ok || (previous !== undefined && previous >= component.value.id)) {
+      return graphQueryUnavailable();
+    }
+    previous = component.value.id;
+    items[index] = component.value;
+  }
+  return success(
+    Object.freeze({
+      generation: page.value.generation,
+      hasMore: page.value.hasMore,
+      items: Object.freeze(items),
+      ...(page.value.nextCursor === undefined ? {} : { nextCursor: page.value.nextCursor }),
+    }),
+  );
+}
+
+async function projectedTraversalPage(
+  query: GraphTraversalQuery,
+  request: BoundedPageRequest,
+  options: ApplicationOperationsContext,
+  expectedRoot?: string,
+): Promise<Result<BlueprintTraversalPage>> {
+  const invoked = await invokeGraphQueryCapability(
+    options.calls.traverseGraphRelations,
+    [query, request],
+    Object.freeze({ hasCursor: request.cursor !== undefined, operation: "traverse" }),
+    options,
+  );
+  if (!invoked.ok) return invoked;
+  const page = validatedGraphQueryPage(
+    invoked.value,
+    request,
+    options.bounds.maxRelationships,
+    options,
+  );
+  if (!page.ok) return page;
+  let canonicalRoot = expectedRoot;
+  if (canonicalRoot === undefined) {
+    const invokedRoot = await invokeGraphQueryCapability(
+      options.calls.exactGraphEntity,
+      [query.entity],
+      Object.freeze({ hasCursor: false, operation: "traverse" }),
+      options,
+    );
+    if (!invokedRoot.ok) return invokedRoot;
+    const root = canonicalExactGraphComponent(invokedRoot.value, options);
+    if (!root.ok || root.value.generation !== page.value.generation) {
+      return graphQueryUnavailable();
+    }
+    canonicalRoot = root.value.component.id;
+  }
+  const items: BlueprintTraversalHit[] = [];
+  const relations = new Set<string>();
+  let previousDepth: number | undefined;
+  let previousRelation: string | undefined;
+  for (let index = 0; index < page.value.items.length; index += 1) {
+    const hit = inspectExactRecord(
+      page.value.items[index],
+      [["depth", "direction", "entity", "from", "relation"]],
+      "graph-query-unavailable",
+      "Graph traversal hit",
+    );
+    if (
+      !hit.ok ||
+      typeof hit.value.depth !== "number" ||
+      !Number.isSafeInteger(hit.value.depth) ||
+      hit.value.depth <= 0 ||
+      hit.value.depth > query.depth ||
+      (hit.value.direction !== "incoming" && hit.value.direction !== "outgoing") ||
+      (query.direction !== "both" && hit.value.direction !== query.direction) ||
+      typeof hit.value.from !== "string" ||
+      (index === 0 && request.cursor === undefined && hit.value.depth !== 1) ||
+      (previousDepth !== undefined &&
+        (hit.value.depth < previousDepth || hit.value.depth > previousDepth + 1))
+    ) {
+      return graphQueryUnavailable();
+    }
+    const from = parseEntityId(hit.value.from);
+    const component = canonicalGraphComponent(hit.value.entity, options);
+    const relationship = canonicalGraphRelationship(hit.value.relation, options);
+    if (!from.ok || !component.ok || !relationship.ok) return graphQueryUnavailable();
+    if (
+      (hit.value.depth === 1 && from.value !== canonicalRoot) ||
+      (hit.value.depth === previousDepth &&
+        previousRelation !== undefined &&
+        previousRelation >= relationship.value.id) ||
+      relations.has(relationship.value.id) ||
+      (query.relationType !== undefined && relationship.value.type !== query.relationType)
+    ) {
+      return graphQueryUnavailable();
+    }
+    const expectedFrom =
+      hit.value.direction === "incoming" ? relationship.value.target : relationship.value.source;
+    const expectedNeighbor =
+      hit.value.direction === "incoming" ? relationship.value.source : relationship.value.target;
+    if (expectedFrom !== from.value || expectedNeighbor !== component.value.id) {
+      return graphQueryUnavailable();
+    }
+    relations.add(relationship.value.id);
+    previousDepth = hit.value.depth;
+    previousRelation = relationship.value.id;
+    items[index] = Object.freeze({
+      component: component.value,
+      depth: hit.value.depth,
+      direction: hit.value.direction,
+      from: from.value,
+      relationship: relationship.value,
+    });
+  }
+  return success(
+    Object.freeze({
+      generation: page.value.generation,
+      hasMore: page.value.hasMore,
+      items: Object.freeze(items),
+      ...(page.value.nextCursor === undefined ? {} : { nextCursor: page.value.nextCursor }),
+    }),
+  );
+}
+
 function standardTransactionRequest(
   componentMutations: readonly GraphDataRecord[],
   relationshipMutations: readonly GraphDataRecord[],
@@ -2435,6 +3040,7 @@ export function createApplicationOperations(
   const metadata = validateSnapshotStateDecoder(captured);
   const frozenOptions = freezeApplicationOperationsOptions(captured);
   validateBoundedQueryReceiver(frozenOptions.queries, metadata.isProxy);
+  validateGraphQueryEngineReceiver(frozenOptions.graphQueries, metadata.isProxy);
   const options: ApplicationOperationsContext = Object.freeze({
     ...frozenOptions,
     calls: captureApplicationCapabilityCalls(frozenOptions),
@@ -2476,6 +3082,214 @@ export function createApplicationOperations(
         diagnostic("workspace-initialization-failed", "Workspace initialization capability failed"),
       );
     }
+  };
+
+  const exportBlueprint = async (
+    request: ExportBlueprintRequest,
+  ): Promise<Result<BlueprintExportPage>> => {
+    const page = graphPageRequest(
+      request,
+      "Blueprint export request",
+      options.bounds.maxComponents,
+      options,
+    );
+    if (!page.ok) return page;
+    const components = await projectedComponentPage(
+      options.calls.pageGraphEntities,
+      Object.freeze({ kind: STANDARD_COMPONENT_KIND }),
+      page.value,
+      "export",
+      options,
+    );
+    if (!components.ok) return components;
+    const items: BlueprintExportItem[] = [];
+    const exportedRelationshipIds = new Set<string>();
+    const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
+    const pageStructuralValues = components.value.nextCursor === undefined ? 4 : 5;
+    if (structuralRemaining.value < pageStructuralValues) return graphQueryUnavailable();
+    structuralRemaining.value -= pageStructuralValues;
+    for (
+      let componentIndex = 0;
+      componentIndex < components.value.items.length;
+      componentIndex += 1
+    ) {
+      const component = components.value.items[componentIndex]!;
+      if (structuralRemaining.value < 2) return graphQueryUnavailable();
+      structuralRemaining.value -= 2;
+      if (!consumeBlueprintStructuralValues(component, structuralRemaining, options)) {
+        return graphQueryUnavailable();
+      }
+      const relationships: StandardRelationship[] = [];
+      let traversalCursor: ContinuationCursor | undefined;
+      let previousRelationship: string | undefined;
+      do {
+        const remaining = options.bounds.maxRelationships - exportedRelationshipIds.size;
+        const traversalRequest = Object.freeze({
+          ...(traversalCursor === undefined ? {} : { cursor: traversalCursor }),
+          limit: Math.max(1, Math.min(page.value.limit, Math.max(1, remaining))),
+        });
+        const traversal = await projectedTraversalPage(
+          Object.freeze({
+            depth: 1,
+            direction: "outgoing",
+            entity: component.id,
+          }),
+          traversalRequest,
+          options,
+          component.id,
+        );
+        if (!traversal.ok || traversal.value.generation !== components.value.generation) {
+          return graphQueryUnavailable();
+        }
+        for (let hitIndex = 0; hitIndex < traversal.value.items.length; hitIndex += 1) {
+          const relationship = traversal.value.items[hitIndex]!.relationship;
+          if (
+            (previousRelationship !== undefined && previousRelationship >= relationship.id) ||
+            exportedRelationshipIds.has(relationship.id) ||
+            exportedRelationshipIds.size >= options.bounds.maxRelationships ||
+            !consumeBlueprintStructuralValues(relationship, structuralRemaining, options)
+          ) {
+            return graphQueryUnavailable();
+          }
+          previousRelationship = relationship.id;
+          exportedRelationshipIds.add(relationship.id);
+          relationships.push(relationship);
+        }
+        if (
+          traversal.value.hasMore &&
+          exportedRelationshipIds.size >= options.bounds.maxRelationships
+        ) {
+          return graphQueryUnavailable();
+        }
+        traversalCursor = traversal.value.nextCursor;
+      } while (traversalCursor !== undefined);
+      items[componentIndex] = Object.freeze({
+        component,
+        relationships: Object.freeze(relationships),
+      });
+    }
+    return success(
+      Object.freeze({
+        generation: components.value.generation,
+        hasMore: components.value.hasMore,
+        items: Object.freeze(items),
+        ...(components.value.nextCursor === undefined
+          ? {}
+          : { nextCursor: components.value.nextCursor }),
+      }),
+    );
+  };
+
+  const searchBlueprint = async (
+    request: SearchBlueprintRequest,
+  ): Promise<Result<BlueprintComponentPage>> => {
+    const inspected = exactRequest(
+      request,
+      [
+        ["limit", "text"],
+        ["cursor", "limit", "text"],
+      ],
+      "Blueprint search request",
+    );
+    if (!inspected.ok) return inspected;
+    if (
+      typeof inspected.value.text !== "string" ||
+      inspected.value.text.length === 0 ||
+      inspected.value.text.length > 4_096
+    ) {
+      return failure(diagnostic("invalid-search-text", "Blueprint search text is malformed"));
+    }
+    const page = graphPageRequest(
+      Object.freeze({
+        ...(Object.hasOwn(inspected.value, "cursor")
+          ? { cursor: inspected.value.cursor as string }
+          : {}),
+        limit: inspected.value.limit as number,
+      }),
+      "Blueprint search page request",
+      options.bounds.maxComponents,
+      options,
+    );
+    return page.ok
+      ? projectedComponentPage(
+          options.calls.searchGraphEntities,
+          Object.freeze({ kind: STANDARD_COMPONENT_KIND, text: inspected.value.text }),
+          page.value,
+          "search",
+          options,
+        )
+      : page;
+  };
+
+  const traverseBlueprint = async (
+    request: TraverseBlueprintRequest,
+  ): Promise<Result<BlueprintTraversalPage>> => {
+    const inspected = exactRequest(
+      request,
+      [
+        ["depth", "direction", "id", "limit"],
+        ["cursor", "depth", "direction", "id", "limit"],
+        ["depth", "direction", "id", "limit", "relationType"],
+        ["cursor", "depth", "direction", "id", "limit", "relationType"],
+      ],
+      "Blueprint traversal request",
+    );
+    if (!inspected.ok) return inspected;
+    if (typeof inspected.value.id !== "string") {
+      return failure(diagnostic("invalid-entity-id", "Traversal identity must be a string"));
+    }
+    const id = parseEntityId(inspected.value.id);
+    if (!id.ok) return id;
+    const direction = inspected.value.direction;
+    if (direction !== "incoming" && direction !== "outgoing" && direction !== "both") {
+      return failure(
+        diagnostic(
+          "invalid-traversal-direction",
+          "Traversal direction must be incoming, outgoing, or both",
+        ),
+      );
+    }
+    const depth = inspected.value.depth;
+    if (
+      typeof depth !== "number" ||
+      !Number.isSafeInteger(depth) ||
+      depth <= 0 ||
+      depth > options.bounds.maxComponents
+    ) {
+      return failure(
+        diagnostic("invalid-traversal-depth", "Traversal depth is outside the application bound"),
+      );
+    }
+    const relationType = inspected.value.relationType;
+    if (
+      relationType !== undefined &&
+      (typeof relationType !== "string" ||
+        relationType.length > 128 ||
+        !relationTypePattern.test(relationType))
+    ) {
+      return failure(
+        diagnostic("invalid-relation-type", "Traversal relationship type is malformed"),
+      );
+    }
+    const pageRequest = graphPageRequest(
+      Object.freeze({
+        ...(Object.hasOwn(inspected.value, "cursor")
+          ? { cursor: inspected.value.cursor as string }
+          : {}),
+        limit: inspected.value.limit as number,
+      }),
+      "Blueprint traversal page request",
+      options.bounds.maxRelationships,
+      options,
+    );
+    if (!pageRequest.ok) return pageRequest;
+    const query = Object.freeze({
+      depth,
+      direction,
+      entity: id.value,
+      ...(relationType === undefined ? {} : { relationType }),
+    });
+    return projectedTraversalPage(query, pageRequest.value, options);
   };
 
   const getComponent = async (
@@ -3218,6 +4032,7 @@ export function createApplicationOperations(
 
   return Object.freeze({
     createComponent,
+    exportBlueprint,
     getComponent,
     initialize,
     listChildren,
@@ -3226,6 +4041,8 @@ export function createApplicationOperations(
     mergeComponent,
     removeComponent,
     reparentComponent,
+    searchBlueprint,
+    traverseBlueprint,
     updateComponent,
   });
 }

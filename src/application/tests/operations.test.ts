@@ -64,6 +64,16 @@ const relationIds = {
 
 const model = createStandardModelCapability();
 const doesNotRecognizeProxy = (_value: unknown) => false;
+const unavailableGraphQueries: ApplicationOperationsOptions["graphQueries"] = Object.freeze({
+  exactEntity: async () =>
+    failure({ code: "graph-query-unavailable", message: "fixture graph query is unavailable" }),
+  pageEntities: async () =>
+    failure({ code: "graph-query-unavailable", message: "fixture graph query is unavailable" }),
+  searchEntities: async () =>
+    failure({ code: "graph-query-unavailable", message: "fixture graph query is unavailable" }),
+  traverseRelations: async () =>
+    failure({ code: "graph-query-unavailable", message: "fixture graph query is unavailable" }),
+});
 const applicationBounds: ApplicationOperationBounds = Object.freeze({
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
@@ -357,6 +367,7 @@ function mutationOperations(
   const api = createApplicationOperations({
     bounds,
     graph,
+    graphQueries: unavailableGraphQueries,
     initialization: semanticInitialization.capability,
     maxSnapshotAttempts: 3,
     model: modelCapability,
@@ -441,7 +452,78 @@ function applicationOptions(
     },
     transactionProvider: fixture,
     ...overrides,
+    graphQueries: overrides.graphQueries ?? unavailableGraphQueries,
   } satisfies ApplicationOperationsOptions;
+}
+
+function projectionGraphQueries(
+  overrides: Partial<ApplicationOperationsOptions["graphQueries"]> = {},
+): ApplicationOperationsOptions["graphQueries"] {
+  const incomingToService = Object.freeze({
+    id: "rel_00000000000000000000000000000003",
+    payload: Object.freeze({ description: "Feeds ordering" }),
+    source: ids.target,
+    target: ids.service,
+    type: "feeds",
+  });
+  const byId = new Map(richState.components.map((entry) => [entry.id, entry] as const));
+  const base: ApplicationOperationsOptions["graphQueries"] = Object.freeze({
+    exactEntity: async (id: string) => {
+      const item = byId.get(id);
+      return item === undefined
+        ? failure({ code: "unknown-entity", message: "fixture entity missing" })
+        : (success({ generation: generation(7), item }) as never);
+    },
+    pageEntities: async () =>
+      success({
+        generation: generation(7),
+        hasMore: true,
+        items: richState.components.slice(0, 2),
+        nextCursor: "engine-export-cursor",
+      }) as never,
+    searchEntities: async () =>
+      success({
+        generation: generation(7),
+        hasMore: false,
+        items: [richState.components[1]!],
+      }) as never,
+    traverseRelations: async (
+      query: Parameters<ApplicationOperationsOptions["graphQueries"]["traverseRelations"]>[0],
+    ) => {
+      const hits: unknown[] = [];
+      if (query.direction === "incoming" || query.direction === "both") {
+        for (const relation of [...richState.relationships, incomingToService]) {
+          if (relation.target !== query.entity) continue;
+          hits.push({
+            depth: 1,
+            direction: "incoming",
+            entity: byId.get(relation.source),
+            from: query.entity,
+            relation,
+          });
+        }
+      }
+      if (query.direction === "outgoing" || query.direction === "both") {
+        for (const relation of [...richState.relationships, incomingToService]) {
+          if (relation.source !== query.entity) continue;
+          hits.push({
+            depth: 1,
+            direction: "outgoing",
+            entity: byId.get(relation.target),
+            from: query.entity,
+            relation,
+          });
+        }
+      }
+      hits.sort((left, right) =>
+        String((left as { relation: { id: string } }).relation.id).localeCompare(
+          String((right as { relation: { id: string } }).relation.id),
+        ),
+      );
+      return success({ generation: generation(7), hasMore: false, items: hits }) as never;
+    },
+  });
+  return Object.freeze({ ...base, ...overrides });
 }
 
 function operations(
@@ -664,6 +746,747 @@ describe("application workspace initialization", () => {
     expect(result.ok ? "" : result.diagnostics[0]?.code).toBe("workspace-initialization-failed");
     expect(getterCalls).toBe(0);
     expect(JSON.stringify(result)).not.toContain(secret);
+  });
+});
+
+describe("application projection-backed blueprint queries", () => {
+  test("exports and searches canonical sparse and rich recursive components without snapshots", async () => {
+    const fixture = new SnapshotFixture();
+    fixture.snapshot = () => {
+      throw new Error("projection-backed reads must not open canonical snapshots");
+    };
+    const api = operations(fixture, undefined, { graphQueries: projectionGraphQueries() });
+
+    const exported = await api.exportBlueprint({ limit: 2 });
+    expect(exported).toEqual({
+      ok: true,
+      value: {
+        generation: generation(7),
+        hasMore: true,
+        items: [
+          {
+            component: {
+              extensions: {},
+              id: ids.domain,
+              kind: "component",
+              name: "Commerce",
+              type: "domain",
+            },
+            relationships: [],
+          },
+          {
+            component: expect.objectContaining({
+              actions: [{ description: "Release safely", extensions: {}, id: "deploy" }],
+              id: ids.service,
+              inputs: [{ extensions: {}, id: "orders", name: "Orders" }],
+              intent: "Own the order lifecycle.",
+              outputs: [{ extensions: {}, id: "receipts", name: "Receipts" }],
+              parent: ids.domain,
+            }),
+            relationships: [
+              expect.objectContaining({ id: relationIds.first, source: ids.service }),
+              expect.objectContaining({ id: relationIds.second, source: ids.service }),
+            ],
+          },
+        ],
+        nextCursor: "engine-export-cursor" as never,
+      },
+    });
+    const searched = await api.searchBlueprint({ limit: 1, text: "order lifecycle" });
+    expect(searched).toMatchObject({
+      ok: true,
+      value: {
+        generation: 7,
+        hasMore: false,
+        items: [{ id: ids.service, parent: ids.domain }],
+      },
+    });
+    expect(fixture.requested).toEqual([]);
+  });
+
+  test("gathers every outgoing relationship inside one self-contained export page", async () => {
+    const traversalRequests: Array<string | undefined> = [];
+    const graphQueries = projectionGraphQueries({
+      pageEntities: async () =>
+        success({
+          generation: generation(7),
+          hasMore: false,
+          items: [richState.components[1]],
+        }) as never,
+      traverseRelations: async (_query, request) => {
+        traversalRequests.push(request.cursor);
+        return request.cursor === undefined
+          ? (success({
+              generation: generation(7),
+              hasMore: true,
+              items: [
+                {
+                  depth: 1,
+                  direction: "outgoing",
+                  entity: richState.components[5],
+                  from: ids.service,
+                  relation: richState.relationships[0],
+                },
+              ],
+              nextCursor: "relationship-page-2",
+            }) as never)
+          : (success({
+              generation: generation(7),
+              hasMore: false,
+              items: [
+                {
+                  depth: 1,
+                  direction: "outgoing",
+                  entity: richState.components[2],
+                  from: ids.service,
+                  relation: richState.relationships[1],
+                },
+              ],
+            }) as never);
+      },
+    });
+
+    const exported = await operations(new SnapshotFixture(), undefined, {
+      graphQueries,
+    }).exportBlueprint({ limit: 1 });
+
+    expect(exported).toMatchObject({
+      ok: true,
+      value: {
+        hasMore: false,
+        items: [
+          {
+            component: { id: ids.service },
+            relationships: [{ id: relationIds.first }, { id: relationIds.second }],
+          },
+        ],
+      },
+    });
+    expect(traversalRequests).toEqual([undefined, "relationship-page-2"]);
+  });
+
+  test("fails closed on export generation drift and duplicate relationship identities", async () => {
+    const drifting = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [richState.components[1]],
+          }) as never,
+        traverseRelations: async () =>
+          success({ generation: generation(8), hasMore: false, items: [] }) as never,
+      }),
+    }).exportBlueprint({ limit: 1 });
+    expect(drifting).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+
+    const duplicate = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [richState.components[1], richState.components[5]],
+          }) as never,
+        traverseRelations: async (query) =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [
+              query.entity === ids.service
+                ? {
+                    depth: 1,
+                    direction: "outgoing",
+                    entity: richState.components[5],
+                    from: ids.service,
+                    relation: richState.relationships[0],
+                  }
+                : {
+                    depth: 1,
+                    direction: "outgoing",
+                    entity: richState.components[0],
+                    from: ids.target,
+                    relation: {
+                      ...richState.relationships[0],
+                      source: ids.target,
+                      target: ids.domain,
+                    },
+                  },
+            ],
+          }) as never,
+      }),
+    }).exportBlueprint({ limit: 2 });
+    expect(duplicate).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+
+    let boundedTraversalCalls = 0;
+    const overAggregate = await operations(new SnapshotFixture(), undefined, {
+      bounds: Object.freeze({ ...applicationBounds, maxRelationships: 1 }),
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [richState.components[1]],
+          }) as never,
+        traverseRelations: async () => {
+          boundedTraversalCalls += 1;
+          return success({
+            generation: generation(7),
+            hasMore: true,
+            items: [
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: richState.components[5],
+                from: ids.service,
+                relation: richState.relationships[0],
+              },
+            ],
+            nextCursor: "more-relationships",
+          }) as never;
+        },
+      }),
+    }).exportBlueprint({ limit: 1 });
+    expect(overAggregate).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+    expect(boundedTraversalCalls).toBe(1);
+
+    const sparseSource = component({ id: ids.service });
+    const sparseTargets = [component({ id: ids.target }), component({ id: ids.module })] as const;
+    const sparseRelationships = [
+      {
+        id: relationIds.first,
+        payload: Object.freeze({}),
+        source: ids.service,
+        target: ids.target,
+        type: "depends-on",
+      },
+      {
+        id: relationIds.second,
+        payload: Object.freeze({}),
+        source: ids.service,
+        target: ids.module,
+        type: "depends-on",
+      },
+    ] as const;
+    let structuralPageCalls = 0;
+    const structurallyOversized = await operations(new SnapshotFixture(), undefined, {
+      bounds: Object.freeze({ ...applicationBounds, maxSnapshotStateValues: 20 }),
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () =>
+          success({ generation: generation(7), hasMore: false, items: [sparseSource] }) as never,
+        traverseRelations: async (_query, request) => {
+          const index = request.cursor === undefined ? 0 : 1;
+          structuralPageCalls += 1;
+          return success({
+            generation: generation(7),
+            hasMore: index === 0,
+            items: [
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: sparseTargets[index],
+                from: ids.service,
+                relation: sparseRelationships[index],
+              },
+            ],
+            ...(index === 0 ? { nextCursor: "structural-page-2" } : {}),
+          }) as never;
+        },
+      }),
+    }).exportBlueprint({ limit: 1 });
+    expect(structurallyOversized).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+    expect(structuralPageCalls).toBe(2);
+  });
+
+  test("canonicalizes incoming, outgoing, and both-direction traversal hits", async () => {
+    const api = operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries(),
+    });
+    const outgoing = await api.traverseBlueprint({
+      depth: 1,
+      direction: "outgoing",
+      id: ids.service,
+      limit: 10,
+    });
+    expect(outgoing).toMatchObject({
+      ok: true,
+      value: {
+        generation: 7,
+        items: [
+          {
+            component: { id: ids.target },
+            direction: "outgoing",
+            from: ids.service,
+            relationship: {
+              description: "Authenticates through",
+              id: relationIds.first,
+              source: ids.service,
+              target: ids.target,
+            },
+          },
+          {
+            component: { id: ids.module, parent: ids.service },
+            relationship: {
+              extensions: { "example.dev/strength": "required" },
+              id: relationIds.second,
+            },
+          },
+        ],
+      },
+    });
+    const incoming = await api.traverseBlueprint({
+      depth: 1,
+      direction: "incoming",
+      id: ids.target,
+      limit: 10,
+    });
+    expect(incoming).toMatchObject({
+      ok: true,
+      value: { items: [{ component: { id: ids.service }, direction: "incoming" }] },
+    });
+    const both = await api.traverseBlueprint({
+      depth: 1,
+      direction: "both",
+      id: ids.service,
+      limit: 10,
+    });
+    expect(both).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          { direction: "outgoing", relationship: { id: relationIds.first } },
+          { direction: "outgoing", relationship: { id: relationIds.second } },
+          {
+            direction: "incoming",
+            relationship: { id: "rel_00000000000000000000000000000003" },
+          },
+        ],
+      },
+    });
+  });
+
+  test("binds durable-alias traversal pages to the resolved canonical root", async () => {
+    const alias = "ent_0000000000000000000000000000000a";
+    const calls: string[] = [];
+    const api = operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        exactEntity: async (id) => {
+          calls.push(`exact:${id}`);
+          return id === alias
+            ? (success({ generation: generation(7), item: richState.components[1] }) as never)
+            : failure({ code: "unknown-entity", message: "fixture entity missing" });
+        },
+        traverseRelations: async (query, request) => {
+          calls.push(`traverse:${query.entity}:${request.cursor ?? "first"}`);
+          return request.cursor === undefined
+            ? (success({
+                generation: generation(7),
+                hasMore: true,
+                items: [
+                  {
+                    depth: 1,
+                    direction: "outgoing",
+                    entity: richState.components[5],
+                    from: ids.service,
+                    relation: richState.relationships[0],
+                  },
+                ],
+                nextCursor: "alias-page-2",
+              }) as never)
+            : (success({
+                generation: generation(7),
+                hasMore: false,
+                items: [
+                  {
+                    depth: 1,
+                    direction: "outgoing",
+                    entity: richState.components[2],
+                    from: ids.service,
+                    relation: richState.relationships[1],
+                  },
+                ],
+              }) as never);
+        },
+      }),
+    });
+
+    const first = await api.traverseBlueprint({
+      depth: 1,
+      direction: "outgoing",
+      id: alias,
+      limit: 1,
+    });
+    expect(first).toMatchObject({
+      ok: true,
+      value: {
+        hasMore: true,
+        items: [{ from: ids.service, relationship: { id: relationIds.first } }],
+        nextCursor: "alias-page-2",
+      },
+    });
+    const second = await api.traverseBlueprint({
+      cursor: "alias-page-2",
+      depth: 1,
+      direction: "outgoing",
+      id: alias,
+      limit: 1,
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      value: {
+        hasMore: false,
+        items: [{ from: ids.service, relationship: { id: relationIds.second } }],
+      },
+    });
+    expect(calls).toEqual([
+      `traverse:${alias}:first`,
+      `exact:${alias}`,
+      `traverse:${alias}:alias-page-2`,
+      `exact:${alias}`,
+    ]);
+  });
+
+  test("captures graph-query methods and contains hostile results and diagnostics", async () => {
+    let originalCalls = 0;
+    let redirectedCalls = 0;
+    const mutable = {
+      ...projectionGraphQueries({
+        pageEntities: async function () {
+          originalCalls += 1;
+          expect(this).toBe(mutable);
+          return success({ generation: generation(7), hasMore: false, items: [] });
+        },
+      }),
+    };
+    const api = operations(new SnapshotFixture(), undefined, { graphQueries: mutable });
+    mutable.pageEntities = async () => {
+      redirectedCalls += 1;
+      return success({ generation: generation(99), hasMore: false, items: [] });
+    };
+    expect(await api.exportBlueprint({ limit: 1 })).toEqual({
+      ok: true,
+      value: { generation: generation(7), hasMore: false, items: [] },
+    });
+    expect({ originalCalls, redirectedCalls }).toEqual({ originalCalls: 1, redirectedCalls: 0 });
+
+    for (const graphQueries of [
+      projectionGraphQueries({
+        pageEntities: async () =>
+          success({ generation: generation(7), hasMore: true, items: [] }) as never,
+      }),
+      projectionGraphQueries({
+        pageEntities: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [richState.components[1], richState.components[0]],
+          }) as never,
+      }),
+      projectionGraphQueries({
+        pageEntities: async () =>
+          failure({ code: "provider-private-secret", message: "/private/query" }),
+      }),
+      projectionGraphQueries({
+        pageEntities: async () =>
+          failure({ code: "stale-cursor", message: { secret: "/private/query" } } as never),
+      }),
+    ]) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries,
+      }).exportBlueprint({ limit: 2 });
+      expect(result).toEqual({
+        diagnostics: [
+          {
+            code: "graph-query-unavailable",
+            message: "The bounded graph query engine is unavailable",
+          },
+        ],
+        ok: false,
+      });
+    }
+
+    const stale = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        searchEntities: async () =>
+          failure({ code: "stale-cursor", message: "/private/provider-generation" }),
+      }),
+    }).searchBlueprint({ cursor: "old", limit: 1, text: "order" });
+    expect(stale).toEqual({
+      diagnostics: [
+        {
+          code: "stale-cursor",
+          message: "The continuation cursor belongs to a different graph generation",
+        },
+      ],
+      ok: false,
+    });
+    expect(JSON.stringify(stale)).not.toContain("private");
+  });
+
+  test("enforces cursor and traversal endpoint invariants around a replacement engine", async () => {
+    let calls = 0;
+    const tooLong = "c".repeat(4_097);
+    const api = operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () => {
+          calls += 1;
+          return success({ generation: generation(7), hasMore: false, items: [] });
+        },
+        traverseRelations: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: richState.components[5],
+                from: ids.domain,
+                relation: { ...richState.relationships[0], source: ids.domain },
+              },
+            ],
+          }) as never,
+      }),
+    });
+    expect(await api.exportBlueprint({ cursor: tooLong, limit: 1 })).toMatchObject({ ok: false });
+    expect(calls).toBe(0);
+    expect(
+      await api.traverseBlueprint({
+        depth: 1,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 1,
+      }),
+    ).toEqual({
+      diagnostics: [
+        {
+          code: "graph-query-unavailable",
+          message: "The bounded graph query engine is unavailable",
+        },
+      ],
+      ok: false,
+    });
+  });
+
+  test("uses relationship bounds for traversal requests and returned pages", async () => {
+    let traversalCalls = 0;
+    const thirdRelation = Object.freeze({
+      id: "rel_00000000000000000000000000000003",
+      payload: Object.freeze({}),
+      source: ids.service,
+      target: ids.nestedService,
+      type: "depends-on",
+    });
+    const api = operations(new SnapshotFixture(), undefined, {
+      bounds: Object.freeze({
+        ...applicationBounds,
+        maxComponents: 4,
+        maxRelationships: 2,
+      }),
+      graphQueries: projectionGraphQueries({
+        traverseRelations: async () => {
+          traversalCalls += 1;
+          return success({
+            generation: generation(7),
+            hasMore: false,
+            items: [
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: richState.components[5],
+                from: ids.service,
+                relation: richState.relationships[0],
+              },
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: richState.components[2],
+                from: ids.service,
+                relation: richState.relationships[1],
+              },
+              {
+                depth: 1,
+                direction: "outgoing",
+                entity: richState.components[3],
+                from: ids.service,
+                relation: thirdRelation,
+              },
+            ],
+          }) as never;
+        },
+      }),
+    });
+
+    expect(
+      await api.traverseBlueprint({
+        depth: 1,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 2,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "graph-query-unavailable" }], ok: false });
+    expect(
+      await api.traverseBlueprint({
+        depth: 1,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 3,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-page-limit" }], ok: false });
+    expect(traversalCalls).toBe(1);
+  });
+
+  test("rejects non-advancing cursors for export, search, and traversal", async () => {
+    const stalledPage = {
+      generation: generation(7),
+      hasMore: true,
+      items: [richState.components[0]],
+      nextCursor: "same-cursor",
+    } as const;
+    const stalledTraversal = {
+      generation: generation(7),
+      hasMore: true,
+      items: [
+        {
+          depth: 1,
+          direction: "outgoing",
+          entity: richState.components[5],
+          from: ids.service,
+          relation: richState.relationships[0],
+        },
+      ],
+      nextCursor: "same-cursor",
+    } as const;
+    const cases = [
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          pageEntities: async () => success(stalledPage) as never,
+        }),
+      }).exportBlueprint({ cursor: "same-cursor", limit: 1 }),
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          searchEntities: async () => success(stalledPage) as never,
+        }),
+      }).searchBlueprint({ cursor: "same-cursor", limit: 1, text: "commerce" }),
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          traverseRelations: async () => success(stalledTraversal) as never,
+        }),
+      }).traverseBlueprint({
+        cursor: "same-cursor",
+        depth: 1,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 1,
+      }),
+    ];
+
+    for (const result of await Promise.all(cases)) {
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "graph-query-unavailable" }],
+        ok: false,
+      });
+    }
+  });
+
+  test("contains traversal pages that violate breadth-first depth progression", async () => {
+    const hitAt = (depth: number, relationIndex: 0 | 1) => ({
+      depth,
+      direction: "outgoing" as const,
+      entity: richState.components[relationIndex === 0 ? 5 : 2],
+      from: ids.service,
+      relation: richState.relationships[relationIndex],
+    });
+    for (const items of [[hitAt(2, 0)], [hitAt(1, 0), hitAt(3, 1)]]) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          traverseRelations: async () =>
+            success({ generation: generation(7), hasMore: false, items }) as never,
+        }),
+      }).traverseBlueprint({
+        depth: 3,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 2,
+      });
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "graph-query-unavailable" }],
+        ok: false,
+      });
+    }
+
+    const resumed = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        traverseRelations: async () =>
+          success({
+            generation: generation(7),
+            hasMore: false,
+            items: [hitAt(2, 0)],
+          }) as never,
+      }),
+    }).traverseBlueprint({
+      cursor: "opaque-resume",
+      depth: 3,
+      direction: "outgoing",
+      id: ids.service,
+      limit: 1,
+    });
+    expect(resumed).toMatchObject({ ok: true, value: { items: [{ depth: 2 }] } });
+  });
+
+  test("allowlists graph diagnostics for the exact operation and cursor state", async () => {
+    const exportFailure = async (code: string, cursor?: string) =>
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          pageEntities: async () => failure({ code, message: `/private/${code}` }),
+        }),
+      }).exportBlueprint({ ...(cursor === undefined ? {} : { cursor }), limit: 1 });
+    const searchFailure = async (code: string) =>
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          searchEntities: async () => failure({ code, message: `/private/${code}` }),
+        }),
+      }).searchBlueprint({ limit: 1, text: "commerce" });
+    const traversalFailure = async (code: string, cursor?: string) =>
+      operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          traverseRelations: async () => failure({ code, message: `/private/${code}` }),
+        }),
+      }).traverseBlueprint({
+        ...(cursor === undefined ? {} : { cursor }),
+        depth: 1,
+        direction: "outgoing",
+        id: ids.service,
+        limit: 1,
+      });
+    const codeOf = (result: {
+      readonly diagnostics?: readonly { readonly code: string }[];
+      readonly ok: boolean;
+    }) => (result.ok ? "" : result.diagnostics?.[0]?.code);
+
+    expect(codeOf(await exportFailure("unknown-entity"))).toBe("graph-query-unavailable");
+    expect(codeOf(await exportFailure("stale-cursor"))).toBe("graph-query-unavailable");
+    expect(codeOf(await exportFailure("stale-cursor", "opaque"))).toBe("stale-cursor");
+    expect(codeOf(await searchFailure("unknown-entity"))).toBe("graph-query-unavailable");
+    expect(codeOf(await searchFailure("invalid-search-text"))).toBe("invalid-search-text");
+    expect(codeOf(await traversalFailure("entity-scan-bound-exceeded"))).toBe(
+      "graph-query-unavailable",
+    );
+    expect(codeOf(await traversalFailure("stale-cursor"))).toBe("graph-query-unavailable");
+    expect(codeOf(await traversalFailure("unknown-entity"))).toBe("unknown-entity");
+    expect(codeOf(await traversalFailure("stale-cursor", "opaque"))).toBe("stale-cursor");
   });
 });
 

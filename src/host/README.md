@@ -68,12 +68,14 @@ or reclassify that already-committed outcome; the next projection load compares 
 generation and canonical-content fingerprint with current canonical state and rebuilds
 safely. The complete `groma.projection-index/v1` capability is exposed as
 `HostComposition.projection` for the application transaction engine, but it is not passed
-to the current terminal surface and is never added to a canonical journal target set.
+to the terminal surface and is never added to a canonical journal target set.
 
 The separate query-engine plugin depends only on `groma.projection-read/v1` and Core's
-bounded-query contracts. It publishes `groma.graph-query/v1` and is exposed as
-`HostComposition.queryEngine` for the next shared-operation slice. It is not passed to
-the current terminal surface, so this composition does not pull the GROM-30 CLI forward.
+bounded-query contracts. It publishes `groma.graph-query/v1`, which the official
+Application plugin requires and injects into shared blueprint export, search, and
+traversal operations. `HostComposition.queryEngine` remains explicit for embedders and
+verification, but `HostSurfaceContext` exposes only the shared application operations;
+the terminal surface cannot bypass their canonicalization and generation checks.
 The official projection plugin publishes the same object as the complete
 `groma.projection-index/v1` reconstructable index and the bounded
 `groma.projection-read/v1` partial-read capability; `HostComposition` keeps those

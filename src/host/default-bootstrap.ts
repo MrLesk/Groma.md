@@ -756,6 +756,7 @@ export function createDefaultBootstrapRegistry(
             [
               capability(defaultHostCapabilityIds.graph),
               capability(defaultHostCapabilityIds.invariant),
+              capability(defaultHostCapabilityIds.queryEngine),
               capability(defaultHostCapabilityIds.model),
               capability(defaultHostCapabilityIds.projection),
               capability(defaultHostCapabilityIds.queries),
@@ -774,6 +775,10 @@ export function createDefaultBootstrapRegistry(
             const invariant = requiredCapability<HostComposition["invariant"]>(
               pluginContext,
               defaultHostCapabilityIds.invariant,
+            );
+            const queryEngine = requiredCapability<HostComposition["queryEngine"]>(
+              pluginContext,
+              defaultHostCapabilityIds.queryEngine,
             );
             const model = requiredCapability<HostComposition["model"]>(
               pluginContext,
@@ -941,6 +946,7 @@ export function createDefaultBootstrapRegistry(
                 maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
               },
               graph,
+              graphQueries: queryEngine,
               initialization: workspace,
               maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
               model,

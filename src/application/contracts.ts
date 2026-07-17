@@ -3,6 +3,8 @@ import type {
   ContinuationCursor,
   Diagnostic,
   GraphGeneration,
+  GraphQueryEngineCapability,
+  GraphTraversalDirection,
   GraphKernel,
   ResourceKey,
   Result,
@@ -65,6 +67,7 @@ export interface ApplicationOperationsOptions {
   readonly aliasResourceMapper?: AliasResourceMapper;
   readonly bounds: ApplicationOperationBounds;
   readonly graph: GraphKernel;
+  readonly graphQueries: GraphQueryEngineCapability;
   readonly initialization: WorkspaceInitializationCapability;
   readonly maxSnapshotAttempts: number;
   readonly model: StandardModelCapability;
@@ -93,6 +96,19 @@ export interface ListRootComponentsRequest extends BoundedPageRequest {}
 
 export interface ListChildComponentsRequest extends BoundedPageRequest {
   readonly parent: string;
+}
+
+export interface ExportBlueprintRequest extends BoundedPageRequest {}
+
+export interface SearchBlueprintRequest extends BoundedPageRequest {
+  readonly text: string;
+}
+
+export interface TraverseBlueprintRequest extends BoundedPageRequest {
+  readonly depth: number;
+  readonly direction: GraphTraversalDirection;
+  readonly id: string;
+  readonly relationType?: string;
 }
 
 export interface ComponentRevision {
@@ -203,8 +219,49 @@ export interface ComponentPage {
   readonly nextCursor?: ContinuationCursor;
 }
 
+/** Projection-backed component page without canonical resource revisions. */
+export interface BlueprintComponentPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly StandardComponent[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
+/** One component and every canonical outgoing depth-1 relationship from that source. */
+export interface BlueprintExportItem {
+  readonly component: StandardComponent;
+  readonly relationships: readonly StandardRelationship[];
+}
+
+/** One self-contained bounded export page carried by the projection component cursor. */
+export interface BlueprintExportPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly BlueprintExportItem[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
+export interface BlueprintTraversalHit {
+  readonly component: StandardComponent;
+  readonly depth: number;
+  readonly direction: Exclude<GraphTraversalDirection, "both">;
+  readonly from: string;
+  readonly relationship: StandardRelationship;
+}
+
+/** One bounded page from a deterministic projection-backed relationship traversal. */
+export interface BlueprintTraversalPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly BlueprintTraversalHit[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
 export interface ApplicationOperations {
   initialize(request: InitializeWorkspaceRequest): Promise<Result<WorkspaceInitializationOutcome>>;
+  exportBlueprint(request: ExportBlueprintRequest): Promise<Result<BlueprintExportPage>>;
+  searchBlueprint(request: SearchBlueprintRequest): Promise<Result<BlueprintComponentPage>>;
+  traverseBlueprint(request: TraverseBlueprintRequest): Promise<Result<BlueprintTraversalPage>>;
   getComponent(request: GetComponentRequest): Promise<Result<ExactComponentRead>>;
   listComponents(request: ListComponentsRequest): Promise<Result<ComponentPage>>;
   listRoots(request: ListRootComponentsRequest): Promise<Result<ComponentPage>>;

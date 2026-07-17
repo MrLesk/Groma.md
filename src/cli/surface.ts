@@ -72,6 +72,7 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
     codes.some(
       (code) =>
         code === "plugin-scaffold-publication-failed" ||
+        code === "graph-query-unavailable" ||
         code.includes("provider") ||
         code.includes("initialization-failed") ||
         code.includes("recovery") ||
@@ -370,6 +371,35 @@ async function execute(
   const operations = workspaceOperations(command, context);
   if (!("listRoots" in operations)) return operations;
   switch (command.kind) {
+    case "blueprint-export":
+      return applicationResult(
+        command,
+        await operations.exportBlueprint({
+          ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
+          limit: command.limit,
+        }),
+      );
+    case "blueprint-search":
+      return applicationResult(
+        command,
+        await operations.searchBlueprint({
+          ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
+          limit: command.limit,
+          text: command.text,
+        }),
+      );
+    case "blueprint-traverse":
+      return applicationResult(
+        command,
+        await operations.traverseBlueprint({
+          ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
+          depth: command.depth,
+          direction: command.direction,
+          id: command.id,
+          limit: command.limit,
+          ...(command.relationType === undefined ? {} : { relationType: command.relationType }),
+        }),
+      );
     case "component-create": {
       const request = await structuredRequest(command, command.input, reader, context.cancellation);
       if (!request.ok) return request.result;

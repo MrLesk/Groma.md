@@ -3,18 +3,41 @@
 Presentation-neutral semantic operations shared by CLI, service, and web surfaces.
 Operations depend on capabilities and never call storage implementations directly.
 
-`createApplicationOperations` is the shared entry point. Its read surface currently
-provides atomic workspace initialization, exact component reads with bounded outgoing
-relationships, and deterministic bounded pages for all components, roots, and direct
-children. Every page is bound to a graph generation and query context through Core's
-opaque continuation cursor contract.
+`createApplicationOperations` is the shared entry point. Its read surface provides
+atomic workspace initialization, exact canonical component reads with bounded outgoing
+relationships, deterministic bounded pages for all components, roots, and direct
+children, plus projection-backed blueprint export, search, and directional traversal.
+Every page is bound to a graph generation and query context through Core's opaque
+continuation cursor contract.
 
 Application code sees stable component identities and content revisions, but never a
 canonical resource locator. A host injects the transaction snapshot, transaction
-execution, resource-mapping, graph, query, Standard Model, and workspace-initializer
-capabilities. Page reads confirm resource revisions in a second snapshot and retry a
+execution, resource-mapping, graph, bounded-query, graph-query, Standard Model, and
+workspace-initializer capabilities. Canonical page reads confirm resource revisions in a second snapshot and retry a
 configured number of times if the generation changes; empty canonical state remains a
 valid empty graph because bootstrap representation belongs to the host.
+
+`exportBlueprint`, `searchBlueprint`, and `traverseBlueprint` consume only the injected
+`groma.graph-query/v1` capability. Application captures its receiver and methods once,
+settles and contains each untrusted result, retains only allowlisted diagnostics with
+application-owned messages, validates page and traversal invariants, and canonicalizes
+every entity and relation through the same snapshot-state decoder used by canonical
+reads. The component page's generation, `hasMore`, and opaque cursor are preserved
+exactly; Application does not wrap them in another cursor or open a canonical snapshot
+to answer the projection-backed read.
+
+Every `exportBlueprint` item contains one canonical component plus every canonical
+outgoing depth-1 relationship whose source is that component. Application gathers the
+required traversal pages sequentially inside the same export operation, requires every
+internal page to match the component page generation, rejects duplicate or non-advancing
+relationship pages, and caps the page-wide relationship aggregate at the configured
+relationship bound. One incremental structural-value budget also covers the complete
+export page across its components and accumulated relationships. The internal traversal
+cursor never escapes. A complete current blueprint therefore requires only paging
+`exportBlueprint` through its fingerprint-bound component cursor; a stale generation or
+same-generation projection mismatch requires restarting the export. Public search and
+traversal remain independent one-page exploration operations and never follow their
+surface cursors implicitly.
 
 `createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
 provider snapshot state. `ApplicationOperationsOptions` requires that explicit

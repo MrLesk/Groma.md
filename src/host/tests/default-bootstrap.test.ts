@@ -350,6 +350,19 @@ describe("default bootstrap registry", () => {
         items: expectedProjection === undefined ? [] : [expectedProjection.entity],
       },
     });
+    expect(
+      await composed.value.operations.searchBlueprint({
+        limit: 1,
+        text: "projected component",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        generation: created.generation,
+        hasMore: false,
+        items: [{ id: created.value.id, name: "Projected component" }],
+      },
+    });
     const maximumTermSearch = Array.from(
       { length: 32 },
       (_, index) => `a${index.toString(36).padStart(6, "0")}`,
@@ -426,6 +439,11 @@ describe("default bootstrap registry", () => {
     expect(projectionRequirements("official.application")).toEqual([
       defaultHostCapabilityIds.projection,
     ]);
+    expect(
+      pluginInspection?.plugins
+        .find((plugin) => plugin.id === "official.application")
+        ?.requires.map((item) => item.id),
+    ).toContain(defaultHostCapabilityIds.queryEngine);
     expect(projectionRequirements("official.query-engine")).toEqual([
       defaultHostCapabilityIds.projectionRead,
     ]);

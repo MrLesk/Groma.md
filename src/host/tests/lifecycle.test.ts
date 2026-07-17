@@ -81,6 +81,7 @@ function applicationOperations(
   };
   return {
     createComponent: unused,
+    exportBlueprint: unused,
     getComponent: unused,
     initialize,
     listChildren: unused,
@@ -89,6 +90,8 @@ function applicationOperations(
     mergeComponent: unused,
     removeComponent: unused,
     reparentComponent: unused,
+    searchBlueprint: unused,
+    traverseBlueprint: unused,
     updateComponent: unused,
   };
 }
