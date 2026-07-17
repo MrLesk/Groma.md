@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 20:58'
+updated_date: '2026-07-17 21:24'
 labels: []
 milestone: m-2
 dependencies:
@@ -85,6 +85,8 @@ A true in-progress SIGKILL during projection-index staging exposed a production 
 PR #34 review superseded the maxBuffer-as-read-interruption proof: exact hash-and-PID projection-stage SIGKILL evidence demonstrated a true in-progress cold rebuild, but also exposed that the default five-minute callback stale-age policy (24-hour configured ceiling) prevents immediate same-workspace recovery after the exporter dies while holding projection coordination. Alex explicitly authorized expanding GROM-33 to add a narrow projection load-only proven-dead recovery fallback after exact contention; the global withCoordination policy and its stale-age behavior remain unchanged.
 
 Implemented the authorized projection load-only recovery and the final PR #34 verification gaps. The production-binary foundation verifier now arms an exact cache watcher before spawning, identifies the projection-index stage by full locator hash and exporter PID, kills the exact shipped process immediately with SIGKILL, proves the surviving regular stage and both unpublished manifests, preserves canonical bytes, and requires the complete recovered export to equal the primed export. Cold load alone follows exact callback contention with one same-locator explicit acquisition so double-proven-dead publishers recover immediately; live or ambiguous ownership remains contended, action runs at most once, release is bounded and fail-closed, and rebuild/update stay callback-only. Target verification now validates executable image kinds and structural bounds for the actual Mach-O arm64, ELF64 x86-64, PE32+ x64, and PE32+ arm64 artifacts. Focused projection tests pass 47/47; six focused production-binary foundation runs (one after target-matrix native restoration plus five consecutive repetitions), bun run check (800 tests and the complete verify:1b path), and bun run check:targets all pass. Formatting, typecheck, architecture boundaries, git diff --check, and Backlog doctor pass. Task status, acceptance criteria, and the existing final summary remain intentionally unchanged pending ready-PR review gates.
+
+Post-cancellation verification evidence supersedes the earlier 47-projection-test and 800-total-test counts: the focused projection-index suite now passes 48/48 tests (351 expectations), including cancellation after successful explicit acquisition with confirmed release and reacquisition, and bun run check passes 801/801 tests (5,704 expectations) plus the complete production-binary Iteration 1B workflow. Target verification now also parses the complete bounded Mach-O arm64 load-command table, rejects malformed command and segment arithmetic, requires one file-backed RX non-writable LC_SEGMENT_64 range, and binds a safe nonzero LC_MAIN entryoff to that executable file range. bun run check:targets accepts all four actual Bun artifacts and restores the native binary. These checks apply to the current post-cancellation worktree; GROM-33 status, acceptance criteria, and final summary remain unchanged pending review gates.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

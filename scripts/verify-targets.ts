@@ -74,12 +74,25 @@ function checkedTableEnd(offset: number, entrySize: number, count: number): numb
   return Number.isSafeInteger(length) && Number.isSafeInteger(end) ? end : undefined;
 }
 
+function checkedSpanEnd(offset: number, length: number): number | undefined {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0) {
+    return undefined;
+  }
+  const end = offset + length;
+  return Number.isSafeInteger(end) ? end : undefined;
+}
+
 function boundedUint64(view: DataView, offset: number): number | undefined {
   const value = view.getBigUint64(offset, true);
   return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : undefined;
 }
 
-function verifyMachOHeader(target: Target, header: Uint8Array, view: DataView): void {
+function verifyMachOHeader(
+  target: Target,
+  header: Uint8Array,
+  view: DataView,
+  fileSize: number,
+): void {
   if (
     header.byteLength < 32 ||
     !hasPrefix(header, [0xcf, 0xfa, 0xed, 0xfe]) ||
@@ -89,6 +102,106 @@ function verifyMachOHeader(target: Target, header: Uint8Array, view: DataView): 
   }
   if (view.getUint32(12, true) !== 0x00000002) {
     throw new Error(`${target.target} is not a Mach-O MH_EXECUTE image`);
+  }
+
+  const loadCommandOffset = 32;
+  const loadCommandCount = view.getUint32(16, true);
+  const loadCommandBytes = view.getUint32(20, true);
+  const loadCommandEnd = checkedSpanEnd(loadCommandOffset, loadCommandBytes);
+  if (
+    loadCommandCount === 0 ||
+    loadCommandBytes === 0 ||
+    loadCommandCount > Math.floor(loadCommandBytes / 8) ||
+    loadCommandEnd === undefined ||
+    loadCommandEnd > header.byteLength ||
+    loadCommandEnd > fileSize
+  ) {
+    throw new Error(`${target.target} has an invalid Mach-O load-command table`);
+  }
+
+  const executableFileRanges: { readonly end: number; readonly start: number }[] = [];
+  let entryOffset: number | undefined;
+  let offset = loadCommandOffset;
+  for (let index = 0; index < loadCommandCount; index += 1) {
+    const commandHeaderEnd = checkedSpanEnd(offset, 8);
+    if (commandHeaderEnd === undefined || commandHeaderEnd > loadCommandEnd) {
+      throw new Error(`${target.target} has a truncated Mach-O load command`);
+    }
+    const command = view.getUint32(offset, true);
+    const commandSize = view.getUint32(offset + 4, true);
+    const commandEnd = checkedSpanEnd(offset, commandSize);
+    if (
+      commandSize < 8 ||
+      commandSize % 8 !== 0 ||
+      commandEnd === undefined ||
+      commandEnd > loadCommandEnd
+    ) {
+      throw new Error(`${target.target} has an invalid Mach-O load command size`);
+    }
+
+    if (command === 0x00000019) {
+      if (commandSize < 72) {
+        throw new Error(`${target.target} has a truncated Mach-O LC_SEGMENT_64 command`);
+      }
+      const sectionCount = view.getUint32(offset + 64, true);
+      const sectionBytes = sectionCount * 80;
+      const sectionEnd = checkedSpanEnd(offset + 72, sectionBytes);
+      if (!Number.isSafeInteger(sectionBytes) || sectionEnd !== commandEnd) {
+        throw new Error(`${target.target} has an invalid Mach-O LC_SEGMENT_64 section table`);
+      }
+      const fileOffset = boundedUint64(view, offset + 40);
+      const fileBytes = boundedUint64(view, offset + 48);
+      const segmentEnd =
+        fileOffset === undefined || fileBytes === undefined
+          ? undefined
+          : checkedSpanEnd(fileOffset, fileBytes);
+      if (
+        fileOffset === undefined ||
+        fileBytes === undefined ||
+        segmentEnd === undefined ||
+        segmentEnd > fileSize
+      ) {
+        throw new Error(`${target.target} has an out-of-bounds Mach-O segment`);
+      }
+      const maximumProtection = view.getUint32(offset + 56, true);
+      const initialProtection = view.getUint32(offset + 60, true);
+      if ((initialProtection & 0x4) !== 0) {
+        if (
+          initialProtection !== 0x5 ||
+          (maximumProtection & initialProtection) !== initialProtection ||
+          fileBytes === 0
+        ) {
+          throw new Error(`${target.target} has an invalid executable Mach-O segment`);
+        }
+        executableFileRanges.push(Object.freeze({ end: segmentEnd, start: fileOffset }));
+      }
+    }
+
+    if (command === 0x80000028) {
+      if (commandSize !== 24 || entryOffset !== undefined) {
+        throw new Error(`${target.target} has an invalid Mach-O LC_MAIN command`);
+      }
+      entryOffset = boundedUint64(view, offset + 8);
+      if (entryOffset === undefined || entryOffset === 0 || entryOffset >= fileSize) {
+        throw new Error(`${target.target} has an invalid Mach-O LC_MAIN entry offset`);
+      }
+    }
+    offset = commandEnd;
+  }
+
+  if (offset !== loadCommandEnd) {
+    throw new Error(`${target.target} does not exactly consume its Mach-O load-command table`);
+  }
+  if (executableFileRanges.length === 0) {
+    throw new Error(`${target.target} has no executable file-backed Mach-O segment`);
+  }
+  if (
+    entryOffset === undefined ||
+    !executableFileRanges.some(
+      (range) => entryOffset !== undefined && entryOffset >= range.start && entryOffset < range.end,
+    )
+  ) {
+    throw new Error(`${target.target} has no LC_MAIN entry inside an executable Mach-O segment`);
   }
 }
 
@@ -271,7 +384,7 @@ async function verifyExecutableHeader(target: Target): Promise<void> {
     const header = bytes.subarray(0, bytesRead);
     const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
     if (target.platform === "darwin") {
-      verifyMachOHeader(target, header, view);
+      verifyMachOHeader(target, header, view, stats.size);
       return;
     }
     if (target.platform === "linux") {
