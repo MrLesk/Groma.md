@@ -955,11 +955,15 @@ component page and reuses it for that page and every internal traversal; a
 same-generation branch switch therefore fails closed. Search and traversal keep their
 own one-page cursors for independent exploration; neither is a second phase of export.
 Traversal order remains breadth-first depth and then stable relationship identity.
-Proven page-wide relationship or structural-value exhaustion returns the semantic
-`blueprint-export-page-bound-exceeded` diagnostic so a caller can retry with a smaller
-component-page limit; malformed, hostile, or unavailable query data remains an
-infrastructure failure. A failure at limit one means the self-contained item itself
-exceeds the local export bounds.
+Application exact-counts canonical-JSON UTF-8 bytes and proves depth on every final
+export, search, and traversal page under the Host-supplied `maxBlueprintPageBytes` and
+`maxBlueprintPageDepth` bounds. The descriptor-safe counter never invokes
+behavior-bearing values or constructs a second serialized page, and it does not run on
+export's internal traversal pages. Proven page-wide relationship, structural-value,
+byte, or depth exhaustion returns an operation-specific semantic page-bound diagnostic
+so a caller can retry with a smaller limit; malformed, hostile, or unavailable query data
+remains an infrastructure failure. A failure at limit one identifies one self-contained
+export item, search component, or traversal hit as too large.
 
 The official shared operation surface is published only as `groma.operations/v2`.
 Official full-workspace and blueprint registrations require that v2 identity; no v1
@@ -990,9 +994,12 @@ blueprint operations.
   application operations.
 
 Ordinary command results remain atomic and non-streaming under an eight-MiB rendered
-output bound. This covers the official one-MiB source intent document after worst-case
-JSON escaping and the bounded canonical result envelope; output beyond that boundary
-fails as `cli-output-bound-exceeded` before any partial result is emitted.
+output bound and canonical-JSON depth 30. The official Host gives Application
+provider-neutral final blueprint-page bounds 64 KiB below that byte ceiling and two
+levels below the depth ceiling, leaving fixed command/result-envelope headroom while
+keeping the two layers independent. Proven blueprint-page exhaustion is semantic and
+retryable with a smaller limit; the CLI ceilings remain last-resort containment and fail
+as `cli-output-bound-exceeded` before any partial result is emitted.
 
 #### Application Service
 

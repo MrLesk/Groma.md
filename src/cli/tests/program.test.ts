@@ -3,9 +3,10 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createDefaultBootstrapRegistry } from "../../host/index.ts";
+import { createDefaultBootstrapRegistry, defaultHostBounds } from "../../host/index.ts";
 import {
   CLI_EXIT,
+  CLI_MAX_JSON_DEPTH,
   CLI_MAX_RENDERED_BYTES,
   CLI_MAX_SEARCH_CHARACTERS,
   CLI_MAX_TRAVERSAL_DEPTH,
@@ -124,6 +125,12 @@ function committedRevision(envelope: JsonEnvelope, id: string): string {
 }
 
 describe("CLI program", () => {
+  test("keeps the official Application page bound below the atomic CLI result ceiling", () => {
+    expect(defaultHostBounds.maxBlueprintPageBytes).toBe(CLI_MAX_RENDERED_BYTES - 64 * 1024);
+    expect(defaultHostBounds.maxBlueprintPageDepth as number).toBe(CLI_MAX_JSON_DEPTH - 2);
+    expect(Object.isFrozen(defaultHostBounds)).toBeTrue();
+  });
+
   for (const args of [["--help"], ["-h"]] as const) {
     test(`renders help for ${JSON.stringify(args)}`, async () => {
       const captured = captureOutput();
@@ -485,6 +492,79 @@ describe("CLI program", () => {
       },
       exitCode: CLI_EXIT.success,
     });
+  });
+
+  test("renders a near-max official two-document limit-one traversal below eight MiB", async () => {
+    const root = await workspace();
+    const source = "ent_00000000000000000000000000000001";
+    const target = "ent_00000000000000000000000000000002";
+    const neighborValue = "\0".repeat(65_000);
+    const relationshipValue = "\0".repeat(520_000);
+    const registry = createDefaultBootstrapRegistry({
+      surface: { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+    });
+    const composed = await registry.compose({ workspaceRoot: root });
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(await composed.value.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await composed.value.operations.createComponent({
+        component: {
+          "example.dev/blob": neighborValue,
+          id: target,
+          name: "Target",
+          type: "service",
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: source, name: "Source", type: "service" },
+        relationships: [{ description: relationshipValue, target, type: "depends-on" }],
+      }),
+    ).toMatchObject({ status: "committed" });
+    const targetBytes = await readFile(path.join(root, "groma", "intent", "00", `${target}.md`));
+    const sourceBytes = await readFile(path.join(root, "groma", "intent", "00", `${source}.md`));
+    expect(targetBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+    expect(sourceBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+
+    const traversed = await jsonCommand(root, [
+      "blueprint",
+      "traverse",
+      source,
+      "--direction",
+      "outgoing",
+      "--depth",
+      "1",
+      "--limit",
+      "1",
+    ]);
+    const renderedBytes = new TextEncoder().encode(traversed.text).byteLength;
+    expect(renderedBytes).toBeGreaterThan(3_000_000);
+    expect(renderedBytes).toBeLessThanOrEqual(CLI_MAX_RENDERED_BYTES);
+    expect(traversed).toMatchObject({
+      envelope: {
+        command: "blueprint traverse",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          ok: true,
+          value: {
+            hasMore: false,
+            items: [
+              {
+                component: {
+                  extensions: { "example.dev/blob": neighborValue },
+                  id: target,
+                },
+                relationship: { description: relationshipValue, source, target },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(traversed.text).not.toContain("cli-output-bound-exceeded");
   });
 
   test("executes the complete one-shot component workflow across host restarts", async () => {

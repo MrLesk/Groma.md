@@ -85,34 +85,59 @@ describe("CLI rendering", () => {
     ).toEqual({ ok: false });
   });
 
-  test("renders export page-bound guidance identically in plain and JSON results", () => {
-    const result: CliCommandResult = {
-      command: "blueprint export",
-      exitCode: 4,
-      ok: false,
-      result: {
-        diagnostics: [
-          {
-            code: "blueprint-export-page-bound-exceeded",
-            details: { bound: "relationships", maximum: 1_000 },
-            message:
-              "The blueprint export page exceeds local aggregate bounds; retry with a smaller --limit. If --limit 1 fails, one item exceeds the local export bounds",
-          },
-        ],
+  test("renders blueprint page-bound guidance identically in plain and JSON results", () => {
+    for (const [command, code, noun, bound, maximum] of [
+      [
+        "blueprint export",
+        "blueprint-export-page-bound-exceeded",
+        "export item",
+        "utf8-bytes",
+        8_323_072,
+      ],
+      [
+        "blueprint search",
+        "blueprint-search-page-bound-exceeded",
+        "component",
+        "utf8-bytes",
+        8_323_072,
+      ],
+      [
+        "blueprint traverse",
+        "blueprint-traverse-page-bound-exceeded",
+        "traversal hit",
+        "utf8-bytes",
+        8_323_072,
+      ],
+      ["blueprint search", "blueprint-search-page-bound-exceeded", "component", "depth", 28],
+    ] as const) {
+      const result: CliCommandResult = {
+        command,
+        exitCode: 4,
         ok: false,
-      },
-    };
+        result: {
+          diagnostics: [
+            {
+              code,
+              details: { bound, maximum },
+              message: `The page is too large; retry with a smaller --limit. If --limit 1 fails, one ${noun} is too large`,
+            },
+          ],
+          ok: false,
+        },
+      };
 
-    const json = renderCommandResult(result, "json");
-    const plain = renderCommandResult(result, "plain");
-    expect(json).toMatchObject({ ok: true });
-    expect(plain).toMatchObject({ ok: true });
-    if (json.ok && plain.ok) {
-      const jsonResult = (JSON.parse(json.text) as { readonly result: unknown }).result;
-      const plainResult = JSON.parse(plain.text.slice(plain.text.indexOf("result: ") + 8));
-      expect(plainResult).toEqual(jsonResult);
-      expect(plain.text).toContain("smaller --limit");
-      expect(plain.text).toContain("blueprint-export-page-bound-exceeded");
+      const json = renderCommandResult(result, "json");
+      const plain = renderCommandResult(result, "plain");
+      expect(json).toMatchObject({ ok: true });
+      expect(plain).toMatchObject({ ok: true });
+      if (json.ok && plain.ok) {
+        const jsonResult = (JSON.parse(json.text) as { readonly result: unknown }).result;
+        const plainResult = JSON.parse(plain.text.slice(plain.text.indexOf("result: ") + 8));
+        expect(plainResult).toEqual(jsonResult);
+        expect(plain.text).toContain("smaller --limit");
+        expect(plain.text).toContain(code);
+        expect(plain.text).not.toContain("cli-output-bound-exceeded");
+      }
     }
   });
 

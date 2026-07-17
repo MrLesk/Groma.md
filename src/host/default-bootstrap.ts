@@ -85,6 +85,10 @@ import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-i
 const intrinsicReflectApply = Reflect.apply;
 
 export const defaultHostBounds = Object.freeze({
+  // Leaves one fixed 64-KiB envelope below the CLI's independent eight-MiB result cap.
+  maxBlueprintPageBytes: 8 * 1024 * 1024 - 64 * 1024,
+  // Leaves the CLI's independent command and Application-result envelope levels.
+  maxBlueprintPageDepth: 28,
   maxCanonicalMigrationResources: 2_003,
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
@@ -935,6 +939,8 @@ export function createDefaultBootstrapRegistry(
             operations = createApplicationOperations({
               aliasResourceMapper,
               bounds: {
+                maxBlueprintPageBytes: defaultHostBounds.maxBlueprintPageBytes,
+                maxBlueprintPageDepth: defaultHostBounds.maxBlueprintPageDepth,
                 maxComponents: defaultHostBounds.maxComponents,
                 maxDiagnosticCount: defaultHostBounds.maxDiagnosticCount,
                 maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,

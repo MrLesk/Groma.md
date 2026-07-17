@@ -82,6 +82,7 @@ import {
   type DecodedApplicationSnapshotState,
 } from "./snapshot-state.ts";
 import { containCapabilityValue } from "./capability-value.ts";
+import { measureCanonicalJsonUtf8Bytes } from "./canonical-json-utf8.ts";
 import { observeNativePromise } from "./promise-observation.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
@@ -194,6 +195,8 @@ async function settleApplicationCapabilityValue(
 }
 
 const absoluteBounds = Object.freeze({
+  maxBlueprintPageBytes: 64 * 1024 * 1024,
+  maxBlueprintPageDepth: 100,
   maxComponents: 1_000_000,
   maxDiagnosticCount: 1_000,
   maxEmbeddedItems: 100_000,
@@ -326,6 +329,8 @@ function captureApplicationOperationsOptions(
   source: ApplicationOperationsOptions,
 ): ApplicationOperationsOptions {
   const bounds = {
+    maxBlueprintPageBytes: source.bounds.maxBlueprintPageBytes,
+    maxBlueprintPageDepth: source.bounds.maxBlueprintPageDepth,
     maxComponents: source.bounds.maxComponents,
     maxDiagnosticCount: source.bounds.maxDiagnosticCount,
     maxEmbeddedItems: source.bounds.maxEmbeddedItems,
@@ -2502,7 +2507,7 @@ function graphQueryUnavailable<T>(): Result<T> {
   );
 }
 
-type BlueprintExportPageBound = "relationships" | "structural-values";
+type BlueprintExportPageBound = "depth" | "relationships" | "structural-values" | "utf8-bytes";
 
 function blueprintExportPageBoundExceeded<T>(
   bound: BlueprintExportPageBound,
@@ -2513,9 +2518,57 @@ function blueprintExportPageBoundExceeded<T>(
       code: "blueprint-export-page-bound-exceeded",
       details: Object.freeze({ bound, maximum }),
       message:
-        "The blueprint export page exceeds local aggregate bounds; retry with a smaller --limit. If --limit 1 fails, one item exceeds the local export bounds",
+        "The blueprint export page exceeds local aggregate bounds; retry with a smaller --limit. If --limit 1 fails, one export item exceeds the local export bounds",
     }),
   );
+}
+
+type BlueprintPageBoundOperation = "export" | "search" | "traverse";
+type BlueprintFinalPageBound = "depth" | "utf8-bytes";
+
+function blueprintFinalPageBoundExceeded<T>(
+  operation: BlueprintPageBoundOperation,
+  bound: BlueprintFinalPageBound,
+  maximum: number,
+): Result<T> {
+  if (operation === "export") {
+    return blueprintExportPageBoundExceeded(bound, maximum);
+  }
+  const noun = operation === "search" ? "component" : "traversal hit";
+  const capacity = bound === "depth" ? "canonical-JSON depth" : "UTF-8 byte";
+  return frozenFailure(
+    Object.freeze({
+      code:
+        operation === "search"
+          ? "blueprint-search-page-bound-exceeded"
+          : "blueprint-traverse-page-bound-exceeded",
+      details: Object.freeze({ bound, maximum }),
+      message: `The blueprint ${operation} page exceeds the local ${capacity} bound; retry with a smaller --limit. If --limit 1 fails, one ${noun} exceeds the local page bound`,
+    }),
+  );
+}
+
+function boundedBlueprintPage<T>(
+  page: T,
+  operation: BlueprintPageBoundOperation,
+  options: ApplicationOperationsContext,
+): Result<T> {
+  const measured = measureCanonicalJsonUtf8Bytes(page, {
+    isProxy: options.isProxy,
+    maximumBytes: options.bounds.maxBlueprintPageBytes,
+    maximumDepth: options.bounds.maxBlueprintPageDepth,
+  });
+  if (measured.status === "accepted") return success(page);
+  if (measured.status === "bound-exceeded") {
+    return blueprintFinalPageBoundExceeded(
+      operation,
+      "utf8-bytes",
+      options.bounds.maxBlueprintPageBytes,
+    );
+  }
+  return measured.status === "depth-exceeded"
+    ? blueprintFinalPageBoundExceeded(operation, "depth", options.bounds.maxBlueprintPageDepth)
+    : graphQueryUnavailable();
 }
 
 type GraphQueryInvocationOperation = "export" | "identity" | "search" | "traverse";
@@ -3227,6 +3280,8 @@ export function createApplicationOperations(
     absoluteBounds.maxSnapshotAttempts,
   );
   for (const name of [
+    "maxBlueprintPageBytes",
+    "maxBlueprintPageDepth",
     "maxComponents",
     "maxDiagnosticCount",
     "maxEmbeddedItems",
@@ -3420,7 +3475,7 @@ export function createApplicationOperations(
         relationships: Object.freeze(relationships),
       });
     }
-    return success(
+    return boundedBlueprintPage(
       Object.freeze({
         generation: components.value.generation,
         hasMore: components.value.hasMore,
@@ -3429,6 +3484,8 @@ export function createApplicationOperations(
           ? {}
           : { nextCursor: components.value.nextCursor }),
       }),
+      "export",
+      options,
     );
   };
 
@@ -3464,16 +3521,16 @@ export function createApplicationOperations(
     );
     if (!page.ok) return page;
     const identity = await projectedGraphQueryIdentity(options);
-    return identity.ok
-      ? projectedComponentPage(
-          identity.value,
-          options.calls.searchGraphEntities,
-          Object.freeze({ kind: STANDARD_COMPONENT_KIND, text: inspected.value.text }),
-          page.value,
-          "search",
-          options,
-        )
-      : identity;
+    if (!identity.ok) return identity;
+    const projected = await projectedComponentPage(
+      identity.value,
+      options.calls.searchGraphEntities,
+      Object.freeze({ kind: STANDARD_COMPONENT_KIND, text: inspected.value.text }),
+      page.value,
+      "search",
+      options,
+    );
+    return projected.ok ? boundedBlueprintPage(projected.value, "search", options) : projected;
   };
 
   const traverseBlueprint = async (
@@ -3545,9 +3602,14 @@ export function createApplicationOperations(
       ...(relationType === undefined ? {} : { relationType }),
     });
     const identity = await projectedGraphQueryIdentity(options);
-    return identity.ok
-      ? projectedTraversalPage(identity.value, query, pageRequest.value, options)
-      : identity;
+    if (!identity.ok) return identity;
+    const projected = await projectedTraversalPage(
+      identity.value,
+      query,
+      pageRequest.value,
+      options,
+    );
+    return projected.ok ? boundedBlueprintPage(projected.value, "traverse", options) : projected;
   };
 
   const getComponent = async (

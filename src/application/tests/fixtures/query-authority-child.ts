@@ -92,6 +92,8 @@ try {
     maxPageSize: 10,
   });
   const bounds = Object.freeze({
+    maxBlueprintPageBytes: 8 * 1024 * 1024 - 64 * 1024,
+    maxBlueprintPageDepth: 28,
     maxComponents: 10,
     maxDiagnosticCount: 10,
     maxEmbeddedItems: 10,

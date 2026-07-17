@@ -52,6 +52,8 @@ export interface TransactionExecutionCapability {
 }
 
 export interface ApplicationOperationBounds {
+  readonly maxBlueprintPageBytes: number;
+  readonly maxBlueprintPageDepth: number;
   readonly maxComponents: number;
   readonly maxDiagnosticCount: number;
   readonly maxEmbeddedItems: number;

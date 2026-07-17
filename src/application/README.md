@@ -41,16 +41,27 @@ of the caller's component-page limit. One incremental structural-value budget al
 covers the complete export page across its components and accumulated relationships. The
 internal traversal cursor never escapes. A complete current blueprint therefore requires
 only paging `exportBlueprint` through its fingerprint-bound component cursor; a stale
-generation or same-generation projection mismatch requires restarting the export. Public search and
-traversal remain independent one-page exploration operations and never follow their
-surface cursors implicitly.
+generation or same-generation projection mismatch requires restarting the export. Public
+search and traversal remain independent one-page exploration operations and never follow
+their surface cursors implicitly.
 
-Proven page-wide relationship or structural-value exhaustion returns the application-owned
-`blueprint-export-page-bound-exceeded` diagnostic with the exhausted bound and maximum;
-callers can retry with a smaller component-page limit. Failure at limit one means one
-self-contained item exceeds the local export bounds. Ordering, duplicate, malformed,
-proxy, detector, provider, and other invalid-query failures remain
-`graph-query-unavailable` and never receive capacity retry guidance.
+Every final export, search, and traversal page also crosses the provider-neutral
+`maxBlueprintPageBytes` and `maxBlueprintPageDepth` bounds before Application returns
+success. A descriptor-based counter measures exact canonical-JSON UTF-8 bytes and depth
+without invoking getters, iterators, `toJSON`, or prototype behavior and without
+constructing a second serialized page. These bounds apply only to the final owned result;
+export's internal traversal pages remain governed by the query engine and export
+aggregate checks.
+
+Proven page-wide relationship, structural-value, UTF-8 byte, or canonical-JSON depth
+exhaustion returns an application-owned semantic diagnostic with the exhausted bound and
+maximum. Export uses `blueprint-export-page-bound-exceeded`; search and traversal use
+`blueprint-search-page-bound-exceeded` and `blueprint-traverse-page-bound-exceeded` for
+their byte or depth bounds. Callers can retry with a smaller page limit. Failure at limit
+one means one self-contained export item, search component, or traversal hit exceeds the
+local page bound. Ordering, duplicate, malformed, proxy, detector, provider, and other
+invalid-query failures remain `graph-query-unavailable` and never receive capacity retry
+guidance.
 
 For `invalid-search-text`, Application replaces provider wording with its stable message and
 accepts either no details for a generic invalid search or one exact typed detail shape: a
@@ -207,12 +218,15 @@ mutations.
 
 Each composition supplies explicit application bounds for component and relationship
 state, relationship mutations, embedded items, diagnostics, request-data structural
-depth and values, and snapshot structural depth and values. Create and update mutation
-data—including component items and extensions plus outgoing relationship descriptions
-and extensions—is copied within one total request budget before model, identity, graph,
-provider, or transaction work. `maxEmbeddedItems` limits each component's combined
-inputs, outputs, and actions on both writes and reads; `maxSnapshotStateValues` remains
-the aggregate whole-snapshot structural bound. Sparse updates retain the early raw-patch
+depth and values, snapshot structural depth and values, and final blueprint-page
+canonical-JSON UTF-8 bytes and depth. Create and update mutation data—including component
+items and extensions plus outgoing relationship descriptions and extensions—is copied
+within one total request budget before model, identity, graph, provider, or transaction
+work. `maxEmbeddedItems`
+limits each component's combined inputs, outputs, and actions on both writes and reads;
+`maxSnapshotStateValues` remains the aggregate whole-snapshot structural bound, while
+`maxBlueprintPageBytes` and `maxBlueprintPageDepth` are independent of provider storage
+technology and canonical state. Sparse updates retain the early raw-patch
 preflight before provider access and validate the final model-merged component again
 before relationship planning or transaction execution, so omitted arrays cannot bypass
 the combined per-component bound. Construction also enforces absolute ceilings

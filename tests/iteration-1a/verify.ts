@@ -37,6 +37,7 @@ const ids = Object.freeze({
   freshShardCrash: "ent_ab000000000000000000000000000000",
 });
 const relationshipId = "rel_00000000000000000000000000000001";
+const secondRelationshipId = "rel_00000000000000000000000000000002";
 const maximumExpansionSearchTerm = "\u0800".repeat(255);
 
 interface VerificationOptions {
@@ -393,6 +394,13 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     3,
     "no-workspace",
   );
+  for (const args of [
+    ["blueprint", "export", "--limit", "1"],
+    ["blueprint", "search", "missing", "--limit", "1"],
+    ["blueprint", "traverse", ids.shop, "--direction", "outgoing", "--depth", "1", "--limit", "1"],
+  ] as const) {
+    await failure(executable, workspaceRoot, args, 3, "no-workspace");
+  }
   assert.deepEqual(await gromaSnapshot(workspaceRoot), []);
 
   await success(executable, workspaceRoot, ["init"]);
@@ -468,6 +476,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   });
   await createComponent(executable, workspaceRoot, {
     component: { id: ids.payment, name: "Payment", parent: ids.orders, type: "adapter" },
+    relationships: [{ id: secondRelationshipId, target: ids.orders, type: "feeds" }],
   });
 
   const expectedIds = [
@@ -536,12 +545,14 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     exportedIds.push(...exportComponentIds(page));
     exportedRelationshipIds.push(...exportRelationshipIds(page));
     const value = valueRecord(page);
+    assert.equal(typeof value.generation, "number");
+    assert.ok(Number.isSafeInteger(value.generation));
     exportGeneration ??= value.generation;
     assert.equal(value.generation, exportGeneration);
     exportCursor = value.hasMore === true ? (value.nextCursor as string) : undefined;
   } while (exportCursor !== undefined);
   assert.deepEqual(exportedIds, expectedIds);
-  assert.deepEqual(exportedRelationshipIds, [relationshipId]);
+  assert.deepEqual(exportedRelationshipIds, [relationshipId, secondRelationshipId]);
 
   const searched = await success(executable, workspaceRoot, [
     "blueprint",
@@ -574,6 +585,51 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.deepEqual(traversalRelationshipIds(incoming), [relationshipId]);
   assert.ok(incoming.stdout.includes('"direction":"incoming"'));
   assert.ok(incoming.stdout.includes(`"from":"${ids.login}"`));
+  const outgoing = await success(executable, workspaceRoot, [
+    "blueprint",
+    "traverse",
+    ids.login,
+    "--direction",
+    "outgoing",
+    "--depth",
+    "1",
+    "--relation-type",
+    "depends-on",
+    "--limit",
+    "10",
+  ]);
+  assert.deepEqual(traversalRelationshipIds(outgoing), []);
+  const wrongType = await success(executable, workspaceRoot, [
+    "blueprint",
+    "traverse",
+    ids.login,
+    "--direction",
+    "incoming",
+    "--depth",
+    "1",
+    "--relation-type",
+    "feeds",
+    "--limit",
+    "10",
+  ]);
+  assert.deepEqual(traversalRelationshipIds(wrongType), []);
+  const deepIncoming = await success(executable, workspaceRoot, [
+    "blueprint",
+    "traverse",
+    ids.login,
+    "--direction",
+    "incoming",
+    "--depth",
+    "2",
+    "--limit",
+    "10",
+  ]);
+  assert.deepEqual(traversalRelationshipIds(deepIncoming), [relationshipId, secondRelationshipId]);
+  const deepItems = valueRecord(deepIncoming).items as Array<Record<string, unknown>>;
+  assert.deepEqual(
+    deepItems.map((item) => item.depth),
+    [1, 2],
+  );
 
   const maximumSearch = await success(executable, workspaceRoot, [
     "blueprint",
@@ -586,7 +642,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert(typeof maximumSearchCursor === "string");
   assert.ok(maximumSearchCursor.length > 2_048);
   assert.ok(maximumSearchCursor.length <= 4_096);
-  await success(executable, workspaceRoot, [
+  const maximumSearchNext = await success(executable, workspaceRoot, [
     "blueprint",
     "search",
     maximumExpansionSearchTerm,
@@ -595,6 +651,14 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     "--cursor",
     maximumSearchCursor,
   ]);
+  const firstMaximumIds = blueprintComponentIds(maximumSearch);
+  const nextMaximumIds = blueprintComponentIds(maximumSearchNext);
+  assert.deepEqual(firstMaximumIds, [ids.shop]);
+  assert.deepEqual(nextMaximumIds, [ids.users]);
+  assert.equal(
+    nextMaximumIds.some((id) => new Set<string>(firstMaximumIds).has(id)),
+    false,
+  );
   const repeatExport = await success(executable, workspaceRoot, [
     "blueprint",
     "export",
@@ -803,9 +867,13 @@ async function verifyExportCursorContinuity(
   const firstValue = valueRecord(first);
   assert.equal(firstValue.hasMore, true);
   assert.equal(typeof firstValue.nextCursor, "string");
+  assert.equal(typeof firstValue.generation, "number");
+  assert.ok(Number.isSafeInteger(firstValue.generation));
   const historyBGeneration = valueRecord(
     await success(executable, historyB, ["component", "list", "--limit", "2"]),
   ).generation;
+  assert.equal(typeof historyBGeneration, "number");
+  assert.ok(Number.isSafeInteger(historyBGeneration));
   assert.equal(historyBGeneration, firstValue.generation);
   await expectFailureWithoutChanges(
     executable,

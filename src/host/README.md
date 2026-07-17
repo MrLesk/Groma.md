@@ -78,6 +78,13 @@ the caller to supply one previously captured generation/fingerprint identity to 
 data-bearing query. `HostComposition.queryEngine` remains explicit for embedders and
 verification, but `HostSurfaceContext` exposes only the shared application operations;
 the terminal surface cannot bypass their canonicalization and generation checks.
+The official Host also supplies Application provider-neutral final blueprint-page bounds:
+eight MiB minus a fixed 64-KiB command-envelope reserve, and canonical-JSON depth 28 with
+two levels reserved for the CLI command and Application-result envelopes. Both are
+captured with the other Application bounds and remain below the CLI's independent
+eight-MiB/depth-30 atomic renderer ceilings without introducing a Host dependency on CLI
+code.
+
 The official Application plugin publishes its complete shared operation surface only as
 `groma.operations/v2`, and official full-workspace and blueprint registrations require
 that v2 identity. No v1 operations or graph-query adapters are published. The lifecycle

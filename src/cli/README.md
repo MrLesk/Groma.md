@@ -17,11 +17,14 @@ the explicit supersession boundary. It removes the obsolete component and preser
 stable references through a canonical alias while leaving the survivor identity and
 intent unchanged. Reads by an older ID return the current survivor. Renames, updates,
 and reparenting do not create aliases.
-Command output is buffered atomically up to eight MiB. The official one-MiB Markdown
-intent-document bound owns one component and its outgoing relationships; sixfold
-worst-case JSON escaping plus less than two MiB of canonical envelope and reshaping
-under the official Host caps fits this output bound. A result beyond it becomes a typed
-`cli-output-bound-exceeded` failure rather than partial or streamed output.
+Command output is buffered atomically up to eight MiB. Before a successful blueprint
+export, search, or traversal page reaches the CLI, Application measures its exact
+canonical-JSON UTF-8 bytes and depth under official bounds of eight MiB minus a fixed
+64-KiB command-envelope reserve and depth 28, which reserves two levels below the CLI's
+depth-30 ceiling for the command and Application-result envelopes. Proven page
+exhaustion therefore remains a small semantic result with smaller-limit guidance. The
+CLI ceilings remain independent last-resort containment for every command; anything
+beyond them becomes `cli-output-bound-exceeded` rather than partial or streamed output.
 
 Projection-backed raw blueprint reads use the shared application path:
 
@@ -54,11 +57,14 @@ relationship paging stays inside the shared bounded operation; no relationship c
 composite cursor is exposed. `blueprint search` and `blueprint traverse` remain
 independent exploration commands rather than phases of export.
 
-When a valid export selection exceeds Application's page-wide relationship or
-structural-value aggregate, `blueprint-export-page-bound-exceeded` is a semantic result:
-retry with a smaller `--limit`. If `--limit 1` still fails, one self-contained item
-exceeds the local export bounds; malformed or unavailable query data remains an
-infrastructure failure instead of receiving retry guidance.
+When a valid export selection exceeds Application's page-wide relationship,
+structural-value, UTF-8 byte, or canonical-JSON depth aggregate,
+`blueprint-export-page-bound-exceeded` is a semantic result. Search and traversal use
+`blueprint-search-page-bound-exceeded` and `blueprint-traverse-page-bound-exceeded` for
+proven final-page byte or depth exhaustion. Retry with a smaller `--limit`; if `--limit 1`
+still fails, one self-contained export item, search component, or traversal hit exceeds
+the local page bound. Malformed or unavailable query data remains an infrastructure
+failure instead of receiving retry guidance.
 
 `--format json` is the stable machine-facing envelope. Each response has `command`,
 `exitCode`, `ok`, and `result`; object keys are emitted canonically. Plain output is

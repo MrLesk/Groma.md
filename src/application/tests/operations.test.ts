@@ -79,6 +79,8 @@ const unavailableGraphQueries: ApplicationOperationsOptions["graphQueries"] = Ob
     failure({ code: "graph-query-unavailable", message: "fixture graph query is unavailable" }),
 });
 const applicationBounds: ApplicationOperationBounds = Object.freeze({
+  maxBlueprintPageBytes: 8 * 1024 * 1024 - 64 * 1024,
+  maxBlueprintPageDepth: 28,
   maxComponents: 1_000,
   maxDiagnosticCount: 100,
   maxEmbeddedItems: 100,
@@ -1229,6 +1231,193 @@ describe("application projection-backed blueprint queries", () => {
       ok: false,
     });
     expect(structuralPageCalls).toBe(2);
+  });
+
+  test("returns small typed byte-bound failures for oversized replaceable-provider pages", async () => {
+    const half = "x".repeat(5_000_000);
+    const whole = `${half}${half}`;
+    const largeSource = component({ id: ids.service, intent: half, type: "service" });
+    const largeTarget = component({ id: ids.target, intent: half, type: "service" });
+    const largeSearch = component({ id: ids.service, intent: whole, type: "service" });
+    const largeRelationship = Object.freeze({
+      id: relationIds.first,
+      payload: Object.freeze({ description: half }),
+      source: ids.service,
+      target: ids.target,
+      type: "depends-on",
+    });
+    const traversalHit = Object.freeze({
+      depth: 1,
+      direction: "outgoing" as const,
+      entity: largeTarget,
+      from: ids.service,
+      relation: largeRelationship,
+    });
+
+    const exported = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        pageEntities: async () =>
+          success({ generation: generation(7), hasMore: false, items: [largeSource] }) as never,
+        traverseRelations: async () =>
+          success({ generation: generation(7), hasMore: false, items: [traversalHit] }) as never,
+      }),
+    }).exportBlueprint({ limit: 1 });
+    const searched = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        searchEntities: async () =>
+          success({ generation: generation(7), hasMore: false, items: [largeSearch] }) as never,
+      }),
+    }).searchBlueprint({ limit: 1, text: "large" });
+    const traversed = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        traverseRelations: async () =>
+          success({ generation: generation(7), hasMore: false, items: [traversalHit] }) as never,
+      }),
+    }).traverseBlueprint({
+      depth: 1,
+      direction: "outgoing",
+      id: ids.service,
+      limit: 1,
+    });
+
+    for (const [result, code, noun] of [
+      [exported, "blueprint-export-page-bound-exceeded", "export item"],
+      [searched, "blueprint-search-page-bound-exceeded", "component"],
+      [traversed, "blueprint-traverse-page-bound-exceeded", "traversal hit"],
+    ] as const) {
+      expect(result).toEqual({
+        diagnostics: [
+          {
+            code,
+            details: {
+              bound: "utf8-bytes",
+              maximum: applicationBounds.maxBlueprintPageBytes,
+            },
+            message: expect.stringContaining(noun),
+          },
+        ],
+        ok: false,
+      });
+      expect(JSON.stringify(result).length).toBeLessThan(512);
+      expect(Object.isFrozen(result)).toBeTrue();
+      expect(!result.ok && Object.isFrozen(result.diagnostics[0]?.details)).toBeTrue();
+    }
+  });
+
+  test("captures the page-byte bound and gives smaller-limit guidance at the exact boundary", async () => {
+    const first = component({ id: ids.service, intent: "x".repeat(256), type: "service" });
+    const second = component({ id: ids.target, intent: "y".repeat(256), type: "service" });
+    const canonical = model.parse(first as GraphEntity);
+    expect(canonical.ok).toBeTrue();
+    if (!canonical.ok) return;
+    const exactBytes = new TextEncoder().encode(
+      JSON.stringify({ generation: 7, hasMore: false, items: [canonical.value] }),
+    ).byteLength;
+    const graphQueries = projectionGraphQueries({
+      searchEntities: async (_identity, _query, request) =>
+        success({
+          generation: generation(7),
+          hasMore: false,
+          items: request.limit === 1 ? [first] : [first, second],
+        }) as never,
+    });
+    const mutableBounds = { ...applicationBounds, maxBlueprintPageBytes: exactBytes };
+    const options = applicationOptions(new SnapshotFixture(), undefined, {
+      bounds: mutableBounds,
+      graphQueries,
+    });
+    const captured = createApplicationOperations(options);
+    mutableBounds.maxBlueprintPageBytes = 1;
+
+    expect(await captured.searchBlueprint({ limit: 1, text: "x" })).toMatchObject({
+      ok: true,
+      value: { items: [{ id: ids.service }] },
+    });
+    expect(await captured.searchBlueprint({ limit: 2, text: "x" })).toMatchObject({
+      diagnostics: [
+        {
+          code: "blueprint-search-page-bound-exceeded",
+          details: { bound: "utf8-bytes", maximum: exactBytes },
+          message: expect.stringContaining("smaller --limit"),
+        },
+      ],
+      ok: false,
+    });
+    expect(
+      await operations(new SnapshotFixture(), undefined, {
+        bounds: Object.freeze({ ...applicationBounds, maxBlueprintPageBytes: exactBytes - 1 }),
+        graphQueries,
+      }).searchBlueprint({ limit: 1, text: "x" }),
+    ).toMatchObject({
+      diagnostics: [
+        {
+          code: "blueprint-search-page-bound-exceeded",
+          details: { bound: "utf8-bytes", maximum: exactBytes - 1 },
+          message: expect.stringContaining("If --limit 1 fails"),
+        },
+      ],
+      ok: false,
+    });
+  });
+
+  test("returns a small semantic depth failure before a deep Standard Model page reaches CLI", async () => {
+    const nestedExtension = (depth: number): GraphData => {
+      let value: GraphData = "leaf";
+      for (let index = 0; index < depth; index += 1) {
+        value = Object.freeze({ x: value });
+      }
+      return value;
+    };
+    const exact = component({
+      "example.dev/deep": nestedExtension(24),
+      id: ids.service,
+      name: "Exact depth",
+      type: "service",
+    });
+    const tooDeep = component({
+      "example.dev/deep": nestedExtension(25),
+      id: ids.service,
+      name: "Too deep",
+      type: "service",
+    });
+    const graphQueries = projectionGraphQueries({
+      searchEntities: async (_identity, query) =>
+        success({
+          generation: generation(7),
+          hasMore: false,
+          items: [query.text === "deep" ? tooDeep : exact],
+        }) as never,
+    });
+    const mutableBounds = { ...applicationBounds };
+    const api = createApplicationOperations(
+      applicationOptions(new SnapshotFixture(), undefined, {
+        bounds: mutableBounds,
+        graphQueries,
+      }),
+    );
+    mutableBounds.maxBlueprintPageDepth = 100;
+
+    const exceeded = await api.searchBlueprint({ limit: 1, text: "deep" });
+    expect(exceeded).toEqual({
+      diagnostics: [
+        {
+          code: "blueprint-search-page-bound-exceeded",
+          details: { bound: "depth", maximum: applicationBounds.maxBlueprintPageDepth },
+          message: expect.stringContaining("canonical-JSON depth"),
+        },
+      ],
+      ok: false,
+    });
+    expect(JSON.stringify(exceeded).length).toBeLessThan(512);
+    expect(Object.isFrozen(exceeded)).toBeTrue();
+    expect(!exceeded.ok && Object.isFrozen(exceeded.diagnostics[0]?.details)).toBeTrue();
+
+    expect(await api.searchBlueprint({ limit: 1, text: "exact" })).toMatchObject({
+      ok: true,
+      value: {
+        items: [{ extensions: { "example.dev/deep": nestedExtension(24) }, id: ids.service }],
+      },
+    });
   });
 
   test("canonicalizes incoming, outgoing, and both-direction traversal hits", async () => {
@@ -5665,6 +5854,16 @@ describe("application operation bounds", () => {
     expect(() => operations(new SnapshotFixture(), undefined, { maxSnapshotAttempts: 17 })).toThrow(
       "maxSnapshotAttempts",
     );
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxBlueprintPageBytes: 64 * 1024 * 1024 + 1 },
+      }),
+    ).toThrow("maxBlueprintPageBytes");
+    expect(() =>
+      operations(new SnapshotFixture(), undefined, {
+        bounds: { ...applicationBounds, maxBlueprintPageDepth: 101 },
+      }),
+    ).toThrow("maxBlueprintPageDepth");
     expect(() =>
       operations(new SnapshotFixture(), undefined, {
         bounds: { ...applicationBounds, maxComponents: 1_000_001 },
