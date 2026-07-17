@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 18:38'
+updated_date: '2026-07-17 18:46'
 labels: []
 milestone: m-2
 dependencies:
@@ -16,6 +16,12 @@ references:
   - MANIFESTO.md
   - ARCHITECTURE.md
   - DEVELOPMENT.md
+modified_files:
+  - DEVELOPMENT.md
+  - package.json
+  - scripts/verify-targets.ts
+  - tests/iteration-1b/verify-foundation.ts
+  - tests/iteration-1b/verify-self-blueprint.ts
 priority: high
 type: task
 ordinal: 30000
@@ -29,12 +35,12 @@ Close Iteration 1B with black-box proof that the minimal capability runtime, con
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A clean checkout builds one standalone Groma executable and verifies bootstrap, configuration, public capability invocation, projection rebuild, bounded query, recognition metadata, and complete blueprint export through public surfaces
-- [ ] #2 The canonical self-blueprint is validated against the architecture entry point and remains byte-stable across restart, index rebuild, and read-only use
-- [ ] #3 Black-box cases cover malformed configuration, incompatible built-in capabilities, corrupt projection, stale cursors, and interrupted reads without unintended canonical changes
-- [ ] #4 The quality gate cross-compiles exact standalone artifacts for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 from one runner
-- [ ] #5 The host-compatible artifact runs the complete Iteration 1B workflow without a separately installed Bun runtime and documentation makes no unsupported native-runtime claim for other targets
-- [ ] #6 Iteration 2 scanning, evidence, binding, reconciliation, and visual navigation remain clearly identified as not yet delivered
+- [x] #1 A clean checkout builds one standalone Groma executable and verifies bootstrap, configuration, public capability invocation, projection rebuild, bounded query, recognition metadata, and complete blueprint export through public surfaces
+- [x] #2 The canonical self-blueprint is validated against the architecture entry point and remains byte-stable across restart, index rebuild, and read-only use
+- [x] #3 Black-box cases cover malformed configuration, incompatible built-in capabilities, corrupt projection, stale cursors, and interrupted reads without unintended canonical changes
+- [x] #4 The quality gate cross-compiles exact standalone artifacts for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 from one runner
+- [x] #5 The host-compatible artifact runs the complete Iteration 1B workflow without a separately installed Bun runtime and documentation makes no unsupported native-runtime claim for other targets
+- [x] #6 Iteration 2 scanning, evidence, binding, reconciliation, and visual navigation remain clearly identified as not yet delivered
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,4 +63,6 @@ Implemented the production-binary-only Iteration 1B foundation verifier, explici
 Addressed the mandatory spec-review finding in the self-blueprint verifier: ARCHITECTURE.md Canonical Orientation agreement now parses only the bounded table immediately following its exact introduction, validates the Root/Orientation header and separator plus nonempty row cells, rejects duplicate or over-limit rows, and compares the exact row count and order-insensitive root-name set with the independently validated canonical root contract. Global root-name substring checks were removed; the canonical groma/ link assertion remains. Normal and report self-blueprint verification, typecheck, and the full bun run check gate pass.
 
 Addressed both mandatory quality-review findings in the Iteration 1B foundation verifier. The incompatible package fixture now distinguishes module evaluation from plugin start: untrusted enable leaves both sentinels absent, trusted enable records exactly one evaluation with no start, and ordinary host-bootstrap-failed startup records exactly two evaluations with no start, with assertions only after child exit and canonical snapshots unchanged. Subprocess execution now uses one bounded captured-process lifecycle that attaches exit and output observation immediately, installs lifetime cleanup before progress polling, preserves original failures, sends SIGTERM then bounded SIGKILL escalation, drains exit/stdout/stderr through Promise.allSettled, and cancels readers on the final settlement deadline. bun run verify:1b, bun run check (796 tests), bun run check:targets, git diff --check, canonical groma/ diff hygiene, and Backlog doctor all pass.
+
+Finalization evidence at 3ec7bf9: bun run check passed 796/796 tests and the complete production-binary Iteration 1B workflow; bun run check:targets validated Mach-O arm64, ELF x86-64, PE x86-64, and PE arm64 artifacts and ran the host-compatible workflow before restoring the native artifact. Independent specification and quality reviews approved the cumulative diff after exact orientation-table, plugin evaluation-sentinel, and bounded child-lifecycle remediations. git diff --check and Backlog doctor pass; origin/main...HEAD contains no canonical groma/ change. The task remains In Progress until ready-PR CI, Claude, and Codex review gates complete.
 <!-- SECTION:NOTES:END -->
