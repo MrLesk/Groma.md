@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 
 import {
   createGraphCommittedEvent,
@@ -51,6 +52,15 @@ const ids = {
   rootGrandchild: relation("3"),
   childGrandchild: relation("2"),
 };
+
+const smallFollowerBounds = Object.freeze({
+  maxAliases: 3,
+  maxBytes: 4_096,
+  maxEntities: 3,
+  maxPageSize: 3,
+  maxRelations: 2,
+  maxSearchableTextCharacters: 256,
+});
 
 function entity(hex: string) {
   const parsed = parseEntityId(`ent_${hex.padStart(32, "0")}`);
@@ -614,7 +624,7 @@ describe("local projection index", () => {
     expect(stages).toBeGreaterThan(0);
   });
 
-  test("cold load followers adopt the exact completed winner publication without coordinating or writing again", async () => {
+  test("cold load followers adopt an exact healthy publication after the old wait window", async () => {
     const target = await temporaryProvider();
     const checkpoint = new MutableProjectionCheckpoint();
     const winnerSource = new MutableCanonicalSource(canonical(1));
@@ -626,22 +636,22 @@ describe("local projection index", () => {
     let followerCoordinations = 0;
     let followerStages = 0;
     let followerIsFollowing = false;
+    let followerReadObserved = false;
     let signalFollowerRead!: () => void;
-    let allowFollowerRead!: () => void;
     const followerReadStarted = new Promise<void>((resolve) => {
       signalFollowerRead = resolve;
-    });
-    const followerReadAllowed = new Promise<void>((resolve) => {
-      allowFollowerRead = resolve;
     });
     const followerResources = new Proxy(target.resources, {
       get(resourceTarget, property) {
         if (property === "read") {
           return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
-            if (followerIsFollowing && request.locator === projectionLocator.value) {
-              followerIsFollowing = false;
+            if (
+              followerIsFollowing &&
+              !followerReadObserved &&
+              request.locator === projectionLocator.value
+            ) {
+              followerReadObserved = true;
               signalFollowerRead();
-              await followerReadAllowed;
             }
             return resourceTarget.read(request);
           };
@@ -684,10 +694,10 @@ describe("local projection index", () => {
     await blockedWinner.started;
     const followerLoad = follower.load();
     await followerReadStarted;
+    await wait(350);
     blockedWinner.release();
     const winnerResult = await winnerLoad;
     if (!winnerResult.ok) throw new Error("expected coordinated winner publication");
-    allowFollowerRead();
     const followerResult = await followerLoad;
 
     expect(followerResult).toEqual(winnerResult);
@@ -737,20 +747,24 @@ describe("local projection index", () => {
       },
     }) as LocalResourceProvider;
 
-    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
-      {
-        diagnostics: [
-          {
-            code: "projection-index-unavailable",
-            details: { reason: "projection-coordination-failed" },
-          },
-        ],
-        ok: false,
-      },
-    );
+    expect(
+      await createLocalProjectionIndex({
+        bounds: smallFollowerBounds,
+        canonical: source,
+        resources,
+      }).load(),
+    ).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-coordination-failed" },
+        },
+      ],
+      ok: false,
+    });
     expect(source.calls).toBe(0);
     expect(coordinations).toBe(1);
-    expect(projectionReads).toBe(17);
+    expect(projectionReads).toBe(8);
     expect(stages).toBe(0);
   });
 
@@ -941,6 +955,7 @@ describe("local projection index", () => {
     }).load();
     await winnerStarted;
     const followerLoad = createLocalProjectionIndex({
+      bounds: smallFollowerBounds,
       canonical: followerSource,
       resources: followerResources,
     }).load();
@@ -964,7 +979,7 @@ describe("local projection index", () => {
     });
     expect(followerSource.calls).toBe(0);
     expect(followerCoordinations).toBe(1);
-    expect(followerProjectionReads).toBe(17);
+    expect(followerProjectionReads).toBe(8);
     expect(followerStages).toBe(0);
     expect(await readFile(path.join(target.root, ".groma-cache", "projection-index.json"))).toEqual(
       Buffer.from(malformedBytes),

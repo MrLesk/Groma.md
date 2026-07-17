@@ -1186,18 +1186,21 @@ then requires an exact trust grant bound to scope, canonical workspace location,
 canonical package location, package name, manifest hash, entry path, and entry hash.
 Drift fails before module evaluation. Supported package mutations, recovery, and
 publication retain one exclusive workspace-scoped package-state coordination lease.
-Read-only startup does not acquire that lease: it projects captured canonical
-configuration, exact lock, and exact user state, then exact-revalidates the same surfaces
-after materialization, immediately before each import, and once more after the final
-import. The final check also applies when zero entries are enabled; absent contained user
-state is observed before and after exact configuration and lock revalidation. Startup may
-therefore return a coherent old projection while a writer has not published, while an
-observed intermediate or changed state fails closed. Direct edits are detected by the
-same revalidation. The Host evaluates the already-read entry bytes through one immutable
-in-memory module URL; it never reopens the mutable entry path for execution. Manifest and
-entry opens additionally re-check the post-open canonical path, current file identity,
-and containment within the previously resolved package root before accepting captured
-bytes.
+Read-only startup takes that lease briefly to observe canonical configuration, exact lock,
+and exact user state as one coherent projection, then releases it before materialization
+or import. The same brief fence exact-revalidates all three surfaces after materialization,
+immediately before each import, and once more after the final import. The final check also
+applies when zero entries are enabled; absent contained user state is attested within the
+same coherent fence. A reader follows ordinary brief contention for at most two seconds,
+at 25-millisecond intervals, and creates no package-state writes while waiting; any other
+coordination failure fails closed as unavailable package state. Startup may therefore
+observe only a tuple between writers or follow ordinary contention until the writer
+settles; a tuple changed from the initial capture fails closed. Direct edits are detected
+by the same revalidation. No lease is held while plugin bytes are read or evaluated. The
+Host evaluates the already-read entry bytes through one immutable in-memory module URL; it
+never reopens the mutable entry path for execution. Manifest and entry opens additionally
+re-check the post-open canonical path, current file identity, and containment within the
+previously resolved package root before accepting captured bytes.
 
 The Host validates unsupported project requests, unavailable official selections,
 additional Host registration namespaces, and selected Host registration defects that

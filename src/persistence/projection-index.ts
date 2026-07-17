@@ -58,8 +58,10 @@ const intrinsicJsonParse = JSON.parse;
 const intrinsicNormalize = String.prototype.normalize;
 const intrinsicObjectKeys = Object.keys;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
-const maximumProjectionRepairFollowerAttempts = 16;
-const projectionRepairFollowerDelayMilliseconds = 20;
+const projectionRepairFollowerInitialDelayMilliseconds = 20;
+const projectionRepairFollowerMaximumDelayMilliseconds = 500;
+const projectionRepairFollowerMinimumWaitMilliseconds = 750;
+const projectionRepairFollowerSupportedScaleWaitMilliseconds = 10_000;
 
 export interface ProjectionIndexBounds {
   readonly maxAliases: number;
@@ -103,6 +105,42 @@ const absoluteBounds: ProjectionIndexBounds = Object.freeze({
   maxRelations: 10_000_000,
   maxSearchableTextCharacters: 1024 * 1024,
 });
+
+function projectionRepairFollowerWaitMilliseconds(bounds: ProjectionIndexBounds): number {
+  const structuralWork = bounds.maxAliases + bounds.maxEntities + bounds.maxRelations;
+  const supportedStructuralWork =
+    defaultBounds.maxAliases + defaultBounds.maxEntities + defaultBounds.maxRelations;
+  const structuralWait = Math.ceil(
+    (structuralWork * projectionRepairFollowerSupportedScaleWaitMilliseconds) /
+      supportedStructuralWork,
+  );
+  const byteWait = Math.ceil(
+    (bounds.maxBytes * projectionRepairFollowerSupportedScaleWaitMilliseconds) /
+      defaultBounds.maxBytes,
+  );
+  return Math.min(
+    projectionRepairFollowerSupportedScaleWaitMilliseconds,
+    Math.max(projectionRepairFollowerMinimumWaitMilliseconds, structuralWait, byteWait),
+  );
+}
+
+function projectionRepairFollowerDelaySchedule(bounds: ProjectionIndexBounds): readonly number[] {
+  const waitMilliseconds = projectionRepairFollowerWaitMilliseconds(bounds);
+  const delays: number[] = [];
+  let elapsed = 0;
+  let nextDelay = projectionRepairFollowerInitialDelayMilliseconds;
+  while (elapsed < waitMilliseconds) {
+    const delay = Math.min(
+      nextDelay,
+      projectionRepairFollowerMaximumDelayMilliseconds,
+      waitMilliseconds - elapsed,
+    );
+    delays.push(delay);
+    elapsed += delay;
+    nextDelay = Math.min(nextDelay * 2, projectionRepairFollowerMaximumDelayMilliseconds);
+  }
+  return Object.freeze(delays);
+}
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -1006,12 +1044,14 @@ export function createLocalProjectionIndex(
   };
 
   const followCoordinatedPublication = async (): Promise<Result<ProjectionSnapshot>> => {
-    for (let attempt = 0; attempt < maximumProjectionRepairFollowerAttempts; attempt += 1) {
+    const delays = projectionRepairFollowerDelaySchedule(bounds);
+    let observation = 0;
+    while (true) {
       const adopted = await readOnlyAdoption();
       if (adopted !== undefined) return adopted;
-      if (attempt + 1 < maximumProjectionRepairFollowerAttempts) {
-        await wait(projectionRepairFollowerDelayMilliseconds);
-      }
+      if (observation === delays.length) break;
+      await wait(delays[observation]!);
+      observation += 1;
     }
     return unavailable("projection-coordination-failed");
   };

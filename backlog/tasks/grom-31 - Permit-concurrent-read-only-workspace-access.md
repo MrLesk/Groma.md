@@ -1,11 +1,11 @@
 ---
 id: GROM-31
 title: Permit concurrent read-only workspace access
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 09:13'
+updated_date: '2026-07-17 10:09'
 labels: []
 milestone: m-4
 dependencies: []
@@ -50,19 +50,20 @@ Fix the dogfood failure in which several independent read-only CLI processes can
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reproduce concurrent canonical and projection-backed CLI reads through the compiled binary, classify every contended local state gate, and capture canonical bytes before and after.
-2. Add persistence-local optimistic transaction snapshots and projection-continuity checkpoint reads only for stable idle journal state with no retained lease, fenced by matching idle generation/state observations around canonical or checkpoint reads.
-3. Make local plugin-package startup projection read optimistically from captured configuration, lock, and user state, then exact-revalidate that same state before success; keep every package mutation, indeterminate recovery, and state publication exclusively coordinated.
-4. Add a read-only fast path for an already complete projection index: validate canonical identity, manifest/chunks, and continuity checkpoint without coordination or publication; fall back to the existing exclusive load/rebuild/adopt/publish path whenever repair, adoption, ignore publication, checkpoint update, or any unstable state is required.
-5. Keep transaction settlement, projection rebuild/update/publication, package publication, retained leases, writer exclusion, crash recovery, stale-owner handling, and every public capability/coordination contract unchanged.
-6. Add focused journal, projection, and package-state interleaving tests for stable readers, writer races, exact final revalidation, retained-release handling, and coherent old-or-new results.
-7. Extend compiled Iteration 1A verification to launch at least eight independent concurrent canonical reads and eight projection-backed blueprint exports, require deterministic valid output, and prove the complete canonical workspace and committed generation remain byte-for-byte unchanged.
-8. Document the three optimistic read fences at their owning Persistence/Host boundaries and keep canonical meaning separate from disposable projection state.
-9. Run focused Persistence/Host/Application/CLI tests, compiled and crash-recovery workflows, full check, all target checks, independent specification and quality review, then finalize the task and ready PR.
+1. Reproduce concurrent canonical and projection-backed CLI reads through the compiled binary, classify each contended local state gate, and capture canonical bytes before and after.
+2. Add persistence-local optimistic transaction snapshots and projection-continuity checkpoint reads only for stable idle journal state with no retained lease, fenced by matching idle generation and state observations around canonical or checkpoint reads.
+3. Give local plugin-package startup brief coherent package-state observations for initial capture, each pre-import revalidation, and final revalidation; release coordination before materialization or import, follow only exact ordinary contention for a finite bound, and keep every package mutation, recovery, and publication exclusively coordinated.
+4. Add a read-only fast path for an already complete projection index and a bounded read-only follower for a sole contended cold repair; validate canonical identity, manifest and chunks, continuity checkpoint, and ignore hygiene without follower publication or repair.
+5. Keep transaction settlement, projection rebuild and publication, package publication, retained leases, writer exclusion, crash recovery, stale-owner handling, and public capability contracts unchanged.
+6. Add focused journal, projection, and package-state interleaving tests for stable readers, writer races, exact final revalidation, retained-release handling, cold publication liveness, and coherent old-or-new results.
+7. Extend compiled Iteration 1A verification to launch at least eight independent concurrent canonical reads and eight cache-cold projection-backed exports, require deterministic valid output, and prove the complete canonical workspace and committed generation remain byte-for-byte unchanged.
+8. Document each optimistic or briefly coordinated read fence at its owning Persistence or Host boundary while keeping canonical meaning separate from disposable projection state.
+9. Run focused Persistence, Host, Application, and CLI tests; compiled and crash-recovery workflows; the full check; all target checks; independent specification and quality reviews; then finalize the task and ready pull request.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
+<!-- SECTION:NOTES:BEGIN -->
 <!-- SECTION:NOTES:BEGIN -->
 Historical release context: Iteration 2 intentionally shipped a fail-closed single-active-CLI-process path and deferred concurrent independent readers to this task. GROM-31 now owns removing that limitation without weakening deterministic canonical state, writer exclusion, crash recovery, or stale-owner safety. Future release documentation must describe the concurrent-read behavior actually verified here rather than retaining the old limitation.
 
@@ -79,18 +80,27 @@ Claude second review exposed a possible two-handle release overlap and a cold-pr
 The final GitHub quality job exposed runner-only timing pressure, not a behavior failure: the host restart workflow and two CLI end-to-end workflows hit Bun’s 5-second default at 5.001–5.132 seconds while 778 other tests and both binary jobs passed. Exactly those three integration tests now use the existing finite 20-second per-test allowance; production code and global test behavior are unchanged. Focused verification passed 3 tests/128 expectations, full check remained green at 781/5,561, independent review approved, and git diff --check passed.
 
 Latest Codex review correctly found that cache-cold concurrent projection reads still raced at fail-fast repair: the compiled reproduction produced one successful export and seven graph-query-unavailable exits with canonical bytes unchanged. The load path now follows only an exact single resource-coordination-contended acquisition result with 16 complete read-only adoption observations spaced 20 ms apart. Followers never reacquire coordination, repair, ensure hygiene, stage, or publish; they can only adopt the winner after the existing projection/canonical fingerprint/manifest/checkpoint/ignore fence succeeds, otherwise they fail closed after the fixed bound. Both mixed-diagnostic orderings, persistent contention, malformed/failed publication, exact winner adoption, and zero follower writes are covered. Compiled Iteration 1A now deletes the cache before launching eight independent exports and proves identical valid output plus byte-identical canonical state. Full check passed with 786 tests/5,588 expectations; all four target builds passed; the cold workflow passed 10 repetitions; independent specification and quality reviews passed; git diff --check passed.
+
+Final GitHub review remediation supersedes the earlier fixed 300-millisecond cold-follower and coordination-free package-startup descriptions. Cold projection followers now use a finite workload-sized schedule: a 750-millisecond floor, scaling to a 10-second cap at default supported bounds, with 20-to-500-millisecond exponential polling. They still follow only one sole coordination-contention result, never reacquire, repair, stage, or publish, and adopt only through the complete projection, canonical, manifest, checkpoint, and ignore-hygiene fence. A healthy publisher held beyond the former window is adopted; small-bound persistent and malformed cases exhaust deterministically.
+
+The package-state review found a reachable C/L/U ABA mixture across supported blueprint and personal mutations. Startup now captures and exact-revalidates configuration, lock, and personal state or required root absence under brief package-state coordination, releases before package materialization and imports, retries only a sole contention diagnostic every 25 milliseconds for at most two seconds, and maps all other coordination failures to unavailable package state. The regression manually proves the former synthetic C1/L1/U0 projection never existed across real C1/L1/U1 -> C0/L0/U1 -> C0/L0/U0 states, then proves fenced startup fails before import. Windows, unusable-root, zero-entry, eight-reader, bounded-exhaustion, and mixed-diagnostic paths are covered.
+
+Final verification on the exact tree: bun run check passed formatting, type checking, architecture boundaries, 791 tests across 37 files with 5,649 expectations, the compiled Iteration 1A eight-reader cache-cold workflow, and crash recovery. bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64 executables. Focused package tests passed 49 tests and 452 expectations; focused projection tests passed 39 tests and 298 expectations; git diff --check passed. Independent cold-projection and package-state reviews approved the final behavior and exact regressions.
 <!-- SECTION:NOTES:END -->
+<!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @codex
+created: 2026-07-17 09:47
+---
+Reopened during final pull-request review remediation: the latest Codex review identified two actionable concurrency findings. The cold-projection follower liveness window and coherent package-state startup fence are being corrected and reverified before merge.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Permitted at least eight independent canonical and warmed projection-backed CLI readers to inspect one workspace concurrently without mutation or recovery failures. Exact pre/post fences preserve deterministic old-or-new snapshots, while writers, crash recovery, stale-owner handling, repair, and publication remain exclusive. Verified with the full check, compiled 8-reader workflows, byte-identical canonical-state assertions, adversarial dead-writer recovery, all supported target builds, and two independent reviews.
-
-PR review remediation additionally made uncertain lease handoff reusable by the next journal operation and made the optimistic-read guard lease-specific under overlapping delayed release acknowledgements.
-
-Final review also enforced a single active-or-retained journal lease during delayed release acknowledgement and removed the redundant canonical read from cold and invalid projection repair.
-
-Three integration-scale regressions received test-local 20-second CI allowances after shared-runner execution crossed Bun’s 5-second default; no runtime or global timeout changed.
-
-Cache-cold projection readers now follow one coordinated publisher through a fixed read-only adoption window, so eight simultaneous first exports succeed without follower writes or canonical mutation.
+Permitted at least eight independent CLI processes to inspect one initialized workspace concurrently through canonical and cache-cold projection-backed reads without recovery, package-state, or graph-query failures. Stable-idle transaction and checkpoint snapshots remain optimistic; package startup uses only brief coherent observations outside plugin execution; cold projection losers follow one bounded read-only publication path. Writers, crash recovery, stale-owner handling, mutations, repair, and publication remain exclusive. Verified by 791 tests and 5,649 expectations, the compiled byte-for-byte canonical-state workflow, crash recovery, all four target builds, exact ABA and slow-publication regressions, and independent reviews.
 <!-- SECTION:FINAL_SUMMARY:END -->

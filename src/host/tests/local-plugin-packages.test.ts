@@ -17,7 +17,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createLocalResourceProvider } from "../../persistence/index.ts";
+import {
+  createLocalResourceProvider,
+  workspaceResourceLocator,
+  type LocalResourceProvider,
+  type WorkspaceResourceLocator,
+} from "../../persistence/index.ts";
 import {
   bootstrapConfigurationBounds,
   createLocalPluginPackageManager,
@@ -2241,7 +2246,7 @@ describe("local plugin package manager", () => {
     expect(imports).toBe(0);
   });
 
-  test("reads an empty startup projection without package coordination and revalidates it", async () => {
+  test("fences an empty startup projection and revalidates direct edits", async () => {
     if (process.platform === "win32") return;
 
     const context = await fixture();
@@ -2270,7 +2275,7 @@ describe("local plugin package manager", () => {
       ok: true,
       value: { personalPluginIds: [], registrations: [] },
     });
-    expect(coordinationClaims).toBe(0);
+    expect(coordinationClaims).toBe(2);
 
     lockReads = 0;
     mutateOnLockRead = true;
@@ -2278,7 +2283,175 @@ describe("local plugin package manager", () => {
       diagnostics: [{ code: "workspace-configuration-changed" }],
       ok: false,
     });
-    expect(coordinationClaims).toBe(0);
+    expect(coordinationClaims).toBe(4);
+  });
+
+  test("serves eight contending startup observations without package-state writes", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const loadedBootstrap = await bootstrap(context.resources);
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const configurationBefore = await readFile(configurationFile);
+    const userRootBefore = await readdir(context.userDataRoot);
+    let coordinations = 0;
+    let stages = 0;
+    const resources = new Proxy(context.resources, {
+      get(resourceTarget, property) {
+        if (property === "withCoordination") {
+          return (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            coordinations += 1;
+            return resourceTarget.withCoordination(request, action);
+          };
+        }
+        if (property === "stageReplacement") {
+          return (
+            locator: Parameters<LocalResourceProvider["stageReplacement"]>[0],
+            bytes: Uint8Array,
+          ) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+    const managers = Array.from({ length: 8 }, () =>
+      createLocalPluginPackageManager({
+        ...context,
+        bootstrap: loadedBootstrap,
+        resources,
+      }),
+    );
+
+    const results = await Promise.all(managers.map((manager) => manager.loadEnabled()));
+    for (const result of results) {
+      expect(result).toEqual({
+        ok: true,
+        value: { personalPluginIds: [], registrations: [] },
+      });
+    }
+    expect(coordinations).toBeGreaterThanOrEqual(16);
+    expect(stages).toBe(0);
+    expect(await readFile(configurationFile)).toEqual(configurationBefore);
+    expect(await readdir(context.userDataRoot)).toEqual(userRootBefore);
+  });
+
+  test("bounds a persistently contended startup fence without reads or writes", async () => {
+    const context = await fixture();
+    const loadedBootstrap = await bootstrap(context.resources);
+    let coordinations = 0;
+    let reads = 0;
+    let stages = 0;
+    const resources = new Proxy(context.resources, {
+      get(resourceTarget, property) {
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return {
+              diagnostics: [
+                {
+                  code: "resource-coordination-contended",
+                  message: "fixture package-state coordination remains held",
+                },
+              ],
+              ok: false as const,
+            };
+          };
+        }
+        if (property === "read") {
+          return (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            reads += 1;
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return (
+            locator: Parameters<LocalResourceProvider["stageReplacement"]>[0],
+            bytes: Uint8Array,
+          ) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+    const manager = createLocalPluginPackageManager({
+      ...context,
+      bootstrap: loadedBootstrap,
+      resources,
+    });
+
+    expect(await manager.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "plugin-package-state-unavailable" }],
+      ok: false,
+    });
+    expect(coordinations).toBe(81);
+    expect(reads).toBe(0);
+    expect(stages).toBe(0);
+  });
+
+  test("does not follow mixed package-state coordination failures in either order", async () => {
+    const context = await fixture();
+    const loadedBootstrap = await bootstrap(context.resources);
+    for (const contentionFirst of [false, true]) {
+      let coordinations = 0;
+      let reads = 0;
+      const first = contentionFirst
+        ? {
+            code: "resource-coordination-contended",
+            message: "fixture contention is not the complete acquisition result",
+          }
+        : {
+            code: "coordination-release-failed",
+            message: "fixture release failed",
+          };
+      const second = contentionFirst
+        ? {
+            code: "coordination-release-failed",
+            message: "fixture release failed",
+          }
+        : {
+            code: "resource-coordination-contended",
+            message: "fixture secondary contention must not authorize following",
+          };
+      const resources = new Proxy(context.resources, {
+        get(resourceTarget, property) {
+          if (property === "withCoordination") {
+            return async () => {
+              coordinations += 1;
+              return { diagnostics: [first, second], ok: false as const };
+            };
+          }
+          if (property === "read") {
+            return (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+              reads += 1;
+              return resourceTarget.read(request);
+            };
+          }
+          const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+          return typeof value === "function" ? value.bind(resourceTarget) : value;
+        },
+      }) as LocalResourceProvider;
+      const manager = createLocalPluginPackageManager({
+        ...context,
+        bootstrap: loadedBootstrap,
+        resources,
+      });
+
+      expect(await manager.loadEnabled(), `${contentionFirst}`).toMatchObject({
+        diagnostics: [{ code: "plugin-package-state-unavailable" }],
+        ok: false,
+      });
+      expect(coordinations, `${contentionFirst}`).toBe(1);
+      expect(reads, `${contentionFirst}`).toBe(0);
+    }
   });
 
   test("revalidates package state after the final startup import", async () => {
@@ -2330,7 +2503,7 @@ describe("local plugin package manager", () => {
     expect(imports).toBe(1);
   });
 
-  test("returns a coherent old startup projection while a package mutation has not published", async () => {
+  test("follows a contended package mutation and rejects its stale bootstrap", async () => {
     if (process.platform === "win32") return;
 
     for (const mutation of ["disable", "remove"] as const) {
@@ -2355,13 +2528,41 @@ describe("local plugin package manager", () => {
         ).toMatchObject({ ok: true });
       }
       let imports = 0;
+      let signalContention!: () => void;
+      const contentionObserved = new Promise<void>((resolve) => {
+        signalContention = resolve;
+      });
+      const startupResources = new Proxy(context.resources, {
+        get(resourceTarget, property) {
+          if (property === "withCoordination") {
+            return async (
+              request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+              action: () => unknown | Promise<unknown>,
+            ) => {
+              const result = await resourceTarget.withCoordination(request, action);
+              if (
+                request.locator === "groma/package-state" &&
+                !result.ok &&
+                result.diagnostics.length === 1 &&
+                result.diagnostics[0]?.code === "resource-coordination-contended"
+              ) {
+                signalContention();
+              }
+              return result;
+            };
+          }
+          const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+          return typeof value === "function" ? value.bind(resourceTarget) : value;
+        },
+      }) as LocalResourceProvider;
       const startup = createLocalPluginPackageManager({
-        bootstrap: await bootstrap(context.resources),
+        bootstrap: await bootstrap(startupResources),
         importModule: async () => {
           imports += 1;
           return { plugin: registration(pluginId) };
         },
         ...context,
+        resources: startupResources,
       });
       let enteredWrite!: () => void;
       let releaseWrite!: () => void;
@@ -2395,16 +2596,359 @@ describe("local plugin package manager", () => {
             })
           : manager.remove({ name, scope: "blueprint" });
       await entered;
-      expect(await startup.loadEnabled(), mutation).toMatchObject({
-        ok: true,
-        value: {
-          registrations: mutation === "disable" ? [{ manifest: { id: pluginId } }] : [],
-        },
-      });
-      expect(imports, mutation).toBe(mutation === "disable" ? 1 : 0);
+      const loading = startup.loadEnabled();
+      await contentionObserved;
+      expect(imports, mutation).toBe(0);
       releaseWrite();
       expect(await changing, mutation).toMatchObject({ ok: true });
+      expect(await loading, mutation).toMatchObject({
+        diagnostics: [{ code: "workspace-configuration-changed" }],
+        ok: false,
+      });
+      expect(imports, mutation).toBe(0);
     }
+  });
+
+  test("never imports through a supported disable-enable ABA package-state tuple", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const name = "example-startup-aba";
+    const pluginId = "example.startup-aba";
+    const entry = "./plugins/entry.js";
+    const source = await writePackage(context.workspaceRoot, name, [entry]);
+    const setup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration(pluginId) }),
+      ...context,
+    });
+    expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+    expect(
+      await setup.enable({
+        entry,
+        name,
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+
+    let configurationWrites = 0;
+    let signalMixedTuple!: () => void;
+    let releaseMixedTuple!: () => void;
+    const mixedTupleVisible = new Promise<void>((resolve) => {
+      signalMixedTuple = resolve;
+    });
+    const mixedTupleReleased = new Promise<void>((resolve) => {
+      releaseMixedTuple = resolve;
+    });
+    const mutationResources = await createLocalResourceProvider({
+      faultInjector: async (phase, fault) => {
+        if (phase !== "write" || fault?.locator !== "groma/groma.yaml") return;
+        configurationWrites += 1;
+        if (configurationWrites !== 2) return;
+        signalMixedTuple();
+        await mixedTupleReleased;
+      },
+      workspaceRoot: context.workspaceRoot,
+    });
+    const mutator = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(mutationResources),
+      importModule: async () => ({ plugin: registration(pluginId) }),
+      ...context,
+      resources: mutationResources,
+    });
+
+    let signalReaderContention!: () => void;
+    const readerContended = new Promise<void>((resolve) => {
+      signalReaderContention = resolve;
+    });
+    const startupResources = new Proxy(context.resources, {
+      get(resourceTarget, property) {
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            const result = await resourceTarget.withCoordination(request, action);
+            if (
+              request.locator === "groma/package-state" &&
+              !result.ok &&
+              result.diagnostics.length === 1 &&
+              result.diagnostics[0]?.code === "resource-coordination-contended"
+            ) {
+              signalReaderContention();
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+    let abaMutation: Promise<unknown> | undefined;
+    let mutationStarted = false;
+    let imports = 0;
+    const startup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(startupResources),
+      fileReadObserver: async (event) => {
+        if (
+          mutationStarted ||
+          event.phase !== "opened" ||
+          !event.file.endsWith(path.join("plugins", "entry.js"))
+        ) {
+          return;
+        }
+        mutationStarted = true;
+        expect(await mutator.disable({ entry, name, scope: "blueprint" })).toMatchObject({
+          ok: true,
+        });
+        abaMutation = mutator.enable({
+          entry,
+          name,
+          scope: "blueprint",
+          trustFullUserPermissions: true,
+        });
+        await mixedTupleVisible;
+      },
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration(pluginId) };
+      },
+      ...context,
+      resources: startupResources,
+    });
+
+    const loading = startup.loadEnabled();
+    await mixedTupleVisible;
+    await readerContended;
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
+    const stateFile = path.join(
+      context.userDataRoot,
+      "workspaces",
+      (await readdir(path.join(context.userDataRoot, "workspaces")))[0]!,
+    );
+    const mixedConfiguration = await readFile(configurationFile, "utf8");
+    const mixedLock = JSON.parse(await readFile(lockFile, "utf8")) as {
+      packages: Array<{ enabled: unknown[]; name: string }>;
+    };
+    const mixedUserState = JSON.parse(await readFile(stateFile, "utf8")) as {
+      packages: unknown[];
+      trust: unknown[];
+    };
+    expect(mixedConfiguration).not.toContain(`      - ${JSON.stringify(entry)}`);
+    expect(mixedLock.packages.find((item) => item.name === name)?.enabled).toHaveLength(1);
+    expect(mixedUserState.packages).toHaveLength(0);
+    expect(mixedUserState.trust).toHaveLength(1);
+    expect(imports).toBe(0);
+
+    releaseMixedTuple();
+    if (abaMutation === undefined) throw new Error("missing ABA mutation fixture");
+    expect(await abaMutation).toMatchObject({ ok: true });
+    expect(await loading).toMatchObject({
+      ok: true,
+      value: { registrations: [{ manifest: { id: pluginId } }] },
+    });
+    expect(imports).toBe(1);
+  });
+
+  test("requires one coherent C1-L1-U0 observation across supported package mutations", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const blueprintName = "example-coherent-blueprint";
+    const blueprintId = "example.coherent-blueprint";
+    const personalName = "example-coherent-personal";
+    const personalId = "example.coherent-personal";
+    const entry = "./plugins/entry.js";
+    const blueprintSource = await writePackage(context.workspaceRoot, blueprintName, [entry]);
+    const personalSource = await writePackage(context.workspaceRoot, personalName, [entry]);
+    const blueprintSetup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration(blueprintId) }),
+      ...context,
+    });
+    expect(await blueprintSetup.add({ scope: "blueprint", source: blueprintSource })).toMatchObject(
+      { ok: true },
+    );
+    expect(
+      await blueprintSetup.enable({
+        entry,
+        name: blueprintName,
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const personalSetup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({
+        plugin: registration(personalId, "groma.presentation.panel/v1"),
+      }),
+      ...context,
+    });
+    expect(await personalSetup.add({ scope: "personal", source: personalSource })).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await personalSetup.enable({
+        entry,
+        name: personalName,
+        scope: "personal",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await personalSetup.disable({ entry, name: personalName, scope: "personal" }),
+    ).toMatchObject({ ok: true });
+
+    const initialStateFile = path.join(
+      context.userDataRoot,
+      "workspaces",
+      (await readdir(path.join(context.userDataRoot, "workspaces")))[0]!,
+    );
+    const packageLockLocator = workspaceResourceLocator("groma", "packages.lock");
+    if (!packageLockLocator.ok) throw new Error("missing package lock locator");
+    const readPackageResource = async (locator: WorkspaceResourceLocator) => {
+      const result = await context.resources.read({ locator, maxBytes: 4 * 1_024 * 1_024 });
+      if (!result.ok) throw new Error(result.diagnostics[0]?.code);
+      return result.value.bytes;
+    };
+    const initialConfiguration = await readPackageResource(localWorkspaceLocator.configuration);
+    const initialLock = await readPackageResource(packageLockLocator.value);
+    const initialUserState = await readFile(initialStateFile);
+    const sameTestBytes = (left: Uint8Array, right: Uint8Array) =>
+      left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+    const currentJointState = async () => {
+      const currentConfiguration = await readPackageResource(localWorkspaceLocator.configuration);
+      const currentLock = await readPackageResource(packageLockLocator.value);
+      const currentUserState = await readFile(initialStateFile);
+      return [
+        sameTestBytes(currentConfiguration, initialConfiguration) ? "C1" : "C0",
+        sameTestBytes(currentLock, initialLock) ? "L1" : "L0",
+        sameTestBytes(currentUserState, initialUserState) ? "U0" : "U1",
+      ].join("-");
+    };
+    type Manager = ReturnType<typeof createLocalPluginPackageManager>;
+    const enablePersonal = async (manager: Manager, schedule: string[]) => {
+      expect(
+        await manager.enable({
+          entry,
+          name: personalName,
+          scope: "personal",
+          trustFullUserPermissions: true,
+        }),
+      ).toMatchObject({ ok: true });
+      schedule.push("U1");
+    };
+    const disableBlueprint = async (manager: Manager, schedule: string[]) => {
+      expect(
+        await manager.disable({ entry, name: blueprintName, scope: "blueprint" }),
+      ).toMatchObject({ ok: true });
+      schedule.push("C0-L0-U1");
+    };
+    const disablePersonal = async (manager: Manager, schedule: string[]) => {
+      expect(await manager.disable({ entry, name: personalName, scope: "personal" })).toMatchObject(
+        { ok: true },
+      );
+      schedule.push("C0-L0-U0");
+    };
+
+    const legacyMutator = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({
+        plugin: registration(personalId, "groma.presentation.panel/v1"),
+      }),
+      ...context,
+    });
+    const legacySchedule: string[] = [];
+    await enablePersonal(legacyMutator, legacySchedule);
+    const observedJointStates = [await currentJointState()];
+    const legacyConfigurationObservation = await readPackageResource(
+      localWorkspaceLocator.configuration,
+    );
+    const legacyLockObservation = await readPackageResource(packageLockLocator.value);
+    await disableBlueprint(legacyMutator, legacySchedule);
+    observedJointStates.push(await currentJointState());
+    await disablePersonal(legacyMutator, legacySchedule);
+    observedJointStates.push(await currentJointState());
+    const legacyUserStateObservation = await readFile(initialStateFile);
+    expect(observedJointStates).toEqual(["C1-L1-U1", "C0-L0-U1", "C0-L0-U0"]);
+    expect(observedJointStates).not.toContain("C1-L1-U0");
+    expect(legacyConfigurationObservation).toEqual(initialConfiguration);
+    expect(legacyLockObservation).toEqual(initialLock);
+    expect(legacyUserStateObservation).toEqual(initialUserState);
+    expect(legacySchedule).toEqual(["U1", "C0-L0-U1", "C0-L0-U0"]);
+
+    const blueprintRestorer = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({ plugin: registration(blueprintId) }),
+      ...context,
+    });
+    expect(
+      await blueprintRestorer.enable({
+        entry,
+        name: blueprintName,
+        scope: "blueprint",
+        trustFullUserPermissions: true,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await readPackageResource(localWorkspaceLocator.configuration)).toEqual(
+      initialConfiguration,
+    );
+    expect(await readPackageResource(packageLockLocator.value)).toEqual(initialLock);
+    expect(await readFile(initialStateFile)).toEqual(initialUserState);
+
+    const fencedMutator = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      importModule: async () => ({
+        plugin: registration(personalId, "groma.presentation.panel/v1"),
+      }),
+      ...context,
+    });
+    const fencedSchedule: string[] = [];
+    let packageStateClaims = 0;
+    const startupResources = new Proxy(context.resources, {
+      get(resourceTarget, property) {
+        if (property === "withCoordination") {
+          return async <T>(
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => T | Promise<T>,
+          ) => {
+            if (request.locator === "groma/package-state") {
+              packageStateClaims += 1;
+              if (packageStateClaims === 2) {
+                await enablePersonal(fencedMutator, fencedSchedule);
+                await disableBlueprint(fencedMutator, fencedSchedule);
+                await disablePersonal(fencedMutator, fencedSchedule);
+              }
+            }
+            return resourceTarget.withCoordination(request, action);
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+    let imports = 0;
+    const startup = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(startupResources),
+      importModule: async () => {
+        imports += 1;
+        return { plugin: registration(blueprintId) };
+      },
+      ...context,
+      resources: startupResources,
+    });
+
+    expect(await startup.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-changed" }],
+      ok: false,
+    });
+    expect(packageStateClaims).toBe(2);
+    expect(fencedSchedule).toEqual(["U1", "C0-L0-U1", "C0-L0-U0"]);
+    expect(await readFile(initialStateFile)).toEqual(initialUserState);
+    expect(imports).toBe(0);
   });
 
   test("revalidates direct configuration and lock edits after materialization before import", async () => {

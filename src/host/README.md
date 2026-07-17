@@ -165,13 +165,17 @@ an existing exact location-and-integrity-bound grant or requires
 named `plugin` export. The canonical lock records the exact manifest bytes, every
 enabled entry module's bytes, and resolved plugin ID. Startup rechecks all three before
 import. Every supported mutation and publication retains one exclusive workspace-scoped
-package-state coordination lease. Read-only startup instead projects captured canonical
-configuration, exact lock, and exact user state without acquiring that lease, then
-exact-revalidates the same surfaces after materialization, immediately before each
-import, and once more after the final import. The final check also applies when zero
-entries are enabled. Startup may therefore return a coherent old projection while a
-writer has not published, but an observed intermediate or changed state fails closed.
-Direct edits are detected through the same revalidation.
+package-state coordination lease. Read-only startup takes that same lease only while it
+captures canonical configuration, exact lock, and exact user state as one coherent
+observation, then releases it before package materialization or import. The initial
+capture, the check immediately before each import, and the final check after all imports
+use the same brief fence; the final check also applies when zero entries are enabled.
+Windows and an unusable contained user-data path attest the required absent personal root
+inside that fence instead of creating it. A reader that loses the brief lease retries only
+one exact contention diagnostic at 25-millisecond intervals for at most two seconds; it
+never writes or holds coordination across code execution. Other acquisition, action, or
+release failures fail closed as unavailable package state. Direct edits do not honor the
+lease and are still detected by exact revalidation.
 The Host then evaluates an immutable in-memory module made from those already-read entry
 bytes instead of reopening the source path.
 Manifest and entry paths are canonically checked again after their file descriptor opens;

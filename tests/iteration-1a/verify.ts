@@ -515,6 +515,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     const current = concurrentBlueprintReads[index]!;
     assert.deepEqual(exportComponentIds(current), expectedIds);
     assert.equal(current.stdout.includes("workspace-recovery-failed"), false);
+    assert.equal(current.stdout.includes("graph-query-unavailable"), false);
     assert.equal(current.stdout, concurrentBlueprintReads[0]!.stdout);
   }
   assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeConcurrentBlueprintReads);

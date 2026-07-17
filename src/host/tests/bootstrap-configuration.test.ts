@@ -664,7 +664,7 @@ describe("bootstrap configuration", () => {
       expect({ optionalStarts, phaseZeroEvents, reads }, mutation).toEqual({
         optionalStarts: 0,
         phaseZeroEvents: ["start", "stop"],
-        reads: 2,
+        reads: mutation === "beta" || mutation === "project" ? 3 : 2,
       });
     }
   });
@@ -814,7 +814,7 @@ describe("bootstrap configuration", () => {
       ],
       ok: false,
     });
-    expect(resourceReads).toBe(6);
+    expect(resourceReads).toBe(7);
     expect(Reflect.get(globalThis, Symbol.for(counterKey))).toBe(1);
     Reflect.deleteProperty(globalThis, Symbol.for(counterKey));
   });
