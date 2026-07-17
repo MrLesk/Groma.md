@@ -43,6 +43,14 @@ relationships:
     type: relates-to
     target: ent_6e17f657cc00d57287127e6b8336ac52
     description: Implements projection capability for Query Engine
+  - id: rel_c6e1887359af7e748d24ce24a15e3438
+    type: relates-to
+    target: ent_8b3e9cd7aa686d68360c8bf0da2b1b3c
+    description: uses canonical stores but never becomes authoritative
+  - id: rel_d8a8e506fd4373a6109281c297d082ba
+    type: relates-to
+    target: ent_ea66ab7a178818bb14f96d08c44f605b
+    description: uses canonical stores but never becomes authoritative
 groma.md/first-delivery: 1B
 groma.md/relationship-declarations:
   - edgeIds:
@@ -52,6 +60,8 @@ groma.md/relationship-declarations:
     text: Implements projection capability for Query Engine
   - edgeIds:
       - rel_6e993b5589386ce2153c7db82ba51267
+      - rel_c6e1887359af7e748d24ce24a15e3438
+      - rel_d8a8e506fd4373a6109281c297d082ba
     key: decl_2e48e28c368cda343b7cd6610ade2924
     status: partial
     text: uses canonical stores but never becomes authoritative

@@ -37,6 +37,10 @@ relationships:
     type: relates-to
     target: ent_c6335fe22ac1924249da491006cae1cd
     description: Used by every model and application operation
+  - id: rel_cd9fe01817449a645a71a0890952780d
+    type: relates-to
+    target: ent_596f62cc63bacd108c69d5600f37fac1
+    description: Used by every model and application operation
   - id: rel_f4b3b3c5fba14e503d6141b31fa3cbd6
     type: relates-to
     target: ent_070e99832ea99591e070ab3059f9db48
@@ -45,6 +49,7 @@ groma.md/first-delivery: 1A
 groma.md/relationship-declarations:
   - edgeIds:
       - rel_31c8df6c2873d578cc24458d94185058
+      - rel_cd9fe01817449a645a71a0890952780d
     key: decl_227545e2b71d5919fdc44fc0af808a17
     status: partial
     text: Used by every model and application operation

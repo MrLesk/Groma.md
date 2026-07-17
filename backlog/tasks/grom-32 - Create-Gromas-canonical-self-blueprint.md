@@ -1,11 +1,11 @@
 ---
 id: GROM-32
 title: Create Groma's canonical self-blueprint
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 13:54'
+updated_date: '2026-07-17 16:34'
 labels: []
 milestone: m-2
 dependencies:
@@ -49,14 +49,13 @@ Replace the handmade architecture overview as the detailed source of truth by re
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the verified 43-component and 87-declaration migration baseline while protecting opaque identities, exact declaration text, and the Plugin Package Manager delivery decision.
-2. Use only the freshly compiled public CLI with current revisions for the bounded canonical remediation; compare normalized old and new public exports.
-3. Keep generic structural integrity separate from normal-mode frozen counts, declaration statuses, and digests; retain a report-only disposable public-CLI count-change regression.
-4. Preserve compact navigator context and explicitly noncanonical teaching examples, including the complete Ordering semantics and development source-of-truth pointers.
-5. Harden the verifier's export and root pagination loops with runtime page shape, limit, generation, progress, cursor, and cycle checks; compare generations across root reads and projection rebuilds.
-6. Document the canonical self-blueprint verifier as the final bun run check gate, matching package.json.
-7. Verify formatting, typing, normal and both report argument orders, the complete repository check, all standalone targets, canonical byte stability, and diff hygiene with dist-mutating commands run serially.
-8. Record all review-loop evidence through the Backlog CLI and finalize only after independent specification and code-quality approvals.
+1. Preserve the verified public-CLI-authored self-blueprint while auditing the exact semantic delta from HEAD generation 94 to generation 102.
+2. Confirm the fixed eight-transaction result: exactly nine neutral relates-to edges across Graph Kernel, Local Resource Provider, Projection Index, and Schema Migration, with only Schema Migration changing ambiguous to partial.
+3. Prove all 43 component identities and non-relationship meaning are unchanged, every declaration retains its exact text, and all 104 edge IDs form a global source/description bijection with 87 declarations.
+4. Retain the verifier-owned 256-request test-harness cap in both complete page collectors without changing canonical or presentation bounds.
+5. Cover only ARCHITECTURE.md and docs in the Markdown formatter expansion, avoiding unrelated brand or content churn.
+6. Run build, exact public export audit, normal verification, report mode in both option orders, format checking, the full repository check, all target builds, restored-host verification, diff hygiene, and residue inspection serially.
+7. Record exact-head evidence and the complete task file set through Backlog, keep GROM-32 In Progress for remaining PR-level review gates, and commit without pushing or merging.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -81,6 +80,8 @@ Second review loop restored the complete Ordering teaching semantics: lifecycle 
 Third quality-review loop hardened both complete public-CLI paging helpers. Every export and root page is now runtime-validated as an object with a nonnegative safe-integer generation, boolean hasMore, an intrinsic item array no larger than the requested limit 7, and a consistent cursor contract. A hasMore page must contain items and return a nonempty string cursor that has not appeared before, so repeated and cyclic cursors fail instead of looping. Both collectors return generation with their items; root reads must match the first export generation, the canonical projection rebuild must match the first export generation, and the report-only post-edit rebuild must match its post-edit export generation. DEVELOPMENT.md now documents the canonical self-blueprint verifier as bun run check's final fail-fast gate, matching package.json. No canonical groma state changed. Exact-tree validation passed formatting and type checking, normal verification, report-baseline in both executable-option orders, bun run check with 796 tests and 5,679 expectations plus the final self-blueprint gate, bun run check:targets for all four targets, canonical scope inspection, and git diff --check. Dist-mutating commands were run serially.
 
 Final controller review gates passed on HEAD 0acb834: independent specification review approved after the Ordering-example and edit-tolerant baseline-report fixes; independent code-quality review approved after bounded paging and generation checks plus the DEVELOPMENT gate-order correction. Normal/report verifier modes, bun run check (796 tests, 5,679 expectations), bun run check:targets (all four targets), canonical public-export audits, projection rebuild/byte proofs, and diff hygiene are green.
+
+Exact-head final audit on 4ec0d88 independently compared public exports at generations 94 and 102. Only Graph Kernel, Local Resource Provider, Projection Index, and Schema Migration changed; 39 other components and all non-relationship meaning were unchanged. The audit verified exactly nine new CLI-minted relates-to edges with their full descriptions and intended endpoints, the sole ambiguous-to-partial transition, 43 components with 43 nonempty intents, 87 declarations at 53 edge / 9 partial / 8 ambiguous / 17 constraint, 104 unique edges, and a complete global declaration/edge source-description bijection. Transaction state is idle and committed at generation and projection watermark 102. Verification passed serially: bun run build; exact public export delta/count/endpoint audit; bun run verify:self-blueprint; report-baseline in both executable-option orders with all reviewed digests matching; bun run format:check; bun run check with 796 tests and 5,679 expectations plus compiled Iteration 1A recovery and the self-blueprint gate; bun run check:targets for all four targets; restored-host bun run verify:self-blueprint; git diff --check; temporary-residue inspection. No canonical correction was required.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -103,10 +104,16 @@ created: 2026-07-17 13:53
 ---
 Specification and code-quality review loops are complete with no remaining actionable findings. Finalized for the existing ready PR; external CI, Claude, and Codex bot gates remain PR-level merge gates.
 ---
+
+author: @codex
+created: 2026-07-17 16:08
+---
+Reopened after exact-head Codex review. Independent graph audit confirmed three P2 findings and a fail-closed consistency closure requiring nine public-CLI-authored edges total; independent quality audit also confirmed a unique-cursor page safety bound and targeted new-document formatting coverage as actionable. Optional diagnostic nits were evaluated and are not merge blockers.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Created Groma's public-CLI-authored canonical self-blueprint with 43 intentional components, 87 preserved relationship declarations, 95 evidence-backed neutral edges, explicit partial/ambiguous/constraint visibility, and deterministic bounded export. Replaced the old card ledger with a concise architecture navigator and noncanonical teaching examples. Added a hermetic frozen-baseline verifier with edit-tolerant read-only reporting, bounded paging/generation validation, projection rebuild, and canonical byte-stability proofs. Verified by 796 tests and 5,679 expectations, compiled Iteration 1A recovery, both self-blueprint modes including a supported count-change regression, all four target builds, exact public-export audits, and independent specification/code-quality approvals.
+Completed the exact-head GROM-32 review remediation without altering canonical meaning beyond the approved public-CLI transaction sequence. The self-blueprint remains 43 components and 87 preserved declarations, now with 104 evidence-backed neutral edges and explicit 53 edge / 9 partial / 8 ambiguous / 17 constraint classification. Added a verifier-only 256-page-request runaway guard to both full collectors, refreshed the reviewed count/status/digest baseline, and expanded formatting coverage only to ARCHITECTURE.md and docs. Public export comparison proves the nine new opaque edge IDs, exact endpoints and descriptions, global declaration-edge bijection, unchanged non-relationship meaning, and idle committed generation 102 state. Build, normal and both report verifier modes, formatting, 796 tests with 5,679 expectations, Iteration 1A recovery, all four standalone targets, post-target host verification, diff hygiene, and residue checks pass. Task intentionally remains In Progress for PR-level review gates.
 <!-- SECTION:FINAL_SUMMARY:END -->

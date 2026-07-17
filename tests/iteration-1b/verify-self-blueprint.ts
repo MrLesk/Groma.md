@@ -12,6 +12,8 @@ const defaultExecutable = path.join(
   process.platform === "win32" ? "groma.exe" : "groma",
 );
 const pageLimit = 7;
+// Test-harness runaway protection only; this never limits canonical components or presentation nodes.
+const testHarnessPageRequestLimit = 256;
 const declarationStatuses = ["ambiguous", "constraint", "edge", "partial"] as const;
 type DeclarationStatus = (typeof declarationStatuses)[number];
 
@@ -48,7 +50,7 @@ const expectedBaseline: BaselineSummary = Object.freeze({
     actions: 158,
     components: 43,
     declarations: 87,
-    edges: 95,
+    edges: 104,
     embeddedItems: 398,
     inputs: 129,
     intents: 43,
@@ -56,15 +58,15 @@ const expectedBaseline: BaselineSummary = Object.freeze({
     roots: 9,
   }),
   digests: Object.freeze({
-    declarations: "3a63810fc2452e57951ec8f2f2bbc80666cb25119ae044bb564c038f9f6853c5",
-    edges: "539485d6113bf255f50ab3244065485bd9dd9ff2e3e0cb55a903582ce9424960",
+    declarations: "e3db534b863260a06949e97f4389653c8e99617d8d67ce97ace196aed23fee82",
+    edges: "5dd4a3e5b3b737ced7971611a1426847515cfbb362ea75eed78ca16e66a40cb7",
     embeddedItems: "76551c8739a13767d01eef6459cae01a49f5ddc8e02d0bc37a40b50fdd1053bc",
-    export: "5b894feb59f831bd025ecc635ddb8c3a1b2d4ec93b86e0c30bcc4893d34ae72d",
+    export: "0d7088ca97244f4c0c704ca2586fcd091b162d511d8a5e7f3ac6c7b6ed9579b9",
     parents: "196e03f6931485dfd821e56352c97bae249d6adce41754b99a98066af0d8e532",
     roots: "4d67f79c129d2b67be1284d4e46eae94d1c74f6ce94f9537059f479bb82d232a",
     seeds: "9a6b8c55f6f9147d94be1b16d86d58946b6fbd940f1652b507b68571f4f45e14",
   }),
-  statusCounts: Object.freeze({ ambiguous: 9, constraint: 17, edge: 53, partial: 8 }),
+  statusCounts: Object.freeze({ ambiguous: 8, constraint: 17, edge: 53, partial: 9 }),
 });
 
 interface JsonEnvelope {
@@ -281,7 +283,13 @@ async function exportAll(executable: string, workspace: string): Promise<PagedIt
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
   let generation: number | undefined;
+  let pageRequests = 0;
   do {
+    assert.ok(
+      pageRequests < testHarnessPageRequestLimit,
+      `paged export exceeded test-harness limit of ${testHarnessPageRequestLimit} page requests`,
+    );
+    pageRequests += 1;
     const envelope = await command(executable, workspace, [
       "blueprint",
       "export",
@@ -308,7 +316,13 @@ async function rootIdsAll(executable: string, workspace: string): Promise<PagedI
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
   let generation: number | undefined;
+  let pageRequests = 0;
   do {
+    assert.ok(
+      pageRequests < testHarnessPageRequestLimit,
+      `paged roots exceeded test-harness limit of ${testHarnessPageRequestLimit} page requests`,
+    );
+    pageRequests += 1;
     const envelope = await command(executable, workspace, [
       "component",
       "roots",
