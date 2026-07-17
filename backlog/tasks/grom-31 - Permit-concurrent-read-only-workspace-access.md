@@ -1,11 +1,11 @@
 ---
 id: GROM-31
 title: Permit concurrent read-only workspace access
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 10:27'
+updated_date: '2026-07-17 10:33'
 labels: []
 milestone: m-4
 dependencies: []
@@ -89,8 +89,6 @@ Final verification on the exact tree: bun run check passed formatting, type chec
 Final Claude review clarified the verified scope without changing semantics: settled-state readers may run concurrently, while an active prepared or committing writer still makes canonical snapshot and checkpoint reads fail fast; package-state retry is bounded per coherent observation; and package acquisition constants now use retry rather than follower naming. The projection budget remains intentionally derived from configured reconstruction ceilings in response to the bounded-workload review requirement. The two local sole-contention checks remain at their owning layer boundaries rather than creating a new cross-layer public helper, and post-fence root-absence checks remain because they catch unsupported direct root creation after the coherent observation.
 <!-- SECTION:NOTES:END -->
 
-<!-- SECTION:NOTES:END -->
-
 ## Comments
 
 <!-- COMMENTS:BEGIN -->
@@ -99,7 +97,15 @@ created: 2026-07-17 09:47
 ---
 Reopened during final pull-request review remediation: the latest Codex review identified two actionable concurrency findings. The cold-projection follower liveness window and coherent package-state startup fence are being corrected and reverified before merge.
 ---
+
+author: @codex
+created: 2026-07-17 10:33
+---
+Final pull-request head passed local and hosted checks, all four target builds, compiled verification, Claude review, independent package/projection/whole-diff reviews, and Codex review. Ready to merge PR #32.
+---
 <!-- COMMENTS:END -->
+
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
