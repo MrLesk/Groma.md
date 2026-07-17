@@ -36,6 +36,10 @@ with `--`; options are parsed only from the remaining arguments. The official CL
 1–256 raw characters and rejects longer text before workspace discovery, Host composition,
 or projection-provider work.
 
+Blueprint traversal accepts an explicit depth from 1–16. Larger depths are rejected before
+workspace discovery, Host composition, or projection-provider work; direction, relation-type,
+limit, and cursor grammar remain unchanged.
+
 The CLI accepts opaque cursors up to 4,096 characters so every cursor emitted by the
 official graph query engine can be resumed. It does not parse, rewrite, or auto-follow
 them. Plain and JSON formats serialize the same semantic result object, including exact

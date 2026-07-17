@@ -336,6 +336,11 @@ text beyond the configured character bound returns `invalid-search-text` with on
 empty, or whitespace-only text remains a generic `invalid-search-text`, while normalization
 faults remain contained as query unavailability.
 
+A positive safe traversal depth above the configured engine bound is likewise rejected before
+identity or projection reads as `invalid-traversal-depth` with the frozen positive safe-integer
+`maximumDepth`. Malformed, fractional, or nonpositive depth remains the same generic diagnostic
+without synthesized details.
+
 The engine receives the projection and Core bounded-query contracts by capability. Its
 callers and Core never learn whether the projection is JSON, an in-memory fixture, or a
 future database. Rebuild and incremental projection paths therefore share one query

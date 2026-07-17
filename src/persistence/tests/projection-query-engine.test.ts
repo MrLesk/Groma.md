@@ -216,9 +216,11 @@ function maximumTermSearch(): string {
 function mutableProjection(initial = projectionSnapshot()) {
   let snapshot = initial;
   let catalogLoads = 0;
+  let dataLoads = 0;
   let loads = 0;
   const projection: ProjectionReadCapability = Object.freeze({
     exactCatalogEntry: async (_identity: ProjectionReadIdentity, requested: EntityId) => {
+      dataLoads += 1;
       const projected = snapshot.entities.find((item) => item.entity.id === requested);
       return projected === undefined
         ? {
@@ -237,6 +239,7 @@ function mutableProjection(initial = projectionSnapshot()) {
           });
     },
     exactEntities: async (_identity: ProjectionReadIdentity, requested: readonly EntityId[]) => {
+      dataLoads += 1;
       const entities = new Map(snapshot.entities.map((item) => [item.entity.id, item.entity]));
       const items: GraphEntity[] = [];
       for (let index = 0; index < requested.length; index += 1) {
@@ -262,6 +265,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       requested: ReturnType<typeof entity>,
     ) => {
+      dataLoads += 1;
       const entities = new Map(snapshot.entities.map((item) => [item.entity.id, item.entity]));
       let current = requested;
       const aliases = new Map(snapshot.aliases.map((alias) => [alias.source, alias.target]));
@@ -292,6 +296,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       request: ProjectionCatalogReadRequest,
     ) => {
       catalogLoads += 1;
+      dataLoads += 1;
       const entries = snapshot.entities.map((item) => ({
         id: item.entity.id,
         kind: item.entity.kind,
@@ -322,6 +327,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       request: ProjectionRelationReadRequest,
     ) => {
+      dataLoads += 1;
       const adjacency = snapshot.adjacency.find((item) => item.entity === request.entity);
       const relations = new Map(snapshot.relations.map((item) => [item.id, item]));
       const ids = adjacency?.[request.direction] ?? [];
@@ -358,6 +364,9 @@ function mutableProjection(initial = projectionSnapshot()) {
   return {
     get catalogLoads() {
       return catalogLoads;
+    },
+    get dataLoads() {
+      return dataLoads;
     },
     get loads() {
       return loads;
@@ -1132,7 +1141,56 @@ describe("projection query engine", () => {
       expect(result.ok ? undefined : result.diagnostics[0]?.details).toBeUndefined();
     }
     expect(provider.catalogLoads).toBe(0);
+    expect(provider.dataLoads).toBe(0);
     expect(provider.loads).toBe(0);
+  });
+
+  test("returns a typed traversal depth limit before identity or projection reads", async () => {
+    const snapshot = projectionSnapshot();
+    const provider = mutableProjection(snapshot);
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    const expected = Object.freeze({
+      fingerprint: snapshot.fingerprint,
+      generation: snapshot.generation,
+    });
+    const invalid = (depth: unknown) =>
+      query.traverseRelations(expected, { depth, direction: "outgoing", entity: ids.a } as never, {
+        limit: 1,
+      });
+    const overBound = await invalid(4);
+    expect(overBound).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-traversal-depth",
+          details: { maximumDepth: 3 },
+          message: "Traversal depth must be a positive safe integer no greater than 3",
+        },
+      ],
+      ok: false,
+    });
+    expect(overBound.ok ? false : Object.isFrozen(overBound.diagnostics[0]?.details)).toBeTrue();
+    for (const depth of ["4", 0, -1, 1.5] as const) {
+      const result = await invalid(depth);
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "invalid-traversal-depth" }],
+        ok: false,
+      });
+      expect(result.ok ? undefined : result.diagnostics[0]?.details).toBeUndefined();
+    }
+    expect(provider.loads).toBe(0);
+    expect(provider.dataLoads).toBe(0);
   });
 
   test("fits every valid search and its cursor inside the shared derived ceilings", async () => {

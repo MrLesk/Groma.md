@@ -59,6 +59,12 @@ accessors, proxies, non-integers, or other malformed values fail closed as
 `graph-query-unavailable`; other allowlisted graph-query diagnostics retain their existing
 bounded detail handling.
 
+`invalid-traversal-depth` follows the same optional-enrichment rule: omitted or explicit-
+undefined details remain semantic, while one exact positive safe-integer `maximumDepth` is
+copied and frozen. Any other present traversal-depth detail shape fails closed as
+`graph-query-unavailable`. Application retains its provider-neutral `maxComponents` request
+guard and does not import or duplicate the Persistence engine bound.
+
 Projection-backed component and export pages are ordered by ascending stable component
 identity. Traversal pages preserve deterministic breadth-first depth and then stable
 relationship identity. Application validates that order rather than introducing a

@@ -8,6 +8,7 @@ import {
   CLI_EXIT,
   CLI_MAX_RENDERED_BYTES,
   CLI_MAX_SEARCH_CHARACTERS,
+  CLI_MAX_TRAVERSAL_DEPTH,
   type CliInputSource,
 } from "../contracts.ts";
 import {
@@ -319,6 +320,83 @@ describe("CLI program", () => {
     expect(JSON.parse(plainWhitespaceResult!.slice("result: ".length))).toEqual(
       jsonWhitespaceFailure.envelope.result,
     );
+  });
+
+  test("fails excessive traversal depth before Host work and serves depth sixteen", async () => {
+    const root = await workspace();
+    let registryCalls = 0;
+    const createRegistry = () => {
+      registryCalls += 1;
+      throw new Error("Host composition must not begin");
+    };
+    const excessiveDepthArgs = [
+      "blueprint",
+      "traverse",
+      "ent_00000000000000000000000000000001",
+      "--direction",
+      "outgoing",
+      "--depth",
+      String(CLI_MAX_TRAVERSAL_DEPTH + 1),
+      "--limit",
+      "1",
+    ] as const;
+    const jsonFailure = captureOutput();
+    expect(
+      await runProgram(["--format", "json", ...excessiveDepthArgs], jsonFailure, {
+        createRegistry,
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.usage);
+    const jsonEnvelope = JSON.parse(jsonFailure.output[0]!) as JsonEnvelope;
+    expect(jsonEnvelope).toMatchObject({
+      command: "invocation",
+      exitCode: CLI_EXIT.usage,
+      ok: false,
+      result: { diagnostics: [{ code: "cli-invalid-invocation" }], ok: false },
+    });
+    const plainFailure = captureOutput();
+    expect(
+      await runProgram(excessiveDepthArgs, plainFailure, { createRegistry, workspaceRoot: root }),
+    ).toBe(CLI_EXIT.usage);
+    const plainResult = plainFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResult).toBeDefined();
+    expect(JSON.parse(plainResult!.slice("result: ".length))).toEqual(jsonEnvelope.result);
+    expect(registryCalls).toBe(0);
+    expect(await readdir(root)).toEqual([]);
+
+    const id = "ent_00000000000000000000000000000001";
+    expect(await jsonCommand(root, ["init"])).toMatchObject({
+      envelope: { exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id, name: "Traversal root", type: "service" } }),
+      ),
+    ).toMatchObject({ envelope: { exitCode: CLI_EXIT.success, ok: true } });
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "traverse",
+        id,
+        "--direction",
+        "outgoing",
+        "--depth",
+        String(CLI_MAX_TRAVERSAL_DEPTH),
+        "--limit",
+        "1",
+      ]),
+    ).toMatchObject({
+      envelope: {
+        command: "blueprint traverse",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true, value: { hasMore: false, items: [] } },
+      },
+    });
   });
 
   test("requires an initialized workspace for explicit migration inspection", async () => {

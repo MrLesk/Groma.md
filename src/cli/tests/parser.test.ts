@@ -4,6 +4,7 @@ import {
   CLI_MAX_ARGUMENTS,
   CLI_MAX_CURSOR_CHARACTERS,
   CLI_MAX_SEARCH_CHARACTERS,
+  CLI_MAX_TRAVERSAL_DEPTH,
 } from "../contracts.ts";
 import { parseInvocation } from "../parser.ts";
 
@@ -179,6 +180,36 @@ describe("CLI provisional grammar", () => {
     expect(
       parseInvocation(["blueprint", "search", `${maximumSearch}x`, "--limit", "1"]),
     ).toMatchObject({ diagnostic: { code: "cli-invalid-invocation" }, ok: false });
+  });
+
+  test("bounds the official traversal depth without changing option grammar", () => {
+    const invocation = (depth: number) =>
+      parseInvocation([
+        "blueprint",
+        "traverse",
+        "ent_01",
+        "--limit",
+        "1",
+        "--depth",
+        String(depth),
+        "--direction",
+        "both",
+      ]);
+    expect(invocation(CLI_MAX_TRAVERSAL_DEPTH)).toMatchObject({
+      invocation: {
+        command: {
+          depth: CLI_MAX_TRAVERSAL_DEPTH,
+          direction: "both",
+          kind: "blueprint-traverse",
+          limit: 1,
+        },
+      },
+      ok: true,
+    });
+    expect(invocation(CLI_MAX_TRAVERSAL_DEPTH + 1)).toMatchObject({
+      diagnostic: { code: "cli-invalid-invocation" },
+      ok: false,
+    });
   });
 
   test("requires finite explicit pages and exact option sets", () => {

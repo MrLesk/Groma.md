@@ -4,6 +4,7 @@ import {
   CLI_MAX_CURSOR_CHARACTERS,
   CLI_MAX_PAGE_SIZE,
   CLI_MAX_SEARCH_CHARACTERS,
+  CLI_MAX_TRAVERSAL_DEPTH,
   type CliCommand,
   type CliDiagnostic,
   type CliFormat,
@@ -106,7 +107,7 @@ function blueprintCommand(args: readonly string[]): CliCommand | undefined {
       }
       cursor = value;
     } else if (option === "--depth" && depth === undefined) {
-      depth = positiveInteger(value);
+      depth = positiveInteger(value, CLI_MAX_TRAVERSAL_DEPTH);
       if (depth === undefined) return undefined;
     } else if (option === "--direction" && direction === undefined) {
       if (value !== "incoming" && value !== "outgoing" && value !== "both") return undefined;

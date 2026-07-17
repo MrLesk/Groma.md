@@ -2,6 +2,7 @@ export const CLI_MAX_ARGUMENTS = 256;
 export const CLI_MAX_ARGUMENT_CHARACTERS = 65_536;
 export const CLI_MAX_CURSOR_CHARACTERS = 4_096;
 export const CLI_MAX_SEARCH_CHARACTERS = 256;
+export const CLI_MAX_TRAVERSAL_DEPTH = 16;
 export const CLI_MAX_INPUT_BYTES = 1_048_576;
 export const CLI_MAX_JSON_DEPTH = 30;
 export const CLI_MAX_JSON_VALUES = 10_000;

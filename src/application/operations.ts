@@ -2594,6 +2594,36 @@ function invalidSearchTextDiagnosticDetails(
   return success(Object.freeze({ [key]: maximum }));
 }
 
+function invalidTraversalDepthDiagnosticDetails(
+  source: unknown,
+  isProxy: (value: unknown) => boolean,
+): Result<Readonly<Record<string, string | number | boolean>> | undefined> {
+  if (source === undefined) return success(undefined);
+  try {
+    if (typeof source === "object" && source !== null && isProxy(source)) {
+      return graphQueryUnavailable();
+    }
+  } catch {
+    return graphQueryUnavailable();
+  }
+  const inspected = inspectExactRecord(
+    source,
+    [["maximumDepth"]],
+    "graph-query-unavailable",
+    "Invalid traversal depth diagnostic details",
+  );
+  if (!inspected.ok) return graphQueryUnavailable();
+  const maximumDepth = inspected.value.maximumDepth;
+  if (
+    typeof maximumDepth !== "number" ||
+    !Number.isSafeInteger(maximumDepth) ||
+    maximumDepth <= 0
+  ) {
+    return graphQueryUnavailable();
+  }
+  return success(Object.freeze({ maximumDepth }));
+}
+
 function graphQueryFailureDiagnostics(
   value: unknown,
   scope: GraphQueryDiagnosticScope,
@@ -2636,7 +2666,9 @@ function graphQueryFailureDiagnostics(
     const details =
       code === "invalid-search-text"
         ? invalidSearchTextDiagnosticDetails(entry.value.details, options.isProxy)
-        : safeDiagnosticDetails(entry.value.details, options.isProxy);
+        : code === "invalid-traversal-depth"
+          ? invalidTraversalDepthDiagnosticDetails(entry.value.details, options.isProxy)
+          : safeDiagnosticDetails(entry.value.details, options.isProxy);
     if (!details.ok) return graphQueryUnavailable();
     copied[index] = Object.freeze({
       code,

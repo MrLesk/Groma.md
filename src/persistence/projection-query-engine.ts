@@ -603,13 +603,21 @@ function prepareTraversal(
   if (
     typeof inspected.value.depth !== "number" ||
     !Number.isSafeInteger(inspected.value.depth) ||
-    inspected.value.depth <= 0 ||
-    inspected.value.depth > bounds.maxTraversalDepth
+    inspected.value.depth <= 0
   ) {
     return failure(
       diagnostic(
         "invalid-traversal-depth",
         `Traversal depth must be a positive safe integer no greater than ${bounds.maxTraversalDepth}`,
+      ),
+    );
+  }
+  if (inspected.value.depth > bounds.maxTraversalDepth) {
+    return failure(
+      diagnostic(
+        "invalid-traversal-depth",
+        `Traversal depth must be a positive safe integer no greater than ${bounds.maxTraversalDepth}`,
+        Object.freeze({ maximumDepth: bounds.maxTraversalDepth }),
       ),
     );
   }

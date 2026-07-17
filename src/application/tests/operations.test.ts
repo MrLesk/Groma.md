@@ -1842,6 +1842,9 @@ describe("application projection-backed blueprint queries", () => {
     expect(codeOf(await traversalFailure("entity-scan-bound-exceeded"))).toBe(
       "graph-query-unavailable",
     );
+    expect(codeOf(await traversalFailure("invalid-traversal-depth"))).toBe(
+      "invalid-traversal-depth",
+    );
     expect(codeOf(await traversalFailure("stale-cursor"))).toBe("graph-query-unavailable");
     expect(codeOf(await traversalFailure("unknown-entity"))).toBe("unknown-entity");
     expect(codeOf(await traversalFailure("stale-cursor", "opaque"))).toBe("stale-cursor");
@@ -1956,6 +1959,122 @@ describe("application projection-backed blueprint queries", () => {
           }),
       }),
     }).searchBlueprint({ limit: 1, text: "commerce" });
+    expect(proxied).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+    expect(traps.count).toBe(0);
+  });
+
+  test("canonicalizes generic and exact typed invalid-traversal-depth details", async () => {
+    const privateMessage = "/private/provider-traversal-depth";
+    const request = {
+      depth: 1,
+      direction: "outgoing" as const,
+      id: ids.service,
+      limit: 1,
+    };
+    for (const includeExplicitUndefined of [false, true]) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          traverseRelations: async () =>
+            failure({
+              code: "invalid-traversal-depth",
+              ...(includeExplicitUndefined ? { details: undefined } : {}),
+              message: privateMessage,
+            } as never),
+        }),
+      }).traverseBlueprint(request);
+      expect(result).toEqual({
+        diagnostics: [
+          {
+            code: "invalid-traversal-depth",
+            message: "The relationship traversal depth is invalid",
+          },
+        ],
+        ok: false,
+      });
+      expect(Object.isFrozen(result)).toBeTrue();
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics)).toBeTrue();
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics[0])).toBeTrue();
+      expect(JSON.stringify(result)).not.toContain(privateMessage);
+    }
+
+    const bounded = await operations(new SnapshotFixture(), undefined, {
+      graphQueries: projectionGraphQueries({
+        traverseRelations: async () =>
+          failure({
+            code: "invalid-traversal-depth",
+            details: { maximumDepth: 16 },
+            message: privateMessage,
+          }),
+      }),
+    }).traverseBlueprint(request);
+    expect(bounded).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-traversal-depth",
+          details: { maximumDepth: 16 },
+          message: "The relationship traversal depth is invalid",
+        },
+      ],
+      ok: false,
+    });
+    expect(bounded.ok ? false : Object.isFrozen(bounded.diagnostics[0]?.details)).toBeTrue();
+    expect(JSON.stringify(bounded)).not.toContain(privateMessage);
+
+    let accessorCalls = 0;
+    const accessorDetails = {};
+    Object.defineProperty(accessorDetails, "maximumDepth", {
+      enumerable: true,
+      get: () => {
+        accessorCalls += 1;
+        return 16;
+      },
+    });
+    for (const details of [
+      null,
+      {},
+      [],
+      { maximumDepth: 0 },
+      { maximumDepth: -1 },
+      { maximumDepth: 1.5 },
+      { maximumDepth: Number.MAX_SAFE_INTEGER + 1 },
+      { maximumDepth: "16" },
+      { maximumDepth: 16, extra: true },
+      accessorDetails,
+    ] as const) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          traverseRelations: async () =>
+            failure({
+              code: "invalid-traversal-depth",
+              details: details as never,
+              message: privateMessage,
+            }),
+        }),
+      }).traverseBlueprint(request);
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "graph-query-unavailable" }],
+        ok: false,
+      });
+      expect(JSON.stringify(result)).not.toContain(privateMessage);
+    }
+    expect(accessorCalls).toBe(0);
+
+    const proxies = new Set<unknown>();
+    const traps = { count: 0 };
+    const detailsProxy = recognizedProxy({ maximumDepth: 16 }, proxies, traps);
+    const proxied = await proxyAwareOperations(new SnapshotFixture(), proxies, {
+      graphQueries: projectionGraphQueries({
+        traverseRelations: async () =>
+          failure({
+            code: "invalid-traversal-depth",
+            details: detailsProxy,
+            message: privateMessage,
+          }),
+      }),
+    }).traverseBlueprint(request);
     expect(proxied).toMatchObject({
       diagnostics: [{ code: "graph-query-unavailable" }],
       ok: false,
