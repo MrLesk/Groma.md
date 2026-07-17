@@ -107,6 +107,7 @@ async function verifyExecutableHeader(target: Target): Promise<void> {
   }
 }
 
+let hostWorkflowRan = false;
 try {
   for (const target of targets) {
     await run([process.execPath, "run", "scripts/build.ts", `--target=${target.target}`]);
@@ -139,6 +140,7 @@ try {
         selfBlueprintVerification,
         `--executable=${target.executable}`,
       ]);
+      hostWorkflowRan = true;
     }
   }
 } finally {
@@ -146,5 +148,7 @@ try {
 }
 
 console.log(
-  `Verified ${targets.length} standalone executable headers, the complete host-compatible Iteration 1B workflow, and restored the native artifact.`,
+  hostWorkflowRan
+    ? `Verified ${targets.length} standalone executable headers, the complete host-compatible Iteration 1B workflow, and restored the native artifact.`
+    : `Verified ${targets.length} standalone executable headers by cross-compilation only; no baseline target matches ${process.platform}-${process.arch}, and the native artifact was restored.`,
 );

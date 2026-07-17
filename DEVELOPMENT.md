@@ -173,8 +173,10 @@ black-box tests the target matching the current operating system and architectur
 the complete Iteration 1B workflow. The compiled child process is executed directly and
 does not use a separately installed Bun runtime; Bun remains only the development harness
 that builds and drives it. A successful cross-compile is not native runtime verification
-for a different operating system. After verifying the serial matrix, the command restores
-a native artifact so `bun run smoke` can run immediately.
+for a different operating system. When no baseline target matches the local host, the
+command reports cross-compilation-only verification instead of claiming that it ran the
+complete workflow. After verifying the serial matrix, the command restores a native artifact
+so `bun run smoke` can run immediately.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun` while
 retaining their release tags as comments for review. Setup Bun reads the exact Bun

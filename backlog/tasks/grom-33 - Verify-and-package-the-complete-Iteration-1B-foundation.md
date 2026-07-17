@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 19:27'
+updated_date: '2026-07-17 19:54'
 labels: []
 milestone: m-2
 dependencies:
@@ -73,6 +73,8 @@ Ready-PR gate evidence on commit f7d78ee: GitHub Actions run 29606367136 passed 
 Reopened after GitHub Actions run 29606731908: Cross-platform binaries again exceeded the 5,000ms SIGTERM grace in verifyInterruptedRead and required SIGKILL. The repeated Linux result shows that graceful SIGTERM servicing during a synchronous cold rebuild is not a stable product contract; the task requires deterministic abrupt-interruption canonical safety and fresh-read recovery through the shipped binary. Acceptance criteria and the existing final summary remain unchanged pending implementation and review.
 
 Implemented the deterministic abrupt-interruption proof after run 29606731908. Captured processes now expose an idempotent immediate SIGKILL path while generic failures and timeouts retain SIGTERM, bounded grace, SIGKILL escalation, settlement, and eager rejection observation. The cold target is a large production-binary export; manifest-last rebuild publication plus a second successful production-binary root read witnesses that projection/checkpoint coordination has released before immediate SIGKILL. The test requires an intentional force kill, nonzero exit, empty stderr, zero stdout bytes under the CLI atomic-output contract, exact canonical snapshot equality, and a complete fresh export recovery. Five consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
+
+Addressed the latest PR #34 Codex findings. The interrupted-export proof no longer depends on cache-manifest timing, a second unrelated CLI process, or a large-output duration window. Bun's subprocess maxBuffer boundary now sends SIGKILL when the exact shipped exporter crosses a one-byte stdout threshold; the verifier requires SIGKILL, nonzero exit, exporter-owned output beyond the threshold, clean stderr, exact canonical bytes, and a complete fresh export recovery. This supersedes the prior note's unsupported zero-stdout/atomic-output claim: process.stdout.write and OS buffering may expose either a prefix or a complete buffered document before signal termination, and response completeness is not used as proof. The target verifier now records whether a matching artifact completed all runtime workflows and reports cross-compilation-only on unsupported hosts; DEVELOPMENT.md documents that truthful branch. Five consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

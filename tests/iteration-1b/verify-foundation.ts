@@ -45,7 +45,6 @@ interface ProcessResult {
 
 interface CapturedProcess {
   readonly exited: Promise<number>;
-  readonly forceTerminate: () => void;
   readonly settle: () => Promise<void>;
   readonly terminate: () => void;
   readonly wait: () => Promise<readonly [number, string, string]>;
@@ -171,6 +170,7 @@ function spawnCapturedProcess(
   args: readonly string[],
   options: {
     readonly acceptsInput?: boolean;
+    readonly maxBufferBytes?: number;
     readonly stderrBytes?: number;
     readonly stdoutBytes?: number;
     readonly timeoutMilliseconds?: number;
@@ -181,6 +181,9 @@ function spawnCapturedProcess(
     cmd: [executable, ...args],
     cwd: scenario.workspace,
     env: { ...process.env, HOME: scenario.home, USERPROFILE: scenario.home },
+    ...(options.maxBufferBytes === undefined
+      ? {}
+      : { killSignal: "SIGKILL", maxBuffer: options.maxBufferBytes }),
     stderr: "pipe",
     stdin: options.acceptsInput === true ? "pipe" : "ignore",
     stdout: "pipe",
@@ -266,11 +269,10 @@ function spawnCapturedProcess(
 
   return Object.freeze({
     exited,
-    forceTerminate,
     settle,
     terminate,
     wait: () => Promise.race([result, lifetimeExpired]),
-    wasForceKilled: () => forceKilled,
+    wasForceKilled: () => forceKilled || child.signalCode === "SIGKILL",
     writeInput: (input: string): void => {
       const stdin = child.stdin;
       if (stdin === undefined || typeof stdin === "number") {
@@ -789,28 +791,6 @@ export const plugin = Object.freeze({
   assert.equal(recovered.items[0]?.component.id, ids.incompatible);
 }
 
-async function waitForInterruptionProgress(
-  progressFile: string,
-  exited: Promise<number>,
-): Promise<boolean> {
-  let processExited = false;
-  void exited.then(() => {
-    processExited = true;
-  });
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    try {
-      await lstat(progressFile);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (processExited) return false;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error("cold export did not publish progress evidence before its timeout");
-}
-
 async function verifyInterruptedRead(executable: string, scenario: Scenario): Promise<void> {
   await success(executable, scenario, ["init"]);
   const interruptionIds = Array.from(
@@ -827,8 +807,8 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
     },
   });
   const intentRoot = path.join(scenario.workspace, "groma", "intent", "00");
-  // These 79 hand-written canonical Markdown fixtures intentionally couple to the storage format
-  // only to keep the cancellation window deterministic; the compiled public CLI validates them next.
+  // These 79 hand-written canonical Markdown fixtures intentionally create a representative cold
+  // projection rebuild; the compiled public CLI validates every fixture immediately afterward.
   await Promise.all(
     interruptionIds
       .slice(1)
@@ -857,35 +837,25 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
   const before = await canonicalSnapshot(scenario.workspace);
   const cacheRoot = path.join(scenario.workspace, ".groma-cache");
   await rm(cacheRoot, { force: true, recursive: true });
-  const rebuildProgress = path.join(cacheRoot, "projection-read-current.json");
 
   const captured = spawnCapturedProcess(
     executable,
     scenario,
-    ["--format", "json", "blueprint", "export", "--limit", "100"],
+    ["--format", "json", "blueprint", "export", "--limit", "1"],
     {
+      maxBufferBytes: 1,
       stderrBytes: 1_048_576,
-      stdoutBytes: maximumCommandOutputBytes,
+      stdoutBytes: 1_048_576,
       timeoutMilliseconds: 15_000,
     },
   );
   let operationFailed = false;
   try {
-    if (!(await waitForInterruptionProgress(rebuildProgress, captured.exited))) {
-      const [exitCode, stdout, stderr] = await captured.wait();
-      throw new Error(
-        `cold export exited before publishing progress evidence: ${exitCode}\n${stderr}${stdout}`,
-      );
-    }
-    // A second production-binary read witnesses released publication before the large exporter
-    // is killed while preparing its atomic output document.
-    await success(executable, scenario, ["component", "roots", "--limit", "1"]);
-    captured.forceTerminate();
     const [exitCode, stdout, stderr] = await captured.wait();
-    assert.equal(captured.wasForceKilled(), true, "cold export was not abruptly terminated");
-    assert.notEqual(exitCode, 0, "abruptly terminated cold export completed successfully");
+    assert.equal(captured.wasForceKilled(), true, "export output bound did not force SIGKILL");
+    assert.notEqual(exitCode, 0, "buffer-limited cold export completed successfully");
     assert.equal(stderr, "", "interrupted export wrote unexpected stderr");
-    assert.equal(stdout, "", "abruptly terminated export emitted a non-atomic output document");
+    assert.ok(stdout.length > 1, "buffer-limited export never crossed its output boundary");
   } catch (error) {
     operationFailed = true;
     throw error;
