@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 13:25'
+updated_date: '2026-07-17 13:48'
 labels: []
 milestone: m-2
 dependencies:
@@ -49,12 +49,14 @@ Replace the handmade architecture overview as the detailed source of truth by re
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Preserve the verified 43-component and 87-declaration migration baseline while bounding the actionable review gaps and protecting opaque identities, exact declaration text, and the explicit Plugin Package Manager delivery decision.
-2. Use only the freshly compiled public CLI with current revisions to mint 10 exact relates-to edges, mark the 8 owning declarations partial with their minted IDs, and add the sole missing Plugin Development root intent; compare normalized old and new public exports.
-3. Strengthen the hermetic self-blueprint verifier for 43 nonempty intents, partial declaration semantics, 95-edge bijection, fixed reviewed digests, and a read-only machine-reviewable report-baseline mode.
-4. Restore compact non-ledger context, topology, data planes, workflows, unresolved decisions, exclusions, relationship direction, and baseline-refresh guidance in the navigator; preserve teaching examples in a separate explicitly noncanonical document and repair development pointers.
-5. Verify build, normal and report self-blueprint modes, full repository checks, all target builds, canonical byte stability, semantic export scope, and diff hygiene.
-6. Record review-remediation evidence and leave the task In Progress for controller review and finalization.
+1. Preserve the verified 43-component and 87-declaration migration baseline while protecting opaque identities, exact declaration text, and the Plugin Package Manager delivery decision.
+2. Use only the freshly compiled public CLI with current revisions for the bounded canonical remediation; compare normalized old and new public exports.
+3. Keep generic structural integrity separate from normal-mode frozen counts, declaration statuses, and digests; retain a report-only disposable public-CLI count-change regression.
+4. Preserve compact navigator context and explicitly noncanonical teaching examples, including the complete Ordering semantics and development source-of-truth pointers.
+5. Harden the verifier's export and root pagination loops with runtime page shape, limit, generation, progress, cursor, and cycle checks; compare generations across root reads and projection rebuilds.
+6. Document the canonical self-blueprint verifier as the final bun run check gate, matching package.json.
+7. Verify formatting, typing, normal and both report argument orders, the complete repository check, all standalone targets, canonical byte stability, and diff hygiene with dist-mutating commands run serially.
+8. Record all review-loop evidence through the Backlog CLI and leave the task In Progress for controller review and finalization.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -75,6 +77,8 @@ The verifier now enforces both edge-bearing states in the global source/descript
 Verification passed: bun run build; bun run verify:self-blueprint; report-baseline in both executable-option orders; bun run check with 796 tests and 5,679 expectations plus compiled Iteration 1A crash recovery; bun run check:targets for all four targets; exact public-export pair audit; git diff --check; canonical diff and scope review.
 
 Second review loop restored the complete Ordering teaching semantics: lifecycle states, idempotency and cancellation behavior, four guarantees, the reversible Intent boundary explanation, concept-to-representation mapping, and concrete TypeScript partial scanner evidence, while retaining the explicit noncanonical warning. The verifier now separates generic integrity from a frozen expectedBaseline summary. Normal mode compares all counts, declaration statuses, and digests; report mode bypasses every expected-baseline equality while retaining allowed-status checks, component identity and acyclic containment, nonempty intents, edge-ID rules, exact declaration/edge source-description bijection, bounded paging, projection rebuild equality, and canonical byte proof. A report-only regression uses the public CLI against a second disposable copy to add one valid root, proves observed component/root counts increase, rebuilds the projection, and confirms the source canonical snapshot remains byte-identical. ARCHITECTURE.md now tells maintainers to deliberately refresh expected summary counts, statuses, and digests together.
+
+Third quality-review loop hardened both complete public-CLI paging helpers. Every export and root page is now runtime-validated as an object with a nonnegative safe-integer generation, boolean hasMore, an intrinsic item array no larger than the requested limit 7, and a consistent cursor contract. A hasMore page must contain items and return a nonempty string cursor that has not appeared before, so repeated and cyclic cursors fail instead of looping. Both collectors return generation with their items; root reads must match the first export generation, the canonical projection rebuild must match the first export generation, and the report-only post-edit rebuild must match its post-edit export generation. DEVELOPMENT.md now documents the canonical self-blueprint verifier as bun run check's final fail-fast gate, matching package.json. No canonical groma state changed. Exact-tree validation passed formatting and type checking, normal verification, report-baseline in both executable-option orders, bun run check with 796 tests and 5,679 expectations plus the final self-blueprint gate, bun run check:targets for all four targets, canonical scope inspection, and git diff --check. Dist-mutating commands were run serially.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -96,5 +100,5 @@ Reopened after external review identified actionable migration gaps: preserve co
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed both GROM-32 review-remediation loops. Canonical state remains the public-CLI-authored 43-component, 87-declaration, 95-edge blueprint; the follow-up restores full noncanonical Ordering teaching context and makes report-baseline genuinely edit-tolerant by separating generic structural integrity from normal-mode frozen counts, statuses, and digests. Verified normal self-blueprint mode, report mode in both executable-option orders including a disposable public-CLI count-change regression, full bun run check with 796 tests and 5,679 expectations, all four standalone targets, projection rebuild and canonical byte stability, and clean diff/scope checks. Task remains In Progress pending controller review.
+Completed all three GROM-32 review-remediation loops. The canonical public-CLI-authored 43-component, 87-declaration, 95-edge blueprint is unchanged. The verifier now separates generic integrity from frozen normal-mode expectations, exercises a disposable report-only count change, and fail-closes complete export/root pagination on malformed generations, over-limit or non-progressing pages, cursor contract violations, and repeated/cyclic cursors while proving generation continuity across root reads and projection rebuilds. Restored the complete noncanonical Ordering example and aligned DEVELOPMENT.md with the actual final self-blueprint gate. Verified normal and both report modes, full bun run check with 796 tests and 5,679 expectations, all four standalone targets, byte stability, and clean scope/diff checks. Task remains In Progress pending controller review.
 <!-- SECTION:FINAL_SUMMARY:END -->

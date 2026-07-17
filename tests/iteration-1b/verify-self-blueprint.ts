@@ -11,6 +11,7 @@ const defaultExecutable = path.join(
   "dist",
   process.platform === "win32" ? "groma.exe" : "groma",
 );
+const pageLimit = 7;
 const declarationStatuses = ["ambiguous", "constraint", "edge", "partial"] as const;
 type DeclarationStatus = (typeof declarationStatuses)[number];
 
@@ -121,6 +122,11 @@ interface ExportItem {
   readonly relationships: readonly Relationship[];
 }
 
+interface PagedItems<T> {
+  readonly generation: number;
+  readonly items: readonly T[];
+}
+
 interface VerifyOptions {
   readonly executable: string;
   readonly reportBaseline: boolean;
@@ -225,8 +231,54 @@ function resultValue<T>(envelope: JsonEnvelope): T {
   return result.value as T;
 }
 
-async function exportAll(executable: string, workspace: string): Promise<readonly ExportItem[]> {
+function validatedPage<T>(
+  rawValue: unknown,
+  expectedGeneration: number | undefined,
+  seenCursors: Set<string>,
+  label: string,
+): { readonly generation: number; readonly items: readonly T[]; readonly nextCursor?: string } {
+  assert.equal(typeof rawValue, "object", `${label} page result must be an object`);
+  assert.notEqual(rawValue, null, `${label} page result must not be null`);
+  const value = rawValue as {
+    readonly generation?: unknown;
+    readonly hasMore?: unknown;
+    readonly items?: unknown;
+    readonly nextCursor?: unknown;
+  };
+  assert.equal(typeof value.generation, "number", `${label} page generation must be a number`);
+  const generation = value.generation as number;
+  assert.ok(
+    Number.isSafeInteger(generation) && generation >= 0,
+    `${label} page generation must be a nonnegative safe integer`,
+  );
+  if (expectedGeneration !== undefined) {
+    assert.equal(generation, expectedGeneration, `${label} pages changed generation`);
+  }
+  assert.ok(Array.isArray(value.items), `${label} page items must be an array`);
+  const items = value.items as readonly T[];
+  assert.ok(items.length <= pageLimit, `${label} page exceeded requested limit ${pageLimit}`);
+  assert.equal(typeof value.hasMore, "boolean", `${label} page hasMore must be boolean`);
+  const hasMore = value.hasMore as boolean;
+  const hasCursor = value.nextCursor !== undefined;
+  assert.equal(hasMore, hasCursor, `${label} page cursor contract diverged`);
+  if (!hasMore) return Object.freeze({ generation, items });
+
+  assert.ok(items.length > 0, `${label} page cannot continue without items`);
+  assert.equal(typeof value.nextCursor, "string", `${label} next cursor must be a string`);
+  const nextCursor = value.nextCursor as string;
+  assert.ok(nextCursor.trim().length > 0, `${label} next cursor must not be empty`);
+  assert.equal(
+    seenCursors.has(nextCursor),
+    false,
+    `${label} next cursor repeated or formed a cycle`,
+  );
+  seenCursors.add(nextCursor);
+  return Object.freeze({ generation, items, nextCursor });
+}
+
+async function exportAll(executable: string, workspace: string): Promise<PagedItems<ExportItem>> {
   const items: ExportItem[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
   let generation: number | undefined;
   do {
@@ -234,26 +286,26 @@ async function exportAll(executable: string, workspace: string): Promise<readonl
       "blueprint",
       "export",
       "--limit",
-      "7",
+      String(pageLimit),
       ...(cursor === undefined ? [] : ["--cursor", cursor]),
     ]);
-    const value = resultValue<{
-      readonly generation: number;
-      readonly hasMore: boolean;
-      readonly items: readonly ExportItem[];
-      readonly nextCursor?: string;
-    }>(envelope);
-    generation ??= value.generation;
-    assert.equal(value.generation, generation, "paged export changed generation");
-    items.push(...value.items);
-    cursor = value.nextCursor;
-    assert.equal(value.hasMore, cursor !== undefined, "paged export cursor contract diverged");
+    const page = validatedPage<ExportItem>(
+      resultValue<unknown>(envelope),
+      generation,
+      seenCursors,
+      "paged export",
+    );
+    generation ??= page.generation;
+    items.push(...page.items);
+    cursor = page.nextCursor;
   } while (cursor !== undefined);
-  return items;
+  assert.notEqual(generation, undefined, "paged export did not return a generation");
+  return Object.freeze({ generation, items: Object.freeze(items) });
 }
 
-async function rootIdsAll(executable: string, workspace: string): Promise<readonly string[]> {
+async function rootIdsAll(executable: string, workspace: string): Promise<PagedItems<string>> {
   const ids: string[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
   let generation: number | undefined;
   do {
@@ -261,22 +313,21 @@ async function rootIdsAll(executable: string, workspace: string): Promise<readon
       "component",
       "roots",
       "--limit",
-      "7",
+      String(pageLimit),
       ...(cursor === undefined ? [] : ["--cursor", cursor]),
     ]);
-    const value = resultValue<{
-      readonly generation: number;
-      readonly hasMore: boolean;
-      readonly items: readonly { readonly component: Component }[];
-      readonly nextCursor?: string;
-    }>(envelope);
-    generation ??= value.generation;
-    assert.equal(value.generation, generation, "paged roots changed generation");
-    ids.push(...value.items.map((item) => item.component.id));
-    cursor = value.nextCursor;
-    assert.equal(value.hasMore, cursor !== undefined, "paged roots cursor contract diverged");
+    const page = validatedPage<{ readonly component: Component }>(
+      resultValue<unknown>(envelope),
+      generation,
+      seenCursors,
+      "paged roots",
+    );
+    generation ??= page.generation;
+    ids.push(...page.items.map((item) => item.component.id));
+    cursor = page.nextCursor;
   } while (cursor !== undefined);
-  return ids;
+  assert.notEqual(generation, undefined, "paged roots did not return a generation");
+  return Object.freeze({ generation, items: Object.freeze(ids) });
 }
 
 async function canonicalSnapshot(
@@ -553,7 +604,7 @@ async function exerciseReportBaselineWithSupportedEdit(
   );
   const afterEdit = await canonicalSnapshot(canonicalRoot);
   const changed = await exportAll(executable, workspace);
-  const changedSummary = integrityAudit(changed);
+  const changedSummary = integrityAudit(changed.items);
   assert.equal(changedSummary.counts.components, sourceSummary.counts.components + 1);
   assert.equal(changedSummary.counts.roots, sourceSummary.counts.roots + 1);
   assert.notDeepEqual(changedSummary, sourceSummary);
@@ -562,8 +613,13 @@ async function exerciseReportBaselineWithSupportedEdit(
   await rm(cacheRoot, { force: true, recursive: true });
   await requireMissing(cacheRoot);
   const rebuilt = await exportAll(executable, workspace);
-  assert.equal(canonicalJson(rebuilt), canonicalJson(changed));
-  assert.deepEqual(integrityAudit(rebuilt), changedSummary);
+  assert.equal(
+    rebuilt.generation,
+    changed.generation,
+    "report edit projection rebuild changed generation",
+  );
+  assert.equal(canonicalJson(rebuilt.items), canonicalJson(changed.items));
+  assert.deepEqual(integrityAudit(rebuilt.items), changedSummary);
   assert.deepEqual(await canonicalSnapshot(canonicalRoot), afterEdit);
 }
 
@@ -581,14 +637,15 @@ try {
   await requireMissing(cacheRoot);
 
   const first = await exportAll(options.executable, workspace);
-  const firstSummary = integrityAudit(first);
+  const firstSummary = integrityAudit(first.items);
   if (!options.reportBaseline) assertExpectedBaseline(firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
 
-  const rootIds = await rootIdsAll(options.executable, workspace);
+  const roots = await rootIdsAll(options.executable, workspace);
+  assert.equal(roots.generation, first.generation, "root read generation differed from export");
   assert.deepEqual(
-    [...rootIds].sort(compareText),
-    first
+    [...roots.items].sort(compareText),
+    first.items
       .filter((item) => item.component.parent === undefined)
       .map((item) => item.component.id)
       .sort(compareText),
@@ -597,8 +654,9 @@ try {
   await rm(cacheRoot, { force: true, recursive: true });
   await requireMissing(cacheRoot);
   const rebuilt = await exportAll(options.executable, workspace);
-  assert.equal(canonicalJson(rebuilt), canonicalJson(first));
-  assert.deepEqual(integrityAudit(rebuilt), firstSummary);
+  assert.equal(rebuilt.generation, first.generation, "projection rebuild changed generation");
+  assert.equal(canonicalJson(rebuilt.items), canonicalJson(first.items));
+  assert.deepEqual(integrityAudit(rebuilt.items), firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
   assert.deepEqual(await canonicalSnapshot(canonicalRoot), before);
 

@@ -174,8 +174,9 @@ version from `package.json`.
 
 When verification fails, run `bun run check` first. Its fail-fast order is formatting,
 types, architectural boundaries, unit tests, standalone build and smoke behavior, then
-the complete Iteration 1A black-box and crash-recovery suite. Run the named subcommand
-directly after identifying the failing gate.
+the complete Iteration 1A black-box and crash-recovery suite, and finally the canonical
+self-blueprint verifier through the compiled public CLI. Run the named subcommand directly
+after identifying the failing gate.
 
 ## Iteration 1A Completion Verification
 
