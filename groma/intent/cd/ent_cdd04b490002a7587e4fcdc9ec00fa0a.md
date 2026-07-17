@@ -33,6 +33,10 @@ relationships:
     type: relates-to
     target: ent_f5e8a107d322fa16831edd20867ad6d8
     description: Runs in Plugin Runtime Phase 0
+  - id: rel_8f68c4fdd499d2315fbb7904e1736643
+    type: relates-to
+    target: ent_36f3d9cd50377cc2aa601ee35d00509b
+    description: official profile uses Local Resources and YAML Configuration providers
 groma.md/first-delivery: 1B
 groma.md/relationship-declarations:
   - edgeIds:
@@ -40,8 +44,10 @@ groma.md/relationship-declarations:
     key: decl_9babd08a9d4c45d3ffe441c78eb73614
     status: edge
     text: Runs in Plugin Runtime Phase 0
-  - key: decl_bb5925cac36296ea334e641c8075144a
-    status: ambiguous
+  - edgeIds:
+      - rel_8f68c4fdd499d2315fbb7904e1736643
+    key: decl_bb5925cac36296ea334e641c8075144a
+    status: partial
     text: official profile uses Local Resources and YAML Configuration providers
 groma.md/seed-key: bootstrap-configuration
 ---

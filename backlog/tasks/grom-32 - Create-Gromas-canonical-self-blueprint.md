@@ -1,11 +1,11 @@
 ---
 id: GROM-32
 title: Create Groma's canonical self-blueprint
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 12:22'
+updated_date: '2026-07-17 13:05'
 labels: []
 milestone: m-2
 dependencies:
@@ -18,6 +18,8 @@ references:
   - ARCHITECTURE.md
 modified_files:
   - ARCHITECTURE.md
+  - DEVELOPMENT.md
+  - docs/component-model-examples.md
   - package.json
   - groma/groma.yaml
   - groma/transaction-state.json
@@ -47,12 +49,12 @@ Replace the handmade architecture overview as the detailed source of truth by re
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Freeze the merged detailed architecture as a migration ledger for all 9 roots, 34 cards, documented fields, and all 87 semicolon-delimited relationship declarations; assign one-time opaque supplied identities derived only from random migration entropy plus ordinal, and preserve each component seed key under groma.md/seed-key.
-2. Preserve every relationship declaration as structured groma.md/relationship-declarations metadata with its exact text, stable declaration key, and edge, constraint, or ambiguous status. Materialize only the 53 endpoint-defensible declarations as 85 neutral relates-to edges; reference their edge IDs from the declaration metadata, and create no guessed or synthetic endpoints.
-3. Preflight the complete ledger in a temporary workspace using only the compiled public CLI, creating parents before children and adding relationships only after all endpoints exist; audit the bounded export before touching the repository workspace.
-4. Apply the validated public CLI sequence to this repository so canonical Markdown is generated only by supported Groma operations, then independently audit the committed groma/ tree against the frozen ledger.
-5. Add a durable self-blueprint regression that copies the canonical workspace, exercises fresh-process paged export/reload/cache rebuild, verifies exact component/root/field/declaration/edge coverage, and proves read-only use leaves canonical bytes unchanged.
-6. Replace ARCHITECTURE.md with a concise navigator and explicit disagreement-resolution process, run focused/full/cross-target verification, obtain independent review, and finalize the Backlog evidence before one ready PR.
+1. Preserve the verified 43-component and 87-declaration migration baseline while bounding the actionable review gaps and protecting opaque identities, exact declaration text, and the explicit Plugin Package Manager delivery decision.
+2. Use only the freshly compiled public CLI with current revisions to mint 10 exact relates-to edges, mark the 8 owning declarations partial with their minted IDs, and add the sole missing Plugin Development root intent; compare normalized old and new public exports.
+3. Strengthen the hermetic self-blueprint verifier for 43 nonempty intents, partial declaration semantics, 95-edge bijection, fixed reviewed digests, and a read-only machine-reviewable report-baseline mode.
+4. Restore compact non-ledger context, topology, data planes, workflows, unresolved decisions, exclusions, relationship direction, and baseline-refresh guidance in the navigator; preserve teaching examples in a separate explicitly noncanonical document and repair development pointers.
+5. Verify build, normal and report self-blueprint modes, full repository checks, all target builds, canonical byte stability, semantic export scope, and diff hygiene.
+6. Record review-remediation evidence and leave the task In Progress for controller review and finalization.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -67,6 +69,10 @@ Compiled public-CLI preflight and repository application both passed with the id
 Verification is green: bun run check passed 796 tests with 5,679 expectations plus the compiled Iteration 1A workflow and self-blueprint audit; bun run check:targets verified all four standalone targets. Two independent reviews approved the component migration, relationship classification and bijection, navigator, and hermetic verifier with no actionable findings.
 
 Parent exact-tree verification repeated after handoff: bun run verify:self-blueprint passed the hermetic 43-component/87-declaration/85-edge public export and cache-rebuild proof; bun run check passed formatting, type checking, boundaries, 796 tests with 5,679 expectations, compiled Iteration 1A recovery, and the self-blueprint audit; bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64. git diff --check remained clean.
+
+Review remediation completed without hand-editing canonical state. The freshly compiled public CLI applied 19 current-revision transactions from generation 75 to 94: 10 CLI-minted exact edges, 8 declaration metadata updates to partial, and 1 Plugin Development root intent. A public export reports 43 nonempty intents, 87 declarations at 53 edge / 8 partial / 9 ambiguous / 17 constraint, and 95 edges. Normalizing only those requested changes makes the complete pre-remediation and post-remediation public exports equal, confirming opaque IDs, exact declaration texts, and all other component meaning stayed unchanged. The Plugin Package Manager action and groma.md/first-delivery qualifier remain exact.
+The verifier now enforces both edge-bearing states in the global source/description bijection, all 43 intents, fixed reviewed digests, and a read-only report-baseline mode in either executable-option order while retaining projection rebuild and byte-identical canonical proof. ARCHITECTURE.md restores compact cross-component views and deliberate baseline guidance without a second field ledger; docs/component-model-examples.md preserves the noncanonical Shopify and Ordering examples; DEVELOPMENT.md points detailed architecture and seed metadata to canonical public export.
+Verification passed: bun run build; bun run verify:self-blueprint; report-baseline in both executable-option orders; bun run check with 796 tests and 5,679 expectations plus compiled Iteration 1A crash recovery; bun run check:targets for all four targets; exact public-export pair audit; git diff --check; canonical diff and scope review.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -77,10 +83,16 @@ created: 2026-07-17 12:22
 ---
 All six acceptance criteria are objectively verified on the exact tree; independent component and relationship audits approved with no actionable findings. Ready for one ready-for-review PR.
 ---
+
+author: @codex
+created: 2026-07-17 12:46
+---
+Reopened after external review identified actionable migration gaps: preserve compact cross-component views and teaching examples, add the sole missing root intent, expose partial relationship resolution without guessing endpoints, document neutral edge direction, add a deliberate golden-baseline report workflow, and repair stale development pointers. Two independent audits bounded the fixes before implementation.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Created Groma’s canonical self-blueprint through a preflighted compiled-public-CLI migration: 9 roots, 34 architecture cards, 398 embedded items, all 87 source declarations preserved with explicit edge/constraint/ambiguous resolution, and 85 defensible ordinary edges without guessed endpoints. Replaced the handmade detailed architecture document with a concise navigator and disagreement procedure. Added a hermetic fresh-process verifier that checks frozen semantic coverage, paged export, declaration-to-edge bijection, disposable projection rebuild, and byte-identical canonical state. Verified by 796 tests and 5,679 expectations, compiled Iteration 1A and self-blueprint workflows, all four target builds, and two independent source-to-canonical audits.
+Remediated the GROM-32 review findings through the compiled public CLI: all 43 components now have intent, 8 partially resolvable declarations retain their unresolved remainder while owning 10 new exact CLI-minted edges, and the frozen public-export verifier covers 53 edge / 8 partial / 9 ambiguous / 17 constraint declarations and 95 total edges. Restored compact architecture context, workflows, data planes, decisions, exclusions, neutral direction semantics, noncanonical teaching examples, development source-of-truth pointers, and a deliberate read-only baseline-report workflow. Verified with normalized old/new public-export equality, normal and report self-blueprint proofs, 796 tests with 5,679 expectations, compiled crash recovery, all four target builds, and clean diff checks. Task remains In Progress pending controller review.
 <!-- SECTION:FINAL_SUMMARY:END -->

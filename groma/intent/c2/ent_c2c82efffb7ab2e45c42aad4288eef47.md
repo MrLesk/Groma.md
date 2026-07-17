@@ -35,6 +35,10 @@ actions:
   - id: itm_fc9d228847d57973ede604fec0d4a5e4
     name: materialize plan projections
 relationships:
+  - id: rel_6e993b5589386ce2153c7db82ba51267
+    type: relates-to
+    target: ent_86ed24ba36882dc4365a08293ffeb90b
+    description: uses canonical stores but never becomes authoritative
   - id: rel_c1b44f4186bfb1ba6b5608940ffa47b0
     type: relates-to
     target: ent_6e17f657cc00d57287127e6b8336ac52
@@ -46,8 +50,10 @@ groma.md/relationship-declarations:
     key: decl_e4b754740d7cc027a8b2fc9a2d6ddecf
     status: edge
     text: Implements projection capability for Query Engine
-  - key: decl_2e48e28c368cda343b7cd6610ade2924
-    status: ambiguous
+  - edgeIds:
+      - rel_6e993b5589386ce2153c7db82ba51267
+    key: decl_2e48e28c368cda343b7cd6610ade2924
+    status: partial
     text: uses canonical stores but never becomes authoritative
 groma.md/seed-key: projection-index
 ---

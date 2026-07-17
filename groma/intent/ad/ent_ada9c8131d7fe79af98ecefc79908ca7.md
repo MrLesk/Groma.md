@@ -33,14 +33,20 @@ actions:
   - id: itm_b505654de71f81e1c2ebe5f4a6948d35
     name: validate graph references
 relationships:
+  - id: rel_31c8df6c2873d578cc24458d94185058
+    type: relates-to
+    target: ent_c6335fe22ac1924249da491006cae1cd
+    description: Used by every model and application operation
   - id: rel_f4b3b3c5fba14e503d6141b31fa3cbd6
     type: relates-to
     target: ent_070e99832ea99591e070ab3059f9db48
     description: delegates model-specific meaning to the Standard Blueprint Model
 groma.md/first-delivery: 1A
 groma.md/relationship-declarations:
-  - key: decl_227545e2b71d5919fdc44fc0af808a17
-    status: ambiguous
+  - edgeIds:
+      - rel_31c8df6c2873d578cc24458d94185058
+    key: decl_227545e2b71d5919fdc44fc0af808a17
+    status: partial
     text: Used by every model and application operation
   - edgeIds:
       - rel_f4b3b3c5fba14e503d6141b31fa3cbd6

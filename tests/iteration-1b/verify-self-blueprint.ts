@@ -12,10 +12,10 @@ const defaultExecutable = path.join(
   process.platform === "win32" ? "groma.exe" : "groma",
 );
 const expectedDigests = Object.freeze({
-  declarations: "3f3146e2577205dee18fecd97d098602e964822cb3649ecfa3fb2778890b87a5",
-  edges: "eff6c85eea18f19b89299b05c00e180e5d84c2df465eedf97d116d8f9eee2981",
+  declarations: "3a63810fc2452e57951ec8f2f2bbc80666cb25119ae044bb564c038f9f6853c5",
+  edges: "539485d6113bf255f50ab3244065485bd9dd9ff2e3e0cb55a903582ce9424960",
   embeddedItems: "76551c8739a13767d01eef6459cae01a49f5ddc8e02d0bc37a40b50fdd1053bc",
-  export: "e1106839b6897eec3c0cdc013b891a778c56ed503bc2bd62d41959a956804d54",
+  export: "5b894feb59f831bd025ecc635ddb8c3a1b2d4ec93b86e0c30bcc4893d34ae72d",
   parents: "196e03f6931485dfd821e56352c97bae249d6adce41754b99a98066af0d8e532",
   roots: "4d67f79c129d2b67be1284d4e46eae94d1c74f6ce94f9537059f479bb82d232a",
   seeds: "9a6b8c55f6f9147d94be1b16d86d58946b6fbd940f1652b507b68571f4f45e14",
@@ -37,7 +37,7 @@ interface StandardItem {
 interface Declaration {
   readonly edgeIds?: readonly string[];
   readonly key: string;
-  readonly status: "ambiguous" | "constraint" | "edge";
+  readonly status: "ambiguous" | "constraint" | "edge" | "partial";
   readonly text: string;
 }
 
@@ -52,6 +52,7 @@ interface Component {
   readonly iconDomain?: string;
   readonly id: string;
   readonly inputs?: readonly StandardItem[];
+  readonly intent?: string;
   readonly kind: "component";
   readonly label?: string;
   readonly lifecycle?: string;
@@ -75,16 +76,33 @@ interface ExportItem {
   readonly relationships: readonly Relationship[];
 }
 
-function executableFrom(args: readonly string[]): string {
-  if (args.length === 0) return defaultExecutable;
-  if (args.length === 1 && args[0]?.startsWith("--executable=")) {
-    const value = args[0].slice("--executable=".length);
-    assert.notEqual(value, "", "--executable requires a path");
-    return path.resolve(projectRoot, value);
+interface VerifyOptions {
+  readonly executable: string;
+  readonly reportBaseline: boolean;
+}
+
+function optionsFrom(args: readonly string[]): VerifyOptions {
+  let executable = defaultExecutable;
+  let executableSeen = false;
+  let reportBaseline = false;
+  for (const argument of args) {
+    if (argument === "--report-baseline" && !reportBaseline) {
+      reportBaseline = true;
+      continue;
+    }
+    if (argument.startsWith("--executable=") && !executableSeen) {
+      const value = argument.slice("--executable=".length);
+      assert.notEqual(value, "", "--executable requires a path");
+      executable = path.resolve(projectRoot, value);
+      executableSeen = true;
+      continue;
+    }
+    throw new Error(
+      "Usage: bun run tests/iteration-1b/verify-self-blueprint.ts " +
+        "[--report-baseline] [--executable=<path>]",
+    );
   }
-  throw new Error(
-    "Usage: bun run tests/iteration-1b/verify-self-blueprint.ts [--executable=<path>]",
-  );
+  return Object.freeze({ executable, reportBaseline });
 }
 
 function compareText(left: string, right: string): number {
@@ -217,13 +235,19 @@ async function requireMissing(candidate: string): Promise<void> {
   throw new Error(`${candidate} unexpectedly exists`);
 }
 
-function exactAudit(items: readonly ExportItem[]): void {
+function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boolean) {
   const ordered = [...items].sort((left, right) =>
     compareText(left.component.id, right.component.id),
   );
   const components = ordered.map((item) => item.component);
   assert.equal(components.length, 43);
   assert.equal(new Set(components.map((component) => component.id)).size, 43);
+  assert.equal(
+    components.every(
+      (component) => typeof component.intent === "string" && component.intent.trim().length > 0,
+    ),
+    true,
+  );
 
   const seeds = components.map((component) => ({
     id: component.id,
@@ -286,18 +310,21 @@ function exactAudit(items: readonly ExportItem[]): void {
       ),
     )
     .sort((left, right) => compareText(left.item.id, right.item.id));
-  assert.equal(
-    components.reduce((total, component) => total + (component.inputs?.length ?? 0), 0),
-    129,
+  const inputCount = components.reduce(
+    (total, component) => total + (component.inputs?.length ?? 0),
+    0,
   );
-  assert.equal(
-    components.reduce((total, component) => total + (component.outputs?.length ?? 0), 0),
-    111,
+  const outputCount = components.reduce(
+    (total, component) => total + (component.outputs?.length ?? 0),
+    0,
   );
-  assert.equal(
-    components.reduce((total, component) => total + (component.actions?.length ?? 0), 0),
-    158,
+  const actionCount = components.reduce(
+    (total, component) => total + (component.actions?.length ?? 0),
+    0,
   );
+  assert.equal(inputCount, 129);
+  assert.equal(outputCount, 111);
+  assert.equal(actionCount, 158);
   assert.equal(embeddedItems.length, 398);
   assert.equal(new Set(embeddedItems.map((entry) => entry.item.id)).size, 398);
 
@@ -310,22 +337,28 @@ function exactAudit(items: readonly ExportItem[]): void {
     )
     .sort((left, right) => compareText(left.declaration.key, right.declaration.key));
   assert.equal(declarations.length, 87);
-  assert.deepEqual(
+  const statusCounts = Object.freeze(
     Object.fromEntries(
-      ["edge", "constraint", "ambiguous"].map((status) => [
+      (["ambiguous", "constraint", "edge", "partial"] as const).map((status) => [
         status,
         declarations.filter((entry) => entry.declaration.status === status).length,
       ]),
+    ) as Readonly<Record<Declaration["status"], number>>,
+  );
+  assert.deepEqual(statusCounts, { ambiguous: 9, constraint: 17, edge: 53, partial: 8 });
+  assert.equal(
+    declarations.every((entry) =>
+      (["ambiguous", "constraint", "edge", "partial"] as const).includes(entry.declaration.status),
     ),
-    { ambiguous: 17, constraint: 17, edge: 53 },
+    true,
   );
   assert.equal(new Set(declarations.map((entry) => entry.declaration.key)).size, 87);
 
   const edges = ordered
     .flatMap((item) => item.relationships)
     .sort((left, right) => compareText(left.id, right.id));
-  assert.equal(edges.length, 85);
-  assert.equal(new Set(edges.map((edge) => edge.id)).size, 85);
+  assert.equal(edges.length, 95);
+  assert.equal(new Set(edges.map((edge) => edge.id)).size, 95);
   assert.equal(
     edges.every((edge) => edge.type === "relates-to"),
     true,
@@ -337,7 +370,7 @@ function exactAudit(items: readonly ExportItem[]): void {
   const edgesById = new Map(edges.map((edge) => [edge.id, edge]));
   const declaredEdgeIds: string[] = [];
   for (const { component, declaration } of declarations) {
-    if (declaration.status !== "edge") {
+    if (declaration.status !== "edge" && declaration.status !== "partial") {
       assert.equal(declaration.edgeIds, undefined);
       continue;
     }
@@ -355,21 +388,34 @@ function exactAudit(items: readonly ExportItem[]): void {
     edges.map((edge) => edge.id).sort(compareText),
   );
 
-  assert.deepEqual(
-    {
-      declarations: digest(declarations),
-      edges: digest(edges),
-      embeddedItems: digest(embeddedItems),
-      export: digest(ordered),
-      parents: digest(parents),
-      roots: digest(roots),
-      seeds: digest(seeds),
-    },
-    expectedDigests,
-  );
+  const digests = Object.freeze({
+    declarations: digest(declarations),
+    edges: digest(edges),
+    embeddedItems: digest(embeddedItems),
+    export: digest(ordered),
+    parents: digest(parents),
+    roots: digest(roots),
+    seeds: digest(seeds),
+  });
+  if (enforceExpectedBaseline) assert.deepEqual(digests, expectedDigests);
+  return Object.freeze({
+    counts: Object.freeze({
+      actions: actionCount,
+      components: components.length,
+      declarations: declarations.length,
+      edges: edges.length,
+      embeddedItems: embeddedItems.length,
+      inputs: inputCount,
+      intents: components.length,
+      outputs: outputCount,
+      roots: roots.length,
+    }),
+    digests,
+    statusCounts,
+  });
 }
 
-const executable = executableFrom(Bun.argv.slice(2));
+const options = optionsFrom(Bun.argv.slice(2));
 const temporaryRoot = await mkdtemp(path.join(tmpdir(), "groma-self-blueprint-verify-"));
 try {
   const workspace = path.join(temporaryRoot, "workspace");
@@ -380,11 +426,11 @@ try {
   const before = await canonicalSnapshot(canonicalRoot);
   await requireMissing(cacheRoot);
 
-  const first = await exportAll(executable, workspace);
-  exactAudit(first);
+  const first = await exportAll(options.executable, workspace);
+  const firstSummary = exactAudit(first, !options.reportBaseline);
   await lstat(path.join(cacheRoot, "projection-index.json"));
 
-  const rootEnvelope = await command(executable, workspace, [
+  const rootEnvelope = await command(options.executable, workspace, [
     "component",
     "roots",
     "--limit",
@@ -405,15 +451,20 @@ try {
 
   await rm(cacheRoot, { force: true, recursive: true });
   await requireMissing(cacheRoot);
-  const rebuilt = await exportAll(executable, workspace);
+  const rebuilt = await exportAll(options.executable, workspace);
   assert.equal(canonicalJson(rebuilt), canonicalJson(first));
-  exactAudit(rebuilt);
+  assert.deepEqual(exactAudit(rebuilt, !options.reportBaseline), firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
   assert.deepEqual(await canonicalSnapshot(canonicalRoot), before);
 
-  console.log(
-    "Self-blueprint verified: 43 components, 9 roots, 398 embedded items, 87 declarations, 85 edges.",
-  );
+  if (options.reportBaseline) {
+    console.log(JSON.stringify({ mode: "report-baseline", ...firstSummary }));
+  } else {
+    console.log(
+      "Self-blueprint verified: 43 components, 9 roots, 398 embedded items, " +
+        "87 declarations, 95 edges.",
+    );
+  }
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });
 }

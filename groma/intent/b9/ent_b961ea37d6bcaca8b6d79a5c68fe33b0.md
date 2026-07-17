@@ -6,3 +6,7 @@ name: Plugin Development
 type: domain
 groma.md/seed-key: plugin-development
 ---
+
+# Intent
+
+Provide a public plugin SDK, reusable conformance tests, and scaffolding without coupling plugin authors to Groma internals.
