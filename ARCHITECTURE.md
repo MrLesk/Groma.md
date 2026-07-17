@@ -955,6 +955,11 @@ component page and reuses it for that page and every internal traversal; a
 same-generation branch switch therefore fails closed. Search and traversal keep their
 own one-page cursors for independent exploration; neither is a second phase of export.
 Traversal order remains breadth-first depth and then stable relationship identity.
+Proven page-wide relationship or structural-value exhaustion returns the semantic
+`blueprint-export-page-bound-exceeded` diagnostic so a caller can retry with a smaller
+component-page limit; malformed, hostile, or unavailable query data remains an
+infrastructure failure. A failure at limit one means the self-contained item itself
+exceeds the local export bounds.
 
 The official shared operation surface is published only as `groma.operations/v2`.
 Official full-workspace and blueprint registrations require that v2 identity; no v1
@@ -983,6 +988,11 @@ blueprint operations.
   scan, visual export, plan, diff, validation, migration, and plugin commands over
   time; uses Visual Blueprint Renderer without adding renderer semantics to
   application operations.
+
+Ordinary command results remain atomic and non-streaming under an eight-MiB rendered
+output bound. This covers the official one-MiB source intent document after worst-case
+JSON escaping and the bounded canonical result envelope; output beyond that boundary
+fails as `cli-output-bound-exceeded` before any partial result is emitted.
 
 #### Application Service
 

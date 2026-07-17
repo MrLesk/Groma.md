@@ -52,10 +52,12 @@ function context(code: string): HostSurfaceContext {
 }
 
 describe("CLI surface", () => {
-  test("maps graph-query availability failures to infrastructure without reclassifying stale cursors", async () => {
+  test("classifies query availability, stale cursors, and export page bounds", async () => {
     for (const [code, exitCode] of [
       ["graph-query-unavailable", CLI_EXIT.infrastructure],
+      ["workspace-capability-failed", CLI_EXIT.infrastructure],
       ["stale-cursor", CLI_EXIT.semantic],
+      ["blueprint-export-page-bound-exceeded", CLI_EXIT.semantic],
     ] as const) {
       const base = context("unused");
       const unavailable = Object.freeze({

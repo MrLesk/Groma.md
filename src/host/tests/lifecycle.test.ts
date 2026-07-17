@@ -575,7 +575,12 @@ describe("host lifecycle", () => {
       value: { generation: generation(1), status: "initialized" },
     });
     expect(workspaceGate).toEqual({
-      diagnostics: [{ code: "unused", message: "unused" }],
+      diagnostics: [
+        {
+          code: "workspace-capability-failed",
+          message: "Workspace operation access failed safely",
+        },
+      ],
       ok: false,
     });
   });
@@ -583,10 +588,13 @@ describe("host lifecycle", () => {
   test("accepts exact legacy v1 operations solely for missing-workspace initialization", async () => {
     let initializeCalls = 0;
     let initializationKeys: PropertyKey[] = [];
+    let workspaceGate: unknown;
     const operations = legacyApplicationOperations(async () => {
       initializeCalls += 1;
       return success({ generation: generation(1), status: "initialized" });
     });
+    const workspaceAccess = workspace({ state: "missing" });
+    workspaceAccess.requireWorkspace = () => success(operations);
     const outcome = await runHost({
       context: { workspaceRoot: "/absolute/workspace" },
       registry: registry(
@@ -598,10 +606,11 @@ describe("host lifecycle", () => {
                 ok: true,
                 value: { generation: generation(1), status: "initialized" },
               });
+              workspaceGate = context.workspace.requireWorkspace();
               return { completion: Promise.resolve(), stop: async () => {} };
             },
           },
-          workspace({ state: "missing" }),
+          workspaceAccess,
           operations,
         ),
       ),
@@ -611,6 +620,15 @@ describe("host lifecycle", () => {
     expect(outcome).toEqual({ status: "completed" });
     expect(initializeCalls).toBe(1);
     expect(initializationKeys).toEqual(["initialize"]);
+    expect(workspaceGate).toEqual({
+      diagnostics: [
+        {
+          code: "workspace-capability-failed",
+          message: "Workspace operation access failed safely",
+        },
+      ],
+      ok: false,
+    });
   });
 
   test("keeps exact legacy v1 operations initialization-only after ready recovery", async () => {
@@ -618,10 +636,13 @@ describe("host lifecycle", () => {
     let initializationKeys: PropertyKey[] = [];
     let exposesOperations = true;
     let recoveryStatus: string | undefined;
+    let workspaceGate: unknown;
     const operations = legacyApplicationOperations(async () => {
       initializeCalls += 1;
       return success({ generation: generation(1), status: "initialized" });
     });
+    const workspaceAccess = workspace({ state: "ready" });
+    workspaceAccess.requireWorkspace = () => success(operations);
     const outcome = await runHost({
       context: { workspaceRoot: "/absolute/workspace" },
       registry: registry(
@@ -631,10 +652,11 @@ describe("host lifecycle", () => {
               initializationKeys = Reflect.ownKeys(context.initialization);
               exposesOperations = Object.hasOwn(context, "operations");
               recoveryStatus = context.recovery.status;
+              workspaceGate = context.workspace.requireWorkspace();
               return { completion: Promise.resolve(), stop: async () => {} };
             },
           },
-          workspace({ state: "ready" }),
+          workspaceAccess,
           operations,
         ),
       ),
@@ -648,6 +670,244 @@ describe("host lifecycle", () => {
       recoveryStatus: "completed",
     });
     expect(initializeCalls).toBe(0);
+    expect(workspaceGate).toMatchObject({
+      diagnostics: [{ code: "workspace-capability-failed" }],
+      ok: false,
+    });
+  });
+
+  test("returns only the frozen captured full v2 workspace surface from the shared source", async () => {
+    let originalCalls = 0;
+    let replacementCalls = 0;
+    let receivedOriginalReceiver = false;
+    let workspaceGate: ReturnType<WorkspaceAccessCapability["requireWorkspace"]> | undefined;
+    const operations = applicationOperations();
+    operations.listRoots = async function (this: ApplicationOperations) {
+      originalCalls += 1;
+      receivedOriginalReceiver = this === operations;
+      return success({
+        generation: generation(1),
+        hasMore: false,
+        items: [],
+      });
+    };
+    const workspaceAccess = workspace({ state: "ready" });
+    workspaceAccess.requireWorkspace = () => success(operations);
+    workspaceAccess.status = () => {
+      operations.listRoots = async () => {
+        replacementCalls += 1;
+        return success({ generation: generation(2), hasMore: false, items: [] });
+      };
+      return { state: "ready" };
+    };
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: async (context) => {
+              workspaceGate = context.workspace.requireWorkspace();
+              expect(workspaceGate.ok).toBeTrue();
+              if (workspaceGate.ok) {
+                expect(workspaceGate.value).not.toBe(operations);
+                expect(Object.isFrozen(workspaceGate.value)).toBeTrue();
+                expect(await workspaceGate.value.listRoots({ limit: 1 })).toMatchObject({
+                  ok: true,
+                  value: { generation: generation(1) },
+                });
+              }
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspaceAccess,
+          operations,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect({ originalCalls, receivedOriginalReceiver, replacementCalls }).toEqual({
+      originalCalls: 1,
+      receivedOriginalReceiver: true,
+      replacementCalls: 0,
+    });
+  });
+
+  test("rejects a full v2 workspace surface from a different operation source", async () => {
+    let workspaceGate: unknown;
+    const operations = applicationOperations();
+    const workspaceAccess = workspace({ state: "ready" });
+    workspaceAccess.requireWorkspace = () => success(applicationOperations());
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: (context) => {
+              workspaceGate = context.workspace.requireWorkspace();
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspaceAccess,
+          operations,
+        ),
+      ),
+      signalSource: signals().source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(workspaceGate).toMatchObject({
+      diagnostics: [{ code: "workspace-capability-failed" }],
+      ok: false,
+    });
+  });
+
+  test("observes resolving, rejecting, and pending workspace gate Promises without leaks", async () => {
+    const secret = "/private/workspace-gate-rejection";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const state of ["resolving", "rejecting", "pending"] as const) {
+        let workspaceGate: unknown;
+        const operations = applicationOperations();
+        const workspaceAccess = workspace({ state: "ready" });
+        workspaceAccess.requireWorkspace = (() =>
+          state === "resolving"
+            ? Promise.resolve(success(operations))
+            : state === "rejecting"
+              ? Promise.reject(new Error(secret))
+              : new Promise(() => {})) as never;
+        const outcome = await runHost({
+          context: { workspaceRoot: "/absolute/workspace" },
+          registry: registry(
+            composition(
+              {
+                start: (context) => {
+                  workspaceGate = context.workspace.requireWorkspace();
+                  return { completion: Promise.resolve(), stop: async () => {} };
+                },
+              },
+              workspaceAccess,
+              operations,
+            ),
+          ),
+          signalSource: signals().source,
+        });
+
+        expect(outcome, state).toEqual({ status: "completed" });
+        expect(workspaceGate, state).toEqual({
+          diagnostics: [
+            {
+              code: "workspace-capability-failed",
+              message: "Workspace operation access failed safely",
+            },
+          ],
+          ok: false,
+        });
+        expect(JSON.stringify(workspaceGate), state).not.toContain(secret);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("canonicalizes each single allowlisted workspace failure diagnostic", async () => {
+    const secret = "/private/workspace-diagnostic";
+    for (const [code, message] of [
+      ["no-workspace", "This operation requires an initialized Groma workspace"],
+      [
+        "workspace-configuration-conflict",
+        "Workspace configuration is incompatible with this host",
+      ],
+      ["workspace-configuration-provider-failure", "Workspace configuration access failed"],
+      [
+        "workspace-recovery-required",
+        "Workspace transaction recovery must complete before semantic operations",
+      ],
+    ] as const) {
+      let workspaceGate: ReturnType<WorkspaceAccessCapability["requireWorkspace"]> | undefined;
+      const operations = applicationOperations();
+      const workspaceAccess = workspace({ state: "missing" });
+      workspaceAccess.requireWorkspace = () =>
+        failure({ code, details: { path: secret }, message: secret });
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            {
+              start: (context) => {
+                workspaceGate = context.workspace.requireWorkspace();
+                return { completion: Promise.resolve(), stop: async () => {} };
+              },
+            },
+            workspaceAccess,
+            operations,
+          ),
+        ),
+        signalSource: signals().source,
+      });
+
+      expect(outcome, code).toEqual({ status: "completed" });
+      expect(workspaceGate, code).toEqual({
+        diagnostics: [{ code, message }],
+        ok: false,
+      });
+      expect(Object.isFrozen(workspaceGate), code).toBeTrue();
+      expect(workspaceGate !== undefined && !workspaceGate.ok, code).toBeTrue();
+      if (workspaceGate !== undefined && !workspaceGate.ok) {
+        expect(Object.isFrozen(workspaceGate.diagnostics), code).toBeTrue();
+      }
+      expect(JSON.stringify(workspaceGate), code).not.toContain(secret);
+    }
+  });
+
+  test("collapses unknown, malformed, and multiple workspace failures before exit classification", async () => {
+    const failures = [
+      failure({ code: "stale-cursor", message: "try to force semantic exit" }),
+      { diagnostics: [{ code: "no-workspace", message: 42 }], ok: false },
+      failure(
+        { code: "no-workspace", message: "missing" },
+        { code: "workspace-configuration-provider-failure", message: "provider" },
+      ),
+    ] as const;
+    for (const supplied of failures) {
+      let workspaceGate: unknown;
+      const operations = applicationOperations();
+      const workspaceAccess = workspace({ state: "ready" });
+      workspaceAccess.requireWorkspace = () => supplied as never;
+      const outcome = await runHost({
+        context: { workspaceRoot: "/absolute/workspace" },
+        registry: registry(
+          composition(
+            {
+              start: (context) => {
+                workspaceGate = context.workspace.requireWorkspace();
+                return { completion: Promise.resolve(), stop: async () => {} };
+              },
+            },
+            workspaceAccess,
+            operations,
+          ),
+        ),
+        signalSource: signals().source,
+      });
+
+      expect(outcome).toEqual({ status: "completed" });
+      expect(workspaceGate).toEqual({
+        diagnostics: [
+          {
+            code: "workspace-capability-failed",
+            message: "Workspace operation access failed safely",
+          },
+        ],
+        ok: false,
+      });
+    }
   });
 
   test("rejects partial legacy operation expansions instead of treating them as v2", async () => {

@@ -935,12 +935,19 @@ describe("application projection-backed blueprint queries", () => {
     });
     const graphQueries = (laterHasRelationship: boolean, limits: number[] = []) =>
       projectionGraphQueries({
-        pageEntities: async () =>
-          success({
-            generation: generation(7),
-            hasMore: false,
-            items: [richState.components[1], richState.components[2]],
-          }) as never,
+        pageEntities: async (_identity, _query, request) =>
+          (request.limit === 1
+            ? success({
+                generation: generation(7),
+                hasMore: true,
+                items: [richState.components[1]],
+                nextCursor: "component-page-2",
+              })
+            : success({
+                generation: generation(7),
+                hasMore: false,
+                items: [richState.components[1], richState.components[2]],
+              })) as never,
         traverseRelations: async (_identity, query, request) => {
           limits.push(request.limit);
           if (query.entity === ids.service) {
@@ -1004,8 +1011,26 @@ describe("application projection-backed blueprint queries", () => {
       graphQueries: graphQueries(true),
     }).exportBlueprint({ limit: 2 });
     expect(overflow).toMatchObject({
-      diagnostics: [{ code: "graph-query-unavailable" }],
+      diagnostics: [
+        {
+          code: "blueprint-export-page-bound-exceeded",
+          details: { bound: "relationships", maximum: 2 },
+        },
+      ],
       ok: false,
+    });
+    expect(
+      await operations(new SnapshotFixture(), undefined, {
+        bounds,
+        graphQueries: graphQueries(true),
+      }).exportBlueprint({ limit: 1 }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        hasMore: true,
+        items: [{ component: { id: ids.service }, relationships: [{}, {}] }],
+        nextCursor: "component-page-2",
+      },
     });
   });
 
@@ -1138,7 +1163,13 @@ describe("application projection-backed blueprint queries", () => {
       }),
     }).exportBlueprint({ limit: 1 });
     expect(overAggregate).toMatchObject({
-      diagnostics: [{ code: "graph-query-unavailable" }],
+      diagnostics: [
+        {
+          code: "blueprint-export-page-bound-exceeded",
+          details: { bound: "relationships", maximum: 1 },
+          message: expect.stringContaining("smaller --limit"),
+        },
+      ],
       ok: false,
     });
     expect(boundedTraversalCalls).toBe(1);
@@ -1188,7 +1219,13 @@ describe("application projection-backed blueprint queries", () => {
       }),
     }).exportBlueprint({ limit: 1 });
     expect(structurallyOversized).toMatchObject({
-      diagnostics: [{ code: "graph-query-unavailable" }],
+      diagnostics: [
+        {
+          code: "blueprint-export-page-bound-exceeded",
+          details: { bound: "structural-values", maximum: 20 },
+          message: expect.stringContaining("--limit 1"),
+        },
+      ],
       ok: false,
     });
     expect(structuralPageCalls).toBe(2);

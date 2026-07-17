@@ -706,6 +706,7 @@ describe("default bootstrap registry", () => {
     expect(accessAfter).toMatchObject({ ok: true });
     if (typeof accessAfter === "object" && accessAfter !== null && "value" in accessAfter) {
       expect(initializationView).not.toBe(accessAfter.value);
+      expect(Object.isFrozen(accessAfter.value)).toBeTrue();
     }
     expect({ initializationFrozen, initializationKeys }).toEqual({
       initializationFrozen: true,

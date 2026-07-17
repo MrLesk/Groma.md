@@ -2502,6 +2502,22 @@ function graphQueryUnavailable<T>(): Result<T> {
   );
 }
 
+type BlueprintExportPageBound = "relationships" | "structural-values";
+
+function blueprintExportPageBoundExceeded<T>(
+  bound: BlueprintExportPageBound,
+  maximum: number,
+): Result<T> {
+  return frozenFailure(
+    Object.freeze({
+      code: "blueprint-export-page-bound-exceeded",
+      details: Object.freeze({ bound, maximum }),
+      message:
+        "The blueprint export page exceeds local aggregate bounds; retry with a smaller --limit. If --limit 1 fails, one item exceeds the local export bounds",
+    }),
+  );
+}
+
 type GraphQueryInvocationOperation = "export" | "identity" | "search" | "traverse";
 
 interface GraphQueryDiagnosticScope {
@@ -2757,70 +2773,86 @@ function validatedGraphQueryPage(
   );
 }
 
+type BlueprintStructuralConsumption = "accepted" | "bound-exceeded" | "invalid";
+
 function consumeBlueprintStructuralValues(
   value: unknown,
   remaining: { value: number },
   options: ApplicationOperationsContext,
-): boolean {
+): BlueprintStructuralConsumption {
   const active = new WeakSet<object>();
-  const visit = (candidate: unknown, depth: number): boolean => {
-    if (depth > options.bounds.maxSnapshotStateDepth || remaining.value < 1) return false;
-    remaining.value -= 1;
+  const visit = (candidate: unknown, depth: number): BlueprintStructuralConsumption => {
+    if (depth > options.bounds.maxSnapshotStateDepth) return "invalid";
     if (
       candidate === null ||
       typeof candidate === "string" ||
       typeof candidate === "boolean" ||
       (typeof candidate === "number" && Number.isFinite(candidate))
     ) {
-      return true;
+      if (remaining.value < 1) return "bound-exceeded";
+      remaining.value -= 1;
+      return "accepted";
     }
     if (typeof candidate !== "object" || options.isProxy(candidate) || active.has(candidate)) {
-      return false;
+      return "invalid";
     }
-    active.add(candidate);
     try {
       if (Array.isArray(candidate)) {
-        if (intrinsicObjectGetPrototypeOf(candidate) !== Array.prototype) return false;
+        if (intrinsicObjectGetPrototypeOf(candidate) !== Array.prototype) return "invalid";
         const length = inspectIntrinsicArrayLength(
           candidate,
           "graph-query-unavailable",
           "Blueprint aggregate array",
         );
-        if (!length.ok || length.value > remaining.value) return false;
+        if (!length.ok) return "invalid";
         const keys = Reflect.ownKeys(candidate);
-        if (keys.length !== length.value + 1) return false;
+        if (keys.length !== length.value + 1) return "invalid";
+        const descriptors = new Array<PropertyDescriptor>(length.value);
         for (let index = 0; index < length.value; index += 1) {
           const descriptor = intrinsicObjectGetOwnPropertyDescriptor(candidate, String(index));
-          if (
-            descriptor === undefined ||
-            !("value" in descriptor) ||
-            !descriptor.enumerable ||
-            !visit(descriptor.value, depth + 1)
-          ) {
-            return false;
+          if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+            return "invalid";
           }
+          descriptors[index] = descriptor;
         }
-        return true;
+        if (remaining.value < 1) return "bound-exceeded";
+        remaining.value -= 1;
+        if (length.value > remaining.value) return "bound-exceeded";
+        active.add(candidate);
+        for (let index = 0; index < descriptors.length; index += 1) {
+          const consumed = visit(descriptors[index]!.value, depth + 1);
+          if (consumed !== "accepted") return consumed;
+        }
+        return "accepted";
       }
       const prototype = intrinsicObjectGetPrototypeOf(candidate);
-      if (prototype !== Object.prototype && prototype !== null) return false;
+      if (prototype !== Object.prototype && prototype !== null) return "invalid";
       const keys = Reflect.ownKeys(candidate);
-      if (keys.length > remaining.value) return false;
-      for (const key of keys) {
+      const descriptors = new Array<PropertyDescriptor>(keys.length);
+      for (let index = 0; index < keys.length; index += 1) {
+        const key = keys[index]!;
         const descriptor = intrinsicObjectGetOwnPropertyDescriptor(candidate, key);
         if (
           typeof key !== "string" ||
           descriptor === undefined ||
           !("value" in descriptor) ||
-          !descriptor.enumerable ||
-          !visit(descriptor.value, depth + 1)
+          !descriptor.enumerable
         ) {
-          return false;
+          return "invalid";
         }
+        descriptors[index] = descriptor;
       }
-      return true;
+      if (remaining.value < 1) return "bound-exceeded";
+      remaining.value -= 1;
+      if (keys.length > remaining.value) return "bound-exceeded";
+      active.add(candidate);
+      for (let index = 0; index < descriptors.length; index += 1) {
+        const consumed = visit(descriptors[index]!.value, depth + 1);
+        if (consumed !== "accepted") return consumed;
+      }
+      return "accepted";
     } catch {
-      return false;
+      return "invalid";
     } finally {
       active.delete(candidate);
     }
@@ -2828,7 +2860,7 @@ function consumeBlueprintStructuralValues(
   try {
     return visit(value, 1);
   } catch {
-    return false;
+    return "invalid";
   }
 }
 
@@ -3220,7 +3252,12 @@ export function createApplicationOperations(
     const exportedRelationshipIds = new Set<string>();
     const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
     const pageStructuralValues = components.value.nextCursor === undefined ? 4 : 5;
-    if (structuralRemaining.value < pageStructuralValues) return graphQueryUnavailable();
+    if (structuralRemaining.value < pageStructuralValues) {
+      return blueprintExportPageBoundExceeded(
+        "structural-values",
+        options.bounds.maxSnapshotStateValues,
+      );
+    }
     structuralRemaining.value -= pageStructuralValues;
     for (
       let componentIndex = 0;
@@ -3228,10 +3265,25 @@ export function createApplicationOperations(
       componentIndex += 1
     ) {
       const component = components.value.items[componentIndex]!;
-      if (structuralRemaining.value < 2) return graphQueryUnavailable();
+      if (structuralRemaining.value < 2) {
+        return blueprintExportPageBoundExceeded(
+          "structural-values",
+          options.bounds.maxSnapshotStateValues,
+        );
+      }
       structuralRemaining.value -= 2;
-      if (!consumeBlueprintStructuralValues(component, structuralRemaining, options)) {
-        return graphQueryUnavailable();
+      const componentConsumption = consumeBlueprintStructuralValues(
+        component,
+        structuralRemaining,
+        options,
+      );
+      if (componentConsumption !== "accepted") {
+        return componentConsumption === "bound-exceeded"
+          ? blueprintExportPageBoundExceeded(
+              "structural-values",
+              options.bounds.maxSnapshotStateValues,
+            )
+          : graphQueryUnavailable();
       }
       const relationships: StandardRelationship[] = [];
       let traversalCursor: ContinuationCursor | undefined;
@@ -3264,11 +3316,28 @@ export function createApplicationOperations(
           const relationship = traversal.value.items[hitIndex]!.relationship;
           if (
             (previousRelationship !== undefined && previousRelationship >= relationship.id) ||
-            exportedRelationshipIds.has(relationship.id) ||
-            exportedRelationshipIds.size >= options.bounds.maxRelationships ||
-            !consumeBlueprintStructuralValues(relationship, structuralRemaining, options)
+            exportedRelationshipIds.has(relationship.id)
           ) {
             return graphQueryUnavailable();
+          }
+          if (exportedRelationshipIds.size >= options.bounds.maxRelationships) {
+            return blueprintExportPageBoundExceeded(
+              "relationships",
+              options.bounds.maxRelationships,
+            );
+          }
+          const relationshipConsumption = consumeBlueprintStructuralValues(
+            relationship,
+            structuralRemaining,
+            options,
+          );
+          if (relationshipConsumption !== "accepted") {
+            return relationshipConsumption === "bound-exceeded"
+              ? blueprintExportPageBoundExceeded(
+                  "structural-values",
+                  options.bounds.maxSnapshotStateValues,
+                )
+              : graphQueryUnavailable();
           }
           previousRelationship = relationship.id;
           exportedRelationshipIds.add(relationship.id);
@@ -3278,7 +3347,7 @@ export function createApplicationOperations(
           traversal.value.hasMore &&
           exportedRelationshipIds.size >= options.bounds.maxRelationships
         ) {
-          return graphQueryUnavailable();
+          return blueprintExportPageBoundExceeded("relationships", options.bounds.maxRelationships);
         }
         traversalCursor = traversal.value.nextCursor;
       } while (traversalCursor !== undefined);

@@ -5,7 +5,7 @@ export const CLI_MAX_INPUT_BYTES = 1_048_576;
 export const CLI_MAX_JSON_DEPTH = 30;
 export const CLI_MAX_JSON_VALUES = 10_000;
 export const CLI_MAX_PAGE_SIZE = 100;
-export const CLI_MAX_RENDERED_BYTES = 1_048_576;
+export const CLI_MAX_RENDERED_BYTES = 8 * 1_048_576;
 export const CLI_MAX_RENDERED_VALUES = 200_000;
 
 export const CLI_EXIT = Object.freeze({

@@ -45,6 +45,13 @@ generation or same-generation projection mismatch requires restarting the export
 traversal remain independent one-page exploration operations and never follow their
 surface cursors implicitly.
 
+Proven page-wide relationship or structural-value exhaustion returns the application-owned
+`blueprint-export-page-bound-exceeded` diagnostic with the exhausted bound and maximum;
+callers can retry with a smaller component-page limit. Failure at limit one means one
+self-contained item exceeds the local export bounds. Ordering, duplicate, malformed,
+proxy, detector, provider, and other invalid-query failures remain
+`graph-query-unavailable` and never receive capacity retry guidance.
+
 Projection-backed component and export pages are ordered by ascending stable component
 identity. Traversal pages preserve deterministic breadth-first depth and then stable
 relationship identity. Application validates that order rather than introducing a

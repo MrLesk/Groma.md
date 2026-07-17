@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createDefaultBootstrapRegistry } from "../../host/index.ts";
-import { CLI_EXIT, type CliInputSource } from "../contracts.ts";
+import { CLI_EXIT, CLI_MAX_RENDERED_BYTES, type CliInputSource } from "../contracts.ts";
 import {
   GROMA_VERSION,
   HELP_TEXT,
@@ -220,6 +220,61 @@ describe("CLI program", () => {
       envelope: { command: "component roots", exitCode: CLI_EXIT.success, ok: true },
     });
     await expect(lstat(containedUserDataRoot)).rejects.toThrow();
+  });
+
+  test("renders a limit-one official export whose escaped JSON exceeds one MiB", async () => {
+    const root = await workspace();
+    const source = "ent_00000000000000000000000000000001";
+    const target = "ent_00000000000000000000000000000002";
+    const description = "\\".repeat(600_000);
+    const registry = createDefaultBootstrapRegistry({
+      surface: { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+    });
+    const composed = await registry.compose({ workspaceRoot: root });
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(await composed.value.operations.initialize({})).toMatchObject({
+      ok: true,
+      value: { status: "initialized" },
+    });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: target, name: "Target", type: "service" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: source, name: "Large relationship source", type: "domain" },
+        relationships: [{ description, target, type: "depends-on" }],
+      }),
+    ).toMatchObject({ status: "committed" });
+    const sourceBytes = await readFile(path.join(root, "groma", "intent", "00", `${source}.md`));
+    expect(sourceBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+
+    const exported = await jsonCommand(root, ["blueprint", "export", "--limit", "1"]);
+    const renderedBytes = new TextEncoder().encode(exported.text).byteLength;
+    expect(renderedBytes).toBeGreaterThan(1_048_576);
+    expect(renderedBytes).toBeLessThanOrEqual(CLI_MAX_RENDERED_BYTES);
+    expect(exported).toMatchObject({
+      envelope: {
+        command: "blueprint export",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          ok: true,
+          value: {
+            hasMore: true,
+            items: [
+              {
+                component: { id: source },
+                relationships: [{ description, source, target }],
+              },
+            ],
+          },
+        },
+      },
+      exitCode: CLI_EXIT.success,
+    });
   });
 
   test("executes the complete one-shot component workflow across host restarts", async () => {

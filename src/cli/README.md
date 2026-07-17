@@ -17,9 +17,11 @@ the explicit supersession boundary. It removes the obsolete component and preser
 stable references through a canonical alias while leaving the survivor identity and
 intent unchanged. Reads by an older ID return the current survivor. Renames, updates,
 and reparenting do not create aliases.
-Command output is buffered up to one MiB; an oversized page becomes a typed
-`cli-output-bound-exceeded` failure rather than partial or streamed output, so callers
-can retry with a smaller explicit page.
+Command output is buffered atomically up to eight MiB. The official one-MiB Markdown
+intent-document bound owns one component and its outgoing relationships; sixfold
+worst-case JSON escaping plus less than two MiB of canonical envelope and reshaping
+under the official Host caps fits this output bound. A result beyond it becomes a typed
+`cli-output-bound-exceeded` failure rather than partial or streamed output.
 
 Projection-backed raw blueprint reads use the shared application path:
 
@@ -45,6 +47,12 @@ same-generation projection mismatch requires restarting from the first page. Int
 relationship paging stays inside the shared bounded operation; no relationship cursor or
 composite cursor is exposed. `blueprint search` and `blueprint traverse` remain
 independent exploration commands rather than phases of export.
+
+When a valid export selection exceeds Application's page-wide relationship or
+structural-value aggregate, `blueprint-export-page-bound-exceeded` is a semantic result:
+retry with a smaller `--limit`. If `--limit 1` still fails, one self-contained item
+exceeds the local export bounds; malformed or unavailable query data remains an
+infrastructure failure instead of receiving retry guidance.
 
 `--format json` is the stable machine-facing envelope. Each response has `command`,
 `exitCode`, `ok`, and `result`; object keys are emitted canonically. Plain output is

@@ -307,8 +307,17 @@ the legacy shape is never promoted beyond this captured initialization view.
 the internal package loader or plugin runtime.
 
 `WorkspaceAccessCapability.requireWorkspace()` is the only gate to the complete
-semantic-operation surface provided to surfaces. It returns the shared
-`ApplicationOperations` instance only after configuration is compatible and
+semantic-operation surface provided to surfaces. The lifecycle exact-validates every
+gate result and returns a frozen captured-method facade only when the successful value
+is the same exact full-v2 source validated at composition; legacy, mismatched, malformed,
+Promise-valued, or throwing successes become one path-free capability failure. Native
+Promise settlements are observed without waiting so rejected reasons cannot escape the
+synchronous gate. Failures retain exactly one allowlisted workspace code (`no-workspace`,
+`workspace-configuration-conflict`, `workspace-configuration-provider-failure`, or
+`workspace-recovery-required`) with a Host-owned message and no details; unknown,
+malformed, or multiple diagnostics collapse to the same capability failure and cannot
+choose a surface exit class. The gate opens only after
+configuration is compatible and
 `transactionProvider.snapshot([])` has completed. Missing configuration returns
 `no-workspace`; incompatible configuration returns `workspace-configuration-conflict`;
 compatible but unrecovered state returns `workspace-recovery-required`. All host
