@@ -340,6 +340,8 @@ describe("official local application operations composition", () => {
     expect(unchanged.value.item.revision).toBe(survivorRevision);
   });
 
+  // This regression deliberately runs the complete semantic workflow through local persistence
+  // and a restart. Keep a finite CI allowance above Bun's 5s unit default.
   test("matches in-memory semantics and survives a complete restart", async () => {
     const workspace = await temporaryWorkspace();
     const first = await composition(workspace);
@@ -380,7 +382,7 @@ describe("official local application operations composition", () => {
       finalPage.value.items.map((item) => String(item.component.id)),
     );
     expect(markdown.value.relations).toEqual([]);
-  });
+  }, 20_000);
 
   test("commits and recovers components whose aggregate items exceed the per-component bound", async () => {
     const workspace = await temporaryWorkspace();

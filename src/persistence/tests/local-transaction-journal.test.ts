@@ -168,6 +168,32 @@ async function stageArtifacts(directory: string): Promise<string[]> {
   return artifacts;
 }
 
+async function canonicalWorkspaceFiles(
+  workspaceRoot: string,
+): Promise<readonly { readonly bytes: string; readonly path: string }[]> {
+  const canonicalRoot = path.join(workspaceRoot, "groma");
+  const files: Array<{ readonly bytes: string; readonly path: string }> = [];
+  const visit = async (directory: string): Promise<void> => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+    for (const entry of entries) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolute);
+      } else if (entry.isFile()) {
+        files.push(
+          Object.freeze({
+            bytes: Buffer.from(await readFile(absolute)).toString("base64"),
+            path: path.relative(canonicalRoot, absolute).split(path.sep).join("/"),
+          }),
+        );
+      }
+    }
+  };
+  await visit(canonicalRoot);
+  return Object.freeze(files);
+}
+
 async function crashTransactionProcess(
   roots: Awaited<ReturnType<typeof workspace>>,
   mode: "create" | "delete",
@@ -288,6 +314,39 @@ function journalHarnessFor(resources: LocalResourceProvider) {
     resources,
   });
   return { engine: engineFor(provider), provider, store };
+}
+
+async function pausedSnapshotReader(roots: Awaited<ReturnType<typeof workspace>>) {
+  const resources = await createLocalResourceProvider(roots);
+  const model = createStandardModelCapability();
+  const store = createMarkdownIntentStore({ model, resources });
+  const base = createMarkdownIntentTransactionAdapter({ model, store });
+  let firstLoad = true;
+  let enteredResolve!: () => void;
+  let releaseResolve!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enteredResolve = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    releaseResolve = resolve;
+  });
+  const adapter: CanonicalTransactionAdapter = Object.freeze({
+    load: async () => {
+      const loaded = await base.load();
+      if (firstLoad) {
+        firstLoad = false;
+        enteredResolve();
+        await release;
+      }
+      return loaded;
+    },
+    materialize: base.materialize,
+  });
+  return {
+    entered,
+    provider: createLocalTransactionJournal({ adapter, resources }),
+    release: releaseResolve,
+  };
 }
 
 function createRequest() {
@@ -696,6 +755,89 @@ describe("local transaction journal", () => {
     ).toBe(2);
   });
 
+  test("serves stable idle snapshots without acquiring transaction coordination", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    let acquisitions = 0;
+    const resources = providerWithOverrides(base, {
+      acquireCoordination(request) {
+        acquisitions += 1;
+        return base.acquireCoordination(request);
+      },
+    });
+    const journal = journalHarnessFor(resources).provider;
+
+    const snapshots = await Promise.all(
+      Array.from({ length: 8 }, () => journal.snapshot(Object.freeze([]))),
+    );
+    expect(snapshots).toEqual(
+      Array.from({ length: 8 }, () => ({
+        generation: 0,
+        revisions: [],
+        state: { components: [], relationships: [] },
+      })),
+    );
+    expect(acquisitions).toBe(0);
+  });
+
+  test("retries a snapshot under coordination when a committed writer advances generation", async () => {
+    const roots = await workspace();
+    const reader = await pausedSnapshotReader(roots);
+    const writer = await harness(roots);
+    const pending = reader.provider.snapshot(Object.freeze([]));
+    await within(reader.entered, 5_000, "optimistic snapshot load");
+
+    expect(await writer.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    reader.release();
+    const observed = await pending;
+    expect(observed.generation).toBe(1);
+    const graph = observed.state as unknown as {
+      readonly components: readonly unknown[];
+      readonly relationships: readonly unknown[];
+    };
+    expect(graph.components).toHaveLength(2);
+    expect(graph.relationships).toHaveLength(1);
+  });
+
+  test("accepts matching idle observations around a prepared rollback without target publication", async () => {
+    const roots = await workspace();
+    const reader = await pausedSnapshotReader(roots);
+    const writer = await harness(roots);
+    const pending = reader.provider.snapshot(Object.freeze([resourceFor(entityId(1))]));
+    await within(reader.entered, 5_000, "rollback-fenced snapshot load");
+    const request = createRequest();
+    const prepared = await writer.provider.prepare({
+      affected: request.affected,
+      baseGeneration: 0,
+      context: request.context,
+      expectedRevisions: request.expectedRevisions,
+      generation: 1,
+      mutation: request.mutation,
+      priorState: { components: [], relationships: [] },
+    } as unknown as ProposedTransaction);
+    expect(prepared.status).toBe("prepared");
+    if (prepared.status !== "prepared") throw new Error("expected prepared transaction");
+    expect(await writer.provider.recover(prepared.token)).toEqual({ status: "not-committed" });
+
+    reader.release();
+    expect(await pending).toMatchObject({
+      generation: 0,
+      revisions: [{ resource: resourceFor(entityId(1)), revision: null }],
+      state: { components: [], relationships: [] },
+    });
+    const uncommittedLocator = markdownIntentLocator(entityId(1));
+    if (!uncommittedLocator.ok) throw new Error("invalid uncommitted target locator");
+    expect(
+      await writer.resources.read({
+        locator: uncommittedLocator.value,
+        maxBytes: 1,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "resource-missing" }], ok: false });
+  });
+
   test("coordinates persistent leases, bounded orphan cleanup, and idempotent durable removal", async () => {
     const roots = await workspace();
     const first = await createLocalResourceProvider({ ...roots, maxEntriesPerDirectory: 10 });
@@ -993,7 +1135,7 @@ describe("local transaction journal", () => {
   }
 
   for (const releaseFailure of ["retryable", "ownership-lost"] as const) {
-    for (const retainedBy of ["prepare", "snapshot"] as const) {
+    for (const retainedBy of ["prepare", "checkpoint"] as const) {
       const behavior =
         releaseFailure === "retryable"
           ? `reuses a lease retained by ${retainedBy}`
@@ -1081,12 +1223,17 @@ describe("local transaction journal", () => {
         });
 
         failNextRelease = true;
-        if (retainedBy === "snapshot") {
-          await expect(journal.snapshot([])).rejects.toThrow(
-            releaseFailure === "retryable"
-              ? "Injected retained release failure"
-              : "Injected coordination ownership loss",
-          );
+        if (retainedBy === "checkpoint") {
+          expect(
+            await journal.recordProjectionCheckpoint(
+              projectionIdentity(1, "a"),
+              projectionIntegrity("b"),
+              1,
+            ),
+          ).toMatchObject({
+            diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+            ok: false,
+          });
         } else {
           rejectMaterialization = true;
           await expect(
@@ -1125,7 +1272,7 @@ describe("local transaction journal", () => {
     const active = await harness(roots, undefined, async (phase) => {
       if (phase !== "coordination-release") return;
       releaseCalls += 1;
-      if (releaseCalls === 2) {
+      if (releaseCalls === 1) {
         ownershipLost = true;
         await rm(lockPath, { recursive: true });
       }
@@ -1139,7 +1286,7 @@ describe("local transaction journal", () => {
       generation: 1,
       status: "committed",
     });
-    expect(releaseCalls).toBe(3);
+    expect(releaseCalls).toBe(2);
   });
 
   for (const phase of [
@@ -1402,6 +1549,105 @@ describe("local transaction journal", () => {
     });
   }
 
+  test("keeps eight readers coherent while one dead writer is exclusively recovered", async () => {
+    const roots = await workspace();
+    expect(await readdir(roots.workspaceRoot)).toEqual([]);
+    const shopLocator = markdownIntentLocator(entityId(1));
+    const ordersLocator = markdownIntentLocator(entityId(2));
+    if (!shopLocator.ok || !ordersLocator.ok) {
+      throw new Error("invalid concurrent recovery locators");
+    }
+    await crashTransactionProcess(roots, "create", "after-rename", shopLocator.value, 1);
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(roots.workspaceRoot, String(localTransactionStateLocator)),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ generation: 1, phase: "committing" });
+
+    let recoveryReacquisitions = 0;
+    let recoveryTargetCommits = 0;
+    let recoveryPaused = false;
+    let recoveryEnteredResolve!: () => void;
+    let releaseRecoveryResolve!: () => void;
+    const recoveryEntered = new Promise<void>((resolve) => {
+      recoveryEnteredResolve = resolve;
+    });
+    const releaseRecovery = new Promise<void>((resolve) => {
+      releaseRecoveryResolve = resolve;
+    });
+    const targetLocators = new Set([String(shopLocator.value), String(ordersLocator.value)]);
+    const recovery = await harness(
+      roots,
+      undefined,
+      async (phase, context) => {
+        if (phase === "coordination-reacquire") recoveryReacquisitions += 1;
+        if (
+          phase !== "after-rename" ||
+          context?.locator === undefined ||
+          !targetLocators.has(String(context.locator))
+        ) {
+          return;
+        }
+        recoveryTargetCommits += 1;
+        if (recoveryPaused) return;
+        recoveryPaused = true;
+        recoveryEnteredResolve();
+        await releaseRecovery;
+      },
+      true,
+    );
+    const requested = [resourceFor(entityId(1)), resourceFor(entityId(2))];
+    const recoveringSnapshot = recovery.provider.snapshot(requested);
+    await within(recoveryEntered, 5_000, "dead-writer recovery publication");
+
+    const concurrentReaders = await Promise.all(
+      Array.from({ length: 8 }, () => harness(roots, undefined, undefined, true)),
+    );
+    const contended = await within(
+      Promise.allSettled(concurrentReaders.map((reader) => reader.provider.snapshot(requested))),
+      5_000,
+      "concurrent readers during exclusive recovery",
+    ).finally(() => releaseRecoveryResolve());
+    expect(contended).toHaveLength(8);
+    for (const outcome of contended) {
+      expect(outcome.status).toBe("rejected");
+      if (outcome.status !== "rejected") continue;
+      expect(outcome.reason).toBeInstanceOf(Error);
+      expect((outcome.reason as Error).message).toBe("Local resource coordination is already held");
+    }
+    const recovered = await within(
+      Promise.resolve(recoveringSnapshot),
+      5_000,
+      "exclusive dead-writer recovery completion",
+    );
+    expect(recoveryReacquisitions).toBe(1);
+    expect(recoveryTargetCommits).toBeGreaterThan(0);
+    expect(recovered.generation).toBe(1);
+    expect(recovered.revisions.filter((entry) => entry.revision !== null)).toHaveLength(2);
+
+    const stable = await Promise.all(
+      concurrentReaders.map((reader) => reader.provider.snapshot(requested)),
+    );
+    for (const snapshot of stable) {
+      expect(snapshot.generation).toBe(1);
+      expect(snapshot.revisions).toEqual(recovered.revisions);
+    }
+    expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
+
+    const expectedRoots = await workspace();
+    const expected = await harness(expectedRoots);
+    expect(await expected.engine.execute(createRequest())).toMatchObject({
+      generation: 1,
+      status: "committed",
+    });
+    expect(await canonicalWorkspaceFiles(roots.workspaceRoot)).toEqual(
+      await canonicalWorkspaceFiles(expectedRoots.workspaceRoot),
+    );
+  });
+
   test("cleans recovery-created stages after an unconfirmed startup target", async () => {
     const roots = await workspace();
     const shopLocator = markdownIntentLocator(entityId(1));
@@ -1441,7 +1687,7 @@ describe("local transaction journal", () => {
     expect(await stageArtifacts(roots.workspaceRoot)).toEqual([]);
   });
 
-  test("reuses an idle snapshot lease after a one-shot release failure", async () => {
+  test("uses a retained checkpoint lease for a snapshot fallback", async () => {
     const roots = await workspace();
     let releaseCalls = 0;
     const active = await harness(roots, undefined, (phase) => {
@@ -1450,13 +1696,22 @@ describe("local transaction journal", () => {
       if (releaseCalls === 1) throw new Error("interrupt idle snapshot lease release");
     });
 
-    await expect(active.provider.snapshot([])).rejects.toThrow();
+    expect(
+      await active.provider.recordProjectionCheckpoint(
+        projectionIdentity(0, "a"),
+        projectionIntegrity("b"),
+        1,
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
     expect(releaseCalls).toBe(1);
     expect(await active.provider.snapshot([])).toMatchObject({ generation: 0 });
     expect(releaseCalls).toBe(2);
   });
 
-  test("does not share a retained snapshot lease with a concurrent caller", async () => {
+  test("does not bypass a retained checkpoint lease with a concurrent snapshot", async () => {
     const roots = await workspace();
     let releaseCalls = 0;
     let holdRead = false;
@@ -1480,7 +1735,16 @@ describe("local transaction journal", () => {
         await releaseRead;
       }
     });
-    await expect(active.provider.snapshot([])).rejects.toThrow();
+    expect(
+      await active.provider.recordProjectionCheckpoint(
+        projectionIdentity(0, "a"),
+        projectionIntegrity("b"),
+        1,
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
+      ok: false,
+    });
 
     holdRead = true;
     const retry = active.provider.snapshot([]);
@@ -1717,7 +1981,37 @@ describe("local transaction journal", () => {
     });
   });
 
-  test("contains checkpoint release throws and preserves earlier specific failures", async () => {
+  test("serves stable idle projection checkpoints without acquiring coordination", async () => {
+    const roots = await workspace();
+    const base = await createLocalResourceProvider(roots);
+    let acquisitions = 0;
+    const resources = providerWithOverrides(base, {
+      acquireCoordination(request) {
+        acquisitions += 1;
+        return base.acquireCoordination(request);
+      },
+    });
+    const active = journalHarnessFor(resources);
+
+    const checkpoints = await Promise.all(
+      Array.from({ length: 8 }, () => active.provider.readProjectionCheckpoint()),
+    );
+    expect(checkpoints).toHaveLength(8);
+    for (const checkpoint of checkpoints) {
+      expect(checkpoint).toMatchObject({
+        ok: true,
+        value: {
+          generation: 0,
+          projection: null,
+          projectionIntegrity: null,
+          projectionResourceCount: null,
+        },
+      });
+    }
+    expect(acquisitions).toBe(0);
+  });
+
+  test("contains checkpoint mutation release throws and preserves earlier specific failures", async () => {
     const roots = await workspace();
     let failNextRelease = false;
     const active = await harness(roots, undefined, (phase) => {
@@ -1729,11 +2023,6 @@ describe("local transaction journal", () => {
     const initial = projectionIdentity(0, "d");
     const integrity = projectionIntegrity("e");
 
-    failNextRelease = true;
-    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
-      diagnostics: [{ code: "projection-checkpoint-unavailable" }],
-      ok: false,
-    });
     expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
       ok: true,
       value: { generation: 0, projection: null },
@@ -1791,15 +2080,17 @@ describe("local transaction journal", () => {
       },
     });
     const active = journalHarnessFor(resources);
+    const identity = projectionIdentity(0, "a");
+    const integrity = projectionIntegrity("b");
 
-    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+    expect(await active.provider.recordProjectionCheckpoint(identity, integrity, 1)).toMatchObject({
       diagnostics: [{ code: "projection-checkpoint-unavailable" }],
       ok: false,
     });
     expect(await active.provider.readProjectionCheckpoint()).toMatchObject({ ok: true });
 
     releaseMode = "ownership-lost";
-    expect(await active.provider.readProjectionCheckpoint()).toMatchObject({
+    expect(await active.provider.recordProjectionCheckpoint(identity, integrity, 1)).toMatchObject({
       diagnostics: [{ code: "projection-checkpoint-unavailable" }],
       ok: false,
     });
@@ -2061,7 +2352,7 @@ describe("local transaction journal", () => {
     const resources = providerWithOverrides(base, {
       async acquireCoordination(request) {
         acquisitions += 1;
-        if (acquisitions === 2) {
+        if (acquisitions === 1) {
           return failure(
             Object.freeze({
               code: "resource-provider-failure",
@@ -2085,7 +2376,7 @@ describe("local transaction journal", () => {
       phase: "prepare",
       status: "provider-failure",
     });
-    expect(acquisitions).toBe(2);
+    expect(acquisitions).toBe(1);
   });
 
   for (const operation of ["delete", "replace"] as const) {
@@ -2657,7 +2948,7 @@ describe("local transaction journal", () => {
     let releaseCount = 0;
     const active = await harness(roots, undefined, (phase) => {
       if (phase === "coordination-release") releaseCount += 1;
-      if (!releaseFault && phase === "coordination-release" && releaseCount === 2) {
+      if (!releaseFault && phase === "coordination-release" && releaseCount === 1) {
         releaseFault = true;
         throw new Error("interrupt lease release");
       }
@@ -2676,6 +2967,258 @@ describe("local transaction journal", () => {
       status: "committed",
     });
   });
+
+  for (const releaseFailure of ["throw", "retryable-result"] as const) {
+    test(`hands off a live lease after a ${releaseFailure} release failure without weakening optimistic safety`, async () => {
+      const roots = await workspace();
+      let holdRead = false;
+      let readHeld = false;
+      let readEnteredResolve!: () => void;
+      let releaseReadResolve!: () => void;
+      const readEntered = new Promise<void>((resolve) => {
+        readEnteredResolve = resolve;
+      });
+      const releaseRead = new Promise<void>((resolve) => {
+        releaseReadResolve = resolve;
+      });
+      const base = await createLocalResourceProvider({
+        ...roots,
+        faultInjector: async (phase, context) => {
+          if (
+            !holdRead ||
+            readHeld ||
+            phase !== "read" ||
+            context?.locator !== localTransactionStateLocator
+          ) {
+            return;
+          }
+          readHeld = true;
+          readEnteredResolve();
+          await releaseRead;
+        },
+      });
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (releases === 1) {
+            if (releaseFailure === "throw") throw new Error("injected live release throw");
+            return failure(
+              Object.freeze({
+                code: "injected-live-release-failure",
+                message: "Injected live release failure",
+              }),
+            );
+          }
+          return base.releaseCoordination(lease);
+        },
+      });
+      const active = journalHarnessFor(resources);
+      const outcome = await active.engine.execute(createRequest());
+      expect(outcome.status).toBe("indeterminate");
+      if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 1, releases: 1 });
+
+      holdRead = true;
+      const retainedSnapshot = active.provider.snapshot([]);
+      await within(readEntered, 5_000, `${releaseFailure} retained lease handoff`);
+      expect(acquisitions).toBe(1);
+      try {
+        await expect(active.provider.snapshot([])).rejects.toThrow(
+          "Local resource coordination is already held",
+        );
+      } finally {
+        releaseReadResolve();
+      }
+      expect(await retainedSnapshot).toMatchObject({ generation: 1 });
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 1, releases: 2 });
+
+      holdRead = false;
+      const stable = await Promise.all(
+        Array.from({ length: 8 }, () => active.provider.snapshot([])),
+      );
+      expect(stable.every((snapshot) => snapshot.generation === 1)).toBeTrue();
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 1, releases: 2 });
+      expect(await active.engine.recover(outcome.recovery)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+    });
+  }
+
+  for (const delayedRelease of [
+    "success",
+    "ownership-lost",
+    "invalid",
+    "retryable-result",
+  ] as const) {
+    test(`blocks same-journal acquisition until a delayed ${delayedRelease} release acknowledgement completes`, async () => {
+      const roots = await workspace();
+      let firstReleasePendingResolve!: () => void;
+      let returnFirstReleaseResolve!: () => void;
+      const firstReleasePending = new Promise<void>((resolve) => {
+        firstReleasePendingResolve = resolve;
+      });
+      const returnFirstRelease = new Promise<void>((resolve) => {
+        returnFirstReleaseResolve = resolve;
+      });
+      const base = await createLocalResourceProvider(roots);
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (releases !== 1) return base.releaseCoordination(lease);
+          if (delayedRelease === "retryable-result") {
+            firstReleasePendingResolve();
+            await returnFirstRelease;
+            return failure(
+              Object.freeze({
+                code: "injected-live-release-failure",
+                message: "Injected retryable release result",
+              }),
+            );
+          }
+          const released = await base.releaseCoordination(lease);
+          if (!released.ok) return released;
+          firstReleasePendingResolve();
+          await returnFirstRelease;
+          if (delayedRelease === "success") return released;
+          return failure(
+            Object.freeze({
+              code:
+                delayedRelease === "ownership-lost"
+                  ? "resource-coordination-ownership-lost"
+                  : "invalid-coordination-lease",
+              message: "Injected terminal release result",
+            }),
+          );
+        },
+      });
+      const active = journalHarnessFor(resources);
+      const firstOutcomePending = active.engine.execute(createRequest());
+      await within(firstReleasePending, 5_000, `${delayedRelease} first lease release`);
+
+      await expect(active.provider.snapshot([])).rejects.toThrow(
+        "Local resource coordination is already held",
+      );
+      expect(await active.provider.readProjectionCheckpoint()).toEqual({
+        diagnostics: [
+          {
+            code: "resource-coordination-contended",
+            message: "Local resource coordination is already held",
+          },
+        ],
+        ok: false,
+      });
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 1, releases: 1 });
+
+      returnFirstReleaseResolve();
+      const firstOutcome = await firstOutcomePending;
+      expect(firstOutcome.status).toBe(
+        delayedRelease === "success" ? "committed" : "indeterminate",
+      );
+      if (delayedRelease === "retryable-result") {
+        expect(await active.provider.snapshot([])).toMatchObject({ generation: 1 });
+      }
+      const expectedCounts = {
+        acquisitions: 1,
+        releases: delayedRelease === "retryable-result" ? 2 : 1,
+      };
+      expect({ acquisitions, releases }).toEqual(expectedCounts);
+
+      const stable = await Promise.all(
+        Array.from({ length: 8 }, () => active.provider.snapshot([])),
+      );
+      expect(stable.every((snapshot) => snapshot.generation === 1)).toBeTrue();
+      expect({ acquisitions, releases }).toEqual(expectedCounts);
+
+      if (firstOutcome.status === "indeterminate") {
+        expect(await active.engine.recover(firstOutcome.recovery)).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
+      }
+    });
+  }
+
+  for (const concurrentFinish of ["commit", "recover"] as const) {
+    test(`fails a concurrent same-token ${concurrentFinish} closed while release acknowledgement is pending`, async () => {
+      const roots = await workspace();
+      let firstReleasePendingResolve!: () => void;
+      let returnFirstReleaseResolve!: () => void;
+      const firstReleasePending = new Promise<void>((resolve) => {
+        firstReleasePendingResolve = resolve;
+      });
+      const returnFirstRelease = new Promise<void>((resolve) => {
+        returnFirstReleaseResolve = resolve;
+      });
+      const base = await createLocalResourceProvider(roots);
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          const released = await base.releaseCoordination(lease);
+          if (releases === 1 && released.ok) {
+            firstReleasePendingResolve();
+            await returnFirstRelease;
+          }
+          return released;
+        },
+      });
+      const active = journalHarnessFor(resources);
+      const request = createRequest();
+      const proposal = {
+        affected: request.affected,
+        baseGeneration: 0,
+        context: request.context,
+        expectedRevisions: request.expectedRevisions,
+        generation: 1,
+        mutation: request.mutation,
+        priorState: { components: [], relationships: [] },
+      } as unknown as ProposedTransaction;
+      const prepared = await active.provider.prepare(proposal);
+      expect(prepared).toMatchObject({ status: "prepared" });
+      if (prepared.status !== "prepared") throw new Error("expected prepared transaction");
+
+      const firstCommitPending = Promise.resolve(active.provider.commit(prepared.token));
+      await within(firstReleasePending, 5_000, `${concurrentFinish} first release`);
+      const concurrentOutcome = await Promise.resolve(
+        active.provider[concurrentFinish](prepared.token),
+      );
+      const beforeAcknowledgement = { acquisitions, releases };
+      returnFirstReleaseResolve();
+
+      expect(concurrentOutcome).toEqual({ status: "indeterminate" });
+      expect(beforeAcknowledgement).toEqual({ acquisitions: 1, releases: 1 });
+      expect(await firstCommitPending).toMatchObject({ generation: 1, status: "committed" });
+      expect(await active.provider.recover(prepared.token)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 2, releases: 2 });
+
+      const stable = await Promise.all(
+        Array.from({ length: 8 }, () => active.provider.snapshot([])),
+      );
+      expect(stable.every((snapshot) => snapshot.generation === 1)).toBeTrue();
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 2, releases: 2 });
+    });
+  }
 
   test("retains a freshly acquired recovery lease until release can be retried", async () => {
     const roots = await workspace();

@@ -1316,6 +1316,10 @@ export function createLocalTransactionJournal(
   const live = new Map<string, LivePreparation>();
   const pendingJournalStages = new Map<StagedReplacementHandle, PendingJournalStage>();
   let retainedTransactionLease: LocalCoordinationLease | undefined;
+  let activeTransactionLease: LocalCoordinationLease | undefined;
+  const clearActiveTransactionLease = (lease: LocalCoordinationLease): void => {
+    if (activeTransactionLease === lease) activeTransactionLease = undefined;
+  };
   const readExact = async (locator: WorkspaceResourceLocator, maximum = limits.maxJournalBytes) => {
     const read = await options.resources.read({ locator, maxBytes: maximum });
     if (!read.ok) {
@@ -1466,19 +1470,27 @@ export function createLocalTransactionJournal(
     await commitJournalStage(pending, false);
   };
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
-    const released = await options.resources.releaseCoordination(lease);
-    const preparation = live.get(token);
-    if (!released.ok) {
-      if (coordinationLeaseCannotBeRetried(released) && preparation?.lease === lease) {
-        delete preparation.lease;
-        if (preparation.stagesCleaned) live.delete(token);
-      }
-      return false;
-    }
-    if (preparation?.lease === lease) {
+    const detachPreparationLease = (): void => {
+      const preparation = live.get(token);
+      if (preparation?.lease !== lease) return;
       delete preparation.lease;
       if (preparation.stagesCleaned) live.delete(token);
+    };
+    detachPreparationLease();
+    let released: Result<void>;
+    try {
+      released = await options.resources.releaseCoordination(lease);
+    } catch {
+      retainTransactionLease(lease);
+      clearActiveTransactionLease(lease);
+      return false;
     }
+    if (!released.ok) {
+      if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
+      clearActiveTransactionLease(lease);
+      return false;
+    }
+    clearActiveTransactionLease(lease);
     return true;
   };
   const discardLiveStages = async (token: string, state: PendingState): Promise<void> => {
@@ -1639,15 +1651,26 @@ export function createLocalTransactionJournal(
     throw new Error("Multiple local transaction leases could not be released");
   };
   const acquireTransactionLease = async (): Promise<Result<LocalCoordinationLease>> => {
+    if (activeTransactionLease !== undefined) {
+      return failure(
+        diagnostic(
+          "resource-coordination-contended",
+          "Local resource coordination is already held",
+        ),
+      );
+    }
     const retained = retainedTransactionLease;
     if (retained !== undefined) {
       retainedTransactionLease = undefined;
+      activeTransactionLease = retained;
       return success(retained);
     }
-    return options.resources.acquireCoordination({
+    const acquired = await options.resources.acquireCoordination({
       context: "local-machine",
       locator: transactionCoordinationLocator,
     });
+    if (acquired.ok) activeTransactionLease = acquired.value;
+    return acquired;
   };
   const releaseTransactionLease = async (lease: LocalCoordinationLease): Promise<void> => {
     let released: Result<void>;
@@ -1655,13 +1678,16 @@ export function createLocalTransactionJournal(
       released = await options.resources.releaseCoordination(lease);
     } catch (error) {
       retainTransactionLease(lease);
+      clearActiveTransactionLease(lease);
       throw error;
     }
     if (!released.ok) {
       if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
+      clearActiveTransactionLease(lease);
       throw new Error(released.diagnostics[0]?.message);
     }
     if (retainedTransactionLease === lease) retainedTransactionLease = undefined;
+    clearActiveTransactionLease(lease);
   };
   const releaseProjectionCheckpointLease = async <T>(
     lease: LocalCoordinationLease,
@@ -1685,7 +1711,69 @@ export function createLocalTransactionJournal(
     }
   };
 
-  const snapshot = async (
+  const snapshotInput = (
+    requested: readonly ResourceKey[],
+    state: IdleState,
+    loaded: CanonicalTransactionSnapshot,
+  ): TransactionProviderSnapshotInput => {
+    const current = new Map(loaded.resources.map((entry) => [entry.resource, entry.revision]));
+    const revisions: ResourceRevisionInput[] = requested.map((resource) =>
+      Object.freeze({ resource, revision: current.get(resource) ?? null }),
+    );
+    return Object.freeze({
+      generation: state.generation,
+      revisions: Object.freeze(revisions),
+      state: loaded.state,
+    });
+  };
+
+  const optimisticSnapshot = async (
+    requested: readonly ResourceKey[],
+  ): Promise<TransactionProviderSnapshotInput | undefined> => {
+    if (retainedTransactionLease !== undefined || activeTransactionLease !== undefined) {
+      return undefined;
+    }
+    let before: JournalState;
+    try {
+      before = await readState();
+    } catch {
+      return undefined;
+    }
+    if (
+      before.phase !== "idle" ||
+      retainedTransactionLease !== undefined ||
+      activeTransactionLease !== undefined
+    ) {
+      return undefined;
+    }
+    let loaded: Result<CanonicalTransactionSnapshot> | undefined;
+    let loadError: unknown;
+    try {
+      loaded = await options.adapter.load();
+    } catch (error) {
+      loadError = error;
+    }
+    let after: JournalState;
+    try {
+      after = await readState();
+    } catch {
+      return undefined;
+    }
+    if (
+      after.phase !== "idle" ||
+      after.generation !== before.generation ||
+      retainedTransactionLease !== undefined ||
+      activeTransactionLease !== undefined
+    ) {
+      return undefined;
+    }
+    if (loadError !== undefined) throw loadError;
+    if (loaded === undefined) throw new Error("canonical transaction snapshot did not complete");
+    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+    return snapshotInput(requested, after, loaded.value);
+  };
+
+  const coordinatedSnapshot = async (
     requested: readonly ResourceKey[],
   ): Promise<TransactionProviderSnapshotInput> => {
     const acquired = await acquireTransactionLease();
@@ -1699,21 +1787,16 @@ export function createLocalTransactionJournal(
       if (state.phase !== "idle") throw new Error("transaction state did not settle");
       const loaded = await options.adapter.load();
       if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
-      const current = new Map(
-        loaded.value.resources.map((entry) => [entry.resource, entry.revision]),
-      );
-      const revisions: ResourceRevisionInput[] = requested.map((resource) =>
-        Object.freeze({ resource, revision: current.get(resource) ?? null }),
-      );
-      return Object.freeze({
-        generation: state.generation,
-        revisions: Object.freeze(revisions),
-        state: loaded.value.state,
-      });
+      return snapshotInput(requested, state, loaded.value);
     } finally {
       await releaseTransactionLease(lease);
     }
   };
+
+  const snapshot = async (
+    requested: readonly ResourceKey[],
+  ): Promise<TransactionProviderSnapshotInput> =>
+    (await optimisticSnapshot(requested)) ?? coordinatedSnapshot(requested);
 
   const prepare = async (proposal: ProposedTransaction): Promise<TransactionPrepareResultInput> => {
     const acquired = await acquireTransactionLease();
@@ -1915,7 +1998,88 @@ export function createLocalTransactionJournal(
     return result;
   };
 
+  const checkpointFromIdleState = (state: IdleState): Result<ProjectionContinuityCheckpoint> => {
+    const generation = parseGraphGeneration(state.generation);
+    if (!generation.ok) return generation;
+    if (
+      state.projectionWatermark === null ||
+      state.projectionFingerprint === null ||
+      state.projectionIntegrity === null ||
+      state.projectionResourceCount === null
+    ) {
+      return success(
+        Object.freeze({
+          generation: generation.value,
+          projection: null,
+          projectionIntegrity: null,
+          projectionResourceCount: null,
+        }),
+      );
+    }
+    const projectionGeneration = parseGraphGeneration(state.projectionWatermark);
+    const fingerprint = parseProjectionCanonicalFingerprint(state.projectionFingerprint);
+    const integrity = parseProjectionReadIntegrity(state.projectionIntegrity);
+    const resourceCount = parseProjectionReadResourceCount(state.projectionResourceCount);
+    if (!projectionGeneration.ok || !fingerprint.ok || !integrity.ok || !resourceCount.ok) {
+      return failure(
+        diagnostic(
+          "projection-checkpoint-unavailable",
+          "Projection continuity metadata is malformed",
+        ),
+      );
+    }
+    return success(
+      Object.freeze({
+        generation: generation.value,
+        projection: Object.freeze({
+          fingerprint: fingerprint.value,
+          generation: projectionGeneration.value,
+        }),
+        projectionIntegrity: integrity.value,
+        projectionResourceCount: resourceCount.value,
+      }),
+    );
+  };
+
+  const sameCheckpointState = (left: IdleState, right: IdleState): boolean =>
+    left.generation === right.generation &&
+    left.projectionFingerprint === right.projectionFingerprint &&
+    left.projectionIntegrity === right.projectionIntegrity &&
+    left.projectionResourceCount === right.projectionResourceCount &&
+    left.projectionWatermark === right.projectionWatermark;
+
+  const optimisticProjectionCheckpoint = async (): Promise<
+    Result<ProjectionContinuityCheckpoint> | undefined
+  > => {
+    if (retainedTransactionLease !== undefined || activeTransactionLease !== undefined) {
+      return undefined;
+    }
+    let before: JournalState;
+    let after: JournalState;
+    try {
+      before = await readState();
+      if (
+        before.phase !== "idle" ||
+        retainedTransactionLease !== undefined ||
+        activeTransactionLease !== undefined
+      ) {
+        return undefined;
+      }
+      after = await readState();
+    } catch {
+      return undefined;
+    }
+    return after.phase === "idle" &&
+      sameCheckpointState(before, after) &&
+      retainedTransactionLease === undefined &&
+      activeTransactionLease === undefined
+      ? checkpointFromIdleState(after)
+      : undefined;
+  };
+
   const readProjectionCheckpoint = async (): Promise<Result<ProjectionContinuityCheckpoint>> => {
+    const optimistic = await optimisticProjectionCheckpoint();
+    if (optimistic !== undefined) return optimistic;
     const acquired = await acquireTransactionLease();
     if (!acquired.ok) return acquired;
     const lease = acquired.value;
@@ -1939,46 +2103,7 @@ export function createLocalTransactionJournal(
             ),
           );
         }
-        const generation = parseGraphGeneration(state.generation);
-        if (!generation.ok) return generation;
-        if (
-          state.projectionWatermark === null ||
-          state.projectionFingerprint === null ||
-          state.projectionIntegrity === null ||
-          state.projectionResourceCount === null
-        ) {
-          return success(
-            Object.freeze({
-              generation: generation.value,
-              projection: null,
-              projectionIntegrity: null,
-              projectionResourceCount: null,
-            }),
-          );
-        }
-        const projectionGeneration = parseGraphGeneration(state.projectionWatermark);
-        const fingerprint = parseProjectionCanonicalFingerprint(state.projectionFingerprint);
-        const integrity = parseProjectionReadIntegrity(state.projectionIntegrity);
-        const resourceCount = parseProjectionReadResourceCount(state.projectionResourceCount);
-        if (!projectionGeneration.ok || !fingerprint.ok || !integrity.ok || !resourceCount.ok) {
-          return failure(
-            diagnostic(
-              "projection-checkpoint-unavailable",
-              "Projection continuity metadata is malformed",
-            ),
-          );
-        }
-        return success(
-          Object.freeze({
-            generation: generation.value,
-            projection: Object.freeze({
-              fingerprint: fingerprint.value,
-              generation: projectionGeneration.value,
-            }),
-            projectionIntegrity: integrity.value,
-            projectionResourceCount: resourceCount.value,
-          }),
-        );
+        return checkpointFromIdleState(state);
       } catch {
         return failure(
           diagnostic(

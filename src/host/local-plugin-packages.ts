@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { constants, realpathSync, type Stats } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 
 import { parseDocument } from "yaml";
 
@@ -194,6 +195,8 @@ const indeterminatePersonalPackageStateMessage =
   "Personal plugin package state may have committed; inspect the personal package before retrying; not found confirms removal";
 const indeterminateBlueprintTrustStateMessage =
   "Blueprint plugin trust state may have committed; verify the exact package entry and current selection before retrying";
+const packageStateReadRetryDelayMilliseconds = 25;
+const maximumPackageStateReadRetryWaits = 80;
 
 function requiredLocator(...segments: string[]): WorkspaceResourceLocator {
   const locator = workspaceResourceLocator(...segments);
@@ -1268,6 +1271,155 @@ export function createLocalPluginPackageManager(
     return parsed.ok ? success(parsed.value) : ownedFailure(...parsed.diagnostics);
   };
 
+  type StartupPersonalStateObservation = "state" | "unusable-root-absent" | "windows-root-absent";
+  type StartupPackageStateObservation = Readonly<{
+    configuration: typeof configuration;
+    lock: PackageLock;
+    userState?: UserPackageState;
+  }>;
+
+  const startupPersonalStateObservation: StartupPersonalStateObservation =
+    trustRootPlatform === "win32"
+      ? "windows-root-absent"
+      : userDataRootUnusable
+        ? "unusable-root-absent"
+        : "state";
+
+  const requireAbsentUnusableUserDataRoot = async (): Promise<Result<void>> => {
+    try {
+      await lstat(requestedUserDataRoot);
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") return success(undefined);
+    }
+    return packageFailure(
+      "plugin-package-user-state-unavailable",
+      "Local plugin package state is unavailable",
+    );
+  };
+
+  const startupConfiguration = async (
+    phase: "initial" | "revalidate",
+  ): Promise<Result<typeof configuration>> => {
+    const current = await readConfiguration();
+    if (current.ok) return current;
+    if (phase === "initial") {
+      if (current.diagnostics.some((item) => item.code === "no-workspace")) {
+        return packageFailure(
+          "workspace-configuration-changed",
+          "Workspace configuration changed during bootstrap; restart after changes settle",
+        );
+      }
+      return current.diagnostics.every((item) => item.code.startsWith("workspace-configuration-"))
+        ? current
+        : packageFailure(
+            "workspace-configuration-provider-failure",
+            "Workspace configuration access failed",
+          );
+    }
+    return current.diagnostics.every(
+      (item) => item.code === "workspace-configuration-provider-failure",
+    )
+      ? current
+      : packageFailure(
+          "workspace-configuration-changed",
+          "Workspace configuration changed during package startup; restart after changes settle",
+        );
+  };
+
+  const readStartupPackageStateUncoordinated = async (
+    personalState: StartupPersonalStateObservation,
+    phase: "initial" | "revalidate",
+  ): Promise<Result<StartupPackageStateObservation>> => {
+    const currentConfiguration = await startupConfiguration(phase);
+    if (!currentConfiguration.ok) return currentConfiguration;
+    const lock = await readLock();
+    if (!lock.ok) return lock;
+    if (personalState === "state") {
+      const userState = await readUserState();
+      return userState.ok
+        ? success(
+            Object.freeze({
+              configuration: currentConfiguration.value,
+              lock: lock.value,
+              userState: userState.value,
+            }),
+          )
+        : userState;
+    }
+    const absent =
+      personalState === "windows-root-absent"
+        ? await requireAbsentWindowsUserDataRoot()
+        : await requireAbsentUnusableUserDataRoot();
+    return absent.ok
+      ? success(
+          Object.freeze({
+            configuration: currentConfiguration.value,
+            lock: lock.value,
+          }),
+        )
+      : absent;
+  };
+
+  const readStartupPackageState = async (
+    personalState: StartupPersonalStateObservation,
+    phase: "initial" | "revalidate",
+  ): Promise<Result<StartupPackageStateObservation>> => {
+    for (let attempt = 0; attempt <= maximumPackageStateReadRetryWaits; attempt += 1) {
+      let coordinated: Result<Result<StartupPackageStateObservation>>;
+      try {
+        coordinated = await options.resources.withCoordination(
+          { context: "local-machine", locator: packageStateCoordinationLocator },
+          () => readStartupPackageStateUncoordinated(personalState, phase),
+        );
+      } catch {
+        return packageStateUnavailable();
+      }
+      if (coordinated.ok) return coordinated.value;
+      const contended =
+        coordinated.diagnostics.length === 1 &&
+        coordinated.diagnostics[0]?.code === "resource-coordination-contended";
+      if (!contended) return packageStateUnavailable();
+      if (attempt === maximumPackageStateReadRetryWaits) break;
+      await wait(packageStateReadRetryDelayMilliseconds);
+    }
+    return packageStateUnavailable();
+  };
+
+  const startupPackageProjectionStillCurrent = async (
+    expected: StartupPackageStateObservation,
+    personalState: StartupPersonalStateObservation,
+  ): Promise<Result<void>> => {
+    const current = await readStartupPackageState(personalState, "revalidate");
+    if (!current.ok) return current;
+    if (
+      serializeBootstrapConfiguration(current.value.configuration) !==
+      serializeBootstrapConfiguration(expected.configuration)
+    ) {
+      return packageFailure(
+        "workspace-configuration-changed",
+        "Workspace configuration changed during package startup; restart after changes settle",
+      );
+    }
+    if (!sameBytes(encodeCanonical(current.value.lock), encodeCanonical(expected.lock))) {
+      return packageFailure(
+        "plugin-package-lock-changed",
+        "Blueprint plugin package state changed during startup; restart after changes settle",
+      );
+    }
+    if (
+      personalState === "state" &&
+      (current.value.userState === undefined ||
+        expected.userState === undefined ||
+        !sameBytes(encodeCanonical(current.value.userState), encodeCanonical(expected.userState)))
+    ) {
+      return packageFailure(
+        "plugin-package-user-state-changed",
+        "Local plugin package state changed during startup; restart after changes settle",
+      );
+    }
+    return success(undefined);
+  };
+
   const writeBlueprintState = async (
     nextConfiguration: typeof configuration,
     nextLock: PackageLock,
@@ -1343,24 +1495,14 @@ export function createLocalPluginPackageManager(
     return success(undefined);
   };
 
-  const packageProjectionStillCurrent = async (
+  const blueprintPackageProjectionStillCurrent = async (
     expectedConfiguration: typeof configuration,
     expectedLock: PackageLock,
-    expectedUserState: UserPackageState,
-    operation: "enable" | "startup",
   ): Promise<Result<void>> => {
     const configurationChangedMessage =
-      operation === "startup"
-        ? "Workspace configuration changed during package startup; restart after changes settle"
-        : "Workspace configuration changed during plugin enablement; retry after changes settle";
+      "Workspace configuration changed during plugin enablement; retry after changes settle";
     const lockChangedMessage =
-      operation === "startup"
-        ? "Blueprint plugin package state changed during startup; restart after changes settle"
-        : "Blueprint plugin package state changed during plugin enablement; retry after changes settle";
-    const userStateChangedMessage =
-      operation === "startup"
-        ? "Local plugin package state changed during startup; restart after changes settle"
-        : "Local plugin package state changed during plugin enablement; retry after changes settle";
+      "Blueprint plugin package state changed during plugin enablement; retry after changes settle";
     const currentConfiguration = await readConfiguration();
     if (!currentConfiguration.ok) {
       return currentConfiguration.diagnostics.every(
@@ -1380,6 +1522,21 @@ export function createLocalPluginPackageManager(
     if (!sameBytes(encodeCanonical(currentLock.value), encodeCanonical(expectedLock))) {
       return packageFailure("plugin-package-lock-changed", lockChangedMessage);
     }
+    return success(undefined);
+  };
+
+  const packageProjectionStillCurrent = async (
+    expectedConfiguration: typeof configuration,
+    expectedLock: PackageLock,
+    expectedUserState: UserPackageState,
+  ): Promise<Result<void>> => {
+    const blueprint = await blueprintPackageProjectionStillCurrent(
+      expectedConfiguration,
+      expectedLock,
+    );
+    if (!blueprint.ok) return blueprint;
+    const userStateChangedMessage =
+      "Local plugin package state changed during plugin enablement; retry after changes settle";
     const currentUserState = await readUserState();
     if (!currentUserState.ok) return currentUserState;
     if (!sameBytes(encodeCanonical(currentUserState.value), encodeCanonical(expectedUserState))) {
@@ -1439,16 +1596,6 @@ export function createLocalPluginPackageManager(
         return packageFailure("plugin-package-state-indeterminate", recoveryMessage);
       }
       return coordinated.value;
-    });
-  }
-
-  function serializeProjection<T>(action: () => Promise<Result<T>>): Promise<Result<T>> {
-    return serialize(async () => {
-      const coordinated = await options.resources.withCoordination<Result<T>>(
-        { context: "local-machine", locator: packageStateCoordinationLocator },
-        action,
-      );
-      return coordinated.ok ? coordinated.value : packageStateUnavailable();
     });
   }
 
@@ -1745,7 +1892,6 @@ export function createLocalPluginPackageManager(
         configuration,
         blueprintLock.value,
         state.value,
-        "enable",
       );
       if (!stillCurrent.ok) return stillCurrent;
       let loaded: unknown;
@@ -2063,31 +2209,16 @@ export function createLocalPluginPackageManager(
     });
 
   const loadEnabled = (): Promise<Result<LoadedLocalPluginPackages>> =>
-    serializeProjection(async () => {
+    serialize(async () => {
       if (options.bootstrap.state !== "configured") {
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
       }
-      const currentConfiguration = await readConfiguration();
-      if (!currentConfiguration.ok) {
-        if (currentConfiguration.diagnostics.some((item) => item.code === "no-workspace")) {
-          return packageFailure(
-            "workspace-configuration-changed",
-            "Workspace configuration changed during bootstrap; restart after changes settle",
-          );
-        }
-        return currentConfiguration.diagnostics.every((item) =>
-          item.code.startsWith("workspace-configuration-"),
-        )
-          ? currentConfiguration
-          : packageFailure(
-              "workspace-configuration-provider-failure",
-              "Workspace configuration access failed",
-            );
-      }
+      const observed = await readStartupPackageState(startupPersonalStateObservation, "initial");
+      if (!observed.ok) return observed;
       if (
-        serializeBootstrapConfiguration(currentConfiguration.value) !==
+        serializeBootstrapConfiguration(observed.value.configuration) !==
         serializeBootstrapConfiguration(configuration)
       ) {
         return packageFailure(
@@ -2095,14 +2226,12 @@ export function createLocalPluginPackageManager(
           "Workspace configuration changed during bootstrap; restart after changes settle",
         );
       }
-      const lock = await readLock();
-      if (!lock.ok) return lock;
       const selections: Array<{
         readonly locked: LockedPackage;
         readonly scope: PluginPackageScope;
       }> = [];
       for (const declaration of configuration.packageDeclarations) {
-        const locked = lock.value.packages.find((item) => item.name === declaration.name);
+        const locked = observed.value.lock.packages.find((item) => item.name === declaration.name);
         if (locked === undefined || locked.source !== declaration.source) {
           return packageFailure(
             "plugin-package-lock-missing",
@@ -2121,8 +2250,13 @@ export function createLocalPluginPackageManager(
         if (selections.some((selection) => selection.locked.enabled.length > 0)) {
           return unattestedWindowsTrustRoot();
         }
-        const absent = await requireAbsentWindowsUserDataRoot();
-        if (!absent.ok) return absent;
+        const stillCurrent = await startupPackageProjectionStillCurrent(
+          observed.value,
+          startupPersonalStateObservation,
+        );
+        if (!stillCurrent.ok) return stillCurrent;
+        const stillAbsent = await requireAbsentWindowsUserDataRoot();
+        if (!stillAbsent.ok) return stillAbsent;
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
@@ -2135,11 +2269,26 @@ export function createLocalPluginPackageManager(
             errorCode(error) === "ENOENT" &&
             selections.every((selection) => selection.locked.enabled.length === 0)
           ) {
-            return success(
-              Object.freeze({
-                personalPluginIds: Object.freeze([]),
-                registrations: Object.freeze([]),
-              }),
+            const stillCurrent = await startupPackageProjectionStillCurrent(
+              observed.value,
+              startupPersonalStateObservation,
+            );
+            if (!stillCurrent.ok) return stillCurrent;
+            try {
+              await lstat(requestedUserDataRoot);
+            } catch (finalError) {
+              if (errorCode(finalError) === "ENOENT") {
+                return success(
+                  Object.freeze({
+                    personalPluginIds: Object.freeze([]),
+                    registrations: Object.freeze([]),
+                  }),
+                );
+              }
+            }
+            return packageFailure(
+              "plugin-package-user-state-unavailable",
+              "Local plugin package state is unavailable",
             );
           }
         }
@@ -2148,10 +2297,10 @@ export function createLocalPluginPackageManager(
           "Local plugin package state is unavailable",
         );
       }
-      const state = await readUserState();
-      if (!state.ok) return state;
+      const state = observed.value.userState;
+      if (state === undefined) return packageStateUnavailable();
       if (
-        configuredEnabledEntryCount(configuration) + enabledEntryCount(state.value.packages) >
+        configuredEnabledEntryCount(configuration) + enabledEntryCount(state.packages) >
         options.maxEnabledPlugins
       ) {
         return packageFailure(
@@ -2159,13 +2308,13 @@ export function createLocalPluginPackageManager(
           "Enabled local plugins exceed this Host's runtime capacity",
         );
       }
-      if (hasDuplicateEnabledPluginIds(lock.value.packages, state.value.packages)) {
+      if (hasDuplicateEnabledPluginIds(observed.value.lock.packages, state.packages)) {
         return packageFailure(
           "plugin-package-plugin-id-conflict",
           "Enabled local plugins must use distinct plugin IDs",
         );
       }
-      for (const locked of state.value.packages) selections.push({ locked, scope: "personal" });
+      for (const locked of state.packages) selections.push({ locked, scope: "personal" });
       const registrations: PluginRegistration[] = [];
       const personalPluginIds: string[] = [];
       for (const selection of selections.sort((left, right) =>
@@ -2197,7 +2346,7 @@ export function createLocalPluginPackageManager(
             );
           }
           if (
-            !state.value.trust.some((grant) =>
+            !state.trust.some((grant) =>
               grantMatches(grant, selection.scope, workspaceRoot, materialized.value, entry.value),
             )
           ) {
@@ -2206,11 +2355,9 @@ export function createLocalPluginPackageManager(
               "Plugins run with your full user permissions. Groma verifies what was installed, not that it is safe. Explicit trust is required before this exact entry can execute",
             );
           }
-          const stillCurrent = await packageProjectionStillCurrent(
-            currentConfiguration.value,
-            lock.value,
-            state.value,
-            "startup",
+          const stillCurrent = await startupPackageProjectionStillCurrent(
+            observed.value,
+            startupPersonalStateObservation,
           );
           if (!stillCurrent.ok) return stillCurrent;
           let module: unknown;
@@ -2234,6 +2381,11 @@ export function createLocalPluginPackageManager(
           if (selection.scope === "personal") personalPluginIds.push(exported.value.id);
         }
       }
+      const stillCurrent = await startupPackageProjectionStillCurrent(
+        observed.value,
+        startupPersonalStateObservation,
+      );
+      if (!stillCurrent.ok) return stillCurrent;
       return success(
         Object.freeze({
           personalPluginIds: Object.freeze(personalPluginIds.sort(compareCodeUnits)),

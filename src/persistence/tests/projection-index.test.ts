@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 
 import {
   createGraphCommittedEvent,
@@ -25,6 +26,7 @@ import {
 } from "../../core/index.ts";
 import { createStandardModelCapability } from "../../standard-model/index.ts";
 import {
+  allowsCustomLocalCoordinationRoot,
   createLocalProjectionIndex,
   createLocalProjectionReadIndex,
   createLocalResourceProvider,
@@ -37,10 +39,23 @@ import {
 } from "../index.ts";
 
 const roots: string[] = [];
+const coordinationChild = path.join(import.meta.dir, "fixtures", "coordination-child.ts");
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
+
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, expired]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 const ids = {
   child: entity("2"),
@@ -51,6 +66,15 @@ const ids = {
   rootGrandchild: relation("3"),
   childGrandchild: relation("2"),
 };
+
+const smallFollowerBounds = Object.freeze({
+  maxAliases: 3,
+  maxBytes: 4_096,
+  maxEntities: 3,
+  maxPageSize: 3,
+  maxRelations: 2,
+  maxSearchableTextCharacters: 256,
+});
 
 function entity(hex: string) {
   const parsed = parseEntityId(`ent_${hex.padStart(32, "0")}`);
@@ -331,6 +355,27 @@ function observeReads(
   }) as LocalResourceProvider;
 }
 
+function observeCoordination(
+  resources: LocalResourceProvider,
+  onCoordination: () => void,
+): LocalResourceProvider {
+  return new Proxy(resources, {
+    get(target, property) {
+      if (property === "withCoordination") {
+        return (
+          request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+          action: () => unknown | Promise<unknown>,
+        ) => {
+          onCoordination();
+          return target.withCoordination(request, action);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as LocalResourceProvider;
+}
+
 async function replace(
   resources: LocalResourceProvider,
   locator: WorkspaceResourceLocator,
@@ -493,7 +538,7 @@ describe("local projection index", () => {
     staged.length = 0;
     const callsBeforeRepair = source.calls;
     expect(await index.identity()).toMatchObject({ ok: true, value: { generation: 1 } });
-    expect(source.calls).toBe(callsBeforeRepair + 1);
+    expect(source.calls).toBe(callsBeforeRepair + 2);
     expect(staged.length).toBeGreaterThan(0);
     expect(staged.every((locator) => locator.startsWith(".groma-cache/"))).toBeTrue();
     expect(
@@ -535,9 +580,15 @@ describe("local projection index", () => {
   test("adopts an unchanged durable bundle without writes and fails closed on checkpoint I/O", async () => {
     const target = await temporaryProvider();
     let stages = 0;
-    const resources = observeStages(target.resources, () => {
-      stages += 1;
-    });
+    let coordinated = 0;
+    const resources = observeCoordination(
+      observeStages(target.resources, () => {
+        stages += 1;
+      }),
+      () => {
+        coordinated += 1;
+      },
+    );
     const source = new MutableCanonicalSource(canonical(1));
     const checkpoint = new MutableProjectionCheckpoint();
     const first = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
@@ -545,14 +596,17 @@ describe("local projection index", () => {
     expect(stages).toBeGreaterThan(0);
 
     stages = 0;
+    coordinated = 0;
     const unchanged = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
     expect(await unchanged.load()).toMatchObject({ ok: true, value: { generation: 1 } });
     expect(stages).toBe(0);
+    expect(coordinated).toBe(0);
 
     const ignoreLocator = workspaceResourceLocator(".groma-cache", ".gitignore");
     if (!ignoreLocator.ok) throw new Error("invalid projection ignore locator");
     expect((await target.resources.removeResource(ignoreLocator.value)).state).toBe("committed");
     stages = 0;
+    coordinated = 0;
     checkpoint.failReads = true;
     const unavailable = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
     expect(await unavailable.load()).toMatchObject({
@@ -560,6 +614,7 @@ describe("local projection index", () => {
       ok: false,
     });
     expect(stages).toBe(0);
+    expect(coordinated).toBeGreaterThan(0);
     checkpoint.failReads = false;
     expect(await unavailable.load()).toMatchObject({ ok: true, value: { generation: 1 } });
     expect(stages).toBeGreaterThan(0);
@@ -581,6 +636,710 @@ describe("local projection index", () => {
       },
     );
     expect(stages).toBeGreaterThan(0);
+  });
+
+  test("cold waiters adopt before reacquiring beyond the former small-bound window", async () => {
+    const target = await temporaryProvider();
+    const checkpoint = new MutableProjectionCheckpoint();
+    const winnerSource = new MutableCanonicalSource(canonical(1));
+    const followerSource = new MutableCanonicalSource(canonical(1));
+    const blockedWinner = winnerSource.blockNextSnapshot();
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+
+    let followerCoordinations = 0;
+    let followerProjectionReads = 0;
+    let followerStages = 0;
+    let followerIsFollowing = false;
+    let signalFormerBoundExceeded!: () => void;
+    let releaseAdoptionRead!: () => void;
+    const formerBoundExceeded = new Promise<void>((resolve) => {
+      signalFormerBoundExceeded = resolve;
+    });
+    const adoptionReadReleased = new Promise<void>((resolve) => {
+      releaseAdoptionRead = resolve;
+    });
+    const followerResources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              followerProjectionReads += 1;
+              if (followerIsFollowing && followerProjectionReads === 8) {
+                signalFormerBoundExceeded();
+                await adoptionReadReleased;
+              }
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            followerStages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            followerCoordinations += 1;
+            const result = await resourceTarget.withCoordination(request, action);
+            if (!result.ok && result.diagnostics[0]?.code === "resource-coordination-contended") {
+              followerIsFollowing = true;
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    const winner = createLocalProjectionIndex({
+      bounds: smallFollowerBounds,
+      canonical: winnerSource,
+      checkpoint,
+      resources: target.resources,
+    });
+    const follower = createLocalProjectionIndex({
+      bounds: smallFollowerBounds,
+      canonical: followerSource,
+      checkpoint,
+      resources: followerResources,
+    });
+    const winnerLoad = winner.load();
+    await blockedWinner.started;
+    const followerLoad = follower.load();
+    await Promise.race([
+      formerBoundExceeded,
+      wait(3_000).then(() => {
+        throw new Error("follower did not progress beyond the former wait bound");
+      }),
+    ]);
+    const coordinationsBeforeAdoption = followerCoordinations;
+    blockedWinner.release();
+    const winnerResult = await winnerLoad;
+    if (!winnerResult.ok) throw new Error("expected coordinated winner publication");
+    releaseAdoptionRead();
+    const followerResult = await followerLoad;
+
+    expect(followerResult).toEqual(winnerResult);
+    expect(await follower.identity()).toMatchObject({ ok: true, value: { generation: 1 } });
+    expect(winnerSource.calls).toBe(1);
+    expect(followerSource.calls).toBe(1);
+    expect(followerProjectionReads).toBe(8);
+    expect(followerCoordinations).toBe(coordinationsBeforeAdoption);
+    expect(followerCoordinations).toBeGreaterThan(1);
+    expect(followerStages).toBe(0);
+  });
+
+  test("cold waiters cancel persistent exact contention without reads or writes afterward", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    let stages = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return failure({
+              code: "resource-coordination-contended",
+              message: "fixture coordination remains held",
+            });
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(
+      await createLocalProjectionIndex({
+        bounds: smallFollowerBounds,
+        canonical: source,
+        isCancellationRequested: () => coordinations >= 3,
+        resources,
+      }).load(),
+    ).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-load-cancelled" },
+        },
+      ],
+      ok: false,
+    });
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(3);
+    expect(projectionReads).toBe(3);
+    expect(stages).toBe(0);
+  });
+
+  test("contains throwing and malformed local cancellation predicates before projection I/O", async () => {
+    for (const mode of ["throw", "malformed"] as const) {
+      const target = await temporaryProvider();
+      const source = new MutableCanonicalSource(canonical(1));
+      let reads = 0;
+      let coordinations = 0;
+      const resources = new Proxy(target.resources, {
+        get(resourceTarget, property) {
+          if (property === "read") {
+            return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+              reads += 1;
+              return resourceTarget.read(request);
+            };
+          }
+          if (property === "withCoordination") {
+            return async (
+              request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+              action: () => unknown | Promise<unknown>,
+            ) => {
+              coordinations += 1;
+              return resourceTarget.withCoordination(request, action);
+            };
+          }
+          const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+          return typeof value === "function" ? value.bind(resourceTarget) : value;
+        },
+      }) as LocalResourceProvider;
+      const isCancellationRequested = () => {
+        if (mode === "throw") throw new Error("fixture cancellation failed");
+        return "yes" as unknown as boolean;
+      };
+
+      expect(
+        await createLocalProjectionIndex({
+          canonical: source,
+          isCancellationRequested,
+          resources,
+        }).load(),
+        mode,
+      ).toMatchObject({
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-cancellation-failed" },
+          },
+        ],
+        ok: false,
+      });
+      expect(source.calls, mode).toBe(0);
+      expect(reads, mode).toBe(0);
+      expect(coordinations, mode).toBe(0);
+    }
+  });
+
+  test("cold waiters stop after repeated contention reaches one terminal failure", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return coordinations <= 3
+              ? failure({
+                  code: "resource-coordination-contended",
+                  message: "fixture coordination remains held",
+                })
+              : failure({
+                  code: "coordination-release-failed",
+                  message: "fixture terminal coordination failure",
+                });
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(
+      await createLocalProjectionIndex({
+        bounds: smallFollowerBounds,
+        canonical: source,
+        resources,
+      }).load(),
+    ).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-coordination-failed" },
+        },
+      ],
+      ok: false,
+    });
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(4);
+    expect(projectionReads).toBe(4);
+  });
+
+  test("cold loads do not follow mixed failures after an exact contention retry", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            if (coordinations === 1) {
+              return failure({
+                code: "resource-coordination-contended",
+                message: "fixture first acquisition remains held",
+              });
+            }
+            return failure(
+              {
+                code: "coordination-action-failed",
+                message: "fixture action failed after acquisition",
+              },
+              {
+                code: "resource-coordination-contended",
+                message: "fixture secondary diagnostic must not authorize following",
+              },
+            );
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
+      {
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-coordination-failed" },
+          },
+        ],
+        ok: false,
+      },
+    );
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(2);
+    expect(projectionReads).toBe(2);
+  });
+
+  test("cold loads do not follow a contention-first result carrying another failure", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    let stages = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return failure(
+              {
+                code: "resource-coordination-contended",
+                message: "fixture contention is not the complete acquisition result",
+              },
+              {
+                code: "coordination-release-failed",
+                message: "fixture additional failure forbids following",
+              },
+            );
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
+      {
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-coordination-failed" },
+          },
+        ],
+        ok: false,
+      },
+    );
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(1);
+    expect(projectionReads).toBe(1);
+    expect(stages).toBe(0);
+  });
+
+  test("a cold waiter repairs after the failed winner releases without canonical writes", async () => {
+    const target = await temporaryProvider();
+    const projectionLocator = localProjectionIndexLocator();
+    const canonicalLocator = workspaceResourceLocator("groma", "intent", "sentinel.md");
+    if (!projectionLocator.ok || !canonicalLocator.ok) {
+      throw new Error("invalid projection repair fixture locator");
+    }
+    const malformedBytes = new TextEncoder().encode("{corrupt\n");
+    const canonicalBytes = new TextEncoder().encode("canonical intent remains exact\n");
+    await replace(target.resources, projectionLocator.value, malformedBytes);
+    await replace(target.resources, canonicalLocator.value, canonicalBytes);
+
+    let releaseWinner!: () => void;
+    let signalWinner!: () => void;
+    const winnerReleased = new Promise<void>((resolve) => {
+      releaseWinner = resolve;
+    });
+    const winnerStarted = new Promise<void>((resolve) => {
+      signalWinner = resolve;
+    });
+    const failedSource: ProjectionCanonicalSource = {
+      async snapshot() {
+        signalWinner();
+        await winnerReleased;
+        return failure({
+          code: "canonical-fixture-failed",
+          message: "fixture canonical repair failed",
+        });
+      },
+    };
+    const followerSource = new MutableCanonicalSource(canonical(1));
+    let followerCoordinations = 0;
+    let followerProjectionReads = 0;
+    const followerStages: WorkspaceResourceLocator[] = [];
+    let signalFollowerContention!: () => void;
+    const followerContended = new Promise<void>((resolve) => {
+      signalFollowerContention = resolve;
+    });
+    const followerResources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) followerProjectionReads += 1;
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            followerStages.push(locator);
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            followerCoordinations += 1;
+            const result = await resourceTarget.withCoordination(request, action);
+            if (!result.ok && result.diagnostics[0]?.code === "resource-coordination-contended") {
+              signalFollowerContention();
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    const winnerLoad = createLocalProjectionIndex({
+      canonical: failedSource,
+      resources: target.resources,
+    }).load();
+    await winnerStarted;
+    const followerLoad = createLocalProjectionIndex({
+      bounds: smallFollowerBounds,
+      canonical: followerSource,
+      resources: followerResources,
+    }).load();
+    await followerContended;
+    releaseWinner();
+
+    expect(await winnerLoad).toMatchObject({
+      diagnostics: [
+        { code: "projection-index-unavailable", details: { reason: "canonical-snapshot-failed" } },
+      ],
+      ok: false,
+    });
+    expect(await followerLoad).toMatchObject({ ok: true, value: { generation: 1 } });
+    expect(followerSource.calls).toBe(1);
+    expect(followerCoordinations).toBe(2);
+    expect(followerProjectionReads).toBeGreaterThanOrEqual(2);
+    expect(followerStages.length).toBeGreaterThan(0);
+    expect(followerStages.every((locator) => locator.startsWith(".groma-cache/"))).toBeTrue();
+    expect(
+      await readFile(path.join(target.root, ".groma-cache", "projection-index.json")),
+    ).not.toEqual(Buffer.from(malformedBytes));
+    expect(
+      await target.resources.read({
+        locator: canonicalLocator.value,
+        maxBytes: canonicalBytes.byteLength,
+      }),
+    ).toEqual({ ok: true, value: { bytes: canonicalBytes } });
+  });
+
+  test("a cold waiter reaps a dead projection owner and repairs only disposable state", async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-projection-dead-owner-"));
+    roots.push(workspaceRoot);
+    const coordinationRoot = allowsCustomLocalCoordinationRoot(process.platform)
+      ? await mkdtemp(path.join(tmpdir(), "groma-projection-dead-locks-"))
+      : undefined;
+    if (coordinationRoot !== undefined) roots.push(coordinationRoot);
+    const resources = await createLocalResourceProvider({
+      ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
+      staleLockMilliseconds: 1,
+      workspaceRoot,
+    });
+    const projectionLocator = localProjectionIndexLocator();
+    const canonicalLocator = workspaceResourceLocator("groma", "intent", "sentinel.md");
+    if (!projectionLocator.ok || !canonicalLocator.ok) {
+      throw new Error("invalid dead-owner projection fixture locator");
+    }
+    const malformedBytes = new TextEncoder().encode("{incomplete\n");
+    const canonicalBytes = new TextEncoder().encode("canonical generation remains unchanged\n");
+    await replace(resources, projectionLocator.value, malformedBytes);
+    await replace(resources, canonicalLocator.value, canonicalBytes);
+
+    let readyResolve!: () => void;
+    let readyReject!: (error: Error) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      readyResolve = resolve;
+      readyReject = reject;
+    });
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        coordinationChild,
+        workspaceRoot,
+        projectionLocator.value,
+        ...(coordinationRoot === undefined ? [] : [coordinationRoot]),
+      ],
+      ipc(message) {
+        if (typeof message !== "object" || message === null || !("type" in message)) return;
+        if (message.type === "ready") readyResolve();
+        if (message.type === "error") {
+          readyReject(new Error("coordination child reported an error"));
+        }
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    try {
+      await within(
+        Promise.race([
+          ready,
+          child.exited.then(async (code) => {
+            const stderr = await new Response(child.stderr).text();
+            throw new Error(`coordination child exited before readiness (${code}): ${stderr}`);
+          }),
+        ]),
+        5_000,
+        "dead-owner coordination readiness",
+      );
+      let coordinations = 0;
+      const staged: WorkspaceResourceLocator[] = [];
+      let signalContention!: () => void;
+      const contended = new Promise<void>((resolve) => {
+        signalContention = resolve;
+      });
+      const observedResources = new Proxy(resources, {
+        get(resourceTarget, property) {
+          if (property === "stageReplacement") {
+            return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+              staged.push(locator);
+              return resourceTarget.stageReplacement(locator, bytes);
+            };
+          }
+          if (property === "withCoordination") {
+            return async (
+              request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+              action: () => unknown | Promise<unknown>,
+            ) => {
+              coordinations += 1;
+              const result = await resourceTarget.withCoordination(request, action);
+              if (
+                !result.ok &&
+                result.diagnostics.length === 1 &&
+                result.diagnostics[0]?.code === "resource-coordination-contended"
+              ) {
+                signalContention();
+              }
+              return result;
+            };
+          }
+          const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+          return typeof value === "function" ? value.bind(resourceTarget) : value;
+        },
+      }) as LocalResourceProvider;
+      const source = new MutableCanonicalSource(canonical(1));
+      const load = createLocalProjectionIndex({
+        bounds: smallFollowerBounds,
+        canonical: source,
+        resources: observedResources,
+      }).load();
+      await within(contended, 5_000, "dead-owner projection contention");
+      child.kill();
+      await within(child.exited, 5_000, "dead projection owner exit");
+      await wait(5);
+
+      expect(await within(load, 5_000, "dead-owner projection repair")).toMatchObject({
+        ok: true,
+        value: { generation: 1 },
+      });
+      expect(coordinations).toBeGreaterThan(1);
+      expect(source.calls).toBe(1);
+      expect(staged.length).toBeGreaterThan(0);
+      expect(staged.every((locator) => locator.startsWith(".groma-cache/"))).toBeTrue();
+      expect(
+        await resources.read({
+          locator: canonicalLocator.value,
+          maxBytes: canonicalBytes.byteLength,
+        }),
+      ).toEqual({ ok: true, value: { bytes: canonicalBytes } });
+      expect(source.value.generation).toBe(generation(1));
+    } finally {
+      if (child.exitCode === null) {
+        child.kill();
+        await Promise.race([child.exited, Bun.sleep(2_000)]);
+      }
+      try {
+        child.disconnect();
+      } catch {
+        // The killed child may already have closed IPC.
+      }
+      child.unref();
+    }
+  });
+
+  test("eight cold waiters adopt one publication without changing canonical bytes", async () => {
+    const target = await temporaryProvider();
+    const canonicalLocator = workspaceResourceLocator("groma", "intent", "sentinel.md");
+    if (!canonicalLocator.ok) throw new Error("invalid canonical sentinel locator");
+    const canonicalBytes = new TextEncoder().encode("canonical graph generation remains exact\n");
+    await replace(target.resources, canonicalLocator.value, canonicalBytes);
+    const checkpoint = new MutableProjectionCheckpoint();
+    const winnerSource = new MutableCanonicalSource(canonical(1));
+    const blockedWinner = winnerSource.blockNextSnapshot();
+    let contendedWaiters = 0;
+    let waiterStages = 0;
+    let signalAllContended!: () => void;
+    const allContended = new Promise<void>((resolve) => {
+      signalAllContended = resolve;
+    });
+    const waiterResources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            waiterStages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            const result = await resourceTarget.withCoordination(request, action);
+            if (
+              !result.ok &&
+              result.diagnostics.length === 1 &&
+              result.diagnostics[0]?.code === "resource-coordination-contended"
+            ) {
+              contendedWaiters += 1;
+              if (contendedWaiters === 8) signalAllContended();
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+    const waiterSources = Array.from({ length: 8 }, () => new MutableCanonicalSource(canonical(1)));
+    const winnerLoad = createLocalProjectionIndex({
+      canonical: winnerSource,
+      checkpoint,
+      resources: target.resources,
+    }).load();
+    await blockedWinner.started;
+    const waiterLoads = waiterSources.map((canonical) =>
+      createLocalProjectionIndex({ canonical, checkpoint, resources: waiterResources }).load(),
+    );
+    await allContended;
+    blockedWinner.release();
+    const winnerResult = await winnerLoad;
+    if (!winnerResult.ok) throw new Error("expected winner publication");
+    const waiterResults = await Promise.all(waiterLoads);
+
+    expect(waiterResults.every((result) => result.ok)).toBeTrue();
+    expect(
+      waiterResults.every((result) => result.ok && result.value.generation === generation(1)),
+    ).toBeTrue();
+    expect(waiterSources.every((source) => source.calls > 0)).toBeTrue();
+    expect(waiterStages).toBe(0);
+    expect(
+      await target.resources.read({
+        locator: canonicalLocator.value,
+        maxBytes: canonicalBytes.byteLength,
+      }),
+    ).toEqual({ ok: true, value: { bytes: canonicalBytes } });
   });
 
   test("keeps durable adoption provisional until ignore hygiene succeeds", async () => {
@@ -1453,7 +2212,7 @@ describe("local projection index", () => {
           );
           expect(await index.pageCatalog(identity.value, { limit: 1 })).toMatchObject({ ok: true });
         }
-        expect(source.calls).toBe(3);
+        expect(source.calls).toBe(5);
       }
     }
   });
@@ -1583,7 +2342,7 @@ describe("local projection index", () => {
     if (!reopenedIdentity.ok) throw new Error("expected branch projection identity");
     expect(reopenedIdentity.value.generation).toBe(firstIdentity.value.generation);
     expect(reopenedIdentity.value.fingerprint).not.toBe(firstIdentity.value.fingerprint);
-    expect(source.calls).toBe(2);
+    expect(source.calls).toBe(3);
     expect(await reopened.exactEntity(reopenedIdentity.value, ids.child)).toMatchObject({
       ok: true,
       value: {
@@ -1729,13 +2488,17 @@ describe("local projection index", () => {
     const canonicalBytes = new TextEncoder().encode("canonical intent bytes\n");
     await replace(resources, canonicalLocator.value, canonicalBytes);
 
+    const callsBeforeAbsentLoad = source.calls;
     expect((await index.load()).ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeAbsentLoad + 1);
     const projectionLocator = localProjectionIndexLocator();
     if (!projectionLocator.ok) throw new Error("invalid projection locator");
     await replace(resources, projectionLocator.value, new TextEncoder().encode("{corrupt\n"));
     source.value = canonical(2, { childName: "After corruption" });
+    const callsBeforeCorruptLoad = source.calls;
     const repaired = await index.load();
     expect(repaired.ok && Number(repaired.value.generation)).toBe(2);
+    expect(source.calls).toBe(callsBeforeCorruptLoad + 1);
 
     source.value = canonical(4, { childName: "After event gap", extraRelation: true });
     const missed = createGraphCommittedEvent(4, {
@@ -1748,7 +2511,9 @@ describe("local projection index", () => {
     expect(afterGap.ok && Number(afterGap.value.generation)).toBe(4);
 
     expect((await resources.removeResource(projectionLocator.value)).state).toBe("committed");
+    const callsBeforeDeletedLoad = source.calls;
     expect((await index.load()).ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeDeletedLoad + 1);
     expect(
       await resources.read({
         locator: canonicalLocator.value,
@@ -1828,9 +2593,11 @@ describe("local projection index", () => {
     await replace(resources, canonicalLocator.value, canonicalBytes);
     await replace(resources, projectionLocator.value, new Uint8Array(4_097));
 
+    const callsBeforeRepair = source.calls;
     const repaired = await index.load();
 
     expect(repaired.ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeRepair + 1);
     expect(
       await resources.read({ locator: projectionLocator.value, maxBytes: 4_096 }),
     ).toMatchObject({ ok: true });

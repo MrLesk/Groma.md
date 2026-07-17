@@ -597,6 +597,18 @@ completed safely, callers receive the stable `projection-index-unavailable` diag
 Deleting the cache can therefore change only query availability and rebuild cost, never
 blueprint meaning.
 
+A loader that cannot complete the full read-only adoption fence and encounters one exact
+projection-lease contention result retries without an elapsed-time timeout: each iteration
+safely checks optional local cancellation, attempts that complete adoption fence again, and
+only then attempts coordination. Waits use capped exponential backoff from 20 to 500
+milliseconds. A completed publication is adopted without another acquisition; a waiter that
+acquires becomes the exclusive repairer and may publish only disposable projection resources
+and continuity metadata. Action, release, provider, and mixed-diagnostic failures never
+authorize retry. The official Host connects plugin cancellation to this persistence-local
+wait without changing Core's projection capability, while direct local callers without
+cancellation may wait indefinitely behind permanent exact contention. Cancellation does not
+interrupt a publication after the waiter has acquired the lease.
+
 A generation match alone never establishes currency because an ignored cache may survive
 a branch or checkout change. Load requires both generation and the exact canonical-content
 fingerprint. Incremental publication likewise verifies the complete candidate fingerprint
@@ -631,19 +643,30 @@ directories is deferred to the organization-scale validation in GROM-53.
 After a fresh canonical validation, an unchanged complete index may adopt the existing
 bundle without rewriting it only when its manifest and the durable journal checkpoint
 agree exactly. Missing, oversized, malformed, or semantically mismatched current
-manifests are reconstructable disposable state. Provider I/O and checkpoint I/O fail
-closed without publication, and a warm partial read does not force a canonical reload.
+manifests are reconstructable disposable state. Persistent provider I/O and checkpoint
+I/O failures fail closed without publication, and a warm partial read does not force a
+canonical reload.
 Missing or corrupt authenticated resources use a distinct forced-publication repair path,
 so repair cannot be mistaken for ordinary unchanged-load adoption. Caller page and batch
 limits remain independent from the local provider's private chunk size; providers
 aggregate internal chunks behind the same Core read contract.
 
-Checkpoint reads currently share the canonical journal's exclusive fail-fast lease. A
-prepared writer therefore makes them deterministically unavailable without pending-state
-inspection or projection publication. General concurrent read-only processes, writer
-exclusion, recovery, stale-lock safety, and portability are the explicit scope of GROM-31.
-Checkpoint lease-release uncertainty is contained in the Result contract and never masks
-an earlier specific validation or generation diagnostic.
+Stable-idle canonical snapshots and checkpoint reads are optimistic persistence-local
+reads. A canonical snapshot is accepted only when its adapter load is fenced by two idle
+journal observations at the same generation. A checkpoint is accepted only when two idle
+observations agree exactly on generation, watermark, fingerprint, integrity root, and
+resource count. Neither path may bypass a retained or in-use transaction lease. A warmed
+exact-matching complete projection may therefore validate canonical identity, manifest,
+checkpoint, and provider-owned ignore hygiene and adopt the existing bundle without
+coordination or publication. Any non-idle or changing observation, unavailable state,
+missing hygiene, continuity mismatch, or repair requirement falls back to the existing
+exclusive settlement, recovery, rebuild, and publication path; projection repair or
+publication contention follows the cancellation-aware retry above. Checkpoint recording remains
+exclusive. Lease-release uncertainty is contained in the Result
+contract and never masks an earlier specific validation or generation diagnostic.
+An active prepared or committing writer therefore still makes canonical snapshot and
+checkpoint reads fail fast; this delivery permits independent readers of settled state,
+not reads through an in-progress writer or recovery.
 
 The tracked transaction journal binds its reserved projection watermark to the exact
 bounded projection fingerprint, partial-read integrity root, and resource count. This
@@ -1177,14 +1200,26 @@ Startup reads only declared local paths. Before import it requires the exact sta
 manifest bytes and every enabled entry module byte to match the deterministic lock. It
 then requires an exact trust grant bound to scope, canonical workspace location,
 canonical package location, package name, manifest hash, entry path, and entry hash.
-Drift fails before module evaluation. Supported package mutations and startup share one
-workspace-scoped package-state coordination lease. Direct edits do not participate in
-that lease, so startup re-reads canonical configuration, exact lock, and exact user state
-after each entry is materialized and immediately before importing it. The Host evaluates
-the already-read entry bytes through one immutable in-memory module URL; it never reopens
-the mutable entry path for execution. Manifest and entry opens additionally re-check the
-post-open canonical path, current file identity, and containment within the previously
-resolved package root before accepting captured bytes.
+Drift fails before module evaluation. Supported package mutations, recovery, and
+publication retain one exclusive workspace-scoped package-state coordination lease.
+Read-only startup takes that lease briefly to observe canonical configuration, exact lock,
+and exact user state as one coherent projection, then releases it before materialization
+or import. The same brief fence exact-revalidates all three surfaces after materialization,
+immediately before each import, and once more after the final import. The final check also
+applies when zero entries are enabled; absent contained user state is attested within the
+same coherent fence. A reader follows ordinary brief contention for at most two seconds
+per coherent observation, at 25-millisecond intervals, and creates no package-state writes
+while waiting; any other coordination failure fails closed as unavailable package state.
+Startup may therefore observe only a tuple between writers or follow ordinary contention
+until the writer settles; a tuple changed from the initial capture fails closed. Direct
+edits are detected by the same revalidation. Read-only startup holds no package-state lease
+while plugin bytes are read or evaluated; enablement remains a mutation and retains its
+exclusive lease across selected-entry materialization and evaluation. The Host evaluates
+the already-read entry bytes through one immutable
+in-memory module URL; it never reopens the mutable entry path for execution. Manifest and
+entry opens additionally re-check the post-open canonical path, current file identity,
+and containment within the previously resolved package root before accepting captured
+bytes.
 
 The Host validates unsupported project requests, unavailable official selections,
 additional Host registration namespaces, and selected Host registration defects that

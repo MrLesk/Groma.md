@@ -494,6 +494,8 @@ describe("CLI program", () => {
     });
   });
 
+  // This regression deliberately renders multi-megabyte escaped JSON through the complete Host.
+  // Keep a finite CI allowance above Bun's 5s unit default without relaxing production bounds.
   test("renders a near-max official two-document limit-one traversal below eight MiB", async () => {
     const root = await workspace();
     const source = "ent_00000000000000000000000000000001";
@@ -565,8 +567,10 @@ describe("CLI program", () => {
       },
     });
     expect(traversed.text).not.toContain("cli-output-bound-exceeded");
-  });
+  }, 20_000);
 
+  // This integration regression repeatedly restarts the Host across the complete public workflow.
+  // Keep a finite CI allowance above Bun's 5s unit default without changing global test behavior.
   test("executes the complete one-shot component workflow across host restarts", async () => {
     const root = await workspace();
     const domain = "ent_00000000000000000000000000000001";
@@ -985,7 +989,7 @@ describe("CLI program", () => {
       ok: true,
       result: { value: grandchild },
     });
-  });
+  }, 20_000);
 
   test("rejects an export cursor from different content at the same generation", async () => {
     const historyA = await workspace();
@@ -1790,7 +1794,7 @@ export const plugin = Object.freeze({
   });
 
   test("classifies transient bootstrap and package-state reads and cleans once", async () => {
-    for (const failureRead of [2, 3, 4, 5] as const) {
+    for (const failureRead of [2, 3, 4, 5, 6, 7] as const) {
       const root = await workspace();
       await Bun.write(
         path.join(root, "groma", "groma.yaml"),
@@ -1857,7 +1861,8 @@ export const plugin = Object.freeze({
         },
       );
 
-      const expectedExit = failureRead === 3 ? CLI_EXIT.workspace : CLI_EXIT.infrastructure;
+      const packageLockFailure = failureRead === 3 || failureRead === 5;
+      const expectedExit = packageLockFailure ? CLI_EXIT.workspace : CLI_EXIT.infrastructure;
       expect(exitCode, String(failureRead)).toBe(expectedExit);
       expect(captured.errors, String(failureRead)).toEqual([]);
       expect(captured.output, String(failureRead)).toHaveLength(1);
@@ -1868,18 +1873,16 @@ export const plugin = Object.freeze({
         result: {
           diagnostics: [
             {
-              code:
-                failureRead === 3
-                  ? "plugin-package-lock-unavailable"
-                  : failureRead === 4
-                    ? "workspace-discovery-failed"
-                    : "workspace-configuration-provider-failure",
-              message:
-                failureRead === 3
-                  ? "The exact plugin package lock is unavailable"
-                  : failureRead === 4
-                    ? "Workspace configuration discovery failed"
-                    : "Workspace configuration access failed",
+              code: packageLockFailure
+                ? "plugin-package-lock-unavailable"
+                : failureRead === 6
+                  ? "workspace-discovery-failed"
+                  : "workspace-configuration-provider-failure",
+              message: packageLockFailure
+                ? "The exact plugin package lock is unavailable"
+                : failureRead === 6
+                  ? "Workspace configuration discovery failed"
+                  : "Workspace configuration access failed",
             },
           ],
           status: "startup-failure",
@@ -1900,11 +1903,11 @@ export const plugin = Object.freeze({
       expect(
         events.filter((event) => event === "optional:start"),
         String(failureRead),
-      ).toHaveLength(failureRead === 5 ? 1 : 0);
+      ).toHaveLength(failureRead === 7 ? 1 : 0);
       expect(
         events.filter((event) => event === "optional:stop"),
         String(failureRead),
-      ).toHaveLength(failureRead === 5 ? 1 : 0);
+      ).toHaveLength(failureRead === 7 ? 1 : 0);
     }
   });
 

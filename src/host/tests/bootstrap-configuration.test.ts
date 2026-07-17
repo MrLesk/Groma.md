@@ -664,7 +664,7 @@ describe("bootstrap configuration", () => {
       expect({ optionalStarts, phaseZeroEvents, reads }, mutation).toEqual({
         optionalStarts: 0,
         phaseZeroEvents: ["start", "stop"],
-        reads: 2,
+        reads: mutation === "beta" || mutation === "project" ? 3 : 2,
       });
     }
   });
@@ -747,7 +747,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: async (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 5) {
+        if (reads === 7) {
           await Bun.write(configurationPath, "schema: groma/v0.1\nplugins:\n  - acme.project\n");
         }
       },
@@ -763,7 +763,7 @@ describe("bootstrap configuration", () => {
       ],
       ok: false,
     });
-    expect(reads).toBe(5);
+    expect(reads).toBe(7);
     expect(events).toContain("optional:start");
     expect(events).toContain("optional:stop");
     expect(events.at(-1)).toBe("phase-zero:stop");
@@ -808,12 +808,13 @@ describe("bootstrap configuration", () => {
       diagnostics: [
         {
           code: "workspace-configuration-changed",
-          message: "Workspace configuration changed during bootstrap; restart after changes settle",
+          message:
+            "Workspace configuration changed during package startup; restart after changes settle",
         },
       ],
       ok: false,
     });
-    expect(resourceReads).toBe(6);
+    expect(resourceReads).toBe(7);
     expect(Reflect.get(globalThis, Symbol.for(counterKey))).toBe(1);
     Reflect.deleteProperty(globalThis, Symbol.for(counterKey));
   });
@@ -856,7 +857,7 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 5) throw new Error("transient read failure");
+        if (reads === 7) throw new Error("transient read failure");
       },
       surface: idleSurface(),
     });
@@ -865,7 +866,7 @@ describe("bootstrap configuration", () => {
       diagnostics: [{ code: "host-plugin-cleanup-failed", message: "Host plugin cleanup failed" }],
       ok: false,
     });
-    expect(reads).toBe(5);
+    expect(reads).toBe(7);
     for (const event of [
       "official.bootstrap-cleanup-probe:start",
       "official.bootstrap-cleanup-probe:stop",
