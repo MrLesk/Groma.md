@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readdirSync, watch } from "node:fs";
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +17,7 @@ const maximumCommandOutputBytes = 8 * 1024 * 1024 + 64 * 1024;
 const maximumPageRequests = 32;
 const processTerminationGraceMilliseconds = 5_000;
 const processSettlementTimeoutMilliseconds = 10_000;
+const projectionStageObservationTimeoutMilliseconds = 15_000;
 
 const ids = Object.freeze({
   checkout: "ent_10000000000000000000000000000001",
@@ -45,6 +47,9 @@ interface ProcessResult {
 
 interface CapturedProcess {
   readonly exited: Promise<number>;
+  readonly forceTerminate: () => void;
+  readonly hasExited: () => boolean;
+  readonly pid: number;
   readonly settle: () => Promise<void>;
   readonly terminate: () => void;
   readonly wait: () => Promise<readonly [number, string, string]>;
@@ -170,7 +175,6 @@ function spawnCapturedProcess(
   args: readonly string[],
   options: {
     readonly acceptsInput?: boolean;
-    readonly maxBufferBytes?: number;
     readonly stderrBytes?: number;
     readonly stdoutBytes?: number;
     readonly timeoutMilliseconds?: number;
@@ -181,9 +185,6 @@ function spawnCapturedProcess(
     cmd: [executable, ...args],
     cwd: scenario.workspace,
     env: { ...process.env, HOME: scenario.home, USERPROFILE: scenario.home },
-    ...(options.maxBufferBytes === undefined
-      ? {}
-      : { killSignal: "SIGKILL", maxBuffer: options.maxBufferBytes }),
     stderr: "pipe",
     stdin: options.acceptsInput === true ? "pipe" : "ignore",
     stdout: "pipe",
@@ -269,6 +270,9 @@ function spawnCapturedProcess(
 
   return Object.freeze({
     exited,
+    forceTerminate,
+    hasExited: () => child.exitCode !== null || child.signalCode !== null,
+    pid: child.pid,
     settle,
     terminate,
     wait: () => Promise.race([result, lifetimeExpired]),
@@ -794,7 +798,7 @@ export const plugin = Object.freeze({
 async function verifyInterruptedRead(executable: string, scenario: Scenario): Promise<void> {
   await success(executable, scenario, ["init"]);
   const interruptionIds = Array.from(
-    { length: 80 },
+    { length: 40 },
     (_, index) => `ent_${(0x3000 + index).toString(16).padStart(32, "0")}`,
   );
   const padding = "x".repeat(55_000);
@@ -807,7 +811,7 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
     },
   });
   const intentRoot = path.join(scenario.workspace, "groma", "intent", "00");
-  // These 79 hand-written canonical Markdown fixtures intentionally create a representative cold
+  // These 39 hand-written canonical Markdown fixtures intentionally create a representative cold
   // projection rebuild; the compiled public CLI validates every fixture immediately afterward.
   await Promise.all(
     interruptionIds
@@ -837,35 +841,128 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
   const before = await canonicalSnapshot(scenario.workspace);
   const cacheRoot = path.join(scenario.workspace, ".groma-cache");
   await rm(cacheRoot, { force: true, recursive: true });
+  await mkdir(cacheRoot, { recursive: true });
+  const ignorePath = path.join(cacheRoot, ".gitignore");
+  await writeFile(ignorePath, "*\n", "utf8");
 
-  const captured = spawnCapturedProcess(
-    executable,
-    scenario,
-    ["--format", "json", "blueprint", "export", "--limit", "1"],
-    {
-      maxBufferBytes: 1,
-      stderrBytes: 1_048_576,
-      stdoutBytes: 1_048_576,
-      timeoutMilliseconds: 15_000,
+  const projectionIndexPath = path.join(cacheRoot, "projection-index.json");
+  const projectionReadManifestPath = path.join(cacheRoot, "projection-read-current.json");
+  assert.deepEqual(await readdir(cacheRoot), [".gitignore"], "cold cache was not fresh");
+  assert.equal(await readFile(ignorePath, "utf8"), "*\n", "cold cache ignore file changed");
+  await requireMissing(projectionIndexPath, "cold cache already contained a projection index");
+  await requireMissing(
+    projectionReadManifestPath,
+    "cold cache already contained a projection read manifest",
+  );
+  const projectionStagePrefix = `.groma-stage-${createHash("sha256")
+    .update(".groma-cache/projection-index.json")
+    .digest("hex")}-`;
+  let captured: CapturedProcess | undefined;
+  let childExitedBeforeStage = false;
+  let observedStagePath: string | undefined;
+  let pendingStageName: string | undefined;
+  let watcherFailure: Error | undefined;
+  const observeStageName = (name: string): void => {
+    if (!name.startsWith(projectionStagePrefix)) return;
+    if (captured === undefined) {
+      pendingStageName = name;
+      return;
+    }
+    const expectedPrefix = `${projectionStagePrefix}${captured.pid}-`;
+    if (
+      observedStagePath !== undefined ||
+      !name.startsWith(expectedPrefix) ||
+      name.length === expectedPrefix.length
+    ) {
+      return;
+    }
+    observedStagePath = path.join(cacheRoot, name);
+    captured.forceTerminate();
+  };
+  const watcher = watch(
+    cacheRoot,
+    { encoding: "utf8", persistent: false },
+    (_eventType, filename) => {
+      if (filename !== null) observeStageName(filename);
     },
   );
+  watcher.on("error", (error) => {
+    watcherFailure = error;
+    if (captured !== undefined) captured.terminate();
+  });
+  let capturedResult: readonly [number, string, string] | undefined;
   let operationFailed = false;
   try {
-    const [exitCode, stdout, stderr] = await captured.wait();
-    assert.equal(captured.wasForceKilled(), true, "export output bound did not force SIGKILL");
-    assert.notEqual(exitCode, 0, "buffer-limited cold export completed successfully");
-    assert.equal(stderr, "", "interrupted export wrote unexpected stderr");
-    assert.ok(stdout.length > 1, "buffer-limited export never crossed its output boundary");
+    captured = spawnCapturedProcess(
+      executable,
+      scenario,
+      ["--format", "json", "blueprint", "export", "--limit", "1"],
+      {
+        stderrBytes: 1_048_576,
+        stdoutBytes: 1_048_576,
+        timeoutMilliseconds: 30_000,
+      },
+    );
+    const processResult = captured.wait();
+    void processResult.catch(() => undefined);
+    if (watcherFailure !== undefined) captured.terminate();
+    else if (pendingStageName !== undefined) observeStageName(pendingStageName);
+    // The exporter is a separate process, so this bounded synchronous observation loop can detect
+    // its exclusive stage and send SIGKILL without timer or fs.watch delivery latency.
+    const observationDeadline = Date.now() + projectionStageObservationTimeoutMilliseconds;
+    while (
+      observedStagePath === undefined &&
+      !captured.hasExited() &&
+      Date.now() < observationDeadline
+    ) {
+      const entries = readdirSync(cacheRoot);
+      assert.ok(entries.length <= 64, "cold cache root exceeded its observation bound");
+      for (const entry of entries) observeStageName(entry);
+    }
+    childExitedBeforeStage = observedStagePath === undefined && captured.hasExited();
+    if (observedStagePath === undefined && !childExitedBeforeStage) {
+      throw new Error(
+        `cold export did not stage its projection index within ${projectionStageObservationTimeoutMilliseconds}ms`,
+      );
+    }
+    capturedResult = await processResult;
   } catch (error) {
     operationFailed = true;
     throw error;
   } finally {
     try {
-      await captured.settle();
-    } catch (cleanupError) {
-      if (!operationFailed) throw cleanupError;
+      watcher.close();
+    } finally {
+      try {
+        if (captured !== undefined) await captured.settle();
+      } catch (cleanupError) {
+        if (!operationFailed) throw cleanupError;
+      }
     }
   }
+  if (watcherFailure !== undefined) throw watcherFailure;
+  assert.notEqual(
+    capturedResult,
+    undefined,
+    "interrupted export did not report its process result",
+  );
+  const [exitCode, stdout, stderr] = capturedResult;
+  assert.equal(
+    childExitedBeforeStage,
+    false,
+    "cold export exited before staging its projection index",
+  );
+  assert.ok(observedStagePath !== undefined, "cold export never staged its projection index");
+  assert.equal(captured.wasForceKilled(), true, "staged projection rebuild did not force SIGKILL");
+  assert.notEqual(exitCode, 0, "interrupted cold export completed successfully");
+  assert.equal(stdout, "", "interrupted export wrote unexpected stdout");
+  assert.equal(stderr, "", "interrupted export wrote unexpected stderr");
+  assert.equal((await lstat(observedStagePath)).isFile(), true, "projection stage did not survive");
+  await requireMissing(projectionIndexPath, "interrupted export published its projection index");
+  await requireMissing(
+    projectionReadManifestPath,
+    "interrupted export published its projection read manifest",
+  );
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), before);
   const recovered = await exportAll(executable, scenario, 100);
   assert.deepEqual(recovered, primedExport, "interrupted export recovery changed the blueprint");

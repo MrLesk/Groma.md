@@ -58,50 +58,227 @@ function hasPrefix(bytes: Uint8Array, expected: readonly number[]): boolean {
   return expected.every((value, index) => bytes[index] === value);
 }
 
+function checkedTableEnd(offset: number, entrySize: number, count: number): number | undefined {
+  if (
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    !Number.isSafeInteger(entrySize) ||
+    entrySize <= 0 ||
+    !Number.isSafeInteger(count) ||
+    count <= 0
+  ) {
+    return undefined;
+  }
+  const length = entrySize * count;
+  const end = offset + length;
+  return Number.isSafeInteger(length) && Number.isSafeInteger(end) ? end : undefined;
+}
+
+function boundedUint64(view: DataView, offset: number): number | undefined {
+  const value = view.getBigUint64(offset, true);
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : undefined;
+}
+
+function verifyMachOHeader(target: Target, header: Uint8Array, view: DataView): void {
+  if (
+    header.byteLength < 32 ||
+    !hasPrefix(header, [0xcf, 0xfa, 0xed, 0xfe]) ||
+    view.getUint32(4, true) !== 0x0100000c
+  ) {
+    throw new Error(`${target.target} is not a Mach-O arm64 image`);
+  }
+  if (view.getUint32(12, true) !== 0x00000002) {
+    throw new Error(`${target.target} is not a Mach-O MH_EXECUTE image`);
+  }
+}
+
+function verifyElfHeader(
+  target: Target,
+  header: Uint8Array,
+  view: DataView,
+  fileSize: number,
+): void {
+  if (
+    header.byteLength < 64 ||
+    !hasPrefix(header, [0x7f, 0x45, 0x4c, 0x46]) ||
+    header[4] !== 2 ||
+    header[5] !== 1 ||
+    header[6] !== 1 ||
+    view.getUint16(18, true) !== 0x003e ||
+    view.getUint32(20, true) !== 1
+  ) {
+    throw new Error(`${target.target} is not an ELF64 little-endian x86-64 image`);
+  }
+  const imageType = view.getUint16(16, true);
+  if (imageType !== 2 && imageType !== 3) {
+    throw new Error(`${target.target} is neither an ELF ET_EXEC nor ET_DYN image`);
+  }
+  const entry = boundedUint64(view, 24);
+  const programOffset = boundedUint64(view, 32);
+  const headerSize = view.getUint16(52, true);
+  const programEntrySize = view.getUint16(54, true);
+  const programCount = view.getUint16(56, true);
+  const programEnd =
+    programOffset === undefined
+      ? undefined
+      : checkedTableEnd(programOffset, programEntrySize, programCount);
+  if (
+    entry === undefined ||
+    entry === 0 ||
+    headerSize !== 64 ||
+    programOffset === undefined ||
+    programOffset < headerSize ||
+    programEntrySize !== 56 ||
+    programEnd === undefined ||
+    programEnd > header.byteLength ||
+    programEnd > fileSize
+  ) {
+    throw new Error(`${target.target} has an invalid ELF executable or program-header table`);
+  }
+
+  let executableLoad = false;
+  let interpreter = false;
+  for (let index = 0; index < programCount; index += 1) {
+    const offset = programOffset + index * programEntrySize;
+    const type = view.getUint32(offset, true);
+    const flags = view.getUint32(offset + 4, true);
+    const segmentOffset = boundedUint64(view, offset + 8);
+    const segmentFileSize = boundedUint64(view, offset + 32);
+    const segmentMemorySize = boundedUint64(view, offset + 40);
+    if (
+      segmentOffset === undefined ||
+      segmentFileSize === undefined ||
+      segmentMemorySize === undefined ||
+      segmentOffset > fileSize - segmentFileSize
+    ) {
+      throw new Error(`${target.target} has an out-of-bounds ELF program segment`);
+    }
+    if (type === 1) {
+      if (segmentFileSize > segmentMemorySize) {
+        throw new Error(`${target.target} has an invalid ELF PT_LOAD size`);
+      }
+      if ((flags & 0x1) !== 0 && segmentMemorySize > 0) executableLoad = true;
+    }
+    if (type === 3 && segmentFileSize > 1) interpreter = true;
+  }
+  if (!executableLoad) {
+    throw new Error(`${target.target} has no executable ELF PT_LOAD segment`);
+  }
+  if (imageType === 3 && !interpreter) {
+    throw new Error(`${target.target} is an ELF ET_DYN image without PT_INTERP`);
+  }
+}
+
+function verifyPeHeader(
+  target: Target,
+  header: Uint8Array,
+  view: DataView,
+  fileSize: number,
+): void {
+  if (header.byteLength < 64 || !hasPrefix(header, [0x4d, 0x5a])) {
+    throw new Error(`${target.target} is not a PE image`);
+  }
+  const peOffset = view.getUint32(0x3c, true);
+  const coffEnd = peOffset + 24;
+  if (
+    peOffset < 64 ||
+    !Number.isSafeInteger(coffEnd) ||
+    coffEnd > header.byteLength ||
+    coffEnd > fileSize ||
+    !hasPrefix(header.subarray(peOffset), [0x50, 0x45, 0x00, 0x00])
+  ) {
+    throw new Error(`${target.target} has a malformed PE/COFF header`);
+  }
+  const expectedMachine = target.architecture === "arm64" ? 0xaa64 : 0x8664;
+  if (view.getUint16(peOffset + 4, true) !== expectedMachine) {
+    throw new Error(`${target.target} has the wrong PE machine architecture`);
+  }
+  const sectionCount = view.getUint16(peOffset + 6, true);
+  const optionalSize = view.getUint16(peOffset + 20, true);
+  const characteristics = view.getUint16(peOffset + 22, true);
+  if ((characteristics & 0x0002) === 0 || (characteristics & 0x2000) !== 0) {
+    throw new Error(`${target.target} is not a non-DLL PE executable image`);
+  }
+  const optionalOffset = peOffset + 24;
+  const optionalEnd = optionalOffset + optionalSize;
+  const sectionEnd = checkedTableEnd(optionalEnd, 40, sectionCount);
+  if (
+    sectionCount === 0 ||
+    sectionCount > 96 ||
+    optionalSize < 112 ||
+    !Number.isSafeInteger(optionalEnd) ||
+    optionalEnd > header.byteLength ||
+    optionalEnd > fileSize ||
+    view.getUint16(optionalOffset, true) !== 0x020b ||
+    sectionEnd === undefined ||
+    sectionEnd > header.byteLength ||
+    sectionEnd > fileSize
+  ) {
+    throw new Error(`${target.target} has invalid PE32+ optional or section headers`);
+  }
+  const entry = view.getUint32(optionalOffset + 16, true);
+  const sectionAlignment = view.getUint32(optionalOffset + 32, true);
+  const fileAlignment = view.getUint32(optionalOffset + 36, true);
+  const imageSize = view.getUint32(optionalOffset + 56, true);
+  const headerSize = view.getUint32(optionalOffset + 60, true);
+  if (
+    entry === 0 ||
+    sectionAlignment === 0 ||
+    fileAlignment === 0 ||
+    sectionAlignment < fileAlignment ||
+    imageSize <= headerSize ||
+    entry >= imageSize ||
+    headerSize < sectionEnd ||
+    headerSize > fileSize
+  ) {
+    throw new Error(`${target.target} has invalid PE32+ entry, image, or header bounds`);
+  }
+
+  let executableSection = false;
+  for (let index = 0; index < sectionCount; index += 1) {
+    const offset = optionalEnd + index * 40;
+    const virtualSize = view.getUint32(offset + 8, true);
+    const virtualAddress = view.getUint32(offset + 12, true);
+    const rawSize = view.getUint32(offset + 16, true);
+    const rawOffset = view.getUint32(offset + 20, true);
+    const sectionCharacteristics = view.getUint32(offset + 36, true);
+    const virtualSpan = Math.max(virtualSize, rawSize);
+    if (
+      (rawSize > 0 && (rawOffset < headerSize || rawOffset > fileSize - rawSize)) ||
+      virtualAddress > imageSize - virtualSpan
+    ) {
+      throw new Error(`${target.target} has an out-of-bounds PE section`);
+    }
+    if ((sectionCharacteristics & 0x20000000) !== 0 && virtualSpan > 0) {
+      executableSection = true;
+    }
+  }
+  if (!executableSection) {
+    throw new Error(`${target.target} has no executable PE section`);
+  }
+}
+
 async function verifyExecutableHeader(target: Target): Promise<void> {
   const executable = path.join(projectRoot, target.executable);
   const handle = await open(executable, "r");
   try {
+    const stats = await handle.stat();
+    if (!Number.isSafeInteger(stats.size) || stats.size <= 0) {
+      throw new Error(`${target.target} has an invalid executable size`);
+    }
     const bytes = new Uint8Array(65_536);
     const { bytesRead } = await handle.read(bytes, 0, bytes.byteLength, 0);
     const header = bytes.subarray(0, bytesRead);
     const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
     if (target.platform === "darwin") {
-      if (
-        header.byteLength < 8 ||
-        !hasPrefix(header, [0xcf, 0xfa, 0xed, 0xfe]) ||
-        view.getUint32(4, true) !== 0x0100000c
-      ) {
-        throw new Error(`${target.target} is not a Mach-O arm64 executable`);
-      }
+      verifyMachOHeader(target, header, view);
       return;
     }
     if (target.platform === "linux") {
-      if (
-        header.byteLength < 20 ||
-        !hasPrefix(header, [0x7f, 0x45, 0x4c, 0x46]) ||
-        header[4] !== 2 ||
-        header[5] !== 1 ||
-        view.getUint16(18, true) !== 0x003e
-      ) {
-        throw new Error(`${target.target} is not an ELF x86-64 executable`);
-      }
+      verifyElfHeader(target, header, view, stats.size);
       return;
     }
-    if (header.byteLength < 64 || !hasPrefix(header, [0x4d, 0x5a])) {
-      throw new Error(`${target.target} is not a PE executable`);
-    }
-    const peOffset = view.getUint32(0x3c, true);
-    if (
-      peOffset > header.byteLength - 6 ||
-      !hasPrefix(header.subarray(peOffset), [0x50, 0x45, 0x00, 0x00])
-    ) {
-      throw new Error(`${target.target} has a malformed PE header`);
-    }
-    const expectedMachine = target.architecture === "arm64" ? 0xaa64 : 0x8664;
-    if (view.getUint16(peOffset + 4, true) !== expectedMachine) {
-      throw new Error(`${target.target} has the wrong PE machine architecture`);
-    }
+    verifyPeHeader(target, header, view, stats.size);
   } finally {
     await handle.close();
   }

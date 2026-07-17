@@ -285,6 +285,15 @@ one exact
 release, mixed-diagnostic, and provider failures return immediately. Retry waits start at
 20 milliseconds and use capped exponential backoff up to 500 milliseconds, with no total
 elapsed-time limit.
+Before waiting after that exact callback contention, `load()` makes one direct acquisition
+of the same projection lease. That acquisition uses persistent coordination's immediate
+double proof of a dead PID, so a cold reader can recover a crashed publisher without
+weakening callback coordination's stale-age policy. Live, PID-reused, malformed, and
+otherwise ambiguous owners remain contended. If the direct acquisition succeeds, the load
+action runs at most once and the lease is always released; one cleanup retry is bounded,
+and any release uncertainty withholds the action result even when that retry removes the
+lease. `rebuild()` and incremental updates remain callback-only and fail fast on
+contention.
 If the completed publication becomes adoptable, the waiter returns without reacquiring or
 writing. If it acquires the lease first, it becomes the coordinated repairer and may
 replace only reconstructable projection resources, partial bundles, continuity metadata,

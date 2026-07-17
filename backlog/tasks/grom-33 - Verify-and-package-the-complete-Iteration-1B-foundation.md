@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 19:54'
+updated_date: '2026-07-17 20:58'
 labels: []
 milestone: m-2
 dependencies:
@@ -20,6 +20,9 @@ modified_files:
   - DEVELOPMENT.md
   - package.json
   - scripts/verify-targets.ts
+  - src/persistence/README.md
+  - src/persistence/projection-index.ts
+  - src/persistence/tests/projection-index.test.ts
   - tests/iteration-1b/verify-foundation.ts
   - tests/iteration-1b/verify-self-blueprint.ts
 priority: high
@@ -51,6 +54,7 @@ Close Iteration 1B with black-box proof that the minimal capability runtime, con
 3. Add one verify:1b completion command, make the required quality gate use it, and extend the four-target verifier with target-aware executable-header checks plus the complete host-compatible Iteration 1B workflow.
 4. Update DEVELOPMENT.md to describe the delivered Iteration 1B boundary and explicitly defer scanning, observation/evidence, binding, reconciliation, groma scan, and visual navigation without claiming unexecuted native support.
 5. Run targeted black-box checks, the complete local quality gate, the cross-target gate, diff hygiene, and Backlog health; then finalize only after independent spec and quality reviews.
+6. Add projection cold-load-only proven-dead coordination recovery after exact callback contention, with bounded release handling and focused crash/concurrency tests, while preserving the global callback stale-age policy and fail-fast rebuild/update behavior.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -75,6 +79,12 @@ Reopened after GitHub Actions run 29606731908: Cross-platform binaries again exc
 Implemented the deterministic abrupt-interruption proof after run 29606731908. Captured processes now expose an idempotent immediate SIGKILL path while generic failures and timeouts retain SIGTERM, bounded grace, SIGKILL escalation, settlement, and eager rejection observation. The cold target is a large production-binary export; manifest-last rebuild publication plus a second successful production-binary root read witnesses that projection/checkpoint coordination has released before immediate SIGKILL. The test requires an intentional force kill, nonzero exit, empty stderr, zero stdout bytes under the CLI atomic-output contract, exact canonical snapshot equality, and a complete fresh export recovery. Five consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
 
 Addressed the latest PR #34 Codex findings. The interrupted-export proof no longer depends on cache-manifest timing, a second unrelated CLI process, or a large-output duration window. Bun's subprocess maxBuffer boundary now sends SIGKILL when the exact shipped exporter crosses a one-byte stdout threshold; the verifier requires SIGKILL, nonzero exit, exporter-owned output beyond the threshold, clean stderr, exact canonical bytes, and a complete fresh export recovery. This supersedes the prior note's unsupported zero-stdout/atomic-output claim: process.stdout.write and OS buffering may expose either a prefix or a complete buffered document before signal termination, and response completeness is not used as proof. The target verifier now records whether a matching artifact completed all runtime workflows and reports cross-compilation-only on unsupported hosts; DEVELOPMENT.md documents that truthful branch. Five consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
+
+A true in-progress SIGKILL during projection-index staging exposed a production recovery defect: cold `load()` used callback coordination with the ordinary five-minute stale-age threshold, so a provably dead publisher prevented immediate reconstruction even though explicit leases already provide double-proven-dead recovery. Alex explicitly authorized expanding GROM-33 to include the narrow production fix in the existing PR. Scope is limited to an exact-contention fallback for disposable projection load; global callback coordination, canonical state, rebuild/update fail-fast behavior, and scanner/architecture boundaries remain unchanged.
+
+PR #34 review superseded the maxBuffer-as-read-interruption proof: exact hash-and-PID projection-stage SIGKILL evidence demonstrated a true in-progress cold rebuild, but also exposed that the default five-minute callback stale-age policy (24-hour configured ceiling) prevents immediate same-workspace recovery after the exporter dies while holding projection coordination. Alex explicitly authorized expanding GROM-33 to add a narrow projection load-only proven-dead recovery fallback after exact contention; the global withCoordination policy and its stale-age behavior remain unchanged.
+
+Implemented the authorized projection load-only recovery and the final PR #34 verification gaps. The production-binary foundation verifier now arms an exact cache watcher before spawning, identifies the projection-index stage by full locator hash and exporter PID, kills the exact shipped process immediately with SIGKILL, proves the surviving regular stage and both unpublished manifests, preserves canonical bytes, and requires the complete recovered export to equal the primed export. Cold load alone follows exact callback contention with one same-locator explicit acquisition so double-proven-dead publishers recover immediately; live or ambiguous ownership remains contended, action runs at most once, release is bounded and fail-closed, and rebuild/update stay callback-only. Target verification now validates executable image kinds and structural bounds for the actual Mach-O arm64, ELF64 x86-64, PE32+ x64, and PE32+ arm64 artifacts. Focused projection tests pass 47/47; six focused production-binary foundation runs (one after target-matrix native restoration plus five consecutive repetitions), bun run check (800 tests and the complete verify:1b path), and bun run check:targets all pass. Formatting, typecheck, architecture boundaries, git diff --check, and Backlog doctor pass. Task status, acceptance criteria, and the existing final summary remain intentionally unchanged pending ready-PR review gates.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
