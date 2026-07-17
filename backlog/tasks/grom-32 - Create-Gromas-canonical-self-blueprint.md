@@ -1,11 +1,11 @@
 ---
 id: GROM-32
 title: Create Groma's canonical self-blueprint
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 13:48'
+updated_date: '2026-07-17 13:54'
 labels: []
 milestone: m-2
 dependencies:
@@ -56,7 +56,7 @@ Replace the handmade architecture overview as the detailed source of truth by re
 5. Harden the verifier's export and root pagination loops with runtime page shape, limit, generation, progress, cursor, and cycle checks; compare generations across root reads and projection rebuilds.
 6. Document the canonical self-blueprint verifier as the final bun run check gate, matching package.json.
 7. Verify formatting, typing, normal and both report argument orders, the complete repository check, all standalone targets, canonical byte stability, and diff hygiene with dist-mutating commands run serially.
-8. Record all review-loop evidence through the Backlog CLI and leave the task In Progress for controller review and finalization.
+8. Record all review-loop evidence through the Backlog CLI and finalize only after independent specification and code-quality approvals.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -79,6 +79,8 @@ Verification passed: bun run build; bun run verify:self-blueprint; report-baseli
 Second review loop restored the complete Ordering teaching semantics: lifecycle states, idempotency and cancellation behavior, four guarantees, the reversible Intent boundary explanation, concept-to-representation mapping, and concrete TypeScript partial scanner evidence, while retaining the explicit noncanonical warning. The verifier now separates generic integrity from a frozen expectedBaseline summary. Normal mode compares all counts, declaration statuses, and digests; report mode bypasses every expected-baseline equality while retaining allowed-status checks, component identity and acyclic containment, nonempty intents, edge-ID rules, exact declaration/edge source-description bijection, bounded paging, projection rebuild equality, and canonical byte proof. A report-only regression uses the public CLI against a second disposable copy to add one valid root, proves observed component/root counts increase, rebuilds the projection, and confirms the source canonical snapshot remains byte-identical. ARCHITECTURE.md now tells maintainers to deliberately refresh expected summary counts, statuses, and digests together.
 
 Third quality-review loop hardened both complete public-CLI paging helpers. Every export and root page is now runtime-validated as an object with a nonnegative safe-integer generation, boolean hasMore, an intrinsic item array no larger than the requested limit 7, and a consistent cursor contract. A hasMore page must contain items and return a nonempty string cursor that has not appeared before, so repeated and cyclic cursors fail instead of looping. Both collectors return generation with their items; root reads must match the first export generation, the canonical projection rebuild must match the first export generation, and the report-only post-edit rebuild must match its post-edit export generation. DEVELOPMENT.md now documents the canonical self-blueprint verifier as bun run check's final fail-fast gate, matching package.json. No canonical groma state changed. Exact-tree validation passed formatting and type checking, normal verification, report-baseline in both executable-option orders, bun run check with 796 tests and 5,679 expectations plus the final self-blueprint gate, bun run check:targets for all four targets, canonical scope inspection, and git diff --check. Dist-mutating commands were run serially.
+
+Final controller review gates passed on HEAD 0acb834: independent specification review approved after the Ordering-example and edit-tolerant baseline-report fixes; independent code-quality review approved after bounded paging and generation checks plus the DEVELOPMENT gate-order correction. Normal/report verifier modes, bun run check (796 tests, 5,679 expectations), bun run check:targets (all four targets), canonical public-export audits, projection rebuild/byte proofs, and diff hygiene are green.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -95,10 +97,16 @@ created: 2026-07-17 12:46
 ---
 Reopened after external review identified actionable migration gaps: preserve compact cross-component views and teaching examples, add the sole missing root intent, expose partial relationship resolution without guessing endpoints, document neutral edge direction, add a deliberate golden-baseline report workflow, and repair stale development pointers. Two independent audits bounded the fixes before implementation.
 ---
+
+author: @codex
+created: 2026-07-17 13:53
+---
+Specification and code-quality review loops are complete with no remaining actionable findings. Finalized for the existing ready PR; external CI, Claude, and Codex bot gates remain PR-level merge gates.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed all three GROM-32 review-remediation loops. The canonical public-CLI-authored 43-component, 87-declaration, 95-edge blueprint is unchanged. The verifier now separates generic integrity from frozen normal-mode expectations, exercises a disposable report-only count change, and fail-closes complete export/root pagination on malformed generations, over-limit or non-progressing pages, cursor contract violations, and repeated/cyclic cursors while proving generation continuity across root reads and projection rebuilds. Restored the complete noncanonical Ordering example and aligned DEVELOPMENT.md with the actual final self-blueprint gate. Verified normal and both report modes, full bun run check with 796 tests and 5,679 expectations, all four standalone targets, byte stability, and clean scope/diff checks. Task remains In Progress pending controller review.
+Created Groma's public-CLI-authored canonical self-blueprint with 43 intentional components, 87 preserved relationship declarations, 95 evidence-backed neutral edges, explicit partial/ambiguous/constraint visibility, and deterministic bounded export. Replaced the old card ledger with a concise architecture navigator and noncanonical teaching examples. Added a hermetic frozen-baseline verifier with edit-tolerant read-only reporting, bounded paging/generation validation, projection rebuild, and canonical byte-stability proofs. Verified by 796 tests and 5,679 expectations, compiled Iteration 1A recovery, both self-blueprint modes including a supported count-change regression, all four target builds, exact public-export audits, and independent specification/code-quality approvals.
 <!-- SECTION:FINAL_SUMMARY:END -->
