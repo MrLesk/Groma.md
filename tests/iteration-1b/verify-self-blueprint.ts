@@ -86,6 +86,8 @@ const expectedRootContract = Object.freeze(
     { name: "Standard Blueprint Model", seed: "standard-blueprint-model", type: "domain" },
   ].sort((left, right) => compareText(left.name, right.name)),
 );
+const canonicalOrientationIntroduction = "The self-blueprint contains nine root components:";
+const maximumCanonicalOrientationRows = 32;
 
 interface JsonEnvelope {
   readonly command: string;
@@ -614,6 +616,55 @@ function assertExpectedBaseline(summary: BaselineSummary): void {
   assert.deepEqual(summary, expectedBaseline);
 }
 
+function canonicalOrientationRootNames(architecture: string): readonly string[] {
+  const lines = architecture.split(/\r?\n/u);
+  const introductionLines = lines.flatMap((line, index) =>
+    line === canonicalOrientationIntroduction ? [index] : [],
+  );
+  assert.equal(
+    introductionLines.length,
+    1,
+    "ARCHITECTURE.md must contain exactly one canonical root introduction",
+  );
+  let index = introductionLines[0]! + 1;
+  assert.equal(
+    lines[index],
+    "",
+    "the Canonical Orientation table must immediately follow its introduction",
+  );
+  index += 1;
+  assert.match(
+    lines[index] ?? "",
+    /^\|\s*Root\s*\|\s*Orientation\s*\|$/u,
+    "the Canonical Orientation table header is malformed",
+  );
+  index += 1;
+  assert.match(
+    lines[index] ?? "",
+    /^\|\s*-{3,}\s*\|\s*-{3,}\s*\|$/u,
+    "the Canonical Orientation table separator is malformed",
+  );
+  index += 1;
+
+  const names: string[] = [];
+  while (index < lines.length && lines[index] !== "") {
+    assert.ok(
+      names.length < maximumCanonicalOrientationRows,
+      `the Canonical Orientation table exceeds ${maximumCanonicalOrientationRows} bounded rows`,
+    );
+    const row = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$/u.exec(lines[index]!);
+    assert.notEqual(row, null, `malformed Canonical Orientation row at line ${index + 1}`);
+    const name = row![1]!.trim();
+    const orientation = row![2]!.trim();
+    assert.ok(name.length > 0, `empty canonical root name at line ${index + 1}`);
+    assert.ok(orientation.length > 0, `empty canonical root orientation at line ${index + 1}`);
+    names.push(name);
+    index += 1;
+  }
+  assert.ok(names.length > 0, "the Canonical Orientation table has no root rows");
+  return Object.freeze(names);
+}
+
 function assertCanonicalOrientation(items: readonly ExportItem[], architecture: string): void {
   const roots = items
     .filter((item) => item.component.parent === undefined)
@@ -624,16 +675,23 @@ function assertCanonicalOrientation(items: readonly ExportItem[], architecture: 
     }))
     .sort((left, right) => compareText(left.name ?? "", right.name ?? ""));
   assert.deepEqual(roots, expectedRootContract, "canonical root orientation changed");
-  assert.ok(
-    architecture.includes("The self-blueprint contains nine root components:"),
-    "ARCHITECTURE.md no longer introduces the nine canonical roots",
+  const architectureNames = canonicalOrientationRootNames(architecture);
+  const expectedNames = expectedRootContract.map((root) => root.name);
+  assert.equal(
+    architectureNames.length,
+    expectedNames.length,
+    `the Canonical Orientation table must contain exactly ${expectedNames.length} root rows`,
   );
-  for (const root of expectedRootContract) {
-    assert.ok(
-      architecture.includes(`| ${root.name}`),
-      `ARCHITECTURE.md does not name canonical root ${root.name}`,
-    );
-  }
+  assert.equal(
+    new Set(architectureNames).size,
+    architectureNames.length,
+    "the Canonical Orientation table contains a duplicate root row",
+  );
+  assert.deepEqual(
+    [...architectureNames].sort(compareText),
+    expectedNames,
+    "the Canonical Orientation table root names differ from the canonical root contract",
+  );
   assert.ok(
     architecture.includes("canonical workspace under [`groma/`](groma/)"),
     "ARCHITECTURE.md must point readers to canonical groma/",
