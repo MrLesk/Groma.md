@@ -2565,6 +2565,35 @@ function graphQueryDiagnosticAllowed(code: string, scope: GraphQueryDiagnosticSc
   );
 }
 
+function invalidSearchTextDiagnosticDetails(
+  source: unknown,
+  isProxy: (value: unknown) => boolean,
+): Result<Readonly<Record<string, string | number | boolean>> | undefined> {
+  if (source === undefined) return success(undefined);
+  try {
+    if (typeof source === "object" && source !== null && isProxy(source)) {
+      return graphQueryUnavailable();
+    }
+  } catch {
+    return graphQueryUnavailable();
+  }
+  const inspected = inspectExactRecord(
+    source,
+    [["maximumCharacters"], ["maximumTerms"]],
+    "graph-query-unavailable",
+    "Invalid search text diagnostic details",
+  );
+  if (!inspected.ok) return graphQueryUnavailable();
+  const key = Object.hasOwn(inspected.value, "maximumCharacters")
+    ? "maximumCharacters"
+    : "maximumTerms";
+  const maximum = inspected.value[key];
+  if (typeof maximum !== "number" || !Number.isSafeInteger(maximum) || maximum <= 0) {
+    return graphQueryUnavailable();
+  }
+  return success(Object.freeze({ [key]: maximum }));
+}
+
 function graphQueryFailureDiagnostics(
   value: unknown,
   scope: GraphQueryDiagnosticScope,
@@ -2604,7 +2633,10 @@ function graphQueryFailureDiagnostics(
     ) {
       return graphQueryUnavailable();
     }
-    const details = safeDiagnosticDetails(entry.value.details, options.isProxy);
+    const details =
+      code === "invalid-search-text"
+        ? invalidSearchTextDiagnosticDetails(entry.value.details, options.isProxy)
+        : safeDiagnosticDetails(entry.value.details, options.isProxy);
     if (!details.ok) return graphQueryUnavailable();
     copied[index] = Object.freeze({
       code,

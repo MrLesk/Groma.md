@@ -52,6 +52,13 @@ self-contained item exceeds the local export bounds. Ordering, duplicate, malfor
 proxy, detector, provider, and other invalid-query failures remain
 `graph-query-unavailable` and never receive capacity retry guidance.
 
+For `invalid-search-text`, Application replaces provider wording with its stable message and
+accepts either no details for a generic invalid search or one exact typed detail shape: a
+positive safe-integer `maximumCharacters` or `maximumTerms`. Present details with extra keys,
+accessors, proxies, non-integers, or other malformed values fail closed as
+`graph-query-unavailable`; other allowlisted graph-query diagnostics retain their existing
+bounded detail handling.
+
 Projection-backed component and export pages are ordered by ascending stable component
 identity. Traversal pages preserve deterministic breadth-first depth and then stable
 relationship identity. Application validates that order rather than introducing a

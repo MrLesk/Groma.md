@@ -1809,7 +1809,12 @@ describe("application projection-backed blueprint queries", () => {
     const searchFailure = async (code: string) =>
       operations(new SnapshotFixture(), undefined, {
         graphQueries: projectionGraphQueries({
-          searchEntities: async () => failure({ code, message: `/private/${code}` }),
+          searchEntities: async () =>
+            failure({
+              code,
+              ...(code === "invalid-search-text" ? { details: { maximumCharacters: 256 } } : {}),
+              message: `/private/${code}`,
+            }),
         }),
       }).searchBlueprint({ limit: 1, text: "commerce" });
     const traversalFailure = async (code: string, cursor?: string) =>
@@ -1840,6 +1845,122 @@ describe("application projection-backed blueprint queries", () => {
     expect(codeOf(await traversalFailure("stale-cursor"))).toBe("graph-query-unavailable");
     expect(codeOf(await traversalFailure("unknown-entity"))).toBe("unknown-entity");
     expect(codeOf(await traversalFailure("stale-cursor", "opaque"))).toBe("stale-cursor");
+  });
+
+  test("canonicalizes generic and exact typed invalid-search-text details", async () => {
+    const privateMessage = "/private/provider-search-bound";
+    for (const includeExplicitUndefined of [false, true]) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          searchEntities: async () =>
+            failure({
+              code: "invalid-search-text",
+              ...(includeExplicitUndefined ? { details: undefined } : {}),
+              message: privateMessage,
+            } as never),
+        }),
+      }).searchBlueprint({ limit: 1, text: "commerce" });
+      expect(result).toEqual({
+        diagnostics: [
+          {
+            code: "invalid-search-text",
+            message: "The component search text is invalid",
+          },
+        ],
+        ok: false,
+      });
+      expect(Object.isFrozen(result)).toBeTrue();
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics)).toBeTrue();
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics[0])).toBeTrue();
+      expect(JSON.stringify(result)).not.toContain(privateMessage);
+    }
+
+    for (const details of [{ maximumCharacters: 256 }, { maximumTerms: 32 }] as const) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          searchEntities: async () =>
+            failure({ code: "invalid-search-text", details, message: privateMessage }),
+        }),
+      }).searchBlueprint({ limit: 1, text: "commerce" });
+      expect(result).toEqual({
+        diagnostics: [
+          {
+            code: "invalid-search-text",
+            details,
+            message: "The component search text is invalid",
+          },
+        ],
+        ok: false,
+      });
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics[0])).toBeTrue();
+      expect(result.ok ? false : Object.isFrozen(result.diagnostics[0]?.details)).toBeTrue();
+      expect(JSON.stringify(result)).not.toContain(privateMessage);
+    }
+
+    let accessorCalls = 0;
+    const accessorDetails = {};
+    Object.defineProperty(accessorDetails, "maximumCharacters", {
+      enumerable: true,
+      get: () => {
+        accessorCalls += 1;
+        return 256;
+      },
+    });
+    const nonEnumerableDetails = {};
+    Object.defineProperty(nonEnumerableDetails, "maximumCharacters", {
+      enumerable: false,
+      value: 256,
+    });
+    for (const details of [
+      null,
+      {},
+      [],
+      { maximumCharacters: 0 },
+      { maximumCharacters: -1 },
+      { maximumCharacters: 1.5 },
+      { maximumCharacters: Number.MAX_SAFE_INTEGER + 1 },
+      { maximumCharacters: 256, maximumTerms: 32 },
+      { maximumCharacters: 256, extra: true },
+      { maximumTerms: "32" },
+      accessorDetails,
+      nonEnumerableDetails,
+    ] as const) {
+      const result = await operations(new SnapshotFixture(), undefined, {
+        graphQueries: projectionGraphQueries({
+          searchEntities: async () =>
+            failure({
+              code: "invalid-search-text",
+              details: details as never,
+              message: privateMessage,
+            }),
+        }),
+      }).searchBlueprint({ limit: 1, text: "commerce" });
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "graph-query-unavailable" }],
+        ok: false,
+      });
+      expect(JSON.stringify(result)).not.toContain(privateMessage);
+    }
+    expect(accessorCalls).toBe(0);
+
+    const proxies = new Set<unknown>();
+    const traps = { count: 0 };
+    const detailsProxy = recognizedProxy({ maximumCharacters: 256 }, proxies, traps);
+    const proxied = await proxyAwareOperations(new SnapshotFixture(), proxies, {
+      graphQueries: projectionGraphQueries({
+        searchEntities: async () =>
+          failure({
+            code: "invalid-search-text",
+            details: detailsProxy,
+            message: privateMessage,
+          }),
+      }),
+    }).searchBlueprint({ limit: 1, text: "commerce" });
+    expect(proxied).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+    expect(traps.count).toBe(0);
   });
 });
 

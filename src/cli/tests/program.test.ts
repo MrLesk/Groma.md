@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createDefaultBootstrapRegistry } from "../../host/index.ts";
-import { CLI_EXIT, CLI_MAX_RENDERED_BYTES, type CliInputSource } from "../contracts.ts";
+import {
+  CLI_EXIT,
+  CLI_MAX_RENDERED_BYTES,
+  CLI_MAX_SEARCH_CHARACTERS,
+  type CliInputSource,
+} from "../contracts.ts";
 import {
   GROMA_VERSION,
   HELP_TEXT,
@@ -187,6 +192,133 @@ describe("CLI program", () => {
     ).toBe(CLI_EXIT.success);
     expect(captured.output).toEqual(["No Groma workspace is initialized here.\nRun: groma init\n"]);
     expect(await readdir(root)).toEqual([]);
+  });
+
+  test("fails oversized search before Host work and serves the exact official bound", async () => {
+    const root = await workspace();
+    const captured = captureOutput();
+    let registryCalls = 0;
+    const oversized = "x".repeat(CLI_MAX_SEARCH_CHARACTERS + 1);
+
+    expect(
+      await runProgram(
+        ["--format", "json", "blueprint", "search", oversized, "--limit", "1"],
+        captured,
+        {
+          createRegistry: () => {
+            registryCalls += 1;
+            throw new Error("Host composition must not begin");
+          },
+          workspaceRoot: root,
+        },
+      ),
+    ).toBe(CLI_EXIT.usage);
+    expect(registryCalls).toBe(0);
+    expect(await readdir(root)).toEqual([]);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      command: "invocation",
+      exitCode: CLI_EXIT.usage,
+      ok: false,
+      result: { diagnostics: [{ code: "cli-invalid-invocation" }], ok: false },
+    });
+
+    expect(await jsonCommand(root, ["init"])).toMatchObject({
+      envelope: { exitCode: CLI_EXIT.success, ok: true },
+    });
+    const maximumSearch = "x".repeat(CLI_MAX_SEARCH_CHARACTERS);
+    expect(
+      await jsonCommand(root, ["blueprint", "search", maximumSearch, "--limit", "1"]),
+    ).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true, value: { hasMore: false, items: [] } },
+      },
+    });
+
+    const excessiveTerms = Array.from({ length: 33 }, (_, index) => `t${index}`).join(" ");
+    expect(excessiveTerms.length).toBeLessThanOrEqual(CLI_MAX_SEARCH_CHARACTERS);
+    const jsonFailure = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      excessiveTerms,
+      "--limit",
+      "1",
+    ]);
+    expect(jsonFailure).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code: "invalid-search-text",
+              details: { maximumTerms: 32 },
+              message: "The component search text is invalid",
+            },
+          ],
+          ok: false,
+        },
+      },
+    });
+    const plainFailure = captureOutput();
+    expect(
+      await runProgram(["blueprint", "search", excessiveTerms, "--limit", "1"], plainFailure, {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.semantic);
+    const plainResult = plainFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResult).toBeDefined();
+    expect(JSON.parse(plainResult!.slice("result: ".length))).toEqual(jsonFailure.envelope.result);
+
+    const whitespaceOnly = " \t  ";
+    const jsonWhitespaceFailure = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      whitespaceOnly,
+      "--limit",
+      "1",
+    ]);
+    expect(jsonWhitespaceFailure).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code: "invalid-search-text",
+              message: "The component search text is invalid",
+            },
+          ],
+          ok: false,
+        },
+      },
+    });
+    const whitespaceDiagnostic = (
+      jsonWhitespaceFailure.envelope.result.diagnostics as Array<Record<string, unknown>>
+    )[0]!;
+    expect(Object.hasOwn(whitespaceDiagnostic, "details")).toBeFalse();
+    const plainWhitespaceFailure = captureOutput();
+    expect(
+      await runProgram(
+        ["blueprint", "search", whitespaceOnly, "--limit", "1"],
+        plainWhitespaceFailure,
+        { terminal: { stdin: false, stdout: false }, workspaceRoot: root },
+      ),
+    ).toBe(CLI_EXIT.semantic);
+    const plainWhitespaceResult = plainWhitespaceFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainWhitespaceResult).toBeDefined();
+    expect(JSON.parse(plainWhitespaceResult!.slice("result: ".length))).toEqual(
+      jsonWhitespaceFailure.envelope.result,
+    );
   });
 
   test("requires an initialized workspace for explicit migration inspection", async () => {

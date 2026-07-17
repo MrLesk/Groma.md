@@ -329,6 +329,13 @@ represented in query context and, when a next page exists, resumed with its opaq
 If an embedder supplies a Core cursor contract with a larger budget than the engine, the
 engine fails the page instead of emitting a cursor above its own accepted bound.
 
+Invalid search input is rejected before projection catalog reads. Raw input or NFKC-expanded
+text beyond the configured character bound returns `invalid-search-text` with only
+`maximumCharacters`; excessive normalized terms return the same code with only
+`maximumTerms`. Both maxima are positive safe integers owned by the query engine. Non-string,
+empty, or whitespace-only text remains a generic `invalid-search-text`, while normalization
+faults remain contained as query unavailability.
+
 The engine receives the projection and Core bounded-query contracts by capability. Its
 callers and Core never learn whether the projection is JSON, an in-memory fixture, or a
 future database. Rebuild and incremental projection paths therefore share one query

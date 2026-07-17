@@ -215,6 +215,7 @@ function maximumTermSearch(): string {
 
 function mutableProjection(initial = projectionSnapshot()) {
   let snapshot = initial;
+  let catalogLoads = 0;
   let loads = 0;
   const projection: ProjectionReadCapability = Object.freeze({
     exactCatalogEntry: async (_identity: ProjectionReadIdentity, requested: EntityId) => {
@@ -290,6 +291,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       request: ProjectionCatalogReadRequest,
     ) => {
+      catalogLoads += 1;
       const entries = snapshot.entities.map((item) => ({
         id: item.entity.id,
         kind: item.entity.kind,
@@ -354,6 +356,9 @@ function mutableProjection(initial = projectionSnapshot()) {
     },
   });
   return {
+    get catalogLoads() {
+      return catalogLoads;
+    },
     get loads() {
       return loads;
     },
@@ -1068,6 +1073,66 @@ describe("projection query engine", () => {
         { cursor: replaceCursorAnchor(paged.value.nextCursor, ids.d), limit: 1 },
       ),
     ).toMatchObject({ diagnostics: [{ code: "cursor-anchor-mismatch" }], ok: false });
+  });
+
+  test("returns typed search limits before projection catalog reads", async () => {
+    const snapshot = projectionSnapshot();
+    const provider = mutableProjection(snapshot);
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxSearchCharacters: 16,
+        maxSearchTerms: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    const expected = Object.freeze({
+      fingerprint: snapshot.fingerprint,
+      generation: snapshot.generation,
+    });
+    const invalid = (text: unknown) =>
+      query.searchEntities(expected, { text } as never, { limit: 1 });
+    const characterFailure = {
+      diagnostics: [
+        {
+          code: "invalid-search-text",
+          details: { maximumCharacters: 16 },
+          message: "Search text must be a nonempty primitive string no longer than 16 characters",
+        },
+      ],
+      ok: false,
+    } as const;
+
+    expect(await invalid("x".repeat(17))).toEqual(characterFailure);
+    const normalizedExpansion = await invalid("\uFDFA");
+    expect(normalizedExpansion).toEqual(characterFailure);
+    expect(
+      normalizedExpansion.ok ? false : Object.isFrozen(normalizedExpansion.diagnostics[0]?.details),
+    ).toBeTrue();
+    expect(await invalid("a b c")).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-search-text",
+          details: { maximumTerms: 2 },
+          message: "Search text must contain no more than 2 normalized terms",
+        },
+      ],
+      ok: false,
+    });
+    for (const text of [1, "", "   "] as const) {
+      const result = await invalid(text);
+      expect(result).toMatchObject({ diagnostics: [{ code: "invalid-search-text" }], ok: false });
+      expect(result.ok ? undefined : result.diagnostics[0]?.details).toBeUndefined();
+    }
+    expect(provider.catalogLoads).toBe(0);
+    expect(provider.loads).toBe(0);
   });
 
   test("fits every valid search and its cursor inside the shared derived ceilings", async () => {

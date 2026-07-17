@@ -32,7 +32,9 @@ groma blueprint traverse <id> --direction incoming|outgoing|both --depth N [--re
 ```
 
 Blueprint search treats its first fixed positional value as text even when it begins
-with `--`; options are parsed only from the remaining arguments.
+with `--`; options are parsed only from the remaining arguments. The official CLI accepts
+1–256 raw characters and rejects longer text before workspace discovery, Host composition,
+or projection-provider work.
 
 The CLI accepts opaque cursors up to 4,096 characters so every cursor emitted by the
 official graph query engine can be resumed. It does not parse, rewrite, or auto-follow

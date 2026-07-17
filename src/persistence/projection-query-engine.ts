@@ -466,17 +466,39 @@ function prepareEntityQuery(
   );
 }
 
-function normalizeText(value: string, maximum: number): Result<string> {
+function normalizeText(
+  value: string,
+  maximum: number,
+  overflowDiagnostic?: Diagnostic,
+): Result<string> {
+  const overflow = () =>
+    overflowDiagnostic === undefined
+      ? unavailable("normalized-search-text-bound")
+      : failure(overflowDiagnostic);
   try {
     const normalized = Reflect.apply(intrinsicNormalize, value, ["NFKC"]) as string;
-    if (normalized.length > maximum) return unavailable("normalized-search-text-bound");
+    if (normalized.length > maximum) return overflow();
     const lowered = Reflect.apply(intrinsicToLowerCase, normalized, []) as string;
-    return lowered.length <= maximum
-      ? success(lowered)
-      : unavailable("normalized-search-text-bound");
+    return lowered.length <= maximum ? success(lowered) : overflow();
   } catch {
     return unavailable("search-text-normalization");
   }
+}
+
+function invalidSearchCharacterDiagnostic(maximumCharacters: number): Diagnostic {
+  return diagnostic(
+    "invalid-search-text",
+    `Search text must be a nonempty primitive string no longer than ${maximumCharacters} characters`,
+    Object.freeze({ maximumCharacters }),
+  );
+}
+
+function invalidSearchTermDiagnostic(maximumTerms: number): Diagnostic {
+  return diagnostic(
+    "invalid-search-text",
+    `Search text must contain no more than ${maximumTerms} normalized terms`,
+    Object.freeze({ maximumTerms }),
+  );
 }
 
 function prepareSearch(
@@ -498,11 +520,7 @@ function prepareSearch(
       ),
     );
   }
-  if (
-    typeof inspected.value.text !== "string" ||
-    inspected.value.text.length === 0 ||
-    inspected.value.text.length > bounds.maxSearchCharacters
-  ) {
+  if (typeof inspected.value.text !== "string" || inspected.value.text.length === 0) {
     return failure(
       diagnostic(
         "invalid-search-text",
@@ -510,9 +528,16 @@ function prepareSearch(
       ),
     );
   }
-  const normalized = normalizeText(inspected.value.text, bounds.maxSearchCharacters);
+  if (inspected.value.text.length > bounds.maxSearchCharacters) {
+    return failure(invalidSearchCharacterDiagnostic(bounds.maxSearchCharacters));
+  }
+  const normalized = normalizeText(
+    inspected.value.text,
+    bounds.maxSearchCharacters,
+    invalidSearchCharacterDiagnostic(bounds.maxSearchCharacters),
+  );
   if (!normalized.ok) {
-    return failure(diagnostic("invalid-search-text", "Search text could not be normalized safely"));
+    return normalized;
   }
   const terms: string[] = [];
   let term = "";
@@ -528,13 +553,16 @@ function prepareSearch(
     }
   }
   if (term.length > 0) pushArray(terms, term);
-  if (terms.length === 0 || terms.length > bounds.maxSearchTerms) {
+  if (terms.length === 0) {
     return failure(
       diagnostic(
         "invalid-search-text",
         `Search text must contain between 1 and ${bounds.maxSearchTerms} normalized terms`,
       ),
     );
+  }
+  if (terms.length > bounds.maxSearchTerms) {
+    return failure(invalidSearchTermDiagnostic(bounds.maxSearchTerms));
   }
   const uniqueTerms: string[] = [];
   const seenTerms = new IntrinsicSet<string>();

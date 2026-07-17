@@ -3,6 +3,7 @@ import {
   CLI_MAX_ARGUMENT_CHARACTERS,
   CLI_MAX_CURSOR_CHARACTERS,
   CLI_MAX_PAGE_SIZE,
+  CLI_MAX_SEARCH_CHARACTERS,
   type CliCommand,
   type CliDiagnostic,
   type CliFormat,
@@ -80,7 +81,7 @@ function blueprintCommand(args: readonly string[]): CliCommand | undefined {
   }
   if (action === "search") {
     const text = rest[0];
-    if (text === undefined || text.length === 0 || text.length > 4_096) {
+    if (text === undefined || text.length === 0 || text.length > CLI_MAX_SEARCH_CHARACTERS) {
       return undefined;
     }
     const request = page(rest.slice(1), "--limit", "--cursor");

@@ -1,4 +1,4 @@
-import { CLI_MAX_PAGE_SIZE } from "./contracts.ts";
+import { CLI_MAX_PAGE_SIZE, CLI_MAX_SEARCH_CHARACTERS } from "./contracts.ts";
 
 export const GROMA_VERSION = "0.0.0";
 
@@ -12,7 +12,7 @@ Usage:
   groma --version
   groma [--format plain|json] init
   groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
-  groma [--format plain|json] blueprint search <text> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
+  groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint traverse <id> --direction incoming|outgoing|both --depth <N> [--relation-type <type>] --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] migrate status
   groma [--format plain|json] migrate preview
@@ -43,6 +43,7 @@ Blueprint export, search, and traversal read the disposable projection through s
 operations. Surface cursors are opaque and never followed implicitly. Every export item includes
 one component and all of its outgoing depth-1 relationships; a complete export consumes only its
 fingerprint-bound component pages at one generation.
+Blueprint search text accepts 1-${CLI_MAX_SEARCH_CHARACTERS} raw characters before normalization.
 If an export page exceeds local aggregate bounds, retry with a smaller --limit.
 If --limit 1 still fails, one self-contained item exceeds the local export bounds.
 

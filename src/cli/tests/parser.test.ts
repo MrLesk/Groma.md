@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { CLI_MAX_ARGUMENTS, CLI_MAX_CURSOR_CHARACTERS } from "../contracts.ts";
+import {
+  CLI_MAX_ARGUMENTS,
+  CLI_MAX_CURSOR_CHARACTERS,
+  CLI_MAX_SEARCH_CHARACTERS,
+} from "../contracts.ts";
 import { parseInvocation } from "../parser.ts";
 
 describe("CLI provisional grammar", () => {
@@ -161,6 +165,20 @@ describe("CLI provisional grammar", () => {
       invocation: { command: { cursor: maximumCursor, kind: "blueprint-traverse" } },
       ok: true,
     });
+  });
+
+  test("bounds fixed blueprint search text while preserving a leading option marker", () => {
+    const maximumSearch = `--${"x".repeat(CLI_MAX_SEARCH_CHARACTERS - 2)}`;
+    expect(maximumSearch.length).toBe(CLI_MAX_SEARCH_CHARACTERS);
+    expect(parseInvocation(["blueprint", "search", maximumSearch, "--limit", "1"])).toMatchObject({
+      invocation: {
+        command: { kind: "blueprint-search", limit: 1, text: maximumSearch },
+      },
+      ok: true,
+    });
+    expect(
+      parseInvocation(["blueprint", "search", `${maximumSearch}x`, "--limit", "1"]),
+    ).toMatchObject({ diagnostic: { code: "cli-invalid-invocation" }, ok: false });
   });
 
   test("requires finite explicit pages and exact option sets", () => {
