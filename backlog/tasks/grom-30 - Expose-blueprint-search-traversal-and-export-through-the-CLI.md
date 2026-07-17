@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 05:51'
+updated_date: '2026-07-17 06:18'
 labels: []
 milestone: m-2
 dependencies:
@@ -115,6 +115,8 @@ Final page-capacity remediation completed across export, search, and traversal. 
 Final step-14 specification review PASS and quality review APPROVED after closing iterator/prototype poisoning and JSON-envelope depth findings. Independent quality evidence included 10,000 randomized JSON byte-parity cases. Fresh full verification passed 766 tests with 5,389 assertions plus formatting, typecheck, architecture boundaries, build, smoke, compiled workflow, and crash recovery; check:targets passed all four standalone targets; git diff --check remained clean.
 
 Final CI portability correction: GitHub's shared Linux runner completed the deliberate three-page, greater-than-eight-MiB replacement-provider regression in 8.26 seconds, exceeding Bun's inherited five-second unit default after every other check passed. The regression now declares a documented finite 15-second allowance; production page bounds and behavior are unchanged. Focused verification passed 1 test; full bun run check passed 766 tests / 5,389 assertions plus formatting, typecheck, boundaries, build, smoke, compiled workflow, and crash recovery.
+
+Claude's final-delta performance concern was independently profiled before merge. Canonical JSON byte counting scales linearly at about 11.6–11.7 ms per MiB locally (approximately 93 ms at 8 MiB); the apparent per-character Reflect.apply allocation optimized within noise, and the sibling exact-bound test remained about 2.8 ms. The three-operation regression's local median was 1.55 seconds versus 8.26 seconds on GitHub; 16 simultaneous focused processes reached 11.66 seconds. The finite per-test allowance is therefore 20 seconds for greater than 2x observed-CI headroom, with no production change.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -1304,7 +1304,7 @@ describe("application projection-backed blueprint queries", () => {
       expect(Object.isFrozen(result)).toBeTrue();
       expect(!result.ok && Object.isFrozen(result.diagnostics[0]?.details)).toBeTrue();
     }
-  }, 15_000);
+  }, 20_000);
 
   test("captures the page-byte bound and gives smaller-limit guidance at the exact boundary", async () => {
     const first = component({ id: ids.service, intent: "x".repeat(256), type: "service" });
