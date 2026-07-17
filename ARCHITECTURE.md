@@ -1202,9 +1202,9 @@ until the writer settles; a tuple changed from the initial capture fails closed.
 edits are detected by the same revalidation. No lease is held while plugin bytes are read
 or evaluated. The Host evaluates the already-read entry bytes through one immutable
 in-memory module URL; it never reopens the mutable entry path for execution. Manifest and
-entry opens additionally
-re-check the post-open canonical path, current file identity, and containment within the
-previously resolved package root before accepting captured bytes.
+entry opens additionally re-check the post-open canonical path, current file identity,
+and containment within the previously resolved package root before accepting captured
+bytes.
 
 The Host validates unsupported project requests, unavailable official selections,
 additional Host registration namespaces, and selected Host registration defects that

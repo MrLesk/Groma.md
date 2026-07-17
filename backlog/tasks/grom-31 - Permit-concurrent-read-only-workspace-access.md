@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 10:21'
+updated_date: '2026-07-17 10:27'
 labels: []
 milestone: m-4
 dependencies: []
@@ -86,7 +86,7 @@ The package-state review found a reachable C/L/U ABA mixture across supported bl
 
 Final verification on the exact tree: bun run check passed formatting, type checking, architecture boundaries, 791 tests across 37 files with 5,649 expectations, the compiled Iteration 1A eight-reader cache-cold workflow, and crash recovery. bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64 executables. Focused package tests passed 49 tests and 452 expectations; focused projection tests passed 39 tests and 298 expectations; git diff --check passed. Independent cold-projection and package-state reviews approved the final behavior and exact regressions.
 
-Final Claude review clarified the verified scope without changing semantics: settled-state readers may run concurrently, while a prepared or committing writer still makes canonical snapshot and checkpoint reads fail fast; package-state retry is bounded per coherent observation; and package acquisition constants now use retry rather than follower naming. The projection budget remains intentionally derived from configured reconstruction ceilings in response to the bounded-workload review requirement. The two local sole-contention checks remain at their owning layer boundaries rather than creating a new cross-layer public helper, and post-fence root-absence checks remain because they catch unsupported direct root creation after the coherent observation.
+Final Claude review clarified the verified scope without changing semantics: settled-state readers may run concurrently, while an active prepared or committing writer still makes canonical snapshot and checkpoint reads fail fast; package-state retry is bounded per coherent observation; and package acquisition constants now use retry rather than follower naming. The projection budget remains intentionally derived from configured reconstruction ceilings in response to the bounded-workload review requirement. The two local sole-contention checks remain at their owning layer boundaries rather than creating a new cross-layer public helper, and post-fence root-absence checks remain because they catch unsupported direct root creation after the coherent observation.
 <!-- SECTION:NOTES:END -->
 
 <!-- SECTION:NOTES:END -->

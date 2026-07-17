@@ -277,11 +277,11 @@ This read-only path never repairs or publishes; any unstable observation, incomp
 index, missing hygiene, or continuity mismatch falls back to the existing coordinated
 repair path.
 When a cold loader loses that projection-local lease to another publisher, it becomes a
-bounded read-only follower instead of immediately failing. Its finite
-schedule is sized from configured capacity: it starts at 20 milliseconds and backs off to
-at most 500 milliseconds between observations. The wait budget scales from the configured
-structural and byte ceilings,
-with a 750-millisecond floor and a 10-second cap at or above the default supported scale.
+bounded read-only follower instead of immediately failing. Its finite schedule is sized
+from configured capacity: it starts at 20 milliseconds and backs off to at most 500
+milliseconds between observations. The wait budget scales from the configured structural
+and byte ceilings, with a 750-millisecond floor and a 10-second cap at or above the default
+supported scale.
 It never reacquires coordination, repairs, or publishes. A follower succeeds only after
 the projection, canonical generation and fingerprint, partial-read manifest and
 checkpoint, ignore marker, and process-local adoption commit all pass the same exact
