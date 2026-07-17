@@ -86,8 +86,54 @@ const expectedRootContract = Object.freeze(
     { name: "Standard Blueprint Model", seed: "standard-blueprint-model", type: "domain" },
   ].sort((left, right) => compareText(left.name, right.name)),
 );
+const expectedCanonicalOrientationContract = Object.freeze(
+  [
+    {
+      name: "Canonical Persistence",
+      orientation: "Deterministic local intent, evidence, alias, journal, and migration state",
+    },
+    {
+      name: "CLI, Service, and Web Surfaces",
+      orientation: "Shared operations presented to agents and humans",
+    },
+    {
+      name: "Core",
+      orientation:
+        "Technology-neutral graph, transaction, query, observation, and plugin contracts",
+    },
+    {
+      name: "Official Host",
+      orientation: "Default local composition and bootstrap behavior",
+    },
+    {
+      name: "Planning and History",
+      orientation: "Desired-state overlays, comparison, and historical views",
+    },
+    {
+      name: "Plugin Development",
+      orientation: "Public SDK, reusable conformance, and scaffolding",
+    },
+    {
+      name: "Projection",
+      orientation: "Reconstructable indexes, bounded queries, and visual projection",
+    },
+    {
+      name: "Scanning and Reconciliation",
+      orientation: "Blind observation and intent-preserving reconciliation",
+    },
+    {
+      name: "Standard Blueprint Model",
+      orientation: "The official recursively composable component vocabulary",
+    },
+  ].sort((left, right) => compareText(left.name, right.name)),
+);
 const canonicalOrientationIntroduction = "The self-blueprint contains nine root components:";
 const maximumCanonicalOrientationRows = 32;
+
+interface CanonicalOrientationRow {
+  readonly name: string;
+  readonly orientation: string;
+}
 
 interface JsonEnvelope {
   readonly command: string;
@@ -616,7 +662,7 @@ function assertExpectedBaseline(summary: BaselineSummary): void {
   assert.deepEqual(summary, expectedBaseline);
 }
 
-function canonicalOrientationRootNames(architecture: string): readonly string[] {
+function canonicalOrientationRows(architecture: string): readonly CanonicalOrientationRow[] {
   const lines = architecture.split(/\r?\n/u);
   const introductionLines = lines.flatMap((line, index) =>
     line === canonicalOrientationIntroduction ? [index] : [],
@@ -646,10 +692,10 @@ function canonicalOrientationRootNames(architecture: string): readonly string[] 
   );
   index += 1;
 
-  const names: string[] = [];
+  const rows: CanonicalOrientationRow[] = [];
   while (index < lines.length && lines[index] !== "") {
     assert.ok(
-      names.length < maximumCanonicalOrientationRows,
+      rows.length < maximumCanonicalOrientationRows,
       `the Canonical Orientation table exceeds ${maximumCanonicalOrientationRows} bounded rows`,
     );
     const row = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$/u.exec(lines[index]!);
@@ -658,11 +704,49 @@ function canonicalOrientationRootNames(architecture: string): readonly string[] 
     const orientation = row![2]!.trim();
     assert.ok(name.length > 0, `empty canonical root name at line ${index + 1}`);
     assert.ok(orientation.length > 0, `empty canonical root orientation at line ${index + 1}`);
-    names.push(name);
+    rows.push(Object.freeze({ name, orientation }));
     index += 1;
   }
-  assert.ok(names.length > 0, "the Canonical Orientation table has no root rows");
-  return Object.freeze(names);
+  assert.ok(rows.length > 0, "the Canonical Orientation table has no root rows");
+  return Object.freeze(rows);
+}
+
+function assertCanonicalOrientationRows(rows: readonly CanonicalOrientationRow[]): void {
+  assert.equal(
+    rows.length,
+    expectedCanonicalOrientationContract.length,
+    `the Canonical Orientation table must contain exactly ${expectedCanonicalOrientationContract.length} root rows`,
+  );
+  assert.equal(
+    new Set(rows.map((row) => row.name)).size,
+    rows.length,
+    "the Canonical Orientation table contains a duplicate root row",
+  );
+  assert.deepEqual(
+    [...rows].sort((left, right) => compareText(left.name, right.name)),
+    expectedCanonicalOrientationContract,
+    "the Canonical Orientation table name-to-orientation mapping changed",
+  );
+}
+
+function assertSwappedCanonicalOrientationsRejected(): void {
+  const swapped = expectedCanonicalOrientationContract.map((row) => ({ ...row }));
+  const firstOrientation = swapped[0]!.orientation;
+  swapped[0]!.orientation = swapped[1]!.orientation;
+  swapped[1]!.orientation = firstOrientation;
+  const fixture = [
+    canonicalOrientationIntroduction,
+    "",
+    "| Root | Orientation |",
+    "| --- | --- |",
+    ...swapped.map((row) => `| ${row.name} | ${row.orientation} |`),
+    "",
+  ].join("\n");
+  assert.throws(
+    () => assertCanonicalOrientationRows(canonicalOrientationRows(fixture)),
+    /name-to-orientation mapping changed/u,
+    "swapping canonical orientations must fail even when every root name remains present",
+  );
 }
 
 function assertCanonicalOrientation(items: readonly ExportItem[], architecture: string): void {
@@ -674,24 +758,16 @@ function assertCanonicalOrientation(items: readonly ExportItem[], architecture: 
       type: item.component.type,
     }))
     .sort((left, right) => compareText(left.name ?? "", right.name ?? ""));
-  assert.deepEqual(roots, expectedRootContract, "canonical root orientation changed");
-  const architectureNames = canonicalOrientationRootNames(architecture);
+  assert.deepEqual(roots, expectedRootContract, "canonical blueprint root contract changed");
+  const architectureRows = canonicalOrientationRows(architecture);
   const expectedNames = expectedRootContract.map((root) => root.name);
-  assert.equal(
-    architectureNames.length,
-    expectedNames.length,
-    `the Canonical Orientation table must contain exactly ${expectedNames.length} root rows`,
-  );
-  assert.equal(
-    new Set(architectureNames).size,
-    architectureNames.length,
-    "the Canonical Orientation table contains a duplicate root row",
-  );
   assert.deepEqual(
-    [...architectureNames].sort(compareText),
+    expectedCanonicalOrientationContract.map((row) => row.name),
     expectedNames,
-    "the Canonical Orientation table root names differ from the canonical root contract",
+    "the verifier's canonical orientation and blueprint root contracts disagree",
   );
+  assertCanonicalOrientationRows(architectureRows);
+  assertSwappedCanonicalOrientationsRejected();
   assert.ok(
     architecture.includes("canonical workspace under [`groma/`](groma/)"),
     "ARCHITECTURE.md must point readers to canonical groma/",

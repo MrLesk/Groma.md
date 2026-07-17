@@ -413,7 +413,7 @@ function verifyPeHeader(
     throw new Error(`${target.target} has invalid PE32+ entry, image, or header bounds`);
   }
 
-  let executableSection = false;
+  const executableSectionRanges: { readonly end: number; readonly start: number }[] = [];
   for (let index = 0; index < sectionCount; index += 1) {
     const offset = optionalEnd + index * 40;
     const virtualSize = view.getUint32(offset + 8, true);
@@ -422,18 +422,24 @@ function verifyPeHeader(
     const rawOffset = view.getUint32(offset + 20, true);
     const sectionCharacteristics = view.getUint32(offset + 36, true);
     const virtualSpan = Math.max(virtualSize, rawSize);
+    const virtualEnd = checkedSpanEnd(virtualAddress, virtualSpan);
+    const rawEnd = checkedSpanEnd(rawOffset, rawSize);
     if (
-      (rawSize > 0 && (rawOffset < headerSize || rawOffset > fileSize - rawSize)) ||
-      virtualAddress > imageSize - virtualSpan
+      (rawSize > 0 && (rawOffset < headerSize || rawEnd === undefined || rawEnd > fileSize)) ||
+      virtualEnd === undefined ||
+      virtualEnd > imageSize
     ) {
       throw new Error(`${target.target} has an out-of-bounds PE section`);
     }
     if ((sectionCharacteristics & 0x20000000) !== 0 && virtualSpan > 0) {
-      executableSection = true;
+      executableSectionRanges.push(Object.freeze({ end: virtualEnd, start: virtualAddress }));
     }
   }
-  if (!executableSection) {
+  if (executableSectionRanges.length === 0) {
     throw new Error(`${target.target} has no executable PE section`);
+  }
+  if (!executableSectionRanges.some((range) => entry >= range.start && entry < range.end)) {
+    throw new Error(`${target.target} has a PE entry point outside executable sections`);
   }
 }
 
