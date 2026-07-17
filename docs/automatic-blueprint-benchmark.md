@@ -125,14 +125,15 @@ layer, at most `60,000` milliseconds. Setup before the spawn and human evaluatio
 do not count. A process failure cannot be hidden by a later artifact.
 
 The execution record declares whether host absolute temporary roots use POSIX or Win32 syntax.
-Both temporary roots must be normalized, absolute, non-root, and distinct under the declared
-platform's comparison rules. Groma-owned output and exclusion paths use one portable syntax on
-every platform: sorted, exact, nonempty, forward-slash workspace descendants with no trailing
-slash, `.` or `..` segment, drive prefix, backslash, glob metacharacter, or other reserved filename
-character. Prefixes and globs do not stand in for exact inventory entries. Neither the committed
-nor recorded output inventory may equal, contain, or be an ancestor of an audit's protected source
-root under the declared platform's path-comparison rules, so `src` or its Win32 case aliases cannot
-erase the production tree from mutation detection.
+Both temporary roots must be normalized, absolute, non-root, and disjoint under the declared
+platform's comparison rules: neither root may equal, contain, or be contained by the other.
+Groma-owned output and exclusion paths use one portable syntax on every platform: sorted, exact,
+nonempty, forward-slash workspace descendants with no trailing slash, `.` or `..` segment, drive
+prefix, backslash, glob metacharacter, or other reserved filename character. Prefixes and globs do
+not stand in for exact inventory entries. Neither the committed nor recorded output inventory may
+equal, contain, or be an ancestor of an audit's protected source root under the declared platform's
+path-comparison rules, so `src` or its Win32 case aliases cannot erase the production tree from
+mutation detection.
 
 The plan commitment is SHA-256 over UTF-8 bytes of whitespace-free JSON with this exact key order:
 `gromaOwnedOutputPaths`, `pathConvention`, `rendererDeclaredMainLayerBudget` (`nodes`, then

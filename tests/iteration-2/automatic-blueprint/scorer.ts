@@ -72,10 +72,10 @@ function sameArray(left: readonly string[], right: readonly string[]): boolean {
 }
 
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
-  return (
-    left.length === right.length &&
-    [...left].sort().every((value, index) => value === [...right].sort()[index])
-  );
+  if (left.length !== right.length) return false;
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
 }
 
 const reservedWindowsName =
@@ -151,6 +151,27 @@ function pathsOverlap(
   );
 }
 
+function temporaryRootsOverlap(
+  left: string,
+  right: string,
+  convention: BenchmarkRun["execution"]["pathConvention"],
+): boolean {
+  const separator = convention === "win32" ? "\\" : "/";
+  const canonicalize = (value: string) => {
+    const withoutTrailingSeparator = value.endsWith(separator) ? value.slice(0, -1) : value;
+    return convention === "win32"
+      ? withoutTrailingSeparator.toLowerCase()
+      : withoutTrailingSeparator;
+  };
+  const comparableLeft = canonicalize(left);
+  const comparableRight = canonicalize(right);
+  return (
+    comparableLeft === comparableRight ||
+    comparableLeft.startsWith(`${comparableRight}${separator}`) ||
+    comparableRight.startsWith(`${comparableLeft}${separator}`)
+  );
+}
+
 function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
   const { pathConvention, temporaryConfigRoot, temporaryHome } = run.execution;
   if (pathConvention === "posix") {
@@ -160,7 +181,9 @@ function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
       path.posix.normalize(value) === value &&
       !value.includes("\\");
     return (
-      valid(temporaryHome) && valid(temporaryConfigRoot) && temporaryHome !== temporaryConfigRoot
+      valid(temporaryHome) &&
+      valid(temporaryConfigRoot) &&
+      !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
     );
   }
   const valid = (value: string) =>
@@ -170,7 +193,7 @@ function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
   return (
     valid(temporaryHome) &&
     valid(temporaryConfigRoot) &&
-    temporaryHome.toLowerCase() !== temporaryConfigRoot.toLowerCase()
+    !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
   );
 }
 
@@ -241,7 +264,9 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     addFailure(
       failures,
       "WORKFLOW_MISMATCH",
-      observedWorkflow.map((argv) => argv.join(" ")),
+      observedWorkflow.length === 0
+        ? ["no commands recorded"]
+        : observedWorkflow.map((argv) => argv.join(" ")),
     );
   }
   const failedCommands = run.execution.commands

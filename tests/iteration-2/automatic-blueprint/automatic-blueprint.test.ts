@@ -297,6 +297,16 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).passed).toBeTrue();
   });
 
+  test("reports nonempty workflow evidence when no commands were recorded", async () => {
+    const audit = await loadAudit("groma.json");
+    const run = cloneRun(passingRun(audit));
+    run.execution.commands = [];
+
+    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures).toEqual([
+      { code: "WORKFLOW_MISMATCH", evidence: ["no commands recorded"] },
+    ]);
+  });
+
   test("retains noncritical false-claim evidence without turning points into a compensating gate", async () => {
     const audit = await loadAudit("groma.json");
     const run = cloneRun(passingRun(audit));
@@ -415,6 +425,28 @@ describe("automatic-blueprint conjunctive scorecard", () => {
 
     expect(
       scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures.map(({ code }) => code),
+    ).toEqual(["TEMPORARY_ENVIRONMENT_NOT_ISOLATED"]);
+  });
+
+  test("rejects nested temporary roots under POSIX and Win32 conventions", async () => {
+    const audit = await loadAudit("groma.json");
+    const posix = cloneRun(passingRun(audit));
+    posix.execution.temporaryHome = "/tmp/groma-benchmark/";
+    posix.execution.temporaryConfigRoot = "/tmp/groma-benchmark/config";
+
+    expect(
+      scoreBenchmarkRun(audit, parseBenchmarkRun(posix)).failures.map(({ code }) => code),
+    ).toEqual(["TEMPORARY_ENVIRONMENT_NOT_ISOLATED"]);
+
+    const win32 = cloneRun(passingRun(audit));
+    win32.execution.pathConvention = "win32";
+    win32.execution.temporaryHome = "C:\\Groma-Benchmark";
+    win32.execution.temporaryConfigRoot = "c:\\groma-benchmark\\config";
+    win32.execution.preRunPlan.pathConvention = "win32";
+    recommitPlan(win32);
+
+    expect(
+      scoreBenchmarkRun(audit, parseBenchmarkRun(win32)).failures.map(({ code }) => code),
     ).toEqual(["TEMPORARY_ENVIRONMENT_NOT_ISOLATED"]);
   });
 
