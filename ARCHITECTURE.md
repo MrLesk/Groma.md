@@ -597,6 +597,18 @@ completed safely, callers receive the stable `projection-index-unavailable` diag
 Deleting the cache can therefore change only query availability and rebuild cost, never
 blueprint meaning.
 
+A cold loader that encounters one exact projection-lease contention result retries without
+an elapsed-time timeout: each iteration safely checks optional local cancellation, attempts
+the complete read-only adoption fence, and only then attempts coordination again. Waits use
+capped exponential backoff from 20 to 500 milliseconds. A completed publication is adopted
+without another acquisition; a waiter that acquires becomes the exclusive repairer and may
+publish only disposable projection resources and continuity metadata. Action, release,
+provider, and mixed-diagnostic failures never authorize retry. The official Host connects
+plugin cancellation to this persistence-local wait without changing Core's projection
+capability, while direct local callers without cancellation may wait indefinitely behind
+permanent exact contention. Cancellation does not interrupt a publication after the waiter
+has acquired the lease.
+
 A generation match alone never establishes currency because an ignored cache may survive
 a branch or checkout change. Load requires both generation and the exact canonical-content
 fingerprint. Incremental publication likewise verifies the complete candidate fingerprint
@@ -648,8 +660,9 @@ exact-matching complete projection may therefore validate canonical identity, ma
 checkpoint, and provider-owned ignore hygiene and adopt the existing bundle without
 coordination or publication. Any non-idle or changing observation, unavailable state,
 missing hygiene, continuity mismatch, or repair requirement falls back to the existing
-exclusive fail-fast settlement, recovery, rebuild, and publication path. Checkpoint
-recording remains exclusive. Lease-release uncertainty is contained in the Result
+exclusive settlement, recovery, rebuild, and publication path; cold projection-lease
+contention follows the cancellation-aware retry above. Checkpoint recording remains
+exclusive. Lease-release uncertainty is contained in the Result
 contract and never masks an earlier specific validation or generation diagnostic.
 An active prepared or committing writer therefore still makes canonical snapshot and
 checkpoint reads fail fast; this delivery permits independent readers of settled state,

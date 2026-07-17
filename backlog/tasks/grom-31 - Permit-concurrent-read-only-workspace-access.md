@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 10:33'
+updated_date: '2026-07-17 11:12'
 labels: []
 milestone: m-4
 dependencies: []
@@ -50,15 +50,10 @@ Fix the dogfood failure in which several independent read-only CLI processes can
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reproduce concurrent canonical and projection-backed CLI reads through the compiled binary, classify each contended local state gate, and capture canonical bytes before and after.
-2. Add persistence-local optimistic transaction snapshots and projection-continuity checkpoint reads only for stable idle journal state with no retained lease, fenced by matching idle generation and state observations around canonical or checkpoint reads.
-3. Give local plugin-package startup brief coherent package-state observations for initial capture, each pre-import revalidation, and final revalidation; release coordination before materialization or import, follow only exact ordinary contention for a finite bound, and keep every package mutation, recovery, and publication exclusively coordinated.
-4. Add a read-only fast path for an already complete projection index and a bounded read-only follower for a sole contended cold repair; validate canonical identity, manifest and chunks, continuity checkpoint, and ignore hygiene without follower publication or repair.
-5. Keep transaction settlement, projection rebuild and publication, package publication, retained leases, writer exclusion, crash recovery, stale-owner handling, and public capability contracts unchanged.
-6. Add focused journal, projection, and package-state interleaving tests for stable readers, writer races, exact final revalidation, retained-release handling, cold publication liveness, and coherent old-or-new results.
-7. Extend compiled Iteration 1A verification to launch at least eight independent concurrent canonical reads and eight cache-cold projection-backed exports, require deterministic valid output, and prove the complete canonical workspace and committed generation remain byte-for-byte unchanged.
-8. Document each optimistic or briefly coordinated read fence at its owning Persistence or Host boundary while keeping canonical meaning separate from disposable projection state.
-9. Run focused Persistence, Host, Application, and CLI tests; compiled and crash-recovery workflows; the full check; all target checks; independent specification and quality reviews; then finalize the task and ready pull request.
+1. Replace the finite adoption-only cold-projection follower with one iterative cancellation-aware load loop: safely check cancellation, attempt exact read-only adoption, run one existing coordinated load attempt, return every success or non-sole-contention result, and retry sole contention after capped 20-to-500-millisecond exponential waits without an elapsed-time cap.
+2. Add an optional Persistence-local projection cancellation predicate and wire the official Host bootstrap from pluginContext.cancellation.isCancellationRequested without changing Core projection capability contracts.
+3. Add deterministic regressions for cancellation, progress beyond the former small-bound window, adoption before reacquisition, a failed winner followed by waiter repair, mixed diagnostics, and multiple readers with byte-identical canonical state.
+4. Replace stale finite-follower and never-reacquire documentation in Persistence and Architecture, run focused projection and Host tests plus typecheck/diff checks, and obtain independent review before handoff.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -87,6 +82,14 @@ The package-state review found a reachable C/L/U ABA mixture across supported bl
 Final verification on the exact tree: bun run check passed formatting, type checking, architecture boundaries, 791 tests across 37 files with 5,649 expectations, the compiled Iteration 1A eight-reader cache-cold workflow, and crash recovery. bun run check:targets passed macOS arm64, Linux x64, Windows x64, and Windows arm64 executables. Focused package tests passed 49 tests and 452 expectations; focused projection tests passed 39 tests and 298 expectations; git diff --check passed. Independent cold-projection and package-state reviews approved the final behavior and exact regressions.
 
 Final Claude review clarified the verified scope without changing semantics: settled-state readers may run concurrently, while an active prepared or committing writer still makes canonical snapshot and checkpoint reads fail fast; package-state retry is bounded per coherent observation; and package acquisition constants now use retry rather than follower naming. The projection budget remains intentionally derived from configured reconstruction ceilings in response to the bounded-workload review requirement. The two local sole-contention checks remain at their owning layer boundaries rather than creating a new cross-layer public helper, and post-fence root-absence checks remain because they catch unsupported direct root creation after the coherent observation.
+
+Latest P1 remediation design: no finite timeout can distinguish healthy supported-scale publication from a stuck live lease, so cold loads retry until success, a terminal non-contention result, or optional caller cancellation. Every retry performs adoption before coordination; a waiter that acquires runs the existing repair/publication action and may write only disposable projection state. Only an exact sole resource-coordination-contended diagnostic authorizes another iteration. Backoff starts at 20 ms and caps at 500 ms. Official bootstrap supplies plugin cancellation locally; Core capability shape remains unchanged. Direct local callers without cancellation can wait indefinitely under permanent exact contention. Deterministic testing gates the eighth post-contention read beyond the former small-bound window, covers adoption-before-reacquire, terminal and mixed failures, waiter repair after winner release, and canonical byte/generation immutability.
+
+Implemented the P1 projection liveness remediation. Local projection load now checks a snapshotted optional cancellation predicate safely, attempts exact read-only adoption before every coordination attempt, retries only a sole contention diagnostic with uncapped 20-to-500-millisecond exponential waits, and lets a waiter that acquires run the existing disposable repair/publication action. Default Host bootstrap supplies plugin-context cancellation without changing Core. Deterministic coverage proves adoption after the former small-bound window without reacquisition, cancellation and predicate containment, terminal and mixed failure stopping, repair after a failed winner with only cache writes, eight-waiter success with canonical sentinel bytes unchanged, and Host cancellation wiring. Focused projection plus default-Host verification passed 55 tests and 441 expectations; typecheck, formatting, and git diff check passed.
+
+Closed final independent-review gaps. A projection-level integration now runs behind the real coordination child, kills and awaits the owner, uses a one-millisecond stale policy, and proves the iterative loader safely reaps, reacquires, repairs malformed disposable state, stages only .groma-cache resources, and preserves exact canonical sentinel bytes plus generation. The Final Summary now describes uncapped cancellation-aware retry and waiter repair instead of the obsolete bounded read-only follower. Refreshed focused verification passed 56 tests and 448 expectations; typecheck, formatting, and git diff check remain green.
+
+Final exact-tree verification after the cancellation-aware liveness remediation passed bun run check: formatting, type checking, architecture boundaries, 796 tests across 37 files with 5,679 expectations, the compiled Iteration 1A cache-cold eight-reader workflow, and crash recovery. bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 executables. The focused projection and Host suites passed 56 tests with 448 expectations, the real dead-owner regression passed, two independent reviews approved, and git diff --check was clean.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -103,12 +106,24 @@ created: 2026-07-17 10:33
 ---
 Final pull-request head passed local and hosted checks, all four target builds, compiled verification, Claude review, independent package/projection/whole-diff reviews, and Codex review. Ready to merge PR #32.
 ---
-<!-- COMMENTS:END -->
 
-<!-- SECTION:NOTES:END -->
+author: @codex
+created: 2026-07-17 10:43
+---
+Reopened after exact-head Codex review found the configured ten-second projection follower cap can still expire during a healthy supported-scale publication. Replacing timeout failure with safe progress tracking or coordination retry before merge.
+---
+
+author: @codex
+created: 2026-07-17 11:12
+---
+Exact-tree remediation passed 796 tests and 5,679 expectations, the compiled cold-reader and crash-recovery workflow, all four target builds, focused concurrency verification, and two independent reviews. Ready for final PR head review.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Permitted at least eight independent CLI processes to inspect one initialized workspace concurrently through canonical and cache-cold projection-backed reads without recovery, package-state, or graph-query failures. Stable-idle transaction and checkpoint snapshots remain optimistic; package startup uses only brief coherent observations outside plugin execution; cold projection losers follow one bounded read-only publication path. Writers, crash recovery, stale-owner handling, mutations, repair, and publication remain exclusive. Verified by 791 tests and 5,649 expectations, the compiled byte-for-byte canonical-state workflow, crash recovery, all four target builds, exact ABA and slow-publication regressions, and independent reviews.
+Permits independent CLI processes to inspect one initialized workspace concurrently through canonical and cache-cold projection-backed reads without recovery, package-state, or graph-query failures. Stable-idle transaction and checkpoint reads remain optimistic, and package startup uses brief coherent observations outside plugin execution. Cold projection contenders use cancellation-aware adoption-before-coordination retry with 20-to-500-millisecond capped backoff and no elapsed-time timeout; a waiter that acquires may exclusively repair and publish only disposable projection state. Exact contention, cancellation, mixed failures, normal and dead-owner repair, eight-waiter adoption, Host cancellation wiring, and byte-identical canonical state are covered without changing Core capability contracts. Verified by 796 tests and 5,679 expectations, compiled crash/cold-reader workflows, all four executable targets, focused concurrency suites, and independent reviews.
 <!-- SECTION:FINAL_SUMMARY:END -->
+
+<!-- SECTION:NOTES:END -->

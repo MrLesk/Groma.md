@@ -696,6 +696,7 @@ export function createDefaultBootstrapRegistry(
                 transactionProvider,
               }),
               checkpoint: transactionProvider,
+              isCancellationRequested: () => pluginContext.cancellation.isCancellationRequested(),
               resources,
             });
             return Object.freeze({

@@ -188,6 +188,34 @@ describe("default bootstrap registry", () => {
     expect(repaired).toMatchObject({ ok: true, value: { generation: 2 } });
   });
 
+  test("wires process cancellation into local projection loading", async () => {
+    const context = await temporaryWorkspace();
+    const cancellation = new AbortController();
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+    });
+    const composed = await registry.compose({
+      cancellation: cancellation.signal,
+      workspaceRoot: context.workspaceRoot,
+    });
+    if (!composed.ok) throw new Error("default composition failed");
+    expect(await composed.value.workspace.initialize()).toMatchObject({ status: "initialized" });
+
+    cancellation.abort();
+    expect(await composed.value.projection.load()).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-load-cancelled" },
+        },
+      ],
+      ok: false,
+    });
+  });
+
   test("publishes confirmed direct recoveries without reclassifying canonical success", async () => {
     const context = await temporaryWorkspace();
     let blockedCanonicalLocator: string | undefined;

@@ -58,10 +58,8 @@ const intrinsicJsonParse = JSON.parse;
 const intrinsicNormalize = String.prototype.normalize;
 const intrinsicObjectKeys = Object.keys;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
-const projectionRepairFollowerInitialDelayMilliseconds = 20;
-const projectionRepairFollowerMaximumDelayMilliseconds = 500;
-const projectionRepairFollowerMinimumWaitMilliseconds = 750;
-const projectionRepairFollowerSupportedScaleWaitMilliseconds = 10_000;
+const projectionRepairRetryInitialDelayMilliseconds = 20;
+const projectionRepairRetryMaximumDelayMilliseconds = 500;
 
 export interface ProjectionIndexBounds {
   readonly maxAliases: number;
@@ -76,6 +74,8 @@ export interface LocalProjectionIndexOptions {
   readonly bounds?: Partial<ProjectionIndexBounds>;
   readonly canonical: ProjectionCanonicalSource;
   readonly checkpoint?: ProjectionContinuityCapability;
+  /** Optional local wait cancellation; it must synchronously return a boolean. */
+  readonly isCancellationRequested?: () => boolean;
   readonly resources: LocalResourceProvider;
 }
 
@@ -105,42 +105,6 @@ const absoluteBounds: ProjectionIndexBounds = Object.freeze({
   maxRelations: 10_000_000,
   maxSearchableTextCharacters: 1024 * 1024,
 });
-
-function projectionRepairFollowerWaitMilliseconds(bounds: ProjectionIndexBounds): number {
-  const structuralWork = bounds.maxAliases + bounds.maxEntities + bounds.maxRelations;
-  const supportedStructuralWork =
-    defaultBounds.maxAliases + defaultBounds.maxEntities + defaultBounds.maxRelations;
-  const structuralWait = Math.ceil(
-    (structuralWork * projectionRepairFollowerSupportedScaleWaitMilliseconds) /
-      supportedStructuralWork,
-  );
-  const byteWait = Math.ceil(
-    (bounds.maxBytes * projectionRepairFollowerSupportedScaleWaitMilliseconds) /
-      defaultBounds.maxBytes,
-  );
-  return Math.min(
-    projectionRepairFollowerSupportedScaleWaitMilliseconds,
-    Math.max(projectionRepairFollowerMinimumWaitMilliseconds, structuralWait, byteWait),
-  );
-}
-
-function projectionRepairFollowerDelaySchedule(bounds: ProjectionIndexBounds): readonly number[] {
-  const waitMilliseconds = projectionRepairFollowerWaitMilliseconds(bounds);
-  const delays: number[] = [];
-  let elapsed = 0;
-  let nextDelay = projectionRepairFollowerInitialDelayMilliseconds;
-  while (elapsed < waitMilliseconds) {
-    const delay = Math.min(
-      nextDelay,
-      projectionRepairFollowerMaximumDelayMilliseconds,
-      waitMilliseconds - elapsed,
-    );
-    delays.push(delay);
-    elapsed += delay;
-    nextDelay = Math.min(nextDelay * 2, projectionRepairFollowerMaximumDelayMilliseconds);
-  }
-  return Object.freeze(delays);
-}
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -961,6 +925,7 @@ export function createLocalProjectionIndex(
 ): ProjectionIndexCapability & ProjectionReadCapability {
   const bounds = parseBounds(options.bounds);
   const canonical = options.canonical;
+  const isCancellationRequested = options.isCancellationRequested;
   const resources = options.resources;
   const locator = localProjectionIndexLocator();
   if (!locator.ok) throw new Error("The fixed local projection locator is invalid");
@@ -1043,58 +1008,90 @@ export function createLocalProjectionIndex(
     }
   };
 
-  const followCoordinatedPublication = async (): Promise<Result<ProjectionSnapshot>> => {
-    const delays = projectionRepairFollowerDelaySchedule(bounds);
-    let observation = 0;
-    while (true) {
-      const adopted = await readOnlyAdoption();
-      if (adopted !== undefined) return adopted;
-      if (observation === delays.length) break;
-      await wait(delays[observation]!);
-      observation += 1;
+  type CoordinatedLoadAttempt =
+    | { readonly state: "contended" }
+    | { readonly result: Result<ProjectionSnapshot>; readonly state: "completed" };
+
+  const coordinatedLoadAttempt = async (): Promise<CoordinatedLoadAttempt> => {
+    let result: Result<Result<ProjectionSnapshot>>;
+    try {
+      result = await resources.withCoordination(
+        { context: "local-machine", locator: locator.value },
+        async () => {
+          const canonical = await loadCanonical();
+          if (!canonical.ok) return canonical;
+          const fingerprint = canonicalFingerprint(canonical.value, bounds);
+          if (!fingerprint.ok) return fingerprint;
+          const current = await readProjection(resources, locator.value, bounds);
+          if (current.state === "unavailable") return current.result;
+          if (
+            current.state === "loaded" &&
+            current.snapshot.generation === canonical.value.generation &&
+            current.snapshot.fingerprint === fingerprint.value
+          ) {
+            const adopted = await partialReads.adopt(current.snapshot);
+            if (!adopted.ok) return adopted;
+            if (adopted.value === undefined) return publishComplete(current.snapshot);
+            const ignoreLocator = localProjectionIgnoreLocator();
+            if (!ignoreLocator.ok) return unavailable("projection-ignore-invalid");
+            const ignored = await ensureCacheIgnored(resources, ignoreLocator.value);
+            if (!ignored.ok) return ignored;
+            const committed = adopted.value.commit();
+            return committed.ok ? success(current.snapshot) : committed;
+          }
+          const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
+          return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
+        },
+      );
+    } catch {
+      return Object.freeze({
+        result: unavailable("projection-coordination-failed"),
+        state: "completed" as const,
+      });
     }
-    return unavailable("projection-coordination-failed");
+    if (result.ok) return Object.freeze({ result: result.value, state: "completed" as const });
+    return coordinationContended(result)
+      ? Object.freeze({ state: "contended" as const })
+      : Object.freeze({
+          result: unavailable("projection-coordination-failed"),
+          state: "completed" as const,
+        });
   };
 
-  const coordinatedLoad = async (): Promise<Result<ProjectionSnapshot>> => {
-    const result = await resources.withCoordination(
-      { context: "local-machine", locator: locator.value },
-      async () => {
-        const canonical = await loadCanonical();
-        if (!canonical.ok) return canonical;
-        const fingerprint = canonicalFingerprint(canonical.value, bounds);
-        if (!fingerprint.ok) return fingerprint;
-        const current = await readProjection(resources, locator.value, bounds);
-        if (current.state === "unavailable") return current.result;
-        if (
-          current.state === "loaded" &&
-          current.snapshot.generation === canonical.value.generation &&
-          current.snapshot.fingerprint === fingerprint.value
-        ) {
-          const adopted = await partialReads.adopt(current.snapshot);
-          if (!adopted.ok) return adopted;
-          if (adopted.value === undefined) return publishComplete(current.snapshot);
-          const ignoreLocator = localProjectionIgnoreLocator();
-          if (!ignoreLocator.ok) return unavailable("projection-ignore-invalid");
-          const ignored = await ensureCacheIgnored(resources, ignoreLocator.value);
-          if (!ignored.ok) return ignored;
-          const committed = adopted.value.commit();
-          return committed.ok ? success(current.snapshot) : committed;
-        }
-        const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
-        return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
-      },
-    );
-    if (result.ok) return result.value;
-    return coordinationContended(result)
-      ? followCoordinatedPublication()
-      : unavailable("projection-coordination-failed");
+  const cancellationFailure = (): Result<ProjectionSnapshot> | undefined => {
+    if (isCancellationRequested === undefined) return undefined;
+    try {
+      const requested: unknown = isCancellationRequested();
+      if (requested === false) return undefined;
+      return unavailable(
+        requested === true ? "projection-load-cancelled" : "projection-cancellation-failed",
+      );
+    } catch {
+      return unavailable("projection-cancellation-failed");
+    }
   };
 
   const load = async (): Promise<Result<ProjectionSnapshot>> => {
-    const adopted = await readOnlyAdoption();
-    if (adopted !== undefined) return adopted;
-    return coordinatedLoad();
+    let delayMilliseconds = projectionRepairRetryInitialDelayMilliseconds;
+    while (true) {
+      const beforeAdoption = cancellationFailure();
+      if (beforeAdoption !== undefined) return beforeAdoption;
+      const adopted = await readOnlyAdoption();
+      if (adopted !== undefined) return adopted;
+      const beforeCoordination = cancellationFailure();
+      if (beforeCoordination !== undefined) return beforeCoordination;
+      const coordinated = await coordinatedLoadAttempt();
+      if (coordinated.state === "completed") return coordinated.result;
+      const beforeWait = cancellationFailure();
+      if (beforeWait !== undefined) return beforeWait;
+      await wait(delayMilliseconds);
+      const afterWait = cancellationFailure();
+      if (afterWait !== undefined) return afterWait;
+      delayMilliseconds = Math.min(
+        delayMilliseconds * 2,
+        projectionRepairRetryMaximumDelayMilliseconds,
+      );
+    }
   };
 
   const update = (event: GraphCommittedEvent) => {
