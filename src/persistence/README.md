@@ -285,14 +285,24 @@ one exact
 release, mixed-diagnostic, and provider failures return immediately. Retry waits start at
 20 milliseconds and use capped exponential backoff up to 500 milliseconds, with no total
 elapsed-time limit.
+Before waiting after that exact callback contention, `load()` makes one direct acquisition
+of the same projection lease. That acquisition uses persistent coordination's immediate
+double proof of a dead PID, so a cold reader can recover a crashed publisher without
+weakening callback coordination's stale-age policy. Live, PID-reused, malformed, and
+otherwise ambiguous owners remain contended. If the direct acquisition succeeds, the load
+action runs at most once and the lease is always released; one cleanup retry is bounded,
+and any release uncertainty withholds the action result even when that retry removes the
+lease. `rebuild()` and incremental updates remain callback-only and fail fast on
+contention.
 If the completed publication becomes adoptable, the waiter returns without reacquiring or
 writing. If it acquires the lease first, it becomes the coordinated repairer and may
 replace only reconstructable projection resources, partial bundles, continuity metadata,
 and cache ignore state through the existing publication path. It never targets canonical
 intent, evidence, alias, or generation resources. The official Host connects plugin
 cancellation to this local wait; a direct local caller that supplies no cancellation
-predicate may wait indefinitely behind permanent exact contention. Cancellation bounds
-waiting only: after acquisition, the existing publication action runs to settlement.
+predicate may wait indefinitely behind permanent exact contention. Cancellation may win
+one final check after direct acquisition succeeds and before the publication action begins;
+the acquired lease is still released. Once the action begins, it runs to settlement.
 A missing, oversized, malformed, or semantically mismatched current manifest is
 replaceable disposable state. A missing or mismatched valid checkpoint republishes;
 manifest-provider or checkpoint I/O failure fails closed without publication, and a warm
