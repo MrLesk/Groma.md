@@ -494,6 +494,8 @@ describe("CLI program", () => {
     });
   });
 
+  // This regression deliberately renders multi-megabyte escaped JSON through the complete Host.
+  // Keep a finite CI allowance above Bun's 5s unit default without relaxing production bounds.
   test("renders a near-max official two-document limit-one traversal below eight MiB", async () => {
     const root = await workspace();
     const source = "ent_00000000000000000000000000000001";
@@ -565,8 +567,10 @@ describe("CLI program", () => {
       },
     });
     expect(traversed.text).not.toContain("cli-output-bound-exceeded");
-  });
+  }, 20_000);
 
+  // This integration regression repeatedly restarts the Host across the complete public workflow.
+  // Keep a finite CI allowance above Bun's 5s unit default without changing global test behavior.
   test("executes the complete one-shot component workflow across host restarts", async () => {
     const root = await workspace();
     const domain = "ent_00000000000000000000000000000001";
@@ -985,7 +989,7 @@ describe("CLI program", () => {
       ok: true,
       result: { value: grandchild },
     });
-  });
+  }, 20_000);
 
   test("rejects an export cursor from different content at the same generation", async () => {
     const historyA = await workspace();

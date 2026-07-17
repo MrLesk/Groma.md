@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 08:30'
+updated_date: '2026-07-17 08:39'
 labels: []
 milestone: m-4
 dependencies: []
@@ -17,6 +17,7 @@ modified_files:
   - src/cli/tests/program.test.ts
   - src/host/README.md
   - src/host/local-plugin-packages.ts
+  - src/host/tests/application-operations-local.test.ts
   - src/host/tests/bootstrap-configuration.test.ts
   - src/host/tests/default-bootstrap.test.ts
   - src/host/tests/local-plugin-packages.test.ts
@@ -74,6 +75,8 @@ Implemented three bounded, coordination-free read paths: stable-idle optimistic 
 Claude review identified that indeterminate live-transaction release failures kept the optimistic-read guard latched behind the token-specific preparation. Remediation transfers throwing/retryable releases into the existing retained-lease handoff, while terminal ownership-loss/invalid results detach without retention. Independent re-review then found and closed a delayed-acknowledgement race by replacing the shared boolean with exact active-lease identity, so an older L1 completion cannot clear a newer L2 marker. Deterministic tests cover throwing, retryable, delayed success, delayed ownership-lost, and delayed invalid release outcomes; they prove retained handoff, exact contention while L2 is active, restored eight-reader optimistic access, and committed recovery. Full check and journal suite pass; the five focused cases passed 10 consecutive repetitions; independent re-review approved.
 
 Claude second review exposed a possible two-handle release overlap and a cold-projection double-read. Final remediation enforces one active-or-retained transaction lease per journal: acquisition fails locally while an exact active lease exists, token-local lease ownership detaches before provider release is awaited, and success, terminal, retryable, and throwing acknowledgements cannot be reused or clear another operation. Direct delayed-ack tests cover snapshot, checkpoint, concurrent same-token commit and recover, retained handoff, exact one-attempt contention, normal recovery, and restored eight-reader optimistic access. Projection load now inspects the disposable cache first, so absent, corrupt, deleted, and oversized caches enter coordinated repair with exactly one canonical load; loaded fast-path candidates still fingerprint canonical state and reload under coordination on fallback. Full check passed with 781 tests and 5,561 expectations; focused Persistence suites passed 115/845; same-token tests passed 10 consecutive repetitions; final independent review approved; git diff --check passed.
+
+The final GitHub quality job exposed runner-only timing pressure, not a behavior failure: the host restart workflow and two CLI end-to-end workflows hit Bun’s 5-second default at 5.001–5.132 seconds while 778 other tests and both binary jobs passed. Exactly those three integration tests now use the existing finite 20-second per-test allowance; production code and global test behavior are unchanged. Focused verification passed 3 tests/128 expectations, full check remained green at 781/5,561, independent review approved, and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -84,4 +87,6 @@ Permitted at least eight independent canonical and warmed projection-backed CLI 
 PR review remediation additionally made uncertain lease handoff reusable by the next journal operation and made the optimistic-read guard lease-specific under overlapping delayed release acknowledgements.
 
 Final review also enforced a single active-or-retained journal lease during delayed release acknowledgement and removed the redundant canonical read from cold and invalid projection repair.
+
+Three integration-scale regressions received test-local 20-second CI allowances after shared-runner execution crossed Bun’s 5-second default; no runtime or global timeout changed.
 <!-- SECTION:FINAL_SUMMARY:END -->
