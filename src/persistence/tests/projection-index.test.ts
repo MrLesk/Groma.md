@@ -1519,11 +1519,12 @@ describe("local projection index", () => {
       stderr: "pipe",
       stdout: "pipe",
     });
+    const childExited = child.exited;
     try {
       await within(
         Promise.race([
           ready,
-          child.exited.then(async (code) => {
+          childExited.then(async (code) => {
             const stderr = await new Response(child.stderr).text();
             throw new Error(`coordination child exited before readiness (${code}): ${stderr}`);
           }),
@@ -1543,6 +1544,8 @@ describe("local projection index", () => {
           if (property === "acquireCoordination") {
             return async (request: Parameters<LocalResourceProvider["acquireCoordination"]>[0]) => {
               explicitAcquisitions += 1;
+              // Make dead-owner recovery causal after callback contention, independent of scheduling.
+              if (explicitAcquisitions === 1) await childExited;
               return resourceTarget.acquireCoordination(request);
             };
           }
@@ -1581,14 +1584,14 @@ describe("local projection index", () => {
       }).load();
       await within(contended, 5_000, "dead-owner projection contention");
       child.kill();
-      await within(child.exited, 5_000, "dead projection owner exit");
+      await within(childExited, 5_000, "dead projection owner exit");
 
       expect(await within(load, 5_000, "dead-owner projection repair")).toMatchObject({
         ok: true,
         value: { generation: 1 },
       });
-      expect(coordinations).toBe(2);
-      expect(explicitAcquisitions).toBe(2);
+      expect(coordinations).toBe(1);
+      expect(explicitAcquisitions).toBe(1);
       expect(source.calls).toBe(1);
       expect(staged.length).toBeGreaterThan(0);
       expect(staged.every((locator) => locator.startsWith(".groma-cache/"))).toBeTrue();
@@ -1602,7 +1605,7 @@ describe("local projection index", () => {
     } finally {
       if (child.exitCode === null) {
         child.kill();
-        await Promise.race([child.exited, Bun.sleep(2_000)]);
+        await Promise.race([childExited, Bun.sleep(2_000)]);
       }
       try {
         child.disconnect();
