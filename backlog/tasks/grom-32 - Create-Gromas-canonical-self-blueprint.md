@@ -1,11 +1,11 @@
 ---
 id: GROM-32
 title: Create Groma's canonical self-blueprint
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 16:34'
+updated_date: '2026-07-17 16:46'
 labels: []
 milestone: m-2
 dependencies:
@@ -55,7 +55,7 @@ Replace the handmade architecture overview as the detailed source of truth by re
 4. Retain the verifier-owned 256-request test-harness cap in both complete page collectors without changing canonical or presentation bounds.
 5. Cover only ARCHITECTURE.md and docs in the Markdown formatter expansion, avoiding unrelated brand or content churn.
 6. Run build, exact public export audit, normal verification, report mode in both option orders, format checking, the full repository check, all target builds, restored-host verification, diff hygiene, and residue inspection serially.
-7. Record exact-head evidence and the complete task file set through Backlog, keep GROM-32 In Progress for remaining PR-level review gates, and commit without pushing or merging.
+7. Record exact-head evidence through Backlog, obtain independent specification and code-quality approval, finalize the task, and retain CI/Claude/Codex as PR-level merge gates.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -82,6 +82,8 @@ Third quality-review loop hardened both complete public-CLI paging helpers. Ever
 Final controller review gates passed on HEAD 0acb834: independent specification review approved after the Ordering-example and edit-tolerant baseline-report fixes; independent code-quality review approved after bounded paging and generation checks plus the DEVELOPMENT gate-order correction. Normal/report verifier modes, bun run check (796 tests, 5,679 expectations), bun run check:targets (all four targets), canonical public-export audits, projection rebuild/byte proofs, and diff hygiene are green.
 
 Exact-head final audit on 4ec0d88 independently compared public exports at generations 94 and 102. Only Graph Kernel, Local Resource Provider, Projection Index, and Schema Migration changed; 39 other components and all non-relationship meaning were unchanged. The audit verified exactly nine new CLI-minted relates-to edges with their full descriptions and intended endpoints, the sole ambiguous-to-partial transition, 43 components with 43 nonempty intents, 87 declarations at 53 edge / 9 partial / 8 ambiguous / 17 constraint, 104 unique edges, and a complete global declaration/edge source-description bijection. Transaction state is idle and committed at generation and projection watermark 102. Verification passed serially: bun run build; exact public export delta/count/endpoint audit; bun run verify:self-blueprint; report-baseline in both executable-option orders with all reviewed digests matching; bun run format:check; bun run check with 796 tests and 5,679 expectations plus compiled Iteration 1A recovery and the self-blueprint gate; bun run check:targets for all four targets; restored-host bun run verify:self-blueprint; git diff --check; temporary-residue inspection. No canonical correction was required.
+
+Final exact-head local reviews approved commit 0d84a8c with no remaining specification or quality findings. The specification review proved the nine-edge-only semantic delta, 104-edge bijection, generation 102 settlement, exact baseline, test-only page cap, targeted formatting scope, and all original acceptance criteria. The quality review confirmed the 256-request boundary, canonical serialization, digests, green full/target checks, Backlog accuracy, and clean residue-free worktree.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -110,10 +112,16 @@ created: 2026-07-17 16:08
 ---
 Reopened after exact-head Codex review. Independent graph audit confirmed three P2 findings and a fail-closed consistency closure requiring nine public-CLI-authored edges total; independent quality audit also confirmed a unique-cursor page safety bound and targeted new-document formatting coverage as actionable. Optional diagnostic nits were evaluated and are not merge blockers.
 ---
+
+author: @codex
+created: 2026-07-17 16:46
+---
+Final 0d84a8c specification and code-quality re-reviews approved with no actionable findings. Marked Done; fresh hosted CI, Claude, and Codex review remain merge gates after push.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed the exact-head GROM-32 review remediation without altering canonical meaning beyond the approved public-CLI transaction sequence. The self-blueprint remains 43 components and 87 preserved declarations, now with 104 evidence-backed neutral edges and explicit 53 edge / 9 partial / 8 ambiguous / 17 constraint classification. Added a verifier-only 256-page-request runaway guard to both full collectors, refreshed the reviewed count/status/digest baseline, and expanded formatting coverage only to ARCHITECTURE.md and docs. Public export comparison proves the nine new opaque edge IDs, exact endpoints and descriptions, global declaration-edge bijection, unchanged non-relationship meaning, and idle committed generation 102 state. Build, normal and both report verifier modes, formatting, 796 tests with 5,679 expectations, Iteration 1A recovery, all four standalone targets, post-target host verification, diff hygiene, and residue checks pass. Task intentionally remains In Progress for PR-level review gates.
+Created Groma's public-CLI-authored canonical self-blueprint with 43 intentional components, all 87 source declarations preserved, 104 evidence-backed neutral edges, and explicit 53 edge / 9 partial / 8 ambiguous / 17 constraint visibility. Replaced the card ledger with a concise navigator and noncanonical teaching examples. Added a hermetic expected-baseline verifier with edit-tolerant reporting, bounded page shape/generation/cursor/runaway checks, projection rebuild, and canonical byte-stability proofs, plus formatting coverage for the architecture navigator and examples. Verified by exact generation-94-to-102 public-export audit, 796 tests and 5,679 expectations, compiled Iteration 1A recovery, both report argument orders, all four target builds, post-target host verification, and independent specification/code-quality approvals.
 <!-- SECTION:FINAL_SUMMARY:END -->
