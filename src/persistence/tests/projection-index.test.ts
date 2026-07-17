@@ -1760,13 +1760,17 @@ describe("local projection index", () => {
     const canonicalBytes = new TextEncoder().encode("canonical intent bytes\n");
     await replace(resources, canonicalLocator.value, canonicalBytes);
 
+    const callsBeforeAbsentLoad = source.calls;
     expect((await index.load()).ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeAbsentLoad + 1);
     const projectionLocator = localProjectionIndexLocator();
     if (!projectionLocator.ok) throw new Error("invalid projection locator");
     await replace(resources, projectionLocator.value, new TextEncoder().encode("{corrupt\n"));
     source.value = canonical(2, { childName: "After corruption" });
+    const callsBeforeCorruptLoad = source.calls;
     const repaired = await index.load();
     expect(repaired.ok && Number(repaired.value.generation)).toBe(2);
+    expect(source.calls).toBe(callsBeforeCorruptLoad + 1);
 
     source.value = canonical(4, { childName: "After event gap", extraRelation: true });
     const missed = createGraphCommittedEvent(4, {
@@ -1779,7 +1783,9 @@ describe("local projection index", () => {
     expect(afterGap.ok && Number(afterGap.value.generation)).toBe(4);
 
     expect((await resources.removeResource(projectionLocator.value)).state).toBe("committed");
+    const callsBeforeDeletedLoad = source.calls;
     expect((await index.load()).ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeDeletedLoad + 1);
     expect(
       await resources.read({
         locator: canonicalLocator.value,
@@ -1859,9 +1865,11 @@ describe("local projection index", () => {
     await replace(resources, canonicalLocator.value, canonicalBytes);
     await replace(resources, projectionLocator.value, new Uint8Array(4_097));
 
+    const callsBeforeRepair = source.calls;
     const repaired = await index.load();
 
     expect(repaired.ok).toBeTrue();
+    expect(source.calls).toBe(callsBeforeRepair + 1);
     expect(
       await resources.read({ locator: projectionLocator.value, maxBytes: 4_096 }),
     ).toMatchObject({ ok: true });

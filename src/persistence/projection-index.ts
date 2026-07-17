@@ -992,27 +992,26 @@ export function createLocalProjectionIndex(
 
   const load = async (): Promise<Result<ProjectionSnapshot>> => {
     try {
-      const canonical = await loadCanonical();
-      if (canonical.ok) {
+      const current = await readProjection(resources, locator.value, bounds);
+      if (current.state === "loaded") {
+        const canonical = await loadCanonical();
+        if (!canonical.ok) return coordinatedLoad();
         const fingerprint = canonicalFingerprint(canonical.value, bounds);
-        if (fingerprint.ok) {
-          const current = await readProjection(resources, locator.value, bounds);
+        if (
+          fingerprint.ok &&
+          current.snapshot.generation === canonical.value.generation &&
+          current.snapshot.fingerprint === fingerprint.value
+        ) {
+          const adopted = await partialReads.adopt(current.snapshot);
+          const ignoreLocator = localProjectionIgnoreLocator();
           if (
-            current.state === "loaded" &&
-            current.snapshot.generation === canonical.value.generation &&
-            current.snapshot.fingerprint === fingerprint.value
+            adopted.ok &&
+            adopted.value !== undefined &&
+            ignoreLocator.ok &&
+            (await cacheIgnoreIsCurrent(resources, ignoreLocator.value))
           ) {
-            const adopted = await partialReads.adopt(current.snapshot);
-            const ignoreLocator = localProjectionIgnoreLocator();
-            if (
-              adopted.ok &&
-              adopted.value !== undefined &&
-              ignoreLocator.ok &&
-              (await cacheIgnoreIsCurrent(resources, ignoreLocator.value))
-            ) {
-              const committed = adopted.value.commit();
-              if (committed.ok) return success(current.snapshot);
-            }
+            const committed = adopted.value.commit();
+            if (committed.ok) return success(current.snapshot);
           }
         }
       }

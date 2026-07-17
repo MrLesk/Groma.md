@@ -1476,22 +1476,20 @@ export function createLocalTransactionJournal(
       delete preparation.lease;
       if (preparation.stagesCleaned) live.delete(token);
     };
+    detachPreparationLease();
     let released: Result<void>;
     try {
       released = await options.resources.releaseCoordination(lease);
     } catch {
       retainTransactionLease(lease);
-      detachPreparationLease();
       clearActiveTransactionLease(lease);
       return false;
     }
     if (!released.ok) {
       if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
-      detachPreparationLease();
       clearActiveTransactionLease(lease);
       return false;
     }
-    detachPreparationLease();
     clearActiveTransactionLease(lease);
     return true;
   };
@@ -1653,8 +1651,16 @@ export function createLocalTransactionJournal(
     throw new Error("Multiple local transaction leases could not be released");
   };
   const acquireTransactionLease = async (): Promise<Result<LocalCoordinationLease>> => {
+    if (activeTransactionLease !== undefined) {
+      return failure(
+        diagnostic(
+          "resource-coordination-contended",
+          "Local resource coordination is already held",
+        ),
+      );
+    }
     const retained = retainedTransactionLease;
-    if (retained !== undefined && activeTransactionLease === undefined) {
+    if (retained !== undefined) {
       retainedTransactionLease = undefined;
       activeTransactionLease = retained;
       return success(retained);
