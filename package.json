@@ -19,7 +19,8 @@
     "check:targets": "bun run scripts/verify-targets.ts",
     "smoke": "bun run scripts/verify-binary.ts",
     "verify:1a": "bun run build && bun run smoke && bun run tests/iteration-1a/verify.ts",
-    "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a"
+    "verify:self-blueprint": "bun run build && bun run tests/iteration-1b/verify-self-blueprint.ts",
+    "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a && bun run tests/iteration-1b/verify-self-blueprint.ts"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",
