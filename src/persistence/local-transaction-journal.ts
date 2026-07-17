@@ -1316,7 +1316,10 @@ export function createLocalTransactionJournal(
   const live = new Map<string, LivePreparation>();
   const pendingJournalStages = new Map<StagedReplacementHandle, PendingJournalStage>();
   let retainedTransactionLease: LocalCoordinationLease | undefined;
-  let transactionLeaseInUse = false;
+  let activeTransactionLease: LocalCoordinationLease | undefined;
+  const clearActiveTransactionLease = (lease: LocalCoordinationLease): void => {
+    if (activeTransactionLease === lease) activeTransactionLease = undefined;
+  };
   const readExact = async (locator: WorkspaceResourceLocator, maximum = limits.maxJournalBytes) => {
     const read = await options.resources.read({ locator, maxBytes: maximum });
     if (!read.ok) {
@@ -1467,21 +1470,29 @@ export function createLocalTransactionJournal(
     await commitJournalStage(pending, false);
   };
   const release = async (token: string, lease: LocalCoordinationLease): Promise<boolean> => {
-    const released = await options.resources.releaseCoordination(lease);
-    const preparation = live.get(token);
-    if (!released.ok) {
-      if (coordinationLeaseCannotBeRetried(released) && preparation?.lease === lease) {
-        delete preparation.lease;
-        if (preparation.stagesCleaned) live.delete(token);
-        transactionLeaseInUse = false;
-      }
-      return false;
-    }
-    if (preparation?.lease === lease) {
+    const detachPreparationLease = (): void => {
+      const preparation = live.get(token);
+      if (preparation?.lease !== lease) return;
       delete preparation.lease;
       if (preparation.stagesCleaned) live.delete(token);
+    };
+    let released: Result<void>;
+    try {
+      released = await options.resources.releaseCoordination(lease);
+    } catch {
+      retainTransactionLease(lease);
+      detachPreparationLease();
+      clearActiveTransactionLease(lease);
+      return false;
     }
-    transactionLeaseInUse = false;
+    if (!released.ok) {
+      if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
+      detachPreparationLease();
+      clearActiveTransactionLease(lease);
+      return false;
+    }
+    detachPreparationLease();
+    clearActiveTransactionLease(lease);
     return true;
   };
   const discardLiveStages = async (token: string, state: PendingState): Promise<void> => {
@@ -1643,16 +1654,16 @@ export function createLocalTransactionJournal(
   };
   const acquireTransactionLease = async (): Promise<Result<LocalCoordinationLease>> => {
     const retained = retainedTransactionLease;
-    if (retained !== undefined) {
+    if (retained !== undefined && activeTransactionLease === undefined) {
       retainedTransactionLease = undefined;
-      transactionLeaseInUse = true;
+      activeTransactionLease = retained;
       return success(retained);
     }
     const acquired = await options.resources.acquireCoordination({
       context: "local-machine",
       locator: transactionCoordinationLocator,
     });
-    if (acquired.ok) transactionLeaseInUse = true;
+    if (acquired.ok) activeTransactionLease = acquired.value;
     return acquired;
   };
   const releaseTransactionLease = async (lease: LocalCoordinationLease): Promise<void> => {
@@ -1661,16 +1672,16 @@ export function createLocalTransactionJournal(
       released = await options.resources.releaseCoordination(lease);
     } catch (error) {
       retainTransactionLease(lease);
-      transactionLeaseInUse = false;
+      clearActiveTransactionLease(lease);
       throw error;
     }
     if (!released.ok) {
       if (!coordinationLeaseCannotBeRetried(released)) retainTransactionLease(lease);
-      transactionLeaseInUse = false;
+      clearActiveTransactionLease(lease);
       throw new Error(released.diagnostics[0]?.message);
     }
     if (retainedTransactionLease === lease) retainedTransactionLease = undefined;
-    transactionLeaseInUse = false;
+    clearActiveTransactionLease(lease);
   };
   const releaseProjectionCheckpointLease = async <T>(
     lease: LocalCoordinationLease,
@@ -1713,7 +1724,9 @@ export function createLocalTransactionJournal(
   const optimisticSnapshot = async (
     requested: readonly ResourceKey[],
   ): Promise<TransactionProviderSnapshotInput | undefined> => {
-    if (retainedTransactionLease !== undefined || transactionLeaseInUse) return undefined;
+    if (retainedTransactionLease !== undefined || activeTransactionLease !== undefined) {
+      return undefined;
+    }
     let before: JournalState;
     try {
       before = await readState();
@@ -1723,7 +1736,7 @@ export function createLocalTransactionJournal(
     if (
       before.phase !== "idle" ||
       retainedTransactionLease !== undefined ||
-      transactionLeaseInUse
+      activeTransactionLease !== undefined
     ) {
       return undefined;
     }
@@ -1744,7 +1757,7 @@ export function createLocalTransactionJournal(
       after.phase !== "idle" ||
       after.generation !== before.generation ||
       retainedTransactionLease !== undefined ||
-      transactionLeaseInUse
+      activeTransactionLease !== undefined
     ) {
       return undefined;
     }
@@ -2032,7 +2045,9 @@ export function createLocalTransactionJournal(
   const optimisticProjectionCheckpoint = async (): Promise<
     Result<ProjectionContinuityCheckpoint> | undefined
   > => {
-    if (retainedTransactionLease !== undefined || transactionLeaseInUse) return undefined;
+    if (retainedTransactionLease !== undefined || activeTransactionLease !== undefined) {
+      return undefined;
+    }
     let before: JournalState;
     let after: JournalState;
     try {
@@ -2040,7 +2055,7 @@ export function createLocalTransactionJournal(
       if (
         before.phase !== "idle" ||
         retainedTransactionLease !== undefined ||
-        transactionLeaseInUse
+        activeTransactionLease !== undefined
       ) {
         return undefined;
       }
@@ -2051,7 +2066,7 @@ export function createLocalTransactionJournal(
     return after.phase === "idle" &&
       sameCheckpointState(before, after) &&
       retainedTransactionLease === undefined &&
-      !transactionLeaseInUse
+      activeTransactionLease === undefined
       ? checkpointFromIdleState(after)
       : undefined;
   };

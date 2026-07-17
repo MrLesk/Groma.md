@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 07:39'
+updated_date: '2026-07-17 08:05'
 labels: []
 milestone: m-4
 dependencies: []
@@ -70,10 +70,14 @@ Initial compiled reproduction found two independent read-only startup contention
 A warmed projection-backed reproduction found a third read-only startup gate after the transaction and package fixes: eight simultaneous blueprint-export processes produced one success and seven graph-query-unavailable failures because projection load and continuity-checkpoint reads still acquired exclusive coordination. GROM-31 therefore includes a no-write fast path for an already complete exact-matching projection and stable idle checkpoint; all rebuild, repair, adoption publication, checkpoint publication, and canonical writes stay exclusively coordinated.
 
 Implemented three bounded, coordination-free read paths: stable-idle optimistic canonical/checkpoint reads with exact double-observation fences; exact-revalidated enabled-package startup reads; and warmed, complete projection adoption. All settlement, recovery, repair, publication, package mutation, and canonical writes remain exclusively coordinated. Validation: bun run check passed (format, typecheck, architecture boundaries, 773 tests / 5,491 expectations, compiled Iteration 1A workflow); the adversarial dead-writer recovery regression passed 10 consecutive runs; bun run check:targets passed darwin-arm64, linux-x64-baseline, windows-x64-baseline, and windows-arm64; independent specification and quality reviews approved; git diff --check passed.
+
+Claude review identified that indeterminate live-transaction release failures kept the optimistic-read guard latched behind the token-specific preparation. Remediation transfers throwing/retryable releases into the existing retained-lease handoff, while terminal ownership-loss/invalid results detach without retention. Independent re-review then found and closed a delayed-acknowledgement race by replacing the shared boolean with exact active-lease identity, so an older L1 completion cannot clear a newer L2 marker. Deterministic tests cover throwing, retryable, delayed success, delayed ownership-lost, and delayed invalid release outcomes; they prove retained handoff, exact contention while L2 is active, restored eight-reader optimistic access, and committed recovery. Full check and journal suite pass; the five focused cases passed 10 consecutive repetitions; independent re-review approved.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
 Permitted at least eight independent canonical and warmed projection-backed CLI readers to inspect one workspace concurrently without mutation or recovery failures. Exact pre/post fences preserve deterministic old-or-new snapshots, while writers, crash recovery, stale-owner handling, repair, and publication remain exclusive. Verified with the full check, compiled 8-reader workflows, byte-identical canonical-state assertions, adversarial dead-writer recovery, all supported target builds, and two independent reviews.
+
+PR review remediation additionally made uncertain lease handoff reusable by the next journal operation and made the optimistic-read guard lease-specific under overlapping delayed release acknowledgements.
 <!-- SECTION:FINAL_SUMMARY:END -->

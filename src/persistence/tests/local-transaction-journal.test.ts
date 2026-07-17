@@ -2968,6 +2968,186 @@ describe("local transaction journal", () => {
     });
   });
 
+  for (const releaseFailure of ["throw", "retryable-result"] as const) {
+    test(`hands off a live lease after a ${releaseFailure} release failure without weakening optimistic safety`, async () => {
+      const roots = await workspace();
+      let holdRead = false;
+      let readHeld = false;
+      let readEnteredResolve!: () => void;
+      let releaseReadResolve!: () => void;
+      const readEntered = new Promise<void>((resolve) => {
+        readEnteredResolve = resolve;
+      });
+      const releaseRead = new Promise<void>((resolve) => {
+        releaseReadResolve = resolve;
+      });
+      const base = await createLocalResourceProvider({
+        ...roots,
+        faultInjector: async (phase, context) => {
+          if (
+            !holdRead ||
+            readHeld ||
+            phase !== "read" ||
+            context?.locator !== localTransactionStateLocator
+          ) {
+            return;
+          }
+          readHeld = true;
+          readEnteredResolve();
+          await releaseRead;
+        },
+      });
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (releases === 1) {
+            if (releaseFailure === "throw") throw new Error("injected live release throw");
+            return failure(
+              Object.freeze({
+                code: "injected-live-release-failure",
+                message: "Injected live release failure",
+              }),
+            );
+          }
+          return base.releaseCoordination(lease);
+        },
+      });
+      const active = journalHarnessFor(resources);
+      const outcome = await active.engine.execute(createRequest());
+      expect(outcome.status).toBe("indeterminate");
+      if (outcome.status !== "indeterminate") throw new Error("expected recovery receipt");
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 1, releases: 1 });
+
+      holdRead = true;
+      const retainedSnapshot = active.provider.snapshot([]);
+      await within(readEntered, 5_000, `${releaseFailure} retained lease handoff`);
+      expect(acquisitions).toBe(1);
+      try {
+        await expect(active.provider.snapshot([])).rejects.toThrow(
+          "Local resource coordination is already held",
+        );
+      } finally {
+        releaseReadResolve();
+      }
+      expect(await retainedSnapshot).toMatchObject({ generation: 1 });
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 2, releases: 2 });
+
+      holdRead = false;
+      const stable = await Promise.all(
+        Array.from({ length: 8 }, () => active.provider.snapshot([])),
+      );
+      expect(stable.every((snapshot) => snapshot.generation === 1)).toBeTrue();
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 2, releases: 2 });
+      expect(await active.engine.recover(outcome.recovery)).toMatchObject({
+        generation: 1,
+        status: "committed",
+      });
+    });
+  }
+
+  for (const delayedRelease of ["success", "ownership-lost", "invalid"] as const) {
+    test(`does not let a delayed ${delayedRelease} release completion clear a newer active lease`, async () => {
+      const roots = await workspace();
+      let holdSecondLeaseRead = false;
+      let secondLeaseReadHeld = false;
+      let firstLeaseReleasedResolve!: () => void;
+      let returnFirstReleaseResolve!: () => void;
+      let secondLeaseReadResolve!: () => void;
+      let releaseSecondLeaseReadResolve!: () => void;
+      const firstLeaseReleased = new Promise<void>((resolve) => {
+        firstLeaseReleasedResolve = resolve;
+      });
+      const returnFirstRelease = new Promise<void>((resolve) => {
+        returnFirstReleaseResolve = resolve;
+      });
+      const secondLeaseRead = new Promise<void>((resolve) => {
+        secondLeaseReadResolve = resolve;
+      });
+      const releaseSecondLeaseRead = new Promise<void>((resolve) => {
+        releaseSecondLeaseReadResolve = resolve;
+      });
+      const base = await createLocalResourceProvider({
+        ...roots,
+        faultInjector: async (phase, context) => {
+          if (
+            !holdSecondLeaseRead ||
+            secondLeaseReadHeld ||
+            phase !== "read" ||
+            context?.locator !== localTransactionStateLocator
+          ) {
+            return;
+          }
+          secondLeaseReadHeld = true;
+          secondLeaseReadResolve();
+          await releaseSecondLeaseRead;
+        },
+      });
+      let acquisitions = 0;
+      let releases = 0;
+      const resources = providerWithOverrides(base, {
+        acquireCoordination(request) {
+          acquisitions += 1;
+          return base.acquireCoordination(request);
+        },
+        async releaseCoordination(lease) {
+          releases += 1;
+          if (releases !== 1) return base.releaseCoordination(lease);
+          const released = await base.releaseCoordination(lease);
+          if (!released.ok) return released;
+          firstLeaseReleasedResolve();
+          await returnFirstRelease;
+          if (delayedRelease === "success") return released;
+          return failure(
+            Object.freeze({
+              code:
+                delayedRelease === "ownership-lost"
+                  ? "resource-coordination-ownership-lost"
+                  : "invalid-coordination-lease",
+              message: "Injected terminal release result",
+            }),
+          );
+        },
+      });
+      const active = journalHarnessFor(resources);
+      const firstOutcomePending = active.engine.execute(createRequest());
+      await within(firstLeaseReleased, 5_000, `${delayedRelease} first lease release`);
+
+      holdSecondLeaseRead = true;
+      const secondSnapshotPending = active.provider.snapshot([]);
+      await within(secondLeaseRead, 5_000, `${delayedRelease} second lease acquisition`);
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 2, releases: 1 });
+
+      returnFirstReleaseResolve();
+      const firstOutcome = await firstOutcomePending;
+      expect(firstOutcome.status).toBe(
+        delayedRelease === "success" ? "committed" : "indeterminate",
+      );
+      try {
+        await expect(active.provider.snapshot([])).rejects.toThrow(
+          "Local resource coordination is already held",
+        );
+      } finally {
+        releaseSecondLeaseReadResolve();
+      }
+      const secondSnapshot = await secondSnapshotPending;
+      expect(secondSnapshot).toMatchObject({ generation: 1 });
+      expect({ acquisitions, releases }).toEqual({ acquisitions: 3, releases: 2 });
+
+      if (firstOutcome.status === "indeterminate") {
+        expect(await active.engine.recover(firstOutcome.recovery)).toMatchObject({
+          generation: 1,
+          status: "committed",
+        });
+      }
+    });
+  }
+
   test("retains a freshly acquired recovery lease until release can be retried", async () => {
     const roots = await workspace();
     const interrupted = await harness(roots, (phase) => {
