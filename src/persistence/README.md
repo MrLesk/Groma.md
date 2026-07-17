@@ -300,8 +300,9 @@ replace only reconstructable projection resources, partial bundles, continuity m
 and cache ignore state through the existing publication path. It never targets canonical
 intent, evidence, alias, or generation resources. The official Host connects plugin
 cancellation to this local wait; a direct local caller that supplies no cancellation
-predicate may wait indefinitely behind permanent exact contention. Cancellation bounds
-waiting only: after acquisition, the existing publication action runs to settlement.
+predicate may wait indefinitely behind permanent exact contention. Cancellation may win
+one final check after direct acquisition succeeds and before the publication action begins;
+the acquired lease is still released. Once the action begins, it runs to settlement.
 A missing, oversized, malformed, or semantically mismatched current manifest is
 replaceable disposable state. A missing or mismatched valid checkpoint republishes;
 manifest-provider or checkpoint I/O failure fails closed without publication, and a warm

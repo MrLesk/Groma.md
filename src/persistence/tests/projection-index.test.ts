@@ -807,6 +807,80 @@ describe("local projection index", () => {
     expect(stages).toBe(0);
   });
 
+  test("cancellation after explicit acquisition releases before the load action", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    const coordination = Object.freeze({
+      context: "local-machine" as const,
+      locator: projectionLocator.value,
+    });
+    let acquisitions = 0;
+    let cancellationRequested = false;
+    let confirmedReleases = 0;
+    let releaseAttempts = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "withCoordination") {
+          return async () =>
+            failure({
+              code: "resource-coordination-contended",
+              message: "fixture callback contention is exact",
+            });
+        }
+        if (property === "acquireCoordination") {
+          return async (request: Parameters<LocalResourceProvider["acquireCoordination"]>[0]) => {
+            acquisitions += 1;
+            const acquired = await resourceTarget.acquireCoordination(request);
+            if (acquired.ok) cancellationRequested = true;
+            return acquired;
+          };
+        }
+        if (property === "releaseCoordination") {
+          return async (lease: Parameters<LocalResourceProvider["releaseCoordination"]>[0]) => {
+            releaseAttempts += 1;
+            const released = await resourceTarget.releaseCoordination(lease);
+            if (released.ok) confirmedReleases += 1;
+            return released;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(
+      await createLocalProjectionIndex({
+        canonical: source,
+        isCancellationRequested: () => cancellationRequested,
+        resources,
+      }).load(),
+    ).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-load-cancelled" },
+        },
+      ],
+      ok: false,
+    });
+    expect(source.calls).toBe(0);
+    expect({ acquisitions, confirmedReleases, releaseAttempts }).toEqual({
+      acquisitions: 1,
+      confirmedReleases: 1,
+      releaseAttempts: 1,
+    });
+
+    const reacquired = await target.resources.acquireCoordination(coordination);
+    expect(reacquired.ok).toBeTrue();
+    if (!reacquired.ok) throw new Error("released projection lease was not reacquirable");
+    expect(await target.resources.releaseCoordination(reacquired.value)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+  });
+
   test("contains throwing and malformed local cancellation predicates before projection I/O", async () => {
     for (const mode of ["throw", "malformed"] as const) {
       const target = await temporaryProvider();
