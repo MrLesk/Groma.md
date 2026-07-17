@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 
 import {
   createEntityAliasResolver,
@@ -57,6 +58,8 @@ const intrinsicJsonParse = JSON.parse;
 const intrinsicNormalize = String.prototype.normalize;
 const intrinsicObjectKeys = Object.keys;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
+const maximumProjectionRepairFollowerAttempts = 16;
+const projectionRepairFollowerDelayMilliseconds = 20;
 
 export interface ProjectionIndexBounds {
   readonly maxAliases: number;
@@ -131,6 +134,14 @@ function unavailable(reason: string): Result<never> {
       "The disposable projection index is unavailable; retry or delete it to rebuild",
       { reason },
     ),
+  );
+}
+
+function coordinationContended(result: Result<unknown>): boolean {
+  return (
+    !result.ok &&
+    result.diagnostics.length === 1 &&
+    result.diagnostics[0]?.code === "resource-coordination-contended"
   );
 }
 
@@ -963,62 +974,86 @@ export function createLocalProjectionIndex(
       return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
     });
 
-  const coordinatedLoad = () =>
-    coordinated(async () => {
-      const canonical = await loadCanonical();
-      if (!canonical.ok) return canonical;
-      const fingerprint = canonicalFingerprint(canonical.value, bounds);
-      if (!fingerprint.ok) return fingerprint;
-      const current = await readProjection(resources, locator.value, bounds);
-      if (current.state === "unavailable") return current.result;
-      if (
-        current.state === "loaded" &&
-        current.snapshot.generation === canonical.value.generation &&
-        current.snapshot.fingerprint === fingerprint.value
-      ) {
-        const adopted = await partialReads.adopt(current.snapshot);
-        if (!adopted.ok) return adopted;
-        if (adopted.value === undefined) return publishComplete(current.snapshot);
-        const ignoreLocator = localProjectionIgnoreLocator();
-        if (!ignoreLocator.ok) return unavailable("projection-ignore-invalid");
-        const ignored = await ensureCacheIgnored(resources, ignoreLocator.value);
-        if (!ignored.ok) return ignored;
-        const committed = adopted.value.commit();
-        return committed.ok ? success(current.snapshot) : committed;
-      }
-      const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
-      return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
-    });
-
-  const load = async (): Promise<Result<ProjectionSnapshot>> => {
+  const readOnlyAdoption = async (): Promise<Result<ProjectionSnapshot> | undefined> => {
     try {
       const current = await readProjection(resources, locator.value, bounds);
-      if (current.state === "loaded") {
+      if (current.state !== "loaded") return undefined;
+      const canonical = await loadCanonical();
+      if (!canonical.ok) return undefined;
+      const fingerprint = canonicalFingerprint(canonical.value, bounds);
+      if (
+        !fingerprint.ok ||
+        current.snapshot.generation !== canonical.value.generation ||
+        current.snapshot.fingerprint !== fingerprint.value
+      ) {
+        return undefined;
+      }
+      const adopted = await partialReads.adopt(current.snapshot);
+      const ignoreLocator = localProjectionIgnoreLocator();
+      if (
+        !adopted.ok ||
+        adopted.value === undefined ||
+        !ignoreLocator.ok ||
+        !(await cacheIgnoreIsCurrent(resources, ignoreLocator.value))
+      ) {
+        return undefined;
+      }
+      const committed = adopted.value.commit();
+      return committed.ok ? success(current.snapshot) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const followCoordinatedPublication = async (): Promise<Result<ProjectionSnapshot>> => {
+    for (let attempt = 0; attempt < maximumProjectionRepairFollowerAttempts; attempt += 1) {
+      const adopted = await readOnlyAdoption();
+      if (adopted !== undefined) return adopted;
+      if (attempt + 1 < maximumProjectionRepairFollowerAttempts) {
+        await wait(projectionRepairFollowerDelayMilliseconds);
+      }
+    }
+    return unavailable("projection-coordination-failed");
+  };
+
+  const coordinatedLoad = async (): Promise<Result<ProjectionSnapshot>> => {
+    const result = await resources.withCoordination(
+      { context: "local-machine", locator: locator.value },
+      async () => {
         const canonical = await loadCanonical();
-        if (!canonical.ok) return coordinatedLoad();
+        if (!canonical.ok) return canonical;
         const fingerprint = canonicalFingerprint(canonical.value, bounds);
+        if (!fingerprint.ok) return fingerprint;
+        const current = await readProjection(resources, locator.value, bounds);
+        if (current.state === "unavailable") return current.result;
         if (
-          fingerprint.ok &&
+          current.state === "loaded" &&
           current.snapshot.generation === canonical.value.generation &&
           current.snapshot.fingerprint === fingerprint.value
         ) {
           const adopted = await partialReads.adopt(current.snapshot);
+          if (!adopted.ok) return adopted;
+          if (adopted.value === undefined) return publishComplete(current.snapshot);
           const ignoreLocator = localProjectionIgnoreLocator();
-          if (
-            adopted.ok &&
-            adopted.value !== undefined &&
-            ignoreLocator.ok &&
-            (await cacheIgnoreIsCurrent(resources, ignoreLocator.value))
-          ) {
-            const committed = adopted.value.commit();
-            if (committed.ok) return success(current.snapshot);
-          }
+          if (!ignoreLocator.ok) return unavailable("projection-ignore-invalid");
+          const ignored = await ensureCacheIgnored(resources, ignoreLocator.value);
+          if (!ignored.ok) return ignored;
+          const committed = adopted.value.commit();
+          return committed.ok ? success(current.snapshot) : committed;
         }
-      }
-    } catch {
-      // Any unstable or unavailable read is retried through the existing
-      // exclusively coordinated repair and publication path below.
-    }
+        const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
+        return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
+      },
+    );
+    if (result.ok) return result.value;
+    return coordinationContended(result)
+      ? followCoordinatedPublication()
+      : unavailable("projection-coordination-failed");
+  };
+
+  const load = async (): Promise<Result<ProjectionSnapshot>> => {
+    const adopted = await readOnlyAdoption();
+    if (adopted !== undefined) return adopted;
     return coordinatedLoad();
   };
 

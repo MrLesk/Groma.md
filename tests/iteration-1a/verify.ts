@@ -503,13 +503,8 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   }
   assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeConcurrentReads);
 
-  const warmedBlueprint = await success(executable, workspaceRoot, [
-    "blueprint",
-    "export",
-    "--limit",
-    "100",
-  ]);
-  assert.deepEqual(exportComponentIds(warmedBlueprint), expectedIds);
+  await rm(path.join(workspaceRoot, ".groma-cache"), { force: true, recursive: true });
+  assert.deepEqual(await snapshot(path.join(workspaceRoot, ".groma-cache")), []);
   const beforeConcurrentBlueprintReads = await gromaSnapshot(workspaceRoot);
   const concurrentBlueprintReads = await Promise.all(
     Array.from({ length: 8 }, () =>
@@ -520,7 +515,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     const current = concurrentBlueprintReads[index]!;
     assert.deepEqual(exportComponentIds(current), expectedIds);
     assert.equal(current.stdout.includes("workspace-recovery-failed"), false);
-    assert.equal(current.stdout, warmedBlueprint.stdout);
+    assert.equal(current.stdout, concurrentBlueprintReads[0]!.stdout);
   }
   assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeConcurrentBlueprintReads);
 

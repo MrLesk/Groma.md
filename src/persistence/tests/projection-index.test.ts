@@ -614,6 +614,363 @@ describe("local projection index", () => {
     expect(stages).toBeGreaterThan(0);
   });
 
+  test("cold load followers adopt the exact completed winner publication without coordinating or writing again", async () => {
+    const target = await temporaryProvider();
+    const checkpoint = new MutableProjectionCheckpoint();
+    const winnerSource = new MutableCanonicalSource(canonical(1));
+    const followerSource = new MutableCanonicalSource(canonical(1));
+    const blockedWinner = winnerSource.blockNextSnapshot();
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+
+    let followerCoordinations = 0;
+    let followerStages = 0;
+    let followerIsFollowing = false;
+    let signalFollowerRead!: () => void;
+    let allowFollowerRead!: () => void;
+    const followerReadStarted = new Promise<void>((resolve) => {
+      signalFollowerRead = resolve;
+    });
+    const followerReadAllowed = new Promise<void>((resolve) => {
+      allowFollowerRead = resolve;
+    });
+    const followerResources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (followerIsFollowing && request.locator === projectionLocator.value) {
+              followerIsFollowing = false;
+              signalFollowerRead();
+              await followerReadAllowed;
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            followerStages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            followerCoordinations += 1;
+            const result = await resourceTarget.withCoordination(request, action);
+            if (!result.ok && result.diagnostics[0]?.code === "resource-coordination-contended") {
+              followerIsFollowing = true;
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    const winner = createLocalProjectionIndex({
+      canonical: winnerSource,
+      checkpoint,
+      resources: target.resources,
+    });
+    const follower = createLocalProjectionIndex({
+      canonical: followerSource,
+      checkpoint,
+      resources: followerResources,
+    });
+    const winnerLoad = winner.load();
+    await blockedWinner.started;
+    const followerLoad = follower.load();
+    await followerReadStarted;
+    blockedWinner.release();
+    const winnerResult = await winnerLoad;
+    if (!winnerResult.ok) throw new Error("expected coordinated winner publication");
+    allowFollowerRead();
+    const followerResult = await followerLoad;
+
+    expect(followerResult).toEqual(winnerResult);
+    expect(await follower.identity()).toMatchObject({ ok: true, value: { generation: 1 } });
+    expect(winnerSource.calls).toBe(1);
+    expect(followerSource.calls).toBe(1);
+    expect(followerCoordinations).toBe(1);
+    expect(followerStages).toBe(0);
+  });
+
+  test("cold load followers exhaust a bounded read-only fence under persistent contention", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    let stages = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return failure({
+              code: "resource-coordination-contended",
+              message: "fixture coordination remains held",
+            });
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
+      {
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-coordination-failed" },
+          },
+        ],
+        ok: false,
+      },
+    );
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(1);
+    expect(projectionReads).toBe(17);
+    expect(stages).toBe(0);
+  });
+
+  test("cold loads do not follow mixed failures that did not originate at lease acquisition", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return failure(
+              {
+                code: "coordination-action-failed",
+                message: "fixture action failed after acquisition",
+              },
+              {
+                code: "resource-coordination-contended",
+                message: "fixture secondary diagnostic must not authorize following",
+              },
+            );
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
+      {
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-coordination-failed" },
+          },
+        ],
+        ok: false,
+      },
+    );
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(1);
+    expect(projectionReads).toBe(1);
+  });
+
+  test("cold loads do not follow a contention-first result carrying another failure", async () => {
+    const target = await temporaryProvider();
+    const source = new MutableCanonicalSource(canonical(1));
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    let projectionReads = 0;
+    let coordinations = 0;
+    let stages = 0;
+    const resources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) {
+              projectionReads += 1;
+              return failure({ code: "resource-missing", message: "fixture cache remains cold" });
+            }
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            stages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async () => {
+            coordinations += 1;
+            return failure(
+              {
+                code: "resource-coordination-contended",
+                message: "fixture contention is not the complete acquisition result",
+              },
+              {
+                code: "coordination-release-failed",
+                message: "fixture additional failure forbids following",
+              },
+            );
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    expect(await createLocalProjectionIndex({ canonical: source, resources }).load()).toMatchObject(
+      {
+        diagnostics: [
+          {
+            code: "projection-index-unavailable",
+            details: { reason: "projection-coordination-failed" },
+          },
+        ],
+        ok: false,
+      },
+    );
+    expect(source.calls).toBe(0);
+    expect(coordinations).toBe(1);
+    expect(projectionReads).toBe(1);
+    expect(stages).toBe(0);
+  });
+
+  test("cold load followers reject a malformed cache after the coordinated repair fails", async () => {
+    const target = await temporaryProvider();
+    const projectionLocator = localProjectionIndexLocator();
+    if (!projectionLocator.ok) throw new Error("invalid projection locator fixture");
+    const malformedBytes = new TextEncoder().encode("{corrupt\n");
+    await replace(target.resources, projectionLocator.value, malformedBytes);
+
+    let releaseWinner!: () => void;
+    let signalWinner!: () => void;
+    const winnerReleased = new Promise<void>((resolve) => {
+      releaseWinner = resolve;
+    });
+    const winnerStarted = new Promise<void>((resolve) => {
+      signalWinner = resolve;
+    });
+    const failedSource: ProjectionCanonicalSource = {
+      async snapshot() {
+        signalWinner();
+        await winnerReleased;
+        return failure({
+          code: "canonical-fixture-failed",
+          message: "fixture canonical repair failed",
+        });
+      },
+    };
+    const followerSource = new MutableCanonicalSource(canonical(1));
+    let followerCoordinations = 0;
+    let followerProjectionReads = 0;
+    let followerStages = 0;
+    let signalFollowerContention!: () => void;
+    const followerContended = new Promise<void>((resolve) => {
+      signalFollowerContention = resolve;
+    });
+    const followerResources = new Proxy(target.resources, {
+      get(resourceTarget, property) {
+        if (property === "read") {
+          return async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+            if (request.locator === projectionLocator.value) followerProjectionReads += 1;
+            return resourceTarget.read(request);
+          };
+        }
+        if (property === "stageReplacement") {
+          return async (locator: WorkspaceResourceLocator, bytes: Uint8Array) => {
+            followerStages += 1;
+            return resourceTarget.stageReplacement(locator, bytes);
+          };
+        }
+        if (property === "withCoordination") {
+          return async (
+            request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+            action: () => unknown | Promise<unknown>,
+          ) => {
+            followerCoordinations += 1;
+            const result = await resourceTarget.withCoordination(request, action);
+            if (!result.ok && result.diagnostics[0]?.code === "resource-coordination-contended") {
+              signalFollowerContention();
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(resourceTarget, property, resourceTarget) as unknown;
+        return typeof value === "function" ? value.bind(resourceTarget) : value;
+      },
+    }) as LocalResourceProvider;
+
+    const winnerLoad = createLocalProjectionIndex({
+      canonical: failedSource,
+      resources: target.resources,
+    }).load();
+    await winnerStarted;
+    const followerLoad = createLocalProjectionIndex({
+      canonical: followerSource,
+      resources: followerResources,
+    }).load();
+    await followerContended;
+    releaseWinner();
+
+    expect(await winnerLoad).toMatchObject({
+      diagnostics: [
+        { code: "projection-index-unavailable", details: { reason: "canonical-snapshot-failed" } },
+      ],
+      ok: false,
+    });
+    expect(await followerLoad).toMatchObject({
+      diagnostics: [
+        {
+          code: "projection-index-unavailable",
+          details: { reason: "projection-coordination-failed" },
+        },
+      ],
+      ok: false,
+    });
+    expect(followerSource.calls).toBe(0);
+    expect(followerCoordinations).toBe(1);
+    expect(followerProjectionReads).toBe(17);
+    expect(followerStages).toBe(0);
+    expect(await readFile(path.join(target.root, ".groma-cache", "projection-index.json"))).toEqual(
+      Buffer.from(malformedBytes),
+    );
+  });
+
   test("keeps durable adoption provisional until ignore hygiene succeeds", async () => {
     const ignoreLocator = workspaceResourceLocator(".groma-cache", ".gitignore");
     if (!ignoreLocator.ok) throw new Error("invalid projection ignore locator");

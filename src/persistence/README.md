@@ -275,6 +275,14 @@ chunk remains independently authenticated by logical path, exact bytes, and Merk
 This read-only path never repairs or publishes; any unstable observation, incomplete
 index, missing hygiene, or continuity mismatch falls back to the existing coordinated
 repair path.
+When a cold loader loses that projection-local lease to another publisher, it becomes a
+bounded read-only follower instead of immediately failing. It makes at most 16 complete
+adoption observations separated by 20 milliseconds and never reacquires coordination,
+repairs, or publishes. A follower succeeds only after the projection, canonical
+generation and fingerprint, partial-read manifest and checkpoint, ignore marker, and
+process-local adoption commit all pass the same exact fence above. If no complete winner
+publication becomes visible within that bound, the follower fails closed with the stable
+coordination diagnostic.
 A missing, oversized, malformed, or semantically mismatched current manifest is
 replaceable disposable state. A missing or mismatched valid checkpoint republishes;
 manifest-provider or checkpoint I/O failure fails closed without publication, and a warm

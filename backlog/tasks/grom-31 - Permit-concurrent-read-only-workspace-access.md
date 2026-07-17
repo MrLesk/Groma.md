@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 08:39'
+updated_date: '2026-07-17 09:13'
 labels: []
 milestone: m-4
 dependencies: []
@@ -77,6 +77,8 @@ Claude review identified that indeterminate live-transaction release failures ke
 Claude second review exposed a possible two-handle release overlap and a cold-projection double-read. Final remediation enforces one active-or-retained transaction lease per journal: acquisition fails locally while an exact active lease exists, token-local lease ownership detaches before provider release is awaited, and success, terminal, retryable, and throwing acknowledgements cannot be reused or clear another operation. Direct delayed-ack tests cover snapshot, checkpoint, concurrent same-token commit and recover, retained handoff, exact one-attempt contention, normal recovery, and restored eight-reader optimistic access. Projection load now inspects the disposable cache first, so absent, corrupt, deleted, and oversized caches enter coordinated repair with exactly one canonical load; loaded fast-path candidates still fingerprint canonical state and reload under coordination on fallback. Full check passed with 781 tests and 5,561 expectations; focused Persistence suites passed 115/845; same-token tests passed 10 consecutive repetitions; final independent review approved; git diff --check passed.
 
 The final GitHub quality job exposed runner-only timing pressure, not a behavior failure: the host restart workflow and two CLI end-to-end workflows hit Bun’s 5-second default at 5.001–5.132 seconds while 778 other tests and both binary jobs passed. Exactly those three integration tests now use the existing finite 20-second per-test allowance; production code and global test behavior are unchanged. Focused verification passed 3 tests/128 expectations, full check remained green at 781/5,561, independent review approved, and git diff --check passed.
+
+Latest Codex review correctly found that cache-cold concurrent projection reads still raced at fail-fast repair: the compiled reproduction produced one successful export and seven graph-query-unavailable exits with canonical bytes unchanged. The load path now follows only an exact single resource-coordination-contended acquisition result with 16 complete read-only adoption observations spaced 20 ms apart. Followers never reacquire coordination, repair, ensure hygiene, stage, or publish; they can only adopt the winner after the existing projection/canonical fingerprint/manifest/checkpoint/ignore fence succeeds, otherwise they fail closed after the fixed bound. Both mixed-diagnostic orderings, persistent contention, malformed/failed publication, exact winner adoption, and zero follower writes are covered. Compiled Iteration 1A now deletes the cache before launching eight independent exports and proves identical valid output plus byte-identical canonical state. Full check passed with 786 tests/5,588 expectations; all four target builds passed; the cold workflow passed 10 repetitions; independent specification and quality reviews passed; git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
@@ -89,4 +91,6 @@ PR review remediation additionally made uncertain lease handoff reusable by the 
 Final review also enforced a single active-or-retained journal lease during delayed release acknowledgement and removed the redundant canonical read from cold and invalid projection repair.
 
 Three integration-scale regressions received test-local 20-second CI allowances after shared-runner execution crossed Bun’s 5-second default; no runtime or global timeout changed.
+
+Cache-cold projection readers now follow one coordinated publisher through a fixed read-only adoption window, so eight simultaneous first exports succeed without follower writes or canonical mutation.
 <!-- SECTION:FINAL_SUMMARY:END -->
