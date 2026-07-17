@@ -1790,7 +1790,7 @@ export const plugin = Object.freeze({
   });
 
   test("classifies transient bootstrap and package-state reads and cleans once", async () => {
-    for (const failureRead of [2, 3, 4, 5] as const) {
+    for (const failureRead of [2, 3, 4, 5, 6, 7] as const) {
       const root = await workspace();
       await Bun.write(
         path.join(root, "groma", "groma.yaml"),
@@ -1857,7 +1857,8 @@ export const plugin = Object.freeze({
         },
       );
 
-      const expectedExit = failureRead === 3 ? CLI_EXIT.workspace : CLI_EXIT.infrastructure;
+      const packageLockFailure = failureRead === 3 || failureRead === 5;
+      const expectedExit = packageLockFailure ? CLI_EXIT.workspace : CLI_EXIT.infrastructure;
       expect(exitCode, String(failureRead)).toBe(expectedExit);
       expect(captured.errors, String(failureRead)).toEqual([]);
       expect(captured.output, String(failureRead)).toHaveLength(1);
@@ -1868,18 +1869,16 @@ export const plugin = Object.freeze({
         result: {
           diagnostics: [
             {
-              code:
-                failureRead === 3
-                  ? "plugin-package-lock-unavailable"
-                  : failureRead === 4
-                    ? "workspace-discovery-failed"
-                    : "workspace-configuration-provider-failure",
-              message:
-                failureRead === 3
-                  ? "The exact plugin package lock is unavailable"
-                  : failureRead === 4
-                    ? "Workspace configuration discovery failed"
-                    : "Workspace configuration access failed",
+              code: packageLockFailure
+                ? "plugin-package-lock-unavailable"
+                : failureRead === 6
+                  ? "workspace-discovery-failed"
+                  : "workspace-configuration-provider-failure",
+              message: packageLockFailure
+                ? "The exact plugin package lock is unavailable"
+                : failureRead === 6
+                  ? "Workspace configuration discovery failed"
+                  : "Workspace configuration access failed",
             },
           ],
           status: "startup-failure",
@@ -1900,11 +1899,11 @@ export const plugin = Object.freeze({
       expect(
         events.filter((event) => event === "optional:start"),
         String(failureRead),
-      ).toHaveLength(failureRead === 5 ? 1 : 0);
+      ).toHaveLength(failureRead === 7 ? 1 : 0);
       expect(
         events.filter((event) => event === "optional:stop"),
         String(failureRead),
-      ).toHaveLength(failureRead === 5 ? 1 : 0);
+      ).toHaveLength(failureRead === 7 ? 1 : 0);
     }
   });
 

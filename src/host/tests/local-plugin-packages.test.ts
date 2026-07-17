@@ -733,7 +733,6 @@ describe("local plugin package manager", () => {
           trustFullUserPermissions: true,
         }),
       ).toMatchObject({ ok: true });
-
       const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
       const lockFile = path.join(context.workspaceRoot, "groma", "packages.lock");
       if (recovery === "missing-lock") {
@@ -2242,39 +2241,128 @@ describe("local plugin package manager", () => {
     expect(imports).toBe(0);
   });
 
-  test("coordinates startup with supported disable and remove mutations", async () => {
+  test("reads an empty startup projection without package coordination and revalidates it", async () => {
     if (process.platform === "win32") return;
 
     const context = await fixture();
-    const source = await writePackage(context.workspaceRoot, "example-startup-mutation", [
-      "./plugins/entry.js",
-    ]);
+    const configurationFile = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    let coordinationClaims = 0;
+    let lockReads = 0;
+    let mutateOnLockRead = false;
+    const resources = await createLocalResourceProvider({
+      faultInjector: async (phase, event) => {
+        if (phase === "coordination-claim") coordinationClaims += 1;
+        if (phase !== "read" || event?.locator !== "groma/packages.lock") return;
+        lockReads += 1;
+        if (mutateOnLockRead && lockReads === 1) {
+          await writeFile(configurationFile, "schema: groma/v0.1\nplugins:\n  - official.model\n");
+        }
+      },
+      workspaceRoot: context.workspaceRoot,
+    });
+    const manager = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(resources),
+      ...context,
+      resources,
+    });
+
+    expect(await manager.loadEnabled()).toEqual({
+      ok: true,
+      value: { personalPluginIds: [], registrations: [] },
+    });
+    expect(coordinationClaims).toBe(0);
+
+    lockReads = 0;
+    mutateOnLockRead = true;
+    expect(await manager.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-changed" }],
+      ok: false,
+    });
+    expect(coordinationClaims).toBe(0);
+  });
+
+  test("revalidates package state after the final startup import", async () => {
+    if (process.platform === "win32") return;
+
+    const context = await fixture();
+    const name = "example-final-startup-revalidation";
+    const pluginId = "example.final-startup-revalidation";
+    const source = await writePackage(context.workspaceRoot, name, ["./plugins/entry.js"]);
     const setup = createLocalPluginPackageManager({
       bootstrap: await bootstrap(context.resources),
-      importModule: async () => ({ plugin: registration("example.startup-mutation") }),
+      importModule: async () => ({ plugin: registration(pluginId) }),
       ...context,
     });
     expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
     expect(
       await setup.enable({
         entry: "./plugins/entry.js",
-        name: "example-startup-mutation",
+        name,
         scope: "blueprint",
         trustFullUserPermissions: true,
       }),
     ).toMatchObject({ ok: true });
-    const staleBootstrap = await bootstrap(context.resources);
+    const mutator = createLocalPluginPackageManager({
+      bootstrap: await bootstrap(context.resources),
+      ...context,
+    });
     let imports = 0;
     const startup = createLocalPluginPackageManager({
-      bootstrap: staleBootstrap,
+      bootstrap: await bootstrap(context.resources),
       importModule: async () => {
         imports += 1;
-        return { plugin: registration("example.startup-mutation") };
+        expect(
+          await mutator.disable({
+            entry: "./plugins/entry.js",
+            name,
+            scope: "blueprint",
+          }),
+        ).toMatchObject({ ok: true });
+        return { plugin: registration(pluginId) };
       },
       ...context,
     });
 
+    expect(await startup.loadEnabled()).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-changed" }],
+      ok: false,
+    });
+    expect(imports).toBe(1);
+  });
+
+  test("returns a coherent old startup projection while a package mutation has not published", async () => {
+    if (process.platform === "win32") return;
+
     for (const mutation of ["disable", "remove"] as const) {
+      const context = await fixture();
+      const name = `example-startup-${mutation}`;
+      const pluginId = `example.startup-${mutation}`;
+      const source = await writePackage(context.workspaceRoot, name, ["./plugins/entry.js"]);
+      const setup = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        importModule: async () => ({ plugin: registration(pluginId) }),
+        ...context,
+      });
+      expect(await setup.add({ scope: "blueprint", source })).toMatchObject({ ok: true });
+      if (mutation === "disable") {
+        expect(
+          await setup.enable({
+            entry: "./plugins/entry.js",
+            name,
+            scope: "blueprint",
+            trustFullUserPermissions: true,
+          }),
+        ).toMatchObject({ ok: true });
+      }
+      let imports = 0;
+      const startup = createLocalPluginPackageManager({
+        bootstrap: await bootstrap(context.resources),
+        importModule: async () => {
+          imports += 1;
+          return { plugin: registration(pluginId) };
+        },
+        ...context,
+      });
       let enteredWrite!: () => void;
       let releaseWrite!: () => void;
       const entered = new Promise<void>((resolve) => {
@@ -2302,16 +2390,18 @@ describe("local plugin package manager", () => {
         mutation === "disable"
           ? manager.disable({
               entry: "./plugins/entry.js",
-              name: "example-startup-mutation",
+              name,
               scope: "blueprint",
             })
-          : manager.remove({ name: "example-startup-mutation", scope: "blueprint" });
+          : manager.remove({ name, scope: "blueprint" });
       await entered;
       expect(await startup.loadEnabled(), mutation).toMatchObject({
-        diagnostics: [{ code: "plugin-package-state-unavailable" }],
-        ok: false,
+        ok: true,
+        value: {
+          registrations: mutation === "disable" ? [{ manifest: { id: pluginId } }] : [],
+        },
       });
-      expect(imports, mutation).toBe(0);
+      expect(imports, mutation).toBe(mutation === "disable" ? 1 : 0);
       releaseWrite();
       expect(await changing, mutation).toMatchObject({ ok: true });
     }

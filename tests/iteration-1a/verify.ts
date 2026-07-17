@@ -489,6 +489,41 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     ids.login,
     ids.googleLogin,
   ].sort();
+  const beforeConcurrentReads = await gromaSnapshot(workspaceRoot);
+  const concurrentReads = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      success(executable, workspaceRoot, ["component", "list", "--limit", "100"]),
+    ),
+  );
+  for (let index = 0; index < concurrentReads.length; index += 1) {
+    const current = concurrentReads[index]!;
+    assert.deepEqual(componentIds(current), expectedIds);
+    assert.equal(current.stdout.includes("workspace-recovery-failed"), false);
+    assert.equal(current.stdout, concurrentReads[0]!.stdout);
+  }
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeConcurrentReads);
+
+  const warmedBlueprint = await success(executable, workspaceRoot, [
+    "blueprint",
+    "export",
+    "--limit",
+    "100",
+  ]);
+  assert.deepEqual(exportComponentIds(warmedBlueprint), expectedIds);
+  const beforeConcurrentBlueprintReads = await gromaSnapshot(workspaceRoot);
+  const concurrentBlueprintReads = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      success(executable, workspaceRoot, ["blueprint", "export", "--limit", "100"]),
+    ),
+  );
+  for (let index = 0; index < concurrentBlueprintReads.length; index += 1) {
+    const current = concurrentBlueprintReads[index]!;
+    assert.deepEqual(exportComponentIds(current), expectedIds);
+    assert.equal(current.stdout.includes("workspace-recovery-failed"), false);
+    assert.equal(current.stdout, warmedBlueprint.stdout);
+  }
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeConcurrentBlueprintReads);
+
   const observed: string[] = [];
   let cursor: string | undefined;
   do {

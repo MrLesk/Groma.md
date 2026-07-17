@@ -125,6 +125,16 @@ always rolls a committing record forward by classifying each exact current revis
 old, new, or divergent. Cleanup of live and target-specific orphan stages must succeed
 while the pending record still retains their locators. Only then is idle state written
 with the new generation, making the generation marker the last canonical change.
+Read-only snapshots use that publication order as an optimistic persistence-local fence.
+When no retained or in-use transaction lease exists, a snapshot accepts an adapter load
+only between two idle journal observations with the same generation. A complete
+prepared-to-rollback interval is safe at the same generation because prepared state
+never publishes a canonical target. Every target publication is instead preceded by a
+durable committing record, and successful settlement advances the generation only after
+all targets are durable. Any non-idle, changed, malformed, or retained-lease observation
+falls back to the existing exclusive settlement and recovery path. This permits
+independent readers without adding a shared-lock contract or weakening writer and crash
+recovery semantics.
 Unknown tokens, malformed state, external divergence, cleanup failure, and lease
 release failure stay indeterminate or fail closed.
 Replacement handles created during either commit or startup recovery are attached to
@@ -257,6 +267,14 @@ transactions, and reopening validates direct file edits.
 After that fresh canonical validation, an unchanged complete index adopts an existing
 partial bundle without rewriting it only when the current manifest and durable journal
 checkpoint agree exactly on generation, fingerprint, integrity root, and resource count.
+A warmed read reaches that adoption path without coordination when two idle journal
+observations fence the canonical snapshot and two idle observations return the same
+checkpoint. The projection rechecks the exact current manifest, continuity checkpoint,
+and provider-owned ignore marker before committing process-local adoption. Each selected
+chunk remains independently authenticated by logical path, exact bytes, and Merkle proof.
+This read-only path never repairs or publishes; any unstable observation, incomplete
+index, missing hygiene, or continuity mismatch falls back to the existing coordinated
+repair path.
 A missing, oversized, malformed, or semantically mismatched current manifest is
 replaceable disposable state. A missing or mismatched valid checkpoint republishes;
 manifest-provider or checkpoint I/O failure fails closed without publication, and a warm
@@ -264,13 +282,14 @@ partial read does not force a canonical reload. Adoption authorizes the root, no
 file eagerly: a missing, corrupt, or unauthenticated shard invokes a separate forced
 reconstruction once and never loops through the adoption path.
 
-The current journal checkpoint read deliberately shares the transaction's exclusive,
-fail-fast coordination lease. A read during a prepared transaction therefore returns
-unavailable without reading pending state, reloading canonical data, or publishing. The
-cross-process read/write concurrency and stale-lock evolution belongs to GROM-31. Lease
-release throws and failure results are contained as `projection-checkpoint-unavailable`
-after successful checkpoint work; an earlier validation or generation-mismatch diagnostic
-is preserved unchanged.
+Stable idle checkpoint reads are optimistic and read-only: they accept only two exact
+idle observations with the same generation, projection identity, integrity root,
+resource count, and watermark. A changing or non-idle journal retries through the
+transaction's exclusive fail-fast lease, so prepared state and recovery retain the prior
+fail-closed behavior. Checkpoint recording remains an exclusive mutation. Lease release
+throws and failure results are contained as `projection-checkpoint-unavailable` after
+successful coordinated checkpoint work; an earlier validation or generation-mismatch
+diagnostic is preserved unchanged.
 
 ## Projection query engine
 

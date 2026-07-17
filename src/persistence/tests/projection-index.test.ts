@@ -331,6 +331,27 @@ function observeReads(
   }) as LocalResourceProvider;
 }
 
+function observeCoordination(
+  resources: LocalResourceProvider,
+  onCoordination: () => void,
+): LocalResourceProvider {
+  return new Proxy(resources, {
+    get(target, property) {
+      if (property === "withCoordination") {
+        return (
+          request: Parameters<LocalResourceProvider["withCoordination"]>[0],
+          action: () => unknown | Promise<unknown>,
+        ) => {
+          onCoordination();
+          return target.withCoordination(request, action);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as LocalResourceProvider;
+}
+
 async function replace(
   resources: LocalResourceProvider,
   locator: WorkspaceResourceLocator,
@@ -493,7 +514,7 @@ describe("local projection index", () => {
     staged.length = 0;
     const callsBeforeRepair = source.calls;
     expect(await index.identity()).toMatchObject({ ok: true, value: { generation: 1 } });
-    expect(source.calls).toBe(callsBeforeRepair + 1);
+    expect(source.calls).toBe(callsBeforeRepair + 2);
     expect(staged.length).toBeGreaterThan(0);
     expect(staged.every((locator) => locator.startsWith(".groma-cache/"))).toBeTrue();
     expect(
@@ -535,9 +556,15 @@ describe("local projection index", () => {
   test("adopts an unchanged durable bundle without writes and fails closed on checkpoint I/O", async () => {
     const target = await temporaryProvider();
     let stages = 0;
-    const resources = observeStages(target.resources, () => {
-      stages += 1;
-    });
+    let coordinated = 0;
+    const resources = observeCoordination(
+      observeStages(target.resources, () => {
+        stages += 1;
+      }),
+      () => {
+        coordinated += 1;
+      },
+    );
     const source = new MutableCanonicalSource(canonical(1));
     const checkpoint = new MutableProjectionCheckpoint();
     const first = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
@@ -545,14 +572,17 @@ describe("local projection index", () => {
     expect(stages).toBeGreaterThan(0);
 
     stages = 0;
+    coordinated = 0;
     const unchanged = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
     expect(await unchanged.load()).toMatchObject({ ok: true, value: { generation: 1 } });
     expect(stages).toBe(0);
+    expect(coordinated).toBe(0);
 
     const ignoreLocator = workspaceResourceLocator(".groma-cache", ".gitignore");
     if (!ignoreLocator.ok) throw new Error("invalid projection ignore locator");
     expect((await target.resources.removeResource(ignoreLocator.value)).state).toBe("committed");
     stages = 0;
+    coordinated = 0;
     checkpoint.failReads = true;
     const unavailable = createLocalProjectionIndex({ canonical: source, checkpoint, resources });
     expect(await unavailable.load()).toMatchObject({
@@ -560,6 +590,7 @@ describe("local projection index", () => {
       ok: false,
     });
     expect(stages).toBe(0);
+    expect(coordinated).toBeGreaterThan(0);
     checkpoint.failReads = false;
     expect(await unavailable.load()).toMatchObject({ ok: true, value: { generation: 1 } });
     expect(stages).toBeGreaterThan(0);
@@ -1453,7 +1484,7 @@ describe("local projection index", () => {
           );
           expect(await index.pageCatalog(identity.value, { limit: 1 })).toMatchObject({ ok: true });
         }
-        expect(source.calls).toBe(3);
+        expect(source.calls).toBe(5);
       }
     }
   });
@@ -1583,7 +1614,7 @@ describe("local projection index", () => {
     if (!reopenedIdentity.ok) throw new Error("expected branch projection identity");
     expect(reopenedIdentity.value.generation).toBe(firstIdentity.value.generation);
     expect(reopenedIdentity.value.fingerprint).not.toBe(firstIdentity.value.fingerprint);
-    expect(source.calls).toBe(2);
+    expect(source.calls).toBe(3);
     expect(await reopened.exactEntity(reopenedIdentity.value, ids.child)).toMatchObject({
       ok: true,
       value: {

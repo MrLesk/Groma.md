@@ -899,6 +899,14 @@ async function ensureCacheIgnored(
   return publishBytes(resources, locator, projectionIgnoreBytes);
 }
 
+async function cacheIgnoreIsCurrent(
+  resources: LocalResourceProvider,
+  locator: WorkspaceResourceLocator,
+): Promise<boolean> {
+  const read = await resources.read({ locator, maxBytes: projectionIgnoreBytes.byteLength });
+  return read.ok && sameBytes(read.value.bytes, projectionIgnoreBytes);
+}
+
 export function createLocalProjectionIndex(
   options: LocalProjectionIndexOptions,
 ): ProjectionIndexCapability & ProjectionReadCapability {
@@ -955,7 +963,7 @@ export function createLocalProjectionIndex(
       return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
     });
 
-  const load = () =>
+  const coordinatedLoad = () =>
     coordinated(async () => {
       const canonical = await loadCanonical();
       if (!canonical.ok) return canonical;
@@ -981,6 +989,39 @@ export function createLocalProjectionIndex(
       const rebuilt = materialize(canonical.value, bounds, fingerprint.value);
       return rebuilt.ok ? publishComplete(rebuilt.value) : rebuilt;
     });
+
+  const load = async (): Promise<Result<ProjectionSnapshot>> => {
+    try {
+      const canonical = await loadCanonical();
+      if (canonical.ok) {
+        const fingerprint = canonicalFingerprint(canonical.value, bounds);
+        if (fingerprint.ok) {
+          const current = await readProjection(resources, locator.value, bounds);
+          if (
+            current.state === "loaded" &&
+            current.snapshot.generation === canonical.value.generation &&
+            current.snapshot.fingerprint === fingerprint.value
+          ) {
+            const adopted = await partialReads.adopt(current.snapshot);
+            const ignoreLocator = localProjectionIgnoreLocator();
+            if (
+              adopted.ok &&
+              adopted.value !== undefined &&
+              ignoreLocator.ok &&
+              (await cacheIgnoreIsCurrent(resources, ignoreLocator.value))
+            ) {
+              const committed = adopted.value.commit();
+              if (committed.ok) return success(current.snapshot);
+            }
+          }
+        }
+      }
+    } catch {
+      // Any unstable or unavailable read is retried through the existing
+      // exclusively coordinated repair and publication path below.
+    }
+    return coordinatedLoad();
+  };
 
   const update = (event: GraphCommittedEvent) => {
     let captured: Result<GraphCommittedEvent>;

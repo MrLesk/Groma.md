@@ -164,9 +164,14 @@ an existing exact location-and-integrity-bound grant or requires
 `--trust-full-user-permissions`; only then may it import the selected Phase 1 module's
 named `plugin` export. The canonical lock records the exact manifest bytes, every
 enabled entry module's bytes, and resolved plugin ID. Startup rechecks all three before
-import. Supported mutations and startup share one workspace-scoped package-state
-coordination lease; direct edits are detected by re-reading canonical configuration,
-exact lock, and exact user state after materialization and immediately before each import.
+import. Every supported mutation and publication retains one exclusive workspace-scoped
+package-state coordination lease. Read-only startup instead projects captured canonical
+configuration, exact lock, and exact user state without acquiring that lease, then
+exact-revalidates the same surfaces after materialization, immediately before each
+import, and once more after the final import. The final check also applies when zero
+entries are enabled. Startup may therefore return a coherent old projection while a
+writer has not published, but an observed intermediate or changed state fails closed.
+Direct edits are detected through the same revalidation.
 The Host then evaluates an immutable in-memory module made from those already-read entry
 bytes instead of reopening the source path.
 Manifest and entry paths are canonically checked again after their file descriptor opens;

@@ -1343,10 +1343,9 @@ export function createLocalPluginPackageManager(
     return success(undefined);
   };
 
-  const packageProjectionStillCurrent = async (
+  const blueprintPackageProjectionStillCurrent = async (
     expectedConfiguration: typeof configuration,
     expectedLock: PackageLock,
-    expectedUserState: UserPackageState,
     operation: "enable" | "startup",
   ): Promise<Result<void>> => {
     const configurationChangedMessage =
@@ -1357,10 +1356,6 @@ export function createLocalPluginPackageManager(
       operation === "startup"
         ? "Blueprint plugin package state changed during startup; restart after changes settle"
         : "Blueprint plugin package state changed during plugin enablement; retry after changes settle";
-    const userStateChangedMessage =
-      operation === "startup"
-        ? "Local plugin package state changed during startup; restart after changes settle"
-        : "Local plugin package state changed during plugin enablement; retry after changes settle";
     const currentConfiguration = await readConfiguration();
     if (!currentConfiguration.ok) {
       return currentConfiguration.diagnostics.every(
@@ -1380,6 +1375,25 @@ export function createLocalPluginPackageManager(
     if (!sameBytes(encodeCanonical(currentLock.value), encodeCanonical(expectedLock))) {
       return packageFailure("plugin-package-lock-changed", lockChangedMessage);
     }
+    return success(undefined);
+  };
+
+  const packageProjectionStillCurrent = async (
+    expectedConfiguration: typeof configuration,
+    expectedLock: PackageLock,
+    expectedUserState: UserPackageState,
+    operation: "enable" | "startup",
+  ): Promise<Result<void>> => {
+    const blueprint = await blueprintPackageProjectionStillCurrent(
+      expectedConfiguration,
+      expectedLock,
+      operation,
+    );
+    if (!blueprint.ok) return blueprint;
+    const userStateChangedMessage =
+      operation === "startup"
+        ? "Local plugin package state changed during startup; restart after changes settle"
+        : "Local plugin package state changed during plugin enablement; retry after changes settle";
     const currentUserState = await readUserState();
     if (!currentUserState.ok) return currentUserState;
     if (!sameBytes(encodeCanonical(currentUserState.value), encodeCanonical(expectedUserState))) {
@@ -1439,16 +1453,6 @@ export function createLocalPluginPackageManager(
         return packageFailure("plugin-package-state-indeterminate", recoveryMessage);
       }
       return coordinated.value;
-    });
-  }
-
-  function serializeProjection<T>(action: () => Promise<Result<T>>): Promise<Result<T>> {
-    return serialize(async () => {
-      const coordinated = await options.resources.withCoordination<Result<T>>(
-        { context: "local-machine", locator: packageStateCoordinationLocator },
-        action,
-      );
-      return coordinated.ok ? coordinated.value : packageStateUnavailable();
     });
   }
 
@@ -2063,7 +2067,7 @@ export function createLocalPluginPackageManager(
     });
 
   const loadEnabled = (): Promise<Result<LoadedLocalPluginPackages>> =>
-    serializeProjection(async () => {
+    serialize(async () => {
       if (options.bootstrap.state !== "configured") {
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
@@ -2123,6 +2127,14 @@ export function createLocalPluginPackageManager(
         }
         const absent = await requireAbsentWindowsUserDataRoot();
         if (!absent.ok) return absent;
+        const stillCurrent = await blueprintPackageProjectionStillCurrent(
+          currentConfiguration.value,
+          lock.value,
+          "startup",
+        );
+        if (!stillCurrent.ok) return stillCurrent;
+        const stillAbsent = await requireAbsentWindowsUserDataRoot();
+        if (!stillAbsent.ok) return stillAbsent;
         return success(
           Object.freeze({ personalPluginIds: Object.freeze([]), registrations: Object.freeze([]) }),
         );
@@ -2135,11 +2147,27 @@ export function createLocalPluginPackageManager(
             errorCode(error) === "ENOENT" &&
             selections.every((selection) => selection.locked.enabled.length === 0)
           ) {
-            return success(
-              Object.freeze({
-                personalPluginIds: Object.freeze([]),
-                registrations: Object.freeze([]),
-              }),
+            const stillCurrent = await blueprintPackageProjectionStillCurrent(
+              currentConfiguration.value,
+              lock.value,
+              "startup",
+            );
+            if (!stillCurrent.ok) return stillCurrent;
+            try {
+              await lstat(requestedUserDataRoot);
+            } catch (finalError) {
+              if (errorCode(finalError) === "ENOENT") {
+                return success(
+                  Object.freeze({
+                    personalPluginIds: Object.freeze([]),
+                    registrations: Object.freeze([]),
+                  }),
+                );
+              }
+            }
+            return packageFailure(
+              "plugin-package-user-state-unavailable",
+              "Local plugin package state is unavailable",
             );
           }
         }
@@ -2234,6 +2262,13 @@ export function createLocalPluginPackageManager(
           if (selection.scope === "personal") personalPluginIds.push(exported.value.id);
         }
       }
+      const stillCurrent = await packageProjectionStillCurrent(
+        currentConfiguration.value,
+        lock.value,
+        state.value,
+        "startup",
+      );
+      if (!stillCurrent.ok) return stillCurrent;
       return success(
         Object.freeze({
           personalPluginIds: Object.freeze(personalPluginIds.sort(compareCodeUnits)),

@@ -505,7 +505,6 @@ describe("default bootstrap registry", () => {
 
   test("fails graph reads at the durable checkpoint seam without republishing", async () => {
     const context = await temporaryWorkspace();
-    let armedAfterManifest = false;
     let failCheckpoint = false;
     let writesAfterFault = 0;
     const registry = createDefaultBootstrapRegistry({
@@ -514,21 +513,7 @@ describe("default bootstrap registry", () => {
         : { coordinationRoot: context.coordinationRoot }),
       resourceFaultInjector: (phase, fault) => {
         if (failCheckpoint && phase === "write") writesAfterFault += 1;
-        if (
-          failCheckpoint &&
-          phase === "read" &&
-          fault?.locator === ".groma-cache/projection-read-current.json"
-        ) {
-          armedAfterManifest = true;
-          return;
-        }
-        if (
-          failCheckpoint &&
-          armedAfterManifest &&
-          phase === "read" &&
-          fault?.locator === localTransactionStateLocator
-        ) {
-          armedAfterManifest = false;
+        if (failCheckpoint && phase === "read" && fault?.locator === localTransactionStateLocator) {
           throw new Error("injected checkpoint-specific journal read failure");
         }
       },
