@@ -134,7 +134,8 @@ durable committing record, and successful settlement advances the generation onl
 all targets are durable. Any non-idle, changed, malformed, or retained-lease observation
 falls back to the existing exclusive settlement and recovery path. This permits
 independent readers without adding a shared-lock contract or weakening writer and crash
-recovery semantics.
+recovery semantics. A prepared or committing live writer still makes the read fail fast;
+the optimistic path serves concurrent readers only while canonical state is settled.
 Unknown tokens, malformed state, external divergence, cleanup failure, and lease
 release failure stay indeterminate or fail closed.
 Replacement handles created during either commit or startup recovery are attached to
@@ -276,9 +277,10 @@ This read-only path never repairs or publishes; any unstable observation, incomp
 index, missing hygiene, or continuity mismatch falls back to the existing coordinated
 repair path.
 When a cold loader loses that projection-local lease to another publisher, it becomes a
-bounded read-only follower instead of immediately failing. Its finite workload-sized
-schedule starts at 20 milliseconds and backs off to at most 500 milliseconds between
-observations. The wait budget scales from the configured structural and byte ceilings,
+bounded read-only follower instead of immediately failing. Its finite
+schedule is sized from configured capacity: it starts at 20 milliseconds and backs off to
+at most 500 milliseconds between observations. The wait budget scales from the configured
+structural and byte ceilings,
 with a 750-millisecond floor and a 10-second cap at or above the default supported scale.
 It never reacquires coordination, repairs, or publishes. A follower succeeds only after
 the projection, canonical generation and fingerprint, partial-read manifest and

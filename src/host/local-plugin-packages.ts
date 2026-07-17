@@ -195,8 +195,8 @@ const indeterminatePersonalPackageStateMessage =
   "Personal plugin package state may have committed; inspect the personal package before retrying; not found confirms removal";
 const indeterminateBlueprintTrustStateMessage =
   "Blueprint plugin trust state may have committed; verify the exact package entry and current selection before retrying";
-const packageStateReadFollowerDelayMilliseconds = 25;
-const maximumPackageStateReadFollowerWaits = 80;
+const packageStateReadRetryDelayMilliseconds = 25;
+const maximumPackageStateReadRetryWaits = 80;
 
 function requiredLocator(...segments: string[]): WorkspaceResourceLocator {
   const locator = workspaceResourceLocator(...segments);
@@ -1364,7 +1364,7 @@ export function createLocalPluginPackageManager(
     personalState: StartupPersonalStateObservation,
     phase: "initial" | "revalidate",
   ): Promise<Result<StartupPackageStateObservation>> => {
-    for (let attempt = 0; attempt <= maximumPackageStateReadFollowerWaits; attempt += 1) {
+    for (let attempt = 0; attempt <= maximumPackageStateReadRetryWaits; attempt += 1) {
       let coordinated: Result<Result<StartupPackageStateObservation>>;
       try {
         coordinated = await options.resources.withCoordination(
@@ -1379,8 +1379,8 @@ export function createLocalPluginPackageManager(
         coordinated.diagnostics.length === 1 &&
         coordinated.diagnostics[0]?.code === "resource-coordination-contended";
       if (!contended) return packageStateUnavailable();
-      if (attempt === maximumPackageStateReadFollowerWaits) break;
-      await wait(packageStateReadFollowerDelayMilliseconds);
+      if (attempt === maximumPackageStateReadRetryWaits) break;
+      await wait(packageStateReadRetryDelayMilliseconds);
     }
     return packageStateUnavailable();
   };
