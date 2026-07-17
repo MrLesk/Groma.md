@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 05:44'
+updated_date: '2026-07-17 05:51'
 labels: []
 milestone: m-2
 dependencies:
@@ -113,6 +113,8 @@ A late Codex traversal-envelope finding was independently audited. Its structura
 Final page-capacity remediation completed across export, search, and traversal. Application now captures provider-neutral maxBlueprintPageBytes and maxBlueprintPageDepth bounds, exact-counts canonical-JSON UTF-8 bytes through a descriptor-safe, prototype-poisoning-resistant counter, and returns small frozen semantic page-bound diagnostics for proven byte or depth exhaustion. The official Host reserves 64 KiB below the CLI eight-MiB ceiling and two levels below JSON depth 30. A valid replacement-provider ten-million-byte traversal now fails semantically before rendering; a genuine Standard Model page at exact depth 24 succeeds while depth 25 returns the typed bound result in both formats. The built-in two-document limit-one stress path renders above three MiB and below eight MiB. Claude findings about the hard examined-edge visit ceiling and non-public export-internal traversal diagnostics were independently reproduced/audited and are non-actionable because relaxing the former exceeds declared provider work and surfacing the latter offers no resumable cursor or valid retry. Strengthened compiled verification now proves new commands fail before initialization, direction/type/depth wiring, distinct search continuation pages, and non-vacuous generation continuity.
 
 Final step-14 specification review PASS and quality review APPROVED after closing iterator/prototype poisoning and JSON-envelope depth findings. Independent quality evidence included 10,000 randomized JSON byte-parity cases. Fresh full verification passed 766 tests with 5,389 assertions plus formatting, typecheck, architecture boundaries, build, smoke, compiled workflow, and crash recovery; check:targets passed all four standalone targets; git diff --check remained clean.
+
+Final CI portability correction: GitHub's shared Linux runner completed the deliberate three-page, greater-than-eight-MiB replacement-provider regression in 8.26 seconds, exceeding Bun's inherited five-second unit default after every other check passed. The regression now declares a documented finite 15-second allowance; production page bounds and behavior are unchanged. Focused verification passed 1 test; full bun run check passed 766 tests / 5,389 assertions plus formatting, typecheck, boundaries, build, smoke, compiled workflow, and crash recovery.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -1233,6 +1233,8 @@ describe("application projection-backed blueprint queries", () => {
     expect(structuralPageCalls).toBe(2);
   });
 
+  // This regression deliberately canonicalizes three pages above eight MiB. Keep a finite
+  // CI allowance above Bun's 5s unit default without relaxing production page bounds.
   test("returns small typed byte-bound failures for oversized replaceable-provider pages", async () => {
     const half = "x".repeat(5_000_000);
     const whole = `${half}${half}`;
@@ -1302,7 +1304,7 @@ describe("application projection-backed blueprint queries", () => {
       expect(Object.isFrozen(result)).toBeTrue();
       expect(!result.ok && Object.isFrozen(result.diagnostics[0]?.details)).toBeTrue();
     }
-  });
+  }, 15_000);
 
   test("captures the page-byte bound and gives smaller-limit guidance at the exact boundary", async () => {
     const first = component({ id: ids.service, intent: "x".repeat(256), type: "service" });
