@@ -1,11 +1,11 @@
 ---
 id: GROM-33
 title: Verify and package the complete Iteration 1B foundation
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 19:12'
+updated_date: '2026-07-17 19:27'
 labels: []
 milestone: m-2
 dependencies:
@@ -69,6 +69,10 @@ Finalization evidence at 3ec7bf9: bun run check passed 796/796 tests and the com
 Follow-up for GitHub Actions run 29605152959: both Linux Quality gates and Cross-platform binaries reached verifyInterruptedRead but exceeded the original 1,000ms SIGTERM grace under runner load, so the verifier correctly failed when SIGKILL was required; Windows native smoke passed. The verifier now keeps forced termination a failure while allowing a bounded 5,000ms SIGTERM grace and 10,000ms settlement deadline, eagerly observes the combined result rejection before delayed interruption wait() use without changing caller-visible rejection, polls progress every 10ms, and documents why the 79 canonical Markdown fixtures exist before immediate compiled-CLI validation. Three consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
 
 Ready-PR gate evidence on commit f7d78ee: GitHub Actions run 29606367136 passed Quality gates, Cross-platform binaries, and Native Windows binary. Claude approved after its actionable eager-rejection and Linux cancellation-grace feedback was implemented and independently re-reviewed; its remaining fault-injection suggestion was not adopted because it would replace shipped-artifact proof with the private Iteration 1A harness. Codex bot reacted +1 to PR #34 on the current head with no review comments or threads.
+
+Reopened after GitHub Actions run 29606731908: Cross-platform binaries again exceeded the 5,000ms SIGTERM grace in verifyInterruptedRead and required SIGKILL. The repeated Linux result shows that graceful SIGTERM servicing during a synchronous cold rebuild is not a stable product contract; the task requires deterministic abrupt-interruption canonical safety and fresh-read recovery through the shipped binary. Acceptance criteria and the existing final summary remain unchanged pending implementation and review.
+
+Implemented the deterministic abrupt-interruption proof after run 29606731908. Captured processes now expose an idempotent immediate SIGKILL path while generic failures and timeouts retain SIGTERM, bounded grace, SIGKILL escalation, settlement, and eager rejection observation. The cold target is a large production-binary export; manifest-last rebuild publication plus a second successful production-binary root read witnesses that projection/checkpoint coordination has released before immediate SIGKILL. The test requires an intentional force kill, nonzero exit, empty stderr, zero stdout bytes under the CLI atomic-output contract, exact canonical snapshot equality, and a complete fresh export recovery. Five consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

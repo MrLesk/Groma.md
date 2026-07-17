@@ -45,6 +45,7 @@ interface ProcessResult {
 
 interface CapturedProcess {
   readonly exited: Promise<number>;
+  readonly forceTerminate: () => void;
   readonly settle: () => Promise<void>;
   readonly terminate: () => void;
   readonly wait: () => Promise<readonly [number, string, string]>;
@@ -200,6 +201,17 @@ function spawnCapturedProcess(
     },
   );
 
+  const forceTerminate = (): void => {
+    if (processExited) return;
+    forceKilled = true;
+    terminationStarted = true;
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // Settlement remains bounded and may retry this idempotent signal.
+    }
+  };
+
   const terminate = (): void => {
     if (processExited || terminationStarted) return;
     terminationStarted = true;
@@ -210,12 +222,7 @@ function spawnCapturedProcess(
     }
     forceKillTimer = setTimeout(() => {
       if (processExited) return;
-      forceKilled = true;
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // The bounded settlement deadline remains the final cleanup failure.
-      }
+      forceTerminate();
     }, processTerminationGraceMilliseconds);
   };
 
@@ -240,12 +247,7 @@ function spawnCapturedProcess(
     let settlementTimer: ReturnType<typeof setTimeout> | undefined;
     const settlementExpired = new Promise<never>((_resolve, reject) => {
       settlementTimer = setTimeout(() => {
-        forceKilled = true;
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // Reader cancellation and the cleanup error below still bound this failure path.
-        }
+        forceTerminate();
         stdout.cancel();
         stderr.cancel();
         reject(
@@ -264,6 +266,7 @@ function spawnCapturedProcess(
 
   return Object.freeze({
     exited,
+    forceTerminate,
     settle,
     terminate,
     wait: () => Promise.race([result, lifetimeExpired]),
@@ -854,37 +857,35 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
   const before = await canonicalSnapshot(scenario.workspace);
   const cacheRoot = path.join(scenario.workspace, ".groma-cache");
   await rm(cacheRoot, { force: true, recursive: true });
+  const rebuildProgress = path.join(cacheRoot, "projection-read-current.json");
 
   const captured = spawnCapturedProcess(
     executable,
     scenario,
-    ["--format", "json", "blueprint", "export", "--limit", "1"],
+    ["--format", "json", "blueprint", "export", "--limit", "100"],
     {
       stderrBytes: 1_048_576,
-      stdoutBytes: 2_500_000,
+      stdoutBytes: maximumCommandOutputBytes,
       timeoutMilliseconds: 15_000,
     },
   );
   let operationFailed = false;
   try {
-    if (!(await waitForInterruptionProgress(cacheRoot, captured.exited))) {
+    if (!(await waitForInterruptionProgress(rebuildProgress, captured.exited))) {
       const [exitCode, stdout, stderr] = await captured.wait();
       throw new Error(
         `cold export exited before publishing progress evidence: ${exitCode}\n${stderr}${stdout}`,
       );
     }
-    captured.terminate();
+    // A second production-binary read witnesses released publication before the large exporter
+    // is killed while preparing its atomic output document.
+    await success(executable, scenario, ["component", "roots", "--limit", "1"]);
+    captured.forceTerminate();
     const [exitCode, stdout, stderr] = await captured.wait();
-    assert.equal(captured.wasForceKilled(), false, "interrupted export required SIGKILL cleanup");
-    assert.notEqual(exitCode, 0, "SIGTERM did not interrupt the cold export");
+    assert.equal(captured.wasForceKilled(), true, "cold export was not abruptly terminated");
+    assert.notEqual(exitCode, 0, "abruptly terminated cold export completed successfully");
     assert.equal(stderr, "", "interrupted export wrote unexpected stderr");
-    if (stdout !== "") {
-      assert.ok(stdout.endsWith("\n"), "interrupted export emitted a partial envelope");
-      const envelope = JSON.parse(stdout) as JsonEnvelope;
-      assert.equal(envelope.exitCode, exitCode, stdout);
-      assert.equal(envelope.ok, false, stdout);
-      assert.deepEqual(envelope.result, { signal: "SIGTERM", status: "cancelled" });
-    }
+    assert.equal(stdout, "", "abruptly terminated export emitted a non-atomic output document");
   } catch (error) {
     operationFailed = true;
     throw error;
