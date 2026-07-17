@@ -276,10 +276,11 @@ chunk remains independently authenticated by logical path, exact bytes, and Merk
 This read-only path never repairs or publishes; any unstable observation, incomplete
 index, missing hygiene, or continuity mismatch falls back to the existing coordinated
 repair path.
-When a cold loader loses that projection-local lease to another publisher, it enters an
-iterative cancellation-aware retry instead of guessing a safe publication timeout. Before
-every coordination attempt it checks its optional local cancellation predicate and tries
-the complete read-only adoption fence above. Only one exact
+When a loader that cannot complete that read-only adoption fence loses the projection-local
+lease to another publisher or repairer, it enters an iterative cancellation-aware retry
+instead of guessing a safe publication timeout. Before every coordination attempt it checks
+its optional local cancellation predicate and tries the complete adoption fence again. Only
+one exact
 `resource-coordination-contended` diagnostic authorizes another iteration; action,
 release, mixed-diagnostic, and provider failures return immediately. Retry waits start at
 20 milliseconds and use capped exponential backoff up to 500 milliseconds, with no total

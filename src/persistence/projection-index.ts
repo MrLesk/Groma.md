@@ -1085,8 +1085,6 @@ export function createLocalProjectionIndex(
       const beforeWait = cancellationFailure();
       if (beforeWait !== undefined) return beforeWait;
       await wait(delayMilliseconds);
-      const afterWait = cancellationFailure();
-      if (afterWait !== undefined) return afterWait;
       delayMilliseconds = Math.min(
         delayMilliseconds * 2,
         projectionRepairRetryMaximumDelayMilliseconds,

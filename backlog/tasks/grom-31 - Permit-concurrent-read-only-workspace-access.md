@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 11:12'
+updated_date: '2026-07-17 11:31'
 labels: []
 milestone: m-4
 dependencies: []
@@ -90,6 +90,10 @@ Implemented the P1 projection liveness remediation. Local projection load now ch
 Closed final independent-review gaps. A projection-level integration now runs behind the real coordination child, kills and awaits the owner, uses a one-millisecond stale policy, and proves the iterative loader safely reaps, reacquires, repairs malformed disposable state, stages only .groma-cache resources, and preserves exact canonical sentinel bytes plus generation. The Final Summary now describes uncapped cancellation-aware retry and waiter repair instead of the obsolete bounded read-only follower. Refreshed focused verification passed 56 tests and 448 expectations; typecheck, formatting, and git diff check remain green.
 
 Final exact-tree verification after the cancellation-aware liveness remediation passed bun run check: formatting, type checking, architecture boundaries, 796 tests across 37 files with 5,679 expectations, the compiled Iteration 1A cache-cold eight-reader workflow, and crash recovery. bun run check:targets passed macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64 executables. The focused projection and Host suites passed 56 tests with 448 expectations, the real dead-owner regression passed, two independent reviews approved, and git diff --check was clean.
+
+Final Claude review reported no concurrency correctness bug. Independent audits accepted three small clarity/simplicity corrections: qualify the package-state no-lease statement to read-only startup because enablement intentionally retains its exclusive mutation lease through selected-entry evaluation; describe projection retry for any load that cannot complete the full adoption fence, including present-but-unadoptable state; and remove the post-wait cancellation observation duplicated by the next iteration before any I/O. The checkpoint double observation remains a conservative provider-neutral interleaving fence, canonical reload after coordination preserves same-generation freshness under the public provider contract, and startup/mutation comparison helpers remain separate because their coordination ownership differs.
+
+After the three accepted Claude follow-ups, focused projection and Host verification passed 56 tests and 448 expectations; bun run check again passed formatting, type checking, architecture boundaries, all 796 tests with 5,679 expectations, compiled binary smoke, the cache-cold eight-reader workflow, and crash recovery; git diff --check was clean. The other three Claude observations were independently rejected as non-actionable for this task: the double checkpoint read conservatively detects provider-level interleaving, a fresh post-coordination canonical read preserves same-generation fingerprint freshness, and separate startup/mutation helpers keep distinct lease ownership explicit.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -118,12 +122,24 @@ created: 2026-07-17 11:12
 ---
 Exact-tree remediation passed 796 tests and 5,679 expectations, the compiled cold-reader and crash-recovery workflow, all four target builds, focused concurrency verification, and two independent reviews. Ready for final PR head review.
 ---
+
+author: @codex
+created: 2026-07-17 11:30
+---
+Reopened for three independently validated Claude follow-ups: scope package lease documentation to read-only startup, describe retry for every unadoptable projection rather than only cold cache, and remove one cancellation observation duplicated immediately by the next loop guard.
+---
+
+author: @codex
+created: 2026-07-17 11:31
+---
+Claude feedback was independently evaluated: three documentation/simplicity improvements were applied, three intentional safety/ownership choices remain. The amended exact tree is green and ready for final hosted/Codex review.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Permits independent CLI processes to inspect one initialized workspace concurrently through canonical and cache-cold projection-backed reads without recovery, package-state, or graph-query failures. Stable-idle transaction and checkpoint reads remain optimistic, and package startup uses brief coherent observations outside plugin execution. Cold projection contenders use cancellation-aware adoption-before-coordination retry with 20-to-500-millisecond capped backoff and no elapsed-time timeout; a waiter that acquires may exclusively repair and publish only disposable projection state. Exact contention, cancellation, mixed failures, normal and dead-owner repair, eight-waiter adoption, Host cancellation wiring, and byte-identical canonical state are covered without changing Core capability contracts. Verified by 796 tests and 5,679 expectations, compiled crash/cold-reader workflows, all four executable targets, focused concurrency suites, and independent reviews.
+Permits independent CLI processes to inspect one initialized workspace concurrently through canonical and projection-backed reads without recovery, package-state, or graph-query failures. Stable-idle transaction and checkpoint reads remain optimistic, and package startup uses brief coherent observations outside plugin execution. A projection load that cannot complete read-only adoption uses cancellation-aware adoption-before-coordination retry with 20-to-500-millisecond capped backoff and no elapsed-time timeout; a waiter that acquires may exclusively repair and publish only disposable projection state. Exact contention, cancellation, mixed failures, normal and dead-owner repair, eight-waiter adoption, Host cancellation wiring, and byte-identical canonical state are covered without changing Core capability contracts. Verified by 796 tests and 5,679 expectations, compiled crash/cold-reader workflows, all four executable targets, focused concurrency suites, independent reviews, and evaluated Claude feedback.
 <!-- SECTION:FINAL_SUMMARY:END -->
 
 <!-- SECTION:NOTES:END -->
