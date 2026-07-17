@@ -11,14 +11,59 @@ const defaultExecutable = path.join(
   "dist",
   process.platform === "win32" ? "groma.exe" : "groma",
 );
-const expectedDigests = Object.freeze({
-  declarations: "3a63810fc2452e57951ec8f2f2bbc80666cb25119ae044bb564c038f9f6853c5",
-  edges: "539485d6113bf255f50ab3244065485bd9dd9ff2e3e0cb55a903582ce9424960",
-  embeddedItems: "76551c8739a13767d01eef6459cae01a49f5ddc8e02d0bc37a40b50fdd1053bc",
-  export: "5b894feb59f831bd025ecc635ddb8c3a1b2d4ec93b86e0c30bcc4893d34ae72d",
-  parents: "196e03f6931485dfd821e56352c97bae249d6adce41754b99a98066af0d8e532",
-  roots: "4d67f79c129d2b67be1284d4e46eae94d1c74f6ce94f9537059f479bb82d232a",
-  seeds: "9a6b8c55f6f9147d94be1b16d86d58946b6fbd940f1652b507b68571f4f45e14",
+const declarationStatuses = ["ambiguous", "constraint", "edge", "partial"] as const;
+type DeclarationStatus = (typeof declarationStatuses)[number];
+
+interface BaselineCounts {
+  readonly actions: number;
+  readonly components: number;
+  readonly declarations: number;
+  readonly edges: number;
+  readonly embeddedItems: number;
+  readonly inputs: number;
+  readonly intents: number;
+  readonly outputs: number;
+  readonly roots: number;
+}
+
+interface BaselineDigests {
+  readonly declarations: string;
+  readonly edges: string;
+  readonly embeddedItems: string;
+  readonly export: string;
+  readonly parents: string;
+  readonly roots: string;
+  readonly seeds: string;
+}
+
+interface BaselineSummary {
+  readonly counts: BaselineCounts;
+  readonly digests: BaselineDigests;
+  readonly statusCounts: Readonly<Record<DeclarationStatus, number>>;
+}
+
+const expectedBaseline: BaselineSummary = Object.freeze({
+  counts: Object.freeze({
+    actions: 158,
+    components: 43,
+    declarations: 87,
+    edges: 95,
+    embeddedItems: 398,
+    inputs: 129,
+    intents: 43,
+    outputs: 111,
+    roots: 9,
+  }),
+  digests: Object.freeze({
+    declarations: "3a63810fc2452e57951ec8f2f2bbc80666cb25119ae044bb564c038f9f6853c5",
+    edges: "539485d6113bf255f50ab3244065485bd9dd9ff2e3e0cb55a903582ce9424960",
+    embeddedItems: "76551c8739a13767d01eef6459cae01a49f5ddc8e02d0bc37a40b50fdd1053bc",
+    export: "5b894feb59f831bd025ecc635ddb8c3a1b2d4ec93b86e0c30bcc4893d34ae72d",
+    parents: "196e03f6931485dfd821e56352c97bae249d6adce41754b99a98066af0d8e532",
+    roots: "4d67f79c129d2b67be1284d4e46eae94d1c74f6ce94f9537059f479bb82d232a",
+    seeds: "9a6b8c55f6f9147d94be1b16d86d58946b6fbd940f1652b507b68571f4f45e14",
+  }),
+  statusCounts: Object.freeze({ ambiguous: 9, constraint: 17, edge: 53, partial: 8 }),
 });
 
 interface JsonEnvelope {
@@ -37,7 +82,7 @@ interface StandardItem {
 interface Declaration {
   readonly edgeIds?: readonly string[];
   readonly key: string;
-  readonly status: "ambiguous" | "constraint" | "edge" | "partial";
+  readonly status: DeclarationStatus;
   readonly text: string;
 }
 
@@ -128,6 +173,7 @@ async function command(
   executable: string,
   workspace: string,
   args: readonly string[],
+  input?: string,
 ): Promise<JsonEnvelope> {
   const child = Bun.spawn({
     cmd: [executable, "--format", "json", ...args],
@@ -138,8 +184,15 @@ async function command(
       USERPROFILE: path.join(path.dirname(workspace), "home"),
     },
     stderr: "pipe",
+    stdin: input === undefined ? "ignore" : "pipe",
     stdout: "pipe",
   });
+  if (input !== undefined) {
+    const stdin = child.stdin;
+    assert.notEqual(stdin, undefined, "compiled process stdin was unavailable");
+    stdin!.write(input);
+    stdin!.end();
+  }
   const timeout = setTimeout(() => child.kill(), 30_000);
   try {
     const [exitCode, stdout, stderr] = await Promise.all([
@@ -199,6 +252,33 @@ async function exportAll(executable: string, workspace: string): Promise<readonl
   return items;
 }
 
+async function rootIdsAll(executable: string, workspace: string): Promise<readonly string[]> {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  let generation: number | undefined;
+  do {
+    const envelope = await command(executable, workspace, [
+      "component",
+      "roots",
+      "--limit",
+      "7",
+      ...(cursor === undefined ? [] : ["--cursor", cursor]),
+    ]);
+    const value = resultValue<{
+      readonly generation: number;
+      readonly hasMore: boolean;
+      readonly items: readonly { readonly component: Component }[];
+      readonly nextCursor?: string;
+    }>(envelope);
+    generation ??= value.generation;
+    assert.equal(value.generation, generation, "paged roots changed generation");
+    ids.push(...value.items.map((item) => item.component.id));
+    cursor = value.nextCursor;
+    assert.equal(value.hasMore, cursor !== undefined, "paged roots cursor contract diverged");
+  } while (cursor !== undefined);
+  return ids;
+}
+
 async function canonicalSnapshot(
   root: string,
 ): Promise<readonly { path: string; sha256: string }[]> {
@@ -235,30 +315,40 @@ async function requireMissing(candidate: string): Promise<void> {
   throw new Error(`${candidate} unexpectedly exists`);
 }
 
-function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boolean) {
+function integrityAudit(items: readonly ExportItem[]): BaselineSummary {
   const ordered = [...items].sort((left, right) =>
     compareText(left.component.id, right.component.id),
   );
   const components = ordered.map((item) => item.component);
-  assert.equal(components.length, 43);
-  assert.equal(new Set(components.map((component) => component.id)).size, 43);
+  assert.ok(components.length > 0, "self-blueprint must contain a component");
   assert.equal(
-    components.every(
-      (component) => typeof component.intent === "string" && component.intent.trim().length > 0,
-    ),
+    components.every((component) => typeof component.id === "string" && component.id.length > 0),
     true,
+    "component identities must be nonempty strings",
+  );
+  assert.equal(
+    new Set(components.map((component) => component.id)).size,
+    components.length,
+    "component identities must be unique",
+  );
+  assert.equal(
+    components.every((component) => component.kind === "component"),
+    true,
+    "every canonical entity must be a component",
+  );
+  const intentCount = components.filter(
+    (component) => typeof component.intent === "string" && component.intent.trim().length > 0,
+  ).length;
+  assert.equal(
+    intentCount,
+    components.length,
+    "every self-blueprint component must have nonempty intent",
   );
 
   const seeds = components.map((component) => ({
     id: component.id,
     seed: component.extensions["groma.md/seed-key"],
   }));
-  assert.equal(
-    seeds.every((entry) => typeof entry.seed === "string"),
-    true,
-  );
-  assert.equal(new Set(seeds.map((entry) => entry.seed)).size, 43);
-
   const roots = components
     .filter((component) => component.parent === undefined)
     .map((component) => ({
@@ -266,41 +356,27 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
       seed: component.extensions["groma.md/seed-key"],
       type: component.type,
     }));
-  assert.equal(roots.length, 9);
-  assert.equal(
-    roots.every((root) => root.type === "domain"),
-    true,
-  );
+  assert.ok(roots.length > 0, "self-blueprint containment must have at least one root");
   const parents = components
     .filter((component) => component.parent !== undefined)
     .map((component) => ({ id: component.id, parent: component.parent }));
-  assert.equal(parents.length, 34);
   const componentIds = new Set(components.map((component) => component.id));
   assert.equal(
     parents.every((entry) => componentIds.has(entry.parent!)),
     true,
+    "every structural parent must resolve to a component",
   );
-  assert.equal(
-    roots.every((root) => {
-      const component = components.find((candidate) => candidate.id === root.id)!;
-      return component.extensions["groma.md/first-delivery"] === undefined;
-    }),
-    true,
-  );
-  assert.equal(
-    components.filter(
-      (component) => typeof component.extensions["groma.md/first-delivery"] === "string",
-    ).length,
-    34,
-  );
-
+  const parentById = new Map(parents.map((entry) => [entry.id, entry.parent!]));
   for (const component of components) {
-    assert.equal(component.kind, "component");
-    assert.equal(component.label, undefined);
-    assert.equal(component.summary, undefined);
-    assert.equal(component.iconDomain, undefined);
-    assert.equal(component.lifecycle, undefined);
-    assert.equal(component.desired, undefined);
+    const seen = new Set<string>();
+    let current = component.id;
+    while (true) {
+      assert.equal(seen.has(current), false, `containment cycle reaches ${current}`);
+      seen.add(current);
+      const parent = parentById.get(current);
+      if (parent === undefined) break;
+      current = parent;
+    }
   }
 
   const embeddedItems = components
@@ -322,11 +398,16 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
     (total, component) => total + (component.actions?.length ?? 0),
     0,
   );
-  assert.equal(inputCount, 129);
-  assert.equal(outputCount, 111);
-  assert.equal(actionCount, 158);
-  assert.equal(embeddedItems.length, 398);
-  assert.equal(new Set(embeddedItems.map((entry) => entry.item.id)).size, 398);
+  assert.equal(
+    embeddedItems.every((entry) => typeof entry.item.id === "string" && entry.item.id.length > 0),
+    true,
+    "embedded item identities must be nonempty strings",
+  );
+  assert.equal(
+    new Set(embeddedItems.map((entry) => entry.item.id)).size,
+    embeddedItems.length,
+    "embedded item identities must be unique",
+  );
 
   const declarations = components
     .flatMap((component) =>
@@ -336,36 +417,63 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
       })),
     )
     .sort((left, right) => compareText(left.declaration.key, right.declaration.key));
-  assert.equal(declarations.length, 87);
-  const statusCounts = Object.freeze(
-    Object.fromEntries(
-      (["ambiguous", "constraint", "edge", "partial"] as const).map((status) => [
-        status,
-        declarations.filter((entry) => entry.declaration.status === status).length,
-      ]),
-    ) as Readonly<Record<Declaration["status"], number>>,
-  );
-  assert.deepEqual(statusCounts, { ambiguous: 9, constraint: 17, edge: 53, partial: 8 });
+  const mutableStatusCounts: Record<DeclarationStatus, number> = {
+    ambiguous: 0,
+    constraint: 0,
+    edge: 0,
+    partial: 0,
+  };
+  for (const { declaration } of declarations) {
+    assert.ok(
+      declarationStatuses.includes(declaration.status),
+      `unsupported declaration status: ${String(declaration.status)}`,
+    );
+    assert.ok(
+      typeof declaration.key === "string" && declaration.key.length > 0,
+      "declaration keys must be nonempty strings",
+    );
+    assert.ok(
+      typeof declaration.text === "string" && declaration.text.length > 0,
+      `${declaration.key} must preserve nonempty declaration text`,
+    );
+    mutableStatusCounts[declaration.status] += 1;
+  }
+  const statusCounts = Object.freeze({ ...mutableStatusCounts });
   assert.equal(
-    declarations.every((entry) =>
-      (["ambiguous", "constraint", "edge", "partial"] as const).includes(entry.declaration.status),
-    ),
-    true,
+    new Set(declarations.map((entry) => entry.declaration.key)).size,
+    declarations.length,
+    "declaration keys must be unique",
   );
-  assert.equal(new Set(declarations.map((entry) => entry.declaration.key)).size, 87);
 
   const edges = ordered
     .flatMap((item) => item.relationships)
     .sort((left, right) => compareText(left.id, right.id));
-  assert.equal(edges.length, 95);
-  assert.equal(new Set(edges.map((edge) => edge.id)).size, 95);
+  assert.equal(
+    edges.every((edge) => typeof edge.id === "string" && edge.id.length > 0),
+    true,
+    "relationship identities must be nonempty strings",
+  );
+  assert.equal(
+    new Set(edges.map((edge) => edge.id)).size,
+    edges.length,
+    "relationship identities must be unique",
+  );
   assert.equal(
     edges.every((edge) => edge.type === "relates-to"),
     true,
+    "self-blueprint declaration edges must use neutral relates-to type",
   );
   assert.equal(
     edges.every((edge) => componentIds.has(edge.source) && componentIds.has(edge.target)),
     true,
+    "relationship endpoints must resolve to components",
+  );
+  assert.equal(
+    ordered.every((item) =>
+      item.relationships.every((relationship) => relationship.source === item.component.id),
+    ),
+    true,
+    "exported relationships must be owned by their source component",
   );
   const edgesById = new Map(edges.map((edge) => [edge.id, edge]));
   const declaredEdgeIds: string[] = [];
@@ -374,8 +482,12 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
       assert.equal(declaration.edgeIds, undefined);
       continue;
     }
-    assert.ok(Array.isArray(declaration.edgeIds) && declaration.edgeIds.length > 0);
+    assert.ok(
+      Array.isArray(declaration.edgeIds) && declaration.edgeIds.length > 0,
+      `${declaration.key} must reference at least one edge`,
+    );
     for (const edgeId of declaration.edgeIds) {
+      assert.equal(typeof edgeId, "string", `${declaration.key} has a malformed edge ID`);
       const edge = edgesById.get(edgeId);
       assert.notEqual(edge, undefined, `${declaration.key} references missing edge ${edgeId}`);
       assert.equal(edge!.source, component);
@@ -397,7 +509,6 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
     roots: digest(roots),
     seeds: digest(seeds),
   });
-  if (enforceExpectedBaseline) assert.deepEqual(digests, expectedDigests);
   return Object.freeze({
     counts: Object.freeze({
       actions: actionCount,
@@ -406,7 +517,7 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
       edges: edges.length,
       embeddedItems: embeddedItems.length,
       inputs: inputCount,
-      intents: components.length,
+      intents: intentCount,
       outputs: outputCount,
       roots: roots.length,
     }),
@@ -415,9 +526,52 @@ function exactAudit(items: readonly ExportItem[], enforceExpectedBaseline: boole
   });
 }
 
+function assertExpectedBaseline(summary: BaselineSummary): void {
+  assert.deepEqual(summary, expectedBaseline);
+}
+
+async function exerciseReportBaselineWithSupportedEdit(
+  executable: string,
+  temporaryRoot: string,
+  sourceSummary: BaselineSummary,
+): Promise<void> {
+  const workspace = path.join(temporaryRoot, "report-count-change");
+  const canonicalRoot = path.join(workspace, "groma");
+  const cacheRoot = path.join(workspace, ".groma-cache");
+  await cp(path.join(projectRoot, "groma"), canonicalRoot, { recursive: true });
+  await command(
+    executable,
+    workspace,
+    ["component", "create", "--stdin"],
+    JSON.stringify({
+      component: {
+        intent: "Prove that baseline reporting accepts a supported architecture count change.",
+        name: "Baseline report regression probe",
+        type: "domain",
+      },
+    }),
+  );
+  const afterEdit = await canonicalSnapshot(canonicalRoot);
+  const changed = await exportAll(executable, workspace);
+  const changedSummary = integrityAudit(changed);
+  assert.equal(changedSummary.counts.components, sourceSummary.counts.components + 1);
+  assert.equal(changedSummary.counts.roots, sourceSummary.counts.roots + 1);
+  assert.notDeepEqual(changedSummary, sourceSummary);
+  await lstat(path.join(cacheRoot, "projection-index.json"));
+
+  await rm(cacheRoot, { force: true, recursive: true });
+  await requireMissing(cacheRoot);
+  const rebuilt = await exportAll(executable, workspace);
+  assert.equal(canonicalJson(rebuilt), canonicalJson(changed));
+  assert.deepEqual(integrityAudit(rebuilt), changedSummary);
+  assert.deepEqual(await canonicalSnapshot(canonicalRoot), afterEdit);
+}
+
 const options = optionsFrom(Bun.argv.slice(2));
 const temporaryRoot = await mkdtemp(path.join(tmpdir(), "groma-self-blueprint-verify-"));
 try {
+  const sourceCanonicalRoot = path.join(projectRoot, "groma");
+  const sourceBefore = await canonicalSnapshot(sourceCanonicalRoot);
   const workspace = path.join(temporaryRoot, "workspace");
   const canonicalRoot = path.join(workspace, "groma");
   const cacheRoot = path.join(workspace, ".groma-cache");
@@ -427,22 +581,13 @@ try {
   await requireMissing(cacheRoot);
 
   const first = await exportAll(options.executable, workspace);
-  const firstSummary = exactAudit(first, !options.reportBaseline);
+  const firstSummary = integrityAudit(first);
+  if (!options.reportBaseline) assertExpectedBaseline(firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
 
-  const rootEnvelope = await command(options.executable, workspace, [
-    "component",
-    "roots",
-    "--limit",
-    "100",
-  ]);
-  const rootItems = resultValue<{
-    readonly hasMore: boolean;
-    readonly items: readonly { readonly component: Component }[];
-  }>(rootEnvelope);
-  assert.equal(rootItems.hasMore, false);
+  const rootIds = await rootIdsAll(options.executable, workspace);
   assert.deepEqual(
-    rootItems.items.map((item) => item.component.id).sort(compareText),
+    [...rootIds].sort(compareText),
     first
       .filter((item) => item.component.parent === undefined)
       .map((item) => item.component.id)
@@ -453,18 +598,22 @@ try {
   await requireMissing(cacheRoot);
   const rebuilt = await exportAll(options.executable, workspace);
   assert.equal(canonicalJson(rebuilt), canonicalJson(first));
-  assert.deepEqual(exactAudit(rebuilt, !options.reportBaseline), firstSummary);
+  assert.deepEqual(integrityAudit(rebuilt), firstSummary);
   await lstat(path.join(cacheRoot, "projection-index.json"));
   assert.deepEqual(await canonicalSnapshot(canonicalRoot), before);
 
   if (options.reportBaseline) {
+    await exerciseReportBaselineWithSupportedEdit(options.executable, temporaryRoot, firstSummary);
     console.log(JSON.stringify({ mode: "report-baseline", ...firstSummary }));
   } else {
+    const { counts } = firstSummary;
     console.log(
-      "Self-blueprint verified: 43 components, 9 roots, 398 embedded items, " +
-        "87 declarations, 95 edges.",
+      `Self-blueprint verified: ${counts.components} components, ${counts.roots} roots, ` +
+        `${counts.embeddedItems} embedded items, ${counts.declarations} declarations, ` +
+        `${counts.edges} edges.`,
     );
   }
+  assert.deepEqual(await canonicalSnapshot(sourceCanonicalRoot), sourceBefore);
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });
 }

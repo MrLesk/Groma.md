@@ -222,11 +222,13 @@ A baseline refresh is deliberate and review-only:
 3. Run
    `bun run tests/iteration-1b/verify-self-blueprint.ts --report-baseline` to print the
    observed counts, declaration statuses, and opaque digests.
-4. Review that report and deliberately update the fixed `expectedDigests` summary in the
-   verifier. The report never writes or updates expectations automatically.
+4. Review that report and deliberately update the fixed `expectedBaseline` summary—its
+   counts, status counts, and digests—in the verifier. The report never writes or updates
+   expectations automatically.
 5. Run normal `bun run verify:self-blueprint` to enforce the refreshed baseline.
 
-`--report-baseline` may appear before or after `--executable=<path>`. It bypasses only
-frozen digest equality; structural counts, status rules, the declaration-edge bijection,
-projection rebuild, and byte-identical canonical proof still run. A frozen digest is a
-change detector, not an architectural source.
+`--report-baseline` may appear before or after `--executable=<path>`. It bypasses frozen
+expected-baseline equality for counts, status counts, and digests. Generic identity,
+containment, intent, declaration-status and edge-ID rules, the declaration-edge
+bijection, projection rebuild, and byte-identical canonical proof still run. A frozen
+baseline is a change detector, not an architectural source.

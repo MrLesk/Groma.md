@@ -177,11 +177,54 @@ from acceptance through cancellation or completion.
 It coordinates the conditions required to place an order, but pricing, inventory,
 payment processing, fulfillment, and notification delivery remain separate
 responsibilities.
+
+## Behavioral notes
+
+An order progresses through meaningful business states such as pending, placed,
+cancelled, and completed. Exact storage, state-machine implementation, event transport,
+and API technology are intentionally outside the blueprint.
+
+Order placement must not create two orders when the same purchase intent is submitted
+more than once. Cancellation is available only while the order's state and downstream
+commitments permit it.
+
+## Guarantees
+
+- Every accepted order has a stable identity.
+- The same purchase intent does not create duplicate orders.
+- An order is not placed without an authoritative price, inventory reservation, and
+  acceptable payment state.
+- Meaningful lifecycle changes are available to downstream components.
 ```
 
-### Behavioral Notes
+The relationship source is implicit in the owning component file. Everything after the
+exact `# Intent` heading and blank line is the component's reversible intent string. The
+behavioral notes and guarantees above are therefore intent prose, not additional
+frontmatter fields or new schema.
+
+The structured frontmatter remains limited to intent-adjacent identity, inputs, outputs,
+actions, and relationships. Richer concepts remain readable without making them mandatory
+schema:
+
+| Ordering concept                             | Representation                       |
+| -------------------------------------------- | ------------------------------------ |
+| Order lifecycle state                        | `Behavioral notes` prose             |
+| Pricing, inventory, and payment requirements | `requires` relationships             |
+| Idempotency and acceptance guarantees        | `Guarantees` prose                   |
+| Place-order trigger                          | `Place order request` input          |
+| Rejection and cancellation outcomes          | Outputs                              |
+| Reservation and payment effects              | Relationship and action descriptions |
+| Fulfillment and payment events               | Inputs                               |
+
+A TypeScript scanner might observe only this partial evidence:
+
+```text
+component candidate: packages/ordering
+actions: placeOrder, cancelOrder, updateFulfillmentStatus
+relationships: imports pricing, inventory, payments
+```
 
 A framework-specific scanner might additionally observe an HTTP input or an emitted
-order event. Neither scanner is expected to infer lifecycle meaning, idempotency,
-business guarantees, or why these responsibilities form separate components. Those
-remain human- or agent-curated intent.
+order event. The TypeScript and framework-specific scanners are both partial: neither is
+expected to infer lifecycle meaning, idempotency, business guarantees, or why these
+responsibilities form separate components. Those remain human- or agent-curated intent.

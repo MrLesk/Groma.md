@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 13:05'
+updated_date: '2026-07-17 13:25'
 labels: []
 milestone: m-2
 dependencies:
@@ -73,6 +73,8 @@ Parent exact-tree verification repeated after handoff: bun run verify:self-bluep
 Review remediation completed without hand-editing canonical state. The freshly compiled public CLI applied 19 current-revision transactions from generation 75 to 94: 10 CLI-minted exact edges, 8 declaration metadata updates to partial, and 1 Plugin Development root intent. A public export reports 43 nonempty intents, 87 declarations at 53 edge / 8 partial / 9 ambiguous / 17 constraint, and 95 edges. Normalizing only those requested changes makes the complete pre-remediation and post-remediation public exports equal, confirming opaque IDs, exact declaration texts, and all other component meaning stayed unchanged. The Plugin Package Manager action and groma.md/first-delivery qualifier remain exact.
 The verifier now enforces both edge-bearing states in the global source/description bijection, all 43 intents, fixed reviewed digests, and a read-only report-baseline mode in either executable-option order while retaining projection rebuild and byte-identical canonical proof. ARCHITECTURE.md restores compact cross-component views and deliberate baseline guidance without a second field ledger; docs/component-model-examples.md preserves the noncanonical Shopify and Ordering examples; DEVELOPMENT.md points detailed architecture and seed metadata to canonical public export.
 Verification passed: bun run build; bun run verify:self-blueprint; report-baseline in both executable-option orders; bun run check with 796 tests and 5,679 expectations plus compiled Iteration 1A crash recovery; bun run check:targets for all four targets; exact public-export pair audit; git diff --check; canonical diff and scope review.
+
+Second review loop restored the complete Ordering teaching semantics: lifecycle states, idempotency and cancellation behavior, four guarantees, the reversible Intent boundary explanation, concept-to-representation mapping, and concrete TypeScript partial scanner evidence, while retaining the explicit noncanonical warning. The verifier now separates generic integrity from a frozen expectedBaseline summary. Normal mode compares all counts, declaration statuses, and digests; report mode bypasses every expected-baseline equality while retaining allowed-status checks, component identity and acyclic containment, nonempty intents, edge-ID rules, exact declaration/edge source-description bijection, bounded paging, projection rebuild equality, and canonical byte proof. A report-only regression uses the public CLI against a second disposable copy to add one valid root, proves observed component/root counts increase, rebuilds the projection, and confirms the source canonical snapshot remains byte-identical. ARCHITECTURE.md now tells maintainers to deliberately refresh expected summary counts, statuses, and digests together.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -94,5 +96,5 @@ Reopened after external review identified actionable migration gaps: preserve co
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Remediated the GROM-32 review findings through the compiled public CLI: all 43 components now have intent, 8 partially resolvable declarations retain their unresolved remainder while owning 10 new exact CLI-minted edges, and the frozen public-export verifier covers 53 edge / 8 partial / 9 ambiguous / 17 constraint declarations and 95 total edges. Restored compact architecture context, workflows, data planes, decisions, exclusions, neutral direction semantics, noncanonical teaching examples, development source-of-truth pointers, and a deliberate read-only baseline-report workflow. Verified with normalized old/new public-export equality, normal and report self-blueprint proofs, 796 tests with 5,679 expectations, compiled crash recovery, all four target builds, and clean diff checks. Task remains In Progress pending controller review.
+Completed both GROM-32 review-remediation loops. Canonical state remains the public-CLI-authored 43-component, 87-declaration, 95-edge blueprint; the follow-up restores full noncanonical Ordering teaching context and makes report-baseline genuinely edit-tolerant by separating generic structural integrity from normal-mode frozen counts, statuses, and digests. Verified normal self-blueprint mode, report mode in both executable-option orders including a disposable public-CLI count-change regression, full bun run check with 796 tests and 5,679 expectations, all four standalone targets, projection rebuild and canonical byte stability, and clean diff/scope checks. Task remains In Progress pending controller review.
 <!-- SECTION:FINAL_SUMMARY:END -->
