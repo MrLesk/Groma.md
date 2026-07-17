@@ -869,8 +869,9 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), before);
   const recovered = await exportAll(executable, scenario, 100);
   assert.deepEqual(
-    recovered.items.map((item) => item.component.id),
-    interruptionIds,
+    recovered,
+    primedExport,
+    "interrupted export recovery changed the blueprint",
   );
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), before);
 }
