@@ -1,11 +1,11 @@
 ---
 id: GROM-33
 title: Verify and package the complete Iteration 1B foundation
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 19:02'
+updated_date: '2026-07-17 19:12'
 labels: []
 milestone: m-2
 dependencies:
@@ -67,4 +67,12 @@ Addressed both mandatory quality-review findings in the Iteration 1B foundation 
 Finalization evidence at 3ec7bf9: bun run check passed 796/796 tests and the complete production-binary Iteration 1B workflow; bun run check:targets validated Mach-O arm64, ELF x86-64, PE x86-64, and PE arm64 artifacts and ran the host-compatible workflow before restoring the native artifact. Independent specification and quality reviews approved the cumulative diff after exact orientation-table, plugin evaluation-sentinel, and bounded child-lifecycle remediations. git diff --check and Backlog doctor pass; origin/main...HEAD contains no canonical groma/ change. The task remains In Progress until ready-PR CI, Claude, and Codex review gates complete.
 
 Follow-up for GitHub Actions run 29605152959: both Linux Quality gates and Cross-platform binaries reached verifyInterruptedRead but exceeded the original 1,000ms SIGTERM grace under runner load, so the verifier correctly failed when SIGKILL was required; Windows native smoke passed. The verifier now keeps forced termination a failure while allowing a bounded 5,000ms SIGTERM grace and 10,000ms settlement deadline, eagerly observes the combined result rejection before delayed interruption wait() use without changing caller-visible rejection, polls progress every 10ms, and documents why the 79 canonical Markdown fixtures exist before immediate compiled-CLI validation. Three consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
+
+Ready-PR gate evidence on commit f7d78ee: GitHub Actions run 29606367136 passed Quality gates, Cross-platform binaries, and Native Windows binary. Claude approved after its actionable eager-rejection and Linux cancellation-grace feedback was implemented and independently re-reviewed; its remaining fault-injection suggestion was not adopted because it would replace shipped-artifact proof with the private Iteration 1A harness. Codex bot reacted +1 to PR #34 on the current head with no review comments or threads.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Packaged the complete Iteration 1B foundation as one clean-checkout verification path. The production-binary verifier now proves configuration, public capability-backed operations, recognition metadata, bounded deterministic export, projection repair, and fail-closed negative cases without unintended canonical changes; the self-blueprint verifier enforces exact architectural orientation and byte stability; and the target matrix validates exact Mach-O, ELF, and PE architectures while executing the full workflow only on the host-compatible artifact. DEVELOPMENT.md now states the delivered boundary and explicitly defers Iteration 2 scanning, evidence, binding, reconciliation, groma scan, and visual navigation. Verified by bun run check (796 tests), bun run check:targets, independent spec and quality reviews, green GitHub Actions run 29606367136, Claude approval, and Codex +1 on PR #34.
+<!-- SECTION:FINAL_SUMMARY:END -->
