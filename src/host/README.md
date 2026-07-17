@@ -68,12 +68,29 @@ or reclassify that already-committed outcome; the next projection load compares 
 generation and canonical-content fingerprint with current canonical state and rebuilds
 safely. The complete `groma.projection-index/v1` capability is exposed as
 `HostComposition.projection` for the application transaction engine, but it is not passed
-to the current terminal surface and is never added to a canonical journal target set.
+to the terminal surface and is never added to a canonical journal target set.
 
 The separate query-engine plugin depends only on `groma.projection-read/v1` and Core's
-bounded-query contracts. It publishes `groma.graph-query/v1` and is exposed as
-`HostComposition.queryEngine` for the next shared-operation slice. It is not passed to
-the current terminal surface, so this composition does not pull the GROM-30 CLI forward.
+bounded-query contracts. It publishes `groma.graph-query/v2`, which the official
+Application plugin requires and injects into shared blueprint export, search, and
+traversal operations. The engine exposes a construction-captured page bound and requires
+the caller to supply one previously captured generation/fingerprint identity to every
+data-bearing query. `HostComposition.queryEngine` remains explicit for embedders and
+verification, but `HostSurfaceContext` exposes only the shared application operations;
+the terminal surface cannot bypass their canonicalization and generation checks.
+The official Host also supplies Application provider-neutral final blueprint-page bounds:
+eight MiB minus a fixed 64-KiB command-envelope reserve, and canonical-JSON depth 28 with
+two levels reserved for the CLI command and Application-result envelopes. Both are
+captured with the other Application bounds and remain below the CLI's independent
+eight-MiB/depth-30 atomic renderer ceilings without introducing a Host dependency on CLI
+code.
+
+The official Application plugin publishes its complete shared operation surface only as
+`groma.operations/v2`, and official full-workspace and blueprint registrations require
+that v2 identity. No v1 operations or graph-query adapters are published. The lifecycle
+accepts the exact legacy v1 operations shape only to capture `initialize`; it exposes
+only that captured method through the initialization view and cannot treat the legacy
+object as v2 workspace or blueprint operations.
 The official projection plugin publishes the same object as the complete
 `groma.projection-index/v1` reconstructable index and the bounded
 `groma.projection-read/v1` partial-read capability; `HostComposition` keeps those
@@ -84,8 +101,10 @@ first-open or stale continuity performs one full validation before anything is s
 An unchanged first-open adopts only a manifest authorized by the durable transaction
 checkpoint; checkpoint failure cannot fall back to process-local trust or trigger a
 write. The Host configures one public page bound for both the query engine and projection
-read provider, while Persistence keeps physical shard sizing private. Core's bounded
-query contracts and the engine also receive the same derived context and cursor ceilings;
+read provider, while Persistence keeps physical shard sizing private. Application uses
+that bound for its internal relationship paging independently of a public component-page
+limit. Core's bounded query contracts and the engine also receive the same derived
+context and cursor ceilings;
 the 2,504-character context and 3,864-character cursor ceilings include worst-case JSON
 escaping and nine-character BMP percent encoding so every accepted public search can
 produce a resumable page without an internal size contradiction.
@@ -284,16 +303,28 @@ provider's private representation on replaceable providers.
 
 ## Workspace and recovery gate
 
-`HostSurfaceContext.initialization` is a frozen initialization-only view of the shared
-`ApplicationOperations` instance. The host exact-validates the complete application
-surface and captures `initialize` with its original receiver at composition time, so a
-missing-workspace surface can call `initialization.initialize({})` without receiving any
-other semantic operation authority. `HostSurfaceContext.packages` is a separate frozen
-five-operation view; it cannot expose the internal package loader or plugin runtime.
+`HostSurfaceContext.initialization` is a frozen initialization-only view. At composition
+time the Host exact-validates either the complete v2 `ApplicationOperations` surface or
+the exact legacy v1 initialization-compatibility shape, then captures `initialize` with
+its original receiver. A missing-workspace surface can therefore call
+`initialization.initialize({})` without receiving any other semantic operation
+authority. Only the full v2 surface can be returned as complete workspace operations;
+the legacy shape is never promoted beyond this captured initialization view.
+`HostSurfaceContext.packages` is a separate frozen five-operation view; it cannot expose
+the internal package loader or plugin runtime.
 
 `WorkspaceAccessCapability.requireWorkspace()` is the only gate to the complete
-semantic-operation surface provided to surfaces. It returns the shared
-`ApplicationOperations` instance only after configuration is compatible and
+semantic-operation surface provided to surfaces. The lifecycle exact-validates every
+gate result and returns a frozen captured-method facade only when the successful value
+is the same exact full-v2 source validated at composition; legacy, mismatched, malformed,
+Promise-valued, or throwing successes become one path-free capability failure. Native
+Promise settlements are observed without waiting so rejected reasons cannot escape the
+synchronous gate. Failures retain exactly one allowlisted workspace code (`no-workspace`,
+`workspace-configuration-conflict`, `workspace-configuration-provider-failure`, or
+`workspace-recovery-required`) with a Host-owned message and no details; unknown,
+malformed, or multiple diagnostics collapse to the same capability failure and cannot
+choose a surface exit class. The gate opens only after
+configuration is compatible and
 `transactionProvider.snapshot([])` has completed. Missing configuration returns
 `no-workspace`; incompatible configuration returns `workspace-configuration-conflict`;
 compatible but unrecovered state returns `workspace-recovery-required`. All host

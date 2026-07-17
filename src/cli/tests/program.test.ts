@@ -3,8 +3,15 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createDefaultBootstrapRegistry } from "../../host/index.ts";
-import { CLI_EXIT, type CliInputSource } from "../contracts.ts";
+import { createDefaultBootstrapRegistry, defaultHostBounds } from "../../host/index.ts";
+import {
+  CLI_EXIT,
+  CLI_MAX_JSON_DEPTH,
+  CLI_MAX_RENDERED_BYTES,
+  CLI_MAX_SEARCH_CHARACTERS,
+  CLI_MAX_TRAVERSAL_DEPTH,
+  type CliInputSource,
+} from "../contracts.ts";
 import {
   GROMA_VERSION,
   HELP_TEXT,
@@ -34,6 +41,22 @@ async function workspace(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "groma-cli-"));
   roots.push(root);
   return root;
+}
+
+async function fileTreeSnapshot(directory: string): Promise<readonly string[]> {
+  const entries: string[] = [];
+  const visit = async (current: string, prefix: string): Promise<void> => {
+    const children = await readdir(current, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const relative = prefix.length === 0 ? child.name : `${prefix}/${child.name}`;
+      const absolute = path.join(current, child.name);
+      if (child.isDirectory()) await visit(absolute, relative);
+      else entries.push(`${relative}:${Buffer.from(await readFile(absolute)).toString("base64")}`);
+    }
+  };
+  await visit(directory, "");
+  return Object.freeze(entries);
 }
 
 function captureOutput(): ProgramOutput & { errors: string[]; output: string[] } {
@@ -102,6 +125,12 @@ function committedRevision(envelope: JsonEnvelope, id: string): string {
 }
 
 describe("CLI program", () => {
+  test("keeps the official Application page bound below the atomic CLI result ceiling", () => {
+    expect(defaultHostBounds.maxBlueprintPageBytes).toBe(CLI_MAX_RENDERED_BYTES - 64 * 1024);
+    expect(defaultHostBounds.maxBlueprintPageDepth as number).toBe(CLI_MAX_JSON_DEPTH - 2);
+    expect(Object.isFrozen(defaultHostBounds)).toBeTrue();
+  });
+
   for (const args of [["--help"], ["-h"]] as const) {
     test(`renders help for ${JSON.stringify(args)}`, async () => {
       const captured = captureOutput();
@@ -173,6 +202,210 @@ describe("CLI program", () => {
     expect(await readdir(root)).toEqual([]);
   });
 
+  test("fails oversized search before Host work and serves the exact official bound", async () => {
+    const root = await workspace();
+    const captured = captureOutput();
+    let registryCalls = 0;
+    const oversized = "x".repeat(CLI_MAX_SEARCH_CHARACTERS + 1);
+
+    expect(
+      await runProgram(
+        ["--format", "json", "blueprint", "search", oversized, "--limit", "1"],
+        captured,
+        {
+          createRegistry: () => {
+            registryCalls += 1;
+            throw new Error("Host composition must not begin");
+          },
+          workspaceRoot: root,
+        },
+      ),
+    ).toBe(CLI_EXIT.usage);
+    expect(registryCalls).toBe(0);
+    expect(await readdir(root)).toEqual([]);
+    expect(JSON.parse(captured.output[0]!) as JsonEnvelope).toMatchObject({
+      command: "invocation",
+      exitCode: CLI_EXIT.usage,
+      ok: false,
+      result: { diagnostics: [{ code: "cli-invalid-invocation" }], ok: false },
+    });
+
+    expect(await jsonCommand(root, ["init"])).toMatchObject({
+      envelope: { exitCode: CLI_EXIT.success, ok: true },
+    });
+    const maximumSearch = "x".repeat(CLI_MAX_SEARCH_CHARACTERS);
+    expect(
+      await jsonCommand(root, ["blueprint", "search", maximumSearch, "--limit", "1"]),
+    ).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true, value: { hasMore: false, items: [] } },
+      },
+    });
+
+    const excessiveTerms = Array.from({ length: 33 }, (_, index) => `t${index}`).join(" ");
+    expect(excessiveTerms.length).toBeLessThanOrEqual(CLI_MAX_SEARCH_CHARACTERS);
+    const jsonFailure = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      excessiveTerms,
+      "--limit",
+      "1",
+    ]);
+    expect(jsonFailure).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code: "invalid-search-text",
+              details: { maximumTerms: 32 },
+              message: "The component search text is invalid",
+            },
+          ],
+          ok: false,
+        },
+      },
+    });
+    const plainFailure = captureOutput();
+    expect(
+      await runProgram(["blueprint", "search", excessiveTerms, "--limit", "1"], plainFailure, {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.semantic);
+    const plainResult = plainFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResult).toBeDefined();
+    expect(JSON.parse(plainResult!.slice("result: ".length))).toEqual(jsonFailure.envelope.result);
+
+    const whitespaceOnly = " \t  ";
+    const jsonWhitespaceFailure = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      whitespaceOnly,
+      "--limit",
+      "1",
+    ]);
+    expect(jsonWhitespaceFailure).toMatchObject({
+      envelope: {
+        command: "blueprint search",
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: {
+          diagnostics: [
+            {
+              code: "invalid-search-text",
+              message: "The component search text is invalid",
+            },
+          ],
+          ok: false,
+        },
+      },
+    });
+    const whitespaceDiagnostic = (
+      jsonWhitespaceFailure.envelope.result.diagnostics as Array<Record<string, unknown>>
+    )[0]!;
+    expect(Object.hasOwn(whitespaceDiagnostic, "details")).toBeFalse();
+    const plainWhitespaceFailure = captureOutput();
+    expect(
+      await runProgram(
+        ["blueprint", "search", whitespaceOnly, "--limit", "1"],
+        plainWhitespaceFailure,
+        { terminal: { stdin: false, stdout: false }, workspaceRoot: root },
+      ),
+    ).toBe(CLI_EXIT.semantic);
+    const plainWhitespaceResult = plainWhitespaceFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainWhitespaceResult).toBeDefined();
+    expect(JSON.parse(plainWhitespaceResult!.slice("result: ".length))).toEqual(
+      jsonWhitespaceFailure.envelope.result,
+    );
+  });
+
+  test("fails excessive traversal depth before Host work and serves depth sixteen", async () => {
+    const root = await workspace();
+    let registryCalls = 0;
+    const createRegistry = () => {
+      registryCalls += 1;
+      throw new Error("Host composition must not begin");
+    };
+    const excessiveDepthArgs = [
+      "blueprint",
+      "traverse",
+      "ent_00000000000000000000000000000001",
+      "--direction",
+      "outgoing",
+      "--depth",
+      String(CLI_MAX_TRAVERSAL_DEPTH + 1),
+      "--limit",
+      "1",
+    ] as const;
+    const jsonFailure = captureOutput();
+    expect(
+      await runProgram(["--format", "json", ...excessiveDepthArgs], jsonFailure, {
+        createRegistry,
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.usage);
+    const jsonEnvelope = JSON.parse(jsonFailure.output[0]!) as JsonEnvelope;
+    expect(jsonEnvelope).toMatchObject({
+      command: "invocation",
+      exitCode: CLI_EXIT.usage,
+      ok: false,
+      result: { diagnostics: [{ code: "cli-invalid-invocation" }], ok: false },
+    });
+    const plainFailure = captureOutput();
+    expect(
+      await runProgram(excessiveDepthArgs, plainFailure, { createRegistry, workspaceRoot: root }),
+    ).toBe(CLI_EXIT.usage);
+    const plainResult = plainFailure.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResult).toBeDefined();
+    expect(JSON.parse(plainResult!.slice("result: ".length))).toEqual(jsonEnvelope.result);
+    expect(registryCalls).toBe(0);
+    expect(await readdir(root)).toEqual([]);
+
+    const id = "ent_00000000000000000000000000000001";
+    expect(await jsonCommand(root, ["init"])).toMatchObject({
+      envelope: { exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id, name: "Traversal root", type: "service" } }),
+      ),
+    ).toMatchObject({ envelope: { exitCode: CLI_EXIT.success, ok: true } });
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "traverse",
+        id,
+        "--direction",
+        "outgoing",
+        "--depth",
+        String(CLI_MAX_TRAVERSAL_DEPTH),
+        "--limit",
+        "1",
+      ]),
+    ).toMatchObject({
+      envelope: {
+        command: "blueprint traverse",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true, value: { hasMore: false, items: [] } },
+      },
+    });
+  });
+
   test("requires an initialized workspace for explicit migration inspection", async () => {
     const root = await workspace();
 
@@ -206,6 +439,134 @@ describe("CLI program", () => {
     await expect(lstat(containedUserDataRoot)).rejects.toThrow();
   });
 
+  test("renders a limit-one official export whose escaped JSON exceeds one MiB", async () => {
+    const root = await workspace();
+    const source = "ent_00000000000000000000000000000001";
+    const target = "ent_00000000000000000000000000000002";
+    const description = "\\".repeat(600_000);
+    const registry = createDefaultBootstrapRegistry({
+      surface: { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+    });
+    const composed = await registry.compose({ workspaceRoot: root });
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(await composed.value.operations.initialize({})).toMatchObject({
+      ok: true,
+      value: { status: "initialized" },
+    });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: target, name: "Target", type: "service" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: source, name: "Large relationship source", type: "domain" },
+        relationships: [{ description, target, type: "depends-on" }],
+      }),
+    ).toMatchObject({ status: "committed" });
+    const sourceBytes = await readFile(path.join(root, "groma", "intent", "00", `${source}.md`));
+    expect(sourceBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+
+    const exported = await jsonCommand(root, ["blueprint", "export", "--limit", "1"]);
+    const renderedBytes = new TextEncoder().encode(exported.text).byteLength;
+    expect(renderedBytes).toBeGreaterThan(1_048_576);
+    expect(renderedBytes).toBeLessThanOrEqual(CLI_MAX_RENDERED_BYTES);
+    expect(exported).toMatchObject({
+      envelope: {
+        command: "blueprint export",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          ok: true,
+          value: {
+            hasMore: true,
+            items: [
+              {
+                component: { id: source },
+                relationships: [{ description, source, target }],
+              },
+            ],
+          },
+        },
+      },
+      exitCode: CLI_EXIT.success,
+    });
+  });
+
+  test("renders a near-max official two-document limit-one traversal below eight MiB", async () => {
+    const root = await workspace();
+    const source = "ent_00000000000000000000000000000001";
+    const target = "ent_00000000000000000000000000000002";
+    const neighborValue = "\0".repeat(65_000);
+    const relationshipValue = "\0".repeat(520_000);
+    const registry = createDefaultBootstrapRegistry({
+      surface: { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+    });
+    const composed = await registry.compose({ workspaceRoot: root });
+    expect(composed.ok).toBeTrue();
+    if (!composed.ok) return;
+    expect(await composed.value.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await composed.value.operations.createComponent({
+        component: {
+          "example.dev/blob": neighborValue,
+          id: target,
+          name: "Target",
+          type: "service",
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await composed.value.operations.createComponent({
+        component: { id: source, name: "Source", type: "service" },
+        relationships: [{ description: relationshipValue, target, type: "depends-on" }],
+      }),
+    ).toMatchObject({ status: "committed" });
+    const targetBytes = await readFile(path.join(root, "groma", "intent", "00", `${target}.md`));
+    const sourceBytes = await readFile(path.join(root, "groma", "intent", "00", `${source}.md`));
+    expect(targetBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+    expect(sourceBytes.byteLength).toBeLessThanOrEqual(1_048_576);
+
+    const traversed = await jsonCommand(root, [
+      "blueprint",
+      "traverse",
+      source,
+      "--direction",
+      "outgoing",
+      "--depth",
+      "1",
+      "--limit",
+      "1",
+    ]);
+    const renderedBytes = new TextEncoder().encode(traversed.text).byteLength;
+    expect(renderedBytes).toBeGreaterThan(3_000_000);
+    expect(renderedBytes).toBeLessThanOrEqual(CLI_MAX_RENDERED_BYTES);
+    expect(traversed).toMatchObject({
+      envelope: {
+        command: "blueprint traverse",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          ok: true,
+          value: {
+            hasMore: false,
+            items: [
+              {
+                component: {
+                  extensions: { "example.dev/blob": neighborValue },
+                  id: target,
+                },
+                relationship: { description: relationshipValue, source, target },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(traversed.text).not.toContain("cli-output-bound-exceeded");
+  });
+
   test("executes the complete one-shot component workflow across host restarts", async () => {
     const root = await workspace();
     const domain = "ent_00000000000000000000000000000001";
@@ -213,6 +574,7 @@ describe("CLI program", () => {
     const child = "ent_00000000000000000000000000000003";
     const grandchild = "ent_00000000000000000000000000000004";
     const relationship = "rel_00000000000000000000000000000001";
+    const maximumExpansionSearchTerm = "\u0800".repeat(255);
 
     const initialized = await jsonCommand(root, ["init"]);
     expect(initialized).toMatchObject({
@@ -224,7 +586,14 @@ describe("CLI program", () => {
     const requestFile = path.join(root, "create-domain.json");
     await writeFile(
       requestFile,
-      JSON.stringify({ component: { id: domain, name: "Shop", type: "domain" } }),
+      JSON.stringify({
+        component: {
+          id: domain,
+          intent: maximumExpansionSearchTerm,
+          name: "Shop",
+          type: "domain",
+        },
+      }),
       "utf8",
     );
     const createdDomain = await jsonCommand(root, [
@@ -241,7 +610,14 @@ describe("CLI program", () => {
     await jsonCommand(
       root,
       ["component", "create", "--stdin"],
-      JSON.stringify({ component: { id: target, name: "Users", type: "domain" } }),
+      JSON.stringify({
+        component: {
+          id: target,
+          intent: maximumExpansionSearchTerm,
+          name: "Users",
+          type: "domain",
+        },
+      }),
     );
     const createdChild = await jsonCommand(
       root,
@@ -330,6 +706,147 @@ describe("CLI program", () => {
         relationships: { items: [{ relationship: { id: relationship, target } }] },
       },
     });
+
+    const canonicalBeforeBlueprintReads = await fileTreeSnapshot(path.join(root, "groma"));
+    const exportedComponents: Array<{ readonly id: string }> = [];
+    const exportedRelationships: Array<{ readonly id: string }> = [];
+    let exportCursor: string | undefined;
+    let exportGeneration: number | undefined;
+    do {
+      const page = await jsonCommand(root, [
+        "blueprint",
+        "export",
+        "--limit",
+        "2",
+        ...(exportCursor === undefined ? [] : ["--cursor", exportCursor]),
+      ]);
+      expect(page.envelope).toMatchObject({
+        command: "blueprint export",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true },
+      });
+      const value = page.envelope.result.value as {
+        readonly generation: number;
+        readonly hasMore: boolean;
+        readonly items: Array<{
+          readonly component: { readonly id: string };
+          readonly relationships: Array<{ readonly id: string }>;
+        }>;
+        readonly nextCursor?: string;
+      };
+      expect(Array.isArray(value.items), page.text).toBeTrue();
+      exportGeneration ??= value.generation;
+      expect(value.generation).toBe(exportGeneration);
+      exportedComponents.push(...value.items.map((item) => item.component));
+      exportedRelationships.push(...value.items.flatMap((item) => item.relationships));
+      exportCursor = value.nextCursor;
+      expect(value.hasMore).toBe(exportCursor !== undefined);
+    } while (exportCursor !== undefined);
+    expect(exportedComponents.map((item) => item.id)).toEqual([domain, target, child, grandchild]);
+    expect(exportedRelationships.map((item) => item.id)).toEqual([relationship]);
+
+    const firstExport = await jsonCommand(root, ["blueprint", "export", "--limit", "2"]);
+    const plainExport = captureOutput();
+    expect(
+      await runProgram(["blueprint", "export", "--limit", "2"], plainExport, {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.success);
+    const plainExportResult = plainExport.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(JSON.parse(plainExportResult!.slice("result: ".length))).toEqual(
+      firstExport.envelope.result,
+    );
+
+    const incoming = await jsonCommand(root, [
+      "blueprint",
+      "traverse",
+      target,
+      "--direction",
+      "incoming",
+      "--depth",
+      "1",
+      "--relation-type",
+      "depends-on",
+      "--limit",
+      "10",
+    ]);
+    expect(incoming.envelope.result).toMatchObject({
+      ok: true,
+      value: {
+        generation: exportGeneration,
+        items: [
+          {
+            component: { id: child, intent: "Own carts", parent: domain },
+            direction: "incoming",
+            from: target,
+            relationship: { id: relationship, source: child, target },
+          },
+        ],
+      },
+    });
+    const searched = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      "active shopping cart",
+      "--limit",
+      "10",
+    ]);
+    expect(searched.envelope.result).toMatchObject({
+      ok: true,
+      value: {
+        generation: exportGeneration,
+        items: [
+          {
+            actions: [{ id: "checkout", name: "Checkout" }],
+            id: child,
+            intent: "Own carts",
+            parent: domain,
+          },
+        ],
+      },
+    });
+    const plainSearch = captureOutput();
+    expect(
+      await runProgram(
+        ["blueprint", "search", "active shopping cart", "--limit", "10"],
+        plainSearch,
+        { terminal: { stdin: false, stdout: false }, workspaceRoot: root },
+      ),
+    ).toBe(CLI_EXIT.success);
+    const plainResultLine = plainSearch.output[0]!.split("\n").find((line) =>
+      line.startsWith("result: "),
+    );
+    expect(plainResultLine).toBeDefined();
+    expect(JSON.parse(plainResultLine!.slice("result: ".length))).toEqual(searched.envelope.result);
+
+    const maximumSearch = await jsonCommand(root, [
+      "blueprint",
+      "search",
+      maximumExpansionSearchTerm,
+      "--limit",
+      "1",
+    ]);
+    const maximumSearchValue = maximumSearch.envelope.result.value as {
+      readonly nextCursor: string;
+    };
+    expect(maximumSearchValue.nextCursor.length).toBeGreaterThan(2_048);
+    expect(maximumSearchValue.nextCursor.length).toBeLessThanOrEqual(4_096);
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "search",
+        maximumExpansionSearchTerm,
+        "--limit",
+        "1",
+        "--cursor",
+        maximumSearchValue.nextCursor,
+      ]),
+    ).toMatchObject({ envelope: { exitCode: CLI_EXIT.success, ok: true } });
+    expect(await fileTreeSnapshot(path.join(root, "groma"))).toEqual(canonicalBeforeBlueprintReads);
     const plainRead = captureOutput();
     expect(
       await runProgram(["component", "get", child, "--relationships-limit", "10"], plainRead, {
@@ -405,6 +922,23 @@ describe("CLI program", () => {
       result: { value: { id: child, parent: target } },
     });
     expect(await Bun.file(path.join(root, "groma", "aliases.md")).exists()).toBeFalse();
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "search",
+        maximumExpansionSearchTerm,
+        "--limit",
+        "1",
+        "--cursor",
+        maximumSearchValue.nextCursor,
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: { diagnostics: [{ code: "stale-cursor" }], ok: false },
+      },
+    });
 
     const stableReadArgs = ["component", "get", child, "--relationships-limit", "10"] as const;
     const firstStableRead = await jsonCommand(root, stableReadArgs);
@@ -453,10 +987,66 @@ describe("CLI program", () => {
     });
   });
 
+  test("rejects an export cursor from different content at the same generation", async () => {
+    const historyA = await workspace();
+    const historyB = await workspace();
+    const first = "ent_00000000000000000000000000000011";
+    const second = "ent_00000000000000000000000000000012";
+    for (const [root, suffix] of [
+      [historyA, "A"],
+      [historyB, "B"],
+    ] as const) {
+      await jsonCommand(root, ["init"]);
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id: first, name: `First ${suffix}` } }),
+      );
+      await jsonCommand(
+        root,
+        ["component", "create", "--stdin"],
+        JSON.stringify({ component: { id: second, name: `Second ${suffix}` } }),
+      );
+    }
+    const fromA = await jsonCommand(historyA, ["blueprint", "export", "--limit", "1"]);
+    const aValue = fromA.envelope.result.value as {
+      readonly generation: number;
+      readonly hasMore: boolean;
+      readonly nextCursor: string;
+    };
+    expect(aValue.hasMore).toBeTrue();
+    const bGeneration = (
+      (await jsonCommand(historyB, ["component", "list", "--limit", "2"])).envelope.result
+        .value as { readonly generation: number }
+    ).generation;
+    expect(bGeneration).toBe(aValue.generation);
+    const before = await fileTreeSnapshot(path.join(historyB, "groma"));
+
+    expect(
+      await jsonCommand(historyB, [
+        "blueprint",
+        "export",
+        "--limit",
+        "1",
+        "--cursor",
+        aValue.nextCursor,
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.semantic,
+        ok: false,
+        result: { diagnostics: [{ code: "cursor-query-mismatch" }], ok: false },
+      },
+    });
+    expect(await fileTreeSnapshot(path.join(historyB, "groma"))).toEqual(before);
+  });
+
   test("merges through the public CLI and resolves the obsolete ID after restart", async () => {
     const root = await workspace();
     const obsolete = "ent_00000000000000000000000000000021";
     const survivor = "ent_00000000000000000000000000000022";
+    const target = "ent_00000000000000000000000000000023";
+    const relationship = "rel_00000000000000000000000000000021";
     await jsonCommand(root, ["init"]);
     const obsoleteCreate = await jsonCommand(
       root,
@@ -471,7 +1061,15 @@ describe("CLI program", () => {
     await jsonCommand(
       root,
       ["component", "create", "--stdin"],
-      JSON.stringify({ component: { id: survivor, name: "Checkout" } }),
+      JSON.stringify({ component: { id: target, name: "Payments" } }),
+    );
+    await jsonCommand(
+      root,
+      ["component", "create", "--stdin"],
+      JSON.stringify({
+        component: { id: survivor, name: "Checkout" },
+        relationships: [{ id: relationship, target, type: "depends-on" }],
+      }),
     );
 
     const merged = await jsonCommand(root, [
@@ -502,6 +1100,35 @@ describe("CLI program", () => {
       exitCode: 0,
       ok: true,
       result: { value: { item: { component: { id: survivor, name: "Checkout" } } } },
+    });
+    expect(
+      await jsonCommand(root, [
+        "blueprint",
+        "traverse",
+        obsolete,
+        "--direction",
+        "outgoing",
+        "--depth",
+        "1",
+        "--limit",
+        "1",
+      ]),
+    ).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: {
+          value: {
+            items: [
+              {
+                component: { id: target },
+                from: survivor,
+                relationship: { id: relationship, source: survivor, target },
+              },
+            ],
+          },
+        },
+      },
     });
     expect(await readFile(path.join(root, "groma", "aliases.md"), "utf8")).toBe(
       `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${obsolete}\n    target: ${survivor}\n---\n`,

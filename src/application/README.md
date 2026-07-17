@@ -3,18 +3,83 @@
 Presentation-neutral semantic operations shared by CLI, service, and web surfaces.
 Operations depend on capabilities and never call storage implementations directly.
 
-`createApplicationOperations` is the shared entry point. Its read surface currently
-provides atomic workspace initialization, exact component reads with bounded outgoing
-relationships, and deterministic bounded pages for all components, roots, and direct
-children. Every page is bound to a graph generation and query context through Core's
-opaque continuation cursor contract.
+`createApplicationOperations` is the shared entry point. Its read surface provides
+atomic workspace initialization, exact canonical component reads with bounded outgoing
+relationships, deterministic bounded pages for all components, roots, and direct
+children, plus projection-backed blueprint export, search, and directional traversal.
+Every page is bound to a graph generation and query context through Core's opaque
+continuation cursor contract.
 
 Application code sees stable component identities and content revisions, but never a
 canonical resource locator. A host injects the transaction snapshot, transaction
-execution, resource-mapping, graph, query, Standard Model, and workspace-initializer
-capabilities. Page reads confirm resource revisions in a second snapshot and retry a
+execution, resource-mapping, graph, bounded-query, graph-query, Standard Model, and
+workspace-initializer capabilities. Canonical page reads confirm resource revisions in a second snapshot and retry a
 configured number of times if the generation changes; empty canonical state remains a
 valid empty graph because bootstrap representation belongs to the host.
+
+`exportBlueprint`, `searchBlueprint`, and `traverseBlueprint` consume only the injected
+`groma.graph-query/v2` capability. Application captures its receiver, methods, and
+immutable public page bound once,
+settles and contains each untrusted result, retains only allowlisted diagnostics with
+application-owned messages, validates page and traversal invariants, and canonicalizes
+every entity and relation through the same snapshot-state decoder used by canonical
+reads. Each logical operation captures exactly one frozen generation/fingerprint
+identity and supplies it explicitly to every data-bearing query. The fingerprint remains
+an internal continuity proof and never enters the public Application result. The
+component page's generation, `hasMore`, and opaque cursor are preserved
+exactly; Application does not wrap them in another cursor or open a canonical snapshot
+to answer the projection-backed read.
+
+Every `exportBlueprint` item contains one canonical component plus every canonical
+outgoing depth-1 relationship whose source is that component. Application gathers the
+required traversal pages sequentially inside the same export operation, requires every
+internal page to match the component page generation, rejects duplicate or non-advancing
+relationship pages, and caps the page-wide relationship aggregate at the configured
+relationship bound. Each internal relationship request uses the smaller of the query
+engine's immutable page bound and the remaining relationship budget; it is independent
+of the caller's component-page limit. One incremental structural-value budget also
+covers the complete export page across its components and accumulated relationships. The
+internal traversal cursor never escapes. A complete current blueprint therefore requires
+only paging `exportBlueprint` through its fingerprint-bound component cursor; a stale
+generation or same-generation projection mismatch requires restarting the export. Public
+search and traversal remain independent one-page exploration operations and never follow
+their surface cursors implicitly.
+
+Every final export, search, and traversal page also crosses the provider-neutral
+`maxBlueprintPageBytes` and `maxBlueprintPageDepth` bounds before Application returns
+success. A descriptor-based counter measures exact canonical-JSON UTF-8 bytes and depth
+without invoking getters, iterators, `toJSON`, or prototype behavior and without
+constructing a second serialized page. These bounds apply only to the final owned result;
+export's internal traversal pages remain governed by the query engine and export
+aggregate checks.
+
+Proven page-wide relationship, structural-value, UTF-8 byte, or canonical-JSON depth
+exhaustion returns an application-owned semantic diagnostic with the exhausted bound and
+maximum. Export uses `blueprint-export-page-bound-exceeded`; search and traversal use
+`blueprint-search-page-bound-exceeded` and `blueprint-traverse-page-bound-exceeded` for
+their byte or depth bounds. Callers can retry with a smaller page limit. Failure at limit
+one means one self-contained export item, search component, or traversal hit exceeds the
+local page bound. Ordering, duplicate, malformed, proxy, detector, provider, and other
+invalid-query failures remain `graph-query-unavailable` and never receive capacity retry
+guidance.
+
+For `invalid-search-text`, Application replaces provider wording with its stable message and
+accepts either no details for a generic invalid search or one exact typed detail shape: a
+positive safe-integer `maximumCharacters` or `maximumTerms`. Present details with extra keys,
+accessors, proxies, non-integers, or other malformed values fail closed as
+`graph-query-unavailable`; other allowlisted graph-query diagnostics retain their existing
+bounded detail handling.
+
+`invalid-traversal-depth` follows the same optional-enrichment rule: omitted or explicit-
+undefined details remain semantic, while one exact positive safe-integer `maximumDepth` is
+copied and frozen. Any other present traversal-depth detail shape fails closed as
+`graph-query-unavailable`. Application retains its provider-neutral `maxComponents` request
+guard and does not import or duplicate the Persistence engine bound.
+
+Projection-backed component and export pages are ordered by ascending stable component
+identity. Traversal pages preserve deterministic breadth-first depth and then stable
+relationship identity. Application validates that order rather than introducing a
+second presentation-specific ordering rule.
 
 `createApplicationSnapshotStateDecoder` is the single application-boundary decoder for
 provider snapshot state. `ApplicationOperationsOptions` requires that explicit
@@ -153,12 +218,15 @@ mutations.
 
 Each composition supplies explicit application bounds for component and relationship
 state, relationship mutations, embedded items, diagnostics, request-data structural
-depth and values, and snapshot structural depth and values. Create and update mutation
-data—including component items and extensions plus outgoing relationship descriptions
-and extensions—is copied within one total request budget before model, identity, graph,
-provider, or transaction work. `maxEmbeddedItems` limits each component's combined
-inputs, outputs, and actions on both writes and reads; `maxSnapshotStateValues` remains
-the aggregate whole-snapshot structural bound. Sparse updates retain the early raw-patch
+depth and values, snapshot structural depth and values, and final blueprint-page
+canonical-JSON UTF-8 bytes and depth. Create and update mutation data—including component
+items and extensions plus outgoing relationship descriptions and extensions—is copied
+within one total request budget before model, identity, graph, provider, or transaction
+work. `maxEmbeddedItems`
+limits each component's combined inputs, outputs, and actions on both writes and reads;
+`maxSnapshotStateValues` remains the aggregate whole-snapshot structural bound, while
+`maxBlueprintPageBytes` and `maxBlueprintPageDepth` are independent of provider storage
+technology and canonical state. Sparse updates retain the early raw-patch
 preflight before provider access and validate the final model-merged component again
 before relationship planning or transaction execution, so omitted arrays cannot bypass
 the combined per-component bound. Construction also enforces absolute ceilings

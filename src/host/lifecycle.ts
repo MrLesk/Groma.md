@@ -24,7 +24,7 @@ import type {
   WorkspaceStatus,
 } from "./contracts.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
-import type { SchemaMigrationOperations } from "../application/index.ts";
+import type { ApplicationOperations, SchemaMigrationOperations } from "../application/index.ts";
 import {
   copyHostDiagnostics,
   inspectHostDenseArray,
@@ -55,9 +55,15 @@ interface PluginCleanupCoordinator {
   cleanup(mode: PluginCleanupMode): Promise<void>;
 }
 
-interface ContainedHostComposition extends Omit<HostComposition, "plugins"> {
+interface ContainedHostComposition extends Omit<HostComposition, "operations" | "plugins"> {
   readonly initialization: HostInitializationOperations;
   readonly plugins?: ContainedPluginLifecycle;
+}
+
+interface CanonicalApplicationOperations {
+  readonly full?: ApplicationOperations;
+  readonly initialization: HostInitializationOperations;
+  readonly source: object;
 }
 
 const intrinsicPromise = Promise;
@@ -355,7 +361,40 @@ function canonicalStatus(value: unknown): Result<WorkspaceStatus> {
   return failure(diagnostic("invalid-host-workspace-status", "Workspace status is malformed"));
 }
 
-function canonicalWorkspace(value: unknown): Result<WorkspaceAccessCapability> {
+function workspaceCapabilityFailure(): Result<never> {
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      diagnostic("workspace-capability-failed", "Workspace operation access failed safely"),
+    ]),
+    ok: false,
+  });
+}
+
+const workspaceFailureMessages = Object.freeze({
+  "no-workspace": "This operation requires an initialized Groma workspace",
+  "workspace-configuration-conflict": "Workspace configuration is incompatible with this host",
+  "workspace-configuration-provider-failure": "Workspace configuration access failed",
+  "workspace-recovery-required":
+    "Workspace transaction recovery must complete before semantic operations",
+} as const);
+
+function canonicalWorkspaceFailure(value: unknown): Result<never> {
+  const diagnostics = copyHostDiagnostics(value, 1, "workspace-capability-failed");
+  if (!diagnostics.ok || diagnostics.value.length !== 1) return workspaceCapabilityFailure();
+  const code = diagnostics.value[0]!.code;
+  if (!Object.hasOwn(workspaceFailureMessages, code)) return workspaceCapabilityFailure();
+  return Object.freeze({
+    diagnostics: Object.freeze([
+      diagnostic(code, workspaceFailureMessages[code as keyof typeof workspaceFailureMessages]),
+    ]),
+    ok: false,
+  });
+}
+
+function canonicalWorkspace(
+  value: unknown,
+  operations: CanonicalApplicationOperations,
+): Result<WorkspaceAccessCapability> {
   const workspace = inspectHostRecord(
     value,
     [["initialize", "recover", "requireWorkspace", "status"]],
@@ -380,7 +419,41 @@ function canonicalWorkspace(value: unknown): Result<WorkspaceAccessCapability> {
     Object.freeze({
       initialize: () => intrinsicReflectApply(initialize, source, []),
       recover: () => intrinsicReflectApply(recover, source, []),
-      requireWorkspace: () => intrinsicReflectApply(requireWorkspace, source, []),
+      requireWorkspace: () => {
+        let raw: unknown;
+        try {
+          raw = intrinsicReflectApply(requireWorkspace, source, []);
+        } catch {
+          return workspaceCapabilityFailure();
+        }
+        const promise = observeHostNativePromise(
+          raw,
+          () => undefined,
+          () => undefined,
+        );
+        if (promise.status !== "not-native") return workspaceCapabilityFailure();
+        const result = inspectHostRecord(
+          raw,
+          [
+            ["ok", "value"],
+            ["diagnostics", "ok"],
+          ],
+          "workspace-capability-failed",
+          "Workspace operation result",
+        );
+        if (!result.ok) return workspaceCapabilityFailure();
+        if (result.value.ok === false) {
+          return canonicalWorkspaceFailure(result.value.diagnostics);
+        }
+        if (
+          result.value.ok !== true ||
+          result.value.value !== operations.source ||
+          operations.full === undefined
+        ) {
+          return workspaceCapabilityFailure();
+        }
+        return Object.freeze({ ok: true as const, value: operations.full });
+      },
       status: () => intrinsicReflectApply(status, source, []),
     }) as WorkspaceAccessCapability,
   );
@@ -502,7 +575,7 @@ function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecyc
   );
 }
 
-function canonicalInitializationOperations(value: unknown): Result<HostInitializationOperations> {
+function canonicalApplicationOperations(value: unknown): Result<CanonicalApplicationOperations> {
   const operations = inspectHostRecord(
     value,
     [
@@ -518,10 +591,26 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
         "reparentComponent",
         "updateComponent",
       ],
+      [
+        "createComponent",
+        "exportBlueprint",
+        "getComponent",
+        "initialize",
+        "listChildren",
+        "listComponents",
+        "listRoots",
+        "mergeComponent",
+        "removeComponent",
+        "reparentComponent",
+        "searchBlueprint",
+        "traverseBlueprint",
+        "updateComponent",
+      ],
     ],
     "invalid-host-composition",
     "Application operations",
   );
+  const expanded = operations.ok && Object.hasOwn(operations.value, "exportBlueprint");
   if (
     !operations.ok ||
     typeof operations.value.createComponent !== "function" ||
@@ -533,17 +622,75 @@ function canonicalInitializationOperations(value: unknown): Result<HostInitializ
     typeof operations.value.mergeComponent !== "function" ||
     typeof operations.value.removeComponent !== "function" ||
     typeof operations.value.reparentComponent !== "function" ||
-    typeof operations.value.updateComponent !== "function"
+    typeof operations.value.updateComponent !== "function" ||
+    (expanded &&
+      (typeof operations.value.exportBlueprint !== "function" ||
+        typeof operations.value.searchBlueprint !== "function" ||
+        typeof operations.value.traverseBlueprint !== "function"))
   ) {
     return failure(diagnostic("invalid-host-composition", "Application operations are malformed"));
   }
   const source = value as object;
+  const createComponent = operations.value
+    .createComponent as ApplicationOperations["createComponent"];
+  const exportBlueprint = operations.value.exportBlueprint as
+    ApplicationOperations["exportBlueprint"] | undefined;
+  const getComponent = operations.value.getComponent as ApplicationOperations["getComponent"];
   const initialize = operations.value.initialize;
+  const listChildren = operations.value.listChildren as ApplicationOperations["listChildren"];
+  const listComponents = operations.value.listComponents as ApplicationOperations["listComponents"];
+  const listRoots = operations.value.listRoots as ApplicationOperations["listRoots"];
+  const mergeComponent = operations.value.mergeComponent as ApplicationOperations["mergeComponent"];
+  const removeComponent = operations.value
+    .removeComponent as ApplicationOperations["removeComponent"];
+  const reparentComponent = operations.value
+    .reparentComponent as ApplicationOperations["reparentComponent"];
+  const searchBlueprint = operations.value.searchBlueprint as
+    ApplicationOperations["searchBlueprint"] | undefined;
+  const traverseBlueprint = operations.value.traverseBlueprint as
+    ApplicationOperations["traverseBlueprint"] | undefined;
+  const updateComponent = operations.value
+    .updateComponent as ApplicationOperations["updateComponent"];
+  const initialization = Object.freeze({
+    initialize: (request: Parameters<HostInitializationOperations["initialize"]>[0]) =>
+      intrinsicReflectApply(initialize, source, [request]),
+  }) as HostInitializationOperations;
+  const full = expanded
+    ? (Object.freeze({
+        createComponent: (request: Parameters<ApplicationOperations["createComponent"]>[0]) =>
+          intrinsicReflectApply(createComponent, source, [request]),
+        exportBlueprint: (request: Parameters<ApplicationOperations["exportBlueprint"]>[0]) =>
+          intrinsicReflectApply(exportBlueprint!, source, [request]),
+        getComponent: (request: Parameters<ApplicationOperations["getComponent"]>[0]) =>
+          intrinsicReflectApply(getComponent, source, [request]),
+        initialize: (request: Parameters<ApplicationOperations["initialize"]>[0]) =>
+          intrinsicReflectApply(initialize, source, [request]),
+        listChildren: (request: Parameters<ApplicationOperations["listChildren"]>[0]) =>
+          intrinsicReflectApply(listChildren, source, [request]),
+        listComponents: (request: Parameters<ApplicationOperations["listComponents"]>[0]) =>
+          intrinsicReflectApply(listComponents, source, [request]),
+        listRoots: (request: Parameters<ApplicationOperations["listRoots"]>[0]) =>
+          intrinsicReflectApply(listRoots, source, [request]),
+        mergeComponent: (request: Parameters<ApplicationOperations["mergeComponent"]>[0]) =>
+          intrinsicReflectApply(mergeComponent, source, [request]),
+        removeComponent: (request: Parameters<ApplicationOperations["removeComponent"]>[0]) =>
+          intrinsicReflectApply(removeComponent, source, [request]),
+        reparentComponent: (request: Parameters<ApplicationOperations["reparentComponent"]>[0]) =>
+          intrinsicReflectApply(reparentComponent, source, [request]),
+        searchBlueprint: (request: Parameters<ApplicationOperations["searchBlueprint"]>[0]) =>
+          intrinsicReflectApply(searchBlueprint!, source, [request]),
+        traverseBlueprint: (request: Parameters<ApplicationOperations["traverseBlueprint"]>[0]) =>
+          intrinsicReflectApply(traverseBlueprint!, source, [request]),
+        updateComponent: (request: Parameters<ApplicationOperations["updateComponent"]>[0]) =>
+          intrinsicReflectApply(updateComponent, source, [request]),
+      }) as ApplicationOperations)
+    : undefined;
   return success(
     Object.freeze({
-      initialize: (request: Parameters<HostInitializationOperations["initialize"]>[0]) =>
-        intrinsicReflectApply(initialize, source, [request]),
-    }) as HostInitializationOperations,
+      ...(full === undefined ? {} : { full }),
+      initialization,
+      source,
+    }),
   );
 }
 
@@ -636,14 +783,14 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
     "Host composition",
   );
   if (!composition.ok) return composition;
-  const workspace = canonicalWorkspace(composition.value.workspace);
+  const operations = canonicalApplicationOperations(composition.value.operations);
+  if (!operations.ok) return operations;
+  const workspace = canonicalWorkspace(composition.value.workspace, operations.value);
   if (!workspace.ok) return workspace;
   const surface = canonicalSurface(composition.value.surface);
   if (!surface.ok) return surface;
   const packages = canonicalPackageOperations(composition.value.packages);
   if (!packages.ok) return packages;
-  const initialization = canonicalInitializationOperations(composition.value.operations);
-  if (!initialization.ok) return initialization;
   const migrations = Object.hasOwn(composition.value, "migrations")
     ? canonicalSchemaMigrationOperations(composition.value.migrations)
     : undefined;
@@ -678,11 +825,10 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   return success(
     Object.freeze({
       graph: composition.value.graph,
-      initialization: initialization.value,
+      initialization: operations.value.initialization,
       invariant: composition.value.invariant,
       model: composition.value.model,
       ...(migrations === undefined ? {} : { migrations: migrations.value }),
-      operations: composition.value.operations,
       packages: packages.value,
       ...(plugins === undefined ? {} : { plugins: plugins.value }),
       projection: composition.value.projection,

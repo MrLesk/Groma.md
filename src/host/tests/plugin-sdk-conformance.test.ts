@@ -252,21 +252,34 @@ describe("default host plugin SDK conformance", () => {
         defaultHostCapabilityIds.queryEngine,
         defaultHostPluginIds.queryEngine,
         async (value) => {
-          if (!hasMethod(value, "pageEntities")) return false;
-          const result = await (
-            value as {
-              pageEntities(
-                query: unknown,
-                request: unknown,
-              ): Promise<{
-                readonly ok: boolean;
-                readonly value?: {
-                  readonly generation: number;
-                  readonly items: readonly unknown[];
-                };
-              }>;
-            }
-          ).pageEntities({ kind: "component" }, { limit: 1 });
+          if (!hasMethod(value, "identity") || !hasMethod(value, "pageEntities")) return false;
+          const engine = value as {
+            readonly maxPageSize: number;
+            identity(): Promise<{
+              readonly ok: boolean;
+              readonly value?: { readonly fingerprint: string; readonly generation: number };
+            }>;
+            pageEntities(
+              identity: unknown,
+              query: unknown,
+              request: unknown,
+            ): Promise<{
+              readonly ok: boolean;
+              readonly value?: {
+                readonly generation: number;
+                readonly items: readonly unknown[];
+              };
+            }>;
+          };
+          const identity = await engine.identity();
+          if (!identity.ok || identity.value === undefined || engine.maxPageSize !== 100) {
+            return false;
+          }
+          const result = await engine.pageEntities(
+            identity.value,
+            { kind: "component" },
+            { limit: 1 },
+          );
           return result.ok && result.value?.generation === 0 && result.value.items.length === 0;
         },
       ),

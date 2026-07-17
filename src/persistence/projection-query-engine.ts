@@ -36,6 +36,7 @@ import {
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 
 const intrinsicArrayPush = Array.prototype.push;
+const intrinsicArrayIsArray = Array.isArray;
 const intrinsicArraySlice = Array.prototype.slice;
 const intrinsicArraySort = Array.prototype.sort;
 const IntrinsicSet = Set;
@@ -43,6 +44,9 @@ const intrinsicIncludes = String.prototype.includes;
 const intrinsicMathMin = Math.min;
 const intrinsicNormalize = String.prototype.normalize;
 const intrinsicObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const intrinsicObjectGetPrototypeOf = Object.getPrototypeOf;
+const intrinsicObjectPrototype = Object.prototype;
+const intrinsicReflectOwnKeys = Reflect.ownKeys;
 const intrinsicRegExpTest = RegExp.prototype.test;
 const intrinsicRepeat = String.prototype.repeat;
 const intrinsicSetAdd = Set.prototype.add;
@@ -189,8 +193,78 @@ function unavailable(reason: string): Result<never> {
   );
 }
 
-function parseBounds(input: Partial<ProjectionQueryEngineBounds> | undefined) {
-  const selected = { ...defaultBounds, ...input };
+function parseBounds(input: unknown): ProjectionQueryEngineBounds {
+  const selected: Record<keyof ProjectionQueryEngineBounds, number> = {
+    maxCursorCharacters: defaultBounds.maxCursorCharacters,
+    maxEntities: defaultBounds.maxEntities,
+    maxPageSize: defaultBounds.maxPageSize,
+    maxProjectionPageSize: defaultBounds.maxProjectionPageSize,
+    maxProviderDataDepth: defaultBounds.maxProviderDataDepth,
+    maxProviderDataValues: defaultBounds.maxProviderDataValues,
+    maxSearchCharacters: defaultBounds.maxSearchCharacters,
+    maxSearchableTextCharacters: defaultBounds.maxSearchableTextCharacters,
+    maxSearchTerms: defaultBounds.maxSearchTerms,
+    maxTokenCharacters: defaultBounds.maxTokenCharacters,
+    maxTraversalDepth: defaultBounds.maxTraversalDepth,
+    maxTraversalEntities: defaultBounds.maxTraversalEntities,
+    maxTraversalRelationVisits: defaultBounds.maxTraversalRelationVisits,
+    maxTraversalRelations: defaultBounds.maxTraversalRelations,
+  };
+  if (input !== undefined) {
+    let prototype: object | null;
+    try {
+      prototype = Reflect.apply(intrinsicObjectGetPrototypeOf, Object, [input]) as object | null;
+    } catch {
+      throw new RangeError("Projection query engine bounds are malformed");
+    }
+    if (
+      typeof input !== "object" ||
+      input === null ||
+      (Reflect.apply(intrinsicArrayIsArray, Array, [input]) as boolean) ||
+      (prototype !== intrinsicObjectPrototype && prototype !== null)
+    ) {
+      throw new RangeError("Projection query engine bounds are malformed");
+    }
+    let keys: readonly PropertyKey[];
+    try {
+      keys = Reflect.apply(intrinsicReflectOwnKeys, Reflect, [input]) as readonly PropertyKey[];
+    } catch {
+      throw new RangeError("Projection query engine bounds are malformed");
+    }
+    if (keys.length > boundFields.length) {
+      throw new RangeError("Projection query engine bounds are malformed");
+    }
+    for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+      const key = keys[keyIndex];
+      let field: keyof ProjectionQueryEngineBounds | undefined;
+      if (typeof key === "string") {
+        for (let fieldIndex = 0; fieldIndex < boundFields.length; fieldIndex += 1) {
+          if (boundFields[fieldIndex] === key) {
+            field = boundFields[fieldIndex];
+            break;
+          }
+        }
+      }
+      let descriptor: PropertyDescriptor | undefined;
+      try {
+        descriptor = Reflect.apply(intrinsicObjectGetOwnPropertyDescriptor, Object, [
+          input,
+          key,
+        ]) as PropertyDescriptor | undefined;
+      } catch {
+        throw new RangeError("Projection query engine bounds are malformed");
+      }
+      if (
+        field === undefined ||
+        descriptor === undefined ||
+        !descriptor.enumerable ||
+        !("value" in descriptor)
+      ) {
+        throw new RangeError("Projection query engine bounds are malformed");
+      }
+      selected[field] = descriptor.value;
+    }
+  }
   for (let index = 0; index < boundFields.length; index += 1) {
     const field = boundFields[index]!;
     if (
@@ -210,6 +284,36 @@ function parseBounds(input: Partial<ProjectionQueryEngineBounds> | undefined) {
     throw new RangeError("maxTraversalRelations cannot exceed maxTraversalRelationVisits");
   }
   return Object.freeze(selected);
+}
+
+function parseOptions(value: unknown): {
+  readonly bounds: ProjectionQueryEngineBounds;
+  readonly projection: ProjectionReadCapability;
+  readonly queries: BoundedQueryContracts;
+} {
+  const inspected = inspectExactRecord(
+    value,
+    [
+      ["projection", "queries"],
+      ["bounds", "projection", "queries"],
+    ],
+    "invalid-projection-query-engine-options",
+    "Projection query engine options",
+  );
+  if (!inspected.ok) throw new TypeError("Projection query engine options are malformed");
+  const projection = inspected.value.projection as ProjectionReadCapability;
+  const queries = inspected.value.queries as BoundedQueryContracts;
+  if ((typeof projection !== "object" || projection === null) && typeof projection !== "function") {
+    throw new TypeError("projection must be a partial-read capability");
+  }
+  if ((typeof queries !== "object" || queries === null) && typeof queries !== "function") {
+    throw new TypeError("queries must be bounded query contracts");
+  }
+  return Object.freeze({
+    bounds: parseBounds("bounds" in inspected.value ? inspected.value.bounds : undefined),
+    projection,
+    queries,
+  });
 }
 
 function compareText(left: string, right: string): number {
@@ -362,17 +466,39 @@ function prepareEntityQuery(
   );
 }
 
-function normalizeText(value: string, maximum: number): Result<string> {
+function normalizeText(
+  value: string,
+  maximum: number,
+  overflowDiagnostic?: Diagnostic,
+): Result<string> {
+  const overflow = () =>
+    overflowDiagnostic === undefined
+      ? unavailable("normalized-search-text-bound")
+      : failure(overflowDiagnostic);
   try {
     const normalized = Reflect.apply(intrinsicNormalize, value, ["NFKC"]) as string;
-    if (normalized.length > maximum) return unavailable("normalized-search-text-bound");
+    if (normalized.length > maximum) return overflow();
     const lowered = Reflect.apply(intrinsicToLowerCase, normalized, []) as string;
-    return lowered.length <= maximum
-      ? success(lowered)
-      : unavailable("normalized-search-text-bound");
+    return lowered.length <= maximum ? success(lowered) : overflow();
   } catch {
     return unavailable("search-text-normalization");
   }
+}
+
+function invalidSearchCharacterDiagnostic(maximumCharacters: number): Diagnostic {
+  return diagnostic(
+    "invalid-search-text",
+    `Search text must be a nonempty primitive string no longer than ${maximumCharacters} characters`,
+    Object.freeze({ maximumCharacters }),
+  );
+}
+
+function invalidSearchTermDiagnostic(maximumTerms: number): Diagnostic {
+  return diagnostic(
+    "invalid-search-text",
+    `Search text must contain no more than ${maximumTerms} normalized terms`,
+    Object.freeze({ maximumTerms }),
+  );
 }
 
 function prepareSearch(
@@ -394,11 +520,7 @@ function prepareSearch(
       ),
     );
   }
-  if (
-    typeof inspected.value.text !== "string" ||
-    inspected.value.text.length === 0 ||
-    inspected.value.text.length > bounds.maxSearchCharacters
-  ) {
+  if (typeof inspected.value.text !== "string" || inspected.value.text.length === 0) {
     return failure(
       diagnostic(
         "invalid-search-text",
@@ -406,9 +528,16 @@ function prepareSearch(
       ),
     );
   }
-  const normalized = normalizeText(inspected.value.text, bounds.maxSearchCharacters);
+  if (inspected.value.text.length > bounds.maxSearchCharacters) {
+    return failure(invalidSearchCharacterDiagnostic(bounds.maxSearchCharacters));
+  }
+  const normalized = normalizeText(
+    inspected.value.text,
+    bounds.maxSearchCharacters,
+    invalidSearchCharacterDiagnostic(bounds.maxSearchCharacters),
+  );
   if (!normalized.ok) {
-    return failure(diagnostic("invalid-search-text", "Search text could not be normalized safely"));
+    return normalized;
   }
   const terms: string[] = [];
   let term = "";
@@ -424,13 +553,16 @@ function prepareSearch(
     }
   }
   if (term.length > 0) pushArray(terms, term);
-  if (terms.length === 0 || terms.length > bounds.maxSearchTerms) {
+  if (terms.length === 0) {
     return failure(
       diagnostic(
         "invalid-search-text",
         `Search text must contain between 1 and ${bounds.maxSearchTerms} normalized terms`,
       ),
     );
+  }
+  if (terms.length > bounds.maxSearchTerms) {
+    return failure(invalidSearchTermDiagnostic(bounds.maxSearchTerms));
   }
   const uniqueTerms: string[] = [];
   const seenTerms = new IntrinsicSet<string>();
@@ -471,13 +603,21 @@ function prepareTraversal(
   if (
     typeof inspected.value.depth !== "number" ||
     !Number.isSafeInteger(inspected.value.depth) ||
-    inspected.value.depth <= 0 ||
-    inspected.value.depth > bounds.maxTraversalDepth
+    inspected.value.depth <= 0
   ) {
     return failure(
       diagnostic(
         "invalid-traversal-depth",
         `Traversal depth must be a positive safe integer no greater than ${bounds.maxTraversalDepth}`,
+      ),
+    );
+  }
+  if (inspected.value.depth > bounds.maxTraversalDepth) {
+    return failure(
+      diagnostic(
+        "invalid-traversal-depth",
+        `Traversal depth must be a positive safe integer no greater than ${bounds.maxTraversalDepth}`,
+        Object.freeze({ maximumDepth: bounds.maxTraversalDepth }),
       ),
     );
   }
@@ -540,6 +680,25 @@ function preflightQuery(
     return success(undefined);
   }
   return prepared;
+}
+
+function validateBoundedQueryPageSize(queries: BoundedQueryContracts, maxPageSize: number): void {
+  let prepared: Result<PreparedBoundedQuery>;
+  try {
+    prepared = invokeCapturedBoundedQueryPrepare(
+      queries,
+      0,
+      Object.freeze({}),
+      Object.freeze({ limit: maxPageSize }),
+    );
+  } catch {
+    throw new TypeError("queries must be genuine bounded query contracts");
+  }
+  if (!prepared.ok && prepared.diagnostics[0]?.code === "invalid-page-limit") {
+    throw new RangeError(
+      "Projection query engine maxPageSize exceeds the bounded query contract maximum",
+    );
+  }
 }
 
 function pageFromOrdered<T>(
@@ -673,19 +832,22 @@ function copyRelation(value: unknown, bounds: ProjectionQueryEngineBounds): Resu
     : unavailable("provider-relation-malformed");
 }
 
-function copyIdentity(value: unknown): Result<ProjectionReadIdentity> {
+function copyIdentity(
+  value: unknown,
+  reason = "provider-identity-malformed",
+): Result<ProjectionReadIdentity> {
   const inspected = inspectExactRecord(
     value,
     [["fingerprint", "generation"]],
     "graph-query-unavailable",
     "Projection identity",
   );
-  if (!inspected.ok) return unavailable("provider-identity-malformed");
+  if (!inspected.ok) return unavailable(reason);
   const generation = parseGraphGeneration(inspected.value.generation);
   const fingerprint = parseProjectionCanonicalFingerprint(inspected.value.fingerprint);
   return generation.ok && fingerprint.ok
     ? success(Object.freeze({ fingerprint: fingerprint.value, generation: generation.value }))
-    : unavailable("provider-identity-malformed");
+    : unavailable(reason);
 }
 
 function copyCatalogEntry(
@@ -812,15 +974,37 @@ function resultValue(
 export function createProjectionQueryEngine(
   options: ProjectionQueryEngineOptions,
 ): GraphQueryEngineCapability {
-  const bounds = parseBounds(options.bounds);
-  const projection = options.projection;
-  const queries = options.queries;
-  const identityMethod = projection.identity;
-  const exactCatalogMethod = projection.exactCatalogEntry;
-  const exactMethod = projection.exactEntity;
-  const exactEntitiesMethod = projection.exactEntities;
-  const catalogMethod = projection.pageCatalog;
-  const relationsMethod = projection.pageRelations;
+  const parsed = parseOptions(options);
+  const bounds = parsed.bounds;
+  const projection = parsed.projection;
+  const queries = parsed.queries;
+  validateBoundedQueryPageSize(queries, bounds.maxPageSize);
+  let identityMethod: ProjectionReadCapability["identity"];
+  let exactCatalogMethod: ProjectionReadCapability["exactCatalogEntry"];
+  let exactMethod: ProjectionReadCapability["exactEntity"];
+  let exactEntitiesMethod: ProjectionReadCapability["exactEntities"];
+  let catalogMethod: ProjectionReadCapability["pageCatalog"];
+  let relationsMethod: ProjectionReadCapability["pageRelations"];
+  try {
+    identityMethod = projection.identity;
+    exactCatalogMethod = projection.exactCatalogEntry;
+    exactMethod = projection.exactEntity;
+    exactEntitiesMethod = projection.exactEntities;
+    catalogMethod = projection.pageCatalog;
+    relationsMethod = projection.pageRelations;
+  } catch {
+    throw new TypeError("projection query methods must be callable");
+  }
+  if (
+    typeof identityMethod !== "function" ||
+    typeof exactCatalogMethod !== "function" ||
+    typeof exactMethod !== "function" ||
+    typeof exactEntitiesMethod !== "function" ||
+    typeof catalogMethod !== "function" ||
+    typeof relationsMethod !== "function"
+  ) {
+    throw new TypeError("projection query methods must be callable");
+  }
 
   const identity = async (): Promise<Result<ProjectionReadIdentity>> => {
     try {
@@ -1307,21 +1491,25 @@ export function createProjectionQueryEngine(
     return success(Object.freeze(hits));
   };
 
-  const exactEntity = async (id: string) => {
+  const exactEntity = async (expected: ProjectionReadIdentity, id: string) => {
+    const selected = copyIdentity(expected, "expected-identity-malformed");
+    if (!selected.ok) return selected;
     if (typeof id !== "string") {
       return failure(diagnostic("invalid-entity-id", "Entity identity must be a string"));
     }
     const requested = parseEntityId(id);
     if (!requested.ok) return requested;
-    const current = await identity();
-    if (!current.ok) return current;
-    const entity = await exact(current.value, requested.value);
+    const entity = await exact(selected.value, requested.value);
     return entity.ok
-      ? invokeCapturedBoundedQueryExact(queries, current.value.generation, entity.value)
+      ? invokeCapturedBoundedQueryExact(queries, selected.value.generation, entity.value)
       : entity;
   };
 
-  const pageEntities = async (query: GraphEntityQuery, request: BoundedQueryRequest) => {
+  const pageEntities = async (
+    expected: ProjectionReadIdentity,
+    query: GraphEntityQuery,
+    request: BoundedQueryRequest,
+  ) => {
     const preparedQuery = prepareEntityQuery(query, bounds);
     if (!preparedQuery.ok) return preparedQuery;
     const preparedRequest = prepareRequest(request, bounds);
@@ -1329,24 +1517,28 @@ export function createProjectionQueryEngine(
     const baseContext = queryContext("entities", preparedQuery.value);
     const preflight = preflightQuery(queries, baseContext, preparedRequest.value);
     if (!preflight.ok) return preflight;
-    const current = await identity();
-    if (!current.ok) return current;
+    const selected = copyIdentity(expected, "expected-identity-malformed");
+    if (!selected.ok) return selected;
     const prepared = invokeCapturedBoundedQueryPrepare(
       queries,
-      current.value.generation,
+      selected.value.generation,
       queryContext("entities", {
         ...preparedQuery.value,
-        projectionFingerprint: current.value.fingerprint,
+        projectionFingerprint: selected.value.fingerprint,
       }),
       preparedRequest.value,
     );
     if (!prepared.ok) return prepared;
-    return collectCatalog(current.value, prepared.value, (entry) =>
+    return collectCatalog(selected.value, prepared.value, (entry) =>
       success(preparedQuery.value.kind === undefined || entry.kind === preparedQuery.value.kind),
     );
   };
 
-  const searchEntities = async (query: GraphSearchQuery, request: BoundedQueryRequest) => {
+  const searchEntities = async (
+    expected: ProjectionReadIdentity,
+    query: GraphSearchQuery,
+    request: BoundedQueryRequest,
+  ) => {
     const preparedQuery = prepareSearch(query, bounds);
     if (!preparedQuery.ok) return preparedQuery;
     const preparedRequest = prepareRequest(request, bounds);
@@ -1354,19 +1546,19 @@ export function createProjectionQueryEngine(
     const baseContext = queryContext("search", preparedQuery.value);
     const preflight = preflightQuery(queries, baseContext, preparedRequest.value);
     if (!preflight.ok) return preflight;
-    const current = await identity();
-    if (!current.ok) return current;
+    const selected = copyIdentity(expected, "expected-identity-malformed");
+    if (!selected.ok) return selected;
     const prepared = invokeCapturedBoundedQueryPrepare(
       queries,
-      current.value.generation,
+      selected.value.generation,
       queryContext("search", {
         ...preparedQuery.value,
-        projectionFingerprint: current.value.fingerprint,
+        projectionFingerprint: selected.value.fingerprint,
       }),
       preparedRequest.value,
     );
     if (!prepared.ok) return prepared;
-    return collectCatalog(current.value, prepared.value, (entry) => {
+    return collectCatalog(selected.value, prepared.value, (entry) => {
       if (preparedQuery.value.kind !== undefined && entry.kind !== preparedQuery.value.kind) {
         return success(false);
       }
@@ -1385,7 +1577,11 @@ export function createProjectionQueryEngine(
     });
   };
 
-  const traverseRelations = async (query: GraphTraversalQuery, request: BoundedQueryRequest) => {
+  const traverseRelations = async (
+    expected: ProjectionReadIdentity,
+    query: GraphTraversalQuery,
+    request: BoundedQueryRequest,
+  ) => {
     const preparedQuery = prepareTraversal(query, bounds);
     if (!preparedQuery.ok) return preparedQuery;
     const preparedRequest = prepareRequest(request, bounds);
@@ -1393,22 +1589,22 @@ export function createProjectionQueryEngine(
     const baseContext = queryContext("traversal", preparedQuery.value);
     const preflight = preflightQuery(queries, baseContext, preparedRequest.value);
     if (!preflight.ok) return preflight;
-    const current = await identity();
-    if (!current.ok) return current;
+    const selected = copyIdentity(expected, "expected-identity-malformed");
+    if (!selected.ok) return selected;
     const prepared = invokeCapturedBoundedQueryPrepare(
       queries,
-      current.value.generation,
+      selected.value.generation,
       queryContext("traversal", {
         ...preparedQuery.value,
-        projectionFingerprint: current.value.fingerprint,
+        projectionFingerprint: selected.value.fingerprint,
       }),
       preparedRequest.value,
     );
     if (!prepared.ok) return prepared;
-    const resolved = await exact(current.value, preparedQuery.value.entity);
+    const resolved = await exact(selected.value, preparedQuery.value.entity);
     if (!resolved.ok) return resolved;
     const effectiveQuery = Object.freeze({ ...preparedQuery.value, entity: resolved.value.id });
-    const hits = await traversalHits(current.value, effectiveQuery);
+    const hits = await traversalHits(selected.value, effectiveQuery);
     return hits.ok
       ? pageFromOrdered(
           queries,
@@ -1420,5 +1616,12 @@ export function createProjectionQueryEngine(
       : hits;
   };
 
-  return Object.freeze({ exactEntity, pageEntities, searchEntities, traverseRelations });
+  return Object.freeze({
+    exactEntity,
+    identity,
+    maxPageSize: bounds.maxPageSize,
+    pageEntities,
+    searchEntities,
+    traverseRelations,
+  });
 }

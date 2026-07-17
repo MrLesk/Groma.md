@@ -1,4 +1,8 @@
-import { CLI_MAX_PAGE_SIZE } from "./contracts.ts";
+import {
+  CLI_MAX_PAGE_SIZE,
+  CLI_MAX_SEARCH_CHARACTERS,
+  CLI_MAX_TRAVERSAL_DEPTH,
+} from "./contracts.ts";
 
 export const GROMA_VERSION = "0.0.0";
 
@@ -11,6 +15,9 @@ Usage:
   groma --help
   groma --version
   groma [--format plain|json] init
+  groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
+  groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
+  groma [--format plain|json] blueprint traverse <id> --direction incoming|outgoing|both --depth <1-${CLI_MAX_TRAVERSAL_DEPTH}> [--relation-type <type>] --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] migrate status
   groma [--format plain|json] migrate preview
   groma [--format plain|json] migrate apply
@@ -35,6 +42,15 @@ Parent changes for existing components use the explicit reparent command.
 Merge is the only operation that creates a component alias. It removes the obsolete component,
 keeps the survivor identity unchanged, and preserves old references through canonical supersession.
 Every ordinary read returns exactly one bounded page; page limits are explicit.
+Command results are buffered atomically up to eight MiB and never partially streamed.
+Blueprint export, search, and traversal read the disposable projection through shared application
+operations. Surface cursors are opaque and never followed implicitly. Every export item includes
+one component and all of its outgoing depth-1 relationships; a complete export consumes only its
+fingerprint-bound component pages at one generation.
+Blueprint search text accepts 1-${CLI_MAX_SEARCH_CHARACTERS} raw characters before normalization.
+Blueprint traversal depth accepts the official range 1-${CLI_MAX_TRAVERSAL_DEPTH}.
+If an export page exceeds local aggregate bounds, retry with a smaller --limit.
+If --limit 1 still fails, one self-contained item exceeds the local export bounds.
 
 Migration status and preview are read-only. Preview lists every canonical resource and the exact
 migrator path that would run. Apply is the only migration write boundary and publishes one exact

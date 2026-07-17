@@ -27,7 +27,7 @@ import {
 import {
   createLocalProjectionIndex,
   createLocalResourceProvider,
-  createProjectionQueryEngine,
+  createProjectionQueryEngine as createRawProjectionQueryEngine,
   DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
   DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
 } from "../index.ts";
@@ -145,12 +145,46 @@ function queryContracts() {
   });
 }
 
+/** Models the public caller flow: capture one identity, then make one explicit data read. */
+function createQueryFlow(options: Parameters<typeof createRawProjectionQueryEngine>[0]) {
+  const engine = createRawProjectionQueryEngine(options);
+  return Object.freeze({
+    exactEntity: async (id: string) => {
+      const expected = await engine.identity();
+      return expected.ok ? engine.exactEntity(expected.value, id) : expected;
+    },
+    identity: engine.identity,
+    maxPageSize: engine.maxPageSize,
+    pageEntities: async (
+      query: Parameters<typeof engine.pageEntities>[1],
+      request: Parameters<typeof engine.pageEntities>[2],
+    ) => {
+      const expected = await engine.identity();
+      return expected.ok ? engine.pageEntities(expected.value, query, request) : expected;
+    },
+    searchEntities: async (
+      query: Parameters<typeof engine.searchEntities>[1],
+      request: Parameters<typeof engine.searchEntities>[2],
+    ) => {
+      const expected = await engine.identity();
+      return expected.ok ? engine.searchEntities(expected.value, query, request) : expected;
+    },
+    traverseRelations: async (
+      query: Parameters<typeof engine.traverseRelations>[1],
+      request: Parameters<typeof engine.traverseRelations>[2],
+    ) => {
+      const expected = await engine.identity();
+      return expected.ok ? engine.traverseRelations(expected.value, query, request) : expected;
+    },
+  });
+}
+
 function boundedEngine(
   provider: ReturnType<typeof mutableProjection>,
   maxQueryContextCharacters: number,
   maxCursorCharacters: number,
 ) {
-  return createProjectionQueryEngine({
+  return createQueryFlow({
     bounds: {
       maxCursorCharacters,
       maxEntities: 8,
@@ -181,9 +215,12 @@ function maximumTermSearch(): string {
 
 function mutableProjection(initial = projectionSnapshot()) {
   let snapshot = initial;
+  let catalogLoads = 0;
+  let dataLoads = 0;
   let loads = 0;
   const projection: ProjectionReadCapability = Object.freeze({
     exactCatalogEntry: async (_identity: ProjectionReadIdentity, requested: EntityId) => {
+      dataLoads += 1;
       const projected = snapshot.entities.find((item) => item.entity.id === requested);
       return projected === undefined
         ? {
@@ -202,6 +239,7 @@ function mutableProjection(initial = projectionSnapshot()) {
           });
     },
     exactEntities: async (_identity: ProjectionReadIdentity, requested: readonly EntityId[]) => {
+      dataLoads += 1;
       const entities = new Map(snapshot.entities.map((item) => [item.entity.id, item.entity]));
       const items: GraphEntity[] = [];
       for (let index = 0; index < requested.length; index += 1) {
@@ -227,6 +265,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       requested: ReturnType<typeof entity>,
     ) => {
+      dataLoads += 1;
       const entities = new Map(snapshot.entities.map((item) => [item.entity.id, item.entity]));
       let current = requested;
       const aliases = new Map(snapshot.aliases.map((alias) => [alias.source, alias.target]));
@@ -256,6 +295,8 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       request: ProjectionCatalogReadRequest,
     ) => {
+      catalogLoads += 1;
+      dataLoads += 1;
       const entries = snapshot.entities.map((item) => ({
         id: item.entity.id,
         kind: item.entity.kind,
@@ -286,6 +327,7 @@ function mutableProjection(initial = projectionSnapshot()) {
       _identity: ProjectionReadIdentity,
       request: ProjectionRelationReadRequest,
     ) => {
+      dataLoads += 1;
       const adjacency = snapshot.adjacency.find((item) => item.entity === request.entity);
       const relations = new Map(snapshot.relations.map((item) => [item.id, item]));
       const ids = adjacency?.[request.direction] ?? [];
@@ -320,6 +362,12 @@ function mutableProjection(initial = projectionSnapshot()) {
     },
   });
   return {
+    get catalogLoads() {
+      return catalogLoads;
+    },
+    get dataLoads() {
+      return dataLoads;
+    },
     get loads() {
       return loads;
     },
@@ -331,7 +379,7 @@ function mutableProjection(initial = projectionSnapshot()) {
 }
 
 function queryEngineFor(projection: ProjectionReadCapability) {
-  return createProjectionQueryEngine({
+  return createQueryFlow({
     bounds: {
       maxEntities: 8,
       maxPageSize: 3,
@@ -351,6 +399,336 @@ function engine(provider = mutableProjection()) {
 }
 
 describe("projection query engine", () => {
+  test("captures one explicit identity for an exact multi-read flow without hidden identity reads", async () => {
+    const provider = mutableProjection();
+    const served: ProjectionReadIdentity[] = [];
+    const projection: ProjectionReadCapability = Object.freeze({
+      exactCatalogEntry: async (expected: ProjectionReadIdentity, id: EntityId) => {
+        served.push(expected);
+        return provider.projection.exactCatalogEntry(expected, id);
+      },
+      exactEntities: async (expected: ProjectionReadIdentity, requested: readonly EntityId[]) => {
+        served.push(expected);
+        return provider.projection.exactEntities(expected, requested);
+      },
+      exactEntity: async (expected: ProjectionReadIdentity, id: EntityId) => {
+        served.push(expected);
+        return provider.projection.exactEntity(expected, id);
+      },
+      identity: provider.projection.identity,
+      pageCatalog: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionCatalogReadRequest,
+      ) => {
+        served.push(expected);
+        return provider.projection.pageCatalog(expected, request);
+      },
+      pageRelations: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionRelationReadRequest,
+      ) => {
+        served.push(expected);
+        return provider.projection.pageRelations(expected, request);
+      },
+    });
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection,
+      queries: queryContracts(),
+    });
+
+    const captured = await query.identity();
+    if (!captured.ok) throw new Error("expected projection identity");
+    expect(await query.exactEntity(captured.value, ids.obsolete)).toMatchObject({ ok: true });
+    expect(
+      await query.pageEntities(captured.value, { kind: "component" }, { limit: 1 }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await query.searchEntities(captured.value, { text: "payment" }, { limit: 1 }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await query.traverseRelations(
+        captured.value,
+        { depth: 1, direction: "outgoing", entity: ids.a },
+        { limit: 1 },
+      ),
+    ).toMatchObject({ ok: true });
+
+    expect(provider.loads).toBe(1);
+    expect(served.length).toBeGreaterThan(4);
+    for (const expected of served) {
+      expect(expected).toEqual(captured.value);
+      expect(Object.isFrozen(expected)).toBeTrue();
+    }
+  });
+
+  test("rejects same-generation branch B data under a previously captured branch A identity", async () => {
+    const branchA = projectionSnapshot(7, "fixture:raw-branch-a");
+    const branchBBase = projectionSnapshot(7, "fixture:raw-branch-b");
+    const branchBMarker = "/private/branch-b-data";
+    const branchB = Object.freeze({
+      ...branchBBase,
+      entities: Object.freeze(
+        branchBBase.entities.map((item) =>
+          item.entity.id === ids.a
+            ? Object.freeze({
+                entity: graphEntity(ids.a, branchBMarker),
+                searchableText: `${ids.a}\ncomponent\n${branchBMarker}\nservice`,
+              })
+            : item,
+        ),
+      ),
+    });
+    const provider = mutableProjection(branchA);
+    const reads = {
+      exactEntities: 0,
+      exactEntity: 0,
+      pageCatalog: 0,
+      pageRelations: 0,
+    };
+    const projection: ProjectionReadCapability = Object.freeze({
+      ...provider.projection,
+      exactEntities: async (expected: ProjectionReadIdentity, requested: readonly EntityId[]) => {
+        reads.exactEntities += 1;
+        return provider.projection.exactEntities(expected, requested);
+      },
+      exactEntity: async (expected: ProjectionReadIdentity, id: EntityId) => {
+        reads.exactEntity += 1;
+        return provider.projection.exactEntity(expected, id);
+      },
+      pageCatalog: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionCatalogReadRequest,
+      ) => {
+        reads.pageCatalog += 1;
+        return provider.projection.pageCatalog(expected, request);
+      },
+      pageRelations: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionRelationReadRequest,
+      ) => {
+        reads.pageRelations += 1;
+        return provider.projection.pageRelations(expected, request);
+      },
+    });
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection,
+      queries: queryContracts(),
+    });
+    const identityA = await query.identity();
+    if (!identityA.ok) throw new Error("expected branch A identity");
+    provider.snapshot = branchB;
+
+    const results = [
+      await query.exactEntity(identityA.value, ids.a),
+      await query.pageEntities(identityA.value, { kind: "component" }, { limit: 1 }),
+      await query.traverseRelations(
+        identityA.value,
+        { depth: 1, direction: "outgoing", entity: ids.a },
+        { limit: 1 },
+      ),
+    ];
+
+    for (const result of results) {
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "graph-query-unavailable" }],
+        ok: false,
+      });
+    }
+    expect(JSON.stringify(results)).not.toContain(branchBMarker);
+    expect(reads).toEqual({
+      exactEntities: 0,
+      exactEntity: 2,
+      pageCatalog: 1,
+      pageRelations: 0,
+    });
+    expect(provider.loads).toBe(1);
+  });
+
+  test("captures a validated page maximum and contains hostile construction records", async () => {
+    const provider = mutableProjection();
+    const bounds = { maxPageSize: 2 };
+    const query = createRawProjectionQueryEngine({
+      bounds,
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    bounds.maxPageSize = 1;
+
+    expect(query.maxPageSize).toBe(2);
+    expect(Object.isFrozen(query)).toBeTrue();
+    const captured = await query.identity();
+    if (!captured.ok) throw new Error("expected projection identity");
+    expect(await query.pageEntities(captured.value, {}, { limit: 3 })).toMatchObject({
+      diagnostics: [{ code: "invalid-page-limit", details: { maximum: 2 } }],
+      ok: false,
+    });
+
+    const narrowerQueries = new BoundedQueryContracts({
+      maxAnchorCharacters: 256,
+      maxCursorCharacters: DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
+      maxPageSize: 1,
+      maxQueryContextCharacters: DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
+    });
+    expect(() =>
+      createRawProjectionQueryEngine({
+        bounds: { maxPageSize: 2 },
+        projection: provider.projection,
+        queries: narrowerQueries,
+      }),
+    ).toThrow("maxPageSize exceeds the bounded query contract maximum");
+    expect(provider.loads).toBe(1);
+
+    const replacementProjection = { ...provider.projection };
+    const methodCaptured = createRawProjectionQueryEngine({
+      bounds: { maxPageSize: 3 },
+      projection: replacementProjection,
+      queries: queryContracts(),
+    });
+    replacementProjection.identity = async () => failure({ code: "replaced", message: "replaced" });
+    replacementProjection.exactEntity = async () =>
+      failure({ code: "replaced", message: "replaced" });
+    const methodIdentity = await methodCaptured.identity();
+    if (!methodIdentity.ok) throw new Error("expected captured identity method");
+    expect(await methodCaptured.exactEntity(methodIdentity.value, ids.a)).toMatchObject({
+      ok: true,
+      value: { item: { id: ids.a } },
+    });
+
+    let boundGetterCalls = 0;
+    const hostileBounds = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(hostileBounds, "maxPageSize", {
+      enumerable: true,
+      get: () => {
+        boundGetterCalls += 1;
+        return 2;
+      },
+    });
+    expect(() =>
+      createRawProjectionQueryEngine({
+        bounds: hostileBounds,
+        projection: provider.projection,
+        queries: queryContracts(),
+      } as unknown as Parameters<typeof createRawProjectionQueryEngine>[0]),
+    ).toThrow("bounds are malformed");
+    expect(boundGetterCalls).toBe(0);
+
+    let optionGetterCalls = 0;
+    const hostileOptions = {
+      projection: provider.projection,
+      queries: queryContracts(),
+    } as Record<string, unknown>;
+    Object.defineProperty(hostileOptions, "bounds", {
+      enumerable: true,
+      get: () => {
+        optionGetterCalls += 1;
+        return { maxPageSize: 2 };
+      },
+    });
+    expect(() =>
+      createRawProjectionQueryEngine(
+        hostileOptions as unknown as Parameters<typeof createRawProjectionQueryEngine>[0],
+      ),
+    ).toThrow("options are malformed");
+    expect(optionGetterCalls).toBe(0);
+  });
+
+  test("rejects hostile expected identities before any partial provider read", async () => {
+    const provider = mutableProjection();
+    let dataReads = 0;
+    const projection: ProjectionReadCapability = Object.freeze({
+      exactCatalogEntry: async (expected: ProjectionReadIdentity, id: EntityId) => {
+        dataReads += 1;
+        return provider.projection.exactCatalogEntry(expected, id);
+      },
+      exactEntities: async (expected: ProjectionReadIdentity, requested: readonly EntityId[]) => {
+        dataReads += 1;
+        return provider.projection.exactEntities(expected, requested);
+      },
+      exactEntity: async (expected: ProjectionReadIdentity, id: EntityId) => {
+        dataReads += 1;
+        return provider.projection.exactEntity(expected, id);
+      },
+      identity: provider.projection.identity,
+      pageCatalog: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionCatalogReadRequest,
+      ) => {
+        dataReads += 1;
+        return provider.projection.pageCatalog(expected, request);
+      },
+      pageRelations: async (
+        expected: ProjectionReadIdentity,
+        request: ProjectionRelationReadRequest,
+      ) => {
+        dataReads += 1;
+        return provider.projection.pageRelations(expected, request);
+      },
+    });
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection,
+      queries: queryContracts(),
+    });
+    let getterCalls = 0;
+    const hostile = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(hostile, "fingerprint", {
+      enumerable: true,
+      get: () => {
+        getterCalls += 1;
+        return projectionSnapshot().fingerprint;
+      },
+    });
+    Object.defineProperty(hostile, "generation", { enumerable: true, value: generation(7) });
+    const expected = hostile as unknown as ProjectionReadIdentity;
+
+    expect(await query.exactEntity(expected, ids.a)).toMatchObject({
+      diagnostics: [{ code: "graph-query-unavailable" }],
+      ok: false,
+    });
+    expect(await query.pageEntities(expected, {}, { limit: 1 })).toMatchObject({ ok: false });
+    expect(await query.searchEntities(expected, { text: "payment" }, { limit: 1 })).toMatchObject({
+      ok: false,
+    });
+    expect(
+      await query.traverseRelations(
+        expected,
+        { depth: 1, direction: "outgoing", entity: ids.a },
+        { limit: 1 },
+      ),
+    ).toMatchObject({ ok: false });
+    expect({ dataReads, getterCalls, identityReads: provider.loads }).toEqual({
+      dataReads: 0,
+      getterCalls: 0,
+      identityReads: 0,
+    });
+  });
+
   test("resolves exact canonical identities and aliases with the projection generation", async () => {
     const { engine: query } = engine();
 
@@ -507,7 +885,7 @@ describe("projection query engine", () => {
         return provider.projection.pageCatalog(identity, request);
       },
     });
-    const query = createProjectionQueryEngine({
+    const query = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -546,7 +924,7 @@ describe("projection query engine", () => {
     ).toMatchObject({ diagnostics: [{ code: "cursor-anchor-mismatch" }], ok: false });
     expect(catalogAfters).toEqual([]);
 
-    const anchorBounded = createProjectionQueryEngine({
+    const anchorBounded = createQueryFlow({
       bounds: {
         maxEntities: 1,
         maxPageSize: 1,
@@ -629,7 +1007,7 @@ describe("projection query engine", () => {
         exactEntities: async () => malformedBatches[index]!(),
       }) as ProjectionReadCapability;
       expect(
-        await createProjectionQueryEngine({
+        await createQueryFlow({
           bounds: {
             maxEntities: 8,
             maxPageSize: 3,
@@ -664,7 +1042,7 @@ describe("projection query engine", () => {
     const initial = await engine(baseline).engine.pageEntities({ kind: "component" }, { limit: 2 });
     if (!initial.ok || initial.value.nextCursor === undefined) throw new Error("expected cursor");
     expect(
-      await createProjectionQueryEngine({
+      await createQueryFlow({
         bounds: {
           maxEntities: 8,
           maxPageSize: 3,
@@ -706,6 +1084,115 @@ describe("projection query engine", () => {
     ).toMatchObject({ diagnostics: [{ code: "cursor-anchor-mismatch" }], ok: false });
   });
 
+  test("returns typed search limits before projection catalog reads", async () => {
+    const snapshot = projectionSnapshot();
+    const provider = mutableProjection(snapshot);
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxSearchCharacters: 16,
+        maxSearchTerms: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    const expected = Object.freeze({
+      fingerprint: snapshot.fingerprint,
+      generation: snapshot.generation,
+    });
+    const invalid = (text: unknown) =>
+      query.searchEntities(expected, { text } as never, { limit: 1 });
+    const characterFailure = {
+      diagnostics: [
+        {
+          code: "invalid-search-text",
+          details: { maximumCharacters: 16 },
+          message: "Search text must be a nonempty primitive string no longer than 16 characters",
+        },
+      ],
+      ok: false,
+    } as const;
+
+    expect(await invalid("x".repeat(17))).toEqual(characterFailure);
+    const normalizedExpansion = await invalid("\uFDFA");
+    expect(normalizedExpansion).toEqual(characterFailure);
+    expect(
+      normalizedExpansion.ok ? false : Object.isFrozen(normalizedExpansion.diagnostics[0]?.details),
+    ).toBeTrue();
+    expect(await invalid("a b c")).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-search-text",
+          details: { maximumTerms: 2 },
+          message: "Search text must contain no more than 2 normalized terms",
+        },
+      ],
+      ok: false,
+    });
+    for (const text of [1, "", "   "] as const) {
+      const result = await invalid(text);
+      expect(result).toMatchObject({ diagnostics: [{ code: "invalid-search-text" }], ok: false });
+      expect(result.ok ? undefined : result.diagnostics[0]?.details).toBeUndefined();
+    }
+    expect(provider.catalogLoads).toBe(0);
+    expect(provider.dataLoads).toBe(0);
+    expect(provider.loads).toBe(0);
+  });
+
+  test("returns a typed traversal depth limit before identity or projection reads", async () => {
+    const snapshot = projectionSnapshot();
+    const provider = mutableProjection(snapshot);
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    const expected = Object.freeze({
+      fingerprint: snapshot.fingerprint,
+      generation: snapshot.generation,
+    });
+    const invalid = (depth: unknown) =>
+      query.traverseRelations(expected, { depth, direction: "outgoing", entity: ids.a } as never, {
+        limit: 1,
+      });
+    const overBound = await invalid(4);
+    expect(overBound).toEqual({
+      diagnostics: [
+        {
+          code: "invalid-traversal-depth",
+          details: { maximumDepth: 3 },
+          message: "Traversal depth must be a positive safe integer no greater than 3",
+        },
+      ],
+      ok: false,
+    });
+    expect(overBound.ok ? false : Object.isFrozen(overBound.diagnostics[0]?.details)).toBeTrue();
+    for (const depth of ["4", 0, -1, 1.5] as const) {
+      const result = await invalid(depth);
+      expect(result).toMatchObject({
+        diagnostics: [{ code: "invalid-traversal-depth" }],
+        ok: false,
+      });
+      expect(result.ok ? undefined : result.diagnostics[0]?.details).toBeUndefined();
+    }
+    expect(provider.loads).toBe(0);
+    expect(provider.dataLoads).toBe(0);
+  });
+
   test("fits every valid search and its cursor inside the shared derived ceilings", async () => {
     const escapedFingerprint = "\u0000".repeat(128);
     const maximumKind = `a${"1".repeat(127)}`;
@@ -730,7 +1217,7 @@ describe("projection query engine", () => {
     expect(
       await shortContext.searchEntities({ kind: maximumKind, text: maximumSearch }, { limit: 1 }),
     ).toMatchObject({ diagnostics: [{ code: "query-context-too-large" }], ok: false });
-    expect(shortContextProvider.loads).toBe(0);
+    expect(shortContextProvider.loads).toBe(1);
 
     expect(
       await exactContext.searchEntities(
@@ -738,7 +1225,7 @@ describe("projection query engine", () => {
         { limit: 1 },
       ),
     ).toMatchObject({ diagnostics: [{ code: "invalid-search-text" }], ok: false });
-    expect(exactContextProvider.loads).toBe(1);
+    expect(exactContextProvider.loads).toBe(2);
 
     const zeroIoProvider = mutableProjection();
     const zeroIo = boundedEngine(
@@ -755,7 +1242,7 @@ describe("projection query engine", () => {
       diagnostics: [{ code: "invalid-page-limit" }],
       ok: false,
     });
-    expect(zeroIoProvider.loads).toBe(0);
+    expect(zeroIoProvider.loads).toBe(2);
 
     const cursorFingerprint = "文".repeat(128);
     const cursorSearch = maximumTermSearch();
@@ -804,7 +1291,7 @@ describe("projection query engine", () => {
       await shortCursor.searchEntities({ kind: maximumKind, text: cursorSearch }, { limit: 1 }),
     ).toMatchObject({ diagnostics: [{ code: "continuation-cursor-too-large" }], ok: false });
 
-    const mismatchedCursorBudgets = createProjectionQueryEngine({
+    const mismatchedCursorBudgets = createQueryFlow({
       bounds: {
         maxCursorCharacters: DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS - 1,
         maxEntities: 8,
@@ -874,7 +1361,7 @@ describe("projection query engine", () => {
         return result;
       },
     });
-    const query = createProjectionQueryEngine({
+    const query = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -943,7 +1430,7 @@ describe("projection query engine", () => {
 
     expect(invalid).toMatchObject({ diagnostics: [{ code: "invalid-entity-kind" }], ok: false });
     expect(searched).toMatchObject({ ok: true, value: { items: [{ id: ids.b }] } });
-    expect(provider.loads).toBe(1);
+    expect(provider.loads).toBe(2);
   });
 
   test("traverses recursive cyclic relationships by direction, type, and bounded depth", async () => {
@@ -1089,7 +1576,61 @@ describe("projection query engine", () => {
     ).toMatchObject({ diagnostics: [{ code: "cursor-query-mismatch" }], ok: false });
   });
 
-  test("fails malformed and over-bound inputs before projection access", async () => {
+  test("binds fresh cursors to same-generation fingerprints and permits an exact-content ABA", async () => {
+    const snapshotA = projectionSnapshot(7, "fixture:branch-a");
+    const snapshotB = projectionSnapshot(7, "fixture:branch-b");
+    const provider = mutableProjection(snapshotA);
+    const query = createRawProjectionQueryEngine({
+      bounds: {
+        maxEntities: 8,
+        maxPageSize: 3,
+        maxProjectionPageSize: 2,
+        maxTraversalDepth: 3,
+        maxTraversalEntities: 8,
+        maxTraversalRelationVisits: 16,
+        maxTraversalRelations: 8,
+      },
+      projection: provider.projection,
+      queries: queryContracts(),
+    });
+    const identityA = await query.identity();
+    if (!identityA.ok) throw new Error("expected branch A identity");
+    const pageA = await query.pageEntities(identityA.value, { kind: "component" }, { limit: 1 });
+    if (!pageA.ok || pageA.value.nextCursor === undefined) throw new Error("expected A cursor");
+
+    provider.snapshot = snapshotB;
+    const identityB = await query.identity();
+    if (!identityB.ok) throw new Error("expected branch B identity");
+    expect(
+      await query.pageEntities(
+        identityB.value,
+        { kind: "component" },
+        { cursor: pageA.value.nextCursor, limit: 1 },
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "cursor-query-mismatch" }], ok: false });
+    const pageB = await query.pageEntities(identityB.value, { kind: "component" }, { limit: 1 });
+    if (!pageB.ok || pageB.value.nextCursor === undefined) throw new Error("expected B cursor");
+
+    provider.snapshot = snapshotA;
+    const identityAAgain = await query.identity();
+    if (!identityAAgain.ok) throw new Error("expected restored branch A identity");
+    expect(
+      await query.pageEntities(
+        identityAAgain.value,
+        { kind: "component" },
+        { cursor: pageA.value.nextCursor, limit: 1 },
+      ),
+    ).toMatchObject({ ok: true, value: { items: [{ id: ids.b }] } });
+    expect(
+      await query.pageEntities(
+        identityAAgain.value,
+        { kind: "component" },
+        { cursor: pageB.value.nextCursor, limit: 1 },
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "cursor-query-mismatch" }], ok: false });
+  });
+
+  test("fails malformed and over-bound inputs before partial data reads", async () => {
     const provider = mutableProjection();
     const { engine: query } = engine(provider);
 
@@ -1136,7 +1677,7 @@ describe("projection query engine", () => {
         { limit: 1 },
       ),
     ).toMatchObject({ diagnostics: [{ code: "invalid-relation-type" }], ok: false });
-    expect(provider.loads).toBe(0);
+    expect(provider.loads).toBe(7);
   });
 
   test("contains malformed nested values from a replacement partial-read provider", async () => {
@@ -1146,7 +1687,7 @@ describe("projection query engine", () => {
       exactEntity: async () => success(null),
     }) as unknown as ProjectionReadCapability;
     await expect(
-      createProjectionQueryEngine({
+      createQueryFlow({
         bounds: {
           maxEntities: 8,
           maxPageSize: 3,
@@ -1175,7 +1716,7 @@ describe("projection query engine", () => {
     }) satisfies ProjectionReadCapability;
 
     expect(
-      await createProjectionQueryEngine({
+      await createQueryFlow({
         bounds: {
           maxEntities: 8,
           maxPageSize: 3,
@@ -1193,7 +1734,7 @@ describe("projection query engine", () => {
 
   test("stops cyclic traversal at explicit entity and relation work bounds", async () => {
     const provider = mutableProjection();
-    const relationBounded = createProjectionQueryEngine({
+    const relationBounded = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -1213,7 +1754,7 @@ describe("projection query engine", () => {
       ),
     ).toMatchObject({ diagnostics: [{ code: "traversal-relation-bound-exceeded" }], ok: false });
 
-    const entityBounded = createProjectionQueryEngine({
+    const entityBounded = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -1254,7 +1795,7 @@ describe("projection query engine", () => {
         baseline.relations.map((edge) => (edge.id === ids.r2 ? rewrittenR2 : edge)),
       ),
     });
-    const query = createProjectionQueryEngine({
+    const query = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -1321,7 +1862,7 @@ describe("projection query engine", () => {
     const initial = canonical(1, "Payment service");
     const source = new MutableCanonicalSource(initial);
     const projection = createLocalProjectionIndex({ canonical: source, resources });
-    const query = createProjectionQueryEngine({
+    const query = createQueryFlow({
       bounds: {
         maxEntities: 8,
         maxPageSize: 3,
@@ -1389,7 +1930,7 @@ class MutableCanonicalSource implements ProjectionCanonicalSource {
   }
 }
 
-async function representativePages(query: ReturnType<typeof createProjectionQueryEngine>) {
+async function representativePages(query: ReturnType<typeof createQueryFlow>) {
   return Promise.all([
     query.pageEntities({ kind: "component" }, { limit: 3 }),
     query.searchEntities({ text: "renamed payment" }, { limit: 3 }),

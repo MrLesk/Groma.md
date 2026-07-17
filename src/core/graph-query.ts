@@ -1,5 +1,6 @@
 import type { GraphEntity, GraphRelation } from "./graph.ts";
 import type { EntityId } from "./identity.ts";
+import type { ProjectionReadIdentity } from "./projection.ts";
 import type { BoundedQueryRequest, ExactGraphRead, GraphQueryPage } from "./query.ts";
 import type { Result } from "./result.ts";
 
@@ -39,16 +40,26 @@ export interface GraphTraversalHit {
  * and opaque cursors, never the disposable projection's storage technology.
  */
 export interface GraphQueryEngineCapability {
-  exactEntity(id: string): Promise<Result<ExactGraphRead<GraphEntity>>>;
+  /** Construction-captured maximum accepted by every public bounded page request. */
+  readonly maxPageSize: number;
+  /** Captures one exact disposable projection identity for a caller-owned read flow. */
+  identity(): Promise<Result<ProjectionReadIdentity>>;
+  exactEntity(
+    expected: ProjectionReadIdentity,
+    id: string,
+  ): Promise<Result<ExactGraphRead<GraphEntity>>>;
   pageEntities(
+    expected: ProjectionReadIdentity,
     query: GraphEntityQuery,
     request: BoundedQueryRequest,
   ): Promise<Result<GraphQueryPage<GraphEntity>>>;
   searchEntities(
+    expected: ProjectionReadIdentity,
     query: GraphSearchQuery,
     request: BoundedQueryRequest,
   ): Promise<Result<GraphQueryPage<GraphEntity>>>;
   traverseRelations(
+    expected: ProjectionReadIdentity,
     query: GraphTraversalQuery,
     request: BoundedQueryRequest,
   ): Promise<Result<GraphQueryPage<GraphTraversalHit>>>;

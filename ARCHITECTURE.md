@@ -676,15 +676,19 @@ fresh Host detects direct file edits before serving a projection.
 - **Actions:** Search; filter by project and state; traverse incoming and outgoing
   relations; enforce page and subgraph budgets.
 - **Relationships:** Uses Projection Index; serves Application Operations, Graph
-  Comparator, CLI, and Application Service.
+  Comparator, and Application Service.
 
-The first engine is a replaceable `groma.graph-query/v1` capability. Its plugin requires
+The first engine is a replaceable `groma.graph-query/v2` capability. Its plugin requires
 only `groma.projection-read/v1`, never the complete `groma.projection-index/v1`
 materialization contract. Core defines only
 storage-neutral requests and results: exact entity reads, kind-filtered entity pages,
 normalized full-text entity pages, and relationship traversal by incoming, outgoing,
 or both directions, optional relation type, and bounded breadth-first depth. The
-official Persistence implementation consumes only Core's partial
+engine exposes a construction-captured immutable page bound. A caller captures one
+generation/fingerprint identity for a logical read and supplies it explicitly to every
+data-bearing query; the engine never silently advances that read to a newer identity.
+The fingerprint is continuity evidence and does not become public blueprint meaning.
+The official Persistence implementation consumes only Core's partial
 `ProjectionReadCapability`; it never opens canonical Markdown, requests a complete
 projection snapshot, or knows a resource locator. The local file provider and a future
 database provider implement the same exact-identity, exact live catalog evidence,
@@ -931,12 +935,42 @@ Surfaces never write stores directly. They call shared application operations.
   of surface.
 - **Inputs:** Validated operation request; expected revisions; caller presentation
   preferences.
-- **Outputs:** Domain result; bounded page; conflict or validation diagnostic; committed
-  transaction result.
-- **Actions:** Coordinate queries and mutations; enforce workspace requirements; call
-  registered invariants; return presentation-neutral results.
-- **Relationships:** Uses Core, Standard Model, Projection, scanning, and planning
-  capabilities; called by CLI and Application Service.
+- **Outputs:** Domain result; bounded component page or traversal subgraph; conflict or
+  validation diagnostic; committed transaction result.
+- **Actions:** Coordinate queries and mutations; canonicalize projection-backed graph
+  results; enforce workspace requirements; call registered invariants; return
+  presentation-neutral results.
+- **Relationships:** Uses Core, Standard Model, Projection, Query Engine, scanning, and
+  planning capabilities; called by CLI and Application Service.
+
+One blueprint export page is a self-contained bounded aggregate ordered by ascending
+stable component identity. Each item carries one canonical Standard Model component plus
+every outgoing depth-1 Standard relationship from that component. Application pages
+those relationships sequentially inside the operation, enforces one generation and one
+page-wide relationship bound, and exposes only the query engine's fingerprint-bound
+component cursor. Each internal relationship request is bounded by the smaller of the
+engine's immutable page bound and the remaining relationship budget, independently of
+the caller's component page limit. Application captures one identity before the
+component page and reuses it for that page and every internal traversal; a
+same-generation branch switch therefore fails closed. Search and traversal keep their
+own one-page cursors for independent exploration; neither is a second phase of export.
+Traversal order remains breadth-first depth and then stable relationship identity.
+Application exact-counts canonical-JSON UTF-8 bytes and proves depth on every final
+export, search, and traversal page under the Host-supplied `maxBlueprintPageBytes` and
+`maxBlueprintPageDepth` bounds. The descriptor-safe counter never invokes
+behavior-bearing values or constructs a second serialized page, and it does not run on
+export's internal traversal pages. Proven page-wide relationship, structural-value,
+byte, or depth exhaustion returns an operation-specific semantic page-bound diagnostic
+so a caller can retry with a smaller limit; malformed, hostile, or unavailable query data
+remains an infrastructure failure. A failure at limit one identifies one self-contained
+export item, search component, or traversal hit as too large.
+
+The official shared operation surface is published only as `groma.operations/v2`.
+Official full-workspace and blueprint registrations require that v2 identity; no v1
+operation or graph-query adapters are published. The Host lifecycle recognizes the exact
+legacy v1 operations object only as a narrow initialization compatibility shape, captures
+only its `initialize` method, and never promotes that object into v2 workspace or
+blueprint operations.
 
 #### CLI Surface
 
@@ -958,6 +992,14 @@ Surfaces never write stores directly. They call shared application operations.
   scan, visual export, plan, diff, validation, migration, and plugin commands over
   time; uses Visual Blueprint Renderer without adding renderer semantics to
   application operations.
+
+Ordinary command results remain atomic and non-streaming under an eight-MiB rendered
+output bound and canonical-JSON depth 30. The official Host gives Application
+provider-neutral final blueprint-page bounds 64 KiB below that byte ceiling and two
+levels below the depth ceiling, leaving fixed command/result-envelope headroom while
+keeping the two layers independent. Proven blueprint-page exhaustion is semantic and
+retryable with a smaller limit; the CLI ceilings remain last-resort containment and fail
+as `cli-output-bound-exceeded` before any partial result is emitted.
 
 #### Application Service
 

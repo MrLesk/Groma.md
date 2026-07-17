@@ -2,7 +2,7 @@ import { GraphKernel } from "../../../core/graph.ts";
 import { parseGraphGeneration } from "../../../core/generation.ts";
 import type { GraphData } from "../../../core/payload.ts";
 import { BoundedQueryContracts } from "../../../core/query.ts";
-import { success } from "../../../core/result.ts";
+import { failure, success } from "../../../core/result.ts";
 import {
   parseResourceKey,
   type ResourceKey,
@@ -92,6 +92,8 @@ try {
     maxPageSize: 10,
   });
   const bounds = Object.freeze({
+    maxBlueprintPageBytes: 8 * 1024 * 1024 - 64 * 1024,
+    maxBlueprintPageDepth: 28,
     maxComponents: 10,
     maxDiagnosticCount: 10,
     maxEmbeddedItems: 10,
@@ -126,6 +128,14 @@ try {
   const base = {
     bounds,
     graph,
+    graphQueries: Object.freeze({
+      exactEntity: async () => failure({ code: "unused", message: "unused" }),
+      identity: async () => failure({ code: "unused", message: "unused" }),
+      maxPageSize: 100,
+      pageEntities: async () => failure({ code: "unused", message: "unused" }),
+      searchEntities: async () => failure({ code: "unused", message: "unused" }),
+      traverseRelations: async () => failure({ code: "unused", message: "unused" }),
+    }),
     initialization: {
       initialize: async () => ({ generation: initialGeneration, status: "initialized" as const }),
     },
