@@ -14,8 +14,8 @@ const defaultExecutable = path.join(
 const commandTimeoutMilliseconds = 30_000;
 const maximumCommandOutputBytes = 8 * 1024 * 1024 + 64 * 1024;
 const maximumPageRequests = 32;
-const processTerminationGraceMilliseconds = 1_000;
-const processSettlementTimeoutMilliseconds = 5_000;
+const processTerminationGraceMilliseconds = 5_000;
+const processSettlementTimeoutMilliseconds = 10_000;
 
 const ids = Object.freeze({
   checkout: "ent_10000000000000000000000000000001",
@@ -220,6 +220,7 @@ function spawnCapturedProcess(
   };
 
   const result = Promise.all([exited, stdout.promise, stderr.promise]);
+  void result.catch(() => undefined);
   const settled = Promise.allSettled([exited, stdout.promise, stderr.promise]);
   const timeoutMilliseconds = options.timeoutMilliseconds ?? commandTimeoutMilliseconds;
   let lifetimeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -802,7 +803,7 @@ async function waitForInterruptionProgress(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     if (processExited) return false;
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("cold export did not publish progress evidence before its timeout");
 }
@@ -823,6 +824,8 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
     },
   });
   const intentRoot = path.join(scenario.workspace, "groma", "intent", "00");
+  // These 79 hand-written canonical Markdown fixtures intentionally couple to the storage format
+  // only to keep the cancellation window deterministic; the compiled public CLI validates them next.
   await Promise.all(
     interruptionIds
       .slice(1)

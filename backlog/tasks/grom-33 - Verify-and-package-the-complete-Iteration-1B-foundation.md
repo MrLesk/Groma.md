@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 18:46'
+updated_date: '2026-07-17 19:02'
 labels: []
 milestone: m-2
 dependencies:
@@ -65,4 +65,6 @@ Addressed the mandatory spec-review finding in the self-blueprint verifier: ARCH
 Addressed both mandatory quality-review findings in the Iteration 1B foundation verifier. The incompatible package fixture now distinguishes module evaluation from plugin start: untrusted enable leaves both sentinels absent, trusted enable records exactly one evaluation with no start, and ordinary host-bootstrap-failed startup records exactly two evaluations with no start, with assertions only after child exit and canonical snapshots unchanged. Subprocess execution now uses one bounded captured-process lifecycle that attaches exit and output observation immediately, installs lifetime cleanup before progress polling, preserves original failures, sends SIGTERM then bounded SIGKILL escalation, drains exit/stdout/stderr through Promise.allSettled, and cancels readers on the final settlement deadline. bun run verify:1b, bun run check (796 tests), bun run check:targets, git diff --check, canonical groma/ diff hygiene, and Backlog doctor all pass.
 
 Finalization evidence at 3ec7bf9: bun run check passed 796/796 tests and the complete production-binary Iteration 1B workflow; bun run check:targets validated Mach-O arm64, ELF x86-64, PE x86-64, and PE arm64 artifacts and ran the host-compatible workflow before restoring the native artifact. Independent specification and quality reviews approved the cumulative diff after exact orientation-table, plugin evaluation-sentinel, and bounded child-lifecycle remediations. git diff --check and Backlog doctor pass; origin/main...HEAD contains no canonical groma/ change. The task remains In Progress until ready-PR CI, Claude, and Codex review gates complete.
+
+Follow-up for GitHub Actions run 29605152959: both Linux Quality gates and Cross-platform binaries reached verifyInterruptedRead but exceeded the original 1,000ms SIGTERM grace under runner load, so the verifier correctly failed when SIGKILL was required; Windows native smoke passed. The verifier now keeps forced termination a failure while allowing a bounded 5,000ms SIGTERM grace and 10,000ms settlement deadline, eagerly observes the combined result rejection before delayed interruption wait() use without changing caller-visible rejection, polls progress every 10ms, and documents why the 79 canonical Markdown fixtures exist before immediate compiled-CLI validation. Three consecutive focused foundation runs, bun run check (796 tests), and bun run check:targets pass locally.
 <!-- SECTION:NOTES:END -->
