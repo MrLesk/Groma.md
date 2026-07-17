@@ -119,7 +119,12 @@ function verifyMachOHeader(
     throw new Error(`${target.target} has an invalid Mach-O load-command table`);
   }
 
-  const executableFileRanges: { readonly end: number; readonly start: number }[] = [];
+  const executableSegments: {
+    readonly fileBytes: number;
+    readonly fileOffset: number;
+    readonly virtualAddress: number;
+    readonly virtualEnd: number;
+  }[] = [];
   let entryOffset: number | undefined;
   let offset = loadCommandOffset;
   for (let index = 0; index < loadCommandCount; index += 1) {
@@ -149,20 +154,75 @@ function verifyMachOHeader(
       if (!Number.isSafeInteger(sectionBytes) || sectionEnd !== commandEnd) {
         throw new Error(`${target.target} has an invalid Mach-O LC_SEGMENT_64 section table`);
       }
+      const virtualAddress = boundedUint64(view, offset + 24);
+      const virtualBytes = boundedUint64(view, offset + 32);
       const fileOffset = boundedUint64(view, offset + 40);
       const fileBytes = boundedUint64(view, offset + 48);
+      const virtualEnd =
+        virtualAddress === undefined || virtualBytes === undefined
+          ? undefined
+          : checkedSpanEnd(virtualAddress, virtualBytes);
       const segmentEnd =
         fileOffset === undefined || fileBytes === undefined
           ? undefined
           : checkedSpanEnd(fileOffset, fileBytes);
       if (
+        virtualAddress === undefined ||
+        virtualBytes === undefined ||
+        virtualEnd === undefined ||
         fileOffset === undefined ||
         fileBytes === undefined ||
+        fileBytes > virtualBytes ||
         segmentEnd === undefined ||
         segmentEnd > fileSize
       ) {
         throw new Error(`${target.target} has an out-of-bounds Mach-O segment`);
       }
+
+      for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
+        const sectionOffset = checkedSpanEnd(offset + 72, sectionIndex * 80);
+        const sectionRecordEnd =
+          sectionOffset === undefined ? undefined : checkedSpanEnd(sectionOffset, 80);
+        if (
+          sectionOffset === undefined ||
+          sectionRecordEnd === undefined ||
+          sectionRecordEnd > commandEnd
+        ) {
+          throw new Error(`${target.target} has a truncated Mach-O section_64 record`);
+        }
+        const sectionAddress = boundedUint64(view, sectionOffset + 32);
+        const sectionSize = boundedUint64(view, sectionOffset + 40);
+        const sectionVirtualEnd =
+          sectionAddress === undefined || sectionSize === undefined
+            ? undefined
+            : checkedSpanEnd(sectionAddress, sectionSize);
+        if (
+          sectionAddress === undefined ||
+          sectionSize === undefined ||
+          sectionVirtualEnd === undefined ||
+          sectionAddress < virtualAddress ||
+          sectionVirtualEnd > virtualEnd
+        ) {
+          throw new Error(`${target.target} has an out-of-bounds Mach-O section VM span`);
+        }
+
+        const sectionFileOffset = view.getUint32(sectionOffset + 48, true);
+        const sectionFlags = view.getUint32(sectionOffset + 64, true);
+        const sectionType = sectionFlags & 0xff;
+        const zeroFill = sectionType === 0x01 || sectionType === 0x0c || sectionType === 0x12;
+        if (!zeroFill) {
+          const sectionFileEnd = checkedSpanEnd(sectionFileOffset, sectionSize);
+          if (
+            sectionFileEnd === undefined ||
+            sectionFileOffset < fileOffset ||
+            sectionFileEnd > segmentEnd ||
+            sectionFileEnd > fileSize
+          ) {
+            throw new Error(`${target.target} has an out-of-bounds Mach-O section file span`);
+          }
+        }
+      }
+
       const maximumProtection = view.getUint32(offset + 56, true);
       const initialProtection = view.getUint32(offset + 60, true);
       if ((initialProtection & 0x4) !== 0) {
@@ -173,7 +233,9 @@ function verifyMachOHeader(
         ) {
           throw new Error(`${target.target} has an invalid executable Mach-O segment`);
         }
-        executableFileRanges.push(Object.freeze({ end: segmentEnd, start: fileOffset }));
+        executableSegments.push(
+          Object.freeze({ fileBytes, fileOffset, virtualAddress, virtualEnd }),
+        );
       }
     }
 
@@ -192,14 +254,18 @@ function verifyMachOHeader(
   if (offset !== loadCommandEnd) {
     throw new Error(`${target.target} does not exactly consume its Mach-O load-command table`);
   }
-  if (executableFileRanges.length === 0) {
+  if (executableSegments.length === 0) {
     throw new Error(`${target.target} has no executable file-backed Mach-O segment`);
   }
   if (
     entryOffset === undefined ||
-    !executableFileRanges.some(
-      (range) => entryOffset !== undefined && entryOffset >= range.start && entryOffset < range.end,
-    )
+    !executableSegments.some((segment) => {
+      if (entryOffset === undefined || entryOffset < segment.fileOffset) return false;
+      const fileDelta = entryOffset - segment.fileOffset;
+      if (!Number.isSafeInteger(fileDelta) || fileDelta >= segment.fileBytes) return false;
+      const mappedAddress = checkedSpanEnd(segment.virtualAddress, fileDelta);
+      return mappedAddress !== undefined && mappedAddress < segment.virtualEnd;
+    })
   ) {
     throw new Error(`${target.target} has no LC_MAIN entry inside an executable Mach-O segment`);
   }
