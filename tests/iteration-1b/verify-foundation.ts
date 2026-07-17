@@ -14,6 +14,8 @@ const defaultExecutable = path.join(
 const commandTimeoutMilliseconds = 30_000;
 const maximumCommandOutputBytes = 8 * 1024 * 1024 + 64 * 1024;
 const maximumPageRequests = 32;
+const processTerminationGraceMilliseconds = 1_000;
+const processSettlementTimeoutMilliseconds = 5_000;
 
 const ids = Object.freeze({
   checkout: "ent_10000000000000000000000000000001",
@@ -39,6 +41,20 @@ interface ProcessResult {
   readonly exitCode: number;
   readonly stderr: string;
   readonly stdout: string;
+}
+
+interface CapturedProcess {
+  readonly exited: Promise<number>;
+  readonly settle: () => Promise<void>;
+  readonly terminate: () => void;
+  readonly wait: () => Promise<readonly [number, string, string]>;
+  readonly wasForceKilled: () => boolean;
+  readonly writeInput: (input: string) => void;
+}
+
+interface BoundedRead {
+  readonly cancel: () => void;
+  readonly promise: Promise<string>;
 }
 
 interface JsonEnvelope {
@@ -103,35 +119,163 @@ async function createScenario(root: string, name: string): Promise<Scenario> {
   return Object.freeze({ home, workspace });
 }
 
-async function readBounded(
+function readBounded(
   stream: ReadableStream<Uint8Array>,
   label: string,
   maximumBytes = maximumCommandOutputBytes,
-): Promise<string> {
+): BoundedRead {
   const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const item = await reader.read();
-      if (item.done) break;
-      total += item.value.byteLength;
-      if (total > maximumBytes) {
-        await reader.cancel();
-        throw new Error(`${label} exceeded its ${maximumBytes}-byte output bound`);
+  let cancellation: Promise<void> | undefined;
+  let released = false;
+  const cancel = (): void => {
+    if (released || cancellation !== undefined) return;
+    cancellation = Promise.resolve()
+      .then(() => reader.cancel())
+      .catch(() => undefined);
+  };
+  const promise = (async (): Promise<string> => {
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const item = await reader.read();
+        if (item.done) break;
+        total += item.value.byteLength;
+        if (total > maximumBytes) {
+          cancel();
+          await cancellation;
+          throw new Error(`${label} exceeded its ${maximumBytes}-byte output bound`);
+        }
+        chunks.push(item.value.slice());
       }
-      chunks.push(item.value.slice());
+    } finally {
+      if (cancellation !== undefined) await cancellation;
+      released = true;
+      reader.releaseLock();
     }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
+  })();
+  return Object.freeze({ cancel, promise });
+}
+
+function spawnCapturedProcess(
+  executable: string,
+  scenario: Scenario,
+  args: readonly string[],
+  options: {
+    readonly acceptsInput?: boolean;
+    readonly stderrBytes?: number;
+    readonly stdoutBytes?: number;
+    readonly timeoutMilliseconds?: number;
+  } = {},
+): CapturedProcess {
+  const label = args.join(" ");
+  const child = Bun.spawn({
+    cmd: [executable, ...args],
+    cwd: scenario.workspace,
+    env: { ...process.env, HOME: scenario.home, USERPROFILE: scenario.home },
+    stderr: "pipe",
+    stdin: options.acceptsInput === true ? "pipe" : "ignore",
+    stdout: "pipe",
+  });
+  const exited = child.exited;
+  const stdout = readBounded(child.stdout, `${label} stdout`, options.stdoutBytes);
+  const stderr = readBounded(child.stderr, `${label} stderr`, options.stderrBytes ?? 1_048_576);
+  let processExited = false;
+  let forceKilled = false;
+  let terminationStarted = false;
+  let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+  void exited.then(
+    () => {
+      processExited = true;
+    },
+    () => {
+      processExited = true;
+    },
+  );
+
+  const terminate = (): void => {
+    if (processExited || terminationStarted) return;
+    terminationStarted = true;
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Settlement below distinguishes an already-exited process from failed cleanup.
+    }
+    forceKillTimer = setTimeout(() => {
+      if (processExited) return;
+      forceKilled = true;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The bounded settlement deadline remains the final cleanup failure.
+      }
+    }, processTerminationGraceMilliseconds);
+  };
+
+  const result = Promise.all([exited, stdout.promise, stderr.promise]);
+  const settled = Promise.allSettled([exited, stdout.promise, stderr.promise]);
+  const timeoutMilliseconds = options.timeoutMilliseconds ?? commandTimeoutMilliseconds;
+  let lifetimeTimer: ReturnType<typeof setTimeout> | undefined;
+  const lifetimeExpired = new Promise<never>((_resolve, reject) => {
+    lifetimeTimer = setTimeout(() => {
+      terminate();
+      reject(new Error(`${label} timed out after ${timeoutMilliseconds}ms`));
+    }, timeoutMilliseconds);
+  });
+  void settled.then(() => {
+    if (lifetimeTimer !== undefined) clearTimeout(lifetimeTimer);
+    if (forceKillTimer !== undefined) clearTimeout(forceKillTimer);
+  });
+
+  const settle = async (): Promise<void> => {
+    if (!processExited) terminate();
+    let settlementTimer: ReturnType<typeof setTimeout> | undefined;
+    const settlementExpired = new Promise<never>((_resolve, reject) => {
+      settlementTimer = setTimeout(() => {
+        forceKilled = true;
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // Reader cancellation and the cleanup error below still bound this failure path.
+        }
+        stdout.cancel();
+        stderr.cancel();
+        reject(
+          new Error(
+            `${label} did not settle within ${processSettlementTimeoutMilliseconds}ms after termination`,
+          ),
+        );
+      }, processSettlementTimeoutMilliseconds);
+    });
+    try {
+      await Promise.race([settled.then(() => undefined), settlementExpired]);
+    } finally {
+      if (settlementTimer !== undefined) clearTimeout(settlementTimer);
+    }
+  };
+
+  return Object.freeze({
+    exited,
+    settle,
+    terminate,
+    wait: () => Promise.race([result, lifetimeExpired]),
+    wasForceKilled: () => forceKilled,
+    writeInput: (input: string): void => {
+      const stdin = child.stdin;
+      if (stdin === undefined || typeof stdin === "number") {
+        throw new Error("compiled process stdin was unavailable");
+      }
+      stdin.write(input);
+      stdin.end();
+    },
+  });
 }
 
 async function runProcess(
@@ -140,42 +284,23 @@ async function runProcess(
   args: readonly string[],
   input?: string,
 ): Promise<ProcessResult> {
-  const child = Bun.spawn({
-    cmd: [executable, ...args],
-    cwd: scenario.workspace,
-    env: { ...process.env, HOME: scenario.home, USERPROFILE: scenario.home },
-    stderr: "pipe",
-    stdin: input === undefined ? "ignore" : "pipe",
-    stdout: "pipe",
+  const captured = spawnCapturedProcess(executable, scenario, args, {
+    acceptsInput: input !== undefined,
   });
-  if (input !== undefined) {
-    const stdin = child.stdin;
-    assert.notEqual(stdin, undefined, "compiled process stdin was unavailable");
-    stdin!.write(input);
-    stdin!.end();
-  }
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    child.kill();
-  }, commandTimeoutMilliseconds);
-  const exited = child.exited;
-  const stdout = readBounded(child.stdout, `${args.join(" ")} stdout`);
-  const stderr = readBounded(child.stderr, `${args.join(" ")} stderr`, 1_048_576);
+  let operationFailed = false;
   try {
-    const [exitCode, capturedStdout, capturedStderr] = await Promise.all([exited, stdout, stderr]);
-    assert.equal(timedOut, false, `${args.join(" ")} timed out`);
+    if (input !== undefined) captured.writeInput(input);
+    const [exitCode, capturedStdout, capturedStderr] = await captured.wait();
     return { exitCode, stderr: capturedStderr, stdout: capturedStdout };
   } catch (error) {
-    try {
-      child.kill();
-    } catch {
-      // The process may have exited while a bounded stream reader was rejecting.
-    }
-    await Promise.allSettled([exited, stdout, stderr]);
+    operationFailed = true;
     throw error;
   } finally {
-    clearTimeout(timeout);
+    try {
+      await captured.settle();
+    } catch (cleanupError) {
+      if (!operationFailed) throw cleanupError;
+    }
   }
 }
 
@@ -570,6 +695,7 @@ async function verifyIncompatibleCapability(executable: string, scenario: Scenar
   });
   const packageRoot = path.join(scenario.workspace, "local-incompatible");
   const pluginRoot = path.join(packageRoot, "plugins");
+  const evaluationSentinel = path.join(packageRoot, "evaluation-sentinel.txt");
   const startSentinel = path.join(packageRoot, "start-sentinel.txt");
   await mkdir(pluginRoot, { recursive: true });
   await writeFile(
@@ -586,6 +712,7 @@ async function verifyIncompatibleCapability(executable: string, scenario: Scenar
   await writeFile(
     path.join(pluginRoot, "incompatible.js"),
     `import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(evaluationSentinel)}, "evaluated\\n");
 export const plugin = Object.freeze({
   manifest: Object.freeze({
     apiVersion: "groma.plugin/v1",
@@ -616,6 +743,11 @@ export const plugin = Object.freeze({
     "plugin-full-user-permissions-trust-required",
   );
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), beforeUntrustedEnable);
+  await requireMissing(
+    evaluationSentinel,
+    "untrusted incompatible plugin module was evaluated before trust was granted",
+  );
+  await requireMissing(startSentinel, "untrusted incompatible plugin start ran before trust");
   await success(executable, scenario, [
     "package",
     "enable",
@@ -623,6 +755,7 @@ export const plugin = Object.freeze({
     "./plugins/incompatible.js",
     "--trust-full-user-permissions",
   ]);
+  assert.equal(await readFile(evaluationSentinel, "utf8"), "evaluated\n");
   await requireMissing(startSentinel, "incompatible plugin started while it was being enabled");
 
   const enabled = await canonicalSnapshot(scenario.workspace);
@@ -634,6 +767,7 @@ export const plugin = Object.freeze({
     "host-bootstrap-failed",
   );
   assert.ok(rejected.stdout.length < 65_536, "startup diagnostic exceeded its narrow bound");
+  assert.equal(await readFile(evaluationSentinel, "utf8"), "evaluated\nevaluated\n");
   await requireMissing(startSentinel, "incompatible plugin start ran before resolution failed");
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), enabled);
 
@@ -718,37 +852,27 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
   const cacheRoot = path.join(scenario.workspace, ".groma-cache");
   await rm(cacheRoot, { force: true, recursive: true });
 
-  const child = Bun.spawn({
-    cmd: [executable, "--format", "json", "blueprint", "export", "--limit", "1"],
-    cwd: scenario.workspace,
-    env: { ...process.env, HOME: scenario.home, USERPROFILE: scenario.home },
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-  const exited = child.exited;
-  if (!(await waitForInterruptionProgress(cacheRoot, exited))) {
-    const [exitCode, stdout, stderr] = await Promise.all([
-      exited,
-      readBounded(child.stdout, "early cold export stdout", 2_500_000),
-      readBounded(child.stderr, "early cold export stderr", 1_048_576),
-    ]);
-    throw new Error(
-      `cold export exited before publishing progress evidence: ${exitCode}\n${stderr}${stdout}`,
-    );
-  }
-  child.kill("SIGTERM");
-  let forced = false;
-  const cleanup = setTimeout(() => {
-    forced = true;
-    child.kill("SIGKILL");
-  }, 5_000);
+  const captured = spawnCapturedProcess(
+    executable,
+    scenario,
+    ["--format", "json", "blueprint", "export", "--limit", "1"],
+    {
+      stderrBytes: 1_048_576,
+      stdoutBytes: 2_500_000,
+      timeoutMilliseconds: 15_000,
+    },
+  );
+  let operationFailed = false;
   try {
-    const [exitCode, stdout, stderr] = await Promise.all([
-      exited,
-      readBounded(child.stdout, "interrupted export stdout", 2_500_000),
-      readBounded(child.stderr, "interrupted export stderr", 1_048_576),
-    ]);
-    assert.equal(forced, false, "interrupted export required SIGKILL cleanup");
+    if (!(await waitForInterruptionProgress(cacheRoot, captured.exited))) {
+      const [exitCode, stdout, stderr] = await captured.wait();
+      throw new Error(
+        `cold export exited before publishing progress evidence: ${exitCode}\n${stderr}${stdout}`,
+      );
+    }
+    captured.terminate();
+    const [exitCode, stdout, stderr] = await captured.wait();
+    assert.equal(captured.wasForceKilled(), false, "interrupted export required SIGKILL cleanup");
     assert.notEqual(exitCode, 0, "SIGTERM did not interrupt the cold export");
     assert.equal(stderr, "", "interrupted export wrote unexpected stderr");
     if (stdout !== "") {
@@ -758,8 +882,15 @@ async function verifyInterruptedRead(executable: string, scenario: Scenario): Pr
       assert.equal(envelope.ok, false, stdout);
       assert.deepEqual(envelope.result, { signal: "SIGTERM", status: "cancelled" });
     }
+  } catch (error) {
+    operationFailed = true;
+    throw error;
   } finally {
-    clearTimeout(cleanup);
+    try {
+      await captured.settle();
+    } catch (cleanupError) {
+      if (!operationFailed) throw cleanupError;
+    }
   }
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), before);
   const recovered = await exportAll(executable, scenario, 100);

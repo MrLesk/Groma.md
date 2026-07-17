@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:57'
-updated_date: '2026-07-17 18:12'
+updated_date: '2026-07-17 18:38'
 labels: []
 milestone: m-2
 dependencies:
@@ -55,4 +55,6 @@ Context audit completed against the standalone compiler, binary smoke verifier, 
 Implemented the production-binary-only Iteration 1B foundation verifier, explicit nine-root architecture agreement, the single verify:1b quality workflow, target-aware Mach-O/ELF/PE architecture validation, host-compatible full workflow execution, and truthful Iteration 1B/deferred Iteration 2 documentation. Targeted foundation and self-blueprint report-mode checks pass; bun run verify:1b, bun run check, and bun run check:targets pass on macOS arm64. The target matrix validated all four artifact headers and restored the native binary; git diff --check and Backlog doctor pass, and origin/main has no groma/ changes. Acceptance criteria and final task status remain intentionally untouched for independent finalization.
 
 Addressed the mandatory spec-review finding in the self-blueprint verifier: ARCHITECTURE.md Canonical Orientation agreement now parses only the bounded table immediately following its exact introduction, validates the Root/Orientation header and separator plus nonempty row cells, rejects duplicate or over-limit rows, and compares the exact row count and order-insensitive root-name set with the independently validated canonical root contract. Global root-name substring checks were removed; the canonical groma/ link assertion remains. Normal and report self-blueprint verification, typecheck, and the full bun run check gate pass.
+
+Addressed both mandatory quality-review findings in the Iteration 1B foundation verifier. The incompatible package fixture now distinguishes module evaluation from plugin start: untrusted enable leaves both sentinels absent, trusted enable records exactly one evaluation with no start, and ordinary host-bootstrap-failed startup records exactly two evaluations with no start, with assertions only after child exit and canonical snapshots unchanged. Subprocess execution now uses one bounded captured-process lifecycle that attaches exit and output observation immediately, installs lifetime cleanup before progress polling, preserves original failures, sends SIGTERM then bounded SIGKILL escalation, drains exit/stdout/stderr through Promise.allSettled, and cancels readers on the final settlement deadline. bun run verify:1b, bun run check (796 tests), bun run check:targets, git diff --check, canonical groma/ diff hygiene, and Backlog doctor all pass.
 <!-- SECTION:NOTES:END -->
