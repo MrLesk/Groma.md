@@ -156,6 +156,168 @@ async function collectPages(
   return pages;
 }
 
+describe("top-level resource exclusions", () => {
+  test("hides excluded roots case-insensitively without traversing their contents", async () => {
+    const roots = await fixture();
+    await mkdir(path.join(roots.workspaceRoot, "GROMA", "private"), { recursive: true });
+    await mkdir(path.join(roots.workspaceRoot, ".GROMA-CACHE"), { recursive: true });
+    await mkdir(path.join(roots.workspaceRoot, ".GIT", "objects"), { recursive: true });
+    await mkdir(path.join(roots.workspaceRoot, "src"), { recursive: true });
+    await writeFile(path.join(roots.workspaceRoot, "GROMA", "private", "intent.md"), "intent");
+    await writeFile(path.join(roots.workspaceRoot, ".GROMA-CACHE", "index"), "cache");
+    await writeFile(path.join(roots.workspaceRoot, ".GIT", "objects", "state"), "history");
+    await writeFile(path.join(roots.workspaceRoot, "src", "main.ts"), "export {};");
+    let enumeratedDirectories = 0;
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      excludedTopLevelResourceSegments: ["groma", ".groma-cache", ".git"],
+      faultInjector: (phase) => {
+        if (phase === "enumeration-directory") enumeratedDirectories += 1;
+      },
+    });
+
+    const pages = await collectPages(provider, {
+      limit: 10,
+      locator: locator(),
+      maxDepth: 8,
+      maxEntriesPerDirectory: 20,
+    });
+
+    expect(pages.flatMap((page) => page.entries.map((entry) => String(entry.locator)))).toEqual([
+      "src",
+      "src/main.ts",
+    ]);
+    expect(enumeratedDirectories).toBe(2);
+    expect(
+      diagnosticCode(
+        await provider.read({ locator: locator("GROMA", "private", "intent.md"), maxBytes: 32 }),
+      ),
+    ).toBe("resource-excluded");
+    expect(
+      diagnosticCode(
+        await provider.read({ locator: locator(".GROMA-CACHE", "index"), maxBytes: 32 }),
+      ),
+    ).toBe("resource-excluded");
+    expect(
+      diagnosticCode(
+        await provider.read({ locator: locator(".GIT", "objects", "state"), maxBytes: 32 }),
+      ),
+    ).toBe("resource-excluded");
+    expect(
+      diagnosticCode(
+        await provider.enumerate({
+          limit: 10,
+          locator: locator("GROMA"),
+          maxDepth: 1,
+          maxEntriesPerDirectory: 20,
+        }),
+      ),
+    ).toBe("resource-excluded");
+  });
+
+  test("validates exclusion configuration as a bounded data-only intrinsic array", async () => {
+    const roots = await fixture();
+    const sparse = new Array<string>(1);
+    const accessor = ["groma"];
+    Object.defineProperty(accessor, "0", { enumerable: true, get: () => "private" });
+    let proxyTraps = 0;
+    const hostile = new Proxy(["groma"], {
+      getPrototypeOf: () => {
+        proxyTraps += 1;
+        throw new Error("private host value");
+      },
+    });
+    const candidates: unknown[] = [
+      Array.from(
+        { length: localResourceProviderCeilings.maxExcludedTopLevelResourceSegments + 1 },
+        (_, index) => `private-${index}`,
+      ),
+      sparse,
+      accessor,
+      hostile,
+      ["groma", "GROMA"],
+      ["."],
+      ["nested/private"],
+      ["../private"],
+    ];
+
+    for (const candidate of candidates) {
+      await expect(
+        createLocalResourceProvider({
+          ...roots,
+          excludedTopLevelResourceSegments: candidate as readonly string[],
+        }),
+      ).rejects.toThrow("excludedTopLevelResourceSegments");
+    }
+    expect(proxyTraps).toBe(1);
+  });
+
+  test("rejects every operation that can target an excluded root", async () => {
+    const roots = await fixture();
+    const provider = await createLocalResourceProvider({
+      ...roots,
+      excludedTopLevelResourceSegments: ["private"],
+    });
+    const target = locator("PRIVATE", "nested", "state");
+
+    expect(
+      diagnosticCode(await provider.stageReplacement(target, textEncoder.encode("state"))),
+    ).toBe("resource-excluded");
+    expect(diagnosticCode(await provider.cleanupReplacementStages(target))).toBe(
+      "resource-excluded",
+    );
+    expect((await provider.removeResource(target)).diagnostics?.[0]?.code).toBe(
+      "resource-excluded",
+    );
+    expect(
+      diagnosticCode(
+        await provider.acquireCoordination({ context: "local-machine", locator: target }),
+      ),
+    ).toBe("resource-excluded");
+    let called = false;
+    expect(
+      diagnosticCode(
+        await provider.withCoordination({ context: "local-machine", locator: target }, () => {
+          called = true;
+        }),
+      ),
+    ).toBe("resource-excluded");
+    expect(called).toBeFalse();
+    await expect(lstat(path.join(roots.workspaceRoot, "PRIVATE"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  test("confines a provider's canonical root to an explicit ancestor", async () => {
+    const roots = await fixture();
+    const nested = path.join(roots.workspaceRoot, "nested");
+    const outside = path.join(path.dirname(roots.workspaceRoot), "outside");
+    await mkdir(nested);
+    await mkdir(outside);
+    await expect(
+      createLocalResourceProvider({
+        ...roots,
+        confinementRoot: roots.workspaceRoot,
+        workspaceRoot: nested,
+      }),
+    ).resolves.toBeDefined();
+    const linked = path.join(roots.workspaceRoot, "linked");
+    try {
+      await symlink(outside, linked, "dir");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return;
+      throw error;
+    }
+    await expect(
+      createLocalResourceProvider({
+        ...roots,
+        confinementRoot: roots.workspaceRoot,
+        workspaceRoot: linked,
+      }),
+    ).rejects.toThrow("workspaceRoot must remain within confinementRoot");
+  });
+});
+
 describe("bounded local resource reads", () => {
   test("rejects every configured option beyond its absolute ceiling", async () => {
     const roots = await fixture();

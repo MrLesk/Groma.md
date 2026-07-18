@@ -240,7 +240,11 @@ function parseProjectLocator(value: unknown): Result<WorkspaceResourceLocator> {
 }
 
 function targetsReservedAggregateState(locator: WorkspaceResourceLocator): boolean {
-  return locator !== "." && locator.split("/", 1)[0]?.toLowerCase() === "groma";
+  if (locator === ".") return false;
+  const topLevelSegment = locator.split("/", 1)[0]?.toLowerCase();
+  return (
+    topLevelSegment === "groma" || topLevelSegment === ".groma-cache" || topLevelSegment === ".git"
+  );
 }
 
 function parseProjectScannerConfiguration(

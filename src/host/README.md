@@ -21,15 +21,16 @@ configuration, selects the Host-owned Phase 1 registration set, resolves the com
 graph, and continues without restarting Phase 0. A discovery, parsing, selection, or
 continuation failure cleans the Phase 0 providers in dependency-safe order.
 
-The running graph exposes deterministic inspection for conformance and host tests.
-Every named `HostComposition` capability is the exact opaque value registered in that
-graph: local resources, Standard Model and invariant, Markdown intent store and
-transaction provider, Core transaction engine and graph kernel, bounded query
-contracts, the replaceable local projection index and bounded graph query engine,
-component resource mapper, snapshot decoder, shared application
-operations, workspace access, package operations, and the injected surface. A running
-surface receives `WorkspaceAccessCapability` plus the narrow scaffold/add/inspect/enable/
-disable/remove package capability, not persistence, graph, runtime, or transaction internals.
+The running graph exposes deterministic inspection for conformance and host tests. Every
+plugin-backed `HostComposition` field is the exact opaque value registered in that graph:
+local resources, Standard Model and invariant, Markdown intent store and transaction provider,
+Core transaction engine and graph kernel, bounded query contracts, the replaceable local
+projection index and bounded graph query engine, component resource mapper, snapshot decoder,
+shared application operations, workspace access, and the injected surface. The Host also owns
+bounded package operations, project registration operations, and the scanner runtime composed
+around that already-started graph. A running surface receives `WorkspaceAccessCapability`, the
+narrow package and project operations, and frozen scanner `recover`/`start`; it does not receive
+persistence, graph, plugin runtime, full scanner lifecycle, or transaction internals.
 
 The complete default graph also runs through the runner-agnostic conformance suite
 published at `groma/plugin-sdk/conformance`. The suite exercises deterministic graph
@@ -169,11 +170,13 @@ inside a resource provider rooted at `apps/api`; it is never rewritten to `apps/
 scanner session. The project ID passes unchanged into observation and evidence identity.
 
 Source and coverage locators use `/`, never absolute paths, drive prefixes, UNC syntax,
-backslashes, or traversal. The aggregate `groma/` subtree is Host-reserved: a project cannot
-use it as its source, and a root project cannot declare it as coverage. A nested project may
-contain its own `groma` source-relative directory. The GROM-39 runtime provider must filter the
-aggregate top-level `groma/` subtree on direct reads, enumeration requests, and enumeration
-results; coverage `.` means complete coverage only over that filtered virtual project view.
+backslashes, or traversal. The aggregate `groma/`, `.groma-cache/`, and `.git/` subtrees are
+Host-reserved: a project cannot use them as its source, and a root project cannot declare them
+as coverage. The Git exclusion closes indirect access to current or historical Groma state
+through the official history layer. A nested project may contain its own `groma`,
+`.groma-cache`, or `.git` source-relative directory. The GROM-39 runtime provider filters all
+three aggregate top-level subtrees on direct reads and enumeration; coverage `.` means complete
+coverage only over that filtered virtual project view.
 
 Add/get/list/update/remove share the exact outer `groma/package-state` coordination lane with
 package mutations. Both owners re-read under the lease and merge only their owned projection,
@@ -186,6 +189,35 @@ evidence, bindings, sessions, or observed source bytes.
 An indeterminate add reports the safe attempted project identity in diagnostic details. Reconcile
 that identity with exact get/list before retrying; Groma never asks the user to guess which stable
 identity may have committed.
+
+## Blind scanner execution
+
+The default Host constructs one local observation journal over the aggregate resource provider
+and one Host-owned scanner runtime from the already-started plugin graph and project registry.
+The runtime snapshots the multiple-provider `groma.scanners/v1` catalog; zero providers is a
+valid startup state. A scanner provider declaring any plugin-runtime requirement is rejected
+before its Phase 1 start callback, so it cannot retain canonical capabilities before execution.
+For each execution the runtime creates a separate confined resource provider rooted at the
+captured project source, supplies only bounded read/enumerate authority, scanner configuration,
+declared scopes, an observation sink, and cancellation, and retains locators and cursors relative
+to that project. Root projects cannot observe aggregate `groma/`, `.groma-cache/`, or `.git/`
+state through direct or historical paths.
+
+`HostComposition.scanners` retains the complete runtime for lifecycle fencing. A surface receives
+only one frozen `{recover, start}` view; it cannot call `cancelAll`. Shutdown awaits runtime
+`cancelAll()` after a normal surface stop; process cancellation starts scanner cancellation before
+awaiting surface stop. Both paths await scanner settlement before the plugin graph is stopped.
+Cancellation and the hard duration fence remain authoritative through durable draining, project
+revision validation, completion, handoff, consumption, acknowledgement, and cleanup. If an
+interrupted Host operation does not settle, the execution returns promptly and quarantines only
+that project/source lane. Its eventual settlement releases the quarantine and marks the lane for
+fresh journal recovery; it never resumes the interrupted pipeline. Independent lanes remain
+admissible while that happens.
+
+GROM-39 durably validates and hands off completed observation sessions but does not reconcile them
+or mutate canonical intent, evidence, or bindings. Until GROM-41 composes the reconciliation
+consumer, the default consumer returns `scanner-handoff-consumer-unavailable`; the journal
+therefore keeps the handoff pending without acknowledgement or cleanup for deterministic recovery.
 
 ## Local package boundary
 

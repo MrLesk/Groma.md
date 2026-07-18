@@ -25,7 +25,13 @@ import type {
 } from "./contracts.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
+import {
+  scannerExecutionApiVersion,
+  type ScannerExecutionReport,
+  type ScannerExecutionRuntime,
+} from "./scanner-runtime.ts";
 import type { ApplicationOperations, SchemaMigrationOperations } from "../application/index.ts";
+import { localObservationJournalSessionBounds } from "../persistence/index.ts";
 import {
   copyHostDiagnostics,
   inspectHostDenseArray,
@@ -56,13 +62,18 @@ interface ContainedPluginLifecycle {
 
 type PluginCleanupMode = "cancelled" | "stopped";
 
-interface PluginCleanupCoordinator {
+interface RuntimeCleanupCoordinator {
+  cancelScanners(): Promise<void>;
   cleanup(mode: PluginCleanupMode): Promise<void>;
 }
 
-interface ContainedHostComposition extends Omit<HostComposition, "operations" | "plugins"> {
+interface ContainedHostComposition extends Omit<
+  HostComposition,
+  "operations" | "plugins" | "scanners"
+> {
   readonly initialization: HostInitializationOperations;
   readonly plugins?: ContainedPluginLifecycle;
+  readonly scanners: ScannerExecutionRuntime;
 }
 
 interface CanonicalApplicationOperations {
@@ -229,6 +240,8 @@ const bootstrapFailureMessages = Object.freeze({
   "project-plugin-validation-required":
     "Project-provided plugins are unsupported in this release pending package and trust validation",
   "runtime-plugin-unavailable": "A requested official runtime plugin is unavailable in this host",
+  "scanner-provider-authority-invalid":
+    "Scanner providers must not retain runtime capability requirements",
   "remote-plugin-package-acquisition-out-of-scope":
     "Remote npm, Git, and URL plugin package acquisition is not supported in this delivery",
   "unsupported-plugin-package-manifest-version": "Plugin package manifest version is unsupported",
@@ -620,6 +633,35 @@ function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecyc
   );
 }
 
+function canonicalScannerRuntime(value: unknown): Result<ScannerExecutionRuntime> {
+  const scanners = inspectHostRecord(
+    value,
+    [["cancelAll", "recover", "start"]],
+    "invalid-host-composition",
+    "Scanner runtime",
+  );
+  if (
+    !scanners.ok ||
+    typeof scanners.value.cancelAll !== "function" ||
+    typeof scanners.value.recover !== "function" ||
+    typeof scanners.value.start !== "function"
+  ) {
+    return failure(diagnostic("invalid-host-composition", "Scanner runtime is malformed"));
+  }
+  const receiver = value as object;
+  const cancelAll = scanners.value.cancelAll as ScannerExecutionRuntime["cancelAll"];
+  const recover = scanners.value.recover as ScannerExecutionRuntime["recover"];
+  const start = scanners.value.start as ScannerExecutionRuntime["start"];
+  return success(
+    Object.freeze({
+      cancelAll: () => intrinsicReflectApply(cancelAll, receiver, []),
+      recover: () => intrinsicReflectApply(recover, receiver, []),
+      start: (request: Parameters<ScannerExecutionRuntime["start"]>[0]) =>
+        intrinsicReflectApply(start, receiver, [request]),
+    }),
+  );
+}
+
 function canonicalApplicationOperations(value: unknown): Result<CanonicalApplicationOperations> {
   const operations = inspectHostRecord(
     value,
@@ -756,6 +798,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "queries",
         "resourceMapper",
         "resources",
+        "scanners",
         "snapshotStateDecoder",
         "store",
         "surface",
@@ -777,6 +820,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "queries",
         "resourceMapper",
         "resources",
+        "scanners",
         "snapshotStateDecoder",
         "store",
         "surface",
@@ -798,6 +842,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "queries",
         "resourceMapper",
         "resources",
+        "scanners",
         "snapshotStateDecoder",
         "store",
         "surface",
@@ -820,6 +865,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "queries",
         "resourceMapper",
         "resources",
+        "scanners",
         "snapshotStateDecoder",
         "store",
         "surface",
@@ -842,6 +888,8 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!packages.ok) return packages;
   const projects = canonicalProjectOperations(composition.value.projects);
   if (!projects.ok) return projects;
+  const scanners = canonicalScannerRuntime(composition.value.scanners);
+  if (!scanners.ok) return scanners;
   const migrations = Object.hasOwn(composition.value, "migrations")
     ? canonicalSchemaMigrationOperations(composition.value.migrations)
     : undefined;
@@ -889,6 +937,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       queries: composition.value.queries,
       resourceMapper: composition.value.resourceMapper,
       resources: composition.value.resources,
+      scanners: scanners.value,
       snapshotStateDecoder: composition.value.snapshotStateDecoder,
       store: composition.value.store,
       surface: surface.value,
@@ -957,27 +1006,144 @@ async function observePluginCleanup(
   }
 }
 
-function createPluginCleanupCoordinator(
-  plugins: ContainedPluginLifecycle,
-): PluginCleanupCoordinator {
+const scannerCleanupReportLimit = 4_096;
+const scannerCleanupDiagnosticLimit = 1_024;
+const scannerCleanupContainmentValueLimit = 2_000_000;
+const scannerCleanupEpochPattern = /^epoch_[0-9a-f]{32}$/;
+const scannerCleanupProjectIdPattern = /^(?:project\.default|project_[0-9a-f]{32})$/;
+const scannerCleanupScannerIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+
+function validScannerReportCount(value: unknown, maximum: number): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    !Object.is(value, -0) &&
+    value >= 0 &&
+    value <= maximum
+  );
+}
+
+function validScannerCancellationReport(value: unknown): value is ScannerExecutionReport {
+  const report = inspectHostRecord(
+    value,
+    [
+      [
+        "apiVersion",
+        "batchCount",
+        "diagnostics",
+        "epoch",
+        "lastHeartbeatSequence",
+        "lastSequence",
+        "projectId",
+        "recordCount",
+        "scannerId",
+        "signalCount",
+        "status",
+      ],
+    ],
+    "invalid-host-scanner-cleanup",
+    "Scanner cancellation report",
+  );
+  if (!report.ok) return false;
+  const diagnostics = copyHostDiagnostics(
+    report.value.diagnostics,
+    scannerCleanupDiagnosticLimit,
+    "invalid-host-scanner-cleanup",
+  );
+  const terminalStatus =
+    report.value.status === "cancelled" ||
+    report.value.status === "completed" ||
+    report.value.status === "expired" ||
+    report.value.status === "failed";
+  const lastSequence = report.value.lastSequence;
+  const lastHeartbeatSequence = report.value.lastHeartbeatSequence;
+  const signalCount = report.value.signalCount;
+  const batchCount = report.value.batchCount;
+  return (
+    diagnostics.ok &&
+    report.value.apiVersion === scannerExecutionApiVersion &&
+    typeof report.value.epoch === "string" &&
+    scannerCleanupEpochPattern.test(report.value.epoch) &&
+    typeof report.value.projectId === "string" &&
+    report.value.projectId.length <= localObservationJournalSessionBounds.maxTokenCharacters &&
+    scannerCleanupProjectIdPattern.test(report.value.projectId) &&
+    typeof report.value.scannerId === "string" &&
+    report.value.scannerId.length <= localObservationJournalSessionBounds.maxTokenCharacters &&
+    scannerCleanupScannerIdPattern.test(report.value.scannerId) &&
+    terminalStatus &&
+    validScannerReportCount(batchCount, localObservationJournalSessionBounds.maxBatches) &&
+    validScannerReportCount(
+      report.value.recordCount,
+      localObservationJournalSessionBounds.maxRecords,
+    ) &&
+    validScannerReportCount(signalCount, localObservationJournalSessionBounds.maxSignals) &&
+    validScannerReportCount(lastSequence, Number.MAX_SAFE_INTEGER) &&
+    validScannerReportCount(lastHeartbeatSequence, Number.MAX_SAFE_INTEGER) &&
+    (signalCount === 0 ? lastSequence === 0 : (lastSequence as number) > 0) &&
+    (lastHeartbeatSequence as number) <= (lastSequence as number) &&
+    (batchCount as number) <= (signalCount as number)
+  );
+}
+
+async function observeScannerCancellation(value: unknown): Promise<void> {
+  const observed = observeHostNativePromise(
+    value,
+    (settled) => {
+      const contained = containCapabilityValue(settled, {
+        isProxy: isHostProxy,
+        maximumContainerEntries: scannerCleanupReportLimit,
+        maximumDepth: 8,
+        maximumValues: scannerCleanupContainmentValueLimit,
+      });
+      if (!contained.ok) return false;
+      const reports = inspectHostDenseArray(
+        contained.value,
+        scannerCleanupReportLimit,
+        "invalid-host-scanner-cleanup",
+        "Scanner cancellation reports",
+      );
+      if (!reports.ok) return false;
+      for (let index = 0; index < reports.value.length; index += 1) {
+        if (!validScannerCancellationReport(reports.value[index])) return false;
+      }
+      return true;
+    },
+    () => false,
+  );
+  if (observed.status !== "observed" || !(await observed.promise)) {
+    throw new Error("Host scanner cleanup failed");
+  }
+}
+
+function createRuntimeCleanupCoordinator(
+  scanners: ScannerExecutionRuntime,
+  plugins?: ContainedPluginLifecycle,
+): RuntimeCleanupCoordinator {
+  let scannerCleanup: Promise<void> | undefined;
   let cleanup: Promise<void> | undefined;
+  const cancelScanners = (): Promise<void> => {
+    if (scannerCleanup !== undefined) return scannerCleanup;
+    try {
+      scannerCleanup = observeScannerCancellation(scanners.cancelAll());
+    } catch {
+      scannerCleanup = rejectedPromise("Host scanner cleanup failed");
+    }
+    return scannerCleanup;
+  };
   return Object.freeze({
+    cancelScanners,
     cleanup(mode: PluginCleanupMode): Promise<void> {
       if (cleanup !== undefined) return cleanup;
-      let resolveCleanup!: () => void;
-      let rejectCleanup!: () => void;
-      cleanup = new Promise<void>((resolve, reject) => {
-        resolveCleanup = resolve;
-        rejectCleanup = () => reject(new Error("Host plugin cleanup failed"));
+      cleanup = cancelScanners().then(async () => {
+        if (plugins === undefined) return;
+        let raw: unknown;
+        try {
+          raw = mode === "cancelled" ? plugins.cancel() : plugins.shutdown();
+        } catch {
+          throw new Error("Host plugin cleanup failed");
+        }
+        await observePluginCleanup(raw, mode);
       });
-      let raw: unknown;
-      try {
-        raw = mode === "cancelled" ? plugins.cancel() : plugins.shutdown();
-      } catch {
-        rejectCleanup();
-        return cleanup;
-      }
-      void observePluginCleanup(raw, mode).then(resolveCleanup, rejectCleanup);
       return cleanup;
     },
   });
@@ -992,20 +1158,22 @@ function containDetached(value: Promise<unknown>): void {
 
 function schedulePluginCleanupAfter(
   settlement: Promise<unknown>,
-  plugins: PluginCleanupCoordinator,
+  runtime: RuntimeCleanupCoordinator,
 ): void {
+  containDetached(runtime.cancelScanners());
   containDetached(
     settlement.then(
-      () => plugins.cleanup("cancelled"),
-      () => plugins.cleanup("cancelled"),
+      () => runtime.cleanup("cancelled"),
+      () => runtime.cleanup("cancelled"),
     ),
   );
 }
 
 function scheduleLateSurfaceCleanup(
   start: Promise<ObservedSurfaceStartOutcome>,
-  plugins?: PluginCleanupCoordinator,
+  runtime: RuntimeCleanupCoordinator,
 ): void {
+  containDetached(runtime.cancelScanners());
   containDetached(
     start.then(
       async (late) => {
@@ -1016,15 +1184,9 @@ function scheduleLateSurfaceCleanup(
             // A late surface stop failure must not skip provider cancellation.
           }
         }
-        if (plugins !== undefined) {
-          await plugins.cleanup("cancelled");
-        }
+        await runtime.cleanup("cancelled");
       },
-      async () => {
-        if (plugins !== undefined) {
-          await plugins.cleanup("cancelled");
-        }
-      },
+      () => runtime.cleanup("cancelled"),
     ),
   );
 }
@@ -1033,8 +1195,11 @@ function scheduleLateCompositionCleanup(composition: Promise<ObservedBootstrapOu
   containDetached(
     composition.then(
       async (late) => {
-        if (late.state === "composed" && late.composition.plugins !== undefined) {
-          await createPluginCleanupCoordinator(late.composition.plugins).cleanup("cancelled");
+        if (late.state === "composed") {
+          await createRuntimeCleanupCoordinator(
+            late.composition.scanners,
+            late.composition.plugins,
+          ).cleanup("cancelled");
         }
       },
       () => undefined,
@@ -1232,8 +1397,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   let externalCancellationMayBeRegistered = false;
 
   let unsubscribe: (() => void | Promise<void>) | undefined;
-  let pluginCleanup: PluginCleanupCoordinator | undefined;
-  let pluginCleanupDeferred = false;
+  let runtimeCleanup: RuntimeCleanupCoordinator | undefined;
+  let runtimeCleanupDeferred = false;
   let session: ContainedHostSurfaceSession | undefined;
   let stopPromise: Promise<void> | undefined;
   const stopOnce = (): Promise<void> => {
@@ -1327,10 +1492,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
             );
           } else {
             const composition = first.composition;
-            pluginCleanup =
-              composition.plugins === undefined
-                ? undefined
-                : createPluginCleanupCoordinator(composition.plugins);
+            runtimeCleanup = createRuntimeCleanupCoordinator(
+              composition.scanners,
+              composition.plugins,
+            );
             if (hostCancellation.signal.aborted) {
               outcome = cancelled(cancellationSignal);
             } else {
@@ -1389,9 +1554,9 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     cancellation.then(() => ({ state: "cancelled" as const })),
                   ]);
                   if (recovered.state === "cancelled") {
-                    if (pluginCleanup !== undefined) {
-                      pluginCleanupDeferred = true;
-                      schedulePluginCleanupAfter(observedRecovery.promise, pluginCleanup);
+                    if (runtimeCleanup !== undefined) {
+                      runtimeCleanupDeferred = true;
+                      schedulePluginCleanupAfter(observedRecovery.promise, runtimeCleanup);
                     }
                     outcome = cancelled(cancellationSignal);
                   } else if (recovered.state === "malformed") {
@@ -1428,6 +1593,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     packages: composition.packages,
                     projects: composition.projects,
                     recovery: Object.freeze({ status: recovery }),
+                    scanners: Object.freeze({
+                      recover: composition.scanners.recover,
+                      start: composition.scanners.start,
+                    }),
                     workspace: composition.workspace,
                   });
                   let start: Promise<ObservedSurfaceStartOutcome>;
@@ -1441,8 +1610,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     cancellation.then(() => ({ state: "cancelled" as const })),
                   ]);
                   if (first.state === "cancelled") {
-                    if (pluginCleanup !== undefined) pluginCleanupDeferred = true;
-                    scheduleLateSurfaceCleanup(start, pluginCleanup);
+                    if (runtimeCleanup !== undefined) runtimeCleanupDeferred = true;
+                    scheduleLateSurfaceCleanup(start, runtimeCleanup!);
                     outcome = cancelled(cancellationSignal);
                   } else if (first.state !== "started") {
                     outcome = surfaceFailure(
@@ -1457,6 +1626,9 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                       cancellation.then(() => ({ state: "cancelled" as const })),
                     ]);
                     if (winner.state === "cancelled") {
+                      if (runtimeCleanup !== undefined) {
+                        containDetached(runtimeCleanup.cancelScanners());
+                      }
                       await stopOnce();
                       outcome = cancelled(cancellationSignal);
                     } else if (winner.state === "failed") {
@@ -1487,11 +1659,14 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
   } catch {
     outcome = surfaceFailure("host-surface-cleanup-failed", "Host surface cleanup failed");
   }
-  if (pluginCleanup !== undefined && !pluginCleanupDeferred) {
+  if (runtimeCleanup !== undefined && !runtimeCleanupDeferred) {
     try {
-      await pluginCleanup.cleanup(pluginCleanupMode);
-    } catch {
-      outcome = surfaceFailure("host-plugin-cleanup-failed", "Host plugin cleanup failed");
+      await runtimeCleanup.cleanup(pluginCleanupMode);
+    } catch (error) {
+      outcome =
+        error instanceof Error && error.message === "Host scanner cleanup failed"
+          ? surfaceFailure("host-scanner-cleanup-failed", "Host scanner cleanup failed")
+          : surfaceFailure("host-plugin-cleanup-failed", "Host plugin cleanup failed");
     }
   }
   if (externalCancellationMayBeRegistered && externalCancellation !== undefined) {

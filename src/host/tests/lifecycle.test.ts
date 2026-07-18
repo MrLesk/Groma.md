@@ -12,6 +12,7 @@ import {
 import {
   createProcessSignalSource,
   runHost,
+  scannerExecutionApiVersion,
   type HostBootstrapRegistry,
   type HostComposition,
   type HostProcessSignalEmitter,
@@ -20,6 +21,8 @@ import {
   type HostSurface,
   type HostSurfaceSession,
   type ProjectRegistrationOperations,
+  type ScannerExecutionReport,
+  type ScannerExecutionRuntime,
   type WorkspaceAccessCapability,
   type WorkspaceRecoveryReport,
   type WorkspaceStatus,
@@ -118,10 +121,40 @@ function legacyApplicationOperations(
   } as unknown as ApplicationOperations;
 }
 
+function scannerRuntime(
+  cancelAll: ScannerExecutionRuntime["cancelAll"] = async () => Object.freeze([]),
+): ScannerExecutionRuntime {
+  return Object.freeze({
+    cancelAll,
+    recover: async () => success({ abandoned: 0, acknowledged: 0, consumed: 0 }),
+    start: async () => failure({ code: "unused", message: "unused" }),
+  });
+}
+
+function scannerReport(
+  overrides: Partial<ScannerExecutionReport> = Object.freeze({}),
+): ScannerExecutionReport {
+  return Object.freeze({
+    apiVersion: scannerExecutionApiVersion,
+    batchCount: 0,
+    diagnostics: Object.freeze([]),
+    epoch: `epoch_${"a".repeat(32)}`,
+    lastHeartbeatSequence: 0,
+    lastSequence: 1,
+    projectId: "project.default",
+    recordCount: 0,
+    scannerId: "official.test",
+    signalCount: 1,
+    status: "completed",
+    ...overrides,
+  });
+}
+
 function composition(
   surface: HostSurface,
   workspaceAccess: WorkspaceAccessCapability,
   operations: ApplicationOperations = applicationOperations(),
+  scanners: ScannerExecutionRuntime = scannerRuntime(),
 ): HostComposition {
   const capability = Object.freeze({});
   const packages = Object.freeze({
@@ -155,6 +188,7 @@ function composition(
     queries: capability,
     resourceMapper: capability,
     resources: capability,
+    scanners,
     snapshotStateDecoder: capability,
     store: capability,
     surface,
@@ -189,8 +223,9 @@ function compositionWithPlugins(
   surface: HostSurface,
   workspaceAccess: WorkspaceAccessCapability,
   plugins: RunningPluginGraph,
+  scanners: ScannerExecutionRuntime = scannerRuntime(),
 ): HostComposition {
-  return Object.freeze({ ...composition(surface, workspaceAccess), plugins });
+  return Object.freeze({ ...composition(surface, workspaceAccess, undefined, scanners), plugins });
 }
 
 describe("host lifecycle", () => {
@@ -231,7 +266,185 @@ describe("host lifecycle", () => {
     expect(cancels).toBe(0);
   });
 
-  test("adapts process cancellation to plugin cancellation after surface stop", async () => {
+  test("settles scanner executions after surface cleanup and before plugin shutdown", async () => {
+    const events: string[] = [];
+    const plugins = pluginLifecycle(
+      async () => success({ state: "cancelled", stoppedPluginIds: [] }),
+      async () => {
+        events.push("plugins:shutdown");
+        return success({ state: "stopped", stoppedPluginIds: [] });
+      },
+    );
+    const scanners = scannerRuntime(async () => {
+      events.push("scanners:cancel");
+      return Object.freeze([scannerReport()]);
+    });
+    const outcome = await runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => ({
+              completion: Promise.resolve(),
+              stop: async () => {
+                events.push("surface:stop");
+              },
+            }),
+          },
+          workspace({ state: "missing" }),
+          plugins,
+          scanners,
+        ),
+      ),
+      signalSource: { subscribe: () => () => {} },
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(events).toEqual(["surface:stop", "scanners:cancel", "plugins:shutdown"]);
+  });
+
+  test("exposes only contained scanner start and recovery operations to the surface", async () => {
+    let scannerKeys: readonly PropertyKey[] = [];
+    const outcome = await runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        composition(
+          {
+            start: (context) => {
+              scannerKeys = Reflect.ownKeys(context.scanners);
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          workspace({ state: "missing" }),
+        ),
+      ),
+      signalSource: { subscribe: () => () => {} },
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect(scannerKeys).toEqual(["recover", "start"]);
+  });
+
+  test("fails closed before plugin shutdown for incomplete, nonterminal, and unbounded scanner reports", async () => {
+    const malformedResults: readonly unknown[] = Object.freeze([
+      Object.freeze({ malformed: true }),
+      Object.freeze([Object.freeze({})]),
+      Object.freeze([scannerReport({ status: "running" as never })]),
+      Object.freeze([scannerReport({ recordCount: 50_001 })]),
+      Object.freeze([
+        scannerReport({
+          diagnostics: Object.freeze([Object.freeze({ code: "", message: "malformed" })]),
+        }),
+      ]),
+    ]);
+    for (const malformed of malformedResults) {
+      let shutdowns = 0;
+      const plugins = pluginLifecycle(
+        async () => success({ state: "cancelled", stoppedPluginIds: [] }),
+        async () => {
+          shutdowns += 1;
+          return success({ state: "stopped", stoppedPluginIds: [] });
+        },
+      );
+      const scanners = scannerRuntime((() =>
+        Promise.resolve(malformed)) as unknown as ScannerExecutionRuntime["cancelAll"]);
+      const outcome = await runHost({
+        context: { workspaceRoot: "/workspace" },
+        registry: registry(
+          compositionWithPlugins(
+            {
+              start: () => ({ completion: Promise.resolve(), stop: async () => {} }),
+            },
+            workspace({ state: "missing" }),
+            plugins,
+            scanners,
+          ),
+        ),
+        signalSource: { subscribe: () => () => {} },
+      });
+
+      expect(outcome).toEqual({
+        diagnostics: [
+          { code: "host-scanner-cleanup-failed", message: "Host scanner cleanup failed" },
+        ],
+        status: "surface-failure",
+      });
+      expect(shutdowns).toBe(0);
+    }
+  });
+
+  test("contains nested rejected scanner cleanup values before reporting failure", async () => {
+    const secret = "/private/scanner-cleanup";
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const malformedResults = [
+        () => Object.freeze([Promise.reject(new Error(`${secret}:entry`))]),
+        () =>
+          Object.freeze([
+            Object.freeze({
+              ...scannerReport(),
+              extra: Promise.reject(new Error(`${secret}:extra`)),
+            }),
+          ]),
+        () =>
+          Object.freeze([
+            scannerReport({
+              diagnostics: Object.freeze([
+                Object.freeze({
+                  code: "scanner-private-failure",
+                  details: Object.freeze({
+                    rejected: Promise.reject(new Error(`${secret}:diagnostic`)),
+                  }),
+                  message: secret,
+                }) as never,
+              ]),
+            }),
+          ]),
+      ] as const;
+      for (const malformedResult of malformedResults) {
+        let shutdowns = 0;
+        const plugins = pluginLifecycle(
+          async () => success({ state: "cancelled", stoppedPluginIds: [] }),
+          async () => {
+            shutdowns += 1;
+            return success({ state: "stopped", stoppedPluginIds: [] });
+          },
+        );
+        const scanners = scannerRuntime((() =>
+          Promise.resolve(malformedResult())) as unknown as ScannerExecutionRuntime["cancelAll"]);
+        const outcome = await runHost({
+          context: { workspaceRoot: "/workspace" },
+          registry: registry(
+            compositionWithPlugins(
+              { start: () => ({ completion: Promise.resolve(), stop: async () => {} }) },
+              workspace({ state: "missing" }),
+              plugins,
+              scanners,
+            ),
+          ),
+          signalSource: { subscribe: () => () => {} },
+        });
+
+        expect(outcome).toEqual({
+          diagnostics: [
+            { code: "host-scanner-cleanup-failed", message: "Host scanner cleanup failed" },
+          ],
+          status: "surface-failure",
+        });
+        expect(JSON.stringify(outcome)).not.toContain(secret);
+        expect(shutdowns).toBe(0);
+      }
+      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("cancels scanner work before surface stop and plugins afterward", async () => {
     const events: string[] = [];
     const source = signals();
     const started = deferred<void>();
@@ -246,6 +459,22 @@ describe("host lifecycle", () => {
         return success({ state: "stopped", stoppedPluginIds: ["official.surface"] });
       },
     );
+    const scanners = scannerRuntime(async () => {
+      events.push("scanners:cancel");
+      return Object.freeze([
+        scannerReport({
+          diagnostics: Object.freeze([
+            Object.freeze({
+              code: "scanner-execution-cancelled",
+              message: "Scanner execution was cancelled",
+            }),
+          ]),
+          lastSequence: 0,
+          signalCount: 0,
+          status: "cancelled",
+        }),
+      ]);
+    });
     const running = runHost({
       context: { workspaceRoot: "/workspace" },
       registry: registry(
@@ -263,6 +492,7 @@ describe("host lifecycle", () => {
           },
           workspace({ state: "missing" }),
           plugins,
+          scanners,
         ),
       ),
       signalSource: source.source,
@@ -271,7 +501,60 @@ describe("host lifecycle", () => {
     source.emit("SIGTERM");
 
     expect(await running).toEqual({ signal: "SIGTERM", status: "cancelled" });
-    expect(events).toEqual(["surface:stop", "plugins:cancel"]);
+    expect(events).toEqual(["scanners:cancel", "surface:stop", "plugins:cancel"]);
+  });
+
+  test("cancels scanners before awaiting a surface stop that depends on them", async () => {
+    const events: string[] = [];
+    const source = signals();
+    const started = deferred<void>();
+    const scannerSettled = deferred<void>();
+    const plugins = pluginLifecycle(
+      async () => {
+        events.push("plugins:cancel");
+        return success({ state: "cancelled", stoppedPluginIds: [] });
+      },
+      async () => success({ state: "stopped", stoppedPluginIds: [] }),
+    );
+    const scanners = scannerRuntime(async () => {
+      events.push("scanners:cancel");
+      scannerSettled.resolve();
+      return Object.freeze([]);
+    });
+    const running = runHost({
+      context: { workspaceRoot: "/workspace" },
+      registry: registry(
+        compositionWithPlugins(
+          {
+            start: () => {
+              started.resolve();
+              return {
+                completion: new Promise<void>(() => {}),
+                stop: async () => {
+                  events.push("surface:stop-wait");
+                  await scannerSettled.promise;
+                  events.push("surface:stop-done");
+                },
+              };
+            },
+          },
+          workspace({ state: "missing" }),
+          plugins,
+          scanners,
+        ),
+      ),
+      signalSource: source.source,
+    });
+    await started.promise;
+    source.emit("SIGINT");
+
+    expect(await running).toEqual({ signal: "SIGINT", status: "cancelled" });
+    expect(events).toEqual([
+      "scanners:cancel",
+      "surface:stop-wait",
+      "surface:stop-done",
+      "plugins:cancel",
+    ]);
   });
 
   test("preserves cancellation as the plugin cleanup cause after surface stop failure", async () => {

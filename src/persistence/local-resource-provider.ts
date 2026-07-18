@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { failure, type Diagnostic, type Result, success } from "../core/result.ts";
-import { inspectExactRecord } from "../core/runtime.ts";
+import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   type EnumerateResourcesRequest,
   isReservedWorkspaceResourceSegment,
@@ -60,8 +60,15 @@ export type LocalResourceFaultInjector = (
 export interface LocalResourceProviderOptions {
   /** Absolute host configuration. It is never returned through capability results. */
   readonly workspaceRoot: string;
+  /** Optional absolute ancestor that the canonical workspace root must remain within. */
+  readonly confinementRoot?: string;
   /** Absolute POSIX-only volatile host location. Windows always uses the per-user default. */
   readonly coordinationRoot?: string;
+  /**
+   * Portable top-level resource segments hidden by this provider view. Matching is
+   * case-insensitive so the view has the same boundary on every supported filesystem.
+   */
+  readonly excludedTopLevelResourceSegments?: readonly string[];
   readonly faultInjector?: LocalResourceFaultInjector;
   readonly maxCursorBytes?: number;
   readonly maxDepth?: number;
@@ -130,6 +137,7 @@ const processCoordination = new Set<string>();
 const liveStagePaths = new Set<string>();
 const settledStageMutation = Promise.resolve();
 export const localResourceProviderCeilings = Object.freeze({
+  maxExcludedTopLevelResourceSegments: 64,
   maxCursorBytes: 64 * 1024,
   maxDepth: 256,
   maxEntriesPerDirectory: 100_000,
@@ -163,18 +171,76 @@ const writeChunkBytes = 64 * 1024;
 const exactOwnerToken = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const intrinsicTextDecoder = new TextDecoder();
 const intrinsicTextEncoder = new TextEncoder();
+const intrinsicArrayIncludes = Array.prototype.includes;
 const intrinsicArrayPush = Array.prototype.push;
 const intrinsicArraySlice = Array.prototype.slice;
 const intrinsicArraySort = Array.prototype.sort;
 const intrinsicDecode = TextDecoder.prototype.decode;
 const intrinsicEncode = TextEncoder.prototype.encode;
 const intrinsicNormalize = String.prototype.normalize;
+const intrinsicSetAdd = Set.prototype.add;
+const intrinsicSetHas = Set.prototype.has;
+const intrinsicStringIncludes = String.prototype.includes;
 const intrinsicStringSlice = String.prototype.slice;
 const intrinsicSplit = String.prototype.split;
 const intrinsicStartsWith = String.prototype.startsWith;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
 const intrinsicTest = RegExp.prototype.test;
 const intrinsicUint8ArraySlice = Uint8Array.prototype.slice;
+
+function canonicalExcludedTopLevelSegments(value: unknown): ReadonlySet<string> {
+  if (value === undefined) return new Set<string>();
+  const length = inspectIntrinsicArrayLength(
+    value,
+    "invalid-resource-exclusions",
+    "Excluded top-level resource segments",
+  );
+  if (
+    !length.ok ||
+    length.value > localResourceProviderCeilings.maxExcludedTopLevelResourceSegments
+  ) {
+    throw new TypeError(
+      `excludedTopLevelResourceSegments must be a dense intrinsic array with at most ${localResourceProviderCeilings.maxExcludedTopLevelResourceSegments} items`,
+    );
+  }
+  const source = value as unknown[];
+  const canonical = new Set<string>();
+  try {
+    const keys = Reflect.ownKeys(source);
+    if (
+      keys.length !== length.value + 1 ||
+      !(Reflect.apply(intrinsicArrayIncludes, keys, ["length"]) as boolean)
+    ) {
+      throw new TypeError();
+    }
+    for (let index = 0; index < length.value; index += 1) {
+      const key = String(index);
+      if (!(Reflect.apply(intrinsicArrayIncludes, keys, [key]) as boolean)) throw new TypeError();
+      const descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (
+        descriptor === undefined ||
+        !("value" in descriptor) ||
+        !descriptor.enumerable ||
+        typeof descriptor.value !== "string" ||
+        descriptor.value === "." ||
+        (Reflect.apply(intrinsicStringIncludes, descriptor.value, ["/"]) as boolean)
+      ) {
+        throw new TypeError();
+      }
+      const parsed = parseWorkspaceResourceLocator(descriptor.value);
+      if (!parsed.ok) throw new TypeError();
+      const lowered = Reflect.apply(intrinsicToLowerCase, descriptor.value, []) as string;
+      const normalized = Reflect.apply(intrinsicNormalize, lowered, ["NFC"]) as string;
+      if (Reflect.apply(intrinsicSetHas, canonical, [normalized]) as boolean) throw new TypeError();
+      Reflect.apply(intrinsicSetAdd, canonical, [normalized]);
+    }
+  } catch {
+    throw new TypeError(
+      "excludedTopLevelResourceSegments must contain unique portable data-only segments",
+    );
+  }
+  return canonical;
+}
 
 function stageTargetIdentity(locator: WorkspaceResourceLocator): string {
   return createHash("sha256").update(locator).digest("hex");
@@ -417,6 +483,28 @@ function ownerIsDead(pid: number): boolean {
 export async function createLocalResourceProvider(
   options: LocalResourceProviderOptions,
 ): Promise<LocalResourceProvider> {
+  let excludedTopLevelSegmentValue: unknown;
+  let requestedConfinementRoot: unknown;
+  try {
+    const exclusionDescriptor = Object.getOwnPropertyDescriptor(
+      options,
+      "excludedTopLevelResourceSegments",
+    );
+    const confinementDescriptor = Object.getOwnPropertyDescriptor(options, "confinementRoot");
+    if (
+      (exclusionDescriptor !== undefined &&
+        (!("value" in exclusionDescriptor) || !exclusionDescriptor.enumerable)) ||
+      (confinementDescriptor !== undefined &&
+        (!("value" in confinementDescriptor) || !confinementDescriptor.enumerable))
+    ) {
+      throw new TypeError();
+    }
+    excludedTopLevelSegmentValue = exclusionDescriptor?.value;
+    requestedConfinementRoot = confinementDescriptor?.value;
+  } catch {
+    throw new TypeError("excludedTopLevelResourceSegments or confinementRoot is malformed");
+  }
+  const excludedTopLevelSegments = canonicalExcludedTopLevelSegments(excludedTopLevelSegmentValue);
   if (
     options.coordinationRoot !== undefined &&
     !allowsCustomLocalCoordinationRoot(process.platform)
@@ -427,6 +515,12 @@ export async function createLocalResourceProvider(
     throw new TypeError("workspaceRoot must be an absolute host path");
   }
   if (
+    requestedConfinementRoot !== undefined &&
+    (typeof requestedConfinementRoot !== "string" || !path.isAbsolute(requestedConfinementRoot))
+  ) {
+    throw new TypeError("confinementRoot must be an absolute host path");
+  }
+  if (
     options.coordinationRoot !== undefined &&
     (typeof options.coordinationRoot !== "string" || !path.isAbsolute(options.coordinationRoot))
   ) {
@@ -435,6 +529,13 @@ export async function createLocalResourceProvider(
   const canonicalRoot = await realpath(options.workspaceRoot);
   const rootStats = await lstat(canonicalRoot);
   if (!rootStats.isDirectory()) throw new TypeError("workspaceRoot must identify a directory");
+  if (typeof requestedConfinementRoot === "string") {
+    const canonicalConfinementRoot = await realpath(requestedConfinementRoot);
+    const confinementStats = await lstat(canonicalConfinementRoot);
+    if (!confinementStats.isDirectory() || !isWithin(canonicalConfinementRoot, canonicalRoot)) {
+      throw new TypeError("workspaceRoot must remain within confinementRoot");
+    }
+  }
   const userSuffix = process.platform === "win32" ? "user" : String(process.getuid?.() ?? "user");
   const requestedCoordinationRoot =
     options.coordinationRoot ?? path.join(tmpdir(), `groma-resource-locks-v1-${userSuffix}`);
@@ -485,11 +586,17 @@ export async function createLocalResourceProvider(
   if (isWithin(canonicalRoot, coordinationRoot)) {
     throw new TypeError("coordinationRoot must be a directory outside the canonical workspace");
   }
-  return new BunLocalResourceProvider(canonicalRoot, coordinationRoot, options);
+  return new BunLocalResourceProvider(
+    canonicalRoot,
+    coordinationRoot,
+    excludedTopLevelSegments,
+    options,
+  );
 }
 
 class BunLocalResourceProvider implements LocalResourceProvider {
   readonly #coordinationRoot: string;
+  readonly #excludedTopLevelSegments: ReadonlySet<string>;
   readonly #faultInjector: LocalResourceFaultInjector | undefined;
   readonly #maxCursorBytes: number;
   readonly #maxDepth: number;
@@ -502,9 +609,15 @@ class BunLocalResourceProvider implements LocalResourceProvider {
   readonly #stages = new WeakMap<object, StagedRecord>();
   readonly #staleLockMilliseconds: number;
 
-  constructor(root: string, coordinationRoot: string, options: LocalResourceProviderOptions) {
+  constructor(
+    root: string,
+    coordinationRoot: string,
+    excludedTopLevelSegments: ReadonlySet<string>,
+    options: LocalResourceProviderOptions,
+  ) {
     this.#root = root;
     this.#coordinationRoot = coordinationRoot;
+    this.#excludedTopLevelSegments = excludedTopLevelSegments;
     this.#faultInjector = options.faultInjector;
     this.#maxCursorBytes = configuredBound(
       options.maxCursorBytes,
@@ -1256,6 +1369,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
         diagnostic("invalid-coordination-context", "Coordination context is not recognized"),
       );
     }
+    if (this.#targetsExcludedTopLevelSegment(locator.value)) {
+      return failure(
+        diagnostic("resource-excluded", "Workspace resource is excluded from this provider view"),
+      );
+    }
     const identity = coordinationIdentity(this.#root, locator.value);
     if (processCoordination.has(identity)) {
       return failure(
@@ -1332,6 +1450,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
     const parsed = parseWorkspaceResourceLocator(locator);
     if (!parsed.ok) return parsed;
     const segments = locatorSegments(parsed.value);
+    if (segments[0] !== undefined && this.#isExcludedTopLevelSegment(segments[0])) {
+      return failure(
+        diagnostic("resource-excluded", "Workspace resource is excluded from this provider view"),
+      );
+    }
     const absolutePath = path.resolve(this.#root, ...segments);
     if (!isWithin(this.#root, absolutePath)) {
       return failure(
@@ -1400,6 +1523,11 @@ class BunLocalResourceProvider implements LocalResourceProvider {
 
   async #ensureParentDirectories(locator: WorkspaceResourceLocator): Promise<Result<void>> {
     const segments = locatorSegments(locator);
+    if (segments[0] !== undefined && this.#isExcludedTopLevelSegment(segments[0])) {
+      return failure(
+        diagnostic("resource-excluded", "Workspace resource is excluded from this provider view"),
+      );
+    }
     let current = this.#root;
     for (let index = 0; index < segments.length - 1; index += 1) {
       current = path.join(current, segments[index]!);
@@ -1502,7 +1630,10 @@ class BunLocalResourceProvider implements LocalResourceProvider {
             ),
           );
         }
-        if (!isReservedWorkspaceResourceSegment(entry.name)) {
+        if (
+          !isReservedWorkspaceResourceSegment(entry.name) &&
+          !(directoryLocator === "." && this.#isExcludedTopLevelSegment(entry.name))
+        ) {
           Reflect.apply(intrinsicArrayPush, names, [entry.name]);
         }
       }
@@ -1601,6 +1732,17 @@ class BunLocalResourceProvider implements LocalResourceProvider {
       );
     }
     return success(resolved.value.absolutePath);
+  }
+
+  #isExcludedTopLevelSegment(value: string): boolean {
+    const lowered = Reflect.apply(intrinsicToLowerCase, value, []) as string;
+    const normalized = Reflect.apply(intrinsicNormalize, lowered, ["NFC"]) as string;
+    return Reflect.apply(intrinsicSetHas, this.#excludedTopLevelSegments, [normalized]) as boolean;
+  }
+
+  #targetsExcludedTopLevelSegment(locator: WorkspaceResourceLocator): boolean {
+    const segment = locatorSegments(locator)[0];
+    return segment !== undefined && this.#isExcludedTopLevelSegment(segment);
   }
 
   #encodeCursor(state: CursorState): Result<ResourceContinuationCursor> {

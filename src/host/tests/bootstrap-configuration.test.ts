@@ -414,7 +414,15 @@ describe("bootstrap configuration", () => {
     for (const registration of [
       valid({ source: "groma" }),
       valid({ source: "GROMA/evidence" }),
+      valid({ source: ".groma-cache" }),
+      valid({ source: ".GROMA-CACHE/index" }),
+      valid({ source: ".git" }),
+      valid({ source: ".GIT/objects" }),
       valid({ coverage: [{ id: "workspace", resourceRoot: "groma/evidence" }] }),
+      valid({ coverage: [{ id: "workspace", resourceRoot: ".groma-cache" }] }),
+      valid({ coverage: [{ id: "workspace", resourceRoot: ".GROMA-CACHE/index" }] }),
+      valid({ coverage: [{ id: "workspace", resourceRoot: ".git" }] }),
+      valid({ coverage: [{ id: "workspace", resourceRoot: ".GIT/objects" }] }),
       valid({ coverage: [{ id: ".", resourceRoot: "." }] }),
       valid({
         coverage: [
@@ -428,6 +436,31 @@ describe("bootstrap configuration", () => {
     expect(
       canonicalizeProjectRegistration(
         valid({ source: "apps", coverage: [{ id: "source", resourceRoot: "groma" }] }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps", coverage: [{ id: "source", resourceRoot: ".groma-cache" }] }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps/groma", coverage: [{ id: "source", resourceRoot: "." }] }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps/.groma-cache", coverage: [{ id: "source", resourceRoot: "." }] }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps", coverage: [{ id: "source", resourceRoot: ".git" }] }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps/.git", coverage: [{ id: "source", resourceRoot: "." }] }),
       ),
     ).toMatchObject({ ok: true });
 

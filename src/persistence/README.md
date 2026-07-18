@@ -560,6 +560,13 @@ remain private. Resolution walks the workspace-relative chain with `lstat` and
 that canonical paths remain under the selected workspace. Enumeration may report a
 link entry but never traverses it.
 
+A Host may additionally supply one absolute `confinementRoot`; construction then rejects
+a canonical provider root outside that ancestor before exposing the capability. A bounded
+data-only list of top-level exclusions creates a case-insensitive virtual view without
+rewriting locators: excluded roots cannot be read, enumerated, staged, removed, cleaned, or
+used as coordination lanes, and recursive enumeration never descends into them. These are
+Host authority controls rather than canonical resource semantics.
+
 Enumeration re-resolves the expected directory at every recursive walk entry before
 opening it. These checks narrow, but portable Bun/Node APIs cannot fully close, the
 `lstat`-to-`opendir` enumeration window or the resolve-to-`rename` replacement window
