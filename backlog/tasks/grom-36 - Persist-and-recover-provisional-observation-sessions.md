@@ -1,11 +1,11 @@
 ---
 id: GROM-36
 title: Persist and recover provisional observation sessions
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 10:17'
+updated_date: '2026-07-18 10:48'
 labels: []
 milestone: m-3
 dependencies:
@@ -68,10 +68,12 @@ Review remediation added stateful alias and reserved-parent hostile cases, canon
 Final parent verification: bun run check passed format, TypeScript, architecture boundaries, native build and smoke, Iteration 1A and 1B, and self-blueprint. Direct bun test passed 934 tests and 6,889 assertions across 42 files. Original acceptance and quality reviewers approved the final diff. git diff --check and Backlog doctor are clean. External framing, scanner orchestration, project registry, canonical evidence and bindings, reconciliation, CLI wiring, and extreme-scale sharding remain assigned to later tasks.
 
 Codex PR #37 review remediation independently reproduced and implemented. Recovery now rejects checkpoint envelopes whose 11 Core bounds do not exactly equal the official local journal profile before restoration/replay; a completed canonical off-profile lane cannot hand off and its bytes remain unchanged. Exact duplicate begin is idempotently reclaimable only for the same canonical zero-transition active checkpoint; conflicting begin data and any accepted transition remain rejected, while duplicate empty handles share the durable revision/checkpoint fence so only one advances and a stale loser does not inspect hostile input. Durable handles now cache inspection at the last confirmed publication, hiding definitely uncommitted Core mutation while exposing state confirmed before later fault or release uncertainty. Documentation records these semantics. Verification: local journal 24/0 (161 assertions); Core observation plus all Persistence previously 311/0 (1,869 assertions); TypeScript, architecture boundaries, formatting, and diff check green. Independent review approved the production remediation.
+
+Final PR head 3e9489c passed 937 repository tests with 6,907 assertions, format, TypeScript, architecture boundaries, native build and smoke, Iteration 1A and 1B, self-blueprint, macOS, Linux x64, Windows x64, and Windows arm64 verification. Claude found no production blocker; its two actionable test-quality observations were fixed. Codex review findings were independently reproduced and remediated, all threads resolved, and the final green head received Codex approval.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented bounded Core-owned observation checkpoints plus a crash-safe per-source local journal. Recovery exposes only replay-validated completed snapshots, durably abandons incomplete sessions, fences concurrent and superseded epochs, preserves unacknowledged handoffs, reclaims known orphan stages, and cleans only exact eligible lane state. Verified with hostile alias/corruption tests, provider-phase real-process crash tests, lease-contention probes, 934 repository tests / 6,889 assertions, the complete build/smoke/Iteration/self-blueprint gate, and independent acceptance and quality approval.
+Implemented bounded Core-owned observation checkpoints and a crash-safe per-source local journal with durable begin/signals, replay-validated recovery, deterministic at-least-once handoff, exact cleanup, active supersession, idempotent exact-empty begin reclaim, strict official-profile recovery, and durability-confirmed inspection. Verified by 937 tests / 6,907 assertions, real provider-phase child-process crashes, all build and Iteration gates, four target binaries, independent reviews, Claude review, green CI, and final Codex approval.
 <!-- SECTION:FINAL_SUMMARY:END -->
