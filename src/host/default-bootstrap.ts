@@ -62,11 +62,13 @@ import { isHostProxy } from "./runtime-validation.ts";
 import {
   bootstrapConfigurationBounds,
   bootstrapConfigurationStillUsable,
+  canonicalizeProjectRegistration,
   createLocalConfigurationDiscovery,
   createYamlConfigurationParser,
   loadBootstrapConfiguration,
   localBootstrapConvention,
   parseBootstrapConfiguration,
+  serializeBootstrapConfiguration,
   type BootstrapConfigurationLoad,
   type ConfigurationDiscoveryProvider,
   type ConfigurationParserProvider,
@@ -77,12 +79,42 @@ import type {
   HostComposition,
   HostProcessContext,
 } from "./contracts.ts";
-import { createLocalWorkspaceCapability, defaultWorkspaceDocument } from "./local-workspace.ts";
+import { createLocalWorkspaceCapability } from "./local-workspace.ts";
 import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
+import { createLocalProjectRegistry } from "./local-project-registry.ts";
 import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-identities.ts";
 
 const intrinsicReflectApply = Reflect.apply;
+
+export function initialProjectDisplayName(
+  workspaceRoot: string,
+  platform: "darwin" | "linux" | "win32",
+): string {
+  const isSeparator = (unit: number) => unit === 0x2f || (platform === "win32" && unit === 0x5c);
+  let end = workspaceRoot.length;
+  while (end > 0 && isSeparator(workspaceRoot.charCodeAt(end - 1))) end -= 1;
+  let start = end;
+  while (start > 0 && !isSeparator(workspaceRoot.charCodeAt(start - 1))) start -= 1;
+  const candidate = workspaceRoot.slice(start, end);
+  const raw = platform === "win32" && /^[A-Za-z]:$/.test(candidate) && start === 0 ? "" : candidate;
+  const safe: string[] = [];
+  for (const character of raw) {
+    const code = character.codePointAt(0)!;
+    safe.push(
+      code <= 0x1f ||
+        (code >= 0x7f && code <= 0x9f) ||
+        code === 0x2028 ||
+        code === 0x2029 ||
+        (code >= 0xd800 && code <= 0xdfff)
+        ? "-"
+        : character,
+    );
+    if (safe.length === bootstrapConfigurationBounds.maxProjectDisplayNameCharacters) break;
+  }
+  const bounded = safe.join("").trim();
+  return bounded.length === 0 ? "workspace" : bounded;
+}
 
 export const defaultHostBounds = Object.freeze({
   // Leaves one fixed 64-KiB envelope below the CLI's independent eight-MiB result cap.
@@ -440,6 +472,31 @@ export function createDefaultBootstrapRegistry(
       );
     }
     const isCancellationRequested = () => context.cancellation?.aborted === true;
+    const initialProject = canonicalizeProjectRegistration(
+      Object.freeze({
+        coverage: Object.freeze([Object.freeze({ id: "workspace", resourceRoot: "." })]),
+        id: "project.default",
+        name: initialProjectDisplayName(
+          convention.value.workspaceRoot,
+          selectedTarget.platform as "darwin" | "linux" | "win32",
+        ),
+        scanners: Object.freeze([]),
+        source: ".",
+      }),
+    );
+    if (!initialProject.ok) {
+      return failure<HostComposition>(
+        diagnostic("host-composition-failed", "Default project registration is invalid"),
+      );
+    }
+    const initialConfiguration = Object.freeze({
+      packageDeclarations: Object.freeze([]),
+      projectRegistrations: Object.freeze([initialProject.value]),
+      requestedRuntimePlugins: Object.freeze([]),
+      retiredProjectIds: Object.freeze([]),
+      schema: "groma/v0.1" as const,
+    });
+    const initialConfigurationSource = serializeBootstrapConfiguration(initialConfiguration);
     let plugins: RunningPluginGraph | undefined;
     let staged: StagedPluginGraph | undefined;
     try {
@@ -901,10 +958,15 @@ export function createDefaultBootstrapRegistry(
                 maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
               },
               configuration: Object.freeze({
-                initialDocument: new TextEncoder().encode(defaultWorkspaceDocument),
+                initialDocument: new TextEncoder().encode(initialConfigurationSource),
                 isCompatible: (bytes: Uint8Array) => {
                   const parsed = parseBootstrapConfiguration(selectedParser, bytes);
                   if (!parsed.ok) return false;
+                  if (bootstrap.state === "missing") {
+                    return (
+                      serializeBootstrapConfiguration(parsed.value) === initialConfigurationSource
+                    );
+                  }
                   return bootstrapConfigurationStillUsable(bootstrap, {
                     configuration: parsed.value,
                     locator: bootstrap.locator,
@@ -1116,6 +1178,14 @@ export function createDefaultBootstrapRegistry(
         remove: packageManager.remove,
         scaffold: packageManager.scaffold,
       });
+      const projectRegistry = createLocalProjectRegistry({ entropy, resources });
+      const projectOperations = Object.freeze({
+        add: projectRegistry.add,
+        get: projectRegistry.get,
+        list: projectRegistry.list,
+        remove: projectRegistry.remove,
+        update: projectRegistry.update,
+      });
       const requested =
         bootstrap.state === "configured"
           ? bootstrap.configuration.requestedRuntimePlugins
@@ -1215,7 +1285,12 @@ export function createDefaultBootstrapRegistry(
         configurationParser,
       );
       if (!reloaded.ok) return failAfterStage(...reloaded.diagnostics);
-      if (!bootstrapConfigurationStillUsable(bootstrap, reloaded.value)) {
+      const bootstrapStillUsable =
+        bootstrap.state === "missing" && reloaded.value.state === "configured"
+          ? serializeBootstrapConfiguration(reloaded.value.configuration) ===
+            initialConfigurationSource
+          : bootstrapConfigurationStillUsable(bootstrap, reloaded.value);
+      if (!bootstrapStillUsable) {
         return failAfterStage(
           diagnostic(
             "workspace-configuration-changed",
@@ -1350,6 +1425,7 @@ export function createDefaultBootstrapRegistry(
           migrations,
           operations,
           packages: packageOperations,
+          projects: projectOperations,
           plugins,
           projection,
           projectionRead,

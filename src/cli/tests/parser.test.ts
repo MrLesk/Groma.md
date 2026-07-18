@@ -10,6 +10,8 @@ import { parseInvocation } from "../parser.ts";
 
 describe("CLI provisional grammar", () => {
   test("parses every operation and both structured input forms", () => {
+    const projectId = "project_11111111111111111111111111111111";
+    const projectRevision = `sha256:${"a".repeat(64)}`;
     const cases = [
       [[], { kind: "overview" }],
       [["init"], { kind: "init" }],
@@ -85,6 +87,18 @@ describe("CLI provisional grammar", () => {
       ],
       [["package", "disable", "example", "./plugins/panel.js"], { kind: "package-disable" }],
       [["package", "remove", "example"], { kind: "package-remove" }],
+      [["project", "add", "--input", "project.json"], { kind: "project-add" }],
+      [["project", "add", "--stdin"], { kind: "project-add" }],
+      [["project", "get", projectId], { id: projectId, kind: "project-get" }],
+      [["project", "list"], { kind: "project-list" }],
+      [
+        ["project", "update", projectId, "--revision", projectRevision, "--input", "project.json"],
+        { expectedRevision: projectRevision, id: projectId, kind: "project-update" },
+      ],
+      [
+        ["project", "remove", projectId, "--revision", projectRevision],
+        { expectedRevision: projectRevision, id: projectId, kind: "project-remove" },
+      ],
       [["component", "create", "--input", "request.json"], { kind: "component-create" }],
       [["component", "create", "--stdin"], { kind: "component-create" }],
       [
@@ -125,6 +139,24 @@ describe("CLI provisional grammar", () => {
       const parsed = parseInvocation(args);
       expect(parsed.ok).toBeTrue();
       if (parsed.ok) expect(parsed.invocation.command as unknown).toMatchObject(command);
+    }
+  });
+
+  test("rejects ambiguous or malformed project identity and revision channels", () => {
+    const id = "project_11111111111111111111111111111111";
+    const revision = `sha256:${"a".repeat(64)}`;
+    for (const args of [
+      ["project", "get", "project_bad"],
+      ["project", "list", "extra"],
+      ["project", "update", id, "--revision", "bad", "--stdin"],
+      ["project", "update", id, "--revision", revision, "--revision", revision, "--stdin"],
+      ["project", "update", id, "--revision", revision, "--stdin", "--input", "other.json"],
+      ["project", "remove", id, "--revision", "sha256:ABC"],
+    ]) {
+      expect(parseInvocation(args)).toMatchObject({
+        diagnostic: { code: "cli-invalid-invocation" },
+        ok: false,
+      });
     }
   });
 

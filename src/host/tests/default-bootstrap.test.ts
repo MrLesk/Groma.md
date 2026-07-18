@@ -15,6 +15,8 @@ import {
 } from "../../core/index.ts";
 
 import {
+  bootstrapConfigurationBounds,
+  canonicalizeProjectRegistration,
   createDefaultBootstrapRegistry,
   defaultHostCapabilityIds,
   runHost,
@@ -23,6 +25,7 @@ import {
   type HostSurface,
   type HostSurfaceSession,
 } from "../index.ts";
+import { initialProjectDisplayName } from "../default-bootstrap.ts";
 
 const roots: string[] = [];
 
@@ -76,6 +79,57 @@ function directComponentRequest(composition: HostComposition, rawId: string, nam
 }
 
 describe("default bootstrap registry", () => {
+  test("derives a bounded validator-safe project name from hostile workspace basenames", () => {
+    const maximum = bootstrapConfigurationBounds.maxProjectDisplayNameCharacters;
+    const cases = [
+      {
+        expected: "high-",
+        platform: "linux" as const,
+        root: `/work/high${String.fromCharCode(0xd800)}`,
+      },
+      {
+        expected: "low-",
+        platform: "darwin" as const,
+        root: `/work/low${String.fromCharCode(0xdfff)}`,
+      },
+      {
+        expected: "windows-",
+        platform: "win32" as const,
+        root: `C:\\work\\windows${String.fromCharCode(0xdc00)}`,
+      },
+      {
+        expected: "control-line-",
+        platform: "linux" as const,
+        root: "/work/control\u0001line\u2028",
+      },
+      {
+        expected: "a".repeat(maximum - 1),
+        platform: "linux" as const,
+        root: `/work/${"a".repeat(maximum - 1)} tail`,
+      },
+      {
+        expected: "😀".repeat(maximum),
+        platform: "linux" as const,
+        root: `/work/${"😀".repeat(maximum)}tail`,
+      },
+      { expected: "workspace", platform: "linux" as const, root: "/work/   " },
+    ];
+    for (const fixture of cases) {
+      const name = initialProjectDisplayName(fixture.root, fixture.platform);
+      expect(name, fixture.root).toBe(fixture.expected);
+      expect(
+        canonicalizeProjectRegistration({
+          coverage: [{ id: "workspace", resourceRoot: "." }],
+          id: "project.default",
+          name,
+          scanners: [],
+          source: ".",
+        }),
+        fixture.root,
+      ).toMatchObject({ ok: true });
+    }
+  });
+
   test("publishes a projection-aware transaction engine for direct plugin commits", async () => {
     const context = await temporaryWorkspace();
     let failProjectionPublication = false;
@@ -425,6 +479,7 @@ describe("default bootstrap registry", () => {
       "plugins",
       "projection",
       "projectionRead",
+      "projects",
       "queries",
       "queryEngine",
       "resourceMapper",
@@ -652,6 +707,7 @@ describe("default bootstrap registry", () => {
         initialize: (request) => composed.value.operations.initialize(request),
       }),
       packages: composed.value.packages,
+      projects: composed.value.projects,
       recovery: { status: "not-required" },
       workspace: composed.value.workspace,
     });

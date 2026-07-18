@@ -27,6 +27,11 @@ Usage:
   groma [--format plain|json] package enable <package-name> <entry> [--personal] [--trust-full-user-permissions]
   groma [--format plain|json] package disable <package-name> <entry> [--personal]
   groma [--format plain|json] package remove <package-name> [--personal]
+  groma [--format plain|json] project add (--input <file|-> | --stdin)
+  groma [--format plain|json] project get <project-id>
+  groma [--format plain|json] project list
+  groma [--format plain|json] project update <project-id> --revision <revision> (--input <file|-> | --stdin)
+  groma [--format plain|json] project remove <project-id> --revision <revision>
   groma [--format plain|json] component create (--input <file|-> | --stdin)
   groma [--format plain|json] component get <id> --relationships-limit <1-${CLI_MAX_PAGE_SIZE}> [--relationships-cursor <cursor>]
   groma [--format plain|json] component list --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
@@ -37,7 +42,11 @@ Usage:
   groma [--format plain|json] component reparent <id> --revision <revision> (--parent <parent-id> | --root)
   groma [--format plain|json] component remove <id> --revision <revision>
 
-Create and update input is one bounded UTF-8 JSON application request envelope.
+Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
+Project input contains name, a portable aggregate-workspace-relative source, sorted enabled scanner
+records with canonical data-only configuration, and project-source-relative coverage roots. Project
+updates and removal require the exact current registration revision. Availability is derived locally;
+unavailability and removal never delete prior evidence or mutate observed source content.
 Parent changes for existing components use the explicit reparent command.
 Merge is the only operation that creates a component alias. It removes the obsolete component,
 keeps the survivor identity unchanged, and preserves old references through canonical supersession.

@@ -7,7 +7,7 @@ import {
   type UpdateComponentRequest,
   type SchemaMigrationApplyOutcome,
 } from "../application/index.ts";
-import type { HostSurface, HostSurfaceContext } from "../host/index.ts";
+import type { HostSurface, HostSurfaceContext, ProjectRegistrationInput } from "../host/index.ts";
 import {
   CLI_EXIT,
   commandName,
@@ -68,6 +68,9 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
   if (codes.includes("plugin-package-state-indeterminate")) {
     return CLI_EXIT.indeterminate;
   }
+  if (codes.includes("project-registry-state-indeterminate")) {
+    return CLI_EXIT.indeterminate;
+  }
   if (
     codes.some(
       (code) =>
@@ -90,6 +93,8 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
     codes.some(
       (code) =>
         code === "no-workspace" ||
+        code.startsWith("project-registry-") ||
+        code === "project-revision-conflict" ||
         code === "plugin-package-enabled-limit-exceeded" ||
         code === "plugin-package-plugin-id-conflict" ||
         code === "plugin-package-integrity-drift" ||
@@ -196,6 +201,51 @@ async function structuredRequest(
           ok: false,
         }),
       });
+}
+
+function projectRegistrationRequest(
+  command: CliCommand,
+  value: Readonly<Record<string, unknown>>,
+):
+  | { readonly ok: false; readonly result: CliCommandResult }
+  | { readonly ok: true; readonly value: ProjectRegistrationInput } {
+  const expected = Object.freeze(["coverage", "name", "scanners", "source"]);
+  try {
+    const keys = Reflect.ownKeys(value);
+    if (
+      keys.length !== expected.length ||
+      keys.some((key) => typeof key !== "string" || !expected.includes(key))
+    ) {
+      throw new TypeError("Project registration input keys are not exact");
+    }
+    const fields = Object.create(null) as Record<string, unknown>;
+    for (const key of expected) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        throw new TypeError("Project registration input field is not an enumerable value");
+      }
+      fields[key] = descriptor.value;
+    }
+    return Object.freeze({
+      ok: true as const,
+      value: Object.freeze({
+        coverage: fields.coverage as ProjectRegistrationInput["coverage"],
+        name: fields.name as string,
+        scanners: fields.scanners as ProjectRegistrationInput["scanners"],
+        source: fields.source as string,
+      }),
+    });
+  } catch {
+    return Object.freeze({
+      ok: false as const,
+      result: failedResult(
+        command,
+        CLI_EXIT.usage,
+        "cli-invalid-input",
+        "Project registration input must contain exactly coverage, name, scanners, and source",
+      ),
+    });
+  }
 }
 
 async function overview(
@@ -346,6 +396,42 @@ async function execute(
   }
   if (command.kind === "package-remove") {
     return applicationResult(command, await context.packages.remove(command));
+  }
+  if (command.kind === "project-add") {
+    const request = await structuredRequest(command, command.input, reader, context.cancellation);
+    if (!request.ok) return request.result;
+    const project = projectRegistrationRequest(command, request.value);
+    if (!project.ok) return project.result;
+    return applicationResult(command, await context.projects.add(project.value));
+  }
+  if (command.kind === "project-get") {
+    return applicationResult(command, await context.projects.get({ id: command.id }));
+  }
+  if (command.kind === "project-list") {
+    return applicationResult(command, await context.projects.list());
+  }
+  if (command.kind === "project-update") {
+    const request = await structuredRequest(command, command.input, reader, context.cancellation);
+    if (!request.ok) return request.result;
+    const project = projectRegistrationRequest(command, request.value);
+    if (!project.ok) return project.result;
+    return applicationResult(
+      command,
+      await context.projects.update({
+        ...project.value,
+        expectedRevision: command.expectedRevision,
+        id: command.id,
+      }),
+    );
+  }
+  if (command.kind === "project-remove") {
+    return applicationResult(
+      command,
+      await context.projects.remove({
+        expectedRevision: command.expectedRevision,
+        id: command.id,
+      }),
+    );
   }
   if (command.kind.startsWith("migrate-")) {
     const available = context.workspace.requireWorkspace();

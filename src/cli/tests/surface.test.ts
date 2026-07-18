@@ -48,6 +48,13 @@ function context(code: string): HostSurfaceContext {
         ok: false as const,
       }),
     }),
+    projects: Object.freeze({
+      add: async () => unavailable,
+      get: async () => unavailable,
+      list: async () => unavailable,
+      remove: async () => unavailable,
+      update: async () => unavailable,
+    }),
   });
 }
 
@@ -251,5 +258,74 @@ describe("CLI surface", () => {
       });
       await session.stop();
     }
+  });
+
+  test("rejects non-exact project input before project operations or their providers", async () => {
+    const exact = Object.freeze({
+      coverage: Object.freeze([]),
+      name: "Example",
+      scanners: Object.freeze([]),
+      source: ".",
+    });
+    const invalidInputs = Object.freeze([
+      Object.freeze({ coverage: exact.coverage, name: exact.name, scanners: exact.scanners }),
+      Object.freeze({ ...exact, unexpected: true }),
+      Object.freeze({ ...exact, id: "project.default" }),
+      Object.freeze({ ...exact, expectedRevision: `sha256:${"a".repeat(64)}` }),
+      Object.freeze({
+        ...exact,
+        expectedRevision: `sha256:${"a".repeat(64)}`,
+        id: "project.default",
+      }),
+    ]);
+    let operationCalls = 0;
+    let providerCalls = 0;
+    const unavailable = Object.freeze({
+      diagnostics: Object.freeze([Object.freeze({ code: "unused", message: "unused" })]),
+      ok: false as const,
+    });
+    const projectOperation = async () => {
+      operationCalls += 1;
+      providerCalls += 1;
+      return unavailable;
+    };
+    const base = context("unused");
+    const projectContext: HostSurfaceContext = Object.freeze({
+      ...base,
+      projects: Object.freeze({
+        add: projectOperation,
+        get: projectOperation,
+        list: projectOperation,
+        remove: projectOperation,
+        update: projectOperation,
+      }) as never,
+    });
+    for (const input of invalidInputs) {
+      for (const command of [
+        Object.freeze({ input: Object.freeze({ kind: "stdin" as const }), kind: "project-add" }),
+        Object.freeze({
+          expectedRevision: `sha256:${"b".repeat(64)}`,
+          id: "project.default",
+          input: Object.freeze({ kind: "stdin" as const }),
+          kind: "project-update" as const,
+        }),
+      ] as const) {
+        const controller = createCliSurfaceController(
+          Object.freeze({ command, format: "json" }),
+          { read: async () => JSON.stringify(input) },
+          { stdin: false, stdout: false },
+        );
+        const session = await controller.surface.start(projectContext);
+        await session.completion;
+        expect(controller.result()).toMatchObject({
+          exitCode: CLI_EXIT.usage,
+          ok: false,
+          result: { diagnostics: [{ code: "cli-invalid-input" }], ok: false },
+        });
+        await session.stop();
+      }
+    }
+    expect(operationCalls).toBe(0);
+    expect(providerCalls).toBe(0);
   });
 });

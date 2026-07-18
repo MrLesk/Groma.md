@@ -119,10 +119,21 @@ Persisted local-plugin trust and execution currently fail closed on Windows with
 owner attestor. A fresh Windows workspace without enabled local plugins or an existing
 plugin user-data root still starts normally; POSIX trust behavior is unchanged.
 
-Package commands use a management-only Host composition: previously enabled entries are
-not loaded or started. Inspect reports manifest or enabled-entry drift without executing
-it, and disable/remove remain available as recovery operations when ordinary startup
-would fail closed.
+Package and project commands use a management-only Host path: previously enabled entries are not
+loaded or started, and semantic workspace recovery is skipped only after configuration status is
+validated. The semantic operation gate stays closed. Inspect reports manifest or enabled-entry drift
+without executing it, and disable/remove remain available as recovery operations when malformed
+canonical semantic state makes ordinary startup fail closed.
+
+`project add` and `project update` accept one bounded JSON envelope containing exactly
+`name`, `source`, `scanners`, and `coverage`. Update keeps identity and expected revision on the
+command line; remove also requires the current revision. Get/list return stable identity,
+per-registration revision, source-relative coverage, enabled scanner configuration, and derived
+`available`/`unavailable` state without absolute paths or timestamps. Project commands only
+canonicalize `groma/groma.yaml`; they never read source file contents, load scanners or packages,
+write evidence, or mutate an observed project's package-manager/configuration files.
+If `project add` is indeterminate, its diagnostic includes `attemptedProjectId`; use project get or
+list to reconcile that exact identity before retrying.
 
 `migrate status`, `migrate preview`, and `migrate apply` are the explicit canonical schema
 surface. Status reports the floor, observed versions, mixed state, and per-resource path
@@ -150,10 +161,10 @@ Exit classes are stable:
 | ---: | ----------------------------------------------------- |
 |    0 | Success                                               |
 |    2 | Invalid invocation or structured input                |
-|    3 | Workspace or persisted package-state failure          |
+|    3 | Workspace or persisted package/project-state failure  |
 |    4 | Command, package-source, or revision validation       |
 |    5 | Provider, graph-query, or host infrastructure failure |
-|    6 | Indeterminate semantic or package commit              |
+|    6 | Indeterminate semantic, package, or project commit    |
 |  130 | SIGINT or generic cancellation                        |
 |  143 | SIGTERM                                               |
 

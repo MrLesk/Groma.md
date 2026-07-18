@@ -32,6 +32,7 @@ import {
   createYamlConfigurationParser,
   isBlueprintPackageSource,
   serializeBootstrapConfiguration,
+  workspaceConfigurationCoordinationLocator,
   type BootstrapBaseConfiguration,
   type BootstrapConfigurationLoad,
   type ConfiguredPluginPackage,
@@ -181,7 +182,6 @@ const maximumEntryBytes = 4 * 1024 * 1024;
 const maximumUserStateBytes = 1024 * 1024;
 const lockLocator = requiredLocator("groma", "packages.lock");
 const configurationLocator = requiredLocator("groma", "groma.yaml");
-const packageStateCoordinationLocator = requiredLocator("groma", "package-state");
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const remoteSourcePattern =
@@ -867,6 +867,25 @@ function configuredEnabledEntryCount(configuration: BootstrapBaseConfiguration):
   return configuration.packageDeclarations.reduce((total, item) => total + item.enabled.length, 0);
 }
 
+function sameConfiguredPackages(
+  left: BootstrapBaseConfiguration,
+  right: BootstrapBaseConfiguration,
+): boolean {
+  return (
+    left.packageDeclarations.length === right.packageDeclarations.length &&
+    left.packageDeclarations.every((declaration, index) => {
+      const current = right.packageDeclarations[index];
+      return (
+        current !== undefined &&
+        declaration.name === current.name &&
+        declaration.source === current.source &&
+        declaration.enabled.length === current.enabled.length &&
+        declaration.enabled.every((entry, entryIndex) => entry === current.enabled[entryIndex])
+      );
+    })
+  );
+}
+
 function blueprintEnabledEntryCount(
   configuration: BootstrapBaseConfiguration,
   lock: PackageLock,
@@ -1368,7 +1387,7 @@ export function createLocalPluginPackageManager(
       let coordinated: Result<Result<StartupPackageStateObservation>>;
       try {
         coordinated = await options.resources.withCoordination(
-          { context: "local-machine", locator: packageStateCoordinationLocator },
+          { context: "local-machine", locator: workspaceConfigurationCoordinationLocator },
           () => readStartupPackageStateUncoordinated(personalState, phase),
         );
       } catch {
@@ -1425,29 +1444,30 @@ export function createLocalPluginPackageManager(
     nextLock: PackageLock,
     expectedLock: PackageLock,
   ): Promise<Result<void>> => {
-    const configurationPreflight = preflightConfiguration(nextConfiguration);
-    if (!configurationPreflight.ok) return configurationPreflight;
     const lockPreflight = preflightLock(nextLock);
     if (!lockPreflight.ok) return lockPreflight;
     const expectedLockPreflight = preflightLock(expectedLock);
     if (!expectedLockPreflight.ok) return expectedLockPreflight;
-    const configurationBytes = configurationPreflight.value;
     const lockBytes = lockPreflight.value;
     let publicationMayHaveChanged = false;
+    let committedConfiguration: typeof configuration | undefined;
     const coordinated = await options.resources.withCoordination(
       { context: "local-machine", locator: lockLocator },
       async () => {
         const current = await readConfiguration();
         if (!current.ok) return current;
-        if (
-          serializeBootstrapConfiguration(current.value) !==
-          serializeBootstrapConfiguration(configuration)
-        ) {
+        if (!sameConfiguredPackages(current.value, configuration)) {
           return packageFailure(
             "workspace-configuration-changed",
             "Workspace package configuration changed; retry after changes settle",
           );
         }
+        const rebasedConfiguration = Object.freeze({
+          ...current.value,
+          packageDeclarations: nextConfiguration.packageDeclarations,
+        });
+        const configurationPreflight = preflightConfiguration(rebasedConfiguration);
+        if (!configurationPreflight.ok) return configurationPreflight;
         const currentLock = await readLock();
         if (!currentLock.ok) return currentLock;
         if (!sameBytes(encodeCanonical(currentLock.value), expectedLockPreflight.value)) {
@@ -1472,10 +1492,13 @@ export function createLocalPluginPackageManager(
         const configured = await replaceResource(
           options.resources,
           configurationLocator,
-          configurationBytes,
+          configurationPreflight.value,
           indeterminateBlueprintPackageStateMessage,
         );
-        if (configured.ok) return configured;
+        if (configured.ok) {
+          committedConfiguration = rebasedConfiguration;
+          return configured;
+        }
         return packageFailure(
           "plugin-package-state-indeterminate",
           indeterminateBlueprintPackageStateMessage,
@@ -1491,7 +1514,13 @@ export function createLocalPluginPackageManager(
         : packageStateUnavailable();
     }
     if (!coordinated.value.ok) return coordinated.value;
-    configuration = nextConfiguration;
+    if (committedConfiguration === undefined) {
+      return packageFailure(
+        "plugin-package-state-indeterminate",
+        indeterminateBlueprintPackageStateMessage,
+      );
+    }
+    configuration = committedConfiguration;
     return success(undefined);
   };
 
@@ -1511,10 +1540,7 @@ export function createLocalPluginPackageManager(
         ? currentConfiguration
         : packageFailure("workspace-configuration-changed", configurationChangedMessage);
     }
-    if (
-      serializeBootstrapConfiguration(currentConfiguration.value) !==
-      serializeBootstrapConfiguration(expectedConfiguration)
-    ) {
+    if (!sameConfiguredPackages(currentConfiguration.value, expectedConfiguration)) {
       return packageFailure("workspace-configuration-changed", configurationChangedMessage);
     }
     const currentLock = await readLock();
@@ -1573,7 +1599,7 @@ export function createLocalPluginPackageManager(
           ? indeterminateBlueprintPackageStateMessage
           : indeterminatePersonalPackageStateMessage;
       const coordinated = await options.resources.withCoordination<Result<T>>(
-        { context: "local-machine", locator: packageStateCoordinationLocator },
+        { context: "local-machine", locator: workspaceConfigurationCoordinationLocator },
         async () => {
           completed = await action((message) => {
             publicationMayHaveChanged = true;

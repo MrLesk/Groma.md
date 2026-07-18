@@ -31,6 +31,7 @@ import type {
 } from "../core/index.ts";
 import type { ComponentResourceMapper } from "../application/index.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
+import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
 
 export interface HostProcessContext {
   /** Listener methods must return undefined synchronously; non-void returns fail without being awaited. */
@@ -65,6 +66,7 @@ export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
   readonly initialization: HostInitializationOperations;
   readonly packages: PluginPackageOperations;
+  readonly projects: ProjectRegistrationOperations;
   readonly migrations?: SchemaMigrationOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly workspace: WorkspaceAccessCapability;
@@ -98,6 +100,7 @@ export interface HostComposition {
   readonly migrations?: SchemaMigrationOperations;
   readonly operations: ApplicationOperations;
   readonly packages: PluginPackageOperations;
+  readonly projects: ProjectRegistrationOperations;
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
   readonly plugins?: RunningPluginGraph;
   readonly projection: ProjectionIndexCapability;

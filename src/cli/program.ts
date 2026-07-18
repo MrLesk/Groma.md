@@ -12,6 +12,7 @@ import {
   CLI_EXIT,
   CLI_MAX_INPUT_BYTES,
   commandName,
+  type CliCommand,
   type CliCommandResult,
   type CliFormat,
   type CliInputSource,
@@ -165,6 +166,25 @@ function emit(value: CliCommandResult, format: CliFormat, output: ProgramOutput)
   return emitted.exitCode;
 }
 
+function isRegistryManagementCommand(command: CliCommand): boolean {
+  switch (command.kind) {
+    case "package-add":
+    case "package-disable":
+    case "package-enable":
+    case "package-inspect":
+    case "package-remove":
+    case "package-scaffold":
+    case "project-add":
+    case "project-get":
+    case "project-list":
+    case "project-remove":
+    case "project-update":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export async function runProgram(
   args: readonly string[],
   output: ProgramOutput,
@@ -226,16 +246,18 @@ export async function runProgram(
       stdout: process.stdout.isTTY === true,
     },
   );
+  const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =
     options.createRegistry?.(controller.surface) ??
     createDefaultBootstrapRegistry({
-      loadLocalPluginPackages: !invocation.command.kind.startsWith("package-"),
+      loadLocalPluginPackages: !managementCommand,
       migrationOnly: invocation.command.kind.startsWith("migrate-"),
       surface: controller.surface,
       ...(options.userDataRoot === undefined ? {} : { userDataRoot: options.userDataRoot }),
     });
   const hostOutcome = await runHost({
     context: { workspaceRoot },
+    recoveryPolicy: managementCommand ? "management-not-required" : "semantic-required",
     registry,
     signalSource: options.signalSource ?? createProcessSignalSource(),
   });
