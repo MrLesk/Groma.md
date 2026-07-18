@@ -1,11 +1,11 @@
 ---
 id: GROM-38
 title: Register projects and scanner coverage
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 16:56'
+updated_date: '2026-07-18 17:08'
 labels: []
 milestone: m-3
 dependencies:
