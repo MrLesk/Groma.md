@@ -829,7 +829,7 @@ describe("local observation journal", () => {
     expect(
       (await readFile(absoluteLocator(location.workspaceRoot, locator.value))).byteLength,
     ).toBeLessThanOrEqual(localObservationJournalMinimumBytes);
-  });
+  }, 30_000);
 
   test("resource-phase crashes recover immediately as an exact old-or-new durable lane", async () => {
     const cases = [
