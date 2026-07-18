@@ -1,11 +1,11 @@
 ---
 id: GROM-34
 title: Define the automatic-blueprint aha benchmark
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 04:51'
+updated_date: '2026-07-18 05:04'
 labels: []
 milestone: m-3
 dependencies: []
@@ -104,4 +104,12 @@ Final external-review follow-up:
 - The parser threat model and UTF-8 precheck are explicit.
 - POSIX execution roots reject impossible NUL bytes across HOME, config, workspace, and every attached command context.
 - Claude found no correctness defect in the prior fixes; its two substantive follow-ups were applied. Codex’s POSIX NUL finding was independently reproduced and fixed. Independent review approved the correctness changes; full validation passed 878 tests / 6,534 assertions plus compiled-binary and self-blueprint checks.
+
+Final GitHub gate: final implementation head 55100ab received Codex 👍 and Claude APPROVED. The first CI attempt hit two unrelated Iteration 1 flakes (one five-second timeout and one transient graph-query capability load); rerunning only failed jobs passed Quality, Cross-platform, and Native Windows with no code change.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Defined the versioned, verification-only automatic-blueprint benchmark and immutable Groma/held-out Backlog audits, with offline Git-object proofs, conjunctive observable-fact scoring, hermetic first-minute execution, causal source-integrity evidence, deterministic rescan/identity gates, authenticated provenance, bounded presentation/comprehension checks, and fail-closed cross-platform validation. Verified with 878 tests / 6,534 assertions, typecheck, formatting, architecture boundaries, compiled-binary smoke and recovery, Iteration 1B, self-blueprint verification, offline proof replay, independent adversarial review, Claude approval, Codex approval, and green GitHub CI on all platforms.
+<!-- SECTION:FINAL_SUMMARY:END -->
