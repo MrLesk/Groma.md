@@ -1,0 +1,392 @@
+{
+  "schemaVersion": 1,
+  "auditId": "groma-66fe7c6",
+  "project": {
+    "name": "Groma",
+    "repository": "https://github.com/MrLesk/Groma.md",
+    "revision": "66fe7c616ccb06f8dbd52cafef006cc77f864217",
+    "tree": "71323cd120c867b5c8ac9fffcc07cb9baf6079d4",
+    "packageMetadataVersion": "0.0.0",
+    "ecosystem": ["bun", "typescript"],
+    "fixturePreparation": {
+      "method": "remove-declared-groma-state-v1",
+      "preexistingGromaOwnedPaths": ["groma"],
+      "preparedSourceSnapshotPathCount": 203,
+      "preparedSourceSnapshotSha256": "f1df0bc46db363d82bdc8e6ccb3d2bcc3a75b5403c4f5189e3b31781ba778752"
+    },
+    "sourceScopes": [
+      {
+        "id": "production",
+        "included": ["src/**/*.ts", "src/**/*.tsx"],
+        "excluded": ["src/**/tests/**", "src/**/*.test.ts", "src/**/*.test.tsx"],
+        "pathCount": 61,
+        "pathInventorySha256": "03a89e1b3fc78e39c09c885490126521d9cbb15987a63e3742829eb3d92c004b",
+        "protectedRoots": ["src"]
+      }
+    ]
+  },
+  "reservation": {
+    "heldOut": false,
+    "publicReproducibleReferenceNotSecret": true,
+    "scannerFrozenBeforeHeldOutRun": false,
+    "projectSpecificExceptionsProhibited": true,
+    "scoredResultsMayTuneScanner": true,
+    "genericImprovementRequiresNonHeldOutEvidence": true
+  },
+  "facts": [
+    {
+      "id": "audit.groma.bun-routes.absent",
+      "category": "bun-route",
+      "importance": "supporting",
+      "summary": "The complete pinned production tree has no Bun HTTP route registration or Bun.serve call.",
+      "claim": {
+        "kind": "absence",
+        "subject": "production Bun HTTP routes",
+        "predicate": "contains",
+        "objects": ["no routes"]
+      },
+      "derivation": {
+        "method": "Search every file in the pinned production scope for Bun.serve, Bun HTTP route-table keys, and production imports of Bun Server types; review zero route registrations.",
+        "sourceScopeId": "production",
+        "resultSha256": "954620953514a93e3e61ed8b744e8962f774863c18e62f5eed9def3bf78b9574"
+      },
+      "evidence": [
+        {
+          "path": "package.json",
+          "blobOid": "b2f212e0c515973791c39a57c74903c79d2c0162",
+          "contentSha256": "e21f2abbafcfd92118c8a59c9f9406a1304a6e4e3f027e476d9049aebfd7d01a",
+          "anchor": { "startLine": 1, "endLine": 35, "symbol": "package metadata" }
+        },
+        {
+          "path": "src/cli/program.ts",
+          "blobOid": "386db643abd91b39e1a338de48d9914dc0aa3006",
+          "contentSha256": "17428d4f8036154f8690208e9b5bf7e2e8bfcd3abfe29c8265b4ec6eb8e89e1b",
+          "anchor": { "startLine": 1, "endLine": 38, "symbol": "ProgramOptions" }
+        }
+      ]
+    },
+    {
+      "id": "audit.groma.cross-boundary-dependencies",
+      "category": "cross-boundary-dependency",
+      "importance": "required",
+      "summary": "Literal production imports form exactly the listed aggregate edges between the seven audited source boundaries.",
+      "claim": {
+        "kind": "edge-set",
+        "subject": "production source-boundary imports",
+        "predicate": "contains-exactly",
+        "objects": [
+          "application->core",
+          "application->standard-model",
+          "cli->application",
+          "cli->host",
+          "host->application",
+          "host->core",
+          "host->persistence",
+          "host->plugin-sdk",
+          "host->standard-model",
+          "persistence->core",
+          "persistence->standard-model",
+          "plugin-sdk->core",
+          "standard-model->core"
+        ]
+      },
+      "derivation": {
+        "method": "Parse every static production import in the pinned scope, resolve relative and package-self references, discard intra-boundary edges, aggregate and sort unique boundary pairs.",
+        "sourceScopeId": "production",
+        "resultSha256": "8ad952678023256ab1c9b78766c8cf5f7524a4ec4b56f51f83de7781ef560ad0"
+      },
+      "evidence": [
+        {
+          "path": "src/plugin-sdk/index.ts",
+          "blobOid": "b5d9bf8e19f643e7ab2da339b783be136c1b1cca",
+          "contentSha256": "6afd89bbc202b7b08d754ff7a4c037cb015a93c79145ce5736880b06d2cd5e44",
+          "anchor": { "startLine": 1, "endLine": 31, "symbol": "public SDK imports" }
+        },
+        {
+          "path": "src/standard-model/model.ts",
+          "blobOid": "751629ce655e0bdf6ca3bb3abdc2f765fb4d47b5",
+          "contentSha256": "482a3563ea27ae6a9156cfbb161b4167c22d5d0228dcae803c9112d180c2f05d",
+          "anchor": { "startLine": 1, "endLine": 16, "symbol": "standard model imports" }
+        },
+        {
+          "path": "src/persistence/projection-index.ts",
+          "blobOid": "51457af2e822f46563d3544d7463c205b42bf3b2",
+          "contentSha256": "e63c08981f3e158ec8c6be029c84740dc2d7a95d1d276338607ec71c3eaa6a9e",
+          "anchor": { "startLine": 1, "endLine": 38, "symbol": "projection index imports" }
+        },
+        {
+          "path": "src/application/operations.ts",
+          "blobOid": "cc0d8e1acc4d57213f8f15995fc1a33ce2b09774",
+          "contentSha256": "e2487f04088d33e2280e2be129c0e7b1f85b7ccaa42cac5a944cc1118e36229e",
+          "anchor": { "startLine": 1, "endLine": 43, "symbol": "application operation imports" }
+        },
+        {
+          "path": "src/host/default-bootstrap.ts",
+          "blobOid": "c9d7b8c18ce687f96e43634e59057f9380178e0f",
+          "contentSha256": "1a2d57496371d18969291732bb77ad51dc2d4b3414bd76e1d964b70ce0cb7eda",
+          "anchor": { "startLine": 6, "endLine": 83, "symbol": "host composition imports" }
+        },
+        {
+          "path": "src/host/plugin-scaffolding.ts",
+          "blobOid": "eb87ac965749dd56a8520ecb4e0c77a41073c32f",
+          "contentSha256": "2ac0409f3adc7fa9ed0f12d476adb2502b66720d6ef78f9829acfe02de32f55b",
+          "anchor": { "startLine": 1, "endLine": 18, "symbol": "SDK compatibility import" }
+        },
+        {
+          "path": "src/cli/program.ts",
+          "blobOid": "386db643abd91b39e1a338de48d9914dc0aa3006",
+          "contentSha256": "17428d4f8036154f8690208e9b5bf7e2e8bfcd3abfe29c8265b4ec6eb8e89e1b",
+          "anchor": { "startLine": 1, "endLine": 24, "symbol": "CLI host import" }
+        },
+        {
+          "path": "src/cli/surface.ts",
+          "blobOid": "f53e33bb30876f7b788e200058886d1867cb63b9",
+          "contentSha256": "a02ebbc56f46e1cb483fbd3ac14106125f8e2d93d9e681bfc9ea120e23414d9a",
+          "anchor": { "startLine": 1, "endLine": 16, "symbol": "CLI application import" }
+        }
+      ]
+    },
+    {
+      "id": "audit.groma.documentation-boundary-labels",
+      "category": "documentation-evidence",
+      "importance": "supporting",
+      "summary": "Source documentation names the plugin SDK authoring boundary and explains its two public subpaths.",
+      "claim": {
+        "kind": "documentation",
+        "subject": "source boundary documentation",
+        "predicate": "labels",
+        "objects": ["groma/plugin-sdk", "groma/plugin-sdk/conformance"]
+      },
+      "evidence": [
+        {
+          "path": "src/README.md",
+          "blobOid": "0d474964fd9393fbdcc9e5abc167b9f5543366be",
+          "contentSha256": "e953996e29d4ad7fcc3d048199f4b27731ddb247a57248794173512b748967a5",
+          "anchor": { "startLine": 1, "endLine": 11, "symbol": "Source Layout" }
+        },
+        {
+          "path": "src/plugin-sdk/README.md",
+          "blobOid": "7462960aeeb8bdee9aeb908073c10ad590bae898",
+          "contentSha256": "ea860e32e381939b771768bb0618a3ac025ef71d11d1fb825183f87556d1a3d2",
+          "anchor": { "startLine": 1, "endLine": 27, "symbol": "Groma Plugin SDK" }
+        }
+      ]
+    },
+    {
+      "id": "audit.groma.public-cli-actions",
+      "category": "public-action",
+      "importance": "required",
+      "summary": "The shipped one-shot CLI help publishes the listed command actions.",
+      "claim": {
+        "kind": "set",
+        "subject": "public CLI actions",
+        "predicate": "contains-exactly",
+        "objects": [
+          "blueprint export",
+          "blueprint search",
+          "blueprint traverse",
+          "component children",
+          "component create",
+          "component get",
+          "component list",
+          "component merge",
+          "component remove",
+          "component reparent",
+          "component roots",
+          "component update",
+          "help",
+          "init",
+          "migrate apply",
+          "migrate preview",
+          "migrate status",
+          "overview",
+          "package add",
+          "package disable",
+          "package enable",
+          "package inspect",
+          "package remove",
+          "package scaffold",
+          "version"
+        ]
+      },
+      "derivation": {
+        "method": "Enumerate the complete public CLI parser dispatch and cross-check each accepted action against shipped help text at the pinned revision.",
+        "sourceScopeId": "production",
+        "resultSha256": "764700dd309068df0958ee63b2474f3c16343405e86181c607f6cfc2b8981b19"
+      },
+      "evidence": [
+        {
+          "path": "src/cli/help.ts",
+          "blobOid": "222c124485fb865271416f93f40c07d2d2cf6380",
+          "contentSha256": "e535a6b8ad053ff1f9a851964cae2311498f9e7196403640662c5142318670c0",
+          "anchor": { "startLine": 7, "endLine": 38, "symbol": "HELP_TEXT" }
+        },
+        {
+          "path": "src/cli/parser.ts",
+          "blobOid": "90b446d122da2041374b19941757388a649f71ff",
+          "contentSha256": "89b2be83f67982b9e296acd51b96664a3ed655a8dd61bc69bd84c70ba25c279c",
+          "anchor": { "startLine": 311, "endLine": 387, "symbol": "parseInvocation" }
+        }
+      ]
+    },
+    {
+      "id": "audit.groma.source-boundaries",
+      "category": "workspace-boundary",
+      "importance": "required",
+      "summary": "Every production TypeScript source belongs to one of seven enforced architectural source boundaries.",
+      "claim": {
+        "kind": "set",
+        "subject": "production source boundaries",
+        "predicate": "contains-exactly",
+        "objects": [
+          "application",
+          "cli",
+          "core",
+          "host",
+          "persistence",
+          "plugin-sdk",
+          "standard-model"
+        ]
+      },
+      "derivation": {
+        "method": "Enumerate first path segments for every file in the pinned production scope and cross-check the enforced layerNames declaration.",
+        "sourceScopeId": "production",
+        "resultSha256": "936287aebc0d7bd1aa45db2703175ac26bad0a72b1627fbe11c0fddf9662a18b"
+      },
+      "evidence": [
+        {
+          "path": "scripts/architecture-boundaries.ts",
+          "blobOid": "aa61c9806afc044ec946a703804aa473beab256b",
+          "contentSha256": "1911cde879f825374ffda7c942dd03cd572149a0fcde80362662a60d1ee288f5",
+          "anchor": { "startLine": 6, "endLine": 40, "symbol": "layerNames" }
+        }
+      ]
+    },
+    {
+      "id": "audit.groma.workspace-package",
+      "category": "workspace-boundary",
+      "importance": "required",
+      "summary": "The pinned tree is one private Bun/TypeScript root package with exactly two public package subpaths.",
+      "claim": {
+        "kind": "set",
+        "subject": "root package",
+        "predicate": "declares",
+        "objects": [
+          "package:groma",
+          "package-manager:bun@1.3.14",
+          "public-subpath:./plugin-sdk",
+          "public-subpath:./plugin-sdk/conformance"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "package.json",
+          "blobOid": "b2f212e0c515973791c39a57c74903c79d2c0162",
+          "contentSha256": "e21f2abbafcfd92118c8a59c9f9406a1304a6e4e3f027e476d9049aebfd7d01a",
+          "anchor": { "startLine": 1, "endLine": 10, "symbol": "package metadata" }
+        }
+      ]
+    }
+  ],
+  "forbiddenClaims": [
+    {
+      "id": "forbidden.groma.allowed-means-observed",
+      "severity": "critical",
+      "claim": "Every dependency allowed by the boundary policy is present in production.",
+      "reason": "The allow-list constrains possible imports; only literal imports in the pinned tree establish observed edges.",
+      "evidence": [
+        {
+          "path": "scripts/architecture-boundaries.ts",
+          "blobOid": "aa61c9806afc044ec946a703804aa473beab256b",
+          "contentSha256": "1911cde879f825374ffda7c942dd03cd572149a0fcde80362662a60d1ee288f5",
+          "anchor": { "startLine": 20, "endLine": 40, "symbol": "allowedLayerDependencies" }
+        }
+      ]
+    },
+    {
+      "id": "forbidden.groma.curated-baseline-as-observation",
+      "severity": "critical",
+      "claim": "The automatic map must contain the curated root names or historical 43-component, 83-relationship, or five-root counts.",
+      "reason": "Those names and counts are curated intent or historical comparison context, not defensible scanner ground truth.",
+      "evidence": [
+        {
+          "path": "MANIFESTO.md",
+          "blobOid": "2509484abaaf7716d02487022eb02629b8776e1f",
+          "contentSha256": "6472a88e7ed00978dcf58d97e96ddd1acc237cdbe29e00264e6bae26ce9bf0b9",
+          "anchor": { "startLine": 82, "endLine": 118, "symbol": "Intent and Evidence" }
+        }
+      ]
+    },
+    {
+      "id": "forbidden.groma.directory-is-conceptual-containment",
+      "severity": "critical",
+      "claim": "A source directory proves a canonical component or conceptual parent-child relationship.",
+      "reason": "Directories are observable source boundaries; canonical meaning and containment require reconciliation and intent.",
+      "evidence": [
+        {
+          "path": "MANIFESTO.md",
+          "blobOid": "2509484abaaf7716d02487022eb02629b8776e1f",
+          "contentSha256": "6472a88e7ed00978dcf58d97e96ddd1acc237cdbe29e00264e6bae26ce9bf0b9",
+          "anchor": { "startLine": 61, "endLine": 114, "symbol": "Intent and Evidence" }
+        }
+      ]
+    },
+    {
+      "id": "forbidden.groma.unimplemented-first-loop",
+      "severity": "critical",
+      "claim": "The pin implements groma scan, reconciliation, a web surface, or a visual renderer.",
+      "reason": "The public CLI surface at this pin exposes none of those actions; architectural documentation describes future topology, not shipped behavior.",
+      "evidence": [
+        {
+          "path": "src/cli/help.ts",
+          "blobOid": "222c124485fb865271416f93f40c07d2d2cf6380",
+          "contentSha256": "e535a6b8ad053ff1f9a851964cae2311498f9e7196403640662c5142318670c0",
+          "anchor": { "startLine": 9, "endLine": 38, "symbol": "HELP_TEXT" }
+        },
+        {
+          "path": "ARCHITECTURE.md",
+          "blobOid": "d78ddde28b4c845ddc92eb808e8a44626be939cd",
+          "contentSha256": "05ed68c75bfd0c69157e90ce40955f2c6db1dee7d3de7c11490bda7724ee7f00",
+          "anchor": { "startLine": 92, "endLine": 121, "symbol": "Primary Workflow Sequences" }
+        }
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "exclude.groma.curated-intent",
+      "scope": "groma/, ARCHITECTURE.md intent topology, names, descriptions, relationship declarations, and historical counts",
+      "reason": "The benchmark evaluates observable production structure without requiring automatic output to invent or reproduce curated meaning."
+    },
+    {
+      "id": "exclude.groma.tests-and-fixtures",
+      "scope": "test files, test fixtures, generated dist output, and trusted project plugin behavior",
+      "reason": "The audit describes the pinned first-party production tree; test-only fetches and arbitrary trusted plugin effects are not production routes."
+    },
+    {
+      "id": "exclude.groma.nonliteral-plugin-targets",
+      "scope": "runtime target of the audited nonliteral trusted-plugin import",
+      "reason": "The pin proves a loading seam but not a named external target, so the audit fails closed instead of inventing one."
+    }
+  ],
+  "comprehensionQuestions": [
+    {
+      "id": "question.groma.boundaries",
+      "prompt": "From the frozen main layer alone, what are the major production source boundaries?",
+      "factIds": ["audit.groma.source-boundaries", "audit.groma.workspace-package"],
+      "required": true
+    },
+    {
+      "id": "question.groma.dependencies",
+      "prompt": "Which major source boundaries depend on which others?",
+      "factIds": ["audit.groma.cross-boundary-dependencies"],
+      "required": true
+    },
+    {
+      "id": "question.groma.surface",
+      "prompt": "What can a user invoke publicly, and what expected first-loop capability is visibly not yet observed?",
+      "factIds": ["audit.groma.public-cli-actions", "audit.groma.bun-routes.absent"],
+      "required": true
+    }
+  ]
+}
