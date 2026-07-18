@@ -36,9 +36,13 @@ import { containCapabilityValue } from "../application/capability-value.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
+  /** Only registry-management surfaces may bypass semantic recovery; all other callers default closed. */
+  readonly recoveryPolicy?: HostRecoveryPolicy;
   readonly registry: HostBootstrapRegistry;
   readonly signalSource: HostSignalSource;
 }
+
+export type HostRecoveryPolicy = "management-not-required" | "semantic-required";
 
 interface ContainedHostSurfaceSession {
   readonly completion: Promise<{ readonly state: "completed" | "failed" }>;
@@ -1189,6 +1193,10 @@ export function createProcessSignalSource(
 }
 
 export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> {
+  const recoveryPolicy = options.recoveryPolicy ?? "semantic-required";
+  if (recoveryPolicy !== "semantic-required" && recoveryPolicy !== "management-not-required") {
+    return startupFailure("invalid-host-recovery-policy", "Host recovery policy is malformed");
+  }
   const registry = canonicalRegistry(options.registry);
   if (!registry.ok) {
     return startupFailure(
@@ -1349,6 +1357,8 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                       );
               } else if (hostCancellation.signal.aborted) {
                 outcome = cancelled(cancellationSignal);
+              } else if (recoveryPolicy === "management-not-required") {
+                recovery = "not-required";
               } else {
                 let rawRecovery: unknown;
                 try {

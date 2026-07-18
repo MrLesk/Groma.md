@@ -329,6 +329,62 @@ describe("bootstrap configuration", () => {
     expect(source).toContain('configuration: {"a":[1,null],"z":true}');
   });
 
+  test("round-trips scanner line and paragraph separators through stable YAML bytes", () => {
+    const project = canonicalizeProjectRegistration({
+      coverage: [{ id: "workspace", resourceRoot: "." }],
+      id: "project.default",
+      name: "Workspace",
+      scanners: [
+        {
+          configuration: {
+            line: "before\u2028after",
+            nested: ["left\u2029right", { both: "line\u2028paragraph\u2029" }],
+            paragraph: "before\u2029after",
+          },
+          id: "official.separator-proof",
+        },
+      ],
+      source: ".",
+    });
+    expect(project).toMatchObject({ ok: true });
+    if (!project.ok) return;
+    const parser = createYamlConfigurationParser();
+    const firstSource = serializeBootstrapConfiguration({
+      packageDeclarations: [],
+      projectRegistrations: [project.value],
+      requestedRuntimePlugins: [],
+      retiredProjectIds: [],
+      schema: "groma/v0.1",
+    });
+    const firstParsed = parser.parse(new TextEncoder().encode(firstSource));
+    expect(firstParsed).toMatchObject({
+      ok: true,
+      value: {
+        projectRegistrations: [
+          {
+            scanners: [
+              {
+                configuration: {
+                  line: "before\u2028after",
+                  nested: ["left\u2029right", { both: "line\u2028paragraph\u2029" }],
+                  paragraph: "before\u2029after",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (!firstParsed.ok) return;
+    const secondSource = serializeBootstrapConfiguration(firstParsed.value);
+    expect(secondSource).toBe(firstSource);
+    const secondParsed = parser.parse(new TextEncoder().encode(secondSource));
+    expect(secondParsed).toEqual(firstParsed);
+    if (secondParsed.ok) {
+      expect(serializeBootstrapConfiguration(secondParsed.value)).toBe(firstSource);
+    }
+  });
+
   test("rejects unsafe project names, reserved aggregate roots, invalid scopes, and hostile shapes", () => {
     const valid = (overrides: Record<string, unknown> = {}) => ({
       coverage: [{ id: "workspace", resourceRoot: "." }],

@@ -119,10 +119,11 @@ Persisted local-plugin trust and execution currently fail closed on Windows with
 owner attestor. A fresh Windows workspace without enabled local plugins or an existing
 plugin user-data root still starts normally; POSIX trust behavior is unchanged.
 
-Package and project commands use a management-only Host composition: previously enabled entries are
-not loaded or started. Inspect reports manifest or enabled-entry drift without executing
-it, and disable/remove remain available as recovery operations when ordinary startup
-would fail closed.
+Package and project commands use a management-only Host path: previously enabled entries are not
+loaded or started, and semantic workspace recovery is skipped only after configuration status is
+validated. The semantic operation gate stays closed. Inspect reports manifest or enabled-entry drift
+without executing it, and disable/remove remain available as recovery operations when malformed
+canonical semantic state makes ordinary startup fail closed.
 
 `project add` and `project update` accept one bounded JSON envelope containing exactly
 `name`, `source`, `scanners`, and `coverage`. Update keeps identity and expected revision on the

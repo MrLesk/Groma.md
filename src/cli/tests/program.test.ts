@@ -558,6 +558,15 @@ describe("CLI program", () => {
       },
     });
 
+    const malformedIntentDirectory = path.join(root, "groma", "intent", "00");
+    const malformedIntentPath = path.join(
+      malformedIntentDirectory,
+      "ent_00000000000000000000000000000001.md",
+    );
+    await mkdir(malformedIntentDirectory, { recursive: true });
+    await writeFile(malformedIntentPath, "deliberately malformed canonical intent\n");
+    const malformedIntent = await readFile(malformedIntentPath);
+
     const captured = captureOutput();
     expect(
       await runProgram(["project", "list"], captured, {
@@ -566,6 +575,26 @@ describe("CLI program", () => {
       }),
     ).toBe(CLI_EXIT.success);
     expect(captured.output[0]).toContain('"project.default"');
+
+    expect(
+      await jsonCommand(root, ["package", "disable", "broken-enabled", "./plugins/missing.js"]),
+    ).toMatchObject({
+      envelope: { command: "package disable", exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(await jsonCommand(root, ["package", "remove", "broken-enabled"])).toMatchObject({
+      envelope: { command: "package remove", exitCode: CLI_EXIT.success, ok: true },
+    });
+    expect(await readFile(malformedIntentPath)).toEqual(malformedIntent);
+
+    expect(await jsonCommand(root, ["component", "roots", "--limit", "1"])).toMatchObject({
+      envelope: {
+        command: "component roots",
+        exitCode: CLI_EXIT.infrastructure,
+        ok: false,
+        result: { diagnostics: [{ code: "workspace-recovery-failed" }] },
+      },
+    });
+    expect(await readFile(malformedIntentPath)).toEqual(malformedIntent);
   });
 
   test("converges two initializers on the same exact default project", async () => {

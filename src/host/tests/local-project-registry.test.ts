@@ -42,6 +42,16 @@ function bytes(value: number): (length: number) => Uint8Array {
   return (length) => new Uint8Array(length).fill(value);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
 async function fixture() {
   const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-project-registry-"));
   const userDataRoot = await mkdtemp(path.join(tmpdir(), "groma-project-user-"));
@@ -562,6 +572,28 @@ describe("local project registry", () => {
     }
   });
 
+  test("contains an admitted pre-publication rejection as unavailable", async () => {
+    const context = await fixture();
+    let commits = 0;
+    const base = forwardingResources(context.resources, async (handle) => {
+      commits += 1;
+      return await context.resources.commitReplacement(handle);
+    });
+    const resources = Object.freeze({
+      ...base,
+      read: async () => {
+        throw new Error("pre-publication rejection");
+      },
+    });
+    const registry = createLocalProjectRegistry({ entropy: bytes(8), resources });
+
+    expect(await registry.add(projectInput("Rejected before publication"))).toMatchObject({
+      diagnostics: [{ code: "project-registry-unavailable" }],
+      ok: false,
+    });
+    expect(commits).toBe(0);
+  });
+
   test("reports thrown and malformed post-commit settlements as indeterminate", async () => {
     for (const mode of ["throw", "malformed"] as const) {
       const context = await fixture();
@@ -704,6 +736,232 @@ describe("local project registry", () => {
       ).toMatchObject({ ok: true, value: { id: attemptedId, name: mode } });
     }
     expect(accessorCalls).toBe(0);
+  });
+
+  test("admits at most one publication under sequential and concurrent coordination reentry", async () => {
+    for (const [index, mode] of ["sequential", "concurrent"].entries()) {
+      const context = await fixture();
+      const initial = await createLocalProjectRegistry({
+        entropy: bytes(73 + index),
+        resources: context.resources,
+      }).get({ id: "project.default" });
+      expect(initial, mode).toMatchObject({ ok: true });
+      if (!initial.ok) continue;
+      let commits = 0;
+      const base = forwardingResources(context.resources, async (handle) => {
+        commits += 1;
+        return await context.resources.commitReplacement(handle);
+      });
+      const withCoordination: LocalResourceProvider["withCoordination"] = async (
+        _request,
+        action,
+      ) => {
+        if (mode === "sequential") {
+          const first = await action();
+          await action();
+          return Object.freeze({ ok: true as const, value: first }) as never;
+        }
+        const firstExecution = action();
+        const secondExecution = action();
+        const first = await firstExecution;
+        await secondExecution;
+        return Object.freeze({ ok: true as const, value: first }) as never;
+      };
+      const registry = createLocalProjectRegistry({
+        entropy: bytes(75 + index),
+        resources: Object.freeze({ ...base, withCoordination }),
+      });
+
+      expect(
+        await registry.update({
+          ...projectInput(`Updated ${mode}`),
+          expectedRevision: initial.value.revision,
+          id: initial.value.id,
+        }),
+        mode,
+      ).toMatchObject({
+        diagnostics: [{ code: "project-registry-state-indeterminate" }],
+        ok: false,
+      });
+      expect(commits, mode).toBe(1);
+      expect(
+        await createLocalProjectRegistry({
+          entropy: bytes(77 + index),
+          resources: context.resources,
+        }).get({ id: initial.value.id }),
+        mode,
+      ).toMatchObject({ ok: true, value: { name: `Updated ${mode}` } });
+    }
+  });
+
+  test("fences an admitted publication when coordination returns before awaiting it", async () => {
+    const context = await fixture();
+    const initial = await createLocalProjectRegistry({
+      entropy: bytes(79),
+      resources: context.resources,
+    }).get({ id: "project.default" });
+    expect(initial).toMatchObject({ ok: true });
+    if (!initial.ok) return;
+    const commitEntered = deferred<void>();
+    const allowCommit = deferred<void>();
+    let commits = 0;
+    const base = forwardingResources(context.resources, async (handle) => {
+      commits += 1;
+      commitEntered.resolve(undefined);
+      await allowCommit.promise;
+      return await context.resources.commitReplacement(handle);
+    });
+    const withCoordination: LocalResourceProvider["withCoordination"] = async (
+      _request,
+      action,
+    ) => {
+      void action();
+      return Object.freeze({ ok: true as const, value: Object.freeze({}) }) as never;
+    };
+    const registry = createLocalProjectRegistry({
+      entropy: bytes(80),
+      resources: Object.freeze({ ...base, withCoordination }),
+    });
+    let settled = false;
+    const updating = registry.update({
+      ...projectInput("Early outer return"),
+      expectedRevision: initial.value.revision,
+      id: initial.value.id,
+    });
+    void updating.then(() => {
+      settled = true;
+    });
+
+    await commitEntered.promise;
+    await Promise.resolve();
+    expect(settled).toBeFalse();
+    allowCommit.resolve(undefined);
+    expect(await updating).toMatchObject({
+      diagnostics: [{ code: "project-registry-state-indeterminate" }],
+      ok: false,
+    });
+    expect(commits).toBe(1);
+    expect(
+      await createLocalProjectRegistry({
+        entropy: bytes(81),
+        resources: context.resources,
+      }).get({ id: initial.value.id }),
+    ).toMatchObject({ ok: true, value: { name: "Early outer return" } });
+  });
+
+  test("closes a retained coordination callback after the outer provider settles", async () => {
+    const context = await fixture();
+    const initial = await createLocalProjectRegistry({
+      entropy: bytes(82),
+      resources: context.resources,
+    }).get({ id: "project.default" });
+    expect(initial).toMatchObject({ ok: true });
+    if (!initial.ok) return;
+    const unchanged = await readFile(path.join(context.workspaceRoot, configurationRelative));
+    let commits = 0;
+    let reads = 0;
+    let stages = 0;
+    let retainedAction: (() => unknown) | undefined;
+    const base = forwardingResources(context.resources, async (handle) => {
+      commits += 1;
+      return await context.resources.commitReplacement(handle);
+    });
+    const resources = Object.freeze({
+      ...base,
+      read: async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+        reads += 1;
+        return await base.read(request);
+      },
+      stageReplacement: async (...args: Parameters<LocalResourceProvider["stageReplacement"]>) => {
+        stages += 1;
+        return await base.stageReplacement(...args);
+      },
+      withCoordination: (async (_request, action) => {
+        retainedAction = action;
+        return Object.freeze({ ok: true as const, value: Object.freeze({}) }) as never;
+      }) as LocalResourceProvider["withCoordination"],
+    });
+    const registry = createLocalProjectRegistry({ entropy: bytes(83), resources });
+
+    expect(
+      await registry.update({
+        ...projectInput("Must never publish"),
+        expectedRevision: initial.value.revision,
+        id: initial.value.id,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "project-registry-unavailable" }], ok: false });
+    expect(retainedAction).toBeDefined();
+    if (retainedAction !== undefined) await retainedAction();
+    await Promise.resolve();
+    expect({ commits, reads, stages }).toEqual({ commits: 0, reads: 0, stages: 0 });
+    expect(await readFile(path.join(context.workspaceRoot, configurationRelative))).toEqual(
+      unchanged,
+    );
+  });
+
+  test("keeps stale mutation failures private from a malicious coordination provider", async () => {
+    const context = await fixture();
+    const ordinary = createLocalProjectRegistry({
+      entropy: bytes(71),
+      resources: context.resources,
+    });
+    const initial = await ordinary.get({ id: "project.default" });
+    expect(initial).toMatchObject({ ok: true });
+    if (!initial.ok) return;
+    const current = await ordinary.update({
+      ...projectInput("Current"),
+      expectedRevision: initial.value.revision,
+      id: initial.value.id,
+    });
+    expect(current).toMatchObject({ ok: true });
+    if (!current.ok) return;
+    const unchanged = await readFile(path.join(context.workspaceRoot, configurationRelative));
+
+    let mutationAttempts = 0;
+    let successfulFailureRewrites = 0;
+    const base = forwardingResources(
+      context.resources,
+      context.resources.commitReplacement.bind(context.resources),
+    );
+    const withCoordination: LocalResourceProvider["withCoordination"] = async (
+      _request,
+      action,
+    ) => {
+      const returned = (await action()) as unknown;
+      mutationAttempts += 1;
+      if (typeof returned === "object" && returned !== null) {
+        const deleted = Reflect.deleteProperty(returned, "diagnostics");
+        const changedStatus = Reflect.set(returned, "ok", true);
+        const suppliedValue = Reflect.set(returned, "value", Object.freeze({}));
+        if (deleted && changedStatus && suppliedValue) successfulFailureRewrites += 1;
+      }
+      return Object.freeze({ ok: true as const, value: returned }) as never;
+    };
+    const malicious = createLocalProjectRegistry({
+      entropy: bytes(72),
+      resources: Object.freeze({ ...base, withCoordination }),
+    });
+
+    expect(
+      await malicious.update({
+        ...projectInput("Stale update"),
+        expectedRevision: initial.value.revision,
+        id: initial.value.id,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "project-revision-conflict" }], ok: false });
+    expect(await readFile(path.join(context.workspaceRoot, configurationRelative))).toEqual(
+      unchanged,
+    );
+    expect(
+      await malicious.remove({ id: initial.value.id, expectedRevision: initial.value.revision }),
+    ).toMatchObject({ diagnostics: [{ code: "project-revision-conflict" }], ok: false });
+    expect(await readFile(path.join(context.workspaceRoot, configurationRelative))).toEqual(
+      unchanged,
+    );
+    expect({ mutationAttempts, successfulFailureRewrites }).toEqual({
+      mutationAttempts: 2,
+      successfulFailureRewrites: 0,
+    });
   });
 
   test("rejects a coordination success that never executed the owned callback", async () => {

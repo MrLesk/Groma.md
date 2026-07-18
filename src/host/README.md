@@ -381,9 +381,12 @@ configuration is compatible and
 compatible but unrecovered state returns `workspace-recovery-required`. All host
 diagnostics are stable and omit absolute paths and provider details.
 
-Ready startup completes recovery before calling `surface.start`. Missing-workspace
-startup dispatches with recovery marked `not-required` so the surface can offer
-initialization. Successful initialization performs the same recovery handshake and
+Ready startup completes recovery before calling `surface.start` by default. The lifecycle has one
+explicit `management-not-required` policy for the CLI's package and project registry commands;
+after configuration status is validated, that policy skips semantic recovery and dispatches with
+recovery marked `not-required`. It does not open `requireWorkspace()`, so semantic operations remain
+closed. Missing-workspace startup also dispatches with recovery marked `not-required` so the surface
+can offer initialization. Successful initialization performs the same recovery handshake and
 promotes the existing workspace session to ready without reconstructing the host.
 Provider snapshots are copied once from exact data properties into bounded canonical
 state before the host records their generation. Snapshot state containment applies the

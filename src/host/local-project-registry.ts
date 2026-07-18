@@ -705,6 +705,24 @@ export function createLocalProjectRegistry(
   ): Promise<Result<BootstrapBaseConfiguration>> => {
     let publicationMayHaveChanged = false;
     let ownedSettlement: Result<BootstrapBaseConfiguration> | undefined;
+    const coordinationWitness = Object.freeze(Object.create(null)) as Readonly<
+      Record<string, never>
+    >;
+    const refusedCoordinationWitness = Object.freeze(Object.create(null)) as Readonly<
+      Record<string, never>
+    >;
+    const coordinationState: {
+      admissionOpen: boolean;
+      admittedExecutions: number;
+      executionState: "not-started" | "running" | "completed" | "failed";
+      misuseObserved: boolean;
+    } = {
+      admissionOpen: true,
+      admittedExecutions: 0,
+      executionState: "not-started",
+      misuseObserved: false,
+    };
+    let ownedExecutionFence: Promise<void> | undefined;
     const unsettled = (): Result<BootstrapBaseConfiguration> =>
       publicationMayHaveChanged
         ? projectFailure(
@@ -803,17 +821,54 @@ export function createLocalProjectRegistry(
       }
       return success(roundTrip.value);
     };
+    const coordinatedAction = ():
+      Readonly<Record<string, never>> | Promise<Readonly<Record<string, never>>> => {
+      if (!coordinationState.admissionOpen || coordinationState.admittedExecutions !== 0) {
+        coordinationState.misuseObserved = true;
+        return refusedCoordinationWitness;
+      }
+      coordinationState.admissionOpen = false;
+      coordinationState.admittedExecutions = 1;
+      coordinationState.executionState = "running";
+      const execution = (async () => {
+        try {
+          ownedSettlement = await publication();
+          coordinationState.executionState = "completed";
+          return coordinationWitness;
+        } catch {
+          coordinationState.executionState = "failed";
+          throw new Error("Project registry coordinated publication failed");
+        }
+      })();
+      ownedExecutionFence = (async () => {
+        try {
+          await execution;
+        } catch {
+          // The state above owns classification; the fence only contains and awaits rejection.
+        }
+      })();
+      return execution;
+    };
+
     let rawCoordinated: unknown;
+    let coordinationFailed = false;
     try {
       rawCoordinated = await resources.withCoordination(
         { context: "local-machine", locator: workspaceConfigurationCoordinationLocator },
-        async () => {
-          const settlement = await publication();
-          ownedSettlement = settlement;
-          return settlement;
-        },
+        coordinatedAction,
       );
     } catch {
+      coordinationFailed = true;
+    }
+    coordinationState.admissionOpen = false;
+    if (ownedExecutionFence !== undefined) await ownedExecutionFence;
+    if (
+      coordinationFailed ||
+      coordinationState.misuseObserved ||
+      coordinationState.admittedExecutions !== 1 ||
+      coordinationState.executionState !== "completed" ||
+      ownedSettlement === undefined
+    ) {
       return unsettled();
     }
     const coordinated = inspectHostRecord(
@@ -835,11 +890,7 @@ export function createLocalProjectRegistry(
       if (!diagnostics.ok) return unsettled();
       return unsettled();
     }
-    if (
-      coordinated.value.ok !== true ||
-      ownedSettlement === undefined ||
-      coordinated.value.value !== ownedSettlement
-    ) {
+    if (coordinated.value.ok !== true || coordinated.value.value !== coordinationWitness) {
       return unsettled();
     }
     const settlement = inspectHostRecord(

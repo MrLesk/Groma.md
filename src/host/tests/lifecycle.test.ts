@@ -1358,6 +1358,38 @@ describe("host lifecycle", () => {
     expect(await running).toEqual({ status: "completed" });
   });
 
+  test("dispatches a configured management surface without semantic recovery", async () => {
+    const signal = signals();
+    let recoveries = 0;
+    let recoveryStatus: string | undefined;
+    const access = workspace({ state: "configured" }, async () => {
+      recoveries += 1;
+      return failure({ code: "must-not-recover", message: "must not recover" });
+    });
+    const outcome = await runHost({
+      context: { workspaceRoot: "/absolute/workspace" },
+      recoveryPolicy: "management-not-required",
+      registry: registry(
+        composition(
+          {
+            start: (context) => {
+              recoveryStatus = context.recovery.status;
+              return { completion: Promise.resolve(), stop: async () => {} };
+            },
+          },
+          access,
+        ),
+      ),
+      signalSource: signal.source,
+    });
+
+    expect(outcome).toEqual({ status: "completed" });
+    expect({ recoveries, recoveryStatus }).toEqual({
+      recoveries: 0,
+      recoveryStatus: "not-required",
+    });
+  });
+
   test("reports recovery failure without dispatching a surface", async () => {
     const signal = signals();
     let starts = 0;
@@ -2396,7 +2428,7 @@ describe("host lifecycle", () => {
     expect(signal.unsubscribes()).toBe(1);
   });
 
-  test("always invokes recover for a validated ready status", async () => {
+  test("uses semantic recovery by default for a validated ready status", async () => {
     const signal = signals();
     let recoveries = 0;
     const access = workspace({ state: "ready" }, async () => {
