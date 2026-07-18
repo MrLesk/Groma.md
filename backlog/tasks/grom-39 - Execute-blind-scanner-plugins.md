@@ -1,11 +1,11 @@
 ---
 id: GROM-39
 title: Execute blind scanner plugins
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 19:48'
+updated_date: '2026-07-18 20:00'
 labels: []
 milestone: m-3
 dependencies:
@@ -84,10 +84,12 @@ Objective verification on the final head: 291 cross-module focused tests and 105
 Claude reviewed PR #40 and approved it with no blocking findings. Its relevant forward-looking feedback was applied by documenting the CompletedObservationConsumer at-least-once delivery contract and explicit idempotency requirement for GROM-41. The suggested shared exclusion constant was not adopted because the duplication is tiny and centralizing it would create avoidable module coupling; the late-sink concern is already fenced by createScannerRequest cancellation authority and retained-call tests. Post-comment verification passed 20 runtime/public-integration tests, TypeScript, formatting, and diff checks.
 
 Codex exact-head review on PR #40 identified two actionable P2 findings, both independently confirmed and fixed. Full recovery now serializes unknown ownership and pending same-lane recovery work against targeted starts while permitting clean independent lanes only after recovery truth is known; held recover, delivery, acknowledgement, and cleanup tests prove exactly-once in-process handoff ownership. Scanner lifecycle cleanup now accepts only exact bounded terminal execution reports, rejects running or incoherent reports, and recursively contains nested rejected native Promises without leaking secrets or causing unhandled rejections. Independent post-fix quality review returned READY. Final post-review verification passed bun run check with formatting, TypeScript, architecture boundaries, 1,025 tests / 7,548 assertions, build, smoke, Iteration 1A/1B, and self-blueprint verification; bun run check:targets verified all four standalone targets.
+
+PR #40 merged to main as ef5568828618a2af430f4a5f328a6ef9e6afdb42 after all three CI jobs passed and Codex completed an exact-head review of 45116eb3f7 with no major issues. The two earlier P2 findings were confirmed, fixed, regression-tested, and accepted by the subsequent review.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented blind, finite, cancellable scanner execution from the already-started plugin catalog through confined project resources, durable observation journaling, lane-scoped recovery/quarantine, bounded status, safe Host lifecycle cleanup, and an idempotent completed-observation handoff seam that performs no canonical mutation. Verified all six acceptance criteria with public-SDK third-party integration, adversarial runtime/resource/lifecycle tests, 1,022-test full release gates, four standalone targets, and two independent READY reviews.
+Implemented blind, finite, cancellable scanner execution through confined project resources, durable observation journaling, lane-scoped recovery, bounded lifecycle status, and an idempotent completed-observation handoff seam without canonical mutation. Verified all six acceptance criteria with public third-party and built-in-shaped integration, adversarial runtime/resource/lifecycle coverage, 1,025 repository tests / 7,548 assertions, compiled workflows, four standalone targets, independent READY review, Claude review, green CI, and Codex exact-head acceptance; merged in PR #40.
 <!-- SECTION:FINAL_SUMMARY:END -->
