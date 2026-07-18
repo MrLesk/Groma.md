@@ -42,6 +42,7 @@ import {
   aliasStoreLocator,
   createAliasStore,
   createLocalResourceProvider,
+  createLocalObservationJournal,
   createLocalCanonicalMigrationCatalog,
   createLocalTransactionJournal,
   createLocalProjectionIndex,
@@ -58,6 +59,7 @@ import {
   createStandardModelCapability,
   createStandardModelInvariant,
 } from "../standard-model/index.ts";
+import { scannerCapabilityId, scannerCapabilityVersion } from "../plugin-sdk/index.ts";
 import { isHostProxy } from "./runtime-validation.ts";
 import {
   bootstrapConfigurationBounds,
@@ -82,6 +84,8 @@ import type {
 import { createLocalWorkspaceCapability } from "./local-workspace.ts";
 import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
 import { createLocalProjectRegistry } from "./local-project-registry.ts";
+import { createLocalScannerProjectResources } from "./scanner-project-resources.ts";
+import { createScannerExecutionRuntime } from "./scanner-runtime.ts";
 import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-identities.ts";
 
@@ -365,6 +369,17 @@ function runningCapability<T>(plugins: RunningPluginGraph, id: string): T {
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
+
+const unavailableScannerHandoffConsumer = Object.freeze({
+  async consume() {
+    return failure(
+      diagnostic(
+        "scanner-handoff-consumer-unavailable",
+        "Completed scanner observations cannot be reconciled by this Host yet",
+      ),
+    );
+  },
+});
 
 function localPhaseOneProviderCanRepair(
   item: Diagnostic,
@@ -1263,6 +1278,23 @@ export function createDefaultBootstrapRegistry(
         );
       }
       const resolvedInspection = resolved.value.inspect();
+      const overpoweredScanner = resolvedInspection.plugins.find(
+        (plugin) =>
+          plugin.requires.length > 0 &&
+          plugin.provides.some(
+            (declaration) =>
+              declaration.id === scannerCapabilityId &&
+              declaration.version === scannerCapabilityVersion,
+          ),
+      );
+      if (overpoweredScanner !== undefined) {
+        return failAfterStage(
+          diagnostic(
+            "scanner-provider-authority-invalid",
+            "Scanner providers must not retain runtime capability requirements",
+          ),
+        );
+      }
       for (const pluginId of loadedPackages.value.personalPluginIds) {
         const plugin = resolvedInspection.plugins.find((entry) => entry.id === pluginId);
         if (
@@ -1417,6 +1449,22 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.transactionProvider,
       );
+      const observationJournal = createLocalObservationJournal({ resources });
+      const scanners = createScannerExecutionRuntime({
+        consumer: unavailableScannerHandoffConsumer,
+        entropy,
+        journal: observationJournal,
+        plugins,
+        projectResources: (project) =>
+          createLocalScannerProjectResources({
+            architecture: selectedTarget.architecture as "arm64" | "x64",
+            ...(coordinationRoot === undefined ? {} : { coordinationRoot }),
+            platform: selectedTarget.platform as "darwin" | "linux" | "win32",
+            source: project.source,
+            workspaceRoot: convention.value.workspaceRoot,
+          }),
+        projects: projectOperations,
+      });
       return success<HostComposition>(
         Object.freeze({
           graph,
@@ -1433,6 +1481,7 @@ export function createDefaultBootstrapRegistry(
           queries,
           resourceMapper,
           resources,
+          scanners,
           store,
           surface: runningSurface,
           snapshotStateDecoder,

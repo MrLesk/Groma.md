@@ -1,8 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
-import type { HostSurfaceContext } from "../../host/index.ts";
+import type { HostSurfaceContext, ScannerSurfaceOperations } from "../../host/index.ts";
 import { CLI_EXIT, type CliInvocation } from "../contracts.ts";
 import { createCliSurfaceController } from "../surface.ts";
+
+const inertScanners: ScannerSurfaceOperations = Object.freeze({
+  recover: async () => ({
+    diagnostics: Object.freeze([
+      Object.freeze({ code: "scanner-unavailable", message: "Unavailable" }),
+    ]),
+    ok: false as const,
+  }),
+  start: async () => ({
+    diagnostics: Object.freeze([
+      Object.freeze({ code: "scanner-unavailable", message: "Unavailable" }),
+    ]),
+    ok: false as const,
+  }),
+});
 
 function context(code: string): HostSurfaceContext {
   const unavailable = Object.freeze({
@@ -13,6 +28,7 @@ function context(code: string): HostSurfaceContext {
     cancellation: new AbortController().signal,
     initialization: Object.freeze({ initialize: async () => unavailable }),
     recovery: Object.freeze({ status: "not-required" as const }),
+    scanners: inertScanners,
     workspace: Object.freeze({
       initialize: async () => ({
         diagnostics: unavailable.diagnostics,

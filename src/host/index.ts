@@ -8,3 +8,5 @@ export * from "./local-project-registry.ts";
 export * from "./local-workspace.ts";
 export * from "./plugin-runtime-bounds.ts";
 export * from "./plugin-scaffolding.ts";
+export * from "./scanner-project-resources.ts";
+export * from "./scanner-runtime.ts";

@@ -5,14 +5,23 @@ import path from "node:path";
 
 import {
   allowsCustomLocalCoordinationRoot,
+  createLocalObservationJournal,
   localTransactionStateLocator,
   markdownIntentLocator,
 } from "../../persistence/index.ts";
 import {
   canonicalSchemaMigrationApiVersion,
   parseEntityId,
+  pluginRuntimeApiVersion,
   TransactionEngine,
+  type PluginRegistration,
 } from "../../core/index.ts";
+import {
+  scannerCapability,
+  scannerCapabilityId,
+  scannerCapabilityVersion,
+  type Scanner,
+} from "../../plugin-sdk/index.ts";
 
 import {
   bootstrapConfigurationBounds,
@@ -20,6 +29,7 @@ import {
   createDefaultBootstrapRegistry,
   defaultHostCapabilityIds,
   runHost,
+  serializeBootstrapConfiguration,
   type DefaultBootstrapRegistryOptions,
   type HostComposition,
   type HostSurface,
@@ -50,6 +60,29 @@ function idleSurface(): HostSurface {
         stop: async () => {},
       }) satisfies HostSurfaceSession,
   };
+}
+
+function scannerRegistration(id: string, scanner: Scanner): PluginRegistration {
+  return Object.freeze({
+    manifest: Object.freeze({
+      apiVersion: pluginRuntimeApiVersion,
+      id,
+      phase: 1 as const,
+      provides: Object.freeze([scannerCapability]),
+      requires: Object.freeze([]),
+      version: "2.3.4",
+    }),
+    start: () =>
+      Object.freeze({
+        capabilities: Object.freeze([
+          Object.freeze({
+            id: scannerCapabilityId,
+            value: scanner,
+            version: scannerCapabilityVersion,
+          }),
+        ]),
+      }),
+  });
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -389,6 +422,11 @@ describe("default bootstrap registry", () => {
     if (!composed.ok) return;
     expect(composed.value.surface).not.toBe(surface);
     expect(Object.isFrozen(composed.value.surface)).toBeTrue();
+    expect(Object.isFrozen(composed.value.scanners)).toBeTrue();
+    expect(await composed.value.scanners.recover()).toEqual({
+      ok: true,
+      value: { abandoned: 0, acknowledged: 0, consumed: 0 },
+    });
     expect(composed.value.workspace.status()).toEqual({ state: "missing" });
     expect(composed.value.workspace.requireWorkspace()).toMatchObject({
       diagnostics: [{ code: "no-workspace" }],
@@ -484,6 +522,7 @@ describe("default bootstrap registry", () => {
       "queryEngine",
       "resourceMapper",
       "resources",
+      "scanners",
       "snapshotStateDecoder",
       "store",
       "surface",
@@ -568,6 +607,139 @@ describe("default bootstrap registry", () => {
     ]) {
       expect(composed.value.plugins?.capabilities(id, "1.0.0")).toHaveLength(1);
     }
+  });
+
+  test("keeps completed scanner handoffs pending until reconciliation is composed", async () => {
+    const context = await temporaryWorkspace();
+    const scannerId = "official.pending-scanner";
+    const project = canonicalizeProjectRegistration({
+      coverage: [{ id: "workspace", resourceRoot: "." }],
+      id: "project.default",
+      name: "Pending scanner",
+      scanners: [{ configuration: {}, id: scannerId }],
+      source: ".",
+    });
+    if (!project.ok) throw new Error("invalid pending scanner project fixture");
+    await mkdir(path.join(context.workspaceRoot, "groma"), { recursive: true });
+    await writeFile(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      serializeBootstrapConfiguration({
+        packageDeclarations: [],
+        projectRegistrations: [project.value],
+        requestedRuntimePlugins: [{ id: scannerId, namespace: "official" }],
+        retiredProjectIds: [],
+        schema: "groma/v0.1",
+      }),
+    );
+    const scanner: Scanner = Object.freeze({
+      async scan(request: Parameters<Scanner["scan"]>[0]) {
+        const completed = request.observations.complete({
+          coverage: [{ kinds: [], scope: "workspace", state: "complete" }],
+          epoch: request.session.epoch,
+          sequence: 1,
+        });
+        return completed.ok ? { ok: true as const, value: undefined } : completed;
+      },
+    });
+    const composed = await createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: [scannerRegistration(scannerId, scanner)],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+    }).compose({ workspaceRoot: context.workspaceRoot });
+    if (!composed.ok) throw new Error(composed.diagnostics[0]?.code);
+
+    const started = await composed.value.scanners.start({
+      projectId: "project.default",
+      scannerId,
+    });
+    if (!started.ok) throw new Error(started.diagnostics[0]?.code);
+    expect(await started.value.completion).toMatchObject({
+      diagnostics: [{ code: "scanner-handoff-consumer-unavailable" }],
+      status: "failed",
+    });
+
+    const journal = createLocalObservationJournal({ resources: composed.value.resources });
+    expect(await journal.recover()).toMatchObject({
+      ok: true,
+      value: {
+        abandoned: [],
+        acknowledged: [],
+        handoffs: [
+          {
+            lane: {
+              projectId: "project.default",
+              source: { id: scannerId, instance: "default" },
+            },
+          },
+        ],
+      },
+    });
+    expect(await composed.value.scanners.recover()).toMatchObject({
+      diagnostics: [{ code: "scanner-handoff-consumer-unavailable" }],
+      ok: false,
+    });
+    expect(await journal.recover()).toMatchObject({
+      ok: true,
+      value: { abandoned: [], acknowledged: [], handoffs: [{}] },
+    });
+  });
+
+  test("rejects scanner capability requirements before the provider can start", async () => {
+    const context = await temporaryWorkspace();
+    const scannerId = "official.overpowered-scanner";
+    await mkdir(path.join(context.workspaceRoot, "groma"), { recursive: true });
+    await writeFile(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      serializeBootstrapConfiguration({
+        packageDeclarations: [],
+        projectRegistrations: [],
+        requestedRuntimePlugins: [{ id: scannerId, namespace: "official" }],
+        retiredProjectIds: [],
+        schema: "groma/v0.1",
+      }),
+    );
+    let starts = 0;
+    const registration: PluginRegistration = Object.freeze({
+      manifest: Object.freeze({
+        apiVersion: pluginRuntimeApiVersion,
+        id: scannerId,
+        phase: 1 as const,
+        provides: Object.freeze([scannerCapability]),
+        requires: Object.freeze([
+          Object.freeze({
+            cardinality: "single" as const,
+            id: defaultHostCapabilityIds.resources,
+            version: "1.0.0",
+          }),
+        ]),
+        version: "2.3.4",
+      }),
+      start: () => {
+        starts += 1;
+        return Object.freeze({ capabilities: Object.freeze([]) });
+      },
+    });
+
+    const composed = await createDefaultBootstrapRegistry({
+      additionalRuntimePlugins: [registration],
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      surface: idleSurface(),
+    }).compose({ workspaceRoot: context.workspaceRoot });
+
+    expect(composed).toEqual({
+      diagnostics: [
+        {
+          code: "scanner-provider-authority-invalid",
+          message: "Scanner providers must not retain runtime capability requirements",
+        },
+      ],
+      ok: false,
+    });
+    expect(starts).toBe(0);
   });
 
   test("reports invalid process context without leaking the supplied path", async () => {
@@ -709,6 +881,10 @@ describe("default bootstrap registry", () => {
       packages: composed.value.packages,
       projects: composed.value.projects,
       recovery: { status: "not-required" },
+      scanners: Object.freeze({
+        recover: composed.value.scanners.recover,
+        start: composed.value.scanners.start,
+      }),
       workspace: composed.value.workspace,
     });
     await session.completion;

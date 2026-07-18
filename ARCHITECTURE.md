@@ -95,20 +95,35 @@ canonical component cards rather than in this table.
 
 ## Primary Workflow Sequences
 
-| Journey                 | Primary sequence                                                                                                               | Preserved boundary                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| First useful blueprint  | `groma init -> groma scan -> groma -> bounded current view -> local visual blueprint`                                          | Local, understandable, no upload or AI call by default                                    |
-| Initialize              | Host Phase 0 -> detect no workspace -> init -> create canonical resources -> load Phase 1 -> validate                          | Initialization works before a workspace exists                                            |
-| Create or edit intent   | CLI or web -> shared operation -> current revision -> model invariants -> canonical transaction -> projection event            | Never writes evidence or guesses identity                                                 |
-| Scan and reconcile      | Registry -> blind finite session -> completed snapshot -> deterministic binding -> evidence transaction -> one generation      | Failure or ambiguity infers no absence and erases no intent                               |
-| Local visual navigation | Bounded current read -> projected nodes -> presentation budget -> layout/folding -> focus, expand, trace, inspect              | Visual state is disposable; detail remains reachable                                      |
-| Plans and comparison    | Current + ordered overlays -> cumulative view; selected assertions + current + aliases -> scoped diff                          | Plans state desired truth, never work commands; unrelated work does not block convergence |
-| History                 | `rev:<ref>` -> historical canonical resources -> temporary projection -> read-only view                                        | Git semantics stay outside Core                                                           |
-| Web navigation          | Browser -> application service -> bounded query/subgraph -> layout -> incremental expansion                                    | Browser never requests or lays out the whole organization graph                           |
-| Backlog self-hosting    | Groma plan -> linked Backlog milestone -> external tasks -> implementation -> scan/reconcile -> plan diff -> milestone outcome | Backlog owns work; Groma owns architectural state                                         |
+| Journey                 | Primary sequence                                                                                                                                                      | Preserved boundary                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| First useful blueprint  | `groma init -> groma scan -> groma -> bounded current view -> local visual blueprint`                                                                                 | Local, understandable, no upload or AI call by default                                    |
+| Initialize              | Host Phase 0 -> detect no workspace -> init -> create canonical resources -> load Phase 1 -> validate                                                                 | Initialization works before a workspace exists                                            |
+| Create or edit intent   | CLI or web -> shared operation -> current revision -> model invariants -> canonical transaction -> projection event                                                   | Never writes evidence or guesses identity                                                 |
+| Scan and reconcile      | Registry -> confined project view -> blind finite session -> durable completed snapshot -> handoff -> deterministic binding -> evidence transaction -> one generation | Failure or ambiguity infers no absence and erases no intent                               |
+| Local visual navigation | Bounded current read -> projected nodes -> presentation budget -> layout/folding -> focus, expand, trace, inspect                                                     | Visual state is disposable; detail remains reachable                                      |
+| Plans and comparison    | Current + ordered overlays -> cumulative view; selected assertions + current + aliases -> scoped diff                                                                 | Plans state desired truth, never work commands; unrelated work does not block convergence |
+| History                 | `rev:<ref>` -> historical canonical resources -> temporary projection -> read-only view                                                                               | Git semantics stay outside Core                                                           |
+| Web navigation          | Browser -> application service -> bounded query/subgraph -> layout -> incremental expansion                                                                           | Browser never requests or lays out the whole organization graph                           |
+| Backlog self-hosting    | Groma plan -> linked Backlog milestone -> external tasks -> implementation -> scan/reconcile -> plan diff -> milestone outcome                                        | Backlog owns work; Groma owns architectural state                                         |
 
 These sequences explain cross-component flow; they do not replace the canonical actions,
 inputs, outputs, relationships, or constraints that make each step precise.
+
+The GROM-39 Host currently stops at the durable handoff boundary: it accepts an empty scanner
+catalog, executes configured providers from the already-started plugin graph, and exposes only a
+frozen `{recover, start}` scanner view to surfaces. Lifecycle shutdown awaits the internal
+runtime's `cancelAll()` before plugin shutdown; process cancellation starts it before awaiting a
+surface that may itself be waiting on scanner work. Reconciliation is not a no-op placeholder:
+until GROM-41 supplies the consumer, delivery fails closed and the completed handoff remains
+pending without acknowledgement, cleanup, or canonical mutation.
+
+The execution deadline and cancellation fence cover the complete pipeline, including durable
+drain, revision validation, handoff, consumption, acknowledgement, and cleanup. An unsettled Host
+operation after interruption quarantines only its project/source lane until that promise settles;
+settlement schedules fresh journal recovery and never restarts the interrupted pipeline. Other
+lanes continue independently, so one unavailable consumer or storage operation cannot stop
+unrelated projects or sources.
 
 ## Inspect the Blueprint
 

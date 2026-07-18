@@ -32,6 +32,7 @@ import type {
 import type { ComponentResourceMapper } from "../application/index.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
+import type { ScannerExecutionRuntime } from "./scanner-runtime.ts";
 
 export interface HostProcessContext {
   /** Listener methods must return undefined synchronously; non-void returns fail without being awaited. */
@@ -61,6 +62,7 @@ export interface WorkspaceAccessCapability extends WorkspaceInitializationCapabi
 }
 
 export type HostInitializationOperations = Readonly<Pick<ApplicationOperations, "initialize">>;
+export type ScannerSurfaceOperations = Readonly<Pick<ScannerExecutionRuntime, "recover" | "start">>;
 
 export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
@@ -69,6 +71,7 @@ export interface HostSurfaceContext {
   readonly projects: ProjectRegistrationOperations;
   readonly migrations?: SchemaMigrationOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
+  readonly scanners: ScannerSurfaceOperations;
   readonly workspace: WorkspaceAccessCapability;
 }
 
@@ -109,6 +112,7 @@ export interface HostComposition {
   readonly queries: BoundedQueryContracts;
   readonly resourceMapper: ComponentResourceMapper;
   readonly resources: LocalResourceProvider;
+  readonly scanners: ScannerExecutionRuntime;
   readonly store: MarkdownIntentStore;
   readonly surface: HostSurface;
   readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
