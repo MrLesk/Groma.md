@@ -618,12 +618,62 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         home: "\\\\server\\groma-home\\root",
         workspaceRoot: "\\\\server\\groma-workspace\\root",
       },
+      {
+        configRoot: "\\\\build-server.example\\groma.config$\\root",
+        home: "\\\\home-server.example\\groma.home$\\root",
+        workspaceRoot: "\\\\work-server.example\\groma.workspace$\\root",
+      },
     ]) {
       const run = cloneRun(passingRun(audit));
       setExecutionContext(run, { ...roots, pathConvention: "win32" });
       recommitPlan(run);
 
       expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).passed, roots.home).toBeTrue();
+    }
+  });
+
+  test("rejects invalid UNC server and share components for every execution root", async () => {
+    const audit = await loadAudit("groma.json");
+    const invalidRoots = [
+      "\\\\server\\share.\\home",
+      "\\\\server\\share:name\\home",
+      "\\\\server.\\share\\home",
+      "\\\\server\\share \\home",
+      "\\\\server \\share\\home",
+      "\\\\server\\CON\\home",
+      "\\\\NUL\\share\\home",
+      "\\\\server\\COM1.txt\\home",
+      "\\\\server\\.\\home",
+      "\\\\server\\..\\home",
+      "\\\\server?\\share\\home",
+      `\\\\server\\sha${String.fromCharCode(1)}re\\home`,
+    ];
+    for (const field of ["home", "configRoot", "workspaceRoot"] as const) {
+      for (const invalidRoot of invalidRoots) {
+        const run = cloneRun(passingRun(audit));
+        const values = {
+          configRoot: "\\\\config-server\\groma-config\\root",
+          home: "\\\\home-server\\groma-home\\root",
+          pathConvention: "win32" as const,
+          workspaceRoot: "\\\\workspace-server\\groma-workspace\\root",
+        };
+        values[field] = invalidRoot;
+        setExecutionContext(run, values);
+        recommitPlan(run);
+
+        const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+        expect(
+          result.failures.map(({ code }) => code),
+          `${field}:${JSON.stringify(invalidRoot)}`,
+        ).toEqual([
+          field === "workspaceRoot"
+            ? "COMMAND_EXECUTION_CONTEXT_MISMATCH"
+            : "TEMPORARY_ENVIRONMENT_NOT_ISOLATED",
+        ]);
+        expect(result.dimensions.firstMinute).toBe(0);
+        expect(result.dimensions.repeatability).toBe(0);
+        expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+      }
     }
   });
 

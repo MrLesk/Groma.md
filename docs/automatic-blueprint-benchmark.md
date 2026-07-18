@@ -188,11 +188,13 @@ Win32 syntax. All three roots must be normalized, absolute, non-root, and pairwi
 the declared platform's comparison rules: no root may equal, contain, or be contained by another.
 Win32 roots must be drive-qualified (`C:\...`) or normalized non-device UNC paths
 (`\\server\share\...`); current-drive root-relative paths such as `\workspace` are not stable
-absolute identities and are rejected. Win32 comparison rejects path components ending in a dot or
-space and treats case and trailing separator aliases as the same path. Extended/device namespaces
-beginning `\\?\` or `\\.\` are rejected for all three roots rather than treated as an alternate
-spelling. An invalid global root context cannot earn first-minute, repeatability, or stable-identity
-points.
+absolute identities and are rejected. Both UNC authority components, server and share, are validated
+before the parsed root is removed. They must be nonempty normalized components and obey the same
+conservative rule as every descendant component: no dot or dot-dot component, trailing dot or
+space, control or Windows-invalid character, or reserved device-name alias. Win32 comparison treats
+case and trailing separator aliases as the same path. Extended/device namespaces beginning `\\?\`
+or `\\.\` are rejected for all three roots rather than treated as an alternate spelling. An invalid
+global root context cannot earn first-minute, repeatability, or stable-identity points.
 Groma-owned output and exclusion paths use one portable syntax on every platform: sorted, exact,
 nonempty, forward-slash workspace descendants with no trailing slash, `.` or `..` segment, drive
 prefix, backslash, glob metacharacter, or other reserved filename character. Prefixes and globs do

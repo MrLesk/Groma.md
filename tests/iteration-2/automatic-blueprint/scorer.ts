@@ -143,6 +143,31 @@ function hasUnsupportedWin32NamespacePrefix(value: string): boolean {
   return /^\\\\[?.]\\/.test(value);
 }
 
+const reservedWindowsRootSegment =
+  /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
+
+function win32RootSegmentIsValid(segment: string): boolean {
+  return (
+    segment.length > 0 &&
+    segment !== "." &&
+    segment !== ".." &&
+    !segment.endsWith(".") &&
+    !segment.endsWith(" ") &&
+    !/[\u0000-\u001f<>:"|?*]/.test(segment) &&
+    !reservedWindowsRootSegment.test(segment)
+  );
+}
+
+function hasQualifiedWin32Root(value: string): boolean {
+  if (/^[A-Za-z]:\\/.test(value)) return true;
+  const uncAuthority = /^\\\\([^\\]*)\\([^\\]*)\\/.exec(value);
+  return (
+    uncAuthority !== null &&
+    win32RootSegmentIsValid(uncAuthority[1]!) &&
+    win32RootSegmentIsValid(uncAuthority[2]!)
+  );
+}
+
 function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
   const { pathConvention, temporaryConfigRoot, temporaryHome } = run.execution;
   return (
@@ -164,24 +189,14 @@ function absoluteRootIsNormalized(
       !value.includes("\\")
     );
   }
+  if (hasUnsupportedWin32NamespacePrefix(value) || !hasQualifiedWin32Root(value)) return false;
   const root = path.win32.parse(value).root;
-  const hasQualifiedWin32Root = /^[A-Za-z]:\\/.test(value) || /^\\\\[^\\]+\\[^\\]+\\/.test(value);
-  const reservedWindowsRootSegment =
-    /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
   const segments = value.slice(root.length).split("\\").filter(Boolean);
   return (
-    !hasUnsupportedWin32NamespacePrefix(value) &&
-    hasQualifiedWin32Root &&
     path.win32.isAbsolute(value) &&
     value.toLowerCase() !== root.toLowerCase() &&
     path.win32.normalize(value) === value &&
-    segments.every(
-      (segment) =>
-        !segment.endsWith(".") &&
-        !segment.endsWith(" ") &&
-        !/[\u0000-\u001f<>:"|?*]/.test(segment) &&
-        !reservedWindowsRootSegment.test(segment),
-    )
+    segments.every(win32RootSegmentIsValid)
   );
 }
 
