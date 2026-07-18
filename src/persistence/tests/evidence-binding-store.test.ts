@@ -901,6 +901,7 @@ describe("canonical evidence and binding store", () => {
     ).toMatchObject({ diagnostics: [{ code: "binding-terminal-missing" }], ok: false });
   });
 
+  // Deliberate 8,192-event scale probe: GitHub Linux measured 6.892s, so retain a finite 15s budget.
   test("bounds aggregate binding history across planning, replay, and restart", async () => {
     const root = await temporaryRoot();
     const resources = await createLocalResourceProvider({ workspaceRoot: root });
@@ -967,7 +968,7 @@ describe("canonical evidence and binding store", () => {
       diagnostics: [{ code: "evidence-item-limit-exceeded" }],
       ok: false,
     });
-  });
+  }, 15_000);
 
   test("indexes current evidence by source lane instead of rescanning it per source", async () => {
     const root = await temporaryRoot();
