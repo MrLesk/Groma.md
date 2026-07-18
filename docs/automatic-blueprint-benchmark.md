@@ -14,19 +14,21 @@ canonical Groma state, reconciliation, or renderer data. The verification-only c
 [`tests/iteration-2/automatic-blueprint/`](../tests/iteration-2/automatic-blueprint/) records an
 assessment of those later systems without becoming a production import.
 
-Both audit and run parsers establish an owned immutable boundary before applying semantic
-validation. A schema-directed copy reads only known enumerable own data descriptors, never
-enumerates caller-owned keys, and drops unknown named and symbol properties without inspecting
-them. Known arrays are bounded from their data `length` descriptor before any index is read; only
-their dense in-range indices are copied, while other properties are ignored. The copy accepts finite
-JSON trees made from plain records, dense arrays, finite numbers, strings, booleans, and null. It
-rejects proxies without triggering their traps, rejects accessors on known fields, custom prototypes,
-sparse or behavior-bearing known containers, and cycles, and counts repeated aliases as separate
-JSON occurrences. The owned snapshot is the exact value validated, then every record and array is
+Both audit and run parsers accept an arbitrary unknown JavaScript graph at their caller boundary;
+inputs need not originate from `JSON.parse`. Before semantic validation, a schema-directed copy
+reads only known enumerable own data descriptors, never enumerates caller-owned keys, and drops
+unknown named and symbol properties without inspecting them. Known arrays are bounded from their
+data `length` descriptor before any index is read; only their dense in-range indices are copied,
+while other properties are ignored. The accepted owned value is a finite JSON tree made from plain
+records, dense arrays, finite numbers, strings, booleans, and null. It rejects proxies without
+triggering their traps, rejects accessors on known fields, custom prototypes, sparse or
+behavior-bearing known containers, and cycles, and counts repeated aliases as separate JSON
+occurrences. The owned snapshot is the exact value validated, then every record and array is
 recursively frozen before return; neither later caller mutation nor attempted mutation of a parsed
 value can change scoring. Snapshot work is bounded to depth 32, 100,000 values, 4,096 items per
-array, eight MiB per string, and 64 MiB of aggregate string UTF-8 data. The finite schema itself
-bounds record work.
+array, eight MiB per string, and 64 MiB of aggregate string UTF-8 data. A cheap UTF-16 code-unit
+length precheck rejects strings that are already certainly over the per-string byte ceiling; exact
+UTF-8 encoding then enforces the byte limits. The finite schema itself bounds record work.
 
 ## What is scored
 
@@ -163,7 +165,8 @@ record consumed by this benchmark and enforce these controls:
 3. Still before timing, freeze a pre-run plan containing the prepared snapshot digest, path
    convention, complete Groma-owned output inventory, identical source-hash exclusion inventory,
    and renderer-declared main-layer budget. Record its monotonic freeze time and SHA-256 commitment.
-   Hash the prepared source before execution while excluding exactly the committed output inventory.
+   Hash the prepared source after the plan freeze and before execution while excluding exactly the
+   committed output inventory, and record the hash's monotonic capture time.
 4. Create a fresh workspace plus distinct temporary `HOME` and configuration roots, close stdin
    for every command, and deny network access at the OS or harness boundary. Record both controls
    on every initial and rescan command in addition to the run-level harness mechanism. An
@@ -178,7 +181,9 @@ record consumed by this benchmark and enforce these controls:
    output. The scanner remains blind to the audit and existing blueprint.
 7. Stop the timer only when the initial main layer emits a machine-observable frozen signal.
    Freeze its artifact and all scored outputs before any evaluator sees them.
-8. Hash source bytes again with the exact same exclusions. The before and after hashes must match.
+8. At or after the main-layer freeze, hash source bytes again with the exact same exclusions and
+   record the monotonic capture time. The before and after hashes must match. A hash pair with an
+   invalid capture interval is not source-mutation evidence.
 9. Perform the evidence assessment and human-comprehension evaluation against the frozen outputs.
 
 A human may prepare the ground-truth audit before execution and evaluate comprehension after the
@@ -194,14 +199,22 @@ after the prior completion, and all completions are no later than the main-layer
 timing or any nonzero initial command exit earns no first-minute points. A process failure cannot be
 hidden by a later artifact.
 
+Initial source evidence uses the same monotonic clock. The plan freeze is no later than the
+source-before capture, which is no later than the init spawn and first command start. The
+source-after capture is at or after the main-layer freeze. Invalid initial capture timing earns no
+first-minute, repeatability, or stable-identity points; a digest difference is classified as source
+mutation only when that capture interval is valid.
+
 The record describes finite command executions. A command that does not exit must be terminated by
 the harness's finite process timeout; the harness records its nonzero exit code, preserved streams,
 and completion timestamp. This process timeout is operational safety, not a second benchmark time
 gate.
 
 The execution record declares whether host absolute workspace and temporary roots use POSIX or
-Win32 syntax. All three roots must be normalized, absolute, non-root, and pairwise disjoint under
-the declared platform's comparison rules: no root may equal, contain, or be contained by another.
+Win32 syntax. All three roots must be normalized, absolute, non-root, NUL-free, and pairwise
+disjoint under the declared platform's comparison rules: no root may equal, contain, or be contained
+by another. POSIX roots reject NUL because host filesystem APIs cannot represent it without
+truncation; the benchmark does not otherwise impose the Windows component grammar on POSIX paths.
 Win32 roots must be drive-qualified (`C:\...`) or normalized non-device UNC paths
 (`\\server\share\...`); current-drive root-relative paths such as `\workspace` are not stable
 absolute identities and are rejected. Both UNC authority components, server and share, are validated
@@ -255,14 +268,15 @@ whether ordering, observed content, identity, or canonical serialization drifted
 unattached digest arrays could falsely combine evidence from different executions. The contract
 therefore keeps the values separate but attached to one rescan instance.
 
-Each rescan source-before hash is captured at or after the prior boundary and no later than its first
-command start. Each command completes at or after its start, every next command starts at or after
-the prior completion, the source-after hash is captured at or after the final command, and output
-digests are captured at or after that source-after hash. The next rescan source-before capture and
-command start occur at or after the prior digest capture. Rescans deliberately have no 60-second
-scoring deadline: they measure unchanged-input stability, while the one-minute constraint applies
-only to the first useful initial layer. The finite process-timeout rule still applies to a hung
-rescan command.
+The first rescan source-before hash is captured at or after the initial source-after capture. Each
+later rescan source-before hash is captured at or after the prior boundary and no later than its
+first command start. Each command completes at or after its start, every next command starts at or
+after the prior completion, the source-after hash is captured at or after the final command, and
+output digests are captured at or after that source-after hash. The next rescan source-before
+capture and command start occur at or after the prior digest capture. Rescans deliberately have no
+60-second scoring deadline: they measure unchanged-input stability, while the one-minute constraint
+applies only to the first useful initial layer. The finite process-timeout rule still applies to a
+hung rescan command.
 
 Stable audit fact IDs do not satisfy the identity checks. The runner hashes the scanner and Groma
 identities actually emitted by the system under test.

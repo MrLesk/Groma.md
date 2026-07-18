@@ -140,7 +140,9 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
         tree: audit.project.tree,
       },
       scannerAndRulesFrozenBeforeHeldOutRun: true,
+      sourceAfterCapturedAtMonotonicMilliseconds: 50_000,
       sourceAfterSha256: audit.project.fixturePreparation.preparedSourceSnapshotSha256,
+      sourceBeforeCapturedAtMonotonicMilliseconds: 750,
       sourceBeforeSha256: audit.project.fixturePreparation.preparedSourceSnapshotSha256,
       sourceHashExcludedPaths: [".groma/automatic-blueprint.html", "groma"],
       spawnedInitAtMonotonicMilliseconds: 1_000,
@@ -330,6 +332,8 @@ describe("automatic-blueprint reference audits", () => {
     runSource.execution.commands[0]!.stdinClosed = "false" as unknown as boolean;
     runSource.execution.commands[1]!.networkIsolationEnforcedAtOsLevel =
       "false" as unknown as boolean;
+    runSource.execution.sourceBeforeCapturedAtMonotonicMilliseconds =
+      "not-a-time" as unknown as number;
     runSource.repeatability.rescans[0]!.sourceBeforeSha256 = "not-a-digest";
     runSource.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds =
       "not-a-time" as unknown as number;
@@ -339,10 +343,53 @@ describe("automatic-blueprint reference audits", () => {
     expect(audit.forbiddenClaims[0]!.severity).toBe("critical");
     expect(run.execution.commands[0]!.stdinClosed).toBeTrue();
     expect(run.execution.commands[1]!.networkIsolationEnforcedAtOsLevel).toBeTrue();
+    expect(run.execution.sourceBeforeCapturedAtMonotonicMilliseconds).toBe(750);
     expect(run.repeatability.rescans[0]!.sourceBeforeSha256).not.toBe("not-a-digest");
     expect(run.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds).toBe(90_000);
     expect(scoreBenchmarkRun(audit, run).passed).toBeTrue();
     expect(scoreBenchmarkRun(audit, run).total).toBe(100);
+  });
+
+  test("round-trips every declared schema field with all optional fields populated", async () => {
+    const auditSource = JSON.parse(
+      await readFile(new URL("groma.json", auditDirectory), "utf8"),
+    ) as Mutable<BenchmarkAudit>;
+    const sourceScopeId = auditSource.project.sourceScopes[0]!.id;
+    for (const fact of auditSource.facts) {
+      fact.derivation ??= {
+        method: "schema-coverage-round-trip",
+        resultSha256: createBenchmarkStringArrayDigest(fact.claim.objects),
+        sourceScopeId,
+      };
+      for (const witness of fact.evidence) {
+        witness.anchor.symbol ??= "schemaCoverageFactWitness";
+      }
+    }
+    for (const forbidden of auditSource.forbiddenClaims) {
+      for (const witness of forbidden.evidence) {
+        witness.anchor.symbol ??= "schemaCoverageForbiddenWitness";
+      }
+    }
+
+    const audit = parseBenchmarkAudit(auditSource);
+    expect(audit).toEqual(auditSource);
+
+    const runSource = passingRun(audit) as Mutable<BenchmarkRun>;
+    runSource.claims.noncriticalFalseClaims.push({
+      claim: "Schema coverage false claim",
+      claimId: "claim:schema-coverage-false",
+      evidence: [
+        {
+          detail: "All optional false-claim evidence is populated",
+          observationId: "observation:schema-coverage-false",
+          sourcePath: audit.facts[0]!.evidence[0]!.path,
+        },
+      ],
+      forbiddenClaimIds: [],
+    });
+
+    const run = parseBenchmarkRun(runSource);
+    expect(run).toEqual(runSource);
   });
 
   test("rejects accessors and proxies without invoking caller behavior", async () => {
@@ -815,6 +862,45 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     }
   });
 
+  test("rejects NUL in every POSIX execution root without rejecting ordinary roots", async () => {
+    const audit = await loadAudit("groma.json");
+    const valid = cloneRun(passingRun(audit));
+    setExecutionContext(valid, {
+      configRoot: "/tmp/groma-benchmark/valid-config",
+      home: "/tmp/groma-benchmark/valid-home",
+      pathConvention: "posix",
+      workspaceRoot: "/tmp/groma-benchmark/valid-workspace",
+    });
+    recommitPlan(valid);
+    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(valid)).passed).toBeTrue();
+
+    for (const field of ["home", "configRoot", "workspaceRoot"] as const) {
+      const run = cloneRun(passingRun(audit));
+      const values = {
+        configRoot: "/tmp/groma-benchmark/config",
+        home: "/tmp/groma-benchmark/home",
+        pathConvention: "posix" as const,
+        workspaceRoot: "/tmp/groma-benchmark/workspace",
+      };
+      values[field] = `${values[field]}\0suffix`;
+      setExecutionContext(run, values);
+      recommitPlan(run);
+
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(
+        result.failures.map(({ code }) => code),
+        field,
+      ).toEqual([
+        field === "workspaceRoot"
+          ? "COMMAND_EXECUTION_CONTEXT_MISMATCH"
+          : "TEMPORARY_ENVIRONMENT_NOT_ISOLATED",
+      ]);
+      expect(result.dimensions.firstMinute).toBe(0);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
+  });
+
   test("rejects invalid UNC server and share components for every execution root", async () => {
     const audit = await loadAudit("groma.json");
     const invalidRoots = [
@@ -1122,6 +1208,51 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(() => parseBenchmarkRun(negativeStart)).toThrow(
       "run.execution.commands[0].startedAtMonotonicMilliseconds must be a nonnegative safe integer",
     );
+  });
+
+  test("binds initial source hashes to the plan, timed workflow, freeze, and rescans", async () => {
+    const audit = await loadAudit("groma.json");
+    const invalidInitialCaptures: ((run: Mutable<BenchmarkRun>) => void)[] = [
+      (run) => void (run.execution.sourceBeforeCapturedAtMonotonicMilliseconds = 499),
+      (run) => void (run.execution.sourceBeforeCapturedAtMonotonicMilliseconds = 1_001),
+      (run) => void (run.execution.sourceAfterCapturedAtMonotonicMilliseconds = 49_999),
+      (run) => {
+        run.execution.sourceAfterCapturedAtMonotonicMilliseconds = 49_999;
+        run.execution.sourceAfterSha256 = digestB;
+      },
+    ];
+    for (const mutate of invalidInitialCaptures) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+
+      expect(result.failures.map(({ code }) => code)).toEqual(["SOURCE_CAPTURE_TIMING_INVALID"]);
+      expect(result.dimensions.firstMinute).toBe(0);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
+
+    const rescanBeforeInitialAfterCapture = cloneRun(passingRun(audit));
+    rescanBeforeInitialAfterCapture.execution.sourceAfterCapturedAtMonotonicMilliseconds = 50_001;
+    const crossBoundary = scoreBenchmarkRun(
+      audit,
+      parseBenchmarkRun(rescanBeforeInitialAfterCapture),
+    );
+    expect(crossBoundary.failures.map(({ code }) => code)).toEqual(["RESCAN_TIMING_INVALID"]);
+    expect(crossBoundary.dimensions.firstMinute).toBe(10);
+    expect(crossBoundary.dimensions.repeatability).toBe(0);
+    expect(crossBoundary.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+
+    for (const field of [
+      "sourceBeforeCapturedAtMonotonicMilliseconds",
+      "sourceAfterCapturedAtMonotonicMilliseconds",
+    ] as const) {
+      const negativeCapture = cloneRun(passingRun(audit));
+      negativeCapture.execution[field] = -1;
+      expect(() => parseBenchmarkRun(negativeCapture)).toThrow(
+        `run.execution.${field} must be a nonnegative safe integer`,
+      );
+    }
   });
 
   test("requires the exact artifact and freeze time in the machine freeze signal", async () => {
@@ -2001,6 +2132,12 @@ describe("automatic-blueprint conjunctive scorecard", () => {
             run.execution.spawnedInitAtMonotonicMilliseconds + 1),
       },
       {
+        code: "SOURCE_CAPTURE_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.execution.sourceBeforeCapturedAtMonotonicMilliseconds =
+            run.execution.preRunPlan.frozenAtMonotonicMilliseconds - 1),
+      },
+      {
         code: "PRE_RUN_PLAN_MISMATCH",
         mutate: (run) => {
           run.execution.preRunPlan.rendererDeclaredMainLayerBudget.nodes += 1;
@@ -2042,6 +2179,8 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         mutate: (run) => {
           run.execution.mainLayerFrozenAtMonotonicMilliseconds =
             run.execution.spawnedInitAtMonotonicMilliseconds + 60_001;
+          run.execution.sourceAfterCapturedAtMonotonicMilliseconds =
+            run.execution.mainLayerFrozenAtMonotonicMilliseconds;
           run.presentation.frozenMainLayer.machineObservableFreezeSignal =
             createMachineObservableFreezeSignal(
               run.presentation.frozenMainLayer.artifactSha256,

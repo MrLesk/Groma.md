@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 04:16'
+updated_date: '2026-07-18 04:51'
 labels: []
 milestone: m-3
 dependencies: []
@@ -97,4 +97,11 @@ Final PR review hardening:
 - Every rescan binds prepared, before, and after source digests to causal capture times.
 - Audit/run parsers now validate schema-directed, bounded, caller-independent snapshots and return recursively frozen values.
 - Independent adversarial review approved 74 focused tests / 789 assertions; full repository validation passed 875 tests / 6,493 assertions plus compiled-binary and self-blueprint checks.
+
+Final external-review follow-up:
+- Initial source-before/source-after hashes now carry causal capture timestamps spanning plan freeze through main-layer freeze; invalid capture evidence earns no first-minute or stability credit.
+- A fully populated audit/run round-trip guards every current schema field, including all optional evidence fields.
+- The parser threat model and UTF-8 precheck are explicit.
+- POSIX execution roots reject impossible NUL bytes across HOME, config, workspace, and every attached command context.
+- Claude found no correctness defect in the prior fixes; its two substantive follow-ups were applied. Codex’s POSIX NUL finding was independently reproduced and fixed. Independent review approved the correctness changes; full validation passed 878 tests / 6,534 assertions plus compiled-binary and self-blueprint checks.
 <!-- SECTION:NOTES:END -->

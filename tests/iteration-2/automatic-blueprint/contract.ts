@@ -196,7 +196,9 @@ export interface BenchmarkRun {
       readonly tree: string;
     };
     readonly scannerAndRulesFrozenBeforeHeldOutRun: boolean;
+    readonly sourceAfterCapturedAtMonotonicMilliseconds: number;
     readonly sourceAfterSha256: string;
+    readonly sourceBeforeCapturedAtMonotonicMilliseconds: number;
     readonly sourceBeforeSha256: string;
     readonly sourceHashExcludedPaths: readonly string[];
     readonly spawnedInitAtMonotonicMilliseconds: number;
@@ -281,6 +283,8 @@ const intrinsicObjectPrototype = Object.prototype;
 const intrinsicOwnKeys = Reflect.ownKeys;
 const benchmarkContractUtf8Encoder = new TextEncoder();
 
+// Keep these finite ingress allowlists aligned with the interfaces and semantic validators below.
+// The fully populated parser round-trip regression fails if a declared field is omitted here.
 type BenchmarkSnapshotSchema =
   | { readonly kind: "primitive" }
   | { readonly item: BenchmarkSnapshotSchema; readonly kind: "array" }
@@ -495,7 +499,9 @@ const benchmarkRunSnapshotSchema = recordSnapshotSchema({
       tree: primitiveSnapshotSchema,
     }),
     scannerAndRulesFrozenBeforeHeldOutRun: primitiveSnapshotSchema,
+    sourceAfterCapturedAtMonotonicMilliseconds: primitiveSnapshotSchema,
     sourceAfterSha256: primitiveSnapshotSchema,
+    sourceBeforeCapturedAtMonotonicMilliseconds: primitiveSnapshotSchema,
     sourceBeforeSha256: primitiveSnapshotSchema,
     sourceHashExcludedPaths: stringsSnapshotSchema,
     spawnedInitAtMonotonicMilliseconds: primitiveSnapshotSchema,
@@ -1471,6 +1477,12 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
     "run.execution.mainLayerFrozenAtMonotonicMilliseconds",
     code,
   );
+  for (const field of [
+    "sourceBeforeCapturedAtMonotonicMilliseconds",
+    "sourceAfterCapturedAtMonotonicMilliseconds",
+  ] as const) {
+    nonnegativeNumber(execution[field], `run.execution.${field}`, code);
+  }
   sha256(execution.sourceBeforeSha256, "run.execution.sourceBeforeSha256", code);
   sha256(execution.sourceAfterSha256, "run.execution.sourceAfterSha256", code);
   string(execution.temporaryHome, "run.execution.temporaryHome", code);

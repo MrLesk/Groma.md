@@ -36,6 +36,7 @@ export const benchmarkFailureCodes = [
   "SOURCE_HASH_EXCLUSIONS_MISMATCH",
   "PRE_RUN_PLAN_DIGEST_MISMATCH",
   "PRE_RUN_PLAN_NOT_FROZEN",
+  "SOURCE_CAPTURE_TIMING_INVALID",
   "PRE_RUN_PLAN_MISMATCH",
   "SOURCE_MUTATED",
   "AI_OR_HELPER_INFERENCE_USED",
@@ -186,6 +187,7 @@ function absoluteRootIsNormalized(
       path.posix.isAbsolute(value) &&
       value !== path.posix.parse(value).root &&
       path.posix.normalize(value) === value &&
+      !value.includes("\0") &&
       !value.includes("\\")
     );
   }
@@ -619,14 +621,54 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       computedPlanCommitment,
     ]);
   }
-  if (
-    run.execution.preRunPlan.frozenAtMonotonicMilliseconds >
-    run.execution.spawnedInitAtMonotonicMilliseconds
-  ) {
+  const preRunPlanFrozenBeforeInit =
+    run.execution.preRunPlan.frozenAtMonotonicMilliseconds <=
+    run.execution.spawnedInitAtMonotonicMilliseconds;
+  if (!preRunPlanFrozenBeforeInit) {
     addFailure(failures, "PRE_RUN_PLAN_NOT_FROZEN", [
       `plan ${run.execution.preRunPlan.frozenAtMonotonicMilliseconds}`,
       `init ${run.execution.spawnedInitAtMonotonicMilliseconds}`,
     ]);
+  }
+  const initialSourceCaptureTimingProblems: string[] = [];
+  if (
+    preRunPlanFrozenBeforeInit &&
+    run.execution.sourceBeforeCapturedAtMonotonicMilliseconds <
+      run.execution.preRunPlan.frozenAtMonotonicMilliseconds
+  ) {
+    initialSourceCaptureTimingProblems.push(
+      `source-before captured ${run.execution.sourceBeforeCapturedAtMonotonicMilliseconds} before plan freeze ${run.execution.preRunPlan.frozenAtMonotonicMilliseconds}`,
+    );
+  }
+  if (
+    run.execution.sourceBeforeCapturedAtMonotonicMilliseconds >
+    run.execution.spawnedInitAtMonotonicMilliseconds
+  ) {
+    initialSourceCaptureTimingProblems.push(
+      `source-before captured ${run.execution.sourceBeforeCapturedAtMonotonicMilliseconds} after init spawn ${run.execution.spawnedInitAtMonotonicMilliseconds}`,
+    );
+  }
+  const firstInitialCommandStart = run.execution.commands[0]?.startedAtMonotonicMilliseconds;
+  if (
+    firstInitialCommandStart !== undefined &&
+    run.execution.sourceBeforeCapturedAtMonotonicMilliseconds > firstInitialCommandStart
+  ) {
+    initialSourceCaptureTimingProblems.push(
+      `source-before captured ${run.execution.sourceBeforeCapturedAtMonotonicMilliseconds} after first command start ${firstInitialCommandStart}`,
+    );
+  }
+  if (
+    run.execution.sourceAfterCapturedAtMonotonicMilliseconds <
+    run.execution.mainLayerFrozenAtMonotonicMilliseconds
+  ) {
+    initialSourceCaptureTimingProblems.push(
+      `source-after captured ${run.execution.sourceAfterCapturedAtMonotonicMilliseconds} before main-layer freeze ${run.execution.mainLayerFrozenAtMonotonicMilliseconds}`,
+    );
+  }
+  const initialSourceCaptureTimingValid =
+    preRunPlanFrozenBeforeInit && initialSourceCaptureTimingProblems.length === 0;
+  if (initialSourceCaptureTimingProblems.length > 0) {
+    addFailure(failures, "SOURCE_CAPTURE_TIMING_INVALID", initialSourceCaptureTimingProblems);
   }
   if (
     run.execution.preRunPlan.pathConvention !== run.execution.pathConvention ||
@@ -645,7 +687,10 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   ) {
     addFailure(failures, "PRE_RUN_PLAN_MISMATCH", ["pre-run plan does not match scored run"]);
   }
-  if (run.execution.sourceBeforeSha256 !== run.execution.sourceAfterSha256) {
+  if (
+    initialSourceCaptureTimingValid &&
+    run.execution.sourceBeforeSha256 !== run.execution.sourceAfterSha256
+  ) {
     addFailure(failures, "SOURCE_MUTATED", [
       run.execution.sourceBeforeSha256,
       run.execution.sourceAfterSha256,
@@ -840,7 +885,10 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   }
   const rescanTimingProblems: string[] = [];
   if (rescanWorkflowsMatch) {
-    let chronologicalMinimum = run.execution.mainLayerFrozenAtMonotonicMilliseconds;
+    let chronologicalMinimum = Math.max(
+      run.execution.mainLayerFrozenAtMonotonicMilliseconds,
+      run.execution.sourceAfterCapturedAtMonotonicMilliseconds,
+    );
     for (const rescan of rescans) {
       if (rescan.sourceBeforeCapturedAtMonotonicMilliseconds < chronologicalMinimum) {
         rescanTimingProblems.push(
@@ -914,7 +962,8 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (rescanCommandsSuccessful && mismatchedRescanInputs.length > 0) {
     addFailure(failures, "RESCAN_INPUT_MISMATCH", mismatchedRescanInputs);
   }
-  const rescansEligibleForStability = rescanInputsMatch && allCommandIsolationValid;
+  const rescansEligibleForStability =
+    initialSourceCaptureTimingValid && rescanInputsMatch && allCommandIsolationValid;
   const rescanDigests = <Field extends keyof BenchmarkRun["repeatability"]["rescans"][number]>(
     field: Field,
   ): string[] => rescans.map((rescan) => String(rescan[field]));
@@ -1065,6 +1114,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       initialCommandIsolationValid &&
       initialCommandTimingValid &&
       initialCommandContextValid &&
+      initialSourceCaptureTimingValid &&
       machineFreezeSignalValid &&
       firstMinuteMilliseconds >= 0 &&
       firstMinuteMilliseconds <= maximumFirstMinuteMilliseconds
