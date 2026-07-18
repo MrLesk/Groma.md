@@ -87,25 +87,33 @@ import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-i
 
 const intrinsicReflectApply = Reflect.apply;
 
-function initialProjectDisplayName(
+export function initialProjectDisplayName(
   workspaceRoot: string,
   platform: "darwin" | "linux" | "win32",
 ): string {
-  const paths = platform === "win32" ? path.win32 : path.posix;
-  const raw = paths.basename(workspaceRoot);
-  let safe = "";
+  const isSeparator = (unit: number) => unit === 0x2f || (platform === "win32" && unit === 0x5c);
+  let end = workspaceRoot.length;
+  while (end > 0 && isSeparator(workspaceRoot.charCodeAt(end - 1))) end -= 1;
+  let start = end;
+  while (start > 0 && !isSeparator(workspaceRoot.charCodeAt(start - 1))) start -= 1;
+  const candidate = workspaceRoot.slice(start, end);
+  const raw = platform === "win32" && /^[A-Za-z]:$/.test(candidate) && start === 0 ? "" : candidate;
+  const safe: string[] = [];
   for (const character of raw) {
     const code = character.codePointAt(0)!;
-    safe +=
-      code <= 0x1f || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029
+    safe.push(
+      code <= 0x1f ||
+        (code >= 0x7f && code <= 0x9f) ||
+        code === 0x2028 ||
+        code === 0x2029 ||
+        (code >= 0xd800 && code <= 0xdfff)
         ? "-"
-        : character;
+        : character,
+    );
+    if (safe.length === bootstrapConfigurationBounds.maxProjectDisplayNameCharacters) break;
   }
-  safe = safe.trim();
-  if (safe.length === 0) safe = "workspace";
-  return Array.from(safe)
-    .slice(0, bootstrapConfigurationBounds.maxProjectDisplayNameCharacters)
-    .join("");
+  const bounded = safe.join("").trim();
+  return bounded.length === 0 ? "workspace" : bounded;
 }
 
 export const defaultHostBounds = Object.freeze({

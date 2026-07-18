@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 15:25'
+updated_date: '2026-07-18 15:44'
 labels: []
 milestone: m-3
 dependencies:
@@ -64,6 +64,8 @@ Settled review findings remediated: project publication now exact-captures and i
 Quality re-review staging/readback blocker remediated. stageReplacement now crosses an exact Result boundary, copies failure diagnostics, rejects proxy/malformed/non-object/native-Promise tokens without traps, and preserves valid provider-owned opaque token identity before publication can become indeterminate. Post-commit readback now exact-validates Result and contents records, copies an intrinsic non-proxy bounded Uint8Array, and compares only the owned copy; every hostile/malformed readback remains indeterminate. Added proxy/accessor/extra/malformed/invalid-token/oversized-byte regressions plus a valid custom opaque-token identity regression. Final verification: focused Host/CLI 249 pass; full check 979 pass plus binary workflows; check:targets passed Darwin ARM64, Linux x64, Windows x64, and Windows ARM64.
 
 Final settled validation: project-registry adversarial suite 15 pass; focused Host/CLI suite 249 pass; full bun run check 979 pass plus build, smoke, Iteration 1A, Iteration 1B, and self-blueprint workflows; check:targets passed Darwin ARM64, Linux x64, Windows x64, and Windows ARM64; git diff --check clean. Independent specification review passed and final quality re-review approved with no actionable findings.
+
+Claude review follow-up: hardened default project display-name derivation through an exported pure seam. The Host now derives the final path segment without runtime path coercion, replaces C0/C1 controls, Unicode line separators, and unpaired surrogate code points, truncates at the configured code-point bound, trims after truncation, and falls back to workspace. Direct regressions cover lone high/low surrogates on POSIX and Windows, control/line separators, a truncation-created trailing space, supplementary-plane characters at the exact bound, and whitespace-only fallback; every derived name is accepted by the canonical project-registration validator. Verification: focused Host/CLI suite 250 pass; full check 980 pass plus build, smoke, Iteration 1A, Iteration 1B, and self-blueprint workflows; check:targets passed Darwin ARM64, Linux x64, Windows x64, and Windows ARM64; formatting, architecture boundaries, typecheck, and diff hygiene passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
