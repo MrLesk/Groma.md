@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -474,6 +475,11 @@ describe("local observation journal", () => {
     const journal = createLocalObservationJournal({ resources: provider });
     const started = await journal.begin(begin());
     if (!started.ok) throw new Error("begin failed");
+    const confirmedInspection = started.value.inspect();
+    const locator = localObservationSessionLocator(laneIdentity());
+    if (!locator.ok) throw new Error("invalid fixture locator");
+    const absolute = absoluteLocator(location.workspaceRoot, locator.value);
+    const confirmedBytes = await readFile(absolute);
     armed = true;
     expect(
       codes(
@@ -484,6 +490,8 @@ describe("local observation journal", () => {
         }),
       ),
     ).toEqual(["observation-journal-publication-unconfirmed"]);
+    expect(started.value.inspect()).toEqual(confirmedInspection);
+    expect(await readFile(absolute)).toEqual(confirmedBytes);
     const hostile = new Proxy([] as ObservationRecord[], {
       getPrototypeOf() {
         throw new Error("poisoned handle must not inspect later bodies");
@@ -492,6 +500,38 @@ describe("local observation journal", () => {
     expect(
       codes(await started.value.submitBatch({ epoch: "epoch-001", records: hostile, sequence: 2 })),
     ).toEqual(["observation-session-handle-poisoned"]);
+  });
+
+  test("inspection advances after confirmed publication before a post-publication fault", async () => {
+    const location = await roots();
+    const provider = await resources(location);
+    let armed = false;
+    const journal = createLocalObservationJournal({
+      faultInjector(phase) {
+        if (armed && phase === "after-batch") throw new Error("stop after durable batch");
+      },
+      resources: provider,
+    });
+    const started = await journal.begin(begin());
+    if (!started.ok) throw new Error("begin failed");
+    armed = true;
+    expect(
+      codes(
+        await started.value.submitBatch({
+          epoch: "epoch-001",
+          records: [candidate()],
+          sequence: 1,
+        }),
+      ),
+    ).toEqual(["observation-journal-fault"]);
+    expect(started.value.inspect()).toMatchObject({
+      lastSequence: 1,
+      recordCount: 1,
+      signalCount: 1,
+    });
+    expect(codes(await started.value.heartbeat({ epoch: "epoch-001", sequence: 2 }))).toEqual([
+      "observation-session-handle-poisoned",
+    ]);
   });
 
   test("an unconfirmed persistent-lease release reports uncertainty and poisons applied handles", async () => {
@@ -520,6 +560,11 @@ describe("local observation journal", () => {
     });
     expect(codes(applied)).toEqual(["observation-journal-coordination-release-unconfirmed"]);
     expect(applied.ok ? undefined : applied.diagnostics[0]?.details?.actionCompleted).toBeTrue();
+    expect(started.value.inspect()).toMatchObject({
+      lastSequence: 1,
+      recordCount: 1,
+      signalCount: 1,
+    });
     const hostile = new Proxy([] as ObservationRecord[], {
       getPrototypeOf() {
         throw new Error("release-uncertain handle must not inspect later bodies");
@@ -600,6 +645,77 @@ describe("local observation journal", () => {
     ]);
   });
 
+  test("an exact empty active begin is idempotently reclaimable and fenced after advancement", async () => {
+    const location = await roots();
+    let reads = 0;
+    const provider = await createLocalResourceProvider({
+      ...localObservationJournalResourceProfile,
+      ...location,
+      faultInjector(phase) {
+        if (phase === "read") {
+          reads += 1;
+          if (reads === 2) throw new Error("begin readback unavailable");
+        }
+      },
+    });
+    const journal = createLocalObservationJournal({ resources: provider });
+    expect(codes(await journal.begin(begin()))).toEqual([
+      "observation-journal-publication-unconfirmed",
+    ]);
+
+    const locator = localObservationSessionLocator(laneIdentity());
+    if (!locator.ok) throw new Error("invalid fixture locator");
+    const absolute = absoluteLocator(location.workspaceRoot, locator.value);
+    const durableBegin = await readFile(absolute);
+    const conflicting = begin("epoch-001");
+    expect(
+      codes(
+        await journal.begin({
+          ...conflicting,
+          source: { ...conflicting.source, version: "9.9.9" },
+        }),
+      ),
+    ).toEqual(["observation-epoch-already-recorded"]);
+    expect(await readFile(absolute)).toEqual(durableBegin);
+
+    const reclaimed = await journal.begin(begin());
+    expect(reclaimed.ok).toBeTrue();
+    if (!reclaimed.ok) throw new Error("exact begin was not reclaimed");
+    expect(reclaimed.value.inspect()).toMatchObject({
+      lastSequence: 0,
+      recordCount: 0,
+      signalCount: 0,
+      state: "active",
+    });
+    const duplicate = await journal.begin(begin());
+    expect(duplicate.ok).toBeTrue();
+    if (!duplicate.ok) throw new Error("exact duplicate begin was not reclaimed");
+    expect(
+      await reclaimed.value.submitBatch({
+        epoch: "epoch-001",
+        records: [candidate()],
+        sequence: 1,
+      }),
+    ).toMatchObject({ ok: true, value: { acceptedRecords: 1 } });
+    const advancedBytes = await readFile(absolute);
+    expect(codes(await journal.begin(begin()))).toEqual(["observation-epoch-already-recorded"]);
+    expect(await readFile(absolute)).toEqual(advancedBytes);
+    const hostile = new Proxy([] as ObservationRecord[], {
+      getPrototypeOf() {
+        throw new Error("stale duplicate handle must not inspect its operation body");
+      },
+    });
+    expect(
+      codes(
+        await duplicate.value.submitBatch({
+          epoch: "epoch-001",
+          records: hostile,
+          sequence: 1,
+        }),
+      ),
+    ).toEqual(["stale-observation-lane"]);
+  });
+
   test("cleanup is epoch-scoped and preserves other lanes and unrelated canonical planes", async () => {
     const location = await roots();
     const provider = await resources(location);
@@ -670,6 +786,54 @@ describe("local observation journal", () => {
     await writeFile(absolute, ` ${canonical}`);
     expect(codes(await journal.recover())).toEqual(["malformed-observation-journal"]);
     expect(await readFile(absolute, "utf8")).toBe(` ${canonical}`);
+  });
+
+  test("a completed canonical checkpoint outside the exact local profile cannot hand off", async () => {
+    const location = await roots();
+    const provider = await resources(location);
+    const journal = createLocalObservationJournal({ resources: provider });
+    const started = await journal.begin(begin());
+    if (!started.ok) throw new Error("begin failed");
+    const locator = localObservationSessionLocator(laneIdentity());
+    if (!locator.ok) throw new Error("invalid locator");
+    const absolute = absoluteLocator(location.workspaceRoot, locator.value);
+    const stored = JSON.parse(await readFile(absolute, "utf8")) as Record<string, unknown>;
+    const outsideProfile = createObservationSession(begin(), {
+      ...localObservationJournalSessionBounds,
+      maxCanonicalCharacters: 5 * 1024 * 1024,
+    });
+    if (!outsideProfile.ok) throw new Error("outside-profile fixture begin failed");
+    const submitted = outsideProfile.value.submitBatch({
+      epoch: "epoch-001",
+      records: [candidate()],
+      sequence: 1,
+    });
+    if (!submitted.ok) throw new Error("outside-profile fixture batch failed");
+    const completed = outsideProfile.value.complete({
+      coverage: coverage(),
+      epoch: "epoch-001",
+      sequence: 2,
+    });
+    if (!completed.ok) throw new Error("outside-profile fixture completion failed");
+    const checkpoint = outsideProfile.value.checkpoint();
+    const canonicalCheckpoint = copyCanonicalGraphData(checkpoint, "query");
+    if (!canonicalCheckpoint.ok) throw new Error("outside-profile checkpoint was not canonical");
+    stored.checkpoint = checkpoint;
+    stored.delivery = {
+      state: "available",
+      token: `groma-observation-handoff-v1:${createHash("sha256")
+        .update(canonicalCheckpoint.value.canonicalJson)
+        .digest("hex")}`,
+    };
+    stored.lifecycle = { state: "completed" };
+    stored.revision = 3;
+    const canonical = copyCanonicalGraphData(stored, "transaction");
+    if (!canonical.ok) throw new Error("outside-profile fixture canonicalization failed");
+    const hostileBytes = `${canonical.value.canonicalJson}\n`;
+    await writeFile(absolute, hostileBytes);
+
+    expect(codes(await journal.handoff(lane()))).toEqual(["malformed-observation-journal"]);
+    expect(await readFile(absolute, "utf8")).toBe(hostileBytes);
   });
 
   test("retries an indeterminate provider commit and poisons only when readback stays unconfirmed", async () => {

@@ -113,14 +113,22 @@ allowance leaves room for worst-case UTF-8 and JSON-escape expansion of records 
 bounded begin, scope, transition, coverage, lifecycle, lane, and delivery envelopes.
 Recovery enumerates at most 10,000 lanes in pages of at most 1,000 by default. Page
 count, continuation progress, file shape, per-directory entries, lane count, file bytes,
-and every nested checkpoint value remain explicitly bounded. This is the first-use local
-profile, not an extreme-scale chunk or shard format.
+and every nested checkpoint value remain explicitly bounded. Recovery also requires the
+checkpoint to name this exact official session profile; a Core-valid lane with different
+bounds is hostile operational state and fails closed. This is the first-use local profile,
+not an extreme-scale chunk or shard format.
 
 Every lane mutation uses an explicit persistent same-machine lease and a monotonically
 advancing lane revision. Persistent acquisition uses immediate proven-dead process
 recovery, so a crashed process can be recovered without waiting for the callback
 coordination stale-age interval; live, reused, or unverifiable ownership remains
 contended. Begin is staged, committed, and read back before a durable handle is returned.
+An exact duplicate begin is idempotently reclaimable only while the replay-validated lane
+remains empty and active. This settles the important case where commit succeeds but its
+read-back is unavailable, while acknowledging that durable state cannot distinguish that
+retry from an ordinary exact duplicate. Changed begin data, any accepted transition, or a
+terminal lifecycle remains ineligible. Duplicate exact handles share the same stored
+revision and checkpoint fence, so only one can advance.
 Later handle calls first verify the exact lane, epoch, active lifecycle, revision, and
 canonical checkpoint fingerprint, then apply the Core method exactly once, stage the
 resulting checkpoint, and read back the committed replacement before acknowledging the
@@ -128,7 +136,9 @@ caller. Concurrent calls on one handle are rejected; a superseded, divergent, or
 cross-process-stale handle is rejected before its signal body is inspected. Persistent
 release is retried once. Unresolved release reports whether the coordinated action
 completed, and a handle whose Core operation ran is poisoned before any later caller data
-is inspected. A retryable unresolved release retains one opaque lease for that exact lane
+is inspected. Synchronous handle inspection exposes only its last durability-confirmed
+Core inspection, including while publication is in flight or after poisoning. A retryable
+unresolved release retains one opaque lease for that exact lane
 inside the journal. The next operation or recovery of that lane atomically settles the old
 lease before acquiring a fresh one; it never runs an action under a handle whose release
 was unconfirmed. Another lane remains independent, and a concurrent same-lane caller

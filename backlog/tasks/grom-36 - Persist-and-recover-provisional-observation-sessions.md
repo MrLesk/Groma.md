@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 09:52'
+updated_date: '2026-07-18 10:17'
 labels: []
 milestone: m-3
 dependencies:
@@ -66,6 +66,8 @@ The local journal durably fences begin and every accepted signal, compares the c
 Review remediation added stateful alias and reserved-parent hostile cases, canonical completed/superseded corruption rejection, same-revision divergent checkpoint fencing, default-lock immediate recovery, exact byte-preservation checks, orphan-stage recovery, retryable and thrown release settlement, and release-success-then-throw competitor contention. Real child processes exit inside provider write, flush, rename, file-sync, directory-sync, and removal phases and prove exact old-or-new recovery with complete records, coverage, and stable tokens.
 
 Final parent verification: bun run check passed format, TypeScript, architecture boundaries, native build and smoke, Iteration 1A and 1B, and self-blueprint. Direct bun test passed 934 tests and 6,889 assertions across 42 files. Original acceptance and quality reviewers approved the final diff. git diff --check and Backlog doctor are clean. External framing, scanner orchestration, project registry, canonical evidence and bindings, reconciliation, CLI wiring, and extreme-scale sharding remain assigned to later tasks.
+
+Codex PR #37 review remediation independently reproduced and implemented. Recovery now rejects checkpoint envelopes whose 11 Core bounds do not exactly equal the official local journal profile before restoration/replay; a completed canonical off-profile lane cannot hand off and its bytes remain unchanged. Exact duplicate begin is idempotently reclaimable only for the same canonical zero-transition active checkpoint; conflicting begin data and any accepted transition remain rejected, while duplicate empty handles share the durable revision/checkpoint fence so only one advances and a stale loser does not inspect hostile input. Durable handles now cache inspection at the last confirmed publication, hiding definitely uncommitted Core mutation while exposing state confirmed before later fault or release uncertainty. Documentation records these semantics. Verification: local journal 24/0 (161 assertions); Core observation plus all Persistence previously 311/0 (1,869 assertions); TypeScript, architecture boundaries, formatting, and diff check green. Independent review approved the production remediation.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

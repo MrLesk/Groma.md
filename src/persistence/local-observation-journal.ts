@@ -405,6 +405,57 @@ function handoffToken(checkpoint: ObservationSessionCheckpoint): string {
     .digest("hex")}`;
 }
 
+function sameCheckpoint(
+  left: ObservationSessionCheckpoint,
+  right: ObservationSessionCheckpoint,
+): boolean {
+  const leftCanonical = copyCanonicalGraphData(left, "query");
+  const rightCanonical = copyCanonicalGraphData(right, "query");
+  return (
+    leftCanonical.ok &&
+    rightCanonical.ok &&
+    leftCanonical.value.canonicalJson === rightCanonical.value.canonicalJson
+  );
+}
+
+function hasExactLocalObservationSessionBounds(value: unknown): boolean {
+  const exact = inspectExactRecord(
+    value,
+    [
+      [
+        "maxBatchRecords",
+        "maxBatches",
+        "maxCanonicalCharacters",
+        "maxCoverageEntries",
+        "maxProvenancePerRecord",
+        "maxRecords",
+        "maxResourceCharacters",
+        "maxScopes",
+        "maxSignals",
+        "maxTextCharacters",
+        "maxTokenCharacters",
+      ],
+    ],
+    "malformed-observation-journal",
+    "Observation checkpoint bounds",
+  );
+  if (!exact.ok) return false;
+  const bounds = exact.value;
+  return (
+    bounds.maxBatchRecords === localObservationJournalSessionBounds.maxBatchRecords &&
+    bounds.maxBatches === localObservationJournalSessionBounds.maxBatches &&
+    bounds.maxCanonicalCharacters === localObservationJournalSessionBounds.maxCanonicalCharacters &&
+    bounds.maxCoverageEntries === localObservationJournalSessionBounds.maxCoverageEntries &&
+    bounds.maxProvenancePerRecord === localObservationJournalSessionBounds.maxProvenancePerRecord &&
+    bounds.maxRecords === localObservationJournalSessionBounds.maxRecords &&
+    bounds.maxResourceCharacters === localObservationJournalSessionBounds.maxResourceCharacters &&
+    bounds.maxScopes === localObservationJournalSessionBounds.maxScopes &&
+    bounds.maxSignals === localObservationJournalSessionBounds.maxSignals &&
+    bounds.maxTextCharacters === localObservationJournalSessionBounds.maxTextCharacters &&
+    bounds.maxTokenCharacters === localObservationJournalSessionBounds.maxTokenCharacters
+  );
+}
+
 const abandonmentReasons: Readonly<
   Record<ObservationAbandonmentKind, Readonly<{ code: string; message: string }>>
 > = Object.freeze({
@@ -625,8 +676,20 @@ function parseState(
     });
     const expectedLocator = localObservationSessionLocator(publicLane(lane));
     if (!expectedLocator.ok || expectedLocator.value !== locator) return malformedJournal();
+    const checkpointEnvelope = inspectExactRecord(
+      exact.value.checkpoint,
+      [["apiVersion", "begin", "bounds", "transitions"]],
+      "malformed-observation-journal",
+      "Observation checkpoint",
+    );
+    if (
+      !checkpointEnvelope.ok ||
+      !hasExactLocalObservationSessionBounds(checkpointEnvelope.value.bounds)
+    ) {
+      return malformedJournal();
+    }
     const restored = restoreObservationSessionCheckpoint(
-      exact.value.checkpoint as ObservationSessionCheckpoint,
+      checkpointEnvelope.value as unknown as ObservationSessionCheckpoint,
     );
     if (!restored.ok) return malformedJournal();
     const checkpoint = restored.value.checkpoint();
@@ -927,6 +990,7 @@ export function createLocalObservationJournal(
     let revision = initialRevision;
     let busy = false;
     let poisoned = false;
+    let confirmedInspection = session.inspect();
 
     const run = async <T>(
       operation: () => Result<T>,
@@ -982,6 +1046,7 @@ export function createLocalObservationJournal(
               poisoned = true;
               return durable as Result<T>;
             }
+            confirmedInspection = session.inspect();
             revision = abandoned.value.revision;
             const fault = await invokeFault("after-abandonment");
             if (!fault.ok) poisoned = true;
@@ -1001,6 +1066,7 @@ export function createLocalObservationJournal(
             poisoned = true;
             return durable as Result<T>;
           }
+          confirmedInspection = session.inspect();
           revision = next.revision;
           const fault = await invokeFault(classified.fault);
           if (!fault.ok) {
@@ -1080,7 +1146,7 @@ export function createLocalObservationJournal(
           }),
         );
       },
-      inspect: () => session.inspect(),
+      inspect: () => confirmedInspection,
       submitBatch(batch: ObservationBatch) {
         return run(
           () => session.submitBatch(batch),
@@ -1295,6 +1361,21 @@ export function createLocalObservationJournal(
         }
         revision = existing.value.state.revision;
         if (existing.value.state.checkpoint.begin.epoch === session.inspect().epoch) {
+          if (
+            existing.value.state.lifecycle.state === "active" &&
+            existing.value.state.delivery === null &&
+            existing.value.state.checkpoint.transitions.length === 0 &&
+            sameCheckpoint(existing.value.state.checkpoint, session.checkpoint())
+          ) {
+            return success(
+              makeHandle(
+                existing.value.session,
+                lane,
+                locator.value,
+                existing.value.state.revision,
+              ),
+            );
+          }
           return failure(
             diagnostic(
               "observation-epoch-already-recorded",
