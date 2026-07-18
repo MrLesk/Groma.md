@@ -304,12 +304,13 @@ function assessedClaimBacksFact(
 ): boolean {
   const fact = audit.facts.find((candidate) => candidate.id === factId);
   if (fact === undefined) return false;
-  if (fact.category !== "documentation-evidence") return true;
-  const authenticatedDocumentationPaths = new Set(fact.evidence.map((witness) => witness.path));
+  const expectedProvenanceKind =
+    fact.category === "documentation-evidence" ? "documentation" : "source";
+  const authenticatedPaths = new Set(fact.evidence.map((witness) => witness.path));
   return claim.evidence.some(
     (evidence) =>
-      evidence.provenanceKind === "documentation" &&
-      authenticatedDocumentationPaths.has(evidence.sourcePath),
+      evidence.provenanceKind === expectedProvenanceKind &&
+      authenticatedPaths.has(evidence.sourcePath),
   );
 }
 

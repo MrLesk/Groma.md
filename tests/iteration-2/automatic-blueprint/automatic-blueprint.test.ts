@@ -1119,6 +1119,105 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(wrongPathResult.dimensions.provenance).toBeLessThan(10);
   });
 
+  test("authenticates every mapped source fact by kind and exact witness path", async () => {
+    for (const name of ["groma.json", "backlog-md-v1.48.0.json"]) {
+      const audit = await loadAudit(name);
+      const sourceFact = audit.facts.find(
+        (fact) => fact.category !== "documentation-evidence" && fact.importance === "required",
+      )!;
+      const documentationFact = audit.facts.find(
+        (fact) => fact.category === "documentation-evidence",
+      )!;
+
+      const correctPath = cloneRun(passingRun(audit));
+      const correctClaim = correctPath.claims.assessedClaims.find((claim) =>
+        claim.factIds.includes(sourceFact.id),
+      )!;
+      correctClaim.evidence[0]!.sourcePath = sourceFact.evidence.at(-1)!.path;
+      expect(scoreBenchmarkRun(audit, parseBenchmarkRun(correctPath)).passed, name).toBeTrue();
+
+      for (const mutate of [
+        (claim: typeof correctClaim) => void (claim.evidence[0]!.provenanceKind = "documentation"),
+        (claim: typeof correctClaim) =>
+          void (claim.evidence[0]!.sourcePath = documentationFact.evidence[0]!.path),
+      ]) {
+        const invalid = cloneRun(passingRun(audit));
+        const claim = invalid.claims.assessedClaims.find((candidate) =>
+          candidate.factIds.includes(sourceFact.id),
+        )!;
+        mutate(claim);
+        const result = scoreBenchmarkRun(audit, parseBenchmarkRun(invalid));
+        expect(
+          result.failures.map(({ code }) => code),
+          name,
+        ).toEqual(["REQUIRED_FACT_COVERAGE_INCOMPLETE", "PROVENANCE_INCOMPLETE"]);
+        expect(result.dimensions.observableFactCoverage, name).toBeLessThan(20);
+        expect(result.dimensions.provenance, name).toBeLessThan(10);
+      }
+
+      const mixed = cloneRun(passingRun(audit));
+      const mixedClaim = mixed.claims.assessedClaims.find((claim) =>
+        claim.factIds.includes(sourceFact.id),
+      )!;
+      mixedClaim.factIds.push(documentationFact.id);
+      mixedClaim.evidence.push({
+        detail: `documentation evidence for ${documentationFact.id}`,
+        observationId: `observation:${documentationFact.id}:mixed`,
+        provenanceKind: "documentation",
+        sourcePath: documentationFact.evidence[0]!.path,
+      });
+      expect(scoreBenchmarkRun(audit, parseBenchmarkRun(mixed)).passed, `mixed:${name}`).toBeTrue();
+    }
+  });
+
+  test("permits one evidence record to back only facts sharing that authenticated path", async () => {
+    for (const name of ["groma.json", "backlog-md-v1.48.0.json"]) {
+      const audit = await loadAudit(name);
+      const sourceFacts = audit.facts.filter((fact) => fact.category !== "documentation-evidence");
+      const shared = sourceFacts.flatMap((left, leftIndex) =>
+        sourceFacts.slice(leftIndex + 1).flatMap((right) => {
+          const path = left.evidence.find((witness) =>
+            right.evidence.some((candidate) => candidate.path === witness.path),
+          )?.path;
+          return path === undefined ? [] : [{ left, path, right }];
+        }),
+      )[0]!;
+
+      const validSharedWitness = cloneRun(passingRun(audit));
+      const claim = validSharedWitness.claims.assessedClaims.find((candidate) =>
+        candidate.factIds.includes(shared.left.id),
+      )!;
+      claim.factIds = [shared.left.id, shared.right.id];
+      claim.evidence = [
+        {
+          detail: `shared source evidence at ${shared.path}`,
+          observationId: `observation:shared:${shared.left.id}`,
+          provenanceKind: "source",
+          sourcePath: shared.path,
+        },
+      ];
+      expect(
+        scoreBenchmarkRun(audit, parseBenchmarkRun(validSharedWitness)).passed,
+        `shared:${name}`,
+      ).toBeTrue();
+
+      const broad = cloneRun(passingRun(audit));
+      const broadClaim = broad.claims.assessedClaims[0]!;
+      broadClaim.factIds = audit.facts.map((fact) => fact.id);
+      broad.claims.assessedClaims = [broadClaim];
+      broad.provenance.inScopeClaimIds = [broadClaim.claimId];
+      broad.provenance.claimIdsWithValidWitnesses = [broadClaim.claimId];
+      const broadResult = scoreBenchmarkRun(audit, parseBenchmarkRun(broad));
+      expect(
+        broadResult.failures.map(({ code }) => code),
+        `broad:${name}`,
+      ).toEqual(["REQUIRED_FACT_COVERAGE_INCOMPLETE", "PROVENANCE_INCOMPLETE"]);
+      expect(broadResult.dimensions.observableFactCoverage, `broad:${name}`).toBeGreaterThan(0);
+      expect(broadResult.dimensions.observableFactCoverage, `broad:${name}`).toBeLessThan(20);
+      expect(broadResult.dimensions.provenance, `broad:${name}`).toBe(0);
+    }
+  });
+
   test("does not award self-attested false-claim provenance without structured evidence", async () => {
     const audit = await loadAudit("groma.json");
     const run = cloneRun(passingRun(audit));

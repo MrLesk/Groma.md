@@ -272,11 +272,13 @@ Every recorded claim-evidence `sourcePath` uses the same strict portable workspa
 syntax as audit witnesses. The scorer derives valid provenance from evidence rather than trusting
 the declared valid-ID list: assessed evidence retains a required observation ID, source path, and
 `source` or `documentation` provenance kind, while a false claim needs at least one evidence record
-containing both observation ID and source path. Every mapped `documentation-evidence` fact requires
-documentation-kind evidence whose source path exactly equals one of that fact's authenticated
-documentation witness paths. A source observation or a different documentation path cannot back
-that fact or its emitting claim. Raw scanner evidence remains available alongside the assessment
-rather than being replaced by the score.
+containing both observation ID and source path. Every mapped audit fact is authenticated
+independently. A `documentation-evidence` fact requires documentation-kind evidence at one of that
+fact's exact witness paths; every other category requires source-kind evidence at one of its exact
+witness paths. One evidence record may back multiple facts only when each fact authenticates that
+same path. A broad claim with evidence for only some mapped facts contributes only those facts to
+coverage and receives no claim-level provenance credit. Raw scanner evidence remains available
+alongside the assessment rather than being replaced by the score.
 
 The provenance score denominator is every emitted assessed or false claim, never a self-declared
 subset. An emitted claim contributes to the numerator only when its structured evidence is valid
