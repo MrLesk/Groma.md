@@ -286,6 +286,9 @@ const officialSchemaMigrationContribution = Object.freeze({
     Object.freeze({ schema: "groma/aliases/v0.1", version: 1 }),
     Object.freeze({ schema: "groma.packages-lock/v0", version: 0 }),
     Object.freeze({ schema: "groma.packages-lock/v1", version: 1 }),
+    Object.freeze({ schema: "groma/evidence-source/v0.1", version: 1 }),
+    Object.freeze({ schema: "groma/evidence-shard/v0.1", version: 1 }),
+    Object.freeze({ schema: "groma/binding-shard/v0.1", version: 1 }),
   ]),
 });
 

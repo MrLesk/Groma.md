@@ -110,6 +110,9 @@ describe("local canonical migration persistence", () => {
     const root = await temporaryRoot();
     const entity = "ent_00000000000000000000000000000000";
     await mkdir(path.join(root, "groma", "records", "plugin.example"), { recursive: true });
+    await mkdir(path.join(root, "groma", "evidence", "sources", "aa"), { recursive: true });
+    await mkdir(path.join(root, "groma", "evidence", "shards"), { recursive: true });
+    await mkdir(path.join(root, "groma", "bindings", "shards"), { recursive: true });
     await mkdir(path.join(root, "groma", "notes", "a", "b", "c", "d"), { recursive: true });
     await Promise.all([
       writeFile(path.join(root, "groma", "groma.yaml"), "schema: groma/v0.1\n"),
@@ -124,6 +127,18 @@ describe("local canonical migration persistence", () => {
       writeFile(
         path.join(root, "groma", "intent", "00", `${entity}.md`),
         "---\nschema: groma/v0.1\n---\n",
+      ),
+      writeFile(
+        path.join(root, "groma", "evidence", "sources", "aa", `${"a".repeat(64)}.md`),
+        "---\nschema: groma/evidence-source/v0.1\n---\n",
+      ),
+      writeFile(
+        path.join(root, "groma", "evidence", "shards", "00.md"),
+        "---\nschema: groma/evidence-shard/v0.1\n---\n",
+      ),
+      writeFile(
+        path.join(root, "groma", "bindings", "shards", "00.md"),
+        "---\nschema: groma/binding-shard/v0.1\n---\n",
       ),
       writeFile(path.join(root, "groma", "transaction-state.json"), "not catalogued\n"),
       writeFile(path.join(root, "groma", "notes.md"), "not canonical\n"),
@@ -142,6 +157,9 @@ describe("local canonical migration persistence", () => {
     if (loaded.ok) {
       expect(loaded.value.resources.map((entry) => String(entry.locator))).toEqual([
         "groma/aliases.md",
+        "groma/bindings/shards/00.md",
+        `groma/evidence/shards/00.md`,
+        `groma/evidence/sources/aa/${"a".repeat(64)}.md`,
         "groma/groma.yaml",
         `groma/intent/00/${entity}.md`,
         "groma/packages.lock",
@@ -149,6 +167,9 @@ describe("local canonical migration persistence", () => {
       ]);
       expect(loaded.value.resources.map((entry) => entry.schema)).toEqual([
         "groma/aliases/v0.1",
+        "groma/binding-shard/v0.1",
+        "groma/evidence-shard/v0.1",
+        "groma/evidence-source/v0.1",
         "groma/v0.1",
         "groma/v0.1",
         "groma.packages-lock/v1",
@@ -221,6 +242,20 @@ describe("local canonical migration persistence", () => {
         diagnostics: [{ code: "migration-resource-enumeration-incomplete" }],
         ok: false,
       });
+    }
+
+    for (const relative of [
+      ["evidence", "sources", "00", "nested", "leaf.md"],
+      ["bindings", "shards", "nested", "leaf.md"],
+    ]) {
+      const root = await temporaryRoot();
+      const file = path.join(root, "groma", ...relative);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, "ignored\n");
+      const resources = await createLocalResourceProvider({ workspaceRoot: root });
+      const catalog = createLocalCanonicalMigrationCatalog({ resources });
+
+      expect(await catalog.load(), relative.join("/")).toMatchObject({ ok: false });
     }
 
     const root = await temporaryRoot();

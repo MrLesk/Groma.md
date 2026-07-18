@@ -67,6 +67,12 @@ const schemaPattern =
   /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*(?:\/[a-z0-9][a-z0-9.-]*)*\/v[0-9]+(?:\.[0-9]+)*$/;
 const intentLocatorPattern = /^groma\/intent\/[0-9a-f]{2}\/ent_[0-9a-f]{32}\.md$/;
 const intentShardLocatorPattern = /^groma\/intent\/[0-9a-f]{2}$/;
+const evidenceSourceLocatorPattern = /^groma\/evidence\/sources\/[0-9a-f]{2}\/[0-9a-f]{64}\.md$/;
+const evidenceShardLocatorPattern = /^groma\/evidence\/shards\/[0-9a-f]{2}\.md$/;
+const bindingShardLocatorPattern = /^groma\/bindings\/shards\/[0-9a-f]{2}\.md$/;
+const evidenceDirectoryLocatorPattern =
+  /^groma\/evidence\/(?:sources|shards)$|^groma\/evidence\/sources\/[0-9a-f]{2}$/;
+const bindingDirectoryLocatorPattern = /^groma\/bindings\/shards$/;
 const pluginRecordLocatorPattern =
   /^groma\/records\/[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\/[a-z0-9][a-z0-9._-]*\.(?:json|md|ya?ml)$/;
 const pluginRecordNamespaceLocatorPattern = /^groma\/records\/[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
@@ -109,6 +115,9 @@ function isCanonicalLocator(locator: string): boolean {
     locator === "groma/aliases.md" ||
     locator === "groma/packages.lock" ||
     intentLocatorPattern.test(locator) ||
+    evidenceSourceLocatorPattern.test(locator) ||
+    evidenceShardLocatorPattern.test(locator) ||
+    bindingShardLocatorPattern.test(locator) ||
     pluginRecordLocatorPattern.test(locator)
   );
 }
@@ -118,6 +127,8 @@ function canonicalPlaneEntry(entry: ResourceEntry): Result<WorkspaceResourceLoca
   if (
     entry.kind === "directory" &&
     (intentShardLocatorPattern.test(entry.locator) ||
+      evidenceDirectoryLocatorPattern.test(entry.locator) ||
+      bindingDirectoryLocatorPattern.test(entry.locator) ||
       pluginRecordNamespaceLocatorPattern.test(entry.locator))
   ) {
     return success(undefined);
@@ -214,10 +225,16 @@ export function createLocalCanonicalMigrationCatalog(
     workspaceResourceLocator("groma", "packages.lock"),
   ];
   const planeLocators = [
-    workspaceResourceLocator("groma", "intent"),
-    workspaceResourceLocator("groma", "records"),
+    { locator: workspaceResourceLocator("groma", "intent"), maxDepth: 1 },
+    { locator: workspaceResourceLocator("groma", "records"), maxDepth: 1 },
+    { locator: workspaceResourceLocator("groma", "evidence"), maxDepth: 3 },
+    { locator: workspaceResourceLocator("groma", "bindings"), maxDepth: 2 },
   ];
-  if ([...exactLocators, ...planeLocators].some((locator) => !locator.ok)) {
+  if (
+    [...exactLocators, ...planeLocators.map((plane) => plane.locator)].some(
+      (locator) => !locator.ok,
+    )
+  ) {
     throw new Error("built-in canonical locator is invalid");
   }
   const load = async (): Promise<Result<CanonicalMigrationCatalogSnapshot>> => {
@@ -248,7 +265,8 @@ export function createLocalCanonicalMigrationCatalog(
       const added = addLocator(parsed.value);
       if (!added.ok) return added;
     }
-    for (const parsed of planeLocators) {
+    for (const plane of planeLocators) {
+      const parsed = plane.locator;
       if (!parsed.ok) throw new Error("built-in canonical locator is invalid");
       let cursor: Parameters<LocalResourceProvider["enumerate"]>[0]["cursor"];
       let receivedPage = false;
@@ -268,7 +286,7 @@ export function createLocalCanonicalMigrationCatalog(
           ...(cursor === undefined ? {} : { cursor }),
           limit: limits.pageSize,
           locator: parsed.value,
-          maxDepth: 1,
+          maxDepth: plane.maxDepth,
           maxEntriesPerDirectory: limits.maxEntriesPerDirectory,
         });
         if (!enumerated.ok) {
