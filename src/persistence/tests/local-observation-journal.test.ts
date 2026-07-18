@@ -296,6 +296,15 @@ describe("local observation journal", () => {
       "expired",
       "failed",
     ]);
+    expect(recovered.value.abandoned.find((item) => item.kind === "failed")).toEqual({
+      epoch: "epoch-fail",
+      kind: "failed",
+      lane: {
+        projectId: "project.local",
+        source: { id: "source.fail", instance: "workspace" },
+      },
+      reason: { code: "scanner-failed", message: "Parser failed" },
+    });
     expect(recovered.value.handoffs).toEqual([]);
   });
 
@@ -1100,11 +1109,17 @@ describe("local observation journal", () => {
           /^groma-observation-handoff-v1:[0-9a-f]{64}$/,
         );
       } else if (action === "acknowledgement") {
-        const exactOutcome =
-          first.value.acknowledged.length === 1
-            ? first.value.acknowledged[0]
-            : first.value.handoffs[0];
-        expect(exactOutcome).toMatchObject(crashLane);
+        if (first.value.acknowledged.length === 1) {
+          expect(first.value.acknowledged[0]).toEqual(crashLane);
+          expect(first.value.handoffs).toEqual([]);
+        } else {
+          expect(first.value.acknowledged).toEqual([]);
+          expect(first.value.handoffs).toHaveLength(1);
+          expect(first.value.handoffs[0]).toMatchObject({
+            epoch: crashLane.epoch,
+            lane: { projectId: crashLane.projectId, source: crashLane.source },
+          });
+        }
       } else if (action === "cleanup" && durable === undefined) {
         expect(first.value).toEqual({ abandoned: [], acknowledged: [], handoffs: [] });
       } else {
