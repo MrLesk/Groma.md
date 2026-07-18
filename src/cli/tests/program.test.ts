@@ -3,7 +3,12 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createDefaultBootstrapRegistry, defaultHostBounds } from "../../host/index.ts";
+import {
+  createDefaultBootstrapRegistry,
+  createYamlConfigurationParser,
+  defaultHostBounds,
+  serializeBootstrapConfiguration,
+} from "../../host/index.ts";
 import {
   CLI_EXIT,
   CLI_MAX_JSON_DEPTH,
@@ -428,6 +433,21 @@ describe("CLI program", () => {
     expect(
       await jsonCommand(root, ["init"], undefined, { userDataRoot: containedUserDataRoot }),
     ).toMatchObject({ envelope: { command: "init", exitCode: CLI_EXIT.success, ok: true } });
+    const configuration = await readFile(path.join(root, "groma", "groma.yaml"), "utf8");
+    expect(configuration).toBe(
+      [
+        "schema: groma/v0.1",
+        "projects:",
+        '  - id: "project.default"',
+        `    name: ${JSON.stringify(path.basename(root))}`,
+        '    source: "."',
+        "    scanners: []",
+        "    coverage:",
+        '      - id: "workspace"',
+        '        resourceRoot: "."',
+        "",
+      ].join("\n"),
+    );
     await expect(lstat(containedUserDataRoot)).rejects.toThrow();
     expect(
       await jsonCommand(root, ["component", "roots", "--limit", "1"], undefined, {
@@ -437,6 +457,162 @@ describe("CLI program", () => {
       envelope: { command: "component roots", exitCode: CLI_EXIT.success, ok: true },
     });
     await expect(lstat(containedUserDataRoot)).rejects.toThrow();
+  });
+
+  test("manages projects through bounded JSON input without loading broken enabled packages", async () => {
+    const root = await workspace();
+    await mkdir(path.join(root, "apps", "api"), { recursive: true });
+    expect(await jsonCommand(root, ["init"])).toMatchObject({
+      envelope: { exitCode: CLI_EXIT.success, ok: true },
+    });
+    const configurationPath = path.join(root, "groma", "groma.yaml");
+    const parser = createYamlConfigurationParser();
+    const initialized = parser.parse(Uint8Array.from(await readFile(configurationPath)));
+    if (!initialized.ok) throw new Error(initialized.diagnostics[0]?.code);
+    await writeFile(
+      configurationPath,
+      serializeBootstrapConfiguration({
+        ...initialized.value,
+        packageDeclarations: [
+          {
+            enabled: ["./plugins/missing.js"],
+            name: "broken-enabled",
+            source: "./plugins/missing",
+          },
+        ],
+      }),
+    );
+
+    const input = JSON.stringify({
+      coverage: [{ id: "source", resourceRoot: "src" }],
+      name: "API",
+      scanners: [{ configuration: { include: ["src"] }, id: "official.typescript" }],
+      source: "apps/api",
+    });
+    const added = await jsonCommand(root, ["project", "add", "--stdin"], input);
+    expect(added).toMatchObject({
+      envelope: {
+        command: "project add",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result: { ok: true, value: { availability: "available", name: "API" } },
+      },
+    });
+    const addedValue = (added.envelope.result as { value: { id: string; revision: string } }).value;
+    expect(await jsonCommand(root, ["project", "get", addedValue.id])).toMatchObject({
+      envelope: { result: { ok: true, value: { id: addedValue.id } } },
+    });
+    expect(await jsonCommand(root, ["project", "list"])).toMatchObject({
+      envelope: { result: { ok: true, value: [{ id: "project.default" }, { id: addedValue.id }] } },
+    });
+    const updatedInput = JSON.stringify({
+      coverage: [{ id: "source", resourceRoot: "." }],
+      name: "API renamed",
+      scanners: [],
+      source: "apps/api",
+    });
+    const updated = await jsonCommand(
+      root,
+      [
+        "project",
+        "update",
+        addedValue.id,
+        "--revision",
+        addedValue.revision,
+        "--input",
+        "request.json",
+      ],
+      updatedInput,
+    );
+    expect(updated).toMatchObject({
+      envelope: { result: { ok: true, value: { name: "API renamed", scanners: [] } } },
+    });
+    const stale = await jsonCommand(
+      root,
+      ["project", "update", addedValue.id, "--revision", addedValue.revision, "--stdin"],
+      updatedInput,
+    );
+    expect(stale).toMatchObject({
+      envelope: {
+        exitCode: CLI_EXIT.workspace,
+        ok: false,
+        result: { diagnostics: [{ code: "project-revision-conflict" }], ok: false },
+      },
+    });
+    const updatedValue = (updated.envelope.result as { value: { revision: string } }).value;
+    expect(
+      await jsonCommand(root, [
+        "project",
+        "remove",
+        addedValue.id,
+        "--revision",
+        updatedValue.revision,
+      ]),
+    ).toMatchObject({ envelope: { exitCode: CLI_EXIT.success, ok: true } });
+    const finalConfiguration = parser.parse(Uint8Array.from(await readFile(configurationPath)));
+    expect(finalConfiguration).toMatchObject({
+      ok: true,
+      value: {
+        packageDeclarations: [{ name: "broken-enabled" }],
+        retiredProjectIds: [addedValue.id],
+      },
+    });
+
+    const captured = captureOutput();
+    expect(
+      await runProgram(["project", "list"], captured, {
+        terminal: { stdin: false, stdout: false },
+        workspaceRoot: root,
+      }),
+    ).toBe(CLI_EXIT.success);
+    expect(captured.output[0]).toContain('"project.default"');
+  });
+
+  test("converges two initializers on the same exact default project", async () => {
+    const root = await workspace();
+    const outcomes = await Promise.all([jsonCommand(root, ["init"]), jsonCommand(root, ["init"])]);
+    expect(outcomes.map((outcome) => outcome.exitCode)).toEqual([
+      CLI_EXIT.success,
+      CLI_EXIT.success,
+    ]);
+    const parsed = createYamlConfigurationParser().parse(
+      Uint8Array.from(await readFile(path.join(root, "groma", "groma.yaml"))),
+    );
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: {
+        projectRegistrations: [
+          {
+            coverage: [{ id: "workspace", resourceRoot: "." }],
+            id: "project.default",
+            name: path.basename(root),
+            scanners: [],
+            source: ".",
+          },
+        ],
+      },
+    });
+  });
+
+  test("rejects malformed project identity and revision before Host composition", async () => {
+    const root = await workspace();
+    for (const args of [
+      ["project", "get", "project_bad"],
+      ["project", "remove", "project.default", "--revision", "bad"],
+    ]) {
+      const captured = captureOutput();
+      let registryCalls = 0;
+      expect(
+        await runProgram(["--format", "json", ...args], captured, {
+          createRegistry: () => {
+            registryCalls += 1;
+            throw new Error("must not compose");
+          },
+          workspaceRoot: root,
+        }),
+      ).toBe(CLI_EXIT.usage);
+      expect(registryCalls).toBe(0);
+    }
   });
 
   test("renders a limit-one official export whose escaped JSON exceeds one MiB", async () => {

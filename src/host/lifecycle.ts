@@ -24,6 +24,7 @@ import type {
   WorkspaceStatus,
 } from "./contracts.ts";
 import type { PluginPackageOperations } from "./local-plugin-packages.ts";
+import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
 import type { ApplicationOperations, SchemaMigrationOperations } from "../application/index.ts";
 import {
   copyHostDiagnostics,
@@ -518,6 +519,46 @@ function canonicalPackageOperations(value: unknown): Result<PluginPackageOperati
   );
 }
 
+function canonicalProjectOperations(value: unknown): Result<ProjectRegistrationOperations> {
+  const projects = inspectHostRecord(
+    value,
+    [["add", "get", "list", "remove", "update"]],
+    "invalid-host-composition",
+    "Project registration operations",
+  );
+  if (
+    !projects.ok ||
+    typeof projects.value.add !== "function" ||
+    typeof projects.value.get !== "function" ||
+    typeof projects.value.list !== "function" ||
+    typeof projects.value.remove !== "function" ||
+    typeof projects.value.update !== "function"
+  ) {
+    return failure(
+      diagnostic("invalid-host-composition", "Project registration operations are malformed"),
+    );
+  }
+  const receiver = value as object;
+  const add = projects.value.add as ProjectRegistrationOperations["add"];
+  const get = projects.value.get as ProjectRegistrationOperations["get"];
+  const list = projects.value.list as ProjectRegistrationOperations["list"];
+  const remove = projects.value.remove as ProjectRegistrationOperations["remove"];
+  const update = projects.value.update as ProjectRegistrationOperations["update"];
+  return success(
+    Object.freeze({
+      add: (request: Parameters<ProjectRegistrationOperations["add"]>[0]) =>
+        intrinsicReflectApply(add, receiver, [request]),
+      get: (request: Parameters<ProjectRegistrationOperations["get"]>[0]) =>
+        intrinsicReflectApply(get, receiver, [request]),
+      list: () => intrinsicReflectApply(list, receiver, []),
+      remove: (request: Parameters<ProjectRegistrationOperations["remove"]>[0]) =>
+        intrinsicReflectApply(remove, receiver, [request]),
+      update: (request: Parameters<ProjectRegistrationOperations["update"]>[0]) =>
+        intrinsicReflectApply(update, receiver, [request]),
+    }),
+  );
+}
+
 function canonicalSchemaMigrationOperations(value: unknown): Result<SchemaMigrationOperations> {
   const migrations = inspectHostRecord(
     value,
@@ -704,6 +745,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "model",
         "operations",
         "packages",
+        "projects",
         "projection",
         "projectionRead",
         "queryEngine",
@@ -724,6 +766,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "migrations",
         "operations",
         "packages",
+        "projects",
         "projection",
         "projectionRead",
         "queryEngine",
@@ -743,6 +786,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "model",
         "operations",
         "packages",
+        "projects",
         "plugins",
         "projection",
         "projectionRead",
@@ -764,6 +808,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "migrations",
         "operations",
         "packages",
+        "projects",
         "plugins",
         "projection",
         "projectionRead",
@@ -791,6 +836,8 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!surface.ok) return surface;
   const packages = canonicalPackageOperations(composition.value.packages);
   if (!packages.ok) return packages;
+  const projects = canonicalProjectOperations(composition.value.projects);
+  if (!projects.ok) return projects;
   const migrations = Object.hasOwn(composition.value, "migrations")
     ? canonicalSchemaMigrationOperations(composition.value.migrations)
     : undefined;
@@ -830,6 +877,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       model: composition.value.model,
       ...(migrations === undefined ? {} : { migrations: migrations.value }),
       packages: packages.value,
+      projects: projects.value,
       ...(plugins === undefined ? {} : { plugins: plugins.value }),
       projection: composition.value.projection,
       projectionRead: composition.value.projectionRead,
@@ -1368,6 +1416,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                       ? {}
                       : { migrations: composition.migrations }),
                     packages: composition.packages,
+                    projects: composition.projects,
                     recovery: Object.freeze({ status: recovery }),
                     workspace: composition.workspace,
                   });

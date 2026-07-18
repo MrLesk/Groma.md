@@ -111,15 +111,25 @@ produce a resumable page without an internal size contradiction.
 
 ## Bootstrap workspace document
 
-The configuration resource is `groma/groma.yaml`. Initialization still writes the
-smallest canonical UTF-8 document, preserving every existing workspace:
+The configuration resource is `groma/groma.yaml`. Existing schema-only workspaces remain
+valid and serialize unchanged. Fresh initialization writes one explicit aggregate project
+registration whose display name is derived once from the workspace basename:
 
 ```yaml
 schema: groma/v0.1
+projects:
+  - id: "project.default"
+    name: "workspace"
+    source: "."
+    scanners: []
+    coverage:
+      - id: "workspace"
+        resourceRoot: "."
 ```
 
 The bounded schema reserves an optional `plugins` sequence for official Host-profile
-selection and an optional `packages` sequence for blueprint package declarations:
+selection, an optional `packages` sequence for blueprint package declarations, optional
+`projects`, and bounded sorted `retiredProjectIds` tombstones:
 
 ```yaml
 schema: groma/v0.1
@@ -127,7 +137,7 @@ plugins: []
 packages: []
 ```
 
-These three fields are the only keys. Each package declaration contains exactly `name`,
+These fields are the only keys. Each package declaration contains exactly `name`,
 `source`, and sorted `enabled` entry paths. The parser rejects invalid UTF-8, anchors,
 aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
 entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
@@ -147,6 +157,35 @@ The local discovery provider uses the same provider-relative
 Windows. Architecture does not change POSIX or Windows path syntax. Artifact verification
 remains limited to the four promised targets: macOS arm64, Linux x64, Windows x64, and
 Windows arm64. Core sees neither paths nor YAML.
+
+## Aggregate project registry
+
+Projects are Host configuration, not components and not separate blueprints. Each project has
+one stable `project_*` identity, a single-line display name, an aggregate-workspace-relative
+source locator, sorted enabled scanner records with bounded canonical data-only configuration,
+and sorted coverage declarations `{id, resourceRoot}`. Coverage roots are relative to the
+project source, not the aggregate workspace. For source `apps/api`, coverage `src` means `src`
+inside a resource provider rooted at `apps/api`; it is never rewritten to `apps/api/src` in a
+scanner session. The project ID passes unchanged into observation and evidence identity.
+
+Source and coverage locators use `/`, never absolute paths, drive prefixes, UNC syntax,
+backslashes, or traversal. The aggregate `groma/` subtree is Host-reserved: a project cannot
+use it as its source, and a root project cannot declare it as coverage. A nested project may
+contain its own `groma` source-relative directory. The GROM-39 runtime provider must filter the
+aggregate top-level `groma/` subtree on direct reads, enumeration requests, and enumeration
+results; coverage `.` means complete coverage only over that filtered virtual project view.
+
+Add/get/list/update/remove share the exact outer `groma/package-state` coordination lane with
+package mutations. Both owners re-read under the lease and merge only their owned projection,
+preserving plugins, packages, projects, and retired IDs. Removal adds a permanent bounded
+tombstone so an identity cannot be reused after restart. Registration revisions cover one
+project only; unrelated package or project edits do not change them. Availability is a derived,
+bounded confined-directory probe and exposes neither absolute paths nor timestamps. Missing,
+linked, file, unreadable, or unsupported roots report `unavailable`; they do not remove intent,
+evidence, bindings, sessions, or observed source bytes.
+An indeterminate add reports the safe attempted project identity in diagnostic details. Reconcile
+that identity with exact get/list before retrying; Groma never asks the user to guess which stable
+identity may have committed.
 
 ## Local package boundary
 
@@ -321,6 +360,9 @@ authority. Only the full v2 surface can be returned as complete workspace operat
 the legacy shape is never promoted beyond this captured initialization view.
 `HostSurfaceContext.packages` is a separate frozen five-operation view; it cannot expose
 the internal package loader or plugin runtime.
+`HostSurfaceContext.projects` is the separate frozen five-operation project-registration view;
+the lifecycle captures exact methods and rejects extra, missing, accessor, proxy, or non-callable
+runtime shapes.
 
 `WorkspaceAccessCapability.requireWorkspace()` is the only gate to the complete
 semantic-operation surface provided to surfaces. The lifecycle exact-validates every

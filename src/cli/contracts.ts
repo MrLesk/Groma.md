@@ -76,6 +76,20 @@ export type CliCommand =
       readonly trustFullUserPermissions?: boolean;
     }
   | { readonly input: CliInputSource; readonly kind: "component-create" }
+  | { readonly input: CliInputSource; readonly kind: "project-add" }
+  | { readonly id: string; readonly kind: "project-get" }
+  | { readonly kind: "project-list" }
+  | {
+      readonly expectedRevision: string;
+      readonly id: string;
+      readonly input: CliInputSource;
+      readonly kind: "project-update";
+    }
+  | {
+      readonly expectedRevision: string;
+      readonly id: string;
+      readonly kind: "project-remove";
+    }
   | {
       readonly id: string;
       readonly kind: "component-get";
@@ -194,6 +208,16 @@ export function commandName(command: CliCommand): string {
       return "package disable";
     case "package-remove":
       return "package remove";
+    case "project-add":
+      return "project add";
+    case "project-get":
+      return "project get";
+    case "project-list":
+      return "project list";
+    case "project-update":
+      return "project update";
+    case "project-remove":
+      return "project remove";
     case "migrate-apply":
       return "migrate apply";
     case "migrate-preview":

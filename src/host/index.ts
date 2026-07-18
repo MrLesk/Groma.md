@@ -4,6 +4,7 @@ export * from "./default-bootstrap.ts";
 export * from "./default-host-identities.ts";
 export * from "./lifecycle.ts";
 export * from "./local-plugin-packages.ts";
+export * from "./local-project-registry.ts";
 export * from "./local-workspace.ts";
 export * from "./plugin-runtime-bounds.ts";
 export * from "./plugin-scaffolding.ts";

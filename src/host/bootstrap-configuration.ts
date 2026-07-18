@@ -4,6 +4,7 @@ import { isProxy as isNativeProxy } from "node:util/types";
 import { isAlias, parseDocument, visit } from "yaml";
 
 import { failure, success, type Diagnostic, type Result } from "../core/index.ts";
+import { copyCanonicalGraphData, type GraphData } from "../core/payload.ts";
 import {
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
@@ -48,9 +49,29 @@ export interface ConfiguredPluginPackage {
   readonly source: string;
 }
 
+export interface ConfiguredProjectScanner {
+  readonly configuration: GraphData;
+  readonly id: string;
+}
+
+export interface ConfiguredProjectCoverageScope {
+  readonly id: string;
+  readonly resourceRoot: WorkspaceResourceLocator;
+}
+
+export interface ConfiguredProjectRegistration {
+  readonly coverage: readonly ConfiguredProjectCoverageScope[];
+  readonly id: string;
+  readonly name: string;
+  readonly scanners: readonly ConfiguredProjectScanner[];
+  readonly source: WorkspaceResourceLocator;
+}
+
 export interface BootstrapBaseConfiguration {
   readonly packageDeclarations: readonly ConfiguredPluginPackage[];
+  readonly projectRegistrations?: readonly ConfiguredProjectRegistration[];
   readonly requestedRuntimePlugins: readonly RequestedRuntimePlugin[];
+  readonly retiredProjectIds?: readonly string[];
   readonly schema: "groma/v0.1";
 }
 
@@ -87,6 +108,15 @@ export const bootstrapConfigurationBounds = Object.freeze({
   maxPackageDeclarations: 64,
   maxPackageEntryCharacters: 512,
   maxPackageSourceCharacters: 4_096,
+  maxProjectCoverageScopes: 64,
+  maxProjectDisplayNameCharacters: 256,
+  maxProjectRegistrations: 64,
+  maxRetiredProjectIds: 1_024,
+  maxProjectScannerConfigurationCharacters: 16_384,
+  maxProjectScannerConfigurationDepth: 16,
+  maxProjectScannerConfigurationValues: 1_000,
+  maxProjectScanners: 64,
+  maxProjectScannersTotal: 256,
   maxProviderDiagnostics: 100,
   maxRequestedRuntimePlugins: 64,
   maxTokenCharacters: 128,
@@ -94,13 +124,20 @@ export const bootstrapConfigurationBounds = Object.freeze({
 
 const config = workspaceResourceLocator("groma", "groma.yaml");
 const root = workspaceResourceLocator();
-if (!config.ok || !root.ok) throw new Error("Built-in bootstrap locators are invalid");
+const coordination = workspaceResourceLocator("groma", "package-state");
+if (!config.ok || !root.ok || !coordination.ok) {
+  throw new Error("Built-in bootstrap locators are invalid");
+}
+/** Shared outer lease for every official mutation of groma/groma.yaml. */
+export const workspaceConfigurationCoordinationLocator = coordination.value;
 export const localWorkspaceLocator: WorkspaceLocator = Object.freeze({
   configuration: config.value,
   root: root.value,
 });
 
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const projectIdPattern = /^(?:project\.default|project_[0-9a-f]{32})$/;
+const projectCoverageIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/;
 const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 const packagePathSegmentPattern = /^[A-Za-z0-9@](?:[A-Za-z0-9._@-]*[A-Za-z0-9_@-])?$/;
 const intrinsicTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -143,6 +180,28 @@ function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function isSafeProjectDisplayName(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) return false;
+  let codePoints = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit <= 0x1f || (unit >= 0x7f && unit <= 0x9f) || unit === 0x2028 || unit === 0x2029) {
+      return false;
+    }
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (index + 1 >= value.length) return false;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+    codePoints += 1;
+    if (codePoints > bootstrapConfigurationBounds.maxProjectDisplayNameCharacters) return false;
+  }
+  return codePoints > 0;
+}
+
 function isPortablePackagePath(value: unknown, maximumCharacters: number): value is string {
   if (
     typeof value !== "string" ||
@@ -168,6 +227,194 @@ function isPackageEntry(value: unknown): value is string {
 
 export function isBlueprintPackageSource(value: unknown): value is string {
   return isPortablePackagePath(value, bootstrapConfigurationBounds.maxPackageSourceCharacters);
+}
+
+export function isProjectRegistrationId(value: unknown): value is string {
+  return typeof value === "string" && projectIdPattern.test(value);
+}
+
+function parseProjectLocator(value: unknown): Result<WorkspaceResourceLocator> {
+  if (typeof value !== "string") return malformed();
+  const parsed = parseWorkspaceResourceLocator(value);
+  return parsed.ok && parsed.value === value ? parsed : malformed();
+}
+
+function targetsReservedAggregateState(locator: WorkspaceResourceLocator): boolean {
+  return locator !== "." && locator.split("/", 1)[0]?.toLowerCase() === "groma";
+}
+
+function parseProjectScannerConfiguration(
+  value: unknown,
+  boundary: "configuration" | "parser",
+): Result<{ readonly canonicalJson: string; readonly value: GraphData }> {
+  const copied = copyCanonicalGraphData(
+    value,
+    "query",
+    {
+      code: "workspace-project-scanner-configuration-too-large",
+      maximum: bootstrapConfigurationBounds.maxProjectScannerConfigurationCharacters,
+      message: "Project scanner configuration exceeds its canonical character bound",
+    },
+    {
+      code: "workspace-project-scanner-configuration-too-complex",
+      maximumDepth: bootstrapConfigurationBounds.maxProjectScannerConfigurationDepth,
+      maximumValues: bootstrapConfigurationBounds.maxProjectScannerConfigurationValues,
+      message: "Project scanner configuration exceeds its structural bound",
+    },
+  );
+  if (copied.ok) return success(copied.value);
+  return boundary === "configuration"
+    ? malformed()
+    : failure(
+        diagnostic(
+          "workspace-configuration-parser-failed",
+          "Workspace configuration parsing failed",
+        ),
+      );
+}
+
+function parseConfiguredProjects(
+  value: unknown,
+  boundary: "configuration" | "parser" = "configuration",
+): Result<readonly ConfiguredProjectRegistration[]> {
+  const invalid = () =>
+    boundary === "configuration"
+      ? malformed()
+      : failure(
+          diagnostic(
+            "workspace-configuration-parser-failed",
+            "Workspace configuration parsing failed",
+          ),
+        );
+  const inspected = inspectHostDenseArray(
+    value,
+    bootstrapConfigurationBounds.maxProjectRegistrations,
+    "workspace-configuration-parser-failed",
+    "Configured projects",
+  );
+  if (!inspected.ok) return invalid();
+  const projects: ConfiguredProjectRegistration[] = [];
+  const ids = new Set<string>();
+  let scannerCount = 0;
+  for (const item of inspected.value) {
+    const project = inspectHostRecord(
+      item,
+      [["coverage", "id", "name", "scanners", "source"]],
+      "workspace-configuration-parser-failed",
+      "Configured project",
+    );
+    if (
+      !project.ok ||
+      !isProjectRegistrationId(project.value.id) ||
+      ids.has(project.value.id) ||
+      !isSafeProjectDisplayName(project.value.name)
+    ) {
+      return invalid();
+    }
+    const source = parseProjectLocator(project.value.source);
+    const coverage = inspectHostDenseArray(
+      project.value.coverage,
+      bootstrapConfigurationBounds.maxProjectCoverageScopes,
+      "workspace-configuration-parser-failed",
+      "Configured project coverage",
+    );
+    const scanners = inspectHostDenseArray(
+      project.value.scanners,
+      bootstrapConfigurationBounds.maxProjectScanners,
+      "workspace-configuration-parser-failed",
+      "Configured project scanners",
+    );
+    if (
+      !source.ok ||
+      targetsReservedAggregateState(source.value) ||
+      !coverage.ok ||
+      !scanners.ok ||
+      coverage.value.length === 0
+    ) {
+      return invalid();
+    }
+    const canonicalCoverage: ConfiguredProjectCoverageScope[] = [];
+    const coverageSet = new Set<string>();
+    for (const scope of coverage.value) {
+      const declaration = inspectHostRecord(
+        scope,
+        [["id", "resourceRoot"]],
+        "workspace-configuration-parser-failed",
+        "Configured project coverage scope",
+      );
+      if (
+        !declaration.ok ||
+        typeof declaration.value.id !== "string" ||
+        declaration.value.id.length > bootstrapConfigurationBounds.maxTokenCharacters ||
+        !projectCoverageIdPattern.test(declaration.value.id) ||
+        coverageSet.has(declaration.value.id)
+      ) {
+        return invalid();
+      }
+      const resourceRoot = parseProjectLocator(declaration.value.resourceRoot);
+      if (
+        !resourceRoot.ok ||
+        (source.value === "." && targetsReservedAggregateState(resourceRoot.value))
+      ) {
+        return invalid();
+      }
+      coverageSet.add(declaration.value.id);
+      canonicalCoverage.push(
+        Object.freeze({ id: declaration.value.id, resourceRoot: resourceRoot.value }),
+      );
+    }
+    canonicalCoverage.sort((left, right) => compareCodeUnits(left.id, right.id));
+    const canonicalScanners: ConfiguredProjectScanner[] = [];
+    const scannerIds = new Set<string>();
+    for (const entry of scanners.value) {
+      const scanner = inspectHostRecord(
+        entry,
+        [["configuration", "id"]],
+        "workspace-configuration-parser-failed",
+        "Configured project scanner",
+      );
+      if (
+        !scanner.ok ||
+        typeof scanner.value.id !== "string" ||
+        scanner.value.id.length > bootstrapConfigurationBounds.maxTokenCharacters ||
+        !pluginIdPattern.test(scanner.value.id) ||
+        scannerIds.has(scanner.value.id)
+      ) {
+        return invalid();
+      }
+      const configuration = parseProjectScannerConfiguration(scanner.value.configuration, boundary);
+      if (!configuration.ok) return invalid();
+      scannerIds.add(scanner.value.id);
+      canonicalScanners.push(
+        Object.freeze({ configuration: configuration.value.value, id: scanner.value.id }),
+      );
+    }
+    scannerCount += canonicalScanners.length;
+    if (scannerCount > bootstrapConfigurationBounds.maxProjectScannersTotal) return invalid();
+    canonicalScanners.sort((left, right) => compareCodeUnits(left.id, right.id));
+    ids.add(project.value.id);
+    projects.push(
+      Object.freeze({
+        coverage: Object.freeze(canonicalCoverage),
+        id: project.value.id,
+        name: project.value.name,
+        scanners: Object.freeze(canonicalScanners),
+        source: source.value,
+      }),
+    );
+  }
+  projects.sort((left, right) => compareCodeUnits(left.id, right.id));
+  return success(Object.freeze(projects));
+}
+
+/** Strict Host boundary used by configuration parsing and project-management requests. */
+export function canonicalizeProjectRegistration(
+  value: unknown,
+): Result<ConfiguredProjectRegistration> {
+  const parsed = parseConfiguredProjects(Object.freeze([value]), "parser");
+  return parsed.ok
+    ? success(parsed.value[0]!)
+    : failure(diagnostic("invalid-project-registration", "Project registration is malformed"));
 }
 
 function parseConfiguredPackages(
@@ -240,6 +487,8 @@ function parseConfiguredPackages(
 
 export function serializeBootstrapConfiguration(configuration: BootstrapBaseConfiguration): string {
   const lines = [`schema: ${configuration.schema}`];
+  const projectRegistrations = configuration.projectRegistrations ?? Object.freeze([]);
+  const retiredProjectIds = configuration.retiredProjectIds ?? Object.freeze([]);
   if (configuration.requestedRuntimePlugins.length > 0) {
     lines.push("plugins:");
     for (const plugin of configuration.requestedRuntimePlugins) {
@@ -255,6 +504,31 @@ export function serializeBootstrapConfiguration(configuration: BootstrapBaseConf
       for (const entry of declaration.enabled) lines.push(`      - ${JSON.stringify(entry)}`);
       if (declaration.enabled.length === 0) lines[lines.length - 1] = "    enabled: []";
     }
+  }
+  if (projectRegistrations.length > 0) {
+    lines.push("projects:");
+    for (const project of projectRegistrations) {
+      lines.push(`  - id: ${JSON.stringify(project.id)}`);
+      lines.push(`    name: ${JSON.stringify(project.name)}`);
+      lines.push(`    source: ${JSON.stringify(project.source)}`);
+      lines.push("    scanners:");
+      for (const scanner of project.scanners) {
+        const configuration = parseProjectScannerConfiguration(scanner.configuration, "parser");
+        if (!configuration.ok) throw new TypeError("Project scanner configuration is malformed");
+        lines.push(`      - id: ${JSON.stringify(scanner.id)}`);
+        lines.push(`        configuration: ${configuration.value.canonicalJson}`);
+      }
+      if (project.scanners.length === 0) lines[lines.length - 1] = "    scanners: []";
+      lines.push("    coverage:");
+      for (const scope of project.coverage) {
+        lines.push(`      - id: ${JSON.stringify(scope.id)}`);
+        lines.push(`        resourceRoot: ${JSON.stringify(scope.resourceRoot)}`);
+      }
+    }
+  }
+  if (retiredProjectIds.length > 0) {
+    lines.push("retiredProjectIds:");
+    for (const id of retiredProjectIds) lines.push(`  - ${JSON.stringify(id)}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -516,9 +790,16 @@ export function createYamlConfigurationParser(
       }
       if (
         keys.length < 1 ||
-        keys.length > 3 ||
+        keys.length > 5 ||
         !keys.includes("schema") ||
-        keys.some((key) => key !== "packages" && key !== "plugins" && key !== "schema") ||
+        keys.some(
+          (key) =>
+            key !== "packages" &&
+            key !== "plugins" &&
+            key !== "projects" &&
+            key !== "retiredProjectIds" &&
+            key !== "schema",
+        ) ||
         !schemaAccepted
       ) {
         return malformed();
@@ -553,10 +834,36 @@ export function createYamlConfigurationParser(
         ? parseConfiguredPackages(record.packages)
         : success(Object.freeze([]));
       if (!packageDeclarations.ok) return packageDeclarations;
+      const projectRegistrations = Object.hasOwn(record, "projects")
+        ? parseConfiguredProjects(record.projects)
+        : success(Object.freeze([]));
+      if (!projectRegistrations.ok) return projectRegistrations;
+      const retired = Object.hasOwn(record, "retiredProjectIds")
+        ? inspectHostDenseArray(
+            record.retiredProjectIds,
+            bootstrapConfigurationBounds.maxRetiredProjectIds,
+            "workspace-configuration-parser-failed",
+            "Retired project identities",
+          )
+        : success(Object.freeze([]));
+      if (!retired.ok) return malformed();
+      const retiredProjectIds: string[] = [];
+      const retiredSet = new Set<string>();
+      const activeIds = new Set(projectRegistrations.value.map((project) => project.id));
+      for (const id of retired.value) {
+        if (!isProjectRegistrationId(id) || retiredSet.has(id) || activeIds.has(id)) {
+          return malformed();
+        }
+        retiredSet.add(id);
+        retiredProjectIds.push(id);
+      }
+      retiredProjectIds.sort(compareCodeUnits);
       return success(
         Object.freeze({
           packageDeclarations: packageDeclarations.value,
+          projectRegistrations: projectRegistrations.value,
           requestedRuntimePlugins: Object.freeze(requested),
+          retiredProjectIds: Object.freeze(retiredProjectIds),
           schema: "groma/v0.1" as const,
         }),
       );
@@ -613,7 +920,18 @@ export function parseBootstrapConfiguration(
   }
   const configuration = inspectHostRecord(
     parsed.value.value,
-    [["packageDeclarations", "requestedRuntimePlugins", "schema"]],
+    [
+      ["packageDeclarations", "requestedRuntimePlugins", "schema"],
+      ["packageDeclarations", "projectRegistrations", "requestedRuntimePlugins", "schema"],
+      ["packageDeclarations", "requestedRuntimePlugins", "retiredProjectIds", "schema"],
+      [
+        "packageDeclarations",
+        "projectRegistrations",
+        "requestedRuntimePlugins",
+        "retiredProjectIds",
+        "schema",
+      ],
+    ],
     "workspace-configuration-parser-failed",
     "Bootstrap base configuration",
   );
@@ -674,10 +992,49 @@ export function parseBootstrapConfiguration(
       diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
     );
   }
+  const projectRegistrations = Object.hasOwn(configuration.value, "projectRegistrations")
+    ? parseConfiguredProjects(configuration.value.projectRegistrations, "parser")
+    : success(Object.freeze([]));
+  if (!projectRegistrations.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const retired = Object.hasOwn(configuration.value, "retiredProjectIds")
+    ? inspectHostDenseArray(
+        configuration.value.retiredProjectIds,
+        bootstrapConfigurationBounds.maxRetiredProjectIds,
+        "workspace-configuration-parser-failed",
+        "Retired project identities",
+      )
+    : success(Object.freeze([]));
+  if (!retired.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
+  const activeProjectIds = new Set(projectRegistrations.value.map((project) => project.id));
+  const retiredProjectIds: string[] = [];
+  const retiredSet = new Set<string>();
+  for (const id of retired.value) {
+    if (!isProjectRegistrationId(id) || activeProjectIds.has(id) || retiredSet.has(id)) {
+      return failure(
+        diagnostic(
+          "workspace-configuration-parser-failed",
+          "Workspace configuration parsing failed",
+        ),
+      );
+    }
+    retiredSet.add(id);
+    retiredProjectIds.push(id);
+  }
+  retiredProjectIds.sort(compareCodeUnits);
   return success(
     Object.freeze({
       packageDeclarations: packageDeclarations.value,
+      projectRegistrations: projectRegistrations.value,
       requestedRuntimePlugins: Object.freeze(canonicalRequested),
+      retiredProjectIds: Object.freeze(retiredProjectIds),
       schema: "groma/v0.1" as const,
     }),
   );
@@ -697,7 +1054,9 @@ export function bootstrapConfigurationStillUsable(
     return (
       actual.state === "missing" ||
       (actual.configuration.requestedRuntimePlugins.length === 0 &&
-        actual.configuration.packageDeclarations.length === 0)
+        actual.configuration.packageDeclarations.length === 0 &&
+        (actual.configuration.projectRegistrations?.length ?? 0) === 0 &&
+        (actual.configuration.retiredProjectIds?.length ?? 0) === 0)
     );
   }
   if (actual.state === "missing") return false;
@@ -705,6 +1064,10 @@ export function bootstrapConfigurationStillUsable(
   const actualPlugins = actual.configuration.requestedRuntimePlugins;
   const expectedPackages = expected.configuration.packageDeclarations;
   const actualPackages = actual.configuration.packageDeclarations;
+  const expectedProjects = expected.configuration.projectRegistrations ?? Object.freeze([]);
+  const actualProjects = actual.configuration.projectRegistrations ?? Object.freeze([]);
+  const expectedRetiredProjectIds = expected.configuration.retiredProjectIds ?? Object.freeze([]);
+  const actualRetiredProjectIds = actual.configuration.retiredProjectIds ?? Object.freeze([]);
   return (
     expected.configuration.schema === actual.configuration.schema &&
     expectedPlugins.length === actualPlugins.length &&
@@ -722,6 +1085,42 @@ export function bootstrapConfigurationStillUsable(
         declaration.source === current.source &&
         declaration.enabled.length === current.enabled.length &&
         declaration.enabled.every((entry, entryIndex) => entry === current.enabled[entryIndex])
+      );
+    }) &&
+    expectedRetiredProjectIds.length === actualRetiredProjectIds.length &&
+    expectedRetiredProjectIds.every((id, index) => id === actualRetiredProjectIds[index]) &&
+    expectedProjects.length === actualProjects.length &&
+    expectedProjects.every((project, index) => {
+      const current = actualProjects[index];
+      return (
+        current !== undefined &&
+        project.id === current.id &&
+        project.name === current.name &&
+        project.source === current.source &&
+        project.coverage.length === current.coverage.length &&
+        project.coverage.every(
+          (scope, scopeIndex) =>
+            scope.id === current.coverage[scopeIndex]?.id &&
+            scope.resourceRoot === current.coverage[scopeIndex]?.resourceRoot,
+        ) &&
+        project.scanners.length === current.scanners.length &&
+        project.scanners.every((scanner, scannerIndex) => {
+          const currentScanner = current.scanners[scannerIndex];
+          if (currentScanner === undefined || scanner.id !== currentScanner.id) return false;
+          const expectedConfiguration = parseProjectScannerConfiguration(
+            scanner.configuration,
+            "parser",
+          );
+          const actualConfiguration = parseProjectScannerConfiguration(
+            currentScanner.configuration,
+            "parser",
+          );
+          return (
+            expectedConfiguration.ok &&
+            actualConfiguration.ok &&
+            expectedConfiguration.value.canonicalJson === actualConfiguration.value.canonicalJson
+          );
+        })
       );
     })
   );

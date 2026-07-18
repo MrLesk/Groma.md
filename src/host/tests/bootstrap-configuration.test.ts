@@ -17,6 +17,7 @@ import {
   parseBootstrapConfiguration,
   serializeBootstrapConfiguration,
   bootstrapConfigurationStillUsable,
+  canonicalizeProjectRegistration,
   type ConfigurationDiscoveryProvider,
   type HostSurface,
   type WorkspaceConfigurationCandidate,
@@ -205,7 +206,13 @@ describe("bootstrap configuration", () => {
     const legacy = parser.parse(new TextEncoder().encode("schema: groma/v0.1\n"));
     expect(legacy).toEqual({
       ok: true,
-      value: { packageDeclarations: [], requestedRuntimePlugins: [], schema: "groma/v0.1" },
+      value: {
+        packageDeclarations: [],
+        projectRegistrations: [],
+        requestedRuntimePlugins: [],
+        retiredProjectIds: [],
+        schema: "groma/v0.1",
+      },
     });
     const extended = parser.parse(
       new TextEncoder().encode(
@@ -216,11 +223,13 @@ describe("bootstrap configuration", () => {
       ok: true,
       value: {
         packageDeclarations: [],
+        projectRegistrations: [],
         requestedRuntimePlugins: [
           { id: "acme.policy", namespace: "project" },
           { id: "official.alpha", namespace: "official" },
           { id: "official.zeta", namespace: "official" },
         ],
+        retiredProjectIds: [],
         schema: "groma/v0.1",
       },
     });
@@ -240,7 +249,9 @@ describe("bootstrap configuration", () => {
             source: "./plugins/zeta",
           },
         ],
+        projectRegistrations: [],
         requestedRuntimePlugins: [],
+        retiredProjectIds: [],
         schema: "groma/v0.1",
       },
     });
@@ -265,6 +276,117 @@ describe("bootstrap configuration", () => {
         ok: false,
       });
     }
+  });
+
+  test("canonicalizes bounded project registrations, coverage scopes, scanners, and tombstones", () => {
+    const parser = createYamlConfigurationParser();
+    const parsed = parser.parse(
+      new TextEncoder().encode(
+        [
+          "schema: groma/v0.1",
+          "projects:",
+          '  - id: "project_11111111111111111111111111111111"',
+          '    name: "API \\\"edge\\\" \\\\ 🚀"',
+          '    source: "apps/api"',
+          "    scanners:",
+          '      - id: "official.zeta"',
+          "        configuration: {z: true, a: [1, null]}",
+          '      - id: "official.alpha"',
+          "        configuration: {}",
+          "    coverage:",
+          '      - id: "tests"',
+          '        resourceRoot: "test"',
+          '      - id: "source"',
+          '        resourceRoot: "src"',
+          "retiredProjectIds:",
+          '  - "project_ffffffffffffffffffffffffffffffff"',
+          '  - "project_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+          "",
+        ].join("\n"),
+      ),
+    );
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: {
+        projectRegistrations: [
+          {
+            coverage: [
+              { id: "source", resourceRoot: "src" },
+              { id: "tests", resourceRoot: "test" },
+            ],
+            scanners: [{ id: "official.alpha" }, { id: "official.zeta" }],
+          },
+        ],
+        retiredProjectIds: [
+          "project_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "project_ffffffffffffffffffffffffffffffff",
+        ],
+      },
+    });
+    if (!parsed.ok) return;
+    const source = serializeBootstrapConfiguration(parsed.value);
+    expect(parser.parse(new TextEncoder().encode(source))).toEqual(parsed);
+    expect(source).toContain('configuration: {"a":[1,null],"z":true}');
+  });
+
+  test("rejects unsafe project names, reserved aggregate roots, invalid scopes, and hostile shapes", () => {
+    const valid = (overrides: Record<string, unknown> = {}) => ({
+      coverage: [{ id: "workspace", resourceRoot: "." }],
+      id: "project.default",
+      name: "Workspace",
+      scanners: [],
+      source: ".",
+      ...overrides,
+    });
+    expect(canonicalizeProjectRegistration(valid({ name: `${"🚀".repeat(256)}` }))).toMatchObject({
+      ok: true,
+    });
+    for (const name of [
+      " leading",
+      "trailing ",
+      "line\nbreak",
+      "control\u007f",
+      "separator\u2028",
+      `unpaired${String.fromCharCode(0xd800)}`,
+      "🚀".repeat(257),
+    ]) {
+      expect(canonicalizeProjectRegistration(valid({ name })), name).toMatchObject({
+        diagnostics: [{ code: "invalid-project-registration" }],
+        ok: false,
+      });
+    }
+    for (const registration of [
+      valid({ source: "groma" }),
+      valid({ source: "GROMA/evidence" }),
+      valid({ coverage: [{ id: "workspace", resourceRoot: "groma/evidence" }] }),
+      valid({ coverage: [{ id: ".", resourceRoot: "." }] }),
+      valid({
+        coverage: [
+          { id: "source", resourceRoot: "src" },
+          { id: "source", resourceRoot: "test" },
+        ],
+      }),
+    ]) {
+      expect(canonicalizeProjectRegistration(registration)).toMatchObject({ ok: false });
+    }
+    expect(
+      canonicalizeProjectRegistration(
+        valid({ source: "apps", coverage: [{ id: "source", resourceRoot: "groma" }] }),
+      ),
+    ).toMatchObject({ ok: true });
+
+    let traps = 0;
+    const hostile = new Proxy(valid(), {
+      ownKeys: () => {
+        traps += 1;
+        return [];
+      },
+    });
+    expect(canonicalizeProjectRegistration(hostile)).toMatchObject({ ok: false });
+    expect(traps).toBe(0);
+    const accessor = valid();
+    Object.defineProperty(accessor, "name", { enumerable: true, get: () => "Getter" });
+    expect(canonicalizeProjectRegistration(accessor)).toMatchObject({ ok: false });
   });
 
   test("canonicalizes parser results once and checks expected state remains usable", () => {
@@ -350,6 +472,43 @@ describe("bootstrap configuration", () => {
     });
   });
 
+  test("accepts every provider shape combination for optional project fields", () => {
+    const project = Object.freeze({
+      coverage: Object.freeze([Object.freeze({ id: "source", resourceRoot: "." })]),
+      id: "project.default",
+      name: "Default",
+      scanners: Object.freeze([]),
+      source: ".",
+    });
+    const retiredId = `project_${"a".repeat(32)}`;
+    for (const optional of [
+      Object.freeze({}),
+      Object.freeze({ projectRegistrations: Object.freeze([project]) }),
+      Object.freeze({ retiredProjectIds: Object.freeze([retiredId]) }),
+      Object.freeze({
+        projectRegistrations: Object.freeze([project]),
+        retiredProjectIds: Object.freeze([retiredId]),
+      }),
+    ]) {
+      expect(
+        parseBootstrapConfiguration(
+          {
+            parse: () =>
+              success(
+                Object.freeze({
+                  packageDeclarations: Object.freeze([]),
+                  ...optional,
+                  requestedRuntimePlugins: Object.freeze([]),
+                  schema: "groma/v0.1" as const,
+                }) as never,
+              ),
+          },
+          new Uint8Array(),
+        ),
+      ).toMatchObject({ ok: true });
+    }
+  });
+
   test("contains hostile replacement-parser package declarations and enabled entries", () => {
     expect(
       parseBootstrapConfiguration(
@@ -379,7 +538,9 @@ describe("bootstrap configuration", () => {
             source: "./plugins/example",
           },
         ],
+        projectRegistrations: [],
         requestedRuntimePlugins: [],
+        retiredProjectIds: [],
         schema: "groma/v0.1",
       },
     });
@@ -669,7 +830,7 @@ describe("bootstrap configuration", () => {
     }
   });
 
-  test("accepts peer initialization from missing to the same empty canonical configuration", async () => {
+  test("accepts peer initialization from missing to the exact prepared default project", async () => {
     const context = await temporaryWorkspace();
     const configurationPath = path.join(context.workspaceRoot, "groma", "groma.yaml");
     await mkdir(path.dirname(configurationPath), { recursive: true });
@@ -681,7 +842,26 @@ describe("bootstrap configuration", () => {
       resourceFaultInjector: async (phase) => {
         if (phase !== "read") return;
         reads += 1;
-        if (reads === 2) await Bun.write(configurationPath, "schema: groma/v0.1\n");
+        if (reads === 2) {
+          await Bun.write(
+            configurationPath,
+            serializeBootstrapConfiguration({
+              packageDeclarations: [],
+              projectRegistrations: [
+                {
+                  coverage: [{ id: "workspace", resourceRoot: "." as never }],
+                  id: "project.default",
+                  name: path.basename(context.workspaceRoot),
+                  scanners: [],
+                  source: "." as never,
+                },
+              ],
+              requestedRuntimePlugins: [],
+              retiredProjectIds: [],
+              schema: "groma/v0.1",
+            }),
+          );
+        }
       },
       surface: idleSurface(),
     });
@@ -692,6 +872,47 @@ describe("bootstrap configuration", () => {
     expect(composed.value.workspace.status()).toEqual({ state: "configured" });
     expect(reads).toBe(3);
     expect(await composed.value.plugins?.shutdown()).toMatchObject({ ok: true });
+  });
+
+  test("rejects arbitrary projects-only drift when missing bootstrap is reloaded", async () => {
+    const context = await temporaryWorkspace();
+    const configurationPath = path.join(context.workspaceRoot, "groma", "groma.yaml");
+    await mkdir(path.dirname(configurationPath), { recursive: true });
+    let reads = 0;
+    const registry = createDefaultBootstrapRegistry({
+      ...(context.coordinationRoot === undefined
+        ? {}
+        : { coordinationRoot: context.coordinationRoot }),
+      resourceFaultInjector: async (phase) => {
+        if (phase !== "read") return;
+        reads += 1;
+        if (reads === 2) {
+          await Bun.write(
+            configurationPath,
+            serializeBootstrapConfiguration({
+              packageDeclarations: [],
+              projectRegistrations: [
+                {
+                  coverage: [{ id: "workspace", resourceRoot: "." as never }],
+                  id: "project.default",
+                  name: "Arbitrary peer",
+                  scanners: [],
+                  source: "." as never,
+                },
+              ],
+              requestedRuntimePlugins: [],
+              retiredProjectIds: [],
+              schema: "groma/v0.1",
+            }),
+          );
+        }
+      },
+      surface: idleSurface(),
+    });
+    expect(await registry.compose({ workspaceRoot: context.workspaceRoot })).toMatchObject({
+      diagnostics: [{ code: "workspace-configuration-changed" }],
+      ok: false,
+    });
   });
 
   test("fails direct composition and cleans the graph when configuration changes after revalidation", async () => {

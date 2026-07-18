@@ -22,6 +22,14 @@ function identifier(value: string | undefined): value is string {
   );
 }
 
+function projectIdentifier(value: string | undefined): value is string {
+  return value !== undefined && /^(?:project\.default|project_[0-9a-f]{32})$/.test(value);
+}
+
+function projectRevision(value: string | undefined): value is string {
+  return value !== undefined && /^sha256:[0-9a-f]{64}$/.test(value);
+}
+
 function failed(format: CliFormat, message: string): CliInvocationResult {
   return Object.freeze({ diagnostic: diagnostic(message), format, ok: false as const });
 }
@@ -308,6 +316,57 @@ function packageCommand(args: readonly string[]): CliCommand | undefined {
   return undefined;
 }
 
+function projectCommand(args: readonly string[]): CliCommand | undefined {
+  const action = args[0];
+  const rest = args.slice(1);
+  if (action === "add") {
+    const input = inputSource(rest);
+    return input === undefined ? undefined : Object.freeze({ input, kind: "project-add" });
+  }
+  if (action === "list" && rest.length === 0) {
+    return Object.freeze({ kind: "project-list" });
+  }
+  if (action === "get" && rest.length === 1 && projectIdentifier(rest[0])) {
+    return Object.freeze({ id: rest[0], kind: "project-get" });
+  }
+  if (action === "remove") {
+    if (rest.length !== 3 || rest[1] !== "--revision" || !projectIdentifier(rest[0]))
+      return undefined;
+    const expectedRevision = rest[2];
+    return projectRevision(expectedRevision)
+      ? Object.freeze({ expectedRevision, id: rest[0], kind: "project-remove" })
+      : undefined;
+  }
+  if (action !== "update") return undefined;
+  const id = rest[0];
+  if (!projectIdentifier(id)) return undefined;
+  let expectedRevision: string | undefined;
+  let input: CliInputSource | undefined;
+  for (let index = 1; index < rest.length; index += 1) {
+    if (rest[index] === "--revision" && expectedRevision === undefined) {
+      const value = rest[index + 1];
+      if (!projectRevision(value)) return undefined;
+      expectedRevision = value;
+      index += 1;
+    } else if (rest[index] === "--stdin" && input === undefined) {
+      input = Object.freeze({ kind: "stdin" });
+    } else if (rest[index] === "--input" && input === undefined) {
+      const value = rest[index + 1];
+      if (value === undefined || value.length === 0 || value.length > 4_096) return undefined;
+      input =
+        value === "-"
+          ? Object.freeze({ kind: "stdin" })
+          : Object.freeze({ kind: "file", path: value });
+      index += 1;
+    } else {
+      return undefined;
+    }
+  }
+  return expectedRevision === undefined || input === undefined
+    ? undefined
+    : Object.freeze({ expectedRevision, id, input, kind: "project-update" });
+}
+
 export function parseInvocation(args: readonly string[]): CliInvocationResult {
   const boundedFailureFormat: CliFormat =
     (args[0] === "--format" && args[1] === "json") || args[0] === "--format=json"
@@ -370,13 +429,15 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
         ? componentCommand(commandArgs.slice(1))
         : commandArgs[0] === "package"
           ? packageCommand(commandArgs.slice(1))
-          : commandArgs[0] === "migrate" &&
-              commandArgs.length === 2 &&
-              (commandArgs[1] === "status" ||
-                commandArgs[1] === "preview" ||
-                commandArgs[1] === "apply")
-            ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
-            : undefined;
+          : commandArgs[0] === "project"
+            ? projectCommand(commandArgs.slice(1))
+            : commandArgs[0] === "migrate" &&
+                commandArgs.length === 2 &&
+                (commandArgs[1] === "status" ||
+                  commandArgs[1] === "preview" ||
+                  commandArgs[1] === "apply")
+              ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
+              : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

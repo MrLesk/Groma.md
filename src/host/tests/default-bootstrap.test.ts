@@ -425,6 +425,7 @@ describe("default bootstrap registry", () => {
       "plugins",
       "projection",
       "projectionRead",
+      "projects",
       "queries",
       "queryEngine",
       "resourceMapper",
@@ -652,6 +653,7 @@ describe("default bootstrap registry", () => {
         initialize: (request) => composed.value.operations.initialize(request),
       }),
       packages: composed.value.packages,
+      projects: composed.value.projects,
       recovery: { status: "not-required" },
       workspace: composed.value.workspace,
     });

@@ -18,6 +18,16 @@ const maximumPageRequests = 32;
 const processTerminationGraceMilliseconds = 5_000;
 const processSettlementTimeoutMilliseconds = 10_000;
 const projectionStageObservationTimeoutMilliseconds = 15_000;
+const defaultWorkspaceConfiguration = `schema: groma/v0.1
+projects:
+  - id: "project.default"
+    name: "workspace"
+    source: "."
+    scanners: []
+    coverage:
+      - id: "workspace"
+        resourceRoot: "."
+`;
 
 const ids = Object.freeze({
   checkout: "ent_10000000000000000000000000000001",
@@ -479,7 +489,7 @@ async function verifyFoundationWorkflow(executable: string, scenario: Scenario):
   await success(executable, scenario, ["init"]);
   assert.equal(
     await readFile(path.join(scenario.workspace, "groma", "groma.yaml"), "utf8"),
-    "schema: groma/v0.1\n",
+    defaultWorkspaceConfiguration,
   );
   await createComponent(executable, scenario, {
     component: {
@@ -664,7 +674,7 @@ async function verifyMalformedConfiguration(executable: string, scenario: Scenar
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), malformed);
   await writeFile(configuration, validBytes);
   await success(executable, scenario, ["component", "roots", "--limit", "1"]);
-  assert.equal(await readFile(configuration, "utf8"), "schema: groma/v0.1\n");
+  assert.equal(await readFile(configuration, "utf8"), defaultWorkspaceConfiguration);
   assert.deepEqual(await canonicalSnapshot(scenario.workspace), beforeCorruption);
 }
 

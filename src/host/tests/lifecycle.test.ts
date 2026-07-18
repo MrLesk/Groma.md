@@ -19,6 +19,7 @@ import {
   type HostSignalSource,
   type HostSurface,
   type HostSurfaceSession,
+  type ProjectRegistrationOperations,
   type WorkspaceAccessCapability,
   type WorkspaceRecoveryReport,
   type WorkspaceStatus,
@@ -131,12 +132,23 @@ function composition(
     remove: async () => failure({ code: "unused", message: "unused" }),
     scaffold: async () => failure({ code: "unused", message: "unused" }),
   });
+  const unusedProjectOperation = async (): Promise<never> => {
+    throw new Error("unused project operation");
+  };
+  const projects: ProjectRegistrationOperations = Object.freeze({
+    add: unusedProjectOperation,
+    get: unusedProjectOperation,
+    list: unusedProjectOperation,
+    remove: unusedProjectOperation,
+    update: unusedProjectOperation,
+  });
   return Object.freeze({
     graph: capability,
     invariant: capability,
     model: capability,
     operations,
     packages,
+    projects,
     projection: capability,
     projectionRead: capability,
     queryEngine: capability,

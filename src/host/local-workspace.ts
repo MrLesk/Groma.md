@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { setTimeout as wait } from "node:timers/promises";
 import { isProxy as isNativeProxy } from "node:util/types";
 
 import type {
@@ -693,6 +694,7 @@ function validatedConfigurationRead(
 
 type ValidatedCoordinationAcquisition =
   | { readonly lease: LocalCoordinationLease; readonly state: "acquired" }
+  | { readonly state: "contended" }
   | { readonly state: "failed" };
 
 function isCanonicalCoordinationLease(
@@ -752,7 +754,15 @@ function validatedCoordinationAcquisition(
       "invalid-workspace-provider-result",
     );
     return diagnostics.ok && diagnostics.value.length > 0
-      ? success(Object.freeze({ state: "failed" }))
+      ? success(
+          Object.freeze({
+            state:
+              diagnostics.value.length === 1 &&
+              diagnostics.value[0]?.code === "resource-coordination-contended"
+                ? ("contended" as const)
+                : ("failed" as const),
+          }),
+        )
       : failure(providerFailure());
   }
   if (result.value.ok !== true) return failure(providerFailure());
@@ -1162,22 +1172,31 @@ export async function createLocalWorkspaceCapability(
     }
 
     if (current.state === "missing") {
-      try {
-        const acquired = validatedCoordinationAcquisition(
-          await captured.resources.acquireCoordination({
-            context: "local-machine",
-            locator: captured.configuration.locator,
-          }),
-          bounds,
-          decoderProxyPolicy,
-        );
-        if (!acquired.ok || acquired.value.state !== "acquired") {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        try {
+          const acquired = validatedCoordinationAcquisition(
+            await captured.resources.acquireCoordination({
+              context: "local-machine",
+              locator: captured.configuration.locator,
+            }),
+            bounds,
+            decoderProxyPolicy,
+          );
+          if (!acquired.ok || acquired.value.state === "failed") {
+            return initializationProviderFailure();
+          }
+          if (acquired.value.state === "acquired") {
+            retainedInitializationLease = acquired.value.lease;
+            current = await inspect();
+            break;
+          }
+          current = await inspect();
+          if (current.state !== "missing") break;
+          if (attempt === 39) return initializationProviderFailure();
+          await wait(10);
+        } catch {
           return initializationProviderFailure();
         }
-        retainedInitializationLease = acquired.value.lease;
-        current = await inspect();
-      } catch {
-        return initializationProviderFailure();
       }
 
       if (current.state === "missing") {

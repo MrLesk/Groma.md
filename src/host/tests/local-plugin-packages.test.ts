@@ -292,8 +292,12 @@ describe("local plugin package manager", () => {
     await expect(lstat(actualUserDataRoot)).rejects.toThrow();
   });
 
-  test("adds, inspects, selectively enables, disables, loads, and removes a multi-plugin blueprint package", async () => {
+  test("upgrades an exact legacy three-field configuration through package add, enable, startup, and removal", async () => {
     const context = await fixture();
+    await writeFile(
+      path.join(context.workspaceRoot, "groma", "groma.yaml"),
+      "schema: groma/v0.1\nplugins: []\npackages: []\n",
+    );
     const packageJson = path.join(context.workspaceRoot, "package.json");
     const projectLock = path.join(context.workspaceRoot, "bun.lock");
     await writeFile(packageJson, '{"private":true}\n');
@@ -2988,10 +2992,17 @@ describe("local plugin package manager", () => {
           }
           mutated = true;
           if (mutation === "configuration") {
-            const current = await readFile(configurationFile, "utf8");
+            const parser = createYamlConfigurationParser();
+            const parsed = parser.parse(Uint8Array.from(await readFile(configurationFile)));
+            if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.code);
             await writeFile(
               configurationFile,
-              current.replace('      - "./plugins/entry.js"\n', ""),
+              serializeBootstrapConfiguration({
+                ...parsed.value,
+                packageDeclarations: parsed.value.packageDeclarations.map((declaration, index) =>
+                  index === 0 ? { ...declaration, source: "./plugins/direct-edit" } : declaration,
+                ),
+              }),
             );
           } else {
             const current = JSON.parse(await readFile(lockFile, "utf8"));
@@ -3075,14 +3086,12 @@ describe("local plugin package manager", () => {
             if (!parsed.ok) throw new Error(parsed.diagnostics[0]?.code);
             await writeFile(
               configurationFile,
-              serializeBootstrapConfiguration(
-                Object.freeze({
-                  ...parsed.value,
-                  requestedRuntimePlugins: Object.freeze([
-                    { id: "official.direct-edit", namespace: "official" as const },
-                  ]),
-                }),
-              ),
+              serializeBootstrapConfiguration({
+                ...parsed.value,
+                packageDeclarations: parsed.value.packageDeclarations.map((declaration, index) =>
+                  index === 0 ? { ...declaration, source: "./plugins/direct-edit" } : declaration,
+                ),
+              }),
             );
           } else {
             const file = mutation === "lock" ? lockFile : stateFile;
