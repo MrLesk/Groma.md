@@ -1,5 +1,6 @@
 export * from "./alias-store.ts";
 export * from "./contracts.ts";
+export * from "./evidence-binding-store.ts";
 export * from "./local-resource-provider.ts";
 export * from "./local-observation-journal.ts";
 export * from "./local-transaction-journal.ts";

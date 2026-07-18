@@ -80,6 +80,54 @@ recreate the retired document. A write or implicit source-ownership migration mu
 declare its live owner and relationship in the transaction's affected identities;
 under-reported effects fail before journal publication.
 
+## Canonical evidence and binding store
+
+[`evidence-binding-store.ts`](evidence-binding-store.ts) owns the official Markdown codec,
+bounded loader, binding resolver, and pure transaction-target planner for committed evidence.
+It deliberately has no save or commit method. Reconciliation supplies one completed Core
+observation snapshot and one graph generation, then composes the returned exact
+`CanonicalTransactionTarget` replacements with the other canonical planes through the shared
+local transaction journal. This keeps evidence publication on the same atomic semantic path
+without pulling Markdown or filesystem policy into Core.
+
+The source lane is exactly `(projectId, source.id, source.instance)`; scanner version is
+provenance and never creates a second lane. A source document lives at
+`groma/evidence/sources/<lane-hash-prefix>/<lane-hash>.md` and retains the current scanner
+version, declared scopes, complete or partial coverage for every scope, supplied graph
+generation, current record count, and a semantic snapshot fingerprint. The fingerprint omits
+the operational session epoch, handoff token, checkpoints, clocks, and process paths, so an
+equivalent completed snapshot from a new epoch emits no transaction targets and cannot churn
+canonical bytes.
+
+Observation identity is the unambiguous SHA-256 framing of project, source ID, source instance,
+scope, and source-local key. Evidence records retain the exact Core-owned observation and
+provenance, its observation-time scanner version and scope context, and its last observed graph
+generation. They are stored in the fixed 256 logical shards
+`groma/evidence/shards/00.md` through `ff.md`; empty shards are absent. A later successful
+snapshot upserts observations it contains but leaves omitted prior observations at their older
+generation. An unavailable or incomplete source supplies no snapshot and therefore causes no
+canonical mutation or inference of absence.
+
+Bindings use the matching fixed layout `groma/bindings/shards/00.md` through `ff.md`. Each
+identity has a strictly generation-ordered history whose decisions are `automatic`, `explicit`,
+`ignored`, or `superseded`. Supersession names another observation identity in the same source
+lane and must form one acyclic chain ending in a decision. Component IDs remain byte-stable in
+history; reads resolve them through the existing Core component-alias resolver and return both
+stored and resolved IDs plus both chains. Missing, cross-lane, cyclic, or ambiguous terminals
+fail closed. History is bounded both per binding and across the retained store; the aggregate
+defaults to 1,000,000 entries with a 4,000,000-entry absolute ceiling. Generation replay applies
+each generation atomically and validates only its changed reverse-reachable region with
+memoized iterative traversal.
+
+Every load enforces exact layouts, valid UTF-8, strict YAML without duplicate keys, aliases,
+anchors, or tags, safe integer generations, deterministic reserialization, identity and bucket
+ownership, source counts and fingerprints, uniqueness, history bounds, and aggregate resource
+bounds. The planner returns a fully owned next snapshot, only changed sorted replacement or
+deletion targets with current revisions, and all 256 fanout measurements: retained records,
+records current in the source generation, distinct source lanes, and exact serialized shard
+bytes. Those measurements inform the later fanout decision without changing the initial
+256-bucket contract.
+
 ## Local observation journal
 
 [`local-observation-journal.ts`](local-observation-journal.ts) makes finite observation
@@ -700,13 +748,15 @@ without a five-minute default delay.
 ## Canonical schema migration
 
 The local migration catalog recognizes configuration, package lock, aliases, stable-ID
-intent shards, and flat plugin-owned records beneath `groma/records/<plugin-id>/`. It
+intent shards, exact source/evidence/binding layouts, and flat plugin-owned records beneath
+`groma/records/<plugin-id>/`. It
 rejects malformed canonical-plane layouts and links instead of silently omitting them,
 while excluding `transaction-state.json` and unrelated workspace files. Discovery reads
-the three exact root records and enumerates only the bounded `groma/intent` and
-`groma/records` planes, so unrelated directory depth or size never consumes canonical
-bounds. Every resource is read with per-document, count, directory, and aggregate byte
-bounds and receives the same exact SHA-256 revision used by canonical transactions.
+the three exact root records and enumerates only the bounded `groma/intent`, `groma/evidence`,
+`groma/bindings`, and `groma/records` planes, so unrelated directory depth or size never
+consumes canonical bounds. Every resource is read with per-document, count, directory, and
+aggregate byte bounds and receives the same exact SHA-256 revision used by canonical
+transactions.
 
 `createCanonicalMigrationTransactionAdapter` is a raw-byte adapter for a separate
 `LocalTransactionJournal` instance over the same durable protocol and transaction-state
