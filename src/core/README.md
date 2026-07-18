@@ -35,6 +35,9 @@ known fields and dense numeric array entries, so caller-owned accessors, proxies
 keys, and key enumeration cannot become a second semantic path. Unknown fields never
 survive the owned canonical copy. Configured limits are also inspected as data
 descriptors rather than invoked through getters.
+`maxCanonicalCharacters` is the single authoritative canonical-character limit for an
+individual record and for all retained records cumulatively; Core does not derive a
+smaller hidden record ceiling from the individual text, token, or provenance bounds.
 
 The lifecycle is one-way: active sessions accept advancing batches and heartbeats, then
 complete, fail, cancel, or expire exactly once. Core never reads a wall clock. Expiry is
@@ -44,7 +47,11 @@ signal is always reserved for termination. Every later signal receives the stabl
 
 Only successful completion creates an evidence snapshot. Completion reports exactly
 one `partial` or `complete` coverage entry for every declared scope, including a valid
-zero-record scan. Failed, cancelled, expired, and still-active sessions return
+zero-record scan. Coverage is the scanner's declaration of which record kinds it
+inspected in that scope; it does not claim that a record of every listed kind was
+emitted. Missing emitted records become evidence of absence only through successful
+completion and later reconciliation semantics, never from the coverage list alone.
+Failed, cancelled, expired, and still-active sessions return
 `observation-session-incomplete`; they never turn missing contributions into evidence
 of absence. A bounded source-owned failure reason remains available in session
 inspection without leaking arbitrary thrown values.

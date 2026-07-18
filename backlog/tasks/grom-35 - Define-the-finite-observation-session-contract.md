@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 06:28'
+updated_date: '2026-07-18 06:39'
 labels: []
 milestone: m-3
 dependencies:
@@ -63,10 +63,12 @@ Context classification: L2 public Core/SDK semantic contract. Core owns the fini
 Implemented groma.observation/v1 with immutable project/source/epoch/scope binding; sparse component, member, relationship, and documentation contributions; source/scope-local keys; scope-root-bound fingerprint provenance with optional half-open byte ranges; atomic deterministic batches and replay/contradiction semantics; explicit coverage, heartbeat, completion, failure, cancellation, and logical expiry; completed-only frozen snapshots; stable diagnostics; descriptor-only hostile-value containment; and cumulative record, batch, signal, character, provenance, and text bounds. Published groma.scanners/v1 / groma.scanner/v1 through groma/plugin-sdk with canonical configuration, fail-closed cancellation, scoped read-only bounded resources, owned bytes/pages/diagnostics, and a one-way observation sink that withholds completed snapshots.
 
 Independent contract audit approved the lifecycle, blindness, provenance, partiality, bounds, and diagnostic semantics. Independent quality review found two final defects: post-acceptance receipt validation reread scanner-owned batch properties, and returned enumeration entries did not enforce maxDepth. Both were fixed with descriptor-captured expectations, hostile Proxy coverage, and LocalResourceProvider-compatible depth semantics; the quality re-review approved. Objective evidence: focused Core/SDK/plugin suite passed 33 tests / 210 assertions; final bun run check passed formatting, strict TypeScript, architecture boundaries, 904 tests / 6,689 assertions, native build, binary smoke, Iteration 1A/1B, and self-blueprint verification. git diff --check and backlog doctor passed.
+
+Claude review approved the contract, security posture, atomicity, and scanner blindness. Two narrow follow-ups were independently accepted: remove a hidden derived per-record character ceiling so the exported maxCanonicalCharacters bound is authoritative, and state that coverage declares inspected scope/kinds rather than emitted-record presence. Added a provenance-rich record above the former hidden cap with exact-bound success and one-character-under atomic failure. The suggested inspector/helper consolidation was not applied because Core and SDK have deliberately distinct canonicalization semantics and no correctness defect was identified. Post-review validation passed 34 focused tests / 215 assertions and the complete 905-test / 6,694-assertion gate.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Defined the finite blind-observation contract and public scanner authoring boundary. Groma now accepts bounded, sparse, provenance-backed scanner evidence through atomic finite sessions without exposing curated blueprint meaning or mutation authority; only successful completion yields coverage and a frozen evidence snapshot. Verified by 33 focused tests / 210 assertions, the complete 904-test / 6,689-assertion repository gate, build/smoke and Iteration 1A/1B/self-blueprint checks, plus independent contract and quality approval.
+Defined the finite blind-observation contract and public scanner authoring boundary. Groma now accepts bounded, sparse, provenance-backed scanner evidence through atomic finite sessions without exposing curated blueprint meaning or mutation authority; only successful completion yields coverage and a frozen evidence snapshot. Verified by 34 focused tests / 215 assertions, the complete 905-test / 6,694-assertion repository gate, build/smoke and Iteration 1A/1B/self-blueprint checks, independent contract and quality approval, and an approved Claude review with both actionable follow-ups applied.
 <!-- SECTION:FINAL_SUMMARY:END -->

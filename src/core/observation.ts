@@ -935,11 +935,7 @@ function inspectRecordValue(
 
   const canonical = copyCanonicalGraphData(record, "query", {
     code: "observation-record-too-large",
-    maximum: Math.min(
-      bounds.maxCanonicalCharacters,
-      boundsCeilings.maxTextCharacters * 2,
-      bounds.maxTextCharacters * 2 + bounds.maxProvenancePerRecord * bounds.maxTokenCharacters * 4,
-    ),
+    maximum: bounds.maxCanonicalCharacters,
     message: "Observation record exceeds its canonical character bound",
   });
   if (!canonical.ok) return failure(...canonical.diagnostics);

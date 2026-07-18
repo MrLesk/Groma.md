@@ -411,6 +411,51 @@ describe("finite observation sessions", () => {
     });
   });
 
+  test("uses the public canonical-character bound for long provenance-rich records", () => {
+    const longProvenance = Array.from({ length: 32 }, (_, index) => {
+      const prefix = `src/${String(index).padStart(2, "0")}-`;
+      return {
+        fingerprint: `sha256:${String(index).padStart(2, "0")}`,
+        resource: `${prefix}${"a".repeat(4_096 - prefix.length)}`,
+        scope: "app",
+      };
+    });
+    const record: ObservationRecord = {
+      content: "x".repeat(65_000),
+      format: "text",
+      key: "long.documentation",
+      kind: "documentation",
+      provenance: longProvenance,
+      scope: "app",
+    };
+
+    const measured = session();
+    expect(
+      measured.submitBatch({ epoch: "epoch-001", records: [record], sequence: 1 }),
+    ).toMatchObject({ ok: true, value: { acceptedRecords: 1 } });
+    const exactCharacters = measured.inspect().canonicalCharacters;
+    expect(exactCharacters).toBeGreaterThan(163_840);
+
+    const exact = valueOf(
+      createObservationSession(begin(), { maxCanonicalCharacters: exactCharacters }),
+    );
+    expect(exact.submitBatch({ epoch: "epoch-001", records: [record], sequence: 1 })).toMatchObject(
+      { ok: true, value: { acceptedRecords: 1 } },
+    );
+
+    const under = valueOf(
+      createObservationSession(begin(), { maxCanonicalCharacters: exactCharacters - 1 }),
+    );
+    expect(
+      codes(under.submitBatch({ epoch: "epoch-001", records: [record], sequence: 1 })),
+    ).toEqual(["observation-record-too-large"]);
+    expect(under.inspect()).toMatchObject({
+      batchCount: 0,
+      canonicalCharacters: 0,
+      recordCount: 0,
+    });
+  });
+
   test("canonicalizes provenance and candidate order without reflecting ownKeys", () => {
     const firstCandidate = candidate("api") as Extract<
       ObservationRecord,
