@@ -29,3 +29,4 @@ export {
   type CanonicalSchemaMigrator,
 } from "../core/index.ts";
 export * from "./manifest.ts";
+export * from "./scanner.ts";

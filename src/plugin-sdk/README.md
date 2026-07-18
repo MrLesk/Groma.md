@@ -21,6 +21,55 @@ The SDK intentionally stays small:
 - that subpath also exports `createPluginRuntimeConformanceFixture()`, giving package
   authors the same runtime fixture used to prove official contributions.
 
+## Blind scanner authoring
+
+`scannerCapability` is the frozen multiple-provider declaration for
+`groma.scanners/v1` at exact capability version `1.0.0`. A scanner implements the
+`groma.scanner/v1` `Scanner` contract and receives one Host-assembled `ScannerRequest`.
+The request contains only:
+
+- the immutable project/source/epoch/scope observation-session descriptor;
+- bounded canonical data-only scanner configuration;
+- cancellation;
+- scoped, read-only project-resource enumeration and reads; and
+- the one-way observation sink for batches, heartbeats, completion, and failure.
+
+It contains no blueprint entities, curated intent, aliases, bindings, reconciliation
+decisions, session inspection, snapshot read, canonical mutation, filesystem write, or
+coordination authority. `complete()` deliberately returns only `Result<void>` to the
+scanner; the Host retains the completed evidence snapshot for reconciliation.
+
+Every resource request names one declared scope and a project-relative resource inside
+that scope's declared root. Page size, depth, cursor, resource text, page characters,
+and read bytes are bounded before the provider is called. Pages must contain strictly
+resource-ordered unique entries within the requested subtree and scope, and a continued
+page must advance its bounded control-free cursor. Provider results are exact bounded
+`Result` variants. Bytes are copied into fresh caller-owned storage; pages, entries,
+diagnostics, configuration, and the public request are defensively copied and frozen.
+Provider throws, rejections, non-native promises, malformed results, oversized output,
+and observation-sink throws become stable SDK-owned failures without exposing private
+thrown values.
+
+Enumeration depth counts directory descent below the requested resource, matching the
+official local resource provider. The requested resource and each immediate child are
+depth zero, grandchildren are depth one, and so on, regardless of whether an entry is a
+directory, file, link, or other resource. A `maxDepth: 0` result may therefore list
+immediate children but may not descend into a child directory. Returned entries beyond
+the requested depth are rejected even if a provider accepted the bounded request.
+
+Cancellation fails closed. Once cancellation is requested—or its callback fails or
+returns a non-boolean—the SDK will not invoke resource providers or the observation
+sink. The Host still owns ending the Core observation session. Scanner `scan()` callback
+containment and session orchestration belong to the runtime/Host rather than this
+authoring facade.
+
+`createScannerRequest()` canonicalizes this narrow authority boundary. Its optional
+scanner bounds and observation-session bounds let a Host apply the same accepted scope
+contract on both sides. Extra input properties are ignored and never survive the
+canonical result; only known enumerable data descriptors are inspected. This authority
+narrowing is not a security sandbox: scanner plugins are trusted code running with the
+user's permissions.
+
 The SDK reuses Core's runtime types and implementation. It does not introduce a
 second resolver, lifecycle, or semantic path. Staged Phase 0 continuation is an
 internal Host bootstrap primitive and is intentionally absent from this public
