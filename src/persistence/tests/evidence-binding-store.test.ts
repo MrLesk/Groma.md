@@ -560,6 +560,18 @@ describe("canonical evidence and binding store", () => {
     if (!rescanned.ok) throw new Error(JSON.stringify(rescanned.diagnostics));
     expect(rescanned.value.snapshot.sources[0]?.recordCount).toBe(2);
     expect(rescanned.value.snapshot.evidence).toHaveLength(6);
+    // observedGeneration is last-seen, so a valid binding may predate a later observation.
+    expect(
+      Number(
+        rescanned.value.snapshot.evidence.find((entry) => entry.identity.key === "component.api")
+          ?.observedGeneration,
+      ),
+    ).toBe(3);
+    expect(
+      rescanned.value.snapshot.bindings
+        .find((binding) => binding.identity.key === "component.api")
+        ?.history.map((entry) => Number(entry.generation)),
+    ).toEqual([2]);
     expect(
       Number(
         rescanned.value.snapshot.evidence.find((entry) => entry.identity.key === "output.response")

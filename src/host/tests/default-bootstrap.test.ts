@@ -763,6 +763,100 @@ describe("default bootstrap registry", () => {
     expect(reads).toBe(13);
   });
 
+  test("recognizes current evidence schemas through the official migration operations", async () => {
+    const context = await temporaryWorkspace();
+    const sourceHash = "a".repeat(64);
+    await Promise.all([
+      mkdir(path.join(context.workspaceRoot, "groma", "evidence", "sources", "aa"), {
+        recursive: true,
+      }),
+      mkdir(path.join(context.workspaceRoot, "groma", "evidence", "shards"), {
+        recursive: true,
+      }),
+      mkdir(path.join(context.workspaceRoot, "groma", "bindings", "shards"), {
+        recursive: true,
+      }),
+    ]);
+    await Promise.all([
+      writeFile(
+        path.join(context.workspaceRoot, "groma", "groma.yaml"),
+        "schema: groma/v0.1\nplugins: []\n",
+      ),
+      writeFile(
+        path.join(context.workspaceRoot, "groma", "evidence", "sources", "aa", `${sourceHash}.md`),
+        "---\nschema: groma/evidence-source/v0.1\n---\n",
+      ),
+      writeFile(
+        path.join(context.workspaceRoot, "groma", "evidence", "shards", "00.md"),
+        "---\nschema: groma/evidence-shard/v0.1\n---\n",
+      ),
+      writeFile(
+        path.join(context.workspaceRoot, "groma", "bindings", "shards", "00.md"),
+        "---\nschema: groma/binding-shard/v0.1\n---\n",
+      ),
+    ]);
+    const composed = await createDefaultBootstrapRegistry({ surface: idleSurface() }).compose({
+      workspaceRoot: context.workspaceRoot,
+    });
+    if (!composed.ok || composed.value.migrations === undefined) {
+      throw new Error("default composition did not expose migration operations");
+    }
+
+    const currentEvidenceResources = [
+      "groma/bindings/shards/00.md",
+      "groma/evidence/shards/00.md",
+      `groma/evidence/sources/aa/${sourceHash}.md`,
+    ];
+    const status = await composed.value.migrations.status();
+    expect(status).toMatchObject({
+      ok: true,
+      value: {
+        completePath: true,
+        documentVersions: [1],
+        mixedVersions: false,
+        schemaFloor: 1,
+      },
+    });
+    if (!status.ok) throw new Error("current evidence schemas were not recognized");
+    expect(
+      status.value.resources
+        .filter((resource) => currentEvidenceResources.includes(resource.locator))
+        .map((resource) => ({
+          locator: resource.locator,
+          migrators: resource.migrators,
+          path: resource.path,
+          version: resource.version,
+        })),
+    ).toEqual(
+      currentEvidenceResources.map((locator) => ({
+        locator,
+        migrators: [],
+        path: "complete",
+        version: 1,
+      })),
+    );
+    const preview = await composed.value.migrations.preview();
+    expect(preview).toMatchObject({ ok: true, value: { status: { completePath: true } } });
+    if (!preview.ok) throw new Error("current evidence schemas could not be previewed");
+    expect(
+      preview.value.resources
+        .filter((resource) => currentEvidenceResources.includes(resource.locator))
+        .map((resource) => ({
+          changed: resource.changed,
+          locator: resource.locator,
+          path: resource.path,
+          version: resource.version,
+        })),
+    ).toEqual(
+      currentEvidenceResources.map((locator) => ({
+        changed: false,
+        locator,
+        path: "complete",
+        version: 1,
+      })),
+    );
+  });
+
   test("composes plugin migration contributions through the runtime and contains their failures", async () => {
     const context = await temporaryWorkspace();
     await mkdir(path.join(context.workspaceRoot, "groma", "records", "plugin.example"), {

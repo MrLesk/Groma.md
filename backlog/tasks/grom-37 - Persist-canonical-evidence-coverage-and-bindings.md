@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 12:57'
+updated_date: '2026-07-18 13:27'
 labels: []
 milestone: m-3
 dependencies:
@@ -72,6 +72,8 @@ Final independent verification after specification PASS and quality APPROVED: bu
 CI portability follow-up for PR #38: GitHub Linux measured the deliberate 512 bindings x 16 generations (8,192 history events) regression at 6.892s, exceeding Bun test default 5s; the other 953 tests and production checks passed and every cross-platform target job was green. Kept fixture and production behavior unchanged and documented a finite 15,000ms timeout on this test only; the sibling long-chain scale regression retains the default because CI did not implicate it. Verification after the annotation: focused evidence suite 17 passing; full bun run check 954 tests / 7043 assertions plus formatting, typecheck, architecture boundaries, build, smoke, Iteration 1A/1B, and self-blueprint all green.
 
 Claude PR #38 review found no correctness bug and approved once checks are green. Its substantive observation about the generic evidence-store byte ceilings exceeding the migration catalog/operation envelope was independently audited and is non-actionable for GROM-37: the migration envelope is an existing independently configurable fail-closed policy already smaller than the wired intent store's aggregate capacity, and this task does not construct or publish an evidence store through Host. GROM-41 must deliberately align or preserve explicit fail-closed envelopes when it composes evidence into Host atomic commits. Claude's load-cost, not-yet-wired runtime path, and fixed semantic-fingerprint bound observations are expected/non-blocking within this Persistence-only task. Root independently confirmed the CI annotation with 27 focused evidence/migration tests passing.
+
+PR review follow-up: registered groma/evidence-source/v0.1, groma/evidence-shard/v0.1, and groma/binding-shard/v0.1 as current version-1 schemas in the official Host migration contribution. Added an official default-Host regression proving migration status and preview classify all three resources as complete/current with no migrators. Audited the proposed binding-generation comparison and did not implement it: observedGeneration records last observation, so a valid earlier binding must survive a later rescan; the retained-history test now asserts that semantic explicitly. A first-retention comparison would require a new canonical field and product decision. Verification: focused Host/evidence tests 31 passed; bun run check passed; bun run check:targets passed for native Darwin plus Linux x64 and Windows x64/arm64 standalone targets, including the complete Iteration 1B workflow and self-blueprint.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
