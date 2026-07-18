@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 export const benchmarkSchemaVersion = 1 as const;
 
+export const fixturePreparationMethod = "remove-declared-groma-state-v1" as const;
+
 export const auditCategories = [
   "bun-route",
   "cross-boundary-dependency",
@@ -65,6 +67,12 @@ export interface BenchmarkAudit {
   }[];
   readonly project: {
     readonly ecosystem: readonly string[];
+    readonly fixturePreparation: {
+      readonly method: typeof fixturePreparationMethod;
+      readonly preexistingGromaOwnedPaths: readonly string[];
+      readonly preparedSourceSnapshotPathCount: number;
+      readonly preparedSourceSnapshotSha256: string;
+    };
     readonly name: string;
     readonly packageMetadataVersion: string;
     readonly repository: string;
@@ -88,6 +96,13 @@ export interface BenchmarkAudit {
     readonly scoredResultsMayTuneScanner: boolean;
   };
   readonly schemaVersion: typeof benchmarkSchemaVersion;
+}
+
+export interface BenchmarkCommandRecord {
+  readonly argv: readonly string[];
+  readonly exitCode: number;
+  readonly stderr: string;
+  readonly stdout: string;
 }
 
 export interface FalseClaimEvidence {
@@ -133,12 +148,16 @@ export interface BenchmarkRun {
   };
   readonly execution: {
     readonly aiOrHelperInferenceUsed: boolean;
-    readonly commands: readonly {
-      readonly argv: readonly string[];
-      readonly exitCode: number;
-      readonly stderr: string;
-      readonly stdout: string;
-    }[];
+    readonly commands: readonly BenchmarkCommandRecord[];
+    readonly fixturePreparation: {
+      readonly completedAtMonotonicMilliseconds: number;
+      readonly declaredPreexistingGromaOwnedPaths: readonly string[];
+      readonly gromaOwnedStateAbsentBeforeInit: boolean;
+      readonly method: typeof fixturePreparationMethod;
+      readonly preparedSourceSnapshotPathCount: number;
+      readonly preparedSourceSnapshotSha256: string;
+      readonly removedPreexistingGromaOwnedPaths: readonly string[];
+    };
     readonly gromaOwnedOutputPaths: readonly string[];
     readonly humanCorrectionBeforeFreeze: boolean;
     readonly humanGroundTruthAuditCompletedBeforeRun: boolean;
@@ -154,11 +173,17 @@ export interface BenchmarkRun {
       readonly frozenAtMonotonicMilliseconds: number;
       readonly gromaOwnedOutputPaths: readonly string[];
       readonly pathConvention: "posix" | "win32";
+      readonly preparedSourceSnapshotSha256: string;
       readonly rendererDeclaredMainLayerBudget: {
         readonly nodes: number;
         readonly relationships: number;
       };
       readonly sourceHashExcludedPaths: readonly string[];
+    };
+    readonly project: {
+      readonly repository: string;
+      readonly revision: string;
+      readonly tree: string;
     };
     readonly scannerAndRulesFrozenBeforeHeldOutRun: boolean;
     readonly sourceAfterSha256: string;
@@ -191,11 +216,17 @@ export interface BenchmarkRun {
     readonly inScopeClaimIds: readonly string[];
   };
   readonly repeatability: {
-    readonly canonicalByteDigests: readonly string[];
-    readonly canonicalIdentityDigests: readonly string[];
-    readonly observationIdentityDigests: readonly string[];
-    readonly rawObservationDigests: readonly string[];
-    readonly rawObservationOrderingDigests: readonly string[];
+    readonly rescans: readonly {
+      readonly canonicalByteDigest: string;
+      readonly canonicalIdentityDigest: string;
+      readonly commands: readonly BenchmarkCommandRecord[];
+      readonly id: string;
+      readonly observationIdentityDigest: string;
+      readonly ordinal: number;
+      readonly preparedSourceSnapshotSha256: string;
+      readonly rawObservationDigest: string;
+      readonly rawObservationOrderingDigest: string;
+    }[];
   };
   readonly schemaVersion: typeof benchmarkSchemaVersion;
 }
@@ -277,8 +308,81 @@ function sha256(value: unknown, location: string, code: BenchmarkContractError["
   return parsed;
 }
 
+const reservedWindowsName =
+  /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
+
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      if (index + 1 >= value.length) return true;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isStrictPortableWorkspaceDescendant(value: string): boolean {
+  if (
+    value.length === 0 ||
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("\\") ||
+    value.includes("//") ||
+    /^[A-Za-z]:/.test(value) ||
+    /[\u0000-\u001f:*?"<>|{}!\[\]]/.test(value) ||
+    hasUnpairedSurrogate(value)
+  ) {
+    return false;
+  }
+  return value
+    .split("/")
+    .every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        !segment.endsWith(".") &&
+        !segment.endsWith(" ") &&
+        !reservedWindowsName.test(segment),
+    );
+}
+
+export function strictPortablePathsOverlapConservatively(left: string, right: string): boolean {
+  const comparableLeft = left.toLowerCase();
+  const comparableRight = right.toLowerCase();
+  return (
+    comparableLeft === comparableRight ||
+    comparableLeft.startsWith(`${comparableRight}/`) ||
+    comparableRight.startsWith(`${comparableLeft}/`)
+  );
+}
+
 export function createBenchmarkStringArrayDigest(values: readonly string[]): string {
   return createHash("sha256").update(JSON.stringify(values)).digest("hex");
+}
+
+function commandRecord(
+  value: unknown,
+  location: string,
+  code: BenchmarkContractError["code"],
+): BenchmarkCommandRecord {
+  const command = record(value, location, code);
+  stringArray(command.argv, `${location}.argv`, code);
+  if (typeof command.exitCode !== "number" || !Number.isSafeInteger(command.exitCode)) {
+    throw new BenchmarkContractError(code, `${location}.exitCode must be a safe integer`);
+  }
+  if (typeof command.stdout !== "string" || typeof command.stderr !== "string") {
+    throw new BenchmarkContractError(
+      code,
+      `${location} stdout and stderr must be preserved strings`,
+    );
+  }
+  return value as BenchmarkCommandRecord;
 }
 
 function sourceWitness(
@@ -288,8 +392,11 @@ function sourceWitness(
 ): SourceWitness {
   const parsed = record(value, location, code);
   const path = string(parsed.path, `${location}.path`, code);
-  if (path.startsWith("/") || path.split("/").includes("..")) {
-    throw new BenchmarkContractError(code, `${location}.path must be workspace-relative`);
+  if (!isStrictPortableWorkspaceDescendant(path)) {
+    throw new BenchmarkContractError(
+      code,
+      `${location}.path must be a strict portable workspace descendant`,
+    );
   }
   const blobOid = string(parsed.blobOid, `${location}.blobOid`, code);
   if (!/^[0-9a-f]{40}$/.test(blobOid)) {
@@ -338,7 +445,42 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
   }
   const ecosystem = stringArray(project.ecosystem, "audit.project.ecosystem", code);
   unique(ecosystem, "audit.project.ecosystem", code);
+  const fixturePreparation = record(
+    project.fixturePreparation,
+    "audit.project.fixturePreparation",
+    code,
+  );
+  if (fixturePreparation.method !== fixturePreparationMethod) {
+    throw new BenchmarkContractError(code, "audit fixture preparation method is unsupported");
+  }
+  const preexistingGromaOwnedPaths = stringArray(
+    fixturePreparation.preexistingGromaOwnedPaths,
+    "audit.project.fixturePreparation.preexistingGromaOwnedPaths",
+    code,
+  );
+  unique(
+    preexistingGromaOwnedPaths,
+    "audit.project.fixturePreparation.preexistingGromaOwnedPaths",
+    code,
+  );
+  if (preexistingGromaOwnedPaths.some((value) => !isStrictPortableWorkspaceDescendant(value))) {
+    throw new BenchmarkContractError(
+      code,
+      "audit fixture preparation paths must be strict portable workspace descendants",
+    );
+  }
+  nonnegativeNumber(
+    fixturePreparation.preparedSourceSnapshotPathCount,
+    "audit.project.fixturePreparation.preparedSourceSnapshotPathCount",
+    code,
+  );
+  sha256(
+    fixturePreparation.preparedSourceSnapshotSha256,
+    "audit.project.fixturePreparation.preparedSourceSnapshotSha256",
+    code,
+  );
   const sourceScopeIds: string[] = [];
+  const auditedInputPaths: string[] = [];
   for (const [index, item] of array(
     project.sourceScopes,
     "audit.project.sourceScopes",
@@ -376,6 +518,13 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
     unique(included, `audit.project.sourceScopes[${index}].included`, code);
     unique(excluded, `audit.project.sourceScopes[${index}].excluded`, code);
     unique(protectedRoots, `audit.project.sourceScopes[${index}].protectedRoots`, code);
+    if (protectedRoots.some((value) => !isStrictPortableWorkspaceDescendant(value))) {
+      throw new BenchmarkContractError(
+        code,
+        "audit protected source roots must be strict portable workspace descendants",
+      );
+    }
+    auditedInputPaths.push(...protectedRoots);
     const pathCount = nonnegativeNumber(
       scope.pathCount,
       `audit.project.sourceScopes[${index}].pathCount`,
@@ -425,7 +574,9 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
       throw new BenchmarkContractError(code, `${id}.claim.objects must not be empty`);
     }
     unique(objects, `${id}.claim.objects`, code);
-    witnesses(fact.evidence, `${id}.evidence`, code);
+    auditedInputPaths.push(
+      ...witnesses(fact.evidence, `${id}.evidence`, code).map((witness) => witness.path),
+    );
     const requiresDerivation = claim.kind === "absence" || claim.predicate === "contains-exactly";
     if (requiresDerivation || fact.derivation !== undefined) {
       const derivation = record(fact.derivation, `${id}.derivation`, code);
@@ -473,13 +624,30 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
     if (forbidden.severity !== "critical" && forbidden.severity !== "noncritical") {
       throw new BenchmarkContractError(code, "forbidden claim severity is invalid");
     }
-    witnesses(forbidden.evidence, `audit.forbiddenClaims[${index}].evidence`, code);
+    auditedInputPaths.push(
+      ...witnesses(forbidden.evidence, `audit.forbiddenClaims[${index}].evidence`, code).map(
+        (witness) => witness.path,
+      ),
+    );
   }
   if (forbiddenClaims.length === 0) {
     throw new BenchmarkContractError(code, "audit.forbiddenClaims must not be empty");
   }
   unique(forbiddenIds, "audit forbidden claim ids", code);
   unique(forbiddenTexts, "audit forbidden claim text", code);
+  const unsafePreparationOverlaps = preexistingGromaOwnedPaths.flatMap((preparationPath) =>
+    auditedInputPaths
+      .filter((auditedInputPath) =>
+        strictPortablePathsOverlapConservatively(preparationPath, auditedInputPath),
+      )
+      .map((auditedInputPath) => `${preparationPath}<->${auditedInputPath}`),
+  );
+  if (unsafePreparationOverlaps.length > 0) {
+    throw new BenchmarkContractError(
+      code,
+      `audit fixture preparation overlaps audited input: ${unsafePreparationOverlaps.join(", ")}`,
+    );
+  }
 
   const exclusions = array(parsed.exclusions, "audit.exclusions", code);
   const exclusionIds: string[] = [];
@@ -581,7 +749,17 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
       const raw = record(evidenceItem, `assessedClaim.evidence[${evidenceIndex}]`, code);
       string(raw.detail, `assessedClaim.evidence[${evidenceIndex}].detail`, code);
       string(raw.observationId, `assessedClaim.evidence[${evidenceIndex}].observationId`, code);
-      string(raw.sourcePath, `assessedClaim.evidence[${evidenceIndex}].sourcePath`, code);
+      const sourcePath = string(
+        raw.sourcePath,
+        `assessedClaim.evidence[${evidenceIndex}].sourcePath`,
+        code,
+      );
+      if (!isStrictPortableWorkspaceDescendant(sourcePath)) {
+        throw new BenchmarkContractError(
+          code,
+          `assessedClaim.evidence[${evidenceIndex}].sourcePath must be a strict portable workspace descendant`,
+        );
+      }
     }
   }
   if (assessedClaimIds.length === 0) {
@@ -613,7 +791,17 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
           string(raw.observationId, `falseClaim.evidence[${evidenceIndex}].observationId`, code);
         }
         if (raw.sourcePath !== undefined) {
-          string(raw.sourcePath, `falseClaim.evidence[${evidenceIndex}].sourcePath`, code);
+          const sourcePath = string(
+            raw.sourcePath,
+            `falseClaim.evidence[${evidenceIndex}].sourcePath`,
+            code,
+          );
+          if (!isStrictPortableWorkspaceDescendant(sourcePath)) {
+            throw new BenchmarkContractError(
+              code,
+              `falseClaim.evidence[${evidenceIndex}].sourcePath must be a strict portable workspace descendant`,
+            );
+          }
         }
       }
     }
@@ -634,6 +822,13 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   if (execution.pathConvention !== "posix" && execution.pathConvention !== "win32") {
     throw new BenchmarkContractError(code, "run.execution.pathConvention is invalid");
   }
+  const project = record(execution.project, "run.execution.project", code);
+  string(project.repository, "run.execution.project.repository", code);
+  const revision = string(project.revision, "run.execution.project.revision", code);
+  const tree = string(project.tree, "run.execution.project.tree", code);
+  if (!/^[0-9a-f]{40}$/.test(revision) || !/^[0-9a-f]{40}$/.test(tree)) {
+    throw new BenchmarkContractError(code, "run execution revision and tree must be full Git ids");
+  }
   nonnegativeNumber(
     execution.spawnedInitAtMonotonicMilliseconds,
     "run.execution.spawnedInitAtMonotonicMilliseconds",
@@ -652,6 +847,51 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
     const paths = stringArray(execution[field], `run.execution.${field}`, code);
     unique(paths, `run.execution.${field}`, code);
   }
+  const fixturePreparation = record(
+    execution.fixturePreparation,
+    "run.execution.fixturePreparation",
+    code,
+  );
+  if (fixturePreparation.method !== fixturePreparationMethod) {
+    throw new BenchmarkContractError(code, "run fixture preparation method is unsupported");
+  }
+  nonnegativeNumber(
+    fixturePreparation.completedAtMonotonicMilliseconds,
+    "run.execution.fixturePreparation.completedAtMonotonicMilliseconds",
+    code,
+  );
+  boolean(
+    fixturePreparation.gromaOwnedStateAbsentBeforeInit,
+    "run.execution.fixturePreparation.gromaOwnedStateAbsentBeforeInit",
+    code,
+  );
+  for (const field of [
+    "declaredPreexistingGromaOwnedPaths",
+    "removedPreexistingGromaOwnedPaths",
+  ] as const) {
+    const paths = stringArray(
+      fixturePreparation[field],
+      `run.execution.fixturePreparation.${field}`,
+      code,
+    );
+    unique(paths, `run.execution.fixturePreparation.${field}`, code);
+    if (paths.some((value) => !isStrictPortableWorkspaceDescendant(value))) {
+      throw new BenchmarkContractError(
+        code,
+        `run.execution.fixturePreparation.${field} must contain strict portable workspace descendants`,
+      );
+    }
+  }
+  nonnegativeNumber(
+    fixturePreparation.preparedSourceSnapshotPathCount,
+    "run.execution.fixturePreparation.preparedSourceSnapshotPathCount",
+    code,
+  );
+  sha256(
+    fixturePreparation.preparedSourceSnapshotSha256,
+    "run.execution.fixturePreparation.preparedSourceSnapshotSha256",
+    code,
+  );
   const preRunPlan = record(execution.preRunPlan, "run.execution.preRunPlan", code);
   sha256(preRunPlan.commitmentSha256, "run.execution.preRunPlan.commitmentSha256", code);
   nonnegativeNumber(
@@ -662,6 +902,11 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   if (preRunPlan.pathConvention !== "posix" && preRunPlan.pathConvention !== "win32") {
     throw new BenchmarkContractError(code, "run.execution.preRunPlan.pathConvention is invalid");
   }
+  sha256(
+    preRunPlan.preparedSourceSnapshotSha256,
+    "run.execution.preRunPlan.preparedSourceSnapshotSha256",
+    code,
+  );
   for (const field of ["gromaOwnedOutputPaths", "sourceHashExcludedPaths"] as const) {
     const paths = stringArray(preRunPlan[field], `run.execution.preRunPlan.${field}`, code);
     unique(paths, `run.execution.preRunPlan.${field}`, code);
@@ -686,31 +931,39 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   string(isolation.mechanism, "run.execution.networkIsolation.mechanism", code);
   const commands = array(execution.commands, "run.execution.commands", code);
   for (const [index, item] of commands.entries()) {
-    const command = record(item, `run.execution.commands[${index}]`, code);
-    stringArray(command.argv, `run.execution.commands[${index}].argv`, code);
-    if (typeof command.exitCode !== "number" || !Number.isSafeInteger(command.exitCode)) {
-      throw new BenchmarkContractError(code, "command exitCode must be a safe integer");
-    }
-    if (typeof command.stdout !== "string" || typeof command.stderr !== "string") {
-      throw new BenchmarkContractError(code, "command stdout and stderr must be preserved strings");
-    }
+    commandRecord(item, `run.execution.commands[${index}]`, code);
   }
 
   const repeatability = record(parsed.repeatability, "run.repeatability", code);
-  for (const field of [
-    "canonicalByteDigests",
-    "canonicalIdentityDigests",
-    "observationIdentityDigests",
-    "rawObservationDigests",
-    "rawObservationOrderingDigests",
-  ] as const) {
-    const digests = array(repeatability[field], `run.repeatability.${field}`, code);
-    if (digests.length < 2) {
-      throw new BenchmarkContractError(code, `run.repeatability.${field} requires two rescans`);
-    }
-    digests.forEach((digest, index) =>
-      sha256(digest, `run.repeatability.${field}[${index}]`, code),
+  for (const [index, item] of array(
+    repeatability.rescans,
+    "run.repeatability.rescans",
+    code,
+  ).entries()) {
+    const rescan = record(item, `run.repeatability.rescans[${index}]`, code);
+    string(rescan.id, `run.repeatability.rescans[${index}].id`, code);
+    nonnegativeNumber(rescan.ordinal, `run.repeatability.rescans[${index}].ordinal`, code);
+    sha256(
+      rescan.preparedSourceSnapshotSha256,
+      `run.repeatability.rescans[${index}].preparedSourceSnapshotSha256`,
+      code,
     );
+    for (const field of [
+      "canonicalByteDigest",
+      "canonicalIdentityDigest",
+      "observationIdentityDigest",
+      "rawObservationDigest",
+      "rawObservationOrderingDigest",
+    ] as const) {
+      sha256(rescan[field], `run.repeatability.rescans[${index}].${field}`, code);
+    }
+    for (const [commandIndex, command] of array(
+      rescan.commands,
+      `run.repeatability.rescans[${index}].commands`,
+      code,
+    ).entries()) {
+      commandRecord(command, `run.repeatability.rescans[${index}].commands[${commandIndex}]`, code);
+    }
   }
 
   const provenance = record(parsed.provenance, "run.provenance", code);

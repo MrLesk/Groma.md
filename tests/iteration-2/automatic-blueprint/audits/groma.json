@@ -8,6 +8,12 @@
     "tree": "71323cd120c867b5c8ac9fffcc07cb9baf6079d4",
     "packageMetadataVersion": "0.0.0",
     "ecosystem": ["bun", "typescript"],
+    "fixturePreparation": {
+      "method": "remove-declared-groma-state-v1",
+      "preexistingGromaOwnedPaths": ["groma"],
+      "preparedSourceSnapshotPathCount": 203,
+      "preparedSourceSnapshotSha256": "606066e22b59427c0ecc63f3668d26bb47e623145c9e211266de712909478838"
+    },
     "sourceScopes": [
       {
         "id": "production",

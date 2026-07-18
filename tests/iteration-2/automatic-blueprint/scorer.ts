@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import type { BenchmarkAudit, BenchmarkRun } from "./contract.ts";
+import {
+  isStrictPortableWorkspaceDescendant,
+  strictPortablePathsOverlapConservatively,
+  type BenchmarkAudit,
+  type BenchmarkRun,
+} from "./contract.ts";
 
 export const benchmarkWorkflow = [["groma", "init"], ["groma", "scan"], ["groma"]] as const;
 
@@ -9,6 +14,9 @@ export const maximumFirstMinuteMilliseconds = 60_000;
 
 export const benchmarkFailureCodes = [
   "AUDIT_MISMATCH",
+  "AUDIT_PROJECT_MISMATCH",
+  "FIXTURE_PREPARATION_INVALID",
+  "FIXTURE_SNAPSHOT_MISMATCH",
   "WORKFLOW_MISMATCH",
   "COMMAND_FAILED",
   "NETWORK_ISOLATION_NOT_ENFORCED",
@@ -31,6 +39,10 @@ export const benchmarkFailureCodes = [
   "FALSE_CLAIM_FORBIDDEN_LINK_INVALID",
   "CRITICAL_FALSE_CLAIM",
   "REQUIRED_FACT_COVERAGE_INCOMPLETE",
+  "RESCAN_RECORDS_INCOMPLETE",
+  "RESCAN_WORKFLOW_MISMATCH",
+  "RESCAN_COMMAND_FAILED",
+  "RESCAN_INPUT_MISMATCH",
   "RAW_OBSERVATION_ORDER_CHANGED",
   "RAW_OBSERVATION_DIGEST_CHANGED",
   "OBSERVATION_IDENTITY_CHANGED",
@@ -78,8 +90,6 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
   return sortedLeft.every((value, index) => value === sortedRight[index]);
 }
 
-const reservedWindowsName =
-  /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
 const utf8Encoder = new TextEncoder();
 
 function compareUtf8(left: string, right: string): number {
@@ -92,49 +102,8 @@ function compareUtf8(left: string, right: string): number {
   return leftBytes.length - rightBytes.length;
 }
 
-function hasUnpairedSurrogate(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index);
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      if (index + 1 >= value.length) return true;
-      const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) return true;
-      index += 1;
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function isSorted(values: readonly string[]): boolean {
   return values.every((value, index) => index === 0 || compareUtf8(values[index - 1]!, value) < 0);
-}
-
-function isPortableWorkspaceDescendant(value: string): boolean {
-  if (
-    value.length === 0 ||
-    value.startsWith("/") ||
-    value.endsWith("/") ||
-    value.includes("\\") ||
-    value.includes("//") ||
-    /^[A-Za-z]:/.test(value) ||
-    /[\u0000-\u001f:*?"<>|{}!\[\]]/.test(value) ||
-    hasUnpairedSurrogate(value)
-  ) {
-    return false;
-  }
-  const segments = value.split("/");
-  return segments.every((segment) => {
-    return (
-      segment.length > 0 &&
-      segment !== "." &&
-      segment !== ".." &&
-      !segment.endsWith(".") &&
-      !segment.endsWith(" ") &&
-      !reservedWindowsName.test(segment)
-    );
-  });
 }
 
 function pathsOverlap(
@@ -186,10 +155,24 @@ function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
       !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
     );
   }
-  const valid = (value: string) =>
-    path.win32.isAbsolute(value) &&
-    value.toLowerCase() !== path.win32.parse(value).root.toLowerCase() &&
-    path.win32.normalize(value) === value;
+  const reservedWindowsRootSegment =
+    /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
+  const valid = (value: string) => {
+    const root = path.win32.parse(value).root;
+    const segments = value.slice(root.length).split("\\").filter(Boolean);
+    return (
+      path.win32.isAbsolute(value) &&
+      value.toLowerCase() !== root.toLowerCase() &&
+      path.win32.normalize(value) === value &&
+      segments.every(
+        (segment) =>
+          !segment.endsWith(".") &&
+          !segment.endsWith(" ") &&
+          !/[\u0000-\u001f<>:"|?*]/.test(segment) &&
+          !reservedWindowsRootSegment.test(segment),
+      )
+    );
+  };
   return (
     valid(temporaryHome) &&
     valid(temporaryConfigRoot) &&
@@ -201,6 +184,7 @@ export function createPreRunPlanCommitment(plan: BenchmarkRun["execution"]["preR
   const canonicalInput = {
     gromaOwnedOutputPaths: [...plan.gromaOwnedOutputPaths],
     pathConvention: plan.pathConvention,
+    preparedSourceSnapshotSha256: plan.preparedSourceSnapshotSha256,
     rendererDeclaredMainLayerBudget: {
       nodes: plan.rendererDeclaredMainLayerBudget.nodes,
       relationships: plan.rendererDeclaredMainLayerBudget.relationships,
@@ -222,6 +206,15 @@ function portion(numerator: number, denominator: number, maximum: number): numbe
 
 function commandLines(run: BenchmarkRun): readonly (readonly string[])[] {
   return run.execution.commands.map((command) => command.argv);
+}
+
+function collectAuditedInputPaths(audit: BenchmarkAudit): string[] {
+  const paths = [
+    ...audit.project.sourceScopes.flatMap((scope) => scope.protectedRoots),
+    ...audit.facts.flatMap((fact) => fact.evidence.map((witness) => witness.path)),
+    ...audit.forbiddenClaims.flatMap((claim) => claim.evidence.map((witness) => witness.path)),
+  ];
+  return paths.filter((value, index) => paths.indexOf(value) === index);
 }
 
 function addFailure(
@@ -249,12 +242,97 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   const factsBackedByRawClaims = new Set(
     run.claims.assessedClaims.flatMap((claim) => claim.factIds),
   );
+  const auditedInputPaths = collectAuditedInputPaths(audit);
 
   if (run.auditId !== audit.auditId) {
     addFailure(failures, "AUDIT_MISMATCH", [
       `expected ${audit.auditId}`,
       `received ${run.auditId}`,
     ]);
+  }
+  const projectIdentityFields = ["repository", "revision", "tree"] as const;
+  const projectIdentityMismatches = projectIdentityFields
+    .filter((field) => run.execution.project[field] !== audit.project[field])
+    .map(
+      (field) =>
+        `${field}: expected ${audit.project[field]}, received ${run.execution.project[field]}`,
+    );
+  if (projectIdentityMismatches.length > 0) {
+    addFailure(failures, "AUDIT_PROJECT_MISMATCH", projectIdentityMismatches);
+  }
+  const auditPreparation = audit.project.fixturePreparation;
+  const runPreparation = run.execution.fixturePreparation;
+  const preparationProblems: string[] = [];
+  if (runPreparation.method !== auditPreparation.method) {
+    preparationProblems.push(
+      `method: expected ${auditPreparation.method}, received ${runPreparation.method}`,
+    );
+  }
+  if (
+    !sameArray(
+      runPreparation.declaredPreexistingGromaOwnedPaths,
+      auditPreparation.preexistingGromaOwnedPaths,
+    )
+  ) {
+    preparationProblems.push("declared pre-existing Groma-owned paths do not match the audit");
+  }
+  if (
+    !sameArray(
+      runPreparation.removedPreexistingGromaOwnedPaths,
+      auditPreparation.preexistingGromaOwnedPaths,
+    )
+  ) {
+    preparationProblems.push("removed pre-existing Groma-owned paths do not match the audit");
+  }
+  if (!runPreparation.gromaOwnedStateAbsentBeforeInit) {
+    preparationProblems.push("Groma-owned state remained before groma init");
+  }
+  const unsafePreparationOverlaps = [
+    ...runPreparation.declaredPreexistingGromaOwnedPaths.map(
+      (value) => ["declared", value] as const,
+    ),
+    ...runPreparation.removedPreexistingGromaOwnedPaths.map((value) => ["removed", value] as const),
+  ].flatMap(([kind, preparationPath]) =>
+    auditedInputPaths
+      .filter((auditedInputPath) =>
+        strictPortablePathsOverlapConservatively(preparationPath, auditedInputPath),
+      )
+      .map((auditedInputPath) => `${kind} ${preparationPath}<->${auditedInputPath}`),
+  );
+  if (unsafePreparationOverlaps.length > 0) {
+    preparationProblems.push(...unsafePreparationOverlaps);
+  }
+  if (
+    runPreparation.completedAtMonotonicMilliseconds >
+      run.execution.preRunPlan.frozenAtMonotonicMilliseconds ||
+    runPreparation.completedAtMonotonicMilliseconds >=
+      run.execution.spawnedInitAtMonotonicMilliseconds
+  ) {
+    preparationProblems.push("fixture preparation was not completed before planning and timing");
+  }
+  if (preparationProblems.length > 0) {
+    addFailure(failures, "FIXTURE_PREPARATION_INVALID", preparationProblems);
+  }
+  const snapshotMismatches = [
+    ["prepared fixture", runPreparation.preparedSourceSnapshotSha256],
+    ["committed plan", run.execution.preRunPlan.preparedSourceSnapshotSha256],
+    ["pre-execution source", run.execution.sourceBeforeSha256],
+  ]
+    .filter(([, digest]) => digest !== auditPreparation.preparedSourceSnapshotSha256)
+    .map(
+      ([location, digest]) =>
+        `${location}: expected ${auditPreparation.preparedSourceSnapshotSha256}, received ${digest}`,
+    );
+  if (
+    runPreparation.preparedSourceSnapshotPathCount !==
+    auditPreparation.preparedSourceSnapshotPathCount
+  ) {
+    snapshotMismatches.push(
+      `path count: expected ${auditPreparation.preparedSourceSnapshotPathCount}, received ${runPreparation.preparedSourceSnapshotPathCount}`,
+    );
+  }
+  if (snapshotMismatches.length > 0) {
+    addFailure(failures, "FIXTURE_SNAPSHOT_MISMATCH", snapshotMismatches);
   }
   const observedWorkflow = commandLines(run);
   if (
@@ -294,8 +372,8 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     ...run.execution.preRunPlan.sourceHashExcludedPaths,
   ];
   if (
-    executionPaths.some((value) => !isPortableWorkspaceDescendant(value)) ||
-    plannedPaths.some((value) => !isPortableWorkspaceDescendant(value)) ||
+    executionPaths.some((value) => !isStrictPortableWorkspaceDescendant(value)) ||
+    plannedPaths.some((value) => !isStrictPortableWorkspaceDescendant(value)) ||
     !isSorted(run.execution.gromaOwnedOutputPaths) ||
     !isSorted(run.execution.sourceHashExcludedPaths) ||
     !isSorted(run.execution.preRunPlan.gromaOwnedOutputPaths) ||
@@ -303,21 +381,20 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   ) {
     addFailure(failures, "SOURCE_OUTPUT_PATH_INVALID", [...executionPaths, ...plannedPaths]);
   }
-  const protectedSourceRoots = audit.project.sourceScopes.flatMap((scope) => scope.protectedRoots);
   const protectedOverlaps = [
     ...executionPaths.flatMap((outputPath) =>
-      protectedSourceRoots
-        .filter((protectedRoot) =>
-          pathsOverlap(outputPath, protectedRoot, run.execution.pathConvention),
+      auditedInputPaths
+        .filter((auditedInputPath) =>
+          pathsOverlap(outputPath, auditedInputPath, run.execution.pathConvention),
         )
-        .map((protectedRoot) => `${outputPath}<->${protectedRoot}`),
+        .map((auditedInputPath) => `${outputPath}<->${auditedInputPath}`),
     ),
     ...plannedPaths.flatMap((outputPath) =>
-      protectedSourceRoots
-        .filter((protectedRoot) =>
-          pathsOverlap(outputPath, protectedRoot, run.execution.preRunPlan.pathConvention),
+      auditedInputPaths
+        .filter((auditedInputPath) =>
+          pathsOverlap(outputPath, auditedInputPath, run.execution.preRunPlan.pathConvention),
         )
-        .map((protectedRoot) => `${outputPath}<->${protectedRoot}`),
+        .map((auditedInputPath) => `${outputPath}<->${auditedInputPath}`),
     ),
   ];
   if (protectedOverlaps.length > 0) {
@@ -430,11 +507,15 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       forbiddenClaimsByText.get(claim.claim)?.severity === "critical",
   );
   const effectiveCriticalClaims = [...run.claims.criticalFalseClaims, ...linkedCriticalClaims];
-  if (effectiveCriticalClaims.length > 0) {
-    addFailure(
-      failures,
-      "CRITICAL_FALSE_CLAIM",
-      effectiveCriticalClaims.flatMap((claim) => [
+  const exactCriticalAssessedClaims = run.claims.assessedClaims.filter(
+    (claim) => forbiddenClaimsByText.get(claim.claim)?.severity === "critical",
+  );
+  const exactNoncriticalAssessedClaims = run.claims.assessedClaims.filter(
+    (claim) => forbiddenClaimsByText.get(claim.claim)?.severity === "noncritical",
+  );
+  if (effectiveCriticalClaims.length > 0 || exactCriticalAssessedClaims.length > 0) {
+    addFailure(failures, "CRITICAL_FALSE_CLAIM", [
+      ...effectiveCriticalClaims.flatMap((claim) => [
         `${claim.claimId}: ${claim.claim}`,
         ...claim.forbiddenClaimIds.map((id) => `forbidden ${id}`),
         ...(claim.forbiddenClaimIds.length === 0 && forbiddenClaimsByText.has(claim.claim)
@@ -442,7 +523,16 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
           : []),
         ...claim.evidence.map((evidence) => evidence.detail),
       ]),
-    );
+      ...exactCriticalAssessedClaims.flatMap((claim) => [
+        `${claim.claimId}: ${claim.claim}`,
+        `matched forbidden text ${forbiddenClaimsByText.get(claim.claim)!.id}`,
+        ...claim.evidence.flatMap((evidence) => [
+          evidence.detail,
+          `observation ${evidence.observationId}`,
+          `source ${evidence.sourcePath}`,
+        ]),
+      ]),
+    ]);
   }
   const missingRequired = requiredFactIds.filter(
     (id) => !run.claims.coveredRequiredFactIds.includes(id),
@@ -468,45 +558,133 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       ...unreportedRawClaimCoverage.map((id) => `raw claim not reported for ${id}`),
     ]);
   }
-  if (!allSame(run.repeatability.rawObservationOrderingDigests)) {
+  const rescans = run.repeatability.rescans;
+  const rescanIds = rescans.map((rescan) => rescan.id);
+  const rescanRecordsComplete =
+    rescans.length >= 2 &&
+    new Set(rescanIds).size === rescanIds.length &&
+    rescans.every((rescan, index) => rescan.ordinal === index + 1);
+  if (!rescanRecordsComplete) {
+    addFailure(
+      failures,
+      "RESCAN_RECORDS_INCOMPLETE",
+      rescans.length === 0
+        ? ["no rescan instances recorded"]
+        : [
+            `recorded ${rescans.length} rescan instances`,
+            ...rescans.map((rescan) => `${rescan.ordinal}:${rescan.id}`),
+          ],
+    );
+  }
+  const expectedRescanWorkflow = benchmarkWorkflow.slice(1);
+  const rescanWorkflowsMatch =
+    rescanRecordsComplete &&
+    rescans.every(
+      (rescan) =>
+        rescan.commands.length === expectedRescanWorkflow.length &&
+        rescan.commands.every((command, index) =>
+          sameArray(command.argv, expectedRescanWorkflow[index] ?? []),
+        ),
+    );
+  if (rescanRecordsComplete && !rescanWorkflowsMatch) {
+    addFailure(
+      failures,
+      "RESCAN_WORKFLOW_MISMATCH",
+      rescans.flatMap((rescan) =>
+        rescan.commands.length === 0
+          ? [`${rescan.id}: no commands recorded`]
+          : rescan.commands.map((command) => `${rescan.id}: ${command.argv.join(" ")}`),
+      ),
+    );
+  }
+  const failedRescanCommands = rescans.flatMap((rescan) =>
+    rescan.commands
+      .filter((command) => command.exitCode !== 0)
+      .map(
+        (command) =>
+          `${rescan.id}: ${command.argv.join(" ")} exited ${command.exitCode}: ${command.stderr}`,
+      ),
+  );
+  const rescanCommandsSuccessful = rescanWorkflowsMatch && failedRescanCommands.length === 0;
+  if (rescanWorkflowsMatch && failedRescanCommands.length > 0) {
+    addFailure(failures, "RESCAN_COMMAND_FAILED", failedRescanCommands);
+  }
+  const mismatchedRescanInputs = rescans
+    .filter(
+      (rescan) =>
+        rescan.preparedSourceSnapshotSha256 !==
+        audit.project.fixturePreparation.preparedSourceSnapshotSha256,
+    )
+    .map(
+      (rescan) =>
+        `${rescan.id}: expected ${audit.project.fixturePreparation.preparedSourceSnapshotSha256}, received ${rescan.preparedSourceSnapshotSha256}`,
+    );
+  const rescanInputsMatch = rescanCommandsSuccessful && mismatchedRescanInputs.length === 0;
+  if (rescanCommandsSuccessful && mismatchedRescanInputs.length > 0) {
+    addFailure(failures, "RESCAN_INPUT_MISMATCH", mismatchedRescanInputs);
+  }
+  const rescansEligibleForStability = rescanInputsMatch;
+  const rescanDigests = <Field extends keyof BenchmarkRun["repeatability"]["rescans"][number]>(
+    field: Field,
+  ): string[] => rescans.map((rescan) => String(rescan[field]));
+  if (rescansEligibleForStability && !allSame(rescanDigests("rawObservationOrderingDigest"))) {
     addFailure(failures, "RAW_OBSERVATION_ORDER_CHANGED", [
-      ...run.repeatability.rawObservationOrderingDigests,
+      ...rescanDigests("rawObservationOrderingDigest"),
     ]);
   }
-  if (!allSame(run.repeatability.rawObservationDigests)) {
+  if (rescansEligibleForStability && !allSame(rescanDigests("rawObservationDigest"))) {
     addFailure(failures, "RAW_OBSERVATION_DIGEST_CHANGED", [
-      ...run.repeatability.rawObservationDigests,
+      ...rescanDigests("rawObservationDigest"),
     ]);
   }
-  if (!allSame(run.repeatability.observationIdentityDigests)) {
+  if (rescansEligibleForStability && !allSame(rescanDigests("observationIdentityDigest"))) {
     addFailure(failures, "OBSERVATION_IDENTITY_CHANGED", [
-      ...run.repeatability.observationIdentityDigests,
+      ...rescanDigests("observationIdentityDigest"),
     ]);
   }
-  if (!allSame(run.repeatability.canonicalIdentityDigests)) {
+  if (rescansEligibleForStability && !allSame(rescanDigests("canonicalIdentityDigest"))) {
     addFailure(failures, "CANONICAL_IDENTITY_CHANGED", [
-      ...run.repeatability.canonicalIdentityDigests,
+      ...rescanDigests("canonicalIdentityDigest"),
     ]);
   }
-  if (!allSame(run.repeatability.canonicalByteDigests)) {
-    addFailure(failures, "CANONICAL_BYTES_CHANGED", [...run.repeatability.canonicalByteDigests]);
+  if (rescansEligibleForStability && !allSame(rescanDigests("canonicalByteDigest"))) {
+    addFailure(failures, "CANONICAL_BYTES_CHANGED", [...rescanDigests("canonicalByteDigest")]);
   }
   const emittedClaimIds = [
     ...run.claims.assessedClaims.map((claim) => claim.claimId),
     ...allFalseClaims.map((claim) => claim.claimId),
   ];
+  const evidenceBackedClaimIds = [
+    ...run.claims.assessedClaims
+      .filter((claim) =>
+        claim.evidence.some(
+          (evidence) => evidence.observationId.length > 0 && evidence.sourcePath.length > 0,
+        ),
+      )
+      .map((claim) => claim.claimId),
+    ...allFalseClaims
+      .filter((claim) =>
+        claim.evidence.some(
+          (evidence) => evidence.observationId !== undefined && evidence.sourcePath !== undefined,
+        ),
+      )
+      .map((claim) => claim.claimId),
+  ];
+  const missingStructuredEvidence = emittedClaimIds.filter(
+    (id) => !evidenceBackedClaimIds.includes(id),
+  );
   if (
     run.provenance.inScopeClaimIds.length === 0 ||
-    !sameSet(run.provenance.inScopeClaimIds, run.provenance.claimIdsWithValidWitnesses) ||
-    !sameSet(run.provenance.inScopeClaimIds, emittedClaimIds)
+    !sameSet(run.provenance.inScopeClaimIds, emittedClaimIds) ||
+    !sameSet(run.provenance.inScopeClaimIds, evidenceBackedClaimIds) ||
+    !sameSet(run.provenance.claimIdsWithValidWitnesses, evidenceBackedClaimIds)
   ) {
-    const missing = run.provenance.inScopeClaimIds.filter(
-      (id) => !run.provenance.claimIdsWithValidWitnesses.includes(id),
-    );
     addFailure(
       failures,
       "PROVENANCE_INCOMPLETE",
-      missing.length > 0 ? missing : ["claim inventory and provenance do not match"],
+      missingStructuredEvidence.length > 0
+        ? missingStructuredEvidence.map((id) => `${id}: no structured witness evidence`)
+        : ["claim inventory, structured evidence, and provenance do not match"],
     );
   }
 
@@ -555,13 +733,18 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     );
   }
 
-  const rawStable = allSame(run.repeatability.rawObservationOrderingDigests);
-  const rawDigestStable = allSame(run.repeatability.rawObservationDigests);
-  const observationIdentityStable = allSame(run.repeatability.observationIdentityDigests);
-  const canonicalIdentityStable = allSame(run.repeatability.canonicalIdentityDigests);
-  const canonicalBytesStable = allSame(run.repeatability.canonicalByteDigests);
+  const rawStable =
+    rescansEligibleForStability && allSame(rescanDigests("rawObservationOrderingDigest"));
+  const rawDigestStable =
+    rescansEligibleForStability && allSame(rescanDigests("rawObservationDigest"));
+  const observationIdentityStable =
+    rescansEligibleForStability && allSame(rescanDigests("observationIdentityDigest"));
+  const canonicalIdentityStable =
+    rescansEligibleForStability && allSame(rescanDigests("canonicalIdentityDigest"));
+  const canonicalBytesStable =
+    rescansEligibleForStability && allSame(rescanDigests("canonicalByteDigest"));
   const provenanceCovered = run.provenance.inScopeClaimIds.filter((id) =>
-    run.provenance.claimIdsWithValidWitnesses.includes(id),
+    evidenceBackedClaimIds.includes(id),
   ).length;
   const correctRequiredQuestions = requiredQuestionIds.filter((id) =>
     run.comprehension.correctQuestionIds.includes(id),
@@ -570,10 +753,11 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     falseClaims: Math.max(
       0,
       20 -
-        effectiveCriticalClaims.length * 20 -
+        (effectiveCriticalClaims.length + exactCriticalAssessedClaims.length) * 20 -
         run.claims.noncriticalFalseClaims.filter((claim) => !linkedCriticalClaims.includes(claim))
           .length *
-          2,
+          2 -
+        exactNoncriticalAssessedClaims.length * 2,
     ),
     firstMinute:
       firstMinuteMilliseconds >= 0 && firstMinuteMilliseconds <= maximumFirstMinuteMilliseconds
