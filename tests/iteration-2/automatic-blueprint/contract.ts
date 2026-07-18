@@ -100,9 +100,14 @@ export interface BenchmarkAudit {
 
 export interface BenchmarkCommandRecord {
   readonly argv: readonly string[];
+  readonly completedAtMonotonicMilliseconds: number;
+  readonly effectiveConfigRoot: string;
+  readonly effectiveHome: string;
   readonly exitCode: number;
   readonly stderr: string;
+  readonly startedAtMonotonicMilliseconds: number;
   readonly stdout: string;
+  readonly workingDirectory: string;
 }
 
 export interface FalseClaimEvidence {
@@ -142,6 +147,7 @@ export interface BenchmarkRun {
     readonly criticalMisunderstandings: readonly string[];
     readonly evaluatorHadAgentAssistance: boolean;
     readonly evaluatorHadPriorProjectKnowledge: boolean;
+    readonly evaluatedMainLayerArtifactSha256: string;
     readonly materials: readonly string[];
     readonly startedAfterFreeze: boolean;
     readonly usedOnlyFrozenInitialMainLayer: boolean;
@@ -193,6 +199,7 @@ export interface BenchmarkRun {
     readonly stdinClosed: boolean;
     readonly temporaryConfigRoot: string;
     readonly temporaryHome: string;
+    readonly workspaceRoot: string;
   };
   readonly presentation: {
     readonly declaredMainLayerBudget: {
@@ -220,6 +227,7 @@ export interface BenchmarkRun {
       readonly canonicalByteDigest: string;
       readonly canonicalIdentityDigest: string;
       readonly commands: readonly BenchmarkCommandRecord[];
+      readonly digestsCapturedAtMonotonicMilliseconds: number;
       readonly id: string;
       readonly observationIdentityDigest: string;
       readonly ordinal: number;
@@ -326,6 +334,13 @@ function hasUnpairedSurrogate(value: string): boolean {
   return false;
 }
 
+const utf8Encoder = new TextEncoder();
+
+export const maximumSourceScopePatternUtf8Bytes = 1_024;
+export const maximumSourceScopePatternSegments = 64;
+export const maximumSourceScopeCandidatePathUtf8Bytes = 4_096;
+export const maximumSourceScopeCandidatePathSegments = 256;
+
 export function isStrictPortableWorkspaceDescendant(value: string): boolean {
   if (
     value.length === 0 ||
@@ -362,6 +377,117 @@ export function strictPortablePathsOverlapConservatively(left: string, right: st
   );
 }
 
+export function strictPortablePathIsEqualOrDescendantConservatively(
+  candidate: string,
+  root: string,
+): boolean {
+  const comparableCandidate = candidate.toLowerCase();
+  const comparableRoot = root.toLowerCase();
+  return (
+    comparableCandidate === comparableRoot || comparableCandidate.startsWith(`${comparableRoot}/`)
+  );
+}
+
+export function isValidSourceScopePattern(value: string): boolean {
+  if (
+    value.length === 0 ||
+    value.length > maximumSourceScopePatternUtf8Bytes ||
+    utf8Encoder.encode(value).byteLength > maximumSourceScopePatternUtf8Bytes ||
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("\\") ||
+    value.includes("//") ||
+    /^[A-Za-z]:/.test(value) ||
+    /[\u0000-\u001f?\[\]{}!]/.test(value) ||
+    hasUnpairedSurrogate(value)
+  ) {
+    return false;
+  }
+  const segments = value.split("/");
+  if (segments.length > maximumSourceScopePatternSegments) return false;
+  return segments.every((segment) => {
+    if (segment === "." || segment === "..") return false;
+    if (segment === "**") return true;
+    return !segment.includes("**");
+  });
+}
+
+export function sourceScopePatternLiteralPrefix(value: string): string | undefined {
+  if (!isValidSourceScopePattern(value)) return undefined;
+  const literalSegments: string[] = [];
+  for (const segment of value.split("/")) {
+    if (segment.includes("*")) break;
+    literalSegments.push(segment);
+  }
+  return literalSegments.length === 0 ? undefined : literalSegments.join("/");
+}
+
+function sourceScopeSegmentMatches(pattern: string, value: string): boolean {
+  let patternIndex = 0;
+  let valueIndex = 0;
+  let wildcardIndex = -1;
+  let wildcardValueIndex = -1;
+  while (valueIndex < value.length) {
+    if (patternIndex < pattern.length && pattern[patternIndex] === value[valueIndex]) {
+      patternIndex += 1;
+      valueIndex += 1;
+    } else if (patternIndex < pattern.length && pattern[patternIndex] === "*") {
+      wildcardIndex = patternIndex;
+      wildcardValueIndex = valueIndex;
+      patternIndex += 1;
+    } else if (wildcardIndex >= 0) {
+      patternIndex = wildcardIndex + 1;
+      wildcardValueIndex += 1;
+      valueIndex = wildcardValueIndex;
+    } else {
+      return false;
+    }
+  }
+  while (pattern[patternIndex] === "*") patternIndex += 1;
+  return patternIndex === pattern.length;
+}
+
+export function sourceScopePatternMatches(pattern: string, candidatePath: string): boolean {
+  if (!isValidSourceScopePattern(pattern)) return false;
+  if (
+    candidatePath.length === 0 ||
+    candidatePath.length > maximumSourceScopeCandidatePathUtf8Bytes ||
+    utf8Encoder.encode(candidatePath).byteLength > maximumSourceScopeCandidatePathUtf8Bytes ||
+    candidatePath.startsWith("/") ||
+    candidatePath.endsWith("/") ||
+    candidatePath.includes("//") ||
+    candidatePath.includes("\0") ||
+    hasUnpairedSurrogate(candidatePath)
+  ) {
+    return false;
+  }
+  const pathSegments = candidatePath.split("/");
+  if (pathSegments.length > maximumSourceScopeCandidatePathSegments) return false;
+  const patternSegments = pattern.split("/");
+  const memo = new Map<string, boolean>();
+  const matches = (patternIndex: number, pathIndex: number): boolean => {
+    const key = `${patternIndex}:${pathIndex}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    let result: boolean;
+    if (patternIndex === patternSegments.length) {
+      result = pathIndex === pathSegments.length;
+    } else if (patternSegments[patternIndex] === "**") {
+      result =
+        matches(patternIndex + 1, pathIndex) ||
+        (pathIndex < pathSegments.length && matches(patternIndex, pathIndex + 1));
+    } else {
+      result =
+        pathIndex < pathSegments.length &&
+        sourceScopeSegmentMatches(patternSegments[patternIndex]!, pathSegments[pathIndex]!) &&
+        matches(patternIndex + 1, pathIndex + 1);
+    }
+    memo.set(key, result);
+    return result;
+  };
+  return matches(0, 0);
+}
+
 export function createBenchmarkStringArrayDigest(values: readonly string[]): string {
   return createHash("sha256").update(JSON.stringify(values)).digest("hex");
 }
@@ -373,6 +499,19 @@ function commandRecord(
 ): BenchmarkCommandRecord {
   const command = record(value, location, code);
   stringArray(command.argv, `${location}.argv`, code);
+  nonnegativeNumber(
+    command.completedAtMonotonicMilliseconds,
+    `${location}.completedAtMonotonicMilliseconds`,
+    code,
+  );
+  nonnegativeNumber(
+    command.startedAtMonotonicMilliseconds,
+    `${location}.startedAtMonotonicMilliseconds`,
+    code,
+  );
+  string(command.effectiveConfigRoot, `${location}.effectiveConfigRoot`, code);
+  string(command.effectiveHome, `${location}.effectiveHome`, code);
+  string(command.workingDirectory, `${location}.workingDirectory`, code);
   if (typeof command.exitCode !== "number" || !Number.isSafeInteger(command.exitCode)) {
     throw new BenchmarkContractError(code, `${location}.exitCode must be a safe integer`);
   }
@@ -523,6 +662,33 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
         code,
         "audit protected source roots must be strict portable workspace descendants",
       );
+    }
+    for (const [kind, patterns] of [
+      ["included", included],
+      ["excluded", excluded],
+    ] as const) {
+      for (const pattern of patterns) {
+        if (!isValidSourceScopePattern(pattern)) {
+          throw new BenchmarkContractError(
+            code,
+            `audit.project.sourceScopes[${index}].${kind} contains invalid pattern ${JSON.stringify(pattern)}`,
+          );
+        }
+      }
+    }
+    for (const pattern of included) {
+      const prefix = sourceScopePatternLiteralPrefix(pattern);
+      if (
+        prefix === undefined ||
+        !protectedRoots.some((root) =>
+          strictPortablePathIsEqualOrDescendantConservatively(prefix, root),
+        )
+      ) {
+        throw new BenchmarkContractError(
+          code,
+          `audit.project.sourceScopes[${index}].included pattern ${JSON.stringify(pattern)} is not covered by a protected root`,
+        );
+      }
     }
     auditedInputPaths.push(...protectedRoots);
     const pathCount = nonnegativeNumber(
@@ -843,6 +1009,7 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   sha256(execution.sourceAfterSha256, "run.execution.sourceAfterSha256", code);
   string(execution.temporaryHome, "run.execution.temporaryHome", code);
   string(execution.temporaryConfigRoot, "run.execution.temporaryConfigRoot", code);
+  string(execution.workspaceRoot, "run.execution.workspaceRoot", code);
   for (const field of ["gromaOwnedOutputPaths", "sourceHashExcludedPaths"] as const) {
     const paths = stringArray(execution[field], `run.execution.${field}`, code);
     unique(paths, `run.execution.${field}`, code);
@@ -943,6 +1110,11 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
     const rescan = record(item, `run.repeatability.rescans[${index}]`, code);
     string(rescan.id, `run.repeatability.rescans[${index}].id`, code);
     nonnegativeNumber(rescan.ordinal, `run.repeatability.rescans[${index}].ordinal`, code);
+    nonnegativeNumber(
+      rescan.digestsCapturedAtMonotonicMilliseconds,
+      `run.repeatability.rescans[${index}].digestsCapturedAtMonotonicMilliseconds`,
+      code,
+    );
     sha256(
       rescan.preparedSourceSnapshotSha256,
       `run.repeatability.rescans[${index}].preparedSourceSnapshotSha256`,
@@ -1003,6 +1175,11 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   }
 
   const comprehension = record(parsed.comprehension, "run.comprehension", code);
+  sha256(
+    comprehension.evaluatedMainLayerArtifactSha256,
+    "run.comprehension.evaluatedMainLayerArtifactSha256",
+    code,
+  );
   for (const field of [
     "evaluatorHadAgentAssistance",
     "evaluatorHadPriorProjectKnowledge",

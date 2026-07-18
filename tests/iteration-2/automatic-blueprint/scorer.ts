@@ -19,6 +19,8 @@ export const benchmarkFailureCodes = [
   "FIXTURE_SNAPSHOT_MISMATCH",
   "WORKFLOW_MISMATCH",
   "COMMAND_FAILED",
+  "COMMAND_EXECUTION_CONTEXT_MISMATCH",
+  "COMMAND_TIMING_INVALID",
   "NETWORK_ISOLATION_NOT_ENFORCED",
   "STDIN_NOT_CLOSED",
   "TEMPORARY_ENVIRONMENT_NOT_ISOLATED",
@@ -42,6 +44,8 @@ export const benchmarkFailureCodes = [
   "RESCAN_RECORDS_INCOMPLETE",
   "RESCAN_WORKFLOW_MISMATCH",
   "RESCAN_COMMAND_FAILED",
+  "RESCAN_EXECUTION_CONTEXT_MISMATCH",
+  "RESCAN_TIMING_INVALID",
   "RESCAN_INPUT_MISMATCH",
   "RAW_OBSERVATION_ORDER_CHANGED",
   "RAW_OBSERVATION_DIGEST_CHANGED",
@@ -54,6 +58,7 @@ export const benchmarkFailureCodes = [
   "UNCERTAINTY_NOT_VISIBLE",
   "UNCERTAINTY_COLOR_ONLY",
   "COMPREHENSION_NOT_UNAIDED",
+  "COMPREHENSION_ARTIFACT_MISMATCH",
   "COMPREHENSION_INCOMPLETE",
   "COMPREHENSION_CRITICAL_MISUNDERSTANDING",
 ] as const;
@@ -106,20 +111,6 @@ function isSorted(values: readonly string[]): boolean {
   return values.every((value, index) => index === 0 || compareUtf8(values[index - 1]!, value) < 0);
 }
 
-function pathsOverlap(
-  left: string,
-  right: string,
-  convention: BenchmarkRun["execution"]["pathConvention"],
-): boolean {
-  const comparableLeft = convention === "win32" ? left.toLowerCase() : left;
-  const comparableRight = convention === "win32" ? right.toLowerCase() : right;
-  return (
-    comparableLeft === comparableRight ||
-    comparableLeft.startsWith(`${comparableRight}/`) ||
-    comparableRight.startsWith(`${comparableLeft}/`)
-  );
-}
-
 function temporaryRootsOverlap(
   left: string,
   right: string,
@@ -141,43 +132,115 @@ function temporaryRootsOverlap(
   );
 }
 
+function hasUnsupportedWin32NamespacePrefix(value: string): boolean {
+  return /^\\\\[?.]\\/.test(value);
+}
+
 function temporaryRootsAreIsolated(run: BenchmarkRun): boolean {
   const { pathConvention, temporaryConfigRoot, temporaryHome } = run.execution;
-  if (pathConvention === "posix") {
-    const valid = (value: string) =>
+  return (
+    absoluteRootIsNormalized(temporaryHome, pathConvention) &&
+    absoluteRootIsNormalized(temporaryConfigRoot, pathConvention) &&
+    !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
+  );
+}
+
+function absoluteRootIsNormalized(
+  value: string,
+  convention: BenchmarkRun["execution"]["pathConvention"],
+): boolean {
+  if (convention === "posix") {
+    return (
       path.posix.isAbsolute(value) &&
       value !== path.posix.parse(value).root &&
       path.posix.normalize(value) === value &&
-      !value.includes("\\");
-    return (
-      valid(temporaryHome) &&
-      valid(temporaryConfigRoot) &&
-      !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
+      !value.includes("\\")
     );
   }
+  const root = path.win32.parse(value).root;
   const reservedWindowsRootSegment =
     /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
-  const valid = (value: string) => {
-    const root = path.win32.parse(value).root;
-    const segments = value.slice(root.length).split("\\").filter(Boolean);
-    return (
-      path.win32.isAbsolute(value) &&
-      value.toLowerCase() !== root.toLowerCase() &&
-      path.win32.normalize(value) === value &&
-      segments.every(
-        (segment) =>
-          !segment.endsWith(".") &&
-          !segment.endsWith(" ") &&
-          !/[\u0000-\u001f<>:"|?*]/.test(segment) &&
-          !reservedWindowsRootSegment.test(segment),
-      )
-    );
-  };
+  const segments = value.slice(root.length).split("\\").filter(Boolean);
   return (
-    valid(temporaryHome) &&
-    valid(temporaryConfigRoot) &&
-    !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention)
+    !hasUnsupportedWin32NamespacePrefix(value) &&
+    path.win32.isAbsolute(value) &&
+    value.toLowerCase() !== root.toLowerCase() &&
+    path.win32.normalize(value) === value &&
+    segments.every(
+      (segment) =>
+        !segment.endsWith(".") &&
+        !segment.endsWith(" ") &&
+        !/[\u0000-\u001f<>:"|?*]/.test(segment) &&
+        !reservedWindowsRootSegment.test(segment),
+    )
   );
+}
+
+function executionContextIsValid(run: BenchmarkRun): boolean {
+  const { pathConvention, temporaryConfigRoot, temporaryHome, workspaceRoot } = run.execution;
+  return (
+    absoluteRootIsNormalized(temporaryHome, pathConvention) &&
+    absoluteRootIsNormalized(temporaryConfigRoot, pathConvention) &&
+    absoluteRootIsNormalized(workspaceRoot, pathConvention) &&
+    !temporaryRootsOverlap(temporaryHome, temporaryConfigRoot, pathConvention) &&
+    !temporaryRootsOverlap(workspaceRoot, temporaryHome, pathConvention) &&
+    !temporaryRootsOverlap(workspaceRoot, temporaryConfigRoot, pathConvention)
+  );
+}
+
+function expectedCommandContext(run: BenchmarkRun): {
+  effectiveConfigRoot: string;
+  effectiveHome: string;
+  workingDirectory: string;
+} {
+  return {
+    effectiveConfigRoot: run.execution.temporaryConfigRoot,
+    effectiveHome: run.execution.temporaryHome,
+    workingDirectory: run.execution.workspaceRoot,
+  };
+}
+
+function commandContextProblems(
+  run: BenchmarkRun,
+  commands: readonly BenchmarkRun["execution"]["commands"][number][],
+  prefix: string,
+): string[] {
+  const expected = expectedCommandContext(run);
+  return commands.flatMap((command, index) =>
+    (["workingDirectory", "effectiveHome", "effectiveConfigRoot"] as const)
+      .filter((field) => command[field] !== expected[field])
+      .map(
+        (field) =>
+          `${prefix}command ${index + 1} ${field}: expected ${expected[field]}, received ${command[field]}`,
+      ),
+  );
+}
+
+function commandTimingProblems(
+  commands: readonly BenchmarkRun["execution"]["commands"][number][],
+  minimumStart: number,
+  maximum: number | undefined,
+  prefix: string,
+): string[] {
+  const problems: string[] = [];
+  let previousCompletion = minimumStart;
+  for (const [index, command] of commands.entries()) {
+    const started = command.startedAtMonotonicMilliseconds;
+    const completed = command.completedAtMonotonicMilliseconds;
+    if (started < previousCompletion) {
+      problems.push(
+        `${prefix}command ${index + 1} started ${started} before prior boundary ${previousCompletion}`,
+      );
+    }
+    if (completed < started) {
+      problems.push(`${prefix}command ${index + 1} completed ${completed} before start ${started}`);
+    }
+    if (maximum !== undefined && completed > maximum) {
+      problems.push(`${prefix}command ${index + 1} completed ${completed} after ${maximum}`);
+    }
+    previousCompletion = completed;
+  }
+  return problems;
 }
 
 export function createPreRunPlanCommitment(plan: BenchmarkRun["execution"]["preRunPlan"]): string {
@@ -335,10 +398,10 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     addFailure(failures, "FIXTURE_SNAPSHOT_MISMATCH", snapshotMismatches);
   }
   const observedWorkflow = commandLines(run);
-  if (
-    observedWorkflow.length !== benchmarkWorkflow.length ||
-    !observedWorkflow.every((argv, index) => sameArray(argv, benchmarkWorkflow[index] ?? []))
-  ) {
+  const initialWorkflowMatches =
+    observedWorkflow.length === benchmarkWorkflow.length &&
+    observedWorkflow.every((argv, index) => sameArray(argv, benchmarkWorkflow[index] ?? []));
+  if (!initialWorkflowMatches) {
     addFailure(
       failures,
       "WORKFLOW_MISMATCH",
@@ -357,11 +420,54 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     ]);
   }
   if (!run.execution.stdinClosed) addFailure(failures, "STDIN_NOT_CLOSED", ["stdin remained open"]);
-  if (!temporaryRootsAreIsolated(run)) {
+  const temporaryEnvironmentIsolated = temporaryRootsAreIsolated(run);
+  const globalExecutionContextValid = executionContextIsValid(run);
+  if (!temporaryEnvironmentIsolated) {
     addFailure(failures, "TEMPORARY_ENVIRONMENT_NOT_ISOLATED", [
       run.execution.temporaryHome,
       run.execution.temporaryConfigRoot,
     ]);
+  }
+  const initialContextProblems: string[] = [];
+  if (temporaryEnvironmentIsolated) {
+    if (!absoluteRootIsNormalized(run.execution.workspaceRoot, run.execution.pathConvention)) {
+      initialContextProblems.push(`invalid workspace root ${run.execution.workspaceRoot}`);
+    } else if (
+      temporaryRootsOverlap(
+        run.execution.workspaceRoot,
+        run.execution.temporaryHome,
+        run.execution.pathConvention,
+      ) ||
+      temporaryRootsOverlap(
+        run.execution.workspaceRoot,
+        run.execution.temporaryConfigRoot,
+        run.execution.pathConvention,
+      )
+    ) {
+      initialContextProblems.push("workspace, HOME, and config roots are not isolated");
+    }
+    if (initialWorkflowMatches) {
+      initialContextProblems.push(
+        ...commandContextProblems(run, run.execution.commands, "initial "),
+      );
+    }
+  }
+  if (initialContextProblems.length > 0) {
+    addFailure(failures, "COMMAND_EXECUTION_CONTEXT_MISMATCH", initialContextProblems);
+  }
+  const initialCommandContextValid =
+    globalExecutionContextValid && initialWorkflowMatches && initialContextProblems.length === 0;
+  const initialTimingProblems = initialWorkflowMatches
+    ? commandTimingProblems(
+        run.execution.commands,
+        run.execution.spawnedInitAtMonotonicMilliseconds,
+        run.execution.mainLayerFrozenAtMonotonicMilliseconds,
+        "initial ",
+      )
+    : [];
+  const initialCommandTimingValid = initialWorkflowMatches && initialTimingProblems.length === 0;
+  if (initialTimingProblems.length > 0) {
+    addFailure(failures, "COMMAND_TIMING_INVALID", initialTimingProblems);
   }
   const executionPaths = [
     ...run.execution.gromaOwnedOutputPaths,
@@ -385,14 +491,14 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     ...executionPaths.flatMap((outputPath) =>
       auditedInputPaths
         .filter((auditedInputPath) =>
-          pathsOverlap(outputPath, auditedInputPath, run.execution.pathConvention),
+          strictPortablePathsOverlapConservatively(outputPath, auditedInputPath),
         )
         .map((auditedInputPath) => `${outputPath}<->${auditedInputPath}`),
     ),
     ...plannedPaths.flatMap((outputPath) =>
       auditedInputPaths
         .filter((auditedInputPath) =>
-          pathsOverlap(outputPath, auditedInputPath, run.execution.preRunPlan.pathConvention),
+          strictPortablePathsOverlapConservatively(outputPath, auditedInputPath),
         )
         .map((auditedInputPath) => `${outputPath}<->${auditedInputPath}`),
     ),
@@ -609,6 +715,45 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (rescanWorkflowsMatch && failedRescanCommands.length > 0) {
     addFailure(failures, "RESCAN_COMMAND_FAILED", failedRescanCommands);
   }
+  const rescanContextProblems =
+    rescanWorkflowsMatch && globalExecutionContextValid
+      ? rescans.flatMap((rescan) => commandContextProblems(run, rescan.commands, `${rescan.id} `))
+      : [];
+  const rescanExecutionContextsMatch =
+    rescanWorkflowsMatch && globalExecutionContextValid && rescanContextProblems.length === 0;
+  if (rescanContextProblems.length > 0) {
+    addFailure(failures, "RESCAN_EXECUTION_CONTEXT_MISMATCH", rescanContextProblems);
+  }
+  const rescanTimingProblems: string[] = [];
+  if (rescanWorkflowsMatch) {
+    let chronologicalMinimum = run.execution.mainLayerFrozenAtMonotonicMilliseconds;
+    for (const rescan of rescans) {
+      rescanTimingProblems.push(
+        ...commandTimingProblems(rescan.commands, chronologicalMinimum, undefined, `${rescan.id} `),
+      );
+      const finalCommandCompletion =
+        rescan.commands.at(-1)?.completedAtMonotonicMilliseconds ?? chronologicalMinimum;
+      if (rescan.digestsCapturedAtMonotonicMilliseconds < finalCommandCompletion) {
+        rescanTimingProblems.push(
+          `${rescan.id} digests captured ${rescan.digestsCapturedAtMonotonicMilliseconds} before final command ${finalCommandCompletion}`,
+        );
+      }
+      if (rescan.digestsCapturedAtMonotonicMilliseconds < chronologicalMinimum) {
+        rescanTimingProblems.push(
+          `${rescan.id} digests captured ${rescan.digestsCapturedAtMonotonicMilliseconds} before prior boundary ${chronologicalMinimum}`,
+        );
+      }
+      chronologicalMinimum = Math.max(
+        chronologicalMinimum,
+        finalCommandCompletion,
+        rescan.digestsCapturedAtMonotonicMilliseconds,
+      );
+    }
+  }
+  const rescanTimingValid = rescanWorkflowsMatch && rescanTimingProblems.length === 0;
+  if (rescanTimingProblems.length > 0) {
+    addFailure(failures, "RESCAN_TIMING_INVALID", rescanTimingProblems);
+  }
   const mismatchedRescanInputs = rescans
     .filter(
       (rescan) =>
@@ -619,7 +764,11 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       (rescan) =>
         `${rescan.id}: expected ${audit.project.fixturePreparation.preparedSourceSnapshotSha256}, received ${rescan.preparedSourceSnapshotSha256}`,
     );
-  const rescanInputsMatch = rescanCommandsSuccessful && mismatchedRescanInputs.length === 0;
+  const rescanInputsMatch =
+    rescanCommandsSuccessful &&
+    rescanExecutionContextsMatch &&
+    rescanTimingValid &&
+    mismatchedRescanInputs.length === 0;
   if (rescanCommandsSuccessful && mismatchedRescanInputs.length > 0) {
     addFailure(failures, "RESCAN_INPUT_MISMATCH", mismatchedRescanInputs);
   }
@@ -717,6 +866,15 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (!comprehensionUnaided) {
     addFailure(failures, "COMPREHENSION_NOT_UNAIDED", [...run.comprehension.materials]);
   }
+  const comprehensionArtifactMatches =
+    run.comprehension.evaluatedMainLayerArtifactSha256 ===
+    run.presentation.frozenMainLayer.artifactSha256;
+  if (!comprehensionArtifactMatches) {
+    addFailure(failures, "COMPREHENSION_ARTIFACT_MISMATCH", [
+      `evaluated ${run.comprehension.evaluatedMainLayerArtifactSha256}`,
+      `frozen ${run.presentation.frozenMainLayer.artifactSha256}`,
+    ]);
+  }
   const missingAnswers = requiredQuestionIds.filter(
     (id) =>
       !run.comprehension.answeredQuestionIds.includes(id) ||
@@ -760,7 +918,10 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
         exactNoncriticalAssessedClaims.length * 2,
     ),
     firstMinute:
-      firstMinuteMilliseconds >= 0 && firstMinuteMilliseconds <= maximumFirstMinuteMilliseconds
+      initialCommandTimingValid &&
+      initialCommandContextValid &&
+      firstMinuteMilliseconds >= 0 &&
+      firstMinuteMilliseconds <= maximumFirstMinuteMilliseconds
         ? 10
         : 0,
     observableFactCoverage: portion(
@@ -790,7 +951,9 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       (canonicalIdentityStable ? 5 : 0) +
       (canonicalBytesStable ? 5 : 0),
     unaidedComprehension:
-      comprehensionUnaided && run.comprehension.criticalMisunderstandings.length === 0
+      comprehensionUnaided &&
+      comprehensionArtifactMatches &&
+      run.comprehension.criticalMisunderstandings.length === 0
         ? portion(correctRequiredQuestions, requiredQuestionIds.length, 10)
         : 0,
   };

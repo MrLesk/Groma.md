@@ -53,9 +53,19 @@ binds the ordered fact objects. The combination distinguishes a representative s
 the complete scope used to derive the fact. This makes an audit reviewable without treating the
 current checkout or a self-updating golden as truth.
 
-Source-scope patterns use forward-slash Git paths, with `**` matching zero or more complete path
-segments. The inventory is every pinned-tree blob matched by an include and no exclusion, sorted in
-ascending UTF-8 byte order. `pathInventorySha256` hashes the UTF-8 bytes of that inventory's
+Source-scope patterns use relative forward-slash Git paths. Leading or trailing slashes, empty,
+`.` or `..` segments, backslashes, control characters, drive prefixes, `?`, brackets, braces, `!`,
+and escapes are invalid. `*` is the only within-segment wildcard; `**` is valid only as an entire
+segment and matches zero or more complete path segments. Matching is case-sensitive, so the
+contract has one meaning on every host. Patterns are limited to 1,024 UTF-8 bytes and 64 segments;
+candidate Git paths are limited to 4,096 UTF-8 bytes and 256 segments before dynamic-programming
+matching begins. The inventory is every pinned-tree blob matched by at least
+one include and no exclusion, deduplicated and sorted in ascending raw UTF-8 byte order.
+Every include pattern must have a literal directory prefix equal to or below a protected root under
+conservative case-insensitive portable comparison. Verification also proves every include-matched
+path, before exclusions, and every final inventory path is equal to or below a protected root. An
+exclusion therefore cannot hide source that the audit failed to protect.
+`pathInventorySha256` hashes the UTF-8 bytes of that inventory's
 whitespace-free JSON string array, using ECMAScript `JSON.stringify` string escaping with no
 replacer. Fact `derivation.resultSha256` uses the same encoding for the ordered `claim.objects`
 array; `createBenchmarkStringArrayDigest` is the executable reference helper. The stored counts and
@@ -74,6 +84,16 @@ audit ID by itself cannot accidentally score a different checkout.
 No declared preparation path may equal, contain, or be contained by a protected source root, fact
 witness, or forbidden-claim witness. Audit preparation uses conservative case-insensitive portable
 path comparison so a cleanup alias cannot delete scored evidence on another platform.
+
+Verification in CI uses checked-in, bounded Git object proofs rather than the current checkout, a
+sibling clone, the network, or the Git executable. Each proof contains the raw pinned commit object,
+every tree object reachable from its root tree, and only the unique blob contents referenced by
+audit witnesses. The verifier recomputes Git SHA-1 object IDs from the canonical
+`<type> <byte-length>\0<bytes>` framing, follows the commit's root tree through every subtree, and
+then checks witness path/OID/content/line-anchor bindings. Prepared manifests and source-scope
+inventories are recomputed from that same verified tree. Regular (`100644`), executable (`100755`),
+and symlink (`120000`) blobs participate; gitlinks (`160000`) do not. This is enough evidence for
+the committed claims without embedding either entire repository.
 
 The initial references are:
 
@@ -94,6 +114,10 @@ Refreshing an audit is a deliberate review event:
    prepared snapshot digest, and comprehension question;
 4. review the audit change independently from scanner output;
 5. never update expected facts from the scanner's own result.
+
+The exact local proof-regeneration command and explicit repository arguments are documented in the
+[benchmark test README](../tests/iteration-2/automatic-blueprint/README.md). Regeneration is a
+generation-time Git operation; ordinary verification remains offline and object-proof-only.
 
 ## Held-out reservation
 
@@ -126,12 +150,14 @@ record consumed by this benchmark and enforce these controls:
    convention, complete Groma-owned output inventory, identical source-hash exclusion inventory,
    and renderer-declared main-layer budget. Record its monotonic freeze time and SHA-256 commitment.
    Hash the prepared source before execution while excluding exactly the committed output inventory.
-4. Create distinct temporary `HOME` and configuration roots, close stdin for every command, and
-   deny network access at the OS or harness boundary. An application promise to stay offline is
-   not sufficient.
+4. Create a fresh workspace plus distinct temporary `HOME` and configuration roots, close stdin
+   for every command, and deny network access at the OS or harness boundary. An application promise
+   to stay offline is not sufficient.
 5. Start the monotonic timer immediately before spawning `groma init`. Invoke exactly
    `groma init`, `groma scan`, and `groma`, as separate commands and in that order. Preserve each
-   argument vector, exit code, stdout, and stderr.
+   argument vector, exit code, stdout, stderr, monotonic start and completion timestamps, working
+   directory, effective `HOME`, and effective configuration root. Every command must run in the
+   attested workspace with the exact isolated environment roots.
 6. Permit no AI call, helper inference, or human correction from the first spawn through scored
    output. The scanner remains blind to the audit and existing blueprint.
 7. Stop the timer only when the initial main layer emits a machine-observable frozen signal.
@@ -146,21 +172,32 @@ rename, delete, or edit fixture content based on the generated map.
 
 The one-minute interval is exact: from spawning `groma init` through the frozen initial main
 layer, at most `60,000` milliseconds. Setup before the spawn and human evaluation after the freeze
-do not count. A process failure cannot be hidden by a later artifact.
+do not count. Initial command timestamps use the same monotonic clock: the first start is at or
+after the recorded spawn, each completion is at or after its start, every later start is at or
+after the prior completion, and all completions are no later than the main-layer freeze. Invalid
+timing earns no first-minute points. A process failure cannot be hidden by a later artifact.
 
-The execution record declares whether host absolute temporary roots use POSIX or Win32 syntax.
-Both temporary roots must be normalized, absolute, non-root, and disjoint under the declared
-platform's comparison rules: neither root may equal, contain, or be contained by the other.
+The record describes finite command executions. A command that does not exit must be terminated by
+the harness's finite process timeout; the harness records its nonzero exit code, preserved streams,
+and completion timestamp. This process timeout is operational safety, not a second benchmark time
+gate.
+
+The execution record declares whether host absolute workspace and temporary roots use POSIX or
+Win32 syntax. All three roots must be normalized, absolute, non-root, and pairwise disjoint under
+the declared platform's comparison rules: no root may equal, contain, or be contained by another.
 Win32 comparison rejects path components ending in a dot or space and treats case and trailing
-separator aliases as the same path.
+separator aliases as the same path. Extended/device namespaces beginning `\\?\` or `\\.\` are
+rejected for all three roots rather than treated as an alternate spelling. An invalid global root
+context cannot earn first-minute, repeatability, or stable-identity points.
 Groma-owned output and exclusion paths use one portable syntax on every platform: sorted, exact,
 nonempty, forward-slash workspace descendants with no trailing slash, `.` or `..` segment, drive
 prefix, backslash, glob metacharacter, or other reserved filename character. Prefixes and globs do
 not stand in for exact inventory entries. Every fact and forbidden-claim witness is an audited input,
 as is every protected source root. Neither the committed nor recorded output inventory may equal,
-be an ancestor of, or be a descendant of any audited input under the declared platform's path
-comparison rules. This protects files such as `package.json` and `README.md`, evidence directories
-such as `scripts`, the production tree, and their Win32 case aliases from output exclusion.
+be an ancestor of, or be a descendant of any audited input under conservative case-insensitive
+portable comparison, regardless of the execution host. This protects files such as `package.json`
+and `README.md`, evidence directories such as `scripts`, the production tree, and case aliases from
+output exclusion.
 
 The plan commitment is SHA-256 over UTF-8 bytes of whitespace-free JSON with this exact key order:
 `gromaOwnedOutputPaths`, `pathConvention`, `preparedSourceSnapshotSha256`,
@@ -175,7 +212,8 @@ known.
 
 The runner performs at least two unchanged rescans from the exact prepared fixture. Each rescan is
 one ordered record with a unique ID and consecutive ordinal. It binds the prepared snapshot digest,
-the actual `groma scan` and `groma` argument vectors, exit codes, stdout, stderr, and the five
+the actual `groma scan` and `groma` argument vectors, exit codes, stdout, stderr, execution-context
+attestations, per-command start/completion timestamps, digest-capture timestamp, and the five
 digests produced by that same execution instance:
 
 - raw observation sequence ordering;
@@ -191,6 +229,13 @@ digest remain identical across the records. Combining these checks into one dige
 whether ordering, observed content, identity, or canonical serialization drifted, while five
 unattached digest arrays could falsely combine evidence from different executions. The contract
 therefore keeps the values separate but attached to one rescan instance.
+
+The first rescan command starts at or after the initial main-layer freeze. Each command completes at
+or after its start, every next command starts at or after the prior completion, each digest-capture
+timestamp is at or after its final command, and the next rescan starts at or after the prior capture.
+Rescans deliberately have no 60-second scoring deadline: they measure unchanged-input stability,
+while the one-minute constraint applies only to the first useful initial layer. The finite
+process-timeout rule still applies to a hung rescan command.
 
 Stable audit fact IDs do not satisfy the identity checks. The runner hashes the scanner and Groma
 identities actually emitted by the system under test.
@@ -245,6 +290,10 @@ are presentation checks only; budget and view state never enter canonical meanin
 After the artifact is frozen, an evaluator with no prior knowledge of the project answers the
 audit's predeclared questions. The evaluator receives only the frozen initial main layer: no agent,
 raw JSON, source tree, focus view, expansion, evidence panel, or prose explanation.
+
+The comprehension record includes the SHA-256 of the exact main-layer artifact shown to the
+evaluator. It must equal the frozen presentation artifact digest; otherwise the result earns no
+comprehension points even when the answers themselves are correct.
 
 All required questions must be answered correctly with no critical misunderstanding. Questions
 cover the major boundaries, their cross-boundary relationships, and the observable public

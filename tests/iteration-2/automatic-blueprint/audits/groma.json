@@ -12,7 +12,7 @@
       "method": "remove-declared-groma-state-v1",
       "preexistingGromaOwnedPaths": ["groma"],
       "preparedSourceSnapshotPathCount": 203,
-      "preparedSourceSnapshotSha256": "606066e22b59427c0ecc63f3668d26bb47e623145c9e211266de712909478838"
+      "preparedSourceSnapshotSha256": "f1df0bc46db363d82bdc8e6ccb3d2bcc3a75b5403c4f5189e3b31781ba778752"
     },
     "sourceScopes": [
       {

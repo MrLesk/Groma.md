@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 00:31'
+updated_date: '2026-07-18 01:51'
 labels: []
 milestone: m-3
 dependencies: []
@@ -14,11 +14,17 @@ references:
   - ARCHITECTURE.md
 modified_files:
   - docs/automatic-blueprint-benchmark.md
-  - tests/iteration-2/automatic-blueprint/contract.ts
-  - tests/iteration-2/automatic-blueprint/scorer.ts
-  - tests/iteration-2/automatic-blueprint/automatic-blueprint.test.ts
+  - tests/iteration-2/automatic-blueprint/README.md
   - tests/iteration-2/automatic-blueprint/audits/groma.json
   - tests/iteration-2/automatic-blueprint/audits/backlog-md-v1.48.0.json
+  - tests/iteration-2/automatic-blueprint/automatic-blueprint.test.ts
+  - tests/iteration-2/automatic-blueprint/contract.ts
+  - tests/iteration-2/automatic-blueprint/scorer.ts
+  - tests/iteration-2/automatic-blueprint/offline-proof.ts
+  - tests/iteration-2/automatic-blueprint/offline-proof.test.ts
+  - tests/iteration-2/automatic-blueprint/generate-offline-proofs.ts
+  - tests/iteration-2/automatic-blueprint/proofs/groma.json
+  - tests/iteration-2/automatic-blueprint/proofs/backlog-md-v1.48.0.json
 priority: high
 type: task
 ordinal: 31000
@@ -44,10 +50,12 @@ Turn the desired first-run experience into an evidence-based quality gate using 
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Define a versioned, format-neutral automatic-blueprint benchmark protocol for observable facts, conjunctive pass gates, offline first-minute execution, unaided main-layer comprehension, and deliberate audit refresh.
-2. Commit fresh immutable reference audits for Groma and Backlog.md at exact Git commit/tree snapshots, covering major boundaries, public actions, cross-boundary dependencies, Bun routes, documentation evidence, exclusions, and forbidden claims without importing curated intent.
-3. Add a verification-only parser and scorer with stable failure codes, preserving raw evidence for false claims, coverage, deterministic ordering, identity, provenance, time, presentation bounds, uncertainty visibility, and comprehension.
-4. Prove every gate independently with synthetic tests, validate both audits, and document the Backlog.md reservation policy so scanner-specific exceptions and tuning from scored results are prohibited.
-5. Run targeted tests, formatting, diff hygiene, Backlog integrity, and the full repository check; then complete independent spec and quality review before opening the one ready pull request.
+2. Maintain immutable reference audits for Groma and Backlog.md at exact Git commit/tree snapshots without importing curated intent.
+3. Keep the parser and scorer verification-only with stable failure codes, preserved raw evidence, deterministic identity, provenance, timing, presentation, and comprehension gates.
+4. Prove every gate independently and preserve the held-out reservation policy.
+5. Bind comprehension, command execution context/timing, and audit claims to the exact frozen artifact and checked-in offline Git object evidence.
+6. Recompute prepared and source-scope inventories from bounded raw objects with one strict portable glob grammar and deterministic regeneration.
+7. Close the final adversarial gaps: protected-root completeness, Win32 namespace aliases, global execution-context eligibility, command start-time causality, and executable glob/proof resource bounds; then replay proofs, run focused/full validation, and obtain an independent five-reproduction review.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -64,4 +72,10 @@ Accepted and applied three actionable Claude review cleanups without changing be
 Codex review remediation closed seven additional fail-open cases without expanding GROM-34 beyond verification-only benchmark scope. Benchmark runs now bind the audit ID to the exact repository, revision, tree, and an independently reproducible prepared-source manifest; pre-timer fixture preparation removes only declared pre-existing Groma-owned state and attests absence before init. Repeatability now records ordered unique rescan instances with the prepared input digest, exact scan/open command records, outcomes, raw output streams, and five same-instance digests; incomplete, failed, wrong-workflow, wrong-input, and drift cases have independent stable failures and cannot earn repeatability or identity points. Audited-input protection now covers every fact and forbidden-claim witness plus protected roots under POSIX and Win32 aliases. Exact critical forbidden text hard-fails in every emitted claim bucket, audit witnesses use one strict portable descendant validator, and Win32 temporary roots reject dot/space aliases while canonicalizing trailing separators for overlap. The protocol documents the exact preparation, timing, digest, overlap, and rescan rules. Recomputed prepared manifests from the immutable trees: Groma 203 paths / 606066e22b59427c0ecc63f3668d26bb47e623145c9e211266de712909478838; Backlog.md 1,053 paths / 90bfd9403212b68b47161a9bad874bf5ed78a5c9c00f0355392272c0308bc3b4. Reverified all 85 witness records against tree paths, blob OIDs, content SHA-256, and line bounds. Validation passed: targeted benchmark suite 27 tests / 229 assertions; typecheck; format check; git diff --check; backlog doctor; and full bun run check with 828 tests / 5,933 assertions plus build, standalone smoke, Iteration 1A, Iteration 1B foundation, and self-blueprint verification.
 
 Independent quality follow-up closed three further reproduced fail-open cases. Fixture preparation paths are now rejected at audit parse time and defensively at scoring time when a case-insensitive portable comparison finds equality, ancestry, or descendancy with a protected root, fact witness, or forbidden-claim witness. Claim-evidence source paths now use the strict portable workspace-descendant validator for both assessed and false claims; provenance-valid IDs are derived from structured observation/path evidence and must match the declared inventory, so detail-only false claims cannot self-attest provenance. Exact noncritical forbidden text emitted as an assessed claim now receives one two-point false-claim deduction without becoming a conjunctive failure, while critical behavior remains unchanged. Added protected-root, exact/nested witness cleanup, absolute/drive/backslash/traversal evidence, false-claim self-attestation, and noncritical assessed-claim regressions. Validation passed: targeted benchmark suite 32 tests / 251 assertions; typecheck; format check; git diff --check; backlog doctor; and full bun run check with 833 tests / 5,955 assertions plus build, standalone smoke, Iteration 1A, Iteration 1B foundation, and self-blueprint verification.
+
+Offline object-proof verification found and corrected one prepared-manifest constant: the earlier Groma digest hashed Git default quoted display paths for five Unicode em-dash milestone filenames. Independent NUL-delimited raw ls-tree verification preserves the 203-path count and yields f1df0bc46db363d82bdc8e6ccb3d2bcc3a75b5403c4f5189e3b31781ba778752 under the documented raw-UTF-8 path semantics. Backlog.md remains 1,053 paths / 90bfd9403212b68b47161a9bad874bf5ed78a5c9c00f0355392272c0308bc3b4; both source-scope inventories remain unchanged.
+
+Final review remediation binds comprehension to the exact frozen main-layer artifact; attests the initial and rescan working directory, effective HOME/config roots, command completion times, and rescan digest-capture chronology; validates a single strict portable source-scope glob grammar; and verifies every audit claim from bounded offline Git object proofs. The pure verifier reconstructs both pinned trees from canonical Git SHA-1 framing without Git, network, child processes, or sibling repositories during verification, checks all 85 witness references against exactly 33 unique blob contents, and independently recomputes prepared manifests and source-scope inventories. The explicit-path generator replayed byte-identically. Final validation passed: automatic-blueprint 48 tests / 380 assertions; full repository check 849 tests / 6,084 assertions; typecheck; formatting; architecture boundaries; build and standalone smoke; Iteration 1A/1B verification; git diff check; and backlog doctor. Independent D/F review found no actionable correctness or specification gaps.
+
+Final five-reproduction hardening closed protected-root completeness, Win32 namespace aliases, global execution-context eligibility, command start-time causality, and executable glob/proof resource ceilings. Static audit parsing now requires a bounded literal include prefix covered by a protected root; offline proof verification checks every include-matched path before exclusions and the final inventory. Output protection uses the same conservative case-insensitive portable segment comparison on POSIX and Win32, including a confirmed-unwitnessed in-scope case-alias regression. Win32 device namespaces are rejected for HOME, config, and workspace; all three roots must be normalized absolute non-root and pairwise disjoint before first-minute or stability points can be earned. Every command records a monotonic start and completion, with exact spawn, freeze, prior-command, digest-capture, and next-rescan causality. Source globs and candidate paths have pre-DP byte/segment bounds, including a 50,000-** preflight regression. Offline proofs share finite JSON, object-count, encoded/decoded, aggregate decoded, tree-depth, entry/path-count, and path-byte limits; the bounded file loader checks size before read and bytes before JSON.parse, while the generator validates both serialized proofs before either write. Proof regeneration remained byte-identical: Backlog.md 44ad9a2b6fc675a83651a198e3d912284c47f2f8491ddc30eff7184e426a1c0c; Groma c363bf5884b6ddb7679ba66636aa3941476eeb68a9e7ff73fbda79af9dd3dcdb. Final validation passed: automatic-blueprint 56 tests / 487 assertions; full repository 857 tests / 6,191 assertions; typecheck; formatting; architecture boundaries; git diff check; backlog doctor; build and standalone smoke; Iteration 1A/1B; and self-blueprint verification. The same independent reviewer reran all five original adversarial reproductions, found one POSIX case-alias output-protection mismatch, approved its conservative cross-platform fix, and reported no remaining actionable findings.
 <!-- SECTION:NOTES:END -->

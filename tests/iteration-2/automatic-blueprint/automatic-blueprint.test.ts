@@ -5,8 +5,14 @@ import {
   BenchmarkContractError,
   benchmarkSchemaVersion,
   createBenchmarkStringArrayDigest,
+  isValidSourceScopePattern,
+  maximumSourceScopeCandidatePathSegments,
+  maximumSourceScopeCandidatePathUtf8Bytes,
+  maximumSourceScopePatternSegments,
+  maximumSourceScopePatternUtf8Bytes,
   parseBenchmarkAudit,
   parseBenchmarkRun,
+  sourceScopePatternMatches,
   type BenchmarkAudit,
   type BenchmarkRun,
 } from "./contract.ts";
@@ -72,17 +78,23 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
       criticalMisunderstandings: [],
       evaluatorHadAgentAssistance: false,
       evaluatorHadPriorProjectKnowledge: false,
+      evaluatedMainLayerArtifactSha256: digestA,
       materials: ["frozen-initial-main-layer"],
       startedAfterFreeze: true,
       usedOnlyFrozenInitialMainLayer: true,
     },
     execution: {
       aiOrHelperInferenceUsed: false,
-      commands: benchmarkWorkflow.map((argv) => ({
+      commands: benchmarkWorkflow.map((argv, index) => ({
         argv: [...argv],
+        completedAtMonotonicMilliseconds: [5_000, 30_000, 50_000][index]!,
+        effectiveConfigRoot: "/tmp/groma-benchmark/config",
+        effectiveHome: "/tmp/groma-benchmark/home",
         exitCode: 0,
+        startedAtMonotonicMilliseconds: [1_000, 5_000, 30_000][index]!,
         stderr: "",
         stdout: `${argv.join(" ")} raw output`,
+        workingDirectory: "/tmp/groma-benchmark/workspace",
       })),
       fixturePreparation: {
         completedAtMonotonicMilliseconds: 250,
@@ -130,6 +142,7 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
       stdinClosed: true,
       temporaryConfigRoot: "/tmp/groma-benchmark/config",
       temporaryHome: "/tmp/groma-benchmark/home",
+      workspaceRoot: "/tmp/groma-benchmark/workspace",
     },
     presentation: {
       declaredMainLayerBudget: { nodes: 40, relationships: 80 },
@@ -153,12 +166,20 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
       rescans: [1, 2].map((ordinal) => ({
         canonicalByteDigest: digestA,
         canonicalIdentityDigest: digestA,
-        commands: benchmarkWorkflow.slice(1).map((argv) => ({
+        commands: benchmarkWorkflow.slice(1).map((argv, commandIndex) => ({
           argv: [...argv],
+          completedAtMonotonicMilliseconds:
+            ordinal === 1 ? [60_000, 70_000][commandIndex]! : [80_000, 90_000][commandIndex]!,
+          effectiveConfigRoot: "/tmp/groma-benchmark/config",
+          effectiveHome: "/tmp/groma-benchmark/home",
           exitCode: 0,
+          startedAtMonotonicMilliseconds:
+            ordinal === 1 ? [50_000, 60_000][commandIndex]! : [70_000, 80_000][commandIndex]!,
           stderr: "",
           stdout: `${argv.join(" ")} rescan ${ordinal} raw output`,
+          workingDirectory: "/tmp/groma-benchmark/workspace",
         })),
+        digestsCapturedAtMonotonicMilliseconds: ordinal === 1 ? 70_000 : 90_000,
         id: `rescan-${ordinal}`,
         observationIdentityDigest: digestA,
         ordinal,
@@ -180,6 +201,40 @@ function recommitPlan(run: Mutable<BenchmarkRun>): void {
   run.execution.preRunPlan.commitmentSha256 = createPreRunPlanCommitment(run.execution.preRunPlan);
 }
 
+function setExecutionContext(
+  run: Mutable<BenchmarkRun>,
+  values: {
+    configRoot: string;
+    home: string;
+    pathConvention: "posix" | "win32";
+    workspaceRoot: string;
+  },
+): void {
+  run.execution.pathConvention = values.pathConvention;
+  run.execution.preRunPlan.pathConvention = values.pathConvention;
+  run.execution.temporaryConfigRoot = values.configRoot;
+  run.execution.temporaryHome = values.home;
+  run.execution.workspaceRoot = values.workspaceRoot;
+  for (const command of [
+    ...run.execution.commands,
+    ...run.repeatability.rescans.flatMap((rescan) => rescan.commands),
+  ]) {
+    command.effectiveConfigRoot = values.configRoot;
+    command.effectiveHome = values.home;
+    command.workingDirectory = values.workspaceRoot;
+  }
+}
+
+function setWorkspaceRoot(run: Mutable<BenchmarkRun>, workspaceRoot: string): void {
+  run.execution.workspaceRoot = workspaceRoot;
+  for (const command of [
+    ...run.execution.commands,
+    ...run.repeatability.rescans.flatMap((rescan) => rescan.commands),
+  ]) {
+    command.workingDirectory = workspaceRoot;
+  }
+}
+
 function recordFalseClaim(run: Mutable<BenchmarkRun>, claimId: string): void {
   run.provenance.inScopeClaimIds.push(claimId);
   run.provenance.claimIdsWithValidWitnesses.push(claimId);
@@ -199,7 +254,7 @@ describe("automatic-blueprint reference audits", () => {
       preexistingGromaOwnedPaths: ["groma"],
       preparedSourceSnapshotPathCount: 203,
       preparedSourceSnapshotSha256:
-        "606066e22b59427c0ecc63f3668d26bb47e623145c9e211266de712909478838",
+        "f1df0bc46db363d82bdc8e6ccb3d2bcc3a75b5403c4f5189e3b31781ba778752",
     });
     expect(groma.project.sourceScopes).toEqual([
       {
@@ -346,6 +401,122 @@ describe("automatic-blueprint reference audits", () => {
       "INVALID_AUDIT: held-out audit reservation is not fail-closed",
     );
   });
+
+  test("uses one strict, case-sensitive source-scope glob grammar", async () => {
+    for (const pattern of [
+      "/src/**/*.ts",
+      "src/**/*.ts/",
+      "src//**/*.ts",
+      "src\\**\\*.ts",
+      "C:/src/**/*.ts",
+      "src/./*.ts",
+      "src/../*.ts",
+      "src/**foo/*.ts",
+      "src/foo**/*.ts",
+      "src/***/file.ts",
+      "src/??.ts",
+      "src/[ab].ts",
+      "src/{a,b}.ts",
+      "!src/a.ts",
+      "src/a\\*.ts",
+      `src/${String.fromCharCode(1)}.ts`,
+    ]) {
+      expect(isValidSourceScopePattern(pattern), pattern).toBeFalse();
+    }
+    for (const pattern of ["src/**/*.ts", "src/**/tests/**", "src/*.test.ts", "src/a*b.ts"]) {
+      expect(isValidSourceScopePattern(pattern), pattern).toBeTrue();
+    }
+    expect(sourceScopePatternMatches("src/**/*.ts", "src/index.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/**/*.ts", "src/host/index.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/**/tests/**", "src/tests/a.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/**/tests/**", "src/host/tests/deep/a.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/*.test.ts", "src/a.test.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/*.test.ts", "src/deep/a.test.ts")).toBeFalse();
+    expect(sourceScopePatternMatches("src/**/*.ts", "SRC/index.ts")).toBeFalse();
+    expect(sourceScopePatternMatches("src/**/*.ts", "src/raw\\name.ts")).toBeTrue();
+    expect(sourceScopePatternMatches("src/**/*.ts", "src/raw\nname.ts")).toBeTrue();
+
+    const audit = structuredClone(await loadAudit("groma.json")) as Mutable<BenchmarkAudit>;
+    audit.project.sourceScopes[0]!.included = ["src/**foo/*.ts"];
+    expect(() => parseBenchmarkAudit(audit)).toThrow("contains invalid pattern");
+  });
+
+  test("bounds source-scope glob work before matching", () => {
+    expect(isValidSourceScopePattern("a".repeat(maximumSourceScopePatternUtf8Bytes))).toBeTrue();
+    expect(
+      isValidSourceScopePattern("a".repeat(maximumSourceScopePatternUtf8Bytes + 1)),
+    ).toBeFalse();
+    expect(
+      isValidSourceScopePattern("é".repeat(maximumSourceScopePatternUtf8Bytes / 2)),
+    ).toBeTrue();
+    expect(
+      isValidSourceScopePattern("é".repeat(maximumSourceScopePatternUtf8Bytes / 2 + 1)),
+    ).toBeFalse();
+    expect(
+      isValidSourceScopePattern(
+        Array.from({ length: maximumSourceScopePatternSegments }, () => "a").join("/"),
+      ),
+    ).toBeTrue();
+    expect(
+      isValidSourceScopePattern(
+        Array.from({ length: maximumSourceScopePatternSegments + 1 }, () => "a").join("/"),
+      ),
+    ).toBeFalse();
+    expect(
+      sourceScopePatternMatches("*", "a".repeat(maximumSourceScopeCandidatePathUtf8Bytes)),
+    ).toBeTrue();
+    expect(
+      sourceScopePatternMatches("*", "a".repeat(maximumSourceScopeCandidatePathUtf8Bytes + 1)),
+    ).toBeFalse();
+    expect(
+      sourceScopePatternMatches("*", "é".repeat(maximumSourceScopeCandidatePathUtf8Bytes / 2)),
+    ).toBeTrue();
+    expect(
+      sourceScopePatternMatches("*", "é".repeat(maximumSourceScopeCandidatePathUtf8Bytes / 2 + 1)),
+    ).toBeFalse();
+    expect(
+      sourceScopePatternMatches(
+        "**",
+        Array.from({ length: maximumSourceScopeCandidatePathSegments }, () => "a").join("/"),
+      ),
+    ).toBeTrue();
+    expect(
+      sourceScopePatternMatches(
+        "**",
+        Array.from({ length: maximumSourceScopeCandidatePathSegments + 1 }, () => "a").join("/"),
+      ),
+    ).toBeFalse();
+    const adversarial = Array.from({ length: 50_000 }, () => "**").join("/");
+    expect(isValidSourceScopePattern(adversarial)).toBeFalse();
+    expect(sourceScopePatternMatches(adversarial, "src/index.ts")).toBeFalse();
+  });
+
+  test("requires include prefixes to remain inside protected roots", async () => {
+    const source = await loadAudit("groma.json");
+    for (const protectedRoots of [["lib"], ["src/host"], ["src/host/runtime"]]) {
+      const audit = structuredClone(source) as Mutable<BenchmarkAudit>;
+      audit.project.sourceScopes[0]!.protectedRoots = protectedRoots;
+      expect(() => parseBenchmarkAudit(audit), protectedRoots.join(",")).toThrow(
+        "is not covered by a protected root",
+      );
+    }
+
+    const noLiteralPrefix = structuredClone(source) as Mutable<BenchmarkAudit>;
+    noLiteralPrefix.project.sourceScopes[0]!.included = ["**/*.ts"];
+    expect(() => parseBenchmarkAudit(noLiteralPrefix)).toThrow(
+      "is not covered by a protected root",
+    );
+
+    const caseAlias = structuredClone(source) as Mutable<BenchmarkAudit>;
+    caseAlias.project.sourceScopes[0]!.protectedRoots = ["SRC"];
+    expect(parseBenchmarkAudit(caseAlias).project.sourceScopes[0]!.protectedRoots).toEqual(["SRC"]);
+
+    const nestedInclude = structuredClone(source) as Mutable<BenchmarkAudit>;
+    nestedInclude.project.sourceScopes[0]!.included = ["src/host/**/*.ts"];
+    expect(parseBenchmarkAudit(nestedInclude).project.sourceScopes[0]!.included).toEqual([
+      "src/host/**/*.ts",
+    ]);
+  });
 });
 
 describe("automatic-blueprint conjunctive scorecard", () => {
@@ -435,10 +606,12 @@ describe("automatic-blueprint conjunctive scorecard", () => {
   test("accepts isolated Win32 benchmark roots when the convention is explicit", async () => {
     const audit = await loadAudit("groma.json");
     const run = cloneRun(passingRun(audit));
-    run.execution.pathConvention = "win32";
-    run.execution.temporaryHome = "C:\\groma-benchmark\\home";
-    run.execution.temporaryConfigRoot = "C:\\groma-benchmark\\config";
-    run.execution.preRunPlan.pathConvention = "win32";
+    setExecutionContext(run, {
+      configRoot: "C:\\groma-benchmark\\config",
+      home: "C:\\groma-benchmark\\home",
+      pathConvention: "win32",
+      workspaceRoot: "C:\\groma-benchmark\\workspace",
+    });
     recommitPlan(run);
 
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).passed).toBeTrue();
@@ -471,10 +644,12 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     ).toEqual(["TEMPORARY_ENVIRONMENT_NOT_ISOLATED"]);
 
     const validTrailingRoot = cloneRun(passingRun(audit));
-    validTrailingRoot.execution.pathConvention = "win32";
-    validTrailingRoot.execution.temporaryHome = "C:\\groma-benchmark\\home\\";
-    validTrailingRoot.execution.temporaryConfigRoot = "C:\\groma-benchmark\\config";
-    validTrailingRoot.execution.preRunPlan.pathConvention = "win32";
+    setExecutionContext(validTrailingRoot, {
+      configRoot: "C:\\groma-benchmark\\config",
+      home: "C:\\groma-benchmark\\home\\",
+      pathConvention: "win32",
+      workspaceRoot: "C:\\groma-benchmark\\workspace",
+    });
     recommitPlan(validTrailingRoot);
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(validTrailingRoot)).passed).toBeTrue();
   });
@@ -487,6 +662,148 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures).toEqual([
       { code: "WORKFLOW_MISMATCH", evidence: ["no commands recorded"] },
     ]);
+  });
+
+  test("binds initial command execution to the attested workspace, HOME, and config roots", async () => {
+    const audit = await loadAudit("groma.json");
+    const mutations: ((run: Mutable<BenchmarkRun>) => void)[] = [
+      (run) => void (run.execution.commands[0]!.workingDirectory = "/tmp/other-workspace"),
+      (run) => void (run.execution.commands[1]!.effectiveHome = "/tmp/other-home"),
+      (run) => void (run.execution.commands[2]!.effectiveConfigRoot = "/tmp/other-config"),
+      (run) => setWorkspaceRoot(run, "/"),
+      (run) => setWorkspaceRoot(run, "/tmp/groma-benchmark/home/nested"),
+    ];
+    for (const mutate of mutations) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      expect(
+        scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures.map(({ code }) => code),
+      ).toEqual(["COMMAND_EXECUTION_CONTEXT_MISMATCH"]);
+    }
+
+    for (const workspaceRoot of [
+      "C:\\",
+      "C:\\groma-benchmark\\workspace.",
+      "c:\\GROMA-BENCHMARK\\HOME\\nested",
+    ]) {
+      const run = cloneRun(passingRun(audit));
+      setExecutionContext(run, {
+        configRoot: "C:\\groma-benchmark\\config",
+        home: "C:\\groma-benchmark\\home",
+        pathConvention: "win32",
+        workspaceRoot,
+      });
+      recommitPlan(run);
+      expect(
+        scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures.map(({ code }) => code),
+        workspaceRoot,
+      ).toEqual(["COMMAND_EXECUTION_CONTEXT_MISMATCH"]);
+    }
+  });
+
+  test("rejects Win32 device namespace aliases for every execution root", async () => {
+    const audit = await loadAudit("groma.json");
+    for (const namespace of ["\\\\?\\", "\\\\.\\"] as const) {
+      for (const field of ["home", "configRoot", "workspaceRoot"] as const) {
+        const run = cloneRun(passingRun(audit));
+        const values = {
+          configRoot: "C:\\groma-benchmark\\config",
+          home: "C:\\groma-benchmark\\home",
+          pathConvention: "win32" as const,
+          workspaceRoot: "C:\\groma-benchmark\\workspace",
+        };
+        values[field] = `${namespace}C:\\groma-benchmark\\${
+          field === "configRoot" ? "config" : field === "home" ? "home" : "workspace"
+        }`;
+        setExecutionContext(run, values);
+        recommitPlan(run);
+        const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+        expect(
+          result.failures.map(({ code }) => code),
+          `${namespace}:${field}`,
+        ).toEqual([
+          field === "workspaceRoot"
+            ? "COMMAND_EXECUTION_CONTEXT_MISMATCH"
+            : "TEMPORARY_ENVIRONMENT_NOT_ISOLATED",
+        ]);
+        expect(result.dimensions.firstMinute).toBe(0);
+        expect(result.dimensions.repeatability).toBe(0);
+        expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+      }
+    }
+  });
+
+  test("invalid global execution roots cannot earn stability points", async () => {
+    const audit = await loadAudit("groma.json");
+    const mutations: ((run: Mutable<BenchmarkRun>) => void)[] = [
+      (run) => void (run.execution.temporaryHome = "tmp/home"),
+      (run) => void (run.execution.temporaryConfigRoot = "/tmp/groma-benchmark/home/nested"),
+      (run) => setWorkspaceRoot(run, "/tmp/groma-benchmark/config/nested"),
+      (run) => {
+        setExecutionContext(run, {
+          configRoot: "c:\\groma-benchmark\\root",
+          home: "C:\\GROMA-BENCHMARK\\ROOT",
+          pathConvention: "win32",
+          workspaceRoot: "C:\\groma-benchmark\\workspace",
+        });
+        recommitPlan(run);
+      },
+    ];
+    for (const mutate of mutations) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(result.passed).toBeFalse();
+      expect(result.dimensions.firstMinute).toBe(0);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
+  });
+
+  test("requires causal initial command start and completion attestations", async () => {
+    const audit = await loadAudit("groma.json");
+    const mutations: ((run: Mutable<BenchmarkRun>) => void)[] = [
+      (run) => void (run.execution.commands[0]!.startedAtMonotonicMilliseconds = 999),
+      (run) => void (run.execution.commands[0]!.startedAtMonotonicMilliseconds = 5_001),
+      (run) => void (run.execution.commands[1]!.startedAtMonotonicMilliseconds = 4_999),
+      (run) => void (run.execution.commands[0]!.completedAtMonotonicMilliseconds = 999),
+      (run) => void (run.execution.commands[1]!.completedAtMonotonicMilliseconds = 4_999),
+      (run) => void (run.execution.commands[2]!.completedAtMonotonicMilliseconds = 50_001),
+    ];
+    for (const mutate of mutations) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(result.failures.map(({ code }) => code)).toEqual(["COMMAND_TIMING_INVALID"]);
+      expect(result.dimensions.firstMinute).toBe(0);
+    }
+
+    const negativeCompletion = cloneRun(passingRun(audit));
+    negativeCompletion.execution.commands[0]!.completedAtMonotonicMilliseconds = -1;
+    expect(() => parseBenchmarkRun(negativeCompletion)).toThrow(
+      "run.execution.commands[0].completedAtMonotonicMilliseconds must be a nonnegative safe integer",
+    );
+    const negativeStart = cloneRun(passingRun(audit));
+    negativeStart.execution.commands[0]!.startedAtMonotonicMilliseconds = -1;
+    expect(() => parseBenchmarkRun(negativeStart)).toThrow(
+      "run.execution.commands[0].startedAtMonotonicMilliseconds must be a nonnegative safe integer",
+    );
+  });
+
+  test("binds comprehension to the exact frozen presentation artifact", async () => {
+    const audit = await loadAudit("groma.json");
+    const run = cloneRun(passingRun(audit));
+    run.comprehension.evaluatedMainLayerArtifactSha256 = digestB;
+    const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+
+    expect(result.failures.map(({ code }) => code)).toEqual(["COMPREHENSION_ARTIFACT_MISMATCH"]);
+    expect(result.dimensions.unaidedComprehension).toBe(0);
+
+    const malformed = cloneRun(passingRun(audit));
+    malformed.comprehension.evaluatedMainLayerArtifactSha256 = "not-a-digest";
+    expect(() => parseBenchmarkRun(malformed)).toThrow(
+      "run.comprehension.evaluatedMainLayerArtifactSha256 must be a lowercase SHA-256 digest",
+    );
   });
 
   test("retains noncritical false-claim evidence without turning points into a compensating gate", async () => {
@@ -743,17 +1060,41 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     ).toEqual(["TEMPORARY_ENVIRONMENT_NOT_ISOLATED"]);
   });
 
-  test("protects source roots from case-aliasing Win32 output exclusions", async () => {
+  test("protects source roots from case-aliasing output exclusions on every host", async () => {
     const audit = await loadAudit("backlog-md-v1.48.0.json");
+    for (const pathConvention of ["posix", "win32"] as const) {
+      const run = cloneRun(passingRun(audit));
+      if (pathConvention === "win32") {
+        setExecutionContext(run, {
+          configRoot: "C:\\groma-benchmark\\config",
+          home: "C:\\groma-benchmark\\home",
+          pathConvention,
+          workspaceRoot: "C:\\groma-benchmark\\workspace",
+        });
+      }
+      run.execution.gromaOwnedOutputPaths = ["SRC"];
+      run.execution.sourceHashExcludedPaths = ["SRC"];
+      run.execution.preRunPlan.gromaOwnedOutputPaths = ["SRC"];
+      run.execution.preRunPlan.sourceHashExcludedPaths = ["SRC"];
+      recommitPlan(run);
+
+      expect(
+        scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures.map(({ code }) => code),
+        pathConvention,
+      ).toEqual(["SOURCE_OUTPUT_OVERLAPS_PROTECTED_SOURCE"]);
+    }
+  });
+
+  test("protects a case-aliased audit root from an unwitnessed in-scope output", async () => {
+    const source = structuredClone(await loadAudit("groma.json")) as Mutable<BenchmarkAudit>;
+    source.project.sourceScopes[0]!.protectedRoots = ["SRC"];
+    const audit = parseBenchmarkAudit(source);
     const run = cloneRun(passingRun(audit));
-    run.execution.pathConvention = "win32";
-    run.execution.temporaryHome = "C:\\groma-benchmark\\home";
-    run.execution.temporaryConfigRoot = "C:\\groma-benchmark\\config";
-    run.execution.gromaOwnedOutputPaths = ["SRC"];
-    run.execution.sourceHashExcludedPaths = ["SRC"];
-    run.execution.preRunPlan.pathConvention = "win32";
-    run.execution.preRunPlan.gromaOwnedOutputPaths = ["SRC"];
-    run.execution.preRunPlan.sourceHashExcludedPaths = ["SRC"];
+    const outputPath = "src/application/canonical-json-utf8.ts";
+    run.execution.gromaOwnedOutputPaths = [outputPath];
+    run.execution.sourceHashExcludedPaths = [outputPath];
+    run.execution.preRunPlan.gromaOwnedOutputPaths = [outputPath];
+    run.execution.preRunPlan.sourceHashExcludedPaths = [outputPath];
     recommitPlan(run);
 
     expect(
@@ -782,8 +1123,12 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       run.execution.preRunPlan.gromaOwnedOutputPaths = [outputPath];
       run.execution.preRunPlan.sourceHashExcludedPaths = [outputPath];
       if (pathConvention === "win32") {
-        run.execution.temporaryHome = "C:\\groma-benchmark\\home";
-        run.execution.temporaryConfigRoot = "C:\\groma-benchmark\\config";
+        setExecutionContext(run, {
+          configRoot: "C:\\groma-benchmark\\config",
+          home: "C:\\groma-benchmark\\home",
+          pathConvention: "win32",
+          workspaceRoot: "C:\\groma-benchmark\\workspace",
+        });
       }
       recommitPlan(run);
 
@@ -853,6 +1198,70 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     }
   });
 
+  test("binds every rescan command to the initial execution context", async () => {
+    const audit = await loadAudit("groma.json");
+    for (const mutate of [
+      (run: Mutable<BenchmarkRun>) =>
+        void (run.repeatability.rescans[0]!.commands[0]!.workingDirectory = "/tmp/other"),
+      (run: Mutable<BenchmarkRun>) =>
+        void (run.repeatability.rescans[0]!.commands[1]!.effectiveHome = "/tmp/other"),
+      (run: Mutable<BenchmarkRun>) =>
+        void (run.repeatability.rescans[1]!.commands[0]!.effectiveConfigRoot = "/tmp/other"),
+    ]) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(result.failures.map(({ code }) => code)).toEqual([
+        "RESCAN_EXECUTION_CONTEXT_MISMATCH",
+      ]);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
+  });
+
+  test("requires rescan chronology without imposing the first-minute deadline", async () => {
+    const audit = await loadAudit("groma.json");
+    const mutations: ((run: Mutable<BenchmarkRun>) => void)[] = [
+      (run) =>
+        void (run.repeatability.rescans[0]!.commands[0]!.startedAtMonotonicMilliseconds = 49_999),
+      (run) =>
+        void (run.repeatability.rescans[0]!.commands[1]!.startedAtMonotonicMilliseconds = 59_999),
+      (run) =>
+        void (run.repeatability.rescans[0]!.commands[0]!.completedAtMonotonicMilliseconds = 49_999),
+      (run) =>
+        void (run.repeatability.rescans[0]!.commands[1]!.completedAtMonotonicMilliseconds = 59_999),
+      (run) => void (run.repeatability.rescans[0]!.digestsCapturedAtMonotonicMilliseconds = 69_999),
+      (run) =>
+        void (run.repeatability.rescans[1]!.commands[0]!.completedAtMonotonicMilliseconds = 69_999),
+      (run) => {
+        run.repeatability.rescans[0]!.digestsCapturedAtMonotonicMilliseconds = 71_000;
+        run.repeatability.rescans[1]!.commands[0]!.startedAtMonotonicMilliseconds = 70_999;
+      },
+    ];
+    for (const mutate of mutations) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(result.failures.map(({ code }) => code)).toEqual(["RESCAN_TIMING_INVALID"]);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
+
+    const slowButFinite = cloneRun(passingRun(audit));
+    slowButFinite.repeatability.rescans[1]!.commands[0]!.startedAtMonotonicMilliseconds = 70_000;
+    slowButFinite.repeatability.rescans[1]!.commands[0]!.completedAtMonotonicMilliseconds = 5_000_000;
+    slowButFinite.repeatability.rescans[1]!.commands[1]!.startedAtMonotonicMilliseconds = 5_000_000;
+    slowButFinite.repeatability.rescans[1]!.commands[1]!.completedAtMonotonicMilliseconds = 6_000_000;
+    slowButFinite.repeatability.rescans[1]!.digestsCapturedAtMonotonicMilliseconds = 6_000_000;
+    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(slowButFinite)).passed).toBeTrue();
+
+    const negativeCapture = cloneRun(passingRun(audit));
+    negativeCapture.repeatability.rescans[0]!.digestsCapturedAtMonotonicMilliseconds = -1;
+    expect(() => parseBenchmarkRun(negativeCapture)).toThrow(
+      "run.repeatability.rescans[0].digestsCapturedAtMonotonicMilliseconds must be a nonnegative safe integer",
+    );
+  });
+
   test("breaks every pass gate independently and emits one stable failure code", async () => {
     const audit = await loadAudit("backlog-md-v1.48.0.json");
     const cases: readonly {
@@ -884,6 +1293,15 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         mutate: (run) => void (run.execution.commands[1]!.argv = ["groma", "inspect"]),
       },
       { code: "COMMAND_FAILED", mutate: (run) => void (run.execution.commands[1]!.exitCode = 1) },
+      {
+        code: "COMMAND_EXECUTION_CONTEXT_MISMATCH",
+        mutate: (run) =>
+          void (run.execution.commands[1]!.workingDirectory = "/tmp/other-workspace"),
+      },
+      {
+        code: "COMMAND_TIMING_INVALID",
+        mutate: (run) => void (run.execution.commands[0]!.completedAtMonotonicMilliseconds = 999),
+      },
       {
         code: "NETWORK_ISOLATION_NOT_ENFORCED",
         mutate: (run) => void (run.execution.networkIsolation.enforcedAtOsLevel = false),
@@ -969,9 +1387,13 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       },
       {
         code: "FIRST_MINUTE_EXCEEDED",
-        mutate: (run) =>
-          void (run.execution.mainLayerFrozenAtMonotonicMilliseconds =
-            run.execution.spawnedInitAtMonotonicMilliseconds + 60_001),
+        mutate: (run) => {
+          run.execution.mainLayerFrozenAtMonotonicMilliseconds =
+            run.execution.spawnedInitAtMonotonicMilliseconds + 60_001;
+          run.repeatability.rescans[0]!.commands[0]!.startedAtMonotonicMilliseconds = 61_001;
+          run.repeatability.rescans[0]!.commands[0]!.completedAtMonotonicMilliseconds = 62_000;
+          run.repeatability.rescans[0]!.commands[1]!.startedAtMonotonicMilliseconds = 62_000;
+        },
       },
       {
         code: "FALSE_CLAIM_FORBIDDEN_LINK_INVALID",
@@ -1025,6 +1447,16 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       {
         code: "RESCAN_COMMAND_FAILED",
         mutate: (run) => void (run.repeatability.rescans[1]!.commands[0]!.exitCode = 1),
+      },
+      {
+        code: "RESCAN_EXECUTION_CONTEXT_MISMATCH",
+        mutate: (run) =>
+          void (run.repeatability.rescans[1]!.commands[0]!.effectiveHome = "/tmp/other-home"),
+      },
+      {
+        code: "RESCAN_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.repeatability.rescans[1]!.digestsCapturedAtMonotonicMilliseconds = 89_999),
       },
       {
         code: "RESCAN_INPUT_MISMATCH",
@@ -1081,6 +1513,10 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       {
         code: "COMPREHENSION_NOT_UNAIDED",
         mutate: (run) => void (run.comprehension.evaluatorHadAgentAssistance = true),
+      },
+      {
+        code: "COMPREHENSION_ARTIFACT_MISMATCH",
+        mutate: (run) => void (run.comprehension.evaluatedMainLayerArtifactSha256 = digestB),
       },
       {
         code: "COMPREHENSION_INCOMPLETE",
