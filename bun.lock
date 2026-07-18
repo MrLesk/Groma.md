@@ -5,10 +5,10 @@
     "": {
       "name": "groma",
       "dependencies": {
+        "@babel/parser": "8.0.4",
         "yaml": "2.9.0",
       },
       "devDependencies": {
-        "@babel/parser": "8.0.4",
         "@types/bun": "1.3.14",
         "prettier": "3.9.5",
         "typescript": "7.0.2",
