@@ -233,6 +233,184 @@ describe("local project registry", () => {
     });
   });
 
+  test("captures mutable project requests before queued execution", async () => {
+    const context = await fixture();
+    for (const source of ["captured-add", "mutated-add", "captured-update", "mutated-update"]) {
+      await mkdir(path.join(context.workspaceRoot, source));
+    }
+    const enumeratedLocators: string[] = [];
+    let beforeNextRead: (() => Promise<void>) | undefined;
+    const base = forwardingResources(
+      context.resources,
+      context.resources.commitReplacement.bind(context.resources),
+    );
+    const resources = Object.freeze({
+      ...base,
+      enumerate: async (request: Parameters<LocalResourceProvider["enumerate"]>[0]) => {
+        enumeratedLocators.push(request.locator);
+        return await base.enumerate(request);
+      },
+      read: async (request: Parameters<LocalResourceProvider["read"]>[0]) => {
+        const pending = beforeNextRead;
+        beforeNextRead = undefined;
+        if (pending !== undefined) await pending();
+        return await base.read(request);
+      },
+    });
+    const registry = createLocalProjectRegistry({ entropy: bytes(90), resources });
+    const defaultProject = await registry.get({ id: "project.default" });
+    expect(defaultProject).toMatchObject({ ok: true, value: { id: "project.default" } });
+    if (!defaultProject.ok) throw new Error("Default project was not available");
+
+    const holdQueue = async () => {
+      const entered = deferred<void>();
+      const release = deferred<void>();
+      beforeNextRead = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const blocking = registry.get({ id: "project.default" });
+      await entered.promise;
+      return { blocking, release };
+    };
+
+    enumeratedLocators.length = 0;
+    const addQueue = await holdQueue();
+    const addRequest = {
+      coverage: [{ id: "captured", resourceRoot: "src" }],
+      name: "Captured add",
+      scanners: [
+        {
+          configuration: { nested: { enabled: true }, order: [1, 2] },
+          id: "official.captured",
+        },
+      ],
+      source: "captured-add",
+    };
+    const addedPromise = registry.add(addRequest);
+    addRequest.name = "Mutated add";
+    addRequest.source = "mutated-add";
+    addRequest.coverage[0]!.id = "mutated";
+    addRequest.coverage[0]!.resourceRoot = "changed";
+    addRequest.scanners[0]!.id = "official.mutated";
+    addRequest.scanners[0]!.configuration.nested.enabled = false;
+    addRequest.scanners[0]!.configuration.order[0] = 9;
+    addQueue.release.resolve();
+    expect(await addQueue.blocking).toMatchObject({ ok: true });
+    const added = await addedPromise;
+    const addedId = `project_${"5a".repeat(16)}`;
+    expect(added).toMatchObject({
+      ok: true,
+      value: {
+        availability: "available",
+        coverage: [{ id: "captured", resourceRoot: "src" }],
+        id: addedId,
+        name: "Captured add",
+        scanners: [
+          {
+            configuration: { nested: { enabled: true }, order: [1, 2] },
+            id: "official.captured",
+          },
+        ],
+        source: "captured-add",
+      },
+    });
+    expect(enumeratedLocators).toEqual([".", "captured-add"]);
+    if (!added.ok) throw new Error("Captured add request was not published");
+
+    enumeratedLocators.length = 0;
+    const getQueue = await holdQueue();
+    const getRequest = { id: addedId };
+    const gottenPromise = registry.get(getRequest);
+    getRequest.id = "project.default";
+    getQueue.release.resolve();
+    expect(await getQueue.blocking).toMatchObject({ ok: true });
+    expect(await gottenPromise).toMatchObject({
+      ok: true,
+      value: { id: addedId, name: "Captured add", source: "captured-add" },
+    });
+    expect(enumeratedLocators).toEqual([".", "captured-add"]);
+
+    enumeratedLocators.length = 0;
+    const updateQueue = await holdQueue();
+    const updateRequest = {
+      coverage: [{ id: "updated", resourceRoot: "source" }],
+      expectedRevision: added.value.revision,
+      id: addedId,
+      name: "Captured update",
+      scanners: [
+        {
+          configuration: { nested: { enabled: true }, order: [3, 4] },
+          id: "official.updated",
+        },
+      ],
+      source: "captured-update",
+    };
+    const updatedPromise = registry.update(updateRequest);
+    updateRequest.expectedRevision = defaultProject.value.revision;
+    updateRequest.id = "project.default";
+    updateRequest.name = "Mutated update";
+    updateRequest.source = "mutated-update";
+    updateRequest.coverage[0]!.id = "mutated";
+    updateRequest.coverage[0]!.resourceRoot = "changed";
+    updateRequest.scanners[0]!.id = "official.mutated";
+    updateRequest.scanners[0]!.configuration.nested.enabled = false;
+    updateRequest.scanners[0]!.configuration.order[0] = 9;
+    updateQueue.release.resolve();
+    expect(await updateQueue.blocking).toMatchObject({ ok: true });
+    const updated = await updatedPromise;
+    expect(updated).toMatchObject({
+      ok: true,
+      value: {
+        availability: "available",
+        coverage: [{ id: "updated", resourceRoot: "source" }],
+        id: addedId,
+        name: "Captured update",
+        scanners: [
+          {
+            configuration: { nested: { enabled: true }, order: [3, 4] },
+            id: "official.updated",
+          },
+        ],
+        source: "captured-update",
+      },
+    });
+    expect(enumeratedLocators).toEqual([".", "captured-update"]);
+    if (!updated.ok) throw new Error("Captured update request was not published");
+    expect(await registry.get({ id: addedId })).toMatchObject({
+      ok: true,
+      value: {
+        coverage: [{ id: "updated", resourceRoot: "source" }],
+        name: "Captured update",
+        revision: updated.value.revision,
+        scanners: [{ id: "official.updated" }],
+        source: "captured-update",
+      },
+    });
+
+    enumeratedLocators.length = 0;
+    const removeQueue = await holdQueue();
+    const removeRequest = { expectedRevision: updated.value.revision, id: addedId };
+    const removedPromise = registry.remove(removeRequest);
+    removeRequest.expectedRevision = defaultProject.value.revision;
+    removeRequest.id = "project.default";
+    removeQueue.release.resolve();
+    expect(await removeQueue.blocking).toMatchObject({ ok: true });
+    expect(await removedPromise).toEqual({
+      ok: true,
+      value: { removed: addedId, revision: updated.value.revision },
+    });
+    expect(enumeratedLocators).toEqual(["."]);
+    expect(await registry.get({ id: addedId })).toMatchObject({
+      diagnostics: [{ code: "project-not-found" }],
+      ok: false,
+    });
+    expect(await registry.get({ id: "project.default" })).toMatchObject({
+      ok: true,
+      value: { id: "project.default", revision: defaultProject.value.revision },
+    });
+  });
+
   test("derives bounded availability without exposing absolute paths or touching sources", async () => {
     const context = await fixture();
     for (const directory of ["empty", "one", "two", "large"]) {

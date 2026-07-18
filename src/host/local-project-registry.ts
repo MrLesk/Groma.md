@@ -941,9 +941,9 @@ export function createLocalProjectRegistry(
 
   const add = (
     request: AddProjectRegistrationRequest,
-  ): Promise<Result<ProjectRegistrationSnapshot>> =>
-    serialize(async () => {
-      const input = canonicalInput(request, "project.default");
+  ): Promise<Result<ProjectRegistrationSnapshot>> => {
+    const input = canonicalInput(request, "project.default");
+    return serialize(async () => {
       if (!input.ok) return failure(...input.diagnostics);
       let added: ConfiguredProjectRegistration | undefined;
       const written = await publish((current) => {
@@ -955,14 +955,19 @@ export function createLocalProjectRegistry(
         }
         const id = nextIdentity(current);
         if (!id.ok) return id;
-        const project = canonicalInput(request, id.value);
-        if (!project.ok) return project;
-        added = project.value;
+        const project = Object.freeze({
+          coverage: input.value.coverage,
+          id: id.value,
+          name: input.value.name,
+          scanners: input.value.scanners,
+          source: input.value.source,
+        });
+        added = project;
         return success(
           Object.freeze({
             ...current,
             projectRegistrations: Object.freeze(
-              [...projects(current), project.value].sort((left, right) =>
+              [...projects(current), project].sort((left, right) =>
                 compareCodeUnits(left.id, right.id),
               ),
             ),
@@ -986,12 +991,13 @@ export function createLocalProjectRegistry(
         ? success(await snapshot(added))
         : projectFailure("project-registry-operation-failed", "Project registry operation failed");
     });
+  };
 
   const get = (
     request: GetProjectRegistrationRequest,
-  ): Promise<Result<ProjectRegistrationSnapshot>> =>
-    serialize(async () => {
-      const id = canonicalGet(request);
+  ): Promise<Result<ProjectRegistrationSnapshot>> => {
+    const id = canonicalGet(request);
+    return serialize(async () => {
       if (!id.ok) return id;
       const current = await readConfiguration();
       if (!current.ok) return current;
@@ -1000,6 +1006,7 @@ export function createLocalProjectRegistry(
         ? projectFailure("project-not-found", "The requested project is not registered")
         : success(await snapshot(project));
     });
+  };
 
   const list = (): Promise<Result<readonly ProjectRegistrationSnapshot[]>> =>
     serialize(async () => {
@@ -1012,9 +1019,9 @@ export function createLocalProjectRegistry(
 
   const update = (
     request: UpdateProjectRegistrationRequest,
-  ): Promise<Result<ProjectRegistrationSnapshot>> =>
-    serialize(async () => {
-      const parsed = canonicalMutation(request, true);
+  ): Promise<Result<ProjectRegistrationSnapshot>> => {
+    const parsed = canonicalMutation(request, true);
+    return serialize(async () => {
       if (!parsed.ok) return failure(...parsed.diagnostics);
       if (parsed.value.project === undefined) {
         return projectFailure("invalid-project-request", "Project mutation request is malformed");
@@ -1043,12 +1050,13 @@ export function createLocalProjectRegistry(
       });
       return written.ok ? success(await snapshot(replacement)) : failure(...written.diagnostics);
     });
+  };
 
   const remove = (
     request: RemoveProjectRegistrationRequest,
-  ): Promise<Result<{ readonly removed: string; readonly revision: string }>> =>
-    serialize(async () => {
-      const parsed = canonicalMutation(request, false);
+  ): Promise<Result<{ readonly removed: string; readonly revision: string }>> => {
+    const parsed = canonicalMutation(request, false);
+    return serialize(async () => {
       if (!parsed.ok) return failure(...parsed.diagnostics);
       let removedRevision: string | undefined;
       const written = await publish((current) => {
@@ -1087,6 +1095,7 @@ export function createLocalProjectRegistry(
         ? success(Object.freeze({ removed: parsed.value.id, revision: removedRevision }))
         : projectFailure("project-registry-operation-failed", "Project registry operation failed");
     });
+  };
 
   return Object.freeze({ add, get, list, remove, update });
 }
