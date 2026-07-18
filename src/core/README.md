@@ -4,6 +4,61 @@ The graph kernel is model-neutral. Entity kinds and relation types are validated
 tokens supplied by model plugins; Core does not hard-code groups, components, or any
 other standard-model vocabulary.
 
+## Finite observation sessions
+
+`ObservationSession` is Core's technology-neutral boundary between a blind scanner and
+later reconciliation. Its exact API generation is `groma.observation/v1`. A Host begins
+one session by binding an immutable project ID, versioned source identity, epoch, and a
+finite set of source-resource scopes. Observation identity is only the tuple
+`(source, scope, key)`. Keys that use canonical `ent_` or `rel_` forms are rejected;
+scanners never choose canonical identities, aliases, or bindings.
+
+A bounded atomic batch may contribute any sparse subset of component candidates,
+inputs, outputs, actions, relationships, and raw documentation. A candidate may report
+only existence, key, and provenance. Component members likewise need not invent a name
+or description. Candidate metadata is bounded observed source text, not a prevalidated
+canonical Standard Model payload; reconciliation and model policy decide whether and
+how it becomes canonical component metadata. Scoped references may be forward or
+unresolved because a scanner's contribution is partial evidence, not a complete graph.
+Every record has nonempty
+fingerprinted resource provenance whose explicit scope matches the record and whose
+project-relative resource remains inside that scope's declared resource root.
+Optional provenance ranges use zero-based half-open byte offsets into the exact bytes
+named by that fingerprint; they are never character, UTF-16, or line positions.
+
+Exact replays are idempotent. Reusing one scoped key for different canonical evidence
+is a contradiction, including when the conflicting records occur in one batch. A
+rejected batch changes no record, batch, sequence, signal, or retained-character count.
+Accepted records are defensively copied and frozen; completed records, coverage, scopes,
+and provenance use locale-independent deterministic ordering.
+
+Sessions are finite in records, batches, signals, provenance entries, canonical
+characters, and all public string categories. Descriptor-only inspection reads only
+known fields and dense numeric array entries, so caller-owned accessors, proxies, extra
+keys, and key enumeration cannot become a second semantic path. Unknown fields never
+survive the owned canonical copy. Configured limits are also inspected as data
+descriptors rather than invoked through getters.
+`maxCanonicalCharacters` is the single authoritative canonical-character limit for an
+individual record and for all retained records cumulatively; Core does not derive a
+smaller hidden record ceiling from the individual text, token, or provenance bounds.
+
+The lifecycle is one-way: active sessions accept advancing batches and heartbeats, then
+complete, fail, cancel, or expire exactly once. Core never reads a wall clock. Expiry is
+an explicit Host decision naming the last heartbeat the Host observed. A final bounded
+signal is always reserved for termination. Every later signal receives the stable
+`observation-session-terminal` diagnostic before its body is inspected.
+
+Only successful completion creates an evidence snapshot. Completion reports exactly
+one `partial` or `complete` coverage entry for every declared scope, including a valid
+zero-record scan. Coverage is the scanner's declaration of which record kinds it
+inspected in that scope; it does not claim that a record of every listed kind was
+emitted. Missing emitted records become evidence of absence only through successful
+completion and later reconciliation semantics, never from the coverage list alone.
+Failed, cancelled, expired, and still-active sessions return
+`observation-session-incomplete`; they never turn missing contributions into evidence
+of absence. A bounded source-owned failure reason remains available in session
+inspection without leaking arbitrary thrown values.
+
 ## Phased plugin runtime
 
 `PluginRuntime` is Core's technology-neutral composition and lifecycle service. It
