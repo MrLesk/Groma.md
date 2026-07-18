@@ -603,18 +603,57 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     }
   });
 
-  test("accepts isolated Win32 benchmark roots when the convention is explicit", async () => {
+  test("accepts isolated drive-qualified and UNC Win32 benchmark roots", async () => {
     const audit = await loadAudit("groma.json");
-    const run = cloneRun(passingRun(audit));
-    setExecutionContext(run, {
-      configRoot: "C:\\groma-benchmark\\config",
-      home: "C:\\groma-benchmark\\home",
-      pathConvention: "win32",
-      workspaceRoot: "C:\\groma-benchmark\\workspace",
-    });
-    recommitPlan(run);
+    for (const roots of [
+      {
+        configRoot: "C:\\groma-benchmark\\config",
+        home: "C:\\groma-benchmark\\home",
+        workspaceRoot: "C:\\groma-benchmark\\workspace",
+      },
+      {
+        configRoot: "\\\\server\\groma-config\\root",
+        home: "\\\\server\\groma-home\\root",
+        workspaceRoot: "\\\\server\\groma-workspace\\root",
+      },
+    ]) {
+      const run = cloneRun(passingRun(audit));
+      setExecutionContext(run, { ...roots, pathConvention: "win32" });
+      recommitPlan(run);
 
-    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).passed).toBeTrue();
+      expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).passed, roots.home).toBeTrue();
+    }
+  });
+
+  test("rejects root-relative Win32 aliases for every execution root", async () => {
+    const audit = await loadAudit("groma.json");
+    for (const field of ["home", "configRoot", "workspaceRoot"] as const) {
+      const run = cloneRun(passingRun(audit));
+      const values = {
+        configRoot: "C:\\groma-benchmark\\config",
+        home: "C:\\groma-benchmark\\home",
+        pathConvention: "win32" as const,
+        workspaceRoot: "C:\\groma-benchmark\\workspace",
+      };
+      values[field] = `\\groma-benchmark\\${
+        field === "configRoot" ? "config" : field === "home" ? "home" : "workspace"
+      }`;
+      setExecutionContext(run, values);
+      recommitPlan(run);
+
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(
+        result.failures.map(({ code }) => code),
+        field,
+      ).toEqual([
+        field === "workspaceRoot"
+          ? "COMMAND_EXECUTION_CONTEXT_MISMATCH"
+          : "TEMPORARY_ENVIRONMENT_NOT_ISOLATED",
+      ]);
+      expect(result.dimensions.firstMinute).toBe(0);
+      expect(result.dimensions.repeatability).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes).toBe(0);
+    }
   });
 
   test("rejects Win32 dot, space, and trailing-separator temporary-root aliases", async () => {
@@ -662,6 +701,21 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(run)).failures).toEqual([
       { code: "WORKFLOW_MISMATCH", evidence: ["no commands recorded"] },
     ]);
+  });
+
+  test("failed initial commands cannot earn first-minute points", async () => {
+    const audit = await loadAudit("groma.json");
+    for (const index of [0, 1, 2]) {
+      const run = cloneRun(passingRun(audit));
+      run.execution.commands[index]!.exitCode = 1;
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+
+      expect(
+        result.failures.map(({ code }) => code),
+        String(index),
+      ).toEqual(["COMMAND_FAILED"]);
+      expect(result.dimensions.firstMinute, String(index)).toBe(0);
+    }
   });
 
   test("binds initial command execution to the attested workspace, HOME, and config roots", async () => {
@@ -804,6 +858,21 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(() => parseBenchmarkRun(malformed)).toThrow(
       "run.comprehension.evaluatedMainLayerArtifactSha256 must be a lowercase SHA-256 digest",
     );
+  });
+
+  test("scores only required questions that were both answered and correct", async () => {
+    const audit = await loadAudit("groma.json");
+    const partial = cloneRun(passingRun(audit));
+    partial.comprehension.answeredQuestionIds.pop();
+    const partialResult = scoreBenchmarkRun(audit, parseBenchmarkRun(partial));
+    expect(partialResult.failures.map(({ code }) => code)).toEqual(["COMPREHENSION_INCOMPLETE"]);
+    expect(partialResult.dimensions.unaidedComprehension).toBe(6.67);
+
+    const unanswered = cloneRun(passingRun(audit));
+    unanswered.comprehension.answeredQuestionIds = [];
+    const unansweredResult = scoreBenchmarkRun(audit, parseBenchmarkRun(unanswered));
+    expect(unansweredResult.failures.map(({ code }) => code)).toEqual(["COMPREHENSION_INCOMPLETE"]);
+    expect(unansweredResult.dimensions.unaidedComprehension).toBe(0);
   });
 
   test("retains noncritical false-claim evidence without turning points into a compensating gate", async () => {
@@ -1266,6 +1335,7 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     const audit = await loadAudit("backlog-md-v1.48.0.json");
     const cases: readonly {
       readonly code: BenchmarkFailureCode;
+      readonly dimensionExpectation?: readonly ["firstMinute" | "unaidedComprehension", number];
       readonly mutate: (run: Mutable<BenchmarkRun>) => void;
     }[] = [
       { code: "AUDIT_MISMATCH", mutate: (run) => void (run.auditId = "another-audit") },
@@ -1292,7 +1362,11 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         code: "WORKFLOW_MISMATCH",
         mutate: (run) => void (run.execution.commands[1]!.argv = ["groma", "inspect"]),
       },
-      { code: "COMMAND_FAILED", mutate: (run) => void (run.execution.commands[1]!.exitCode = 1) },
+      {
+        code: "COMMAND_FAILED",
+        dimensionExpectation: ["firstMinute", 0],
+        mutate: (run) => void (run.execution.commands[1]!.exitCode = 1),
+      },
       {
         code: "COMMAND_EXECUTION_CONTEXT_MISMATCH",
         mutate: (run) =>
@@ -1520,6 +1594,7 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       },
       {
         code: "COMPREHENSION_INCOMPLETE",
+        dimensionExpectation: ["unaidedComprehension", 6.67],
         mutate: (run) => void run.comprehension.correctQuestionIds.pop(),
       },
       {
@@ -1540,6 +1615,10 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         gate.code,
       ).toEqual([gate.code]);
       expect(result.failures[0]!.evidence.length, gate.code).toBeGreaterThan(0);
+      if (gate.dimensionExpectation !== undefined) {
+        const [dimension, expected] = gate.dimensionExpectation;
+        expect(result.dimensions[dimension], gate.code).toBe(expected);
+      }
     }
   });
 });

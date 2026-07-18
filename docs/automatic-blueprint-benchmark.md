@@ -175,7 +175,8 @@ layer, at most `60,000` milliseconds. Setup before the spawn and human evaluatio
 do not count. Initial command timestamps use the same monotonic clock: the first start is at or
 after the recorded spawn, each completion is at or after its start, every later start is at or
 after the prior completion, and all completions are no later than the main-layer freeze. Invalid
-timing earns no first-minute points. A process failure cannot be hidden by a later artifact.
+timing or any nonzero initial command exit earns no first-minute points. A process failure cannot be
+hidden by a later artifact.
 
 The record describes finite command executions. A command that does not exit must be terminated by
 the harness's finite process timeout; the harness records its nonzero exit code, preserved streams,
@@ -185,10 +186,13 @@ gate.
 The execution record declares whether host absolute workspace and temporary roots use POSIX or
 Win32 syntax. All three roots must be normalized, absolute, non-root, and pairwise disjoint under
 the declared platform's comparison rules: no root may equal, contain, or be contained by another.
-Win32 comparison rejects path components ending in a dot or space and treats case and trailing
-separator aliases as the same path. Extended/device namespaces beginning `\\?\` or `\\.\` are
-rejected for all three roots rather than treated as an alternate spelling. An invalid global root
-context cannot earn first-minute, repeatability, or stable-identity points.
+Win32 roots must be drive-qualified (`C:\...`) or normalized non-device UNC paths
+(`\\server\share\...`); current-drive root-relative paths such as `\workspace` are not stable
+absolute identities and are rejected. Win32 comparison rejects path components ending in a dot or
+space and treats case and trailing separator aliases as the same path. Extended/device namespaces
+beginning `\\?\` or `\\.\` are rejected for all three roots rather than treated as an alternate
+spelling. An invalid global root context cannot earn first-minute, repeatability, or stable-identity
+points.
 Groma-owned output and exclusion paths use one portable syntax on every platform: sorted, exact,
 nonempty, forward-slash workspace descendants with no trailing slash, `.` or `..` segment, drive
 prefix, backslash, glob metacharacter, or other reserved filename character. Prefixes and globs do
@@ -295,8 +299,9 @@ The comprehension record includes the SHA-256 of the exact main-layer artifact s
 evaluator. It must equal the frozen presentation artifact digest; otherwise the result earns no
 comprehension points even when the answers themselves are correct.
 
-All required questions must be answered correctly with no critical misunderstanding. Questions
-cover the major boundaries, their cross-boundary relationships, and the observable public
+Only required question IDs present in both the answered and correct inventories earn comprehension
+points. All required questions must be answered correctly with no critical misunderstanding.
+Questions cover the major boundaries, their cross-boundary relationships, and the observable public
 surfaces. The benchmark records the material shown, question IDs answered, correct IDs, and any
 critical misunderstanding. It does not collect or score invented architectural prose.
 

@@ -158,11 +158,13 @@ function absoluteRootIsNormalized(
     );
   }
   const root = path.win32.parse(value).root;
+  const hasQualifiedWin32Root = /^[A-Za-z]:\\/.test(value) || /^\\\\[^\\]+\\[^\\]+\\/.test(value);
   const reservedWindowsRootSegment =
     /^(?:aux|clock\$|con|conin\$|conout\$|nul|prn|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu;
   const segments = value.slice(root.length).split("\\").filter(Boolean);
   return (
     !hasUnsupportedWin32NamespacePrefix(value) &&
+    hasQualifiedWin32Root &&
     path.win32.isAbsolute(value) &&
     value.toLowerCase() !== root.toLowerCase() &&
     path.win32.normalize(value) === value &&
@@ -414,6 +416,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     .filter((command) => command.exitCode !== 0)
     .map((command) => `${command.argv.join(" ")} exited ${command.exitCode}: ${command.stderr}`);
   if (failedCommands.length > 0) addFailure(failures, "COMMAND_FAILED", failedCommands);
+  const initialCommandsSuccessful = initialWorkflowMatches && failedCommands.length === 0;
   if (!run.execution.networkIsolation.enforcedAtOsLevel) {
     addFailure(failures, "NETWORK_ISOLATION_NOT_ENFORCED", [
       run.execution.networkIsolation.mechanism,
@@ -904,8 +907,10 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   const provenanceCovered = run.provenance.inScopeClaimIds.filter((id) =>
     evidenceBackedClaimIds.includes(id),
   ).length;
-  const correctRequiredQuestions = requiredQuestionIds.filter((id) =>
-    run.comprehension.correctQuestionIds.includes(id),
+  const answeredCorrectRequiredQuestions = requiredQuestionIds.filter(
+    (id) =>
+      run.comprehension.answeredQuestionIds.includes(id) &&
+      run.comprehension.correctQuestionIds.includes(id),
   ).length;
   const dimensions = {
     falseClaims: Math.max(
@@ -918,6 +923,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
         exactNoncriticalAssessedClaims.length * 2,
     ),
     firstMinute:
+      initialCommandsSuccessful &&
       initialCommandTimingValid &&
       initialCommandContextValid &&
       firstMinuteMilliseconds >= 0 &&
@@ -954,7 +960,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       comprehensionUnaided &&
       comprehensionArtifactMatches &&
       run.comprehension.criticalMisunderstandings.length === 0
-        ? portion(correctRequiredQuestions, requiredQuestionIds.length, 10)
+        ? portion(answeredCorrectRequiredQuestions, requiredQuestionIds.length, 10)
         : 0,
   };
   const total =
