@@ -138,6 +138,8 @@ function copyGraphData(
   structuralBudget?: GraphDataStructuralBudget,
   sharedStructuralState?: GraphDataStructuralBudgetState,
   rootPath = "$",
+  ownedContainers?: WeakMap<object, CanonicalGraphDataCopy>,
+  reservedContainers?: WeakSet<object>,
 ): Result<CanonicalGraphDataCopy> {
   const activeContainers = new WeakSet<object>();
   const maximum = budget?.maximum ?? Number.POSITIVE_INFINITY;
@@ -212,6 +214,15 @@ function copyGraphData(
         path,
         `received ${typeof value}; expected null, boolean, finite number, string, array, or plain record`,
       );
+    }
+    if (reservedContainers?.has(value)) {
+      return unsupportedPayload(owner, path, "container aliases a reserved capture parent");
+    }
+    const owned = ownedContainers?.get(value);
+    if (owned !== undefined) {
+      return !emitCanonicalJson || owned.canonicalJson.length <= remaining
+        ? success(owned)
+        : tooLarge();
     }
     if (activeContainers.has(value)) {
       return unsupportedPayload(owner, path, "cyclic references are not supported");
@@ -303,7 +314,9 @@ function copyGraphData(
           if (available < 1) return tooLarge();
           canonicalJson += "]";
         }
-        return success({ canonicalJson, value: Object.freeze(copiedItems) });
+        const copied = { canonicalJson, value: Object.freeze(copiedItems) };
+        ownedContainers?.set(value, copied);
+        return success(copied);
       } finally {
         activeContainers.delete(value);
       }
@@ -391,7 +404,9 @@ function copyGraphData(
         if (available < 1) return tooLarge();
         canonicalJson += "}";
       }
-      return success({ canonicalJson, value: Object.freeze(copiedRecord) });
+      const copied = { canonicalJson, value: Object.freeze(copiedRecord) };
+      ownedContainers?.set(value, copied);
+      return success(copied);
     } finally {
       activeContainers.delete(value);
     }
@@ -421,6 +436,32 @@ export function copyCanonicalGraphData(
   structuralBudget?: GraphDataStructuralBudget,
 ): Result<CanonicalGraphDataCopy> {
   return copyGraphData(payload, owner, true, budget, structuralBudget);
+}
+
+/** Creates one bounded capture whose repeated caller containers reuse their first owned copy. */
+export function createCanonicalGraphDataCapturer(
+  reserved: readonly object[] = [],
+): (
+  payload: unknown,
+  owner: PayloadOwner,
+  budget?: CanonicalGraphDataBudget,
+  structuralBudget?: GraphDataStructuralBudget,
+) => Result<CanonicalGraphDataCopy> {
+  const ownedContainers = new WeakMap<object, CanonicalGraphDataCopy>();
+  const reservedContainers = new WeakSet<object>();
+  for (const container of reserved) reservedContainers.add(container);
+  return (payload, owner, budget, structuralBudget) =>
+    copyGraphData(
+      payload,
+      owner,
+      true,
+      budget,
+      structuralBudget,
+      undefined,
+      "$",
+      ownedContainers,
+      reservedContainers,
+    );
 }
 
 export function copyGraphPayload(

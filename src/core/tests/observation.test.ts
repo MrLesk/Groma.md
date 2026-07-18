@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createObservationSession,
+  observationSessionCheckpointApiVersion,
   observationSessionApiVersion,
+  restoreObservationSessionCheckpoint,
   type ObservationCoverage,
   type ObservationProvenance,
   type ObservationRecord,
   type ObservationSession,
   type ObservationSessionBegin,
+  type ObservationSessionCheckpoint,
   type Result,
 } from "../index.ts";
 
@@ -61,6 +64,32 @@ function session(scopes?: readonly string[]): ObservationSession {
 
 function codes(result: Result<unknown>): readonly string[] {
   return result.ok ? [] : result.diagnostics.map((item) => item.code);
+}
+
+function descriptorOnceGraph(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  const target: Record<PropertyKey, unknown> | unknown[] = Array.isArray(value)
+    ? []
+    : Object.create(Object.getPrototypeOf(value));
+  for (const key of Reflect.ownKeys(value)) {
+    if (Array.isArray(target) && key === "length") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !("value" in descriptor)) continue;
+    Object.defineProperty(target, key, {
+      configurable: true,
+      enumerable: descriptor.enumerable === true,
+      value: descriptorOnceGraph(descriptor.value),
+      writable: true,
+    });
+  }
+  const inspected = new Set<PropertyKey>();
+  return new Proxy(target, {
+    getOwnPropertyDescriptor(proxyTarget, key) {
+      if (inspected.has(key)) throw new Error(`descriptor ${String(key)} was inspected twice`);
+      inspected.add(key);
+      return Reflect.getOwnPropertyDescriptor(proxyTarget, key);
+    },
+  });
 }
 
 describe("finite observation sessions", () => {
@@ -681,5 +710,388 @@ describe("finite observation sessions", () => {
         }),
       ),
     ).toEqual(["invalid-observation-session"]);
+  });
+
+  test("checkpoints only accepted compact transitions and restores equivalent completed state", () => {
+    const observed = session();
+    const original = candidate("api") as Extract<
+      ObservationRecord,
+      { kind: "component-candidate" }
+    >;
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [original], sequence: 1 }));
+    (original.candidate as { name?: string }).name = "mutated after acceptance";
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 2 }));
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [], sequence: 3 }));
+    valueOf(observed.heartbeat({ epoch: "epoch-001", sequence: 4 }));
+    valueOf(observed.complete({ coverage: coverage(), epoch: "epoch-001", sequence: 5 }));
+
+    const checkpoint = observed.checkpoint();
+    expect(checkpoint.apiVersion).toBe(observationSessionCheckpointApiVersion);
+    expect(checkpoint.bounds).toEqual({
+      maxBatchRecords: 2_048,
+      maxBatches: 4_096,
+      maxCanonicalCharacters: 256 * 1024 * 1024,
+      maxCoverageEntries: 1_024,
+      maxProvenancePerRecord: 32,
+      maxRecords: 100_000,
+      maxResourceCharacters: 4_096,
+      maxScopes: 256,
+      maxSignals: 1_000_000,
+      maxTextCharacters: 65_536,
+      maxTokenCharacters: 256,
+    });
+    expect(
+      checkpoint.transitions
+        .filter((transition) => transition.type === "batch")
+        .map((transition) => transition.records.length),
+    ).toEqual([1, 0, 0]);
+    expect(
+      checkpoint.transitions[0]?.type === "batch"
+        ? (
+            checkpoint.transitions[0].records[0] as Extract<
+              ObservationRecord,
+              { kind: "component-candidate" }
+            >
+          ).candidate.name
+        : undefined,
+    ).toBe("api");
+    expect(Object.isFrozen(checkpoint)).toBeTrue();
+    expect(Object.isFrozen(checkpoint.transitions)).toBeTrue();
+
+    const restored = valueOf(restoreObservationSessionCheckpoint(checkpoint));
+    expect(restored.inspect()).toEqual(observed.inspect());
+    expect(valueOf(restored.snapshot())).toEqual(valueOf(observed.snapshot()));
+    expect(restored.checkpoint()).toEqual(checkpoint);
+  });
+
+  test("rejected calls never alter checkpoints and all incomplete terminal states replay", () => {
+    const contradictory = session();
+    valueOf(
+      contradictory.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 1 }),
+    );
+    const before = contradictory.checkpoint();
+    expect(
+      codes(
+        contradictory.submitBatch({
+          epoch: "epoch-001",
+          records: [candidate("api", "app", "different")],
+          sequence: 2,
+        }),
+      ),
+    ).toEqual(["contradictory-observation"]);
+    expect(contradictory.checkpoint()).toEqual(before);
+
+    const terminal = [
+      (() => {
+        const value = session();
+        valueOf(value.cancel({ epoch: "epoch-001", sequence: 1 }));
+        return value;
+      })(),
+      (() => {
+        const value = session();
+        valueOf(value.expire({ epoch: "epoch-001", heartbeatSequence: 0 }));
+        return value;
+      })(),
+      (() => {
+        const value = session();
+        valueOf(
+          value.fail({
+            epoch: "epoch-001",
+            reason: { code: "scanner-failed", message: "Scanner failed" },
+            sequence: 1,
+          }),
+        );
+        return value;
+      })(),
+    ];
+    for (const value of terminal) {
+      const restored = valueOf(restoreObservationSessionCheckpoint(value.checkpoint()));
+      expect(restored.inspect()).toEqual(value.inspect());
+      expect(codes(restored.snapshot())).toEqual(["observation-session-incomplete"]);
+    }
+  });
+
+  test("restoration rejects non-exact hostile envelopes and noncompact replay records", () => {
+    const observed = session();
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 1 }));
+    const checkpoint = observed.checkpoint();
+    const duplicate = structuredClone(checkpoint) as ObservationSessionCheckpoint;
+    (duplicate.transitions as unknown as Array<{ records: ObservationRecord[] }>).push({
+      records: [candidate("api")],
+      sequence: 2,
+      type: "batch",
+    } as never);
+    expect(codes(restoreObservationSessionCheckpoint(duplicate))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+
+    const extra = { ...checkpoint, unexpected: true } as ObservationSessionCheckpoint;
+    expect(codes(restoreObservationSessionCheckpoint(extra))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    const nested = structuredClone(checkpoint) as ObservationSessionCheckpoint;
+    (nested.begin.source as unknown as { unexpected: boolean }).unexpected = true;
+    expect(codes(restoreObservationSessionCheckpoint(nested))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    const nestedRecord = structuredClone(checkpoint) as ObservationSessionCheckpoint;
+    const firstTransition = nestedRecord.transitions[0];
+    if (firstTransition?.type !== "batch") throw new Error("expected batch fixture");
+    (firstTransition.records[0] as unknown as { unexpected: boolean }).unexpected = true;
+    expect(codes(restoreObservationSessionCheckpoint(nestedRecord))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    const extendedTransitions = structuredClone(checkpoint) as ObservationSessionCheckpoint;
+    (extendedTransitions.transitions as unknown as { unexpected: boolean }).unexpected = true;
+    expect(codes(restoreObservationSessionCheckpoint(extendedTransitions))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    const hostile = new Proxy(checkpoint, {
+      ownKeys() {
+        throw new Error("hostile checkpoint envelope");
+      },
+    });
+    expect(codes(restoreObservationSessionCheckpoint(hostile))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+  });
+
+  test("restoration captures hostile descriptor graphs once before ordinary semantic replay", () => {
+    const active = session();
+    valueOf(active.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 1 }));
+
+    const completed = session();
+    valueOf(completed.complete({ coverage: coverage(), epoch: "epoch-001", sequence: 1 }));
+
+    const failed = session();
+    valueOf(
+      failed.fail({
+        epoch: "epoch-001",
+        reason: { code: "scanner-failed", message: "Scanner failed" },
+        sequence: 1,
+      }),
+    );
+
+    for (const observed of [active, completed, failed]) {
+      const restored = valueOf(
+        restoreObservationSessionCheckpoint(descriptorOnceGraph(observed.checkpoint())),
+      );
+      expect(restored.checkpoint()).toEqual(observed.checkpoint());
+    }
+
+    const transitionTarget = structuredClone(active.checkpoint().transitions[0]!);
+    const remaining = new Set(Reflect.ownKeys(transitionTarget));
+    const revocable = Proxy.revocable(transitionTarget, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        remaining.delete(key);
+        if (remaining.size === 0) revocable.revoke();
+        return descriptor;
+      },
+    });
+    const checkpoint = structuredClone(active.checkpoint()) as unknown as {
+      transitions: unknown[];
+    };
+    checkpoint.transitions[0] = revocable.proxy;
+    expect(valueOf(restoreObservationSessionCheckpoint(checkpoint)).checkpoint()).toEqual(
+      active.checkpoint(),
+    );
+
+    const changingCoverage = structuredClone(
+      completed.checkpoint(),
+    ) as ObservationSessionCheckpoint;
+    const completion = changingCoverage.transitions[0];
+    if (completion?.type !== "complete") throw new Error("expected completion fixture");
+    const coverageTarget = completion.coverage[0]!;
+    let coverageStateReads = 0;
+    (completion.coverage as ObservationCoverage[])[0] = new Proxy(coverageTarget, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (key !== "state" || descriptor === undefined || !("value" in descriptor)) {
+          return descriptor;
+        }
+        coverageStateReads += 1;
+        return { ...descriptor, value: coverageStateReads === 1 ? "partial" : "complete" };
+      },
+    });
+    expect(
+      valueOf(restoreObservationSessionCheckpoint(changingCoverage)).checkpoint().transitions,
+    ).toEqual(completed.checkpoint().transitions);
+    expect(coverageStateReads).toBe(1);
+
+    const changingFailure = structuredClone(failed.checkpoint()) as ObservationSessionCheckpoint;
+    const failure = changingFailure.transitions[0];
+    if (failure?.type !== "fail") throw new Error("expected failure fixture");
+    const reasonTarget = failure.reason;
+    let failureMessageReads = 0;
+    (failure as { reason: typeof failure.reason }).reason = new Proxy(reasonTarget, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (key !== "message" || descriptor === undefined || !("value" in descriptor)) {
+          return descriptor;
+        }
+        failureMessageReads += 1;
+        return {
+          ...descriptor,
+          value: failureMessageReads === 1 ? "Scanner failed" : "Mutated after validation",
+        };
+      },
+    });
+    expect(valueOf(restoreObservationSessionCheckpoint(changingFailure)).checkpoint()).toEqual(
+      failed.checkpoint(),
+    );
+    expect(failureMessageReads).toBe(1);
+  });
+
+  test("restoration rejects replay mixtures, in-batch duplicates, and normalized terminal mutation", () => {
+    const observed = session();
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 1 }));
+
+    const mixed = structuredClone(observed.checkpoint()) as ObservationSessionCheckpoint;
+    (mixed.transitions as unknown as Array<unknown>).push({
+      records: [candidate("api"), candidate("worker")],
+      sequence: 2,
+      type: "batch",
+    });
+    expect(codes(restoreObservationSessionCheckpoint(mixed))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+
+    const duplicate = structuredClone(observed.checkpoint()) as ObservationSessionCheckpoint;
+    const first = duplicate.transitions[0];
+    if (first?.type !== "batch") throw new Error("expected batch fixture");
+    (first.records as ObservationRecord[]).push(candidate("api"));
+    expect(codes(restoreObservationSessionCheckpoint(duplicate))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+
+    const completed = session();
+    valueOf(completed.complete({ coverage: coverage(), epoch: "epoch-001", sequence: 1 }));
+    const reordered = structuredClone(completed.checkpoint()) as ObservationSessionCheckpoint;
+    const terminal = reordered.transitions[0];
+    if (terminal?.type !== "complete") throw new Error("expected completion fixture");
+    (terminal.coverage[0]!.kinds as ObservationRecord["kind"][]).reverse();
+    expect(codes(restoreObservationSessionCheckpoint(reordered))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+  });
+
+  test("restoration owns shared hostile containers once across batches and transitions", () => {
+    const timeSlicedRecord = () => {
+      const target = structuredClone(candidate("api"));
+      let keyReads = 0;
+      return {
+        reads: () => keyReads,
+        value: new Proxy(target, {
+          getOwnPropertyDescriptor(recordTarget, key) {
+            const descriptor = Reflect.getOwnPropertyDescriptor(recordTarget, key);
+            if (key !== "key" || descriptor === undefined || !("value" in descriptor)) {
+              return descriptor;
+            }
+            keyReads += 1;
+            return { ...descriptor, value: keyReads === 1 ? "api" : "worker" };
+          },
+        }),
+      };
+    };
+
+    const oneBatch = session();
+    valueOf(
+      oneBatch.submitBatch({
+        epoch: "epoch-001",
+        records: [candidate("api"), candidate("worker", "app", "api")],
+        sequence: 1,
+      }),
+    );
+    const withinBatch = structuredClone(oneBatch.checkpoint()) as ObservationSessionCheckpoint;
+    const withinTransition = withinBatch.transitions[0];
+    if (withinTransition?.type !== "batch") throw new Error("expected batch fixture");
+    const withinAlias = timeSlicedRecord();
+    (withinTransition.records as ObservationRecord[])[0] = withinAlias.value;
+    (withinTransition.records as ObservationRecord[])[1] = withinAlias.value;
+    expect(codes(restoreObservationSessionCheckpoint(withinBatch))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    expect(withinAlias.reads()).toBe(1);
+
+    const twoBatches = session();
+    valueOf(
+      twoBatches.submitBatch({ epoch: "epoch-001", records: [candidate("api")], sequence: 1 }),
+    );
+    valueOf(
+      twoBatches.submitBatch({
+        epoch: "epoch-001",
+        records: [candidate("worker", "app", "api")],
+        sequence: 2,
+      }),
+    );
+    const acrossTransitions = structuredClone(
+      twoBatches.checkpoint(),
+    ) as ObservationSessionCheckpoint;
+    const firstTransition = acrossTransitions.transitions[0];
+    const secondTransition = acrossTransitions.transitions[1];
+    if (firstTransition?.type !== "batch" || secondTransition?.type !== "batch") {
+      throw new Error("expected batch fixtures");
+    }
+    const acrossAlias = timeSlicedRecord();
+    (firstTransition.records as ObservationRecord[])[0] = acrossAlias.value;
+    (secondTransition.records as ObservationRecord[])[0] = acrossAlias.value;
+    expect(codes(restoreObservationSessionCheckpoint(acrossTransitions))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    expect(acrossAlias.reads()).toBe(1);
+
+    const aliasedParentBase = oneBatch.checkpoint();
+    const transitionTarget: unknown[] = [undefined];
+    let transitionIndexReads = 0;
+    let parentTransition: ObservationSessionCheckpoint["transitions"][number];
+    const transitionsProxy = new Proxy(transitionTarget, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (key !== "0" || descriptor === undefined || !("value" in descriptor)) {
+          return descriptor;
+        }
+        transitionIndexReads += 1;
+        return {
+          ...descriptor,
+          value: transitionIndexReads === 1 ? parentTransition : candidate("api"),
+        };
+      },
+    });
+    parentTransition = {
+      records: transitionsProxy as unknown as readonly ObservationRecord[],
+      sequence: 1,
+      type: "batch",
+    };
+    transitionTarget[0] = parentTransition;
+    const aliasedParent = {
+      ...aliasedParentBase,
+      transitions: transitionsProxy,
+    } as unknown as ObservationSessionCheckpoint;
+    expect(codes(restoreObservationSessionCheckpoint(aliasedParent))).toEqual([
+      "invalid-observation-checkpoint",
+    ]);
+    expect(transitionIndexReads).toBe(1);
+  });
+
+  test("restoration bounds hostile transition capture before semantic batch validation", () => {
+    const observed = valueOf(createObservationSession(begin(), { maxCanonicalCharacters: 256 }));
+    valueOf(observed.submitBatch({ epoch: "epoch-001", records: [], sequence: 1 }));
+    const oversized = structuredClone(observed.checkpoint()) as ObservationSessionCheckpoint;
+    const transition = oversized.transitions[0];
+    if (transition?.type !== "batch") throw new Error("expected batch fixture");
+    (transition.records as ObservationRecord[]).push({
+      content: "x".repeat(4_000_000),
+      format: "text",
+      key: "oversized",
+      kind: "documentation",
+      provenance: provenance(),
+      scope: "app",
+    });
+    const restored = restoreObservationSessionCheckpoint(oversized);
+    expect(codes(restored)).toEqual(["invalid-observation-checkpoint"]);
+    expect(restored.ok ? undefined : restored.diagnostics[0]?.details?.reason).toContain(
+      "could not be captured safely within its bounds",
+    );
   });
 });

@@ -42,6 +42,31 @@ descriptors rather than invoked through getters.
 individual record and for all retained records cumulatively; Core does not derive a
 smaller hidden record ceiling from the individual text, token, or provenance bounds.
 
+Every accepted transition also has a compact, immutable
+`groma.observation-checkpoint/v1` representation owned by Core. A checkpoint records the
+exact resolved bounds and canonical begin descriptor, followed by accepted transitions
+in signal order. A batch transition retains only records that were newly accepted by
+that call; exact replays and accepted empty batches remain as empty transitions so batch,
+signal, and sequence accounting can be reconstructed without storing duplicate evidence.
+Rejected calls do not change the checkpoint. Checkpoint capture uses only Core-owned
+copies produced during the original call and never returns to a caller batch, signal, or
+record after acceptance.
+
+Restoration treats the checkpoint as hostile input. Each hostile container is captured
+once into bounded, frozen canonical graph data; replay never returns to caller-owned
+descriptors or proxies. The envelope and transition variants have exact data-only
+shapes, while the ordinary begin, batch, heartbeat, completion, failure, cancellation,
+and expiry methods remain the single validators of nested meaning. Restoration never
+assigns live session state or trusts persisted counters. It requires the replayed
+checkpoint to equal the captured canonical checkpoint exactly, so normalized coverage,
+duplicate or previously accepted batch records, mixed replay/new batches, and nested
+extra data all fail restoration. Capture character, value-count, and depth budgets are
+derived from the checkpoint's resolved bounded profile before begin or transition data
+is copied. The resulting inspection and completed snapshot are the same deterministic
+Core values as the uninterrupted session. The checkpoint is technology-neutral recovery
+evidence: it contains no file locator, journal phase, handoff token, clock, process
+identity, canonical blueprint ID, reconciliation result, or presentation state.
+
 The lifecycle is one-way: active sessions accept advancing batches and heartbeats, then
 complete, fail, cancel, or expire exactly once. Core never reads a wall clock. Expiry is
 an explicit Host decision naming the last heartbeat the Host observed. A final bounded
