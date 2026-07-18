@@ -16,8 +16,11 @@ scanners never choose canonical identities, aliases, or bindings.
 A bounded atomic batch may contribute any sparse subset of component candidates,
 inputs, outputs, actions, relationships, and raw documentation. A candidate may report
 only existence, key, and provenance. Component members likewise need not invent a name
-or description. Scoped references may be forward or unresolved because a scanner's
-contribution is partial evidence, not a complete graph. Every record has nonempty
+or description. Candidate metadata is bounded observed source text, not a prevalidated
+canonical Standard Model payload; reconciliation and model policy decide whether and
+how it becomes canonical component metadata. Scoped references may be forward or
+unresolved because a scanner's contribution is partial evidence, not a complete graph.
+Every record has nonempty
 fingerprinted resource provenance whose explicit scope matches the record and whose
 project-relative resource remains inside that scope's declared resource root.
 Optional provenance ranges use zero-based half-open byte offsets into the exact bytes

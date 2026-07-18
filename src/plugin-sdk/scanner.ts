@@ -536,6 +536,7 @@ function copyResourcePage(
     const entries: ScannerResourceEntry[] = [];
     let canonicalCharacters =
       "nextCursor" in inspected.value ? (inspected.value.nextCursor as string).length * 6 + 32 : 32;
+    if (canonicalCharacters > bounds.maxPageCharacters) throw new Error();
     let previousResource = "";
     for (let index = 0; index < length.value; index += 1) {
       const descriptor = Object.getOwnPropertyDescriptor(source, String(index));

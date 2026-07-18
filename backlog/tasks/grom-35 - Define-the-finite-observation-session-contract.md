@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 06:39'
+updated_date: '2026-07-18 06:54'
 labels: []
 milestone: m-3
 dependencies:
@@ -65,10 +65,12 @@ Implemented groma.observation/v1 with immutable project/source/epoch/scope bindi
 Independent contract audit approved the lifecycle, blindness, provenance, partiality, bounds, and diagnostic semantics. Independent quality review found two final defects: post-acceptance receipt validation reread scanner-owned batch properties, and returned enumeration entries did not enforce maxDepth. Both were fixed with descriptor-captured expectations, hostile Proxy coverage, and LocalResourceProvider-compatible depth semantics; the quality re-review approved. Objective evidence: focused Core/SDK/plugin suite passed 33 tests / 210 assertions; final bun run check passed formatting, strict TypeScript, architecture boundaries, 904 tests / 6,689 assertions, native build, binary smoke, Iteration 1A/1B, and self-blueprint verification. git diff --check and backlog doctor passed.
 
 Claude review approved the contract, security posture, atomicity, and scanner blindness. Two narrow follow-ups were independently accepted: remove a hidden derived per-record character ceiling so the exported maxCanonicalCharacters bound is authoritative, and state that coverage declares inspected scope/kinds rather than emitted-record presence. Added a provenance-rich record above the former hidden cap with exact-bound success and one-character-under atomic failure. The suggested inspector/helper consolidation was not applied because Core and SDK have deliberately distinct canonicalization semantics and no correctness defect was identified. Post-review validation passed 34 focused tests / 215 assertions and the complete 905-test / 6,694-assertion gate.
+
+Codex automated PR review produced three findings. Independent contract and quality audits confirmed two actionable GROM-35 defects: empty resource-enumeration pages bypassed the configured page-character cost when fixed/cursor overhead alone exceeded the bound, and Core accepted control characters in scope/provenance resource locators that the supported scanner resource authority could not address. Both were fixed with exact-bound/cursor-overhead and tab/LF/CR/Unicode regressions. The candidate metadata proposal was not applied: observation hints are bounded source evidence rather than prevalidated Standard Model payload, and model-specific canonical validation belongs to GROM-41 reconciliation; Core documentation now makes that boundary explicit. Claude independently approved the final-head contract after calling out the same locator consistency issue. Independent remediation re-review approved. Post-remediation verification passed 35 focused tests / 225 assertions and the complete check: formatting, strict TypeScript, architecture boundaries, 906 tests / 6,704 assertions, native build and smoke, Iteration 1A/1B, and the 43-component self-blueprint.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Defined the finite blind-observation contract and public scanner authoring boundary. Groma now accepts bounded, sparse, provenance-backed scanner evidence through atomic finite sessions without exposing curated blueprint meaning or mutation authority; only successful completion yields coverage and a frozen evidence snapshot. Verified by 34 focused tests / 215 assertions, the complete 905-test / 6,694-assertion repository gate, build/smoke and Iteration 1A/1B/self-blueprint checks, independent contract and quality approval, and an approved Claude review with both actionable follow-ups applied.
+Defined the finite blind-observation contract and public scanner authoring boundary. Groma now accepts bounded, sparse, provenance-backed scanner evidence through atomic finite sessions without exposing curated blueprint meaning or mutation authority; only successful completion yields coverage and a frozen evidence snapshot. Verified by 35 focused tests / 225 assertions, the complete 906-test / 6,704-assertion repository gate, build/smoke and Iteration 1A/1B/self-blueprint checks, independent contract and quality approval, and Claude plus Codex review with the two actionable correctness findings applied and the model-layer suggestion rejected as architecturally out of scope.
 <!-- SECTION:FINAL_SUMMARY:END -->

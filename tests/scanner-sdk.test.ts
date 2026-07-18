@@ -276,6 +276,49 @@ describe("scanner SDK", () => {
     ).toEqual(["scanner-resource-provider-failed"]);
   });
 
+  test("charges fixed and cursor overhead against the resource page character bound", async () => {
+    const emptyPage = requestWith(
+      resourcesWith({
+        enumerate: async () => ({
+          ok: true,
+          value: { entries: [], truncatedByDepth: false },
+        }),
+      }),
+    ).request;
+    const request = {
+      limit: 1,
+      maxDepth: 0,
+      resource: "src",
+      scope: "app",
+    } as const;
+
+    const exact = valueOf(createScannerRequest(emptyPage, { maxPageCharacters: 32 }));
+    expect(valueOf(await exact.resources.enumerate(request))).toEqual({
+      entries: [],
+      truncatedByDepth: false,
+    });
+
+    const below = valueOf(createScannerRequest(emptyPage, { maxPageCharacters: 31 }));
+    expect(codes(await below.resources.enumerate(request))).toEqual([
+      "scanner-resource-provider-failed",
+    ]);
+
+    const emptyPageWithCursor = requestWith(
+      resourcesWith({
+        enumerate: async () => ({
+          ok: true,
+          value: { entries: [], nextCursor: "x", truncatedByDepth: false },
+        }),
+      }),
+    ).request;
+    const cursorBelow = valueOf(
+      createScannerRequest(emptyPageWithCursor, { maxPageCharacters: 37 }),
+    );
+    expect(codes(await cursorBelow.resources.enumerate(request))).toEqual([
+      "scanner-resource-provider-failed",
+    ]);
+  });
+
   test("enforces returned entry depth as directory descent below the requested resource", async () => {
     const enumerate = async (
       maxDepth: number,

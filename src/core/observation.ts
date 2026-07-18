@@ -353,6 +353,7 @@ function validText(value: unknown, maximum: number): value is string {
 function validResourceLocator(value: unknown, maximum: number): value is string {
   return (
     validText(value, maximum) &&
+    !/[\u0000-\u001f\u007f]/.test(value) &&
     (value === "." ||
       (!/[\\]/.test(value) &&
         !/^(?:\/|[A-Za-z]:)/.test(value) &&

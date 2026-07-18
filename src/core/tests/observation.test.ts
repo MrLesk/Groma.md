@@ -104,6 +104,16 @@ describe("finite observation sessions", () => {
         createObservationSession({ ...begin(), scopes: [...begin().scopes, ...begin().scopes] }),
       ),
     ).toEqual(["invalid-observation-begin"]);
+    for (const resourceRoot of ["src\troot", "src\nroot", "src\rroot"]) {
+      expect(
+        codes(
+          createObservationSession({
+            ...begin(),
+            scopes: [{ id: "app", resourceRoot }],
+          }),
+        ),
+      ).toEqual(["invalid-observation-begin"]);
+    }
   });
 
   test("accepts sparse partial evidence, forward references, and every observation kind", () => {
@@ -330,6 +340,36 @@ describe("finite observation sessions", () => {
         ),
       ).toEqual(["invalid-observation-provenance"]);
     }
+    for (const resource of ["src/file\tname.ts", "src/file\nname.ts", "src/file\rname.ts"]) {
+      expect(
+        codes(
+          session().submitBatch({
+            epoch: "epoch-001",
+            records: [
+              {
+                ...wrongProvenance,
+                provenance: [{ ...provenance()[0]!, resource }],
+              },
+            ],
+            sequence: 1,
+          }),
+        ),
+      ).toEqual(["invalid-observation-provenance"]);
+    }
+
+    expect(
+      session().submitBatch({
+        epoch: "epoch-001",
+        records: [
+          {
+            ...wrongProvenance,
+            key: "unicode",
+            provenance: [{ ...provenance()[0]!, resource: "src/naïve/文件.ts" }],
+          },
+        ],
+        sequence: 1,
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   test("preflights large batches and preserves cumulative atomicity", () => {
