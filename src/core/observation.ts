@@ -1,8 +1,9 @@
-import { copyCanonicalGraphData } from "./payload.ts";
+import { copyCanonicalGraphData, createCanonicalGraphDataCapturer } from "./payload.ts";
 import { failure, type Diagnostic, type Result, success } from "./result.ts";
-import { inspectIntrinsicArrayLength } from "./runtime.ts";
+import { inspectExactRecord, inspectIntrinsicArrayLength } from "./runtime.ts";
 
 export const observationSessionApiVersion = "groma.observation/v1" as const;
+export const observationSessionCheckpointApiVersion = "groma.observation-checkpoint/v1" as const;
 
 export type ObservationSessionState = "active" | "cancelled" | "completed" | "expired" | "failed";
 
@@ -186,8 +187,40 @@ export interface CompletedObservationSnapshot {
   readonly source: ObservationSourceIdentity;
 }
 
+export type ObservationSessionCheckpointTransition =
+  | Readonly<{
+      readonly records: readonly ObservationRecord[];
+      readonly sequence: number;
+      readonly type: "batch";
+    }>
+  | Readonly<{ readonly sequence: number; readonly type: "cancel" }>
+  | Readonly<{
+      readonly coverage: readonly ObservationCoverage[];
+      readonly sequence: number;
+      readonly type: "complete";
+    }>
+  | Readonly<{ readonly heartbeatSequence: number; readonly type: "expire" }>
+  | Readonly<{
+      readonly reason: ObservationFailureReason;
+      readonly sequence: number;
+      readonly type: "fail";
+    }>
+  | Readonly<{ readonly sequence: number; readonly type: "heartbeat" }>;
+
+/**
+ * Core-owned compact recovery evidence. It contains accepted state transitions, not
+ * caller batches or any persistence/layout policy.
+ */
+export interface ObservationSessionCheckpoint {
+  readonly apiVersion: typeof observationSessionCheckpointApiVersion;
+  readonly begin: ObservationSessionBegin;
+  readonly bounds: ObservationSessionBounds;
+  readonly transitions: readonly ObservationSessionCheckpointTransition[];
+}
+
 export interface ObservationSession {
   cancel(signal: ObservationTerminalSignal): Result<void>;
+  checkpoint(): ObservationSessionCheckpoint;
   complete(completion: ObservationCompletion): Result<CompletedObservationSnapshot>;
   expire(expiry: ObservationExpiry): Result<void>;
   fail(report: ObservationFailure): Result<void>;
@@ -1137,6 +1170,192 @@ function inspectFailureReason(
   );
 }
 
+function invalidCheckpoint(reason: string): Result<never> {
+  return failure(
+    diagnostic("invalid-observation-checkpoint", "Observation checkpoint is invalid", { reason }),
+  );
+}
+
+function inspectCheckpointBounds(value: unknown): Result<ObservationSessionBounds> {
+  const names = Object.keys(defaultObservationSessionBounds) as Array<
+    keyof ObservationSessionBounds
+  >;
+  const inspected = inspectExactRecord(
+    value,
+    [names],
+    "invalid-observation-checkpoint",
+    "Observation checkpoint bounds",
+  );
+  if (!inspected.ok) return invalidCheckpoint("bounds have an invalid shape");
+  const copied: Partial<ObservationSessionBounds> = {};
+  for (const name of names) {
+    Object.defineProperty(copied, name, {
+      enumerable: true,
+      value: inspected.value[name],
+    });
+  }
+  try {
+    return success(resolveBounds(copied));
+  } catch {
+    return invalidCheckpoint("bounds have invalid values");
+  }
+}
+
+function checkpointTransitionShape(value: unknown): Result<Readonly<Record<string, unknown>>> {
+  const inspected = inspectExactRecord(
+    value,
+    [
+      ["records", "sequence", "type"],
+      ["sequence", "type"],
+      ["coverage", "sequence", "type"],
+      ["heartbeatSequence", "type"],
+      ["reason", "sequence", "type"],
+    ],
+    "invalid-observation-checkpoint",
+    "Observation checkpoint transition",
+  );
+  if (!inspected.ok) return invalidCheckpoint("transition has an invalid shape");
+  const transition = inspected.value;
+  const matchesType =
+    (transition.type === "batch" && Object.hasOwn(transition, "records")) ||
+    ((transition.type === "cancel" || transition.type === "heartbeat") &&
+      Object.hasOwn(transition, "sequence")) ||
+    (transition.type === "complete" && Object.hasOwn(transition, "coverage")) ||
+    (transition.type === "expire" && Object.hasOwn(transition, "heartbeatSequence")) ||
+    (transition.type === "fail" && Object.hasOwn(transition, "reason"));
+  return matchesType ? success(transition) : invalidCheckpoint("transition type is unsupported");
+}
+
+function inspectCheckpointTransitions(value: unknown, maximum: number): Result<readonly unknown[]> {
+  const length = inspectIntrinsicArrayLength(
+    value,
+    "invalid-observation-checkpoint",
+    "Observation checkpoint transitions",
+  );
+  if (!length.ok || length.value > maximum) {
+    return invalidCheckpoint("transitions have an invalid shape or size");
+  }
+  try {
+    const source = value as unknown[];
+    const keys = Reflect.ownKeys(source);
+    const keySet = new Set(keys);
+    if (keys.length !== length.value + 1 || !keySet.has("length")) {
+      return invalidCheckpoint("transitions array has extra or missing properties");
+    }
+    const copied: unknown[] = [];
+    for (let index = 0; index < length.value; index += 1) {
+      const key = String(index);
+      if (!keySet.has(key)) return invalidCheckpoint("transitions array is sparse");
+      const descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        return invalidCheckpoint("transition items must be enumerable data properties");
+      }
+      copied.push(descriptor.value);
+    }
+    return success(Object.freeze(copied));
+  } catch {
+    return invalidCheckpoint("transitions could not be inspected safely");
+  }
+}
+
+function saturatingCheckpointSum(...values: readonly number[]): number {
+  let total = 0;
+  for (const value of values) {
+    if (value >= Number.MAX_SAFE_INTEGER - total) return Number.MAX_SAFE_INTEGER;
+    total += value;
+  }
+  return total;
+}
+
+function saturatingCheckpointProduct(left: number, right: number): number {
+  return left > Number.MAX_SAFE_INTEGER / right ? Number.MAX_SAFE_INTEGER : left * right;
+}
+
+function checkpointCaptureBudgets(bounds: ObservationSessionBounds): Readonly<{
+  beginCharacters: number;
+  beginValues: number;
+  transitionCharacters: number;
+  transitionValues: number;
+}> {
+  const beginCharacters = saturatingCheckpointSum(
+    1_024,
+    saturatingCheckpointProduct(
+      bounds.maxScopes,
+      saturatingCheckpointSum(
+        saturatingCheckpointProduct(bounds.maxResourceCharacters, 6),
+        saturatingCheckpointProduct(bounds.maxTokenCharacters, 6),
+        128,
+      ),
+    ),
+    saturatingCheckpointProduct(bounds.maxTokenCharacters, 48),
+  );
+  const batchCharacters = saturatingCheckpointSum(
+    bounds.maxCanonicalCharacters,
+    saturatingCheckpointProduct(bounds.maxBatchRecords, 2),
+    256,
+  );
+  const coverageCharacters = saturatingCheckpointSum(
+    256,
+    saturatingCheckpointProduct(
+      bounds.maxCoverageEntries,
+      saturatingCheckpointSum(saturatingCheckpointProduct(bounds.maxTokenCharacters, 6), 512),
+    ),
+  );
+  const transitionValues = Math.max(
+    16,
+    saturatingCheckpointSum(
+      8,
+      saturatingCheckpointProduct(
+        bounds.maxBatchRecords,
+        saturatingCheckpointSum(24, saturatingCheckpointProduct(bounds.maxProvenancePerRecord, 8)),
+      ),
+    ),
+    saturatingCheckpointSum(8, saturatingCheckpointProduct(bounds.maxCoverageEntries, 12)),
+  );
+  return Object.freeze({
+    beginCharacters,
+    beginValues: saturatingCheckpointSum(12, saturatingCheckpointProduct(bounds.maxScopes, 4)),
+    transitionCharacters: Math.max(
+      1_024,
+      batchCharacters,
+      coverageCharacters,
+      saturatingCheckpointSum(
+        saturatingCheckpointProduct(bounds.maxTextCharacters, 6),
+        saturatingCheckpointProduct(bounds.maxTokenCharacters, 6),
+        256,
+      ),
+    ),
+    transitionValues,
+  });
+}
+
+function captureCheckpointGraphData(
+  value: unknown,
+  subject: string,
+  maximumCharacters: number,
+  maximumValues: number,
+  capture: ReturnType<typeof createCanonicalGraphDataCapturer>,
+) {
+  const captured = capture(
+    value,
+    "query",
+    {
+      code: "invalid-observation-checkpoint",
+      maximum: maximumCharacters,
+      message: `Observation checkpoint ${subject} exceeds its canonical-character bound`,
+    },
+    {
+      code: "invalid-observation-checkpoint",
+      maximumDepth: 12,
+      maximumValues,
+      message: `Observation checkpoint ${subject} exceeds its structural bound`,
+    },
+  );
+  return captured.ok
+    ? captured
+    : invalidCheckpoint(`${subject} could not be captured safely within its bounds`);
+}
+
 /** Canonicalizes a Host-supplied begin descriptor without starting a session. */
 export function canonicalizeObservationSessionBegin(
   beginValue: ObservationSessionBegin,
@@ -1156,6 +1375,7 @@ export function createObservationSession(
   const begin = parsedBegin.value;
   const scopeIds = new Set(begin.scopes.map((scope) => scope.id));
   const scopeRoots = new Map(begin.scopes.map((scope) => [scope.id, scope.resourceRoot]));
+  const transitions: ObservationSessionCheckpointTransition[] = [];
   const state: MutableSessionState = {
     batchCount: 0,
     canonicalCharacters: 0,
@@ -1206,7 +1426,19 @@ export function createObservationSession(
 
   const session: ObservationSession = Object.freeze({
     cancel(signal: ObservationTerminalSignal) {
-      return terminal(signal, "cancelled");
+      const cancelled = terminal(signal, "cancelled");
+      if (cancelled.ok) {
+        transitions.push(Object.freeze({ sequence: state.lastSequence, type: "cancel" as const }));
+      }
+      return cancelled;
+    },
+    checkpoint() {
+      return Object.freeze({
+        apiVersion: observationSessionCheckpointApiVersion,
+        begin,
+        bounds,
+        transitions: Object.freeze([...transitions]),
+      });
     },
     complete(completionValue: ObservationCompletion) {
       const completion = inspectSignal(
@@ -1243,6 +1475,13 @@ export function createObservationSession(
       state.signalCount += 1;
       state.completed = snapshot;
       state.state = "completed";
+      transitions.push(
+        Object.freeze({
+          coverage: coverage.value,
+          sequence: sequence.value,
+          type: "complete" as const,
+        }),
+      );
       return success(snapshot);
     },
     expire(expiryValue: ObservationExpiry) {
@@ -1282,6 +1521,12 @@ export function createObservationSession(
       }
       state.signalCount += 1;
       state.state = "expired";
+      transitions.push(
+        Object.freeze({
+          heartbeatSequence: expiry.value.heartbeatSequence as number,
+          type: "expire" as const,
+        }),
+      );
       return success(undefined);
     },
     fail(reportValue: ObservationFailure) {
@@ -1302,6 +1547,13 @@ export function createObservationSession(
       state.failure = reportedReason.value;
       state.signalCount += 1;
       state.state = "failed";
+      transitions.push(
+        Object.freeze({
+          reason: reportedReason.value,
+          sequence: sequence.value,
+          type: "fail" as const,
+        }),
+      );
       return success(undefined);
     },
     heartbeat(heartbeatValue: ObservationHeartbeat) {
@@ -1319,6 +1571,7 @@ export function createObservationSession(
       state.lastHeartbeatSequence = sequence.value;
       state.lastSequence = sequence.value;
       state.signalCount += 1;
+      transitions.push(Object.freeze({ sequence: sequence.value, type: "heartbeat" as const }));
       return success(undefined);
     },
     inspect: inspection,
@@ -1417,6 +1670,13 @@ export function createObservationSession(
       state.canonicalCharacters += pendingCanonicalCharacters;
       state.lastSequence = sequence.value;
       state.signalCount += 1;
+      transitions.push(
+        Object.freeze({
+          records: Object.freeze([...pending.values()].map((record) => record.value)),
+          sequence: sequence.value,
+          type: "batch" as const,
+        }),
+      );
       return success(
         Object.freeze({
           acceptedRecords: pending.size,
@@ -1428,5 +1688,169 @@ export function createObservationSession(
     },
   });
 
+  return success(session);
+}
+
+/** Restores only by validating and replaying the ordinary session contract. */
+export function restoreObservationSessionCheckpoint(
+  checkpointValue: unknown,
+): Result<ObservationSession> {
+  const envelope = inspectExactRecord(
+    checkpointValue,
+    [["apiVersion", "begin", "bounds", "transitions"]],
+    "invalid-observation-checkpoint",
+    "Observation checkpoint",
+  );
+  if (!envelope.ok) return invalidCheckpoint("envelope has an invalid shape");
+  if (envelope.value.apiVersion !== observationSessionCheckpointApiVersion) {
+    return invalidCheckpoint("apiVersion is unsupported");
+  }
+  const bounds = inspectCheckpointBounds(envelope.value.bounds);
+  if (!bounds.ok) return bounds;
+  const captureBudgets = checkpointCaptureBudgets(bounds.value);
+  const reservedContainers: object[] = [];
+  for (const container of [checkpointValue, envelope.value.bounds, envelope.value.transitions]) {
+    if (typeof container === "object" && container !== null) reservedContainers.push(container);
+  }
+  const capture = createCanonicalGraphDataCapturer(reservedContainers);
+  const beginCopy = captureCheckpointGraphData(
+    envelope.value.begin,
+    "begin",
+    captureBudgets.beginCharacters,
+    captureBudgets.beginValues,
+    capture,
+  );
+  if (!beginCopy.ok) return beginCopy;
+  const transitions = inspectCheckpointTransitions(
+    envelope.value.transitions,
+    bounds.value.maxSignals,
+  );
+  if (!transitions.ok) return transitions;
+  const created = createObservationSession(
+    beginCopy.value.value as unknown as ObservationSessionBegin,
+    bounds.value,
+  );
+  if (!created.ok) return invalidCheckpoint("begin is invalid for the recorded bounds");
+  const session = created.value;
+  const ownedTransitions: unknown[] = [];
+  let capturedCharacters = saturatingCheckpointSum(beginCopy.value.canonicalJson.length, 4_096);
+
+  for (let index = 0; index < transitions.value.length; index += 1) {
+    const transitionCopy = captureCheckpointGraphData(
+      transitions.value[index],
+      `transition ${index}`,
+      captureBudgets.transitionCharacters,
+      captureBudgets.transitionValues,
+      capture,
+    );
+    if (!transitionCopy.ok) return transitionCopy;
+    capturedCharacters = saturatingCheckpointSum(
+      capturedCharacters,
+      transitionCopy.value.canonicalJson.length,
+      1,
+    );
+    ownedTransitions.push(transitionCopy.value.value);
+    const transition = checkpointTransitionShape(transitionCopy.value.value);
+    if (!transition.ok) return transition;
+    let replayed: Result<unknown>;
+    if (transition.value.type === "batch") {
+      const records = inspectArray(
+        transition.value.records,
+        bounds.value.maxBatchRecords,
+        "invalid-observation-checkpoint",
+        "Observation checkpoint batch records",
+      );
+      if (!records.ok) return invalidCheckpoint("batch records have an invalid shape or size");
+      replayed = session.submitBatch({
+        epoch: session.inspect().epoch,
+        records: transition.value.records as readonly ObservationRecord[],
+        sequence: transition.value.sequence as number,
+      });
+      if (
+        replayed.ok &&
+        ((replayed.value as ObservationBatchReceipt).acceptedRecords !== records.value.length ||
+          (replayed.value as ObservationBatchReceipt).replayedRecords !== 0)
+      ) {
+        return invalidCheckpoint("batch transitions must contain only newly accepted records");
+      }
+    } else if (transition.value.type === "heartbeat") {
+      replayed = session.heartbeat({
+        epoch: session.inspect().epoch,
+        sequence: transition.value.sequence as number,
+      });
+    } else if (transition.value.type === "complete") {
+      replayed = session.complete({
+        coverage: transition.value.coverage as readonly ObservationCoverage[],
+        epoch: session.inspect().epoch,
+        sequence: transition.value.sequence as number,
+      });
+    } else if (transition.value.type === "cancel") {
+      replayed = session.cancel({
+        epoch: session.inspect().epoch,
+        sequence: transition.value.sequence as number,
+      });
+    } else if (transition.value.type === "fail") {
+      replayed = session.fail({
+        epoch: session.inspect().epoch,
+        reason: transition.value.reason as ObservationFailureReason,
+        sequence: transition.value.sequence as number,
+      });
+    } else {
+      replayed = session.expire({
+        epoch: session.inspect().epoch,
+        heartbeatSequence: transition.value.heartbeatSequence as number,
+      });
+    }
+    if (!replayed.ok) {
+      return invalidCheckpoint(`transition ${index} cannot be replayed`);
+    }
+  }
+  const capturedValues = saturatingCheckpointSum(
+    captureBudgets.beginValues,
+    16,
+    saturatingCheckpointProduct(transitions.value.length, captureBudgets.transitionValues),
+  );
+  const captured = copyCanonicalGraphData(
+    Object.freeze({
+      apiVersion: observationSessionCheckpointApiVersion,
+      begin: beginCopy.value.value,
+      bounds: bounds.value,
+      transitions: Object.freeze(ownedTransitions),
+    }),
+    "query",
+    {
+      code: "invalid-observation-checkpoint",
+      maximum: capturedCharacters,
+      message: "Observation checkpoint exceeds its captured canonical-character bound",
+    },
+    {
+      code: "invalid-observation-checkpoint",
+      maximumDepth: 14,
+      maximumValues: capturedValues,
+      message: "Observation checkpoint exceeds its captured structural bound",
+    },
+  );
+  const reconstructed = copyCanonicalGraphData(
+    session.checkpoint(),
+    "query",
+    {
+      code: "invalid-observation-checkpoint",
+      maximum: capturedCharacters,
+      message: "Replayed observation checkpoint exceeds its captured canonical-character bound",
+    },
+    {
+      code: "invalid-observation-checkpoint",
+      maximumDepth: 14,
+      maximumValues: capturedValues,
+      message: "Replayed observation checkpoint exceeds its captured structural bound",
+    },
+  );
+  if (
+    !captured.ok ||
+    !reconstructed.ok ||
+    captured.value.canonicalJson !== reconstructed.value.canonicalJson
+  ) {
+    return invalidCheckpoint("checkpoint does not match its replayed canonical state");
+  }
   return success(session);
 }

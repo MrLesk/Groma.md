@@ -80,6 +80,95 @@ recreate the retired document. A write or implicit source-ownership migration mu
 declare its live owner and relationship in the transaction's affected identities;
 under-reported effects fail before journal publication.
 
+## Local observation journal
+
+[`local-observation-journal.ts`](local-observation-journal.ts) makes finite observation
+sessions crash-safe without turning provisional scanner output into canonical evidence.
+It stores one deterministic whole-file record for each logical
+`(projectId, source.id, source.instance)` lane at
+`groma/observation-sessions/<sha256>.json`. The hash is only a portable locator; the full
+lane identity, source version, epoch, declared scopes, exact Core bounds, and Core-owned
+checkpoint remain inside the record and are replay-validated on every read. Source
+version deliberately does not create a second lane. The first attempt to begin a newer
+epoch durably marks an active predecessor `superseded`, fences its handle, and returns an
+actionable retry result; the retry may publish the newer active epoch. A completed
+`available` or `pending` predecessor is never overwritten or superseded. The newer begin
+remains blocked until downstream acknowledges that exact completion.
+
+These files are bounded operational recovery state, separate from intent, committed
+evidence, bindings, transactions, migrations, and disposable projections. They are
+canonical JSON with one LF framing byte, but they are not canonical architectural
+meaning. They contain no layout, blueprint entity identity, absolute path, PID, host
+name, UUID, timestamp, or wall-clock value. Normal abandonment or acknowledged-delivery
+cleanup removes the exact lane file, while a process interruption intentionally leaves
+the file visible for recovery. Cleanup cannot address another lane or epoch and has no
+API that targets intent, prior evidence, transaction state, or projection resources.
+
+The official negotiated session profile keeps Core and the local resource provider on
+one bounded whole-file contract: at most 256 scopes, 50,000 records, 2,048 records per
+batch, 4,096 batches, 8,192 total signals, and 2,097,152 canonical record characters. The
+provider profile uses 16 MiB read and replacement ceilings; the journal refuses a lower
+file ceiling than its exported conservative envelope calculation. The character
+allowance leaves room for worst-case UTF-8 and JSON-escape expansion of records plus the
+bounded begin, scope, transition, coverage, lifecycle, lane, and delivery envelopes.
+Recovery enumerates at most 10,000 lanes in pages of at most 1,000 by default. Page
+count, continuation progress, file shape, per-directory entries, lane count, file bytes,
+and every nested checkpoint value remain explicitly bounded. Recovery also requires the
+checkpoint to name this exact official session profile; a Core-valid lane with different
+bounds is hostile operational state and fails closed. This is the first-use local profile,
+not an extreme-scale chunk or shard format.
+
+Every lane mutation uses an explicit persistent same-machine lease and a monotonically
+advancing lane revision. Persistent acquisition uses immediate proven-dead process
+recovery, so a crashed process can be recovered without waiting for the callback
+coordination stale-age interval; live, reused, or unverifiable ownership remains
+contended. Begin is staged, committed, and read back before a durable handle is returned.
+An exact duplicate begin is idempotently reclaimable only while the replay-validated lane
+remains empty and active. This settles the important case where commit succeeds but its
+read-back is unavailable, while acknowledging that durable state cannot distinguish that
+retry from an ordinary exact duplicate. Changed begin data, any accepted transition, or a
+terminal lifecycle remains ineligible. Duplicate exact handles share the same stored
+revision and checkpoint fence, so only one can advance.
+Later handle calls first verify the exact lane, epoch, active lifecycle, revision, and
+canonical checkpoint fingerprint, then apply the Core method exactly once, stage the
+resulting checkpoint, and read back the committed replacement before acknowledging the
+caller. Concurrent calls on one handle are rejected; a superseded, divergent, or
+cross-process-stale handle is rejected before its signal body is inspected. Persistent
+release is retried once. Unresolved release reports whether the coordinated action
+completed, and a handle whose Core operation ran is poisoned before any later caller data
+is inspected. Synchronous handle inspection exposes only its last durability-confirmed
+Core inspection, including while publication is in flight or after poisoning. A retryable
+unresolved release retains one opaque lease for that exact lane
+inside the journal. The next operation or recovery of that lane atomically settles the old
+lease before acquiring a fresh one; it never runs an action under a handle whose release
+was unconfirmed. Another lane remains independent, and a concurrent same-lane caller
+cannot share settlement or acquisition. A still retryable or thrown settlement returns
+without running the action, confirmed release clears the lease, and an invalid or
+ownership-lost lease is never retained. If Core has advanced but publication cannot be
+confirmed, the same poison rule applies. A restart resolves the durable file instead of
+retrying that in-memory Core call.
+
+Cancellation, expiry, scanner failure, contradiction, explicit supersession, and an
+active session found during restart are durable abandonment states with stable actionable
+diagnostics. They carry no delivery token and can never imply coverage or evidence of
+absence. Recovery never resumes scanner execution. It abandons an interrupted active
+session, retains already abandoned sessions as ineligible, returns exact acknowledged
+lane/epoch cleanup requests instead of an aggregate count, and fails closed without
+deletion on a malformed, noncanonical, misnamed, or replay-invalid lane.
+
+Successful completion is the only state that derives a deterministic
+`groma-observation-handoff-v1:<sha256>` token and a replay-validated evidence snapshot.
+The first offer durably changes `available` to `pending` before returning; retries and
+restart return the same token and snapshot. Downstream reconciliation must commit before
+acknowledging that token. Acknowledgement is durable and idempotent, and only an exact
+acknowledged or abandoned lane/epoch becomes cleanup-eligible. Publication removes
+dead-process replacement stages for that known lane before staging, and confirmed
+eligible cleanup repeats that bounded stage cleanup after exact file removal. No cleanup
+operation enumerates or mutates another lane or canonical plane. This provides
+deterministic at-least-once delivery while leaving reconciliation, canonical evidence
+publication, scanner execution, CLI orchestration, and external transport to their own
+application slices.
+
 ## Local transaction journal
 
 [`local-transaction-journal.ts`](local-transaction-journal.ts) implements Core's
