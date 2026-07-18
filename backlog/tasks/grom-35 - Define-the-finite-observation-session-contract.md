@@ -1,11 +1,11 @@
 ---
 id: GROM-35
 title: Define the finite observation-session contract
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 06:54'
+updated_date: '2026-07-18 07:03'
 labels: []
 milestone: m-3
 dependencies:
@@ -67,6 +67,8 @@ Independent contract audit approved the lifecycle, blindness, provenance, partia
 Claude review approved the contract, security posture, atomicity, and scanner blindness. Two narrow follow-ups were independently accepted: remove a hidden derived per-record character ceiling so the exported maxCanonicalCharacters bound is authoritative, and state that coverage declares inspected scope/kinds rather than emitted-record presence. Added a provenance-rich record above the former hidden cap with exact-bound success and one-character-under atomic failure. The suggested inspector/helper consolidation was not applied because Core and SDK have deliberately distinct canonicalization semantics and no correctness defect was identified. Post-review validation passed 34 focused tests / 215 assertions and the complete 905-test / 6,694-assertion gate.
 
 Codex automated PR review produced three findings. Independent contract and quality audits confirmed two actionable GROM-35 defects: empty resource-enumeration pages bypassed the configured page-character cost when fixed/cursor overhead alone exceeded the bound, and Core accepted control characters in scope/provenance resource locators that the supported scanner resource authority could not address. Both were fixed with exact-bound/cursor-overhead and tab/LF/CR/Unicode regressions. The candidate metadata proposal was not applied: observation hints are bounded source evidence rather than prevalidated Standard Model payload, and model-specific canonical validation belongs to GROM-41 reconciliation; Core documentation now makes that boundary explicit. Claude independently approved the final-head contract after calling out the same locator consistency issue. Independent remediation re-review approved. Post-remediation verification passed 35 focused tests / 225 assertions and the complete check: formatting, strict TypeScript, architecture boundaries, 906 tests / 6,704 assertions, native build and smoke, Iteration 1A/1B, and the 43-component self-blueprint.
+
+Final implementation gate for cff44d6: GitHub Actions run 29634816591 passed Quality gates, Cross-platform binaries, and Native Windows binary. The required exact-head Claude review approved with only non-blocking diagnostic naming/documentation suggestions; no correctness or security defect was identified. The fresh Codex review completed with a +1 reaction after the two actionable findings were fixed and independently re-reviewed. GROM-35 is ready to merge.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
