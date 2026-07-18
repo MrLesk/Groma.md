@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as nodeUtilTypes } from "node:util";
 
 export const benchmarkSchemaVersion = 1 as const;
 
@@ -104,8 +105,10 @@ export interface BenchmarkCommandRecord {
   readonly effectiveConfigRoot: string;
   readonly effectiveHome: string;
   readonly exitCode: number;
+  readonly networkIsolationEnforcedAtOsLevel: boolean;
   readonly stderr: string;
   readonly startedAtMonotonicMilliseconds: number;
+  readonly stdinClosed: boolean;
   readonly stdout: string;
   readonly workingDirectory: string;
 }
@@ -235,6 +238,10 @@ export interface BenchmarkRun {
       readonly preparedSourceSnapshotSha256: string;
       readonly rawObservationDigest: string;
       readonly rawObservationOrderingDigest: string;
+      readonly sourceAfterCapturedAtMonotonicMilliseconds: number;
+      readonly sourceAfterSha256: string;
+      readonly sourceBeforeCapturedAtMonotonicMilliseconds: number;
+      readonly sourceBeforeSha256: string;
     }[];
   };
   readonly schemaVersion: typeof benchmarkSchemaVersion;
@@ -248,6 +255,450 @@ export class BenchmarkContractError extends Error {
     super(`${code}: ${message}`);
     this.name = "BenchmarkContractError";
   }
+}
+
+export const benchmarkContractSnapshotLimits = Object.freeze({
+  maximumArrayLength: 4_096,
+  maximumDepth: 32,
+  maximumStringUtf8Bytes: 8 * 1_024 * 1_024,
+  maximumTotalStringUtf8Bytes: 64 * 1_024 * 1_024,
+  maximumValues: 100_000,
+});
+
+type OwnedBenchmarkJson =
+  null | boolean | number | string | OwnedBenchmarkJson[] | { [key: string]: OwnedBenchmarkJson };
+
+const intrinsicArray = Array;
+const intrinsicArrayIsArray = Array.isArray;
+const intrinsicArrayPrototype = Array.prototype;
+const intrinsicDefineProperty = Object.defineProperty;
+const intrinsicFreeze = Object.freeze;
+const intrinsicGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const intrinsicGetPrototypeOf = Object.getPrototypeOf;
+const intrinsicIsProxy = nodeUtilTypes.isProxy;
+const intrinsicObjectCreate = Object.create;
+const intrinsicObjectPrototype = Object.prototype;
+const intrinsicOwnKeys = Reflect.ownKeys;
+const benchmarkContractUtf8Encoder = new TextEncoder();
+
+type BenchmarkSnapshotSchema =
+  | { readonly kind: "primitive" }
+  | { readonly item: BenchmarkSnapshotSchema; readonly kind: "array" }
+  | {
+      readonly fields: readonly (readonly [string, BenchmarkSnapshotSchema])[];
+      readonly kind: "record";
+    };
+
+const primitiveSnapshotSchema: BenchmarkSnapshotSchema = Object.freeze({ kind: "primitive" });
+const arraySnapshotSchema = (item: BenchmarkSnapshotSchema): BenchmarkSnapshotSchema =>
+  Object.freeze({ item, kind: "array" });
+const recordSnapshotSchema = (
+  fields: Record<string, BenchmarkSnapshotSchema>,
+): BenchmarkSnapshotSchema =>
+  Object.freeze({
+    fields: Object.freeze(
+      Object.entries(fields).map(([key, schema]) => Object.freeze([key, schema] as const)),
+    ),
+    kind: "record",
+  });
+
+const stringsSnapshotSchema = arraySnapshotSchema(primitiveSnapshotSchema);
+const commandSnapshotSchema = recordSnapshotSchema({
+  argv: stringsSnapshotSchema,
+  completedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+  effectiveConfigRoot: primitiveSnapshotSchema,
+  effectiveHome: primitiveSnapshotSchema,
+  exitCode: primitiveSnapshotSchema,
+  networkIsolationEnforcedAtOsLevel: primitiveSnapshotSchema,
+  stderr: primitiveSnapshotSchema,
+  startedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+  stdinClosed: primitiveSnapshotSchema,
+  stdout: primitiveSnapshotSchema,
+  workingDirectory: primitiveSnapshotSchema,
+});
+const sourceWitnessSnapshotSchema = recordSnapshotSchema({
+  anchor: recordSnapshotSchema({
+    endLine: primitiveSnapshotSchema,
+    startLine: primitiveSnapshotSchema,
+    symbol: primitiveSnapshotSchema,
+  }),
+  blobOid: primitiveSnapshotSchema,
+  contentSha256: primitiveSnapshotSchema,
+  path: primitiveSnapshotSchema,
+});
+
+const benchmarkAuditSnapshotSchema = recordSnapshotSchema({
+  auditId: primitiveSnapshotSchema,
+  comprehensionQuestions: arraySnapshotSchema(
+    recordSnapshotSchema({
+      factIds: stringsSnapshotSchema,
+      id: primitiveSnapshotSchema,
+      prompt: primitiveSnapshotSchema,
+      required: primitiveSnapshotSchema,
+    }),
+  ),
+  exclusions: arraySnapshotSchema(
+    recordSnapshotSchema({
+      id: primitiveSnapshotSchema,
+      reason: primitiveSnapshotSchema,
+      scope: primitiveSnapshotSchema,
+    }),
+  ),
+  facts: arraySnapshotSchema(
+    recordSnapshotSchema({
+      category: primitiveSnapshotSchema,
+      claim: recordSnapshotSchema({
+        kind: primitiveSnapshotSchema,
+        objects: stringsSnapshotSchema,
+        predicate: primitiveSnapshotSchema,
+        subject: primitiveSnapshotSchema,
+      }),
+      derivation: recordSnapshotSchema({
+        method: primitiveSnapshotSchema,
+        resultSha256: primitiveSnapshotSchema,
+        sourceScopeId: primitiveSnapshotSchema,
+      }),
+      evidence: arraySnapshotSchema(sourceWitnessSnapshotSchema),
+      id: primitiveSnapshotSchema,
+      importance: primitiveSnapshotSchema,
+      summary: primitiveSnapshotSchema,
+    }),
+  ),
+  forbiddenClaims: arraySnapshotSchema(
+    recordSnapshotSchema({
+      claim: primitiveSnapshotSchema,
+      evidence: arraySnapshotSchema(sourceWitnessSnapshotSchema),
+      id: primitiveSnapshotSchema,
+      reason: primitiveSnapshotSchema,
+      severity: primitiveSnapshotSchema,
+    }),
+  ),
+  project: recordSnapshotSchema({
+    ecosystem: stringsSnapshotSchema,
+    fixturePreparation: recordSnapshotSchema({
+      method: primitiveSnapshotSchema,
+      preexistingGromaOwnedPaths: stringsSnapshotSchema,
+      preparedSourceSnapshotPathCount: primitiveSnapshotSchema,
+      preparedSourceSnapshotSha256: primitiveSnapshotSchema,
+    }),
+    name: primitiveSnapshotSchema,
+    packageMetadataVersion: primitiveSnapshotSchema,
+    repository: primitiveSnapshotSchema,
+    revision: primitiveSnapshotSchema,
+    sourceScopes: arraySnapshotSchema(
+      recordSnapshotSchema({
+        excluded: stringsSnapshotSchema,
+        id: primitiveSnapshotSchema,
+        included: stringsSnapshotSchema,
+        pathCount: primitiveSnapshotSchema,
+        pathInventorySha256: primitiveSnapshotSchema,
+        protectedRoots: stringsSnapshotSchema,
+      }),
+    ),
+    tree: primitiveSnapshotSchema,
+  }),
+  reservation: recordSnapshotSchema({
+    genericImprovementRequiresNonHeldOutEvidence: primitiveSnapshotSchema,
+    heldOut: primitiveSnapshotSchema,
+    projectSpecificExceptionsProhibited: primitiveSnapshotSchema,
+    publicReproducibleReferenceNotSecret: primitiveSnapshotSchema,
+    scannerFrozenBeforeHeldOutRun: primitiveSnapshotSchema,
+    scoredResultsMayTuneScanner: primitiveSnapshotSchema,
+  }),
+  schemaVersion: primitiveSnapshotSchema,
+});
+
+const falseClaimSnapshotSchema = recordSnapshotSchema({
+  claim: primitiveSnapshotSchema,
+  claimId: primitiveSnapshotSchema,
+  evidence: arraySnapshotSchema(
+    recordSnapshotSchema({
+      detail: primitiveSnapshotSchema,
+      observationId: primitiveSnapshotSchema,
+      sourcePath: primitiveSnapshotSchema,
+    }),
+  ),
+  forbiddenClaimIds: stringsSnapshotSchema,
+});
+const assessedClaimSnapshotSchema = recordSnapshotSchema({
+  claim: primitiveSnapshotSchema,
+  claimId: primitiveSnapshotSchema,
+  evidence: arraySnapshotSchema(
+    recordSnapshotSchema({
+      detail: primitiveSnapshotSchema,
+      observationId: primitiveSnapshotSchema,
+      provenanceKind: primitiveSnapshotSchema,
+      sourcePath: primitiveSnapshotSchema,
+    }),
+  ),
+  factIds: stringsSnapshotSchema,
+});
+const declaredBudgetSnapshotSchema = recordSnapshotSchema({
+  nodes: primitiveSnapshotSchema,
+  relationships: primitiveSnapshotSchema,
+});
+
+const benchmarkRunSnapshotSchema = recordSnapshotSchema({
+  auditId: primitiveSnapshotSchema,
+  claims: recordSnapshotSchema({
+    assessedClaims: arraySnapshotSchema(assessedClaimSnapshotSchema),
+    coveredRequiredFactIds: stringsSnapshotSchema,
+    coveredSupportingFactIds: stringsSnapshotSchema,
+    criticalFalseClaims: arraySnapshotSchema(falseClaimSnapshotSchema),
+    noncriticalFalseClaims: arraySnapshotSchema(falseClaimSnapshotSchema),
+  }),
+  comprehension: recordSnapshotSchema({
+    answeredQuestionIds: stringsSnapshotSchema,
+    correctQuestionIds: stringsSnapshotSchema,
+    criticalMisunderstandings: stringsSnapshotSchema,
+    evaluatedMainLayerArtifactSha256: primitiveSnapshotSchema,
+    evaluatorHadAgentAssistance: primitiveSnapshotSchema,
+    evaluatorHadPriorProjectKnowledge: primitiveSnapshotSchema,
+    materials: stringsSnapshotSchema,
+    startedAfterFreeze: primitiveSnapshotSchema,
+    usedOnlyFrozenInitialMainLayer: primitiveSnapshotSchema,
+  }),
+  execution: recordSnapshotSchema({
+    aiOrHelperInferenceUsed: primitiveSnapshotSchema,
+    commands: arraySnapshotSchema(commandSnapshotSchema),
+    fixturePreparation: recordSnapshotSchema({
+      completedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+      declaredPreexistingGromaOwnedPaths: stringsSnapshotSchema,
+      gromaOwnedStateAbsentBeforeInit: primitiveSnapshotSchema,
+      method: primitiveSnapshotSchema,
+      preparedSourceSnapshotPathCount: primitiveSnapshotSchema,
+      preparedSourceSnapshotSha256: primitiveSnapshotSchema,
+      removedPreexistingGromaOwnedPaths: stringsSnapshotSchema,
+    }),
+    gromaOwnedOutputPaths: stringsSnapshotSchema,
+    humanCorrectionBeforeFreeze: primitiveSnapshotSchema,
+    humanGroundTruthAuditCompletedBeforeRun: primitiveSnapshotSchema,
+    mainLayerFrozenAtMonotonicMilliseconds: primitiveSnapshotSchema,
+    networkIsolation: recordSnapshotSchema({
+      enforcedAtOsLevel: primitiveSnapshotSchema,
+      mechanism: primitiveSnapshotSchema,
+    }),
+    outputsFrozenBeforeHumanEvaluation: primitiveSnapshotSchema,
+    pathConvention: primitiveSnapshotSchema,
+    preRunPlan: recordSnapshotSchema({
+      commitmentSha256: primitiveSnapshotSchema,
+      frozenAtMonotonicMilliseconds: primitiveSnapshotSchema,
+      gromaOwnedOutputPaths: stringsSnapshotSchema,
+      pathConvention: primitiveSnapshotSchema,
+      preparedSourceSnapshotSha256: primitiveSnapshotSchema,
+      rendererDeclaredMainLayerBudget: declaredBudgetSnapshotSchema,
+      sourceHashExcludedPaths: stringsSnapshotSchema,
+    }),
+    project: recordSnapshotSchema({
+      repository: primitiveSnapshotSchema,
+      revision: primitiveSnapshotSchema,
+      tree: primitiveSnapshotSchema,
+    }),
+    scannerAndRulesFrozenBeforeHeldOutRun: primitiveSnapshotSchema,
+    sourceAfterSha256: primitiveSnapshotSchema,
+    sourceBeforeSha256: primitiveSnapshotSchema,
+    sourceHashExcludedPaths: stringsSnapshotSchema,
+    spawnedInitAtMonotonicMilliseconds: primitiveSnapshotSchema,
+    stdinClosed: primitiveSnapshotSchema,
+    temporaryConfigRoot: primitiveSnapshotSchema,
+    temporaryHome: primitiveSnapshotSchema,
+    workspaceRoot: primitiveSnapshotSchema,
+  }),
+  presentation: recordSnapshotSchema({
+    declaredMainLayerBudget: declaredBudgetSnapshotSchema,
+    frozenMainLayer: recordSnapshotSchema({
+      artifactSha256: primitiveSnapshotSchema,
+      machineObservableFreezeSignal: primitiveSnapshotSchema,
+      nodes: primitiveSnapshotSchema,
+      relationships: primitiveSnapshotSchema,
+    }),
+    uncertainty: recordSnapshotSchema({
+      coverageGapCount: primitiveSnapshotSchema,
+      nonColorCue: primitiveSnapshotSchema,
+      visible: primitiveSnapshotSchema,
+    }),
+  }),
+  provenance: recordSnapshotSchema({
+    claimIdsWithValidWitnesses: stringsSnapshotSchema,
+    inScopeClaimIds: stringsSnapshotSchema,
+  }),
+  repeatability: recordSnapshotSchema({
+    rescans: arraySnapshotSchema(
+      recordSnapshotSchema({
+        canonicalByteDigest: primitiveSnapshotSchema,
+        canonicalIdentityDigest: primitiveSnapshotSchema,
+        commands: arraySnapshotSchema(commandSnapshotSchema),
+        digestsCapturedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+        id: primitiveSnapshotSchema,
+        observationIdentityDigest: primitiveSnapshotSchema,
+        ordinal: primitiveSnapshotSchema,
+        preparedSourceSnapshotSha256: primitiveSnapshotSchema,
+        rawObservationDigest: primitiveSnapshotSchema,
+        rawObservationOrderingDigest: primitiveSnapshotSchema,
+        sourceAfterCapturedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+        sourceAfterSha256: primitiveSnapshotSchema,
+        sourceBeforeCapturedAtMonotonicMilliseconds: primitiveSnapshotSchema,
+        sourceBeforeSha256: primitiveSnapshotSchema,
+      }),
+    ),
+  }),
+  schemaVersion: primitiveSnapshotSchema,
+});
+
+function copyOwnedBenchmarkJson(
+  value: unknown,
+  schema: BenchmarkSnapshotSchema,
+  location: string,
+  code: BenchmarkContractError["code"],
+): OwnedBenchmarkJson {
+  const ancestors = new WeakSet<object>();
+  let totalStringUtf8Bytes = 0;
+  let values = 0;
+
+  const consumeString = (candidate: string, candidateLocation: string): string => {
+    if (candidate.length > benchmarkContractSnapshotLimits.maximumStringUtf8Bytes) {
+      throw new BenchmarkContractError(code, `${candidateLocation} exceeds the string byte limit`);
+    }
+    const bytes = benchmarkContractUtf8Encoder.encode(candidate).byteLength;
+    if (bytes > benchmarkContractSnapshotLimits.maximumStringUtf8Bytes) {
+      throw new BenchmarkContractError(code, `${candidateLocation} exceeds the string byte limit`);
+    }
+    totalStringUtf8Bytes += bytes;
+    if (totalStringUtf8Bytes > benchmarkContractSnapshotLimits.maximumTotalStringUtf8Bytes) {
+      throw new BenchmarkContractError(code, `${location} exceeds the total string byte limit`);
+    }
+    return candidate;
+  };
+
+  const copy = (
+    candidate: unknown,
+    candidateSchema: BenchmarkSnapshotSchema,
+    candidateLocation: string,
+    depth: number,
+  ): OwnedBenchmarkJson => {
+    values += 1;
+    if (values > benchmarkContractSnapshotLimits.maximumValues) {
+      throw new BenchmarkContractError(code, `${location} exceeds the value limit`);
+    }
+    if (depth > benchmarkContractSnapshotLimits.maximumDepth) {
+      throw new BenchmarkContractError(code, `${candidateLocation} exceeds the depth limit`);
+    }
+    if (typeof candidate === "object" && candidate !== null && intrinsicIsProxy(candidate)) {
+      throw new BenchmarkContractError(code, `${candidateLocation} must not contain proxies`);
+    }
+    if (candidateSchema.kind === "primitive") {
+      if (candidate === null || typeof candidate === "boolean") return candidate;
+      if (typeof candidate === "string") return consumeString(candidate, candidateLocation);
+      if (typeof candidate === "number") {
+        if (!Number.isFinite(candidate)) {
+          throw new BenchmarkContractError(
+            code,
+            `${candidateLocation} must be a finite JSON number`,
+          );
+        }
+        return candidate;
+      }
+      throw new BenchmarkContractError(code, `${candidateLocation} must be a JSON primitive`);
+    }
+    if (typeof candidate !== "object" || candidate === null) {
+      throw new BenchmarkContractError(
+        code,
+        `${candidateLocation} must be a ${candidateSchema.kind === "array" ? "JSON array" : "JSON object"}`,
+      );
+    }
+    if (ancestors.has(candidate)) {
+      throw new BenchmarkContractError(code, `${candidateLocation} must be an acyclic JSON tree`);
+    }
+
+    if (candidateSchema.kind === "array") {
+      if (!intrinsicArrayIsArray(candidate)) {
+        throw new BenchmarkContractError(code, `${candidateLocation} must be a JSON array`);
+      }
+      if (intrinsicGetPrototypeOf(candidate) !== intrinsicArrayPrototype) {
+        throw new BenchmarkContractError(code, `${candidateLocation} must be a plain JSON array`);
+      }
+      const lengthDescriptor = intrinsicGetOwnPropertyDescriptor(candidate, "length");
+      if (
+        lengthDescriptor === undefined ||
+        !("value" in lengthDescriptor) ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0 ||
+        lengthDescriptor.value > benchmarkContractSnapshotLimits.maximumArrayLength
+      ) {
+        throw new BenchmarkContractError(code, `${candidateLocation} exceeds the array limit`);
+      }
+      const length = lengthDescriptor.value as number;
+      ancestors.add(candidate);
+      const owned = new intrinsicArray<OwnedBenchmarkJson>(length);
+      for (let index = 0; index < length; index += 1) {
+        const descriptor = intrinsicGetOwnPropertyDescriptor(candidate, String(index));
+        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+          throw new BenchmarkContractError(code, `${candidateLocation} must be a dense JSON array`);
+        }
+        intrinsicDefineProperty(owned, String(index), {
+          configurable: true,
+          enumerable: true,
+          value: copy(
+            descriptor.value,
+            candidateSchema.item,
+            `${candidateLocation}[${index}]`,
+            depth + 1,
+          ),
+          writable: true,
+        });
+      }
+      ancestors.delete(candidate);
+      return owned;
+    }
+
+    if (intrinsicArrayIsArray(candidate)) {
+      throw new BenchmarkContractError(code, `${candidateLocation} must be a JSON object`);
+    }
+    const prototype = intrinsicGetPrototypeOf(candidate);
+    if (prototype !== intrinsicObjectPrototype && prototype !== null) {
+      throw new BenchmarkContractError(code, `${candidateLocation} must be a plain JSON object`);
+    }
+    ancestors.add(candidate);
+    const owned = intrinsicObjectCreate(null) as {
+      [key: string]: OwnedBenchmarkJson;
+    };
+    for (const [key, fieldSchema] of candidateSchema.fields) {
+      const descriptor = intrinsicGetOwnPropertyDescriptor(candidate, key);
+      if (descriptor === undefined) continue;
+      if (!("value" in descriptor) || !descriptor.enumerable) {
+        throw new BenchmarkContractError(
+          code,
+          `${candidateLocation}.${key} must be an enumerable own data property`,
+        );
+      }
+      intrinsicDefineProperty(owned, key, {
+        configurable: true,
+        enumerable: true,
+        value: copy(descriptor.value, fieldSchema, `${candidateLocation}.${key}`, depth + 1),
+        writable: true,
+      });
+    }
+    ancestors.delete(candidate);
+    return owned;
+  };
+
+  try {
+    return copy(value, schema, location, 0);
+  } catch (error) {
+    if (error instanceof BenchmarkContractError) throw error;
+    throw new BenchmarkContractError(code, `${location} could not be copied safely`);
+  }
+}
+
+function recursivelyFreezeOwnedBenchmarkJson(value: OwnedBenchmarkJson): OwnedBenchmarkJson {
+  if (typeof value !== "object" || value === null) return value;
+  for (const key of intrinsicOwnKeys(value)) {
+    const descriptor = intrinsicGetOwnPropertyDescriptor(value, key);
+    if (descriptor !== undefined && "value" in descriptor) {
+      recursivelyFreezeOwnedBenchmarkJson(descriptor.value as OwnedBenchmarkJson);
+    }
+  }
+  return intrinsicFreeze(value) as unknown as OwnedBenchmarkJson;
 }
 
 function record(value: unknown, location: string, code: BenchmarkContractError["code"]) {
@@ -513,6 +964,12 @@ function commandRecord(
   string(command.effectiveConfigRoot, `${location}.effectiveConfigRoot`, code);
   string(command.effectiveHome, `${location}.effectiveHome`, code);
   string(command.workingDirectory, `${location}.workingDirectory`, code);
+  boolean(
+    command.networkIsolationEnforcedAtOsLevel,
+    `${location}.networkIsolationEnforcedAtOsLevel`,
+    code,
+  );
+  boolean(command.stdinClosed, `${location}.stdinClosed`, code);
   if (typeof command.exitCode !== "number" || !Number.isSafeInteger(command.exitCode)) {
     throw new BenchmarkContractError(code, `${location}.exitCode must be a safe integer`);
   }
@@ -569,7 +1026,8 @@ function witnesses(
 
 export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
   const code = "INVALID_AUDIT" as const;
-  const parsed = record(value, "audit", code);
+  const owned = copyOwnedBenchmarkJson(value, benchmarkAuditSnapshotSchema, "audit", code);
+  const parsed = record(owned, "audit", code);
   if (parsed.schemaVersion !== benchmarkSchemaVersion) {
     throw new BenchmarkContractError(code, `audit.schemaVersion must be ${benchmarkSchemaVersion}`);
   }
@@ -872,12 +1330,13 @@ export function parseBenchmarkAudit(value: unknown): BenchmarkAudit {
   ) {
     throw new BenchmarkContractError(code, "held-out audit reservation is not fail-closed");
   }
-  return value as BenchmarkAudit;
+  return recursivelyFreezeOwnedBenchmarkJson(owned) as unknown as BenchmarkAudit;
 }
 
 export function parseBenchmarkRun(value: unknown): BenchmarkRun {
   const code = "INVALID_RUN" as const;
-  const parsed = record(value, "run", code);
+  const owned = copyOwnedBenchmarkJson(value, benchmarkRunSnapshotSchema, "run", code);
+  const parsed = record(owned, "run", code);
   if (parsed.schemaVersion !== benchmarkSchemaVersion) {
     throw new BenchmarkContractError(code, `run.schemaVersion must be ${benchmarkSchemaVersion}`);
   }
@@ -1128,6 +1587,15 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
       code,
     );
     for (const field of [
+      "sourceBeforeCapturedAtMonotonicMilliseconds",
+      "sourceAfterCapturedAtMonotonicMilliseconds",
+    ] as const) {
+      nonnegativeNumber(rescan[field], `run.repeatability.rescans[${index}].${field}`, code);
+    }
+    for (const field of ["sourceBeforeSha256", "sourceAfterSha256"] as const) {
+      sha256(rescan[field], `run.repeatability.rescans[${index}].${field}`, code);
+    }
+    for (const field of [
       "canonicalByteDigest",
       "canonicalIdentityDigest",
       "observationIdentityDigest",
@@ -1204,5 +1672,5 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
     const values = stringArray(comprehension[field], `run.comprehension.${field}`, code);
     unique(values, `run.comprehension.${field}`, code);
   }
-  return value as BenchmarkRun;
+  return recursivelyFreezeOwnedBenchmarkJson(owned) as unknown as BenchmarkRun;
 }

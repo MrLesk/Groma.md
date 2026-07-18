@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 03:13'
+updated_date: '2026-07-18 04:16'
 labels: []
 milestone: m-3
 dependencies: []
@@ -90,4 +90,11 @@ Latest current-head provenance and freeze-signal remediation made three document
 Per-fact evidence remediation now authenticates every assessed fact independently: documentation facts require documentation-kind evidence at that fact exact audit witness path, while every other fact requires source-kind evidence at that fact exact witness path. A shared evidence record backs multiple facts only when each fact authenticates the same path; broad partially evidenced claims contribute only individually backed facts and receive no claim provenance unless every mapped fact is known and backed. Added both-audit regressions for correct, wrong-kind, wrong-path, mixed source plus documentation, shared-witness, and one-witness-many-facts behavior. Final validation passed: automatic-blueprint 65 tests / 564 assertions; full repository 866 tests / 6,268 assertions; typecheck; formatting; architecture boundaries; git diff check; backlog doctor; build and standalone smoke; Iteration 1A/1B; and self-blueprint verification. The same independent reviewer reproduced both current-head matrices on Groma and Backlog: broad single-witness coverage was partial at 5/20 and 12/20 respectively with zero provenance and both existing gates, while authenticated shared-path claims passed; approved with no actionable findings.
 
 UNC authority remediation now validates raw server and share components before removing the path.win32 parsed root, using the same conservative rule for UNC authority and descendant components: nonempty, not dot or dot-dot, no trailing dot or space, no control or Windows-invalid character, and no reserved device-name alias. Valid drive-qualified roots and normalized UNC roots, including dotted or hyphenated servers and dotted dollar shares, remain accepted. Added direct HOME, config, and workspace regressions covering the reported trailing-dot and colon share aliases, trailing-dot server alias, trailing-space, reserved-name, dot, dot-dot, invalid-character, and control-byte variants; invalid global roots earn zero first-minute, repeatability, and stable-identity points. Final validation passed: automatic-blueprint 66 tests / 709 assertions; full repository 867 tests / 6,413 assertions; typecheck; formatting; architecture boundaries; git diff check; backlog doctor; build and standalone smoke; Iteration 1A/1B; and self-blueprint verification. The same independent reviewer expanded the exact reproduction to 90 invalid server or share cases across all three roots, confirmed the precise existing failures and zero dimensions, verified all valid controls, and approved with no actionable findings.
+
+Final PR review hardening:
+- Audit-declared false-claim severity now overrides submitted buckets in both directions.
+- Every initial and rescan command carries closed-stdin and OS-level network-isolation attestations.
+- Every rescan binds prepared, before, and after source digests to causal capture times.
+- Audit/run parsers now validate schema-directed, bounded, caller-independent snapshots and return recursively frozen values.
+- Independent adversarial review approved 74 focused tests / 789 assertions; full repository validation passed 875 tests / 6,493 assertions plus compiled-binary and self-blueprint checks.
 <!-- SECTION:NOTES:END -->

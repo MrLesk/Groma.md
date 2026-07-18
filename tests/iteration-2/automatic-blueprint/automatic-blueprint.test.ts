@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import {
   BenchmarkContractError,
+  benchmarkContractSnapshotLimits,
   benchmarkSchemaVersion,
   createBenchmarkStringArrayDigest,
   isValidSourceScopePattern,
@@ -93,8 +94,10 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
         effectiveConfigRoot: "/tmp/groma-benchmark/config",
         effectiveHome: "/tmp/groma-benchmark/home",
         exitCode: 0,
+        networkIsolationEnforcedAtOsLevel: true,
         startedAtMonotonicMilliseconds: [1_000, 5_000, 30_000][index]!,
         stderr: "",
+        stdinClosed: true,
         stdout: `${argv.join(" ")} raw output`,
         workingDirectory: "/tmp/groma-benchmark/workspace",
       })),
@@ -175,9 +178,11 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
           effectiveConfigRoot: "/tmp/groma-benchmark/config",
           effectiveHome: "/tmp/groma-benchmark/home",
           exitCode: 0,
+          networkIsolationEnforcedAtOsLevel: true,
           startedAtMonotonicMilliseconds:
             ordinal === 1 ? [50_000, 60_000][commandIndex]! : [70_000, 80_000][commandIndex]!,
           stderr: "",
+          stdinClosed: true,
           stdout: `${argv.join(" ")} rescan ${ordinal} raw output`,
           workingDirectory: "/tmp/groma-benchmark/workspace",
         })),
@@ -188,6 +193,10 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
         preparedSourceSnapshotSha256: audit.project.fixturePreparation.preparedSourceSnapshotSha256,
         rawObservationDigest: digestA,
         rawObservationOrderingDigest: digestA,
+        sourceAfterCapturedAtMonotonicMilliseconds: ordinal === 1 ? 70_000 : 90_000,
+        sourceAfterSha256: audit.project.fixturePreparation.preparedSourceSnapshotSha256,
+        sourceBeforeCapturedAtMonotonicMilliseconds: ordinal === 1 ? 50_000 : 70_000,
+        sourceBeforeSha256: audit.project.fixturePreparation.preparedSourceSnapshotSha256,
       })),
     },
   };
@@ -306,6 +315,129 @@ describe("automatic-blueprint reference audits", () => {
         );
       }
     }
+  });
+
+  test("owns parser inputs before validation and ignores later source mutation", async () => {
+    const auditSource = JSON.parse(
+      await readFile(new URL("groma.json", auditDirectory), "utf8"),
+    ) as Mutable<BenchmarkAudit>;
+    const audit = parseBenchmarkAudit(auditSource);
+    const runSource = passingRun(audit) as Mutable<BenchmarkRun>;
+    const run = parseBenchmarkRun(runSource);
+
+    auditSource.forbiddenClaims[0]!.severity = "noncritical";
+    auditSource.reservation.heldOut = "false" as unknown as boolean;
+    runSource.execution.commands[0]!.stdinClosed = "false" as unknown as boolean;
+    runSource.execution.commands[1]!.networkIsolationEnforcedAtOsLevel =
+      "false" as unknown as boolean;
+    runSource.repeatability.rescans[0]!.sourceBeforeSha256 = "not-a-digest";
+    runSource.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds =
+      "not-a-time" as unknown as number;
+
+    expect(audit).not.toBe(auditSource);
+    expect(run).not.toBe(runSource);
+    expect(audit.forbiddenClaims[0]!.severity).toBe("critical");
+    expect(run.execution.commands[0]!.stdinClosed).toBeTrue();
+    expect(run.execution.commands[1]!.networkIsolationEnforcedAtOsLevel).toBeTrue();
+    expect(run.repeatability.rescans[0]!.sourceBeforeSha256).not.toBe("not-a-digest");
+    expect(run.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds).toBe(90_000);
+    expect(scoreBenchmarkRun(audit, run).passed).toBeTrue();
+    expect(scoreBenchmarkRun(audit, run).total).toBe(100);
+  });
+
+  test("rejects accessors and proxies without invoking caller behavior", async () => {
+    const accessorAudit = JSON.parse(
+      await readFile(new URL("groma.json", auditDirectory), "utf8"),
+    ) as Mutable<BenchmarkAudit>;
+    let accessorInvoked = false;
+    Object.defineProperty(accessorAudit.project, "name", {
+      enumerable: true,
+      get() {
+        accessorInvoked = true;
+        return "hostile";
+      },
+    });
+    expect(() => parseBenchmarkAudit(accessorAudit)).toThrow("enumerable own data property");
+    expect(accessorInvoked).toBeFalse();
+
+    const audit = await loadAudit("groma.json");
+    const proxiedRun = passingRun(audit) as Mutable<BenchmarkRun>;
+    let proxyTrapInvoked = false;
+    proxiedRun.execution.commands[0] = new Proxy(proxiedRun.execution.commands[0]!, {
+      getOwnPropertyDescriptor() {
+        proxyTrapInvoked = true;
+        return undefined;
+      },
+      getPrototypeOf() {
+        proxyTrapInvoked = true;
+        return null;
+      },
+      ownKeys() {
+        proxyTrapInvoked = true;
+        return [];
+      },
+    });
+    expect(() => parseBenchmarkRun(proxiedRun)).toThrow("must not contain proxies");
+    expect(proxyTrapInvoked).toBeFalse();
+  });
+
+  test("drops hostile unknown properties without enumerating caller containers", async () => {
+    const auditSource = JSON.parse(
+      await readFile(new URL("groma.json", auditDirectory), "utf8"),
+    ) as Mutable<BenchmarkAudit>;
+    const projectSource = auditSource.project as unknown as Record<string, unknown>;
+    let unknownAccessorInvoked = false;
+    Object.defineProperty(projectSource, "length", {
+      enumerable: true,
+      value: { mutable: true },
+    });
+    Object.defineProperty(projectSource, "unknownAccessor", {
+      enumerable: true,
+      get() {
+        unknownAccessorInvoked = true;
+        throw new Error("unknown accessors must not be inspected");
+      },
+    });
+    for (let index = 0; index < 200_000; index += 1) {
+      projectSource[`unknown-object-${index}`] = index;
+    }
+
+    const audit = parseBenchmarkAudit(auditSource);
+    expect(unknownAccessorInvoked).toBeFalse();
+    expect("length" in audit.project).toBeFalse();
+    expect("unknownAccessor" in audit.project).toBeFalse();
+    expect("unknown-object-199999" in audit.project).toBeFalse();
+    expect(Object.isFrozen(audit.project)).toBeTrue();
+    expect(Reflect.set(audit.project, "length", { mutable: false })).toBeFalse();
+
+    const runSource = passingRun(audit) as Mutable<BenchmarkRun>;
+    const argvSource = runSource.execution.commands[0]!.argv as unknown as Record<string, unknown>;
+    Object.defineProperty(argvSource, "unknownAccessor", {
+      enumerable: true,
+      get() {
+        unknownAccessorInvoked = true;
+        throw new Error("array accessors outside bounded indices must not be inspected");
+      },
+    });
+    for (let index = 0; index < 200_000; index += 1) {
+      argvSource[`unknown-array-${index}`] = index;
+    }
+
+    const run = parseBenchmarkRun(runSource);
+    expect(unknownAccessorInvoked).toBeFalse();
+    expect(run.execution.commands[0]!.argv).toEqual(["groma", "init"]);
+    expect("unknownAccessor" in run.execution.commands[0]!.argv).toBeFalse();
+    expect("unknown-array-199999" in run.execution.commands[0]!.argv).toBeFalse();
+  });
+
+  test("bounds known arrays before copying their indices", async () => {
+    const audit = await loadAudit("groma.json");
+    const run = passingRun(audit) as Mutable<BenchmarkRun>;
+    run.execution.commands = new Array(benchmarkContractSnapshotLimits.maximumArrayLength + 1).fill(
+      null,
+    ) as unknown as Mutable<BenchmarkRun>["execution"]["commands"];
+
+    expect(() => parseBenchmarkRun(run)).toThrow("exceeds the array limit");
   });
 
   test("rejects scanner or canonical identities as audit fact ids", async () => {
@@ -543,6 +675,57 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     });
   });
 
+  test("recursively freezes parsed audit and run values used by scoring", async () => {
+    const auditSource = structuredClone(await loadAudit("groma.json")) as Mutable<BenchmarkAudit>;
+    auditSource.forbiddenClaims[0]!.severity = "noncritical";
+    const audit = parseBenchmarkAudit(auditSource);
+    const forbidden = audit.forbiddenClaims[0]!;
+    const runSource = passingRun(audit) as Mutable<BenchmarkRun>;
+    const claimId = "claim:frozen-audit-severity";
+    runSource.claims.criticalFalseClaims.push({
+      claimId,
+      claim: "The run bucket cannot replace audit severity",
+      evidence: [
+        {
+          detail: "the audit owns effective severity",
+          observationId: "observation:frozen-audit-severity",
+          sourcePath: forbidden.evidence[0]!.path,
+        },
+      ],
+      forbiddenClaimIds: [forbidden.id],
+    });
+    recordFalseClaim(runSource, claimId);
+    const run = parseBenchmarkRun(runSource);
+    const baseline = scoreBenchmarkRun(audit, run);
+    expect(baseline.passed).toBeTrue();
+    expect(baseline.total).toBe(98);
+
+    expect(Object.isFrozen(audit)).toBeTrue();
+    expect(Object.isFrozen(audit.forbiddenClaims[0]!)).toBeTrue();
+    expect(Object.isFrozen(run.execution.commands[0]!)).toBeTrue();
+    expect(Object.isFrozen(run.repeatability.rescans[0]!)).toBeTrue();
+    expect(Object.isFrozen(run.repeatability.rescans[0]!.commands)).toBeTrue();
+    expect(Reflect.set(audit.forbiddenClaims[0]!, "severity", "critical")).toBeFalse();
+    expect(Reflect.set(run.execution.commands[0]!, "stdinClosed", "false")).toBeFalse();
+    expect(
+      Reflect.set(run.execution.commands[0]!, "networkIsolationEnforcedAtOsLevel", "false"),
+    ).toBeFalse();
+    expect(
+      Reflect.set(run.repeatability.rescans[0]!, "sourceBeforeSha256", "not-a-digest"),
+    ).toBeFalse();
+    expect(
+      Reflect.set(
+        run.repeatability.rescans[0]!,
+        "sourceAfterCapturedAtMonotonicMilliseconds",
+        "not-a-time",
+      ),
+    ).toBeFalse();
+    expect(() => (run.repeatability.rescans[0]!.commands as unknown as unknown[]).push({})).toThrow(
+      TypeError,
+    );
+    expect(scoreBenchmarkRun(audit, run)).toEqual(baseline);
+  });
+
   test("binds the run to the audit repository, revision, and tree independently", async () => {
     const audit = await loadAudit("groma.json");
     const cases = [
@@ -770,6 +953,51 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     }
   });
 
+  test("binds network and stdin isolation to every initial and rescan command", async () => {
+    const audit = await loadAudit("groma.json");
+    const cases: readonly {
+      code: "NETWORK_ISOLATION_NOT_ENFORCED" | "STDIN_NOT_CLOSED";
+      firstMinute: number;
+      mutate: (run: Mutable<BenchmarkRun>) => void;
+    }[] = [
+      {
+        code: "NETWORK_ISOLATION_NOT_ENFORCED",
+        firstMinute: 0,
+        mutate: (run) =>
+          void (run.execution.commands[1]!.networkIsolationEnforcedAtOsLevel = false),
+      },
+      {
+        code: "STDIN_NOT_CLOSED",
+        firstMinute: 0,
+        mutate: (run) => void (run.execution.commands[2]!.stdinClosed = false),
+      },
+      {
+        code: "NETWORK_ISOLATION_NOT_ENFORCED",
+        firstMinute: 10,
+        mutate: (run) =>
+          void (run.repeatability.rescans[0]!.commands[0]!.networkIsolationEnforcedAtOsLevel = false),
+      },
+      {
+        code: "STDIN_NOT_CLOSED",
+        firstMinute: 10,
+        mutate: (run) => void (run.repeatability.rescans[1]!.commands[1]!.stdinClosed = false),
+      },
+    ];
+    for (const { code, firstMinute, mutate } of cases) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+
+      expect(
+        result.failures.map(({ code: failureCode }) => failureCode),
+        code,
+      ).toEqual([code]);
+      expect(result.dimensions.firstMinute, code).toBe(firstMinute);
+      expect(result.dimensions.repeatability, code).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes, code).toBe(0);
+    }
+  });
+
   test("binds initial command execution to the attested workspace, HOME, and config roots", async () => {
     const audit = await loadAudit("groma.json");
     const mutations: ((run: Mutable<BenchmarkRun>) => void)[] = [
@@ -993,6 +1221,39 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(result.passed).toBeFalse();
     expect(result.dimensions.falseClaims).toBe(0);
     expect(result.failures.map((failure) => failure.code)).toEqual(["CRITICAL_FALSE_CLAIM"]);
+  });
+
+  test("lets audit noncritical severity override the run's critical bucket", async () => {
+    const candidate = structuredClone(await loadAudit("groma.json")) as Mutable<BenchmarkAudit>;
+    candidate.forbiddenClaims[0]!.severity = "noncritical";
+    const audit = parseBenchmarkAudit(candidate);
+    const forbidden = audit.forbiddenClaims[0]!;
+    for (const [claim, forbiddenClaimIds] of [
+      ["The run assessor overstated this claim's severity", [forbidden.id]],
+      [forbidden.claim, []],
+    ] as const) {
+      const run = cloneRun(passingRun(audit));
+      const claimId = `claim:demoted:${forbiddenClaimIds.length}`;
+      run.claims.criticalFalseClaims.push({
+        claimId,
+        claim,
+        evidence: [
+          {
+            detail: "raw evidence retained for the audit-owned noncritical claim",
+            observationId: "observation:demoted",
+            sourcePath: forbidden.evidence[0]!.path,
+          },
+        ],
+        forbiddenClaimIds: [...forbiddenClaimIds],
+      });
+      recordFalseClaim(run, claimId);
+
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(result.passed, claim).toBeTrue();
+      expect(result.failures, claim).toEqual([]);
+      expect(result.dimensions.falseClaims, claim).toBe(18);
+      expect(result.total, claim).toBe(98);
+    }
   });
 
   test("inherits exact predeclared critical severity when its forbidden link is omitted", async () => {
@@ -1587,6 +1848,7 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     slowButFinite.repeatability.rescans[1]!.commands[0]!.completedAtMonotonicMilliseconds = 5_000_000;
     slowButFinite.repeatability.rescans[1]!.commands[1]!.startedAtMonotonicMilliseconds = 5_000_000;
     slowButFinite.repeatability.rescans[1]!.commands[1]!.completedAtMonotonicMilliseconds = 6_000_000;
+    slowButFinite.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds = 6_000_000;
     slowButFinite.repeatability.rescans[1]!.digestsCapturedAtMonotonicMilliseconds = 6_000_000;
     expect(scoreBenchmarkRun(audit, parseBenchmarkRun(slowButFinite)).passed).toBeTrue();
 
@@ -1595,6 +1857,55 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(() => parseBenchmarkRun(negativeCapture)).toThrow(
       "run.repeatability.rescans[0].digestsCapturedAtMonotonicMilliseconds must be a nonnegative safe integer",
     );
+  });
+
+  test("binds source hashes causally before and after every rescan", async () => {
+    const audit = await loadAudit("groma.json");
+    const cases: readonly {
+      code: "RESCAN_INPUT_MISMATCH" | "RESCAN_TIMING_INVALID";
+      mutate: (run: Mutable<BenchmarkRun>) => void;
+    }[] = [
+      {
+        code: "RESCAN_INPUT_MISMATCH",
+        mutate: (run) => void (run.repeatability.rescans[0]!.sourceBeforeSha256 = digestB),
+      },
+      {
+        code: "RESCAN_INPUT_MISMATCH",
+        mutate: (run) => void (run.repeatability.rescans[1]!.sourceAfterSha256 = digestB),
+      },
+      {
+        code: "RESCAN_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.repeatability.rescans[0]!.sourceBeforeCapturedAtMonotonicMilliseconds = 49_999),
+      },
+      {
+        code: "RESCAN_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.repeatability.rescans[0]!.sourceBeforeCapturedAtMonotonicMilliseconds = 50_001),
+      },
+      {
+        code: "RESCAN_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.repeatability.rescans[0]!.sourceAfterCapturedAtMonotonicMilliseconds = 69_999),
+      },
+      {
+        code: "RESCAN_TIMING_INVALID",
+        mutate: (run) =>
+          void (run.repeatability.rescans[1]!.sourceAfterCapturedAtMonotonicMilliseconds = 90_001),
+      },
+    ];
+    for (const { code, mutate } of cases) {
+      const run = cloneRun(passingRun(audit));
+      mutate(run);
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+
+      expect(
+        result.failures.map(({ code: failureCode }) => failureCode),
+        code,
+      ).toEqual([code]);
+      expect(result.dimensions.repeatability, code).toBe(0);
+      expect(result.dimensions.stableIdentityAndCanonicalBytes, code).toBe(0);
+    }
   });
 
   test("breaks every pass gate independently and emits one stable failure code", async () => {
@@ -1737,6 +2048,7 @@ describe("automatic-blueprint conjunctive scorecard", () => {
               run.execution.mainLayerFrozenAtMonotonicMilliseconds,
             );
           run.repeatability.rescans[0]!.commands[0]!.startedAtMonotonicMilliseconds = 61_001;
+          run.repeatability.rescans[0]!.sourceBeforeCapturedAtMonotonicMilliseconds = 61_001;
           run.repeatability.rescans[0]!.commands[0]!.completedAtMonotonicMilliseconds = 62_000;
           run.repeatability.rescans[0]!.commands[1]!.startedAtMonotonicMilliseconds = 62_000;
         },

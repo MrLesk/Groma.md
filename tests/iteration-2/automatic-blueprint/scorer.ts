@@ -469,12 +469,49 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     .map((command) => `${command.argv.join(" ")} exited ${command.exitCode}: ${command.stderr}`);
   if (failedCommands.length > 0) addFailure(failures, "COMMAND_FAILED", failedCommands);
   const initialCommandsSuccessful = initialWorkflowMatches && failedCommands.length === 0;
-  if (!run.execution.networkIsolation.enforcedAtOsLevel) {
-    addFailure(failures, "NETWORK_ISOLATION_NOT_ENFORCED", [
-      run.execution.networkIsolation.mechanism,
-    ]);
+  const recordedCommands = [
+    ...run.execution.commands.map((command, index) => ({
+      command,
+      location: `initial command ${index + 1}`,
+    })),
+    ...run.repeatability.rescans.flatMap((rescan) =>
+      rescan.commands.map((command, index) => ({
+        command,
+        location: `${rescan.id} command ${index + 1}`,
+      })),
+    ),
+  ];
+  const networkIsolationProblems = [
+    ...(!run.execution.networkIsolation.enforcedAtOsLevel
+      ? [`run: ${run.execution.networkIsolation.mechanism}`]
+      : []),
+    ...recordedCommands
+      .filter(({ command }) => !command.networkIsolationEnforcedAtOsLevel)
+      .map(({ location, command }) => `${location}: ${command.argv.join(" ")}`),
+  ];
+  if (networkIsolationProblems.length > 0) {
+    addFailure(failures, "NETWORK_ISOLATION_NOT_ENFORCED", networkIsolationProblems);
   }
-  if (!run.execution.stdinClosed) addFailure(failures, "STDIN_NOT_CLOSED", ["stdin remained open"]);
+  const stdinProblems = [
+    ...(!run.execution.stdinClosed ? ["run: stdin remained open"] : []),
+    ...recordedCommands
+      .filter(({ command }) => !command.stdinClosed)
+      .map(({ location, command }) => `${location}: ${command.argv.join(" ")}`),
+  ];
+  if (stdinProblems.length > 0) addFailure(failures, "STDIN_NOT_CLOSED", stdinProblems);
+  const initialCommandIsolationValid =
+    run.execution.networkIsolation.enforcedAtOsLevel &&
+    run.execution.stdinClosed &&
+    run.execution.commands.every(
+      (command) => command.networkIsolationEnforcedAtOsLevel && command.stdinClosed,
+    );
+  const allCommandIsolationValid =
+    initialCommandIsolationValid &&
+    run.repeatability.rescans.every((rescan) =>
+      rescan.commands.every(
+        (command) => command.networkIsolationEnforcedAtOsLevel && command.stdinClosed,
+      ),
+    );
   const temporaryEnvironmentIsolated = temporaryRootsAreIsolated(run);
   const globalExecutionContextValid = executionContextIsValid(run);
   if (!temporaryEnvironmentIsolated) {
@@ -665,12 +702,31 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (invalidForbiddenLinks.length > 0) {
     addFailure(failures, "FALSE_CLAIM_FORBIDDEN_LINK_INVALID", invalidForbiddenLinks);
   }
-  const linkedCriticalClaims = run.claims.noncriticalFalseClaims.filter(
-    (claim) =>
-      claim.forbiddenClaimIds.some((id) => forbiddenClaimsById.get(id)?.severity === "critical") ||
-      forbiddenClaimsByText.get(claim.claim)?.severity === "critical",
+  const auditSeverityForFalseClaim = (
+    claim: (typeof allFalseClaims)[number],
+  ): "critical" | "noncritical" | undefined => {
+    const auditSeverities = claim.forbiddenClaimIds.flatMap((id) => {
+      const severity = forbiddenClaimsById.get(id)?.severity;
+      return severity === undefined ? [] : [severity];
+    });
+    const exactTextSeverity = forbiddenClaimsByText.get(claim.claim)?.severity;
+    if (exactTextSeverity !== undefined) auditSeverities.push(exactTextSeverity);
+    if (auditSeverities.includes("critical")) return "critical" as const;
+    if (auditSeverities.includes("noncritical")) return "noncritical" as const;
+    return undefined;
+  };
+  const criticalBucketClaimIds = new Set(
+    run.claims.criticalFalseClaims.map((claim) => claim.claimId),
   );
-  const effectiveCriticalClaims = [...run.claims.criticalFalseClaims, ...linkedCriticalClaims];
+  const effectiveCriticalClaims = allFalseClaims.filter((claim) => {
+    const auditSeverity = auditSeverityForFalseClaim(claim);
+    if (auditSeverity !== undefined) return auditSeverity === "critical";
+    return criticalBucketClaimIds.has(claim.claimId);
+  });
+  const effectiveCriticalClaimIds = new Set(effectiveCriticalClaims.map((claim) => claim.claimId));
+  const effectiveNoncriticalFalseClaims = allFalseClaims.filter(
+    (claim) => !effectiveCriticalClaimIds.has(claim.claimId),
+  );
   const exactCriticalAssessedClaims = run.claims.assessedClaims.filter(
     (claim) => forbiddenClaimsByText.get(claim.claim)?.severity === "critical",
   );
@@ -786,14 +842,38 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (rescanWorkflowsMatch) {
     let chronologicalMinimum = run.execution.mainLayerFrozenAtMonotonicMilliseconds;
     for (const rescan of rescans) {
+      if (rescan.sourceBeforeCapturedAtMonotonicMilliseconds < chronologicalMinimum) {
+        rescanTimingProblems.push(
+          `${rescan.id} source-before captured ${rescan.sourceBeforeCapturedAtMonotonicMilliseconds} before prior boundary ${chronologicalMinimum}`,
+        );
+      }
+      const firstCommandStart = rescan.commands[0]!.startedAtMonotonicMilliseconds;
+      if (rescan.sourceBeforeCapturedAtMonotonicMilliseconds > firstCommandStart) {
+        rescanTimingProblems.push(
+          `${rescan.id} source-before captured ${rescan.sourceBeforeCapturedAtMonotonicMilliseconds} after first command start ${firstCommandStart}`,
+        );
+      }
       rescanTimingProblems.push(
-        ...commandTimingProblems(rescan.commands, chronologicalMinimum, undefined, `${rescan.id} `),
+        ...commandTimingProblems(
+          rescan.commands,
+          Math.max(chronologicalMinimum, rescan.sourceBeforeCapturedAtMonotonicMilliseconds),
+          undefined,
+          `${rescan.id} `,
+        ),
       );
       const finalCommandCompletion =
         rescan.commands.at(-1)?.completedAtMonotonicMilliseconds ?? chronologicalMinimum;
-      if (rescan.digestsCapturedAtMonotonicMilliseconds < finalCommandCompletion) {
+      if (rescan.sourceAfterCapturedAtMonotonicMilliseconds < finalCommandCompletion) {
         rescanTimingProblems.push(
-          `${rescan.id} digests captured ${rescan.digestsCapturedAtMonotonicMilliseconds} before final command ${finalCommandCompletion}`,
+          `${rescan.id} source-after captured ${rescan.sourceAfterCapturedAtMonotonicMilliseconds} before final command ${finalCommandCompletion}`,
+        );
+      }
+      if (
+        rescan.digestsCapturedAtMonotonicMilliseconds <
+        rescan.sourceAfterCapturedAtMonotonicMilliseconds
+      ) {
+        rescanTimingProblems.push(
+          `${rescan.id} digests captured ${rescan.digestsCapturedAtMonotonicMilliseconds} before source-after ${rescan.sourceAfterCapturedAtMonotonicMilliseconds}`,
         );
       }
       if (rescan.digestsCapturedAtMonotonicMilliseconds < chronologicalMinimum) {
@@ -804,6 +884,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       chronologicalMinimum = Math.max(
         chronologicalMinimum,
         finalCommandCompletion,
+        rescan.sourceAfterCapturedAtMonotonicMilliseconds,
         rescan.digestsCapturedAtMonotonicMilliseconds,
       );
     }
@@ -812,16 +893,19 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (rescanTimingProblems.length > 0) {
     addFailure(failures, "RESCAN_TIMING_INVALID", rescanTimingProblems);
   }
-  const mismatchedRescanInputs = rescans
-    .filter(
-      (rescan) =>
-        rescan.preparedSourceSnapshotSha256 !==
-        audit.project.fixturePreparation.preparedSourceSnapshotSha256,
-    )
-    .map(
-      (rescan) =>
-        `${rescan.id}: expected ${audit.project.fixturePreparation.preparedSourceSnapshotSha256}, received ${rescan.preparedSourceSnapshotSha256}`,
-    );
+  const expectedRescanSourceSha256 = audit.project.fixturePreparation.preparedSourceSnapshotSha256;
+  const mismatchedRescanInputs = rescans.flatMap((rescan) =>
+    [
+      ["prepared fixture", rescan.preparedSourceSnapshotSha256],
+      ["source before", rescan.sourceBeforeSha256],
+      ["source after", rescan.sourceAfterSha256],
+    ]
+      .filter(([, digest]) => digest !== expectedRescanSourceSha256)
+      .map(
+        ([location, digest]) =>
+          `${rescan.id} ${location}: expected ${expectedRescanSourceSha256}, received ${digest}`,
+      ),
+  );
   const rescanInputsMatch =
     rescanCommandsSuccessful &&
     rescanExecutionContextsMatch &&
@@ -830,7 +914,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   if (rescanCommandsSuccessful && mismatchedRescanInputs.length > 0) {
     addFailure(failures, "RESCAN_INPUT_MISMATCH", mismatchedRescanInputs);
   }
-  const rescansEligibleForStability = rescanInputsMatch;
+  const rescansEligibleForStability = rescanInputsMatch && allCommandIsolationValid;
   const rescanDigests = <Field extends keyof BenchmarkRun["repeatability"]["rescans"][number]>(
     field: Field,
   ): string[] => rescans.map((rescan) => String(rescan[field]));
@@ -973,13 +1057,12 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       0,
       20 -
         (effectiveCriticalClaims.length + exactCriticalAssessedClaims.length) * 20 -
-        run.claims.noncriticalFalseClaims.filter((claim) => !linkedCriticalClaims.includes(claim))
-          .length *
-          2 -
+        effectiveNoncriticalFalseClaims.length * 2 -
         exactNoncriticalAssessedClaims.length * 2,
     ),
     firstMinute:
       initialCommandsSuccessful &&
+      initialCommandIsolationValid &&
       initialCommandTimingValid &&
       initialCommandContextValid &&
       machineFreezeSignalValid &&

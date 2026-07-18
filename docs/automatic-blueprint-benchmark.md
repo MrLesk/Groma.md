@@ -14,6 +14,20 @@ canonical Groma state, reconciliation, or renderer data. The verification-only c
 [`tests/iteration-2/automatic-blueprint/`](../tests/iteration-2/automatic-blueprint/) records an
 assessment of those later systems without becoming a production import.
 
+Both audit and run parsers establish an owned immutable boundary before applying semantic
+validation. A schema-directed copy reads only known enumerable own data descriptors, never
+enumerates caller-owned keys, and drops unknown named and symbol properties without inspecting
+them. Known arrays are bounded from their data `length` descriptor before any index is read; only
+their dense in-range indices are copied, while other properties are ignored. The copy accepts finite
+JSON trees made from plain records, dense arrays, finite numbers, strings, booleans, and null. It
+rejects proxies without triggering their traps, rejects accessors on known fields, custom prototypes,
+sparse or behavior-bearing known containers, and cycles, and counts repeated aliases as separate
+JSON occurrences. The owned snapshot is the exact value validated, then every record and array is
+recursively frozen before return; neither later caller mutation nor attempted mutation of a parsed
+value can change scoring. Snapshot work is bounded to depth 32, 100,000 values, 4,096 items per
+array, eight MiB per string, and 64 MiB of aggregate string UTF-8 data. The finite schema itself
+bounds record work.
+
 ## What is scored
 
 An automatic blueprint may claim only architecture that a scanner can defend from observable
@@ -151,13 +165,15 @@ record consumed by this benchmark and enforce these controls:
    and renderer-declared main-layer budget. Record its monotonic freeze time and SHA-256 commitment.
    Hash the prepared source before execution while excluding exactly the committed output inventory.
 4. Create a fresh workspace plus distinct temporary `HOME` and configuration roots, close stdin
-   for every command, and deny network access at the OS or harness boundary. An application promise
-   to stay offline is not sufficient.
+   for every command, and deny network access at the OS or harness boundary. Record both controls
+   on every initial and rescan command in addition to the run-level harness mechanism. An
+   application promise to stay offline is not sufficient.
 5. Start the monotonic timer immediately before spawning `groma init`. Invoke exactly
    `groma init`, `groma scan`, and `groma`, as separate commands and in that order. Preserve each
    argument vector, exit code, stdout, stderr, monotonic start and completion timestamps, working
-   directory, effective `HOME`, and effective configuration root. Every command must run in the
-   attested workspace with the exact isolated environment roots.
+   directory, effective `HOME`, effective configuration root, closed-stdin attestation, and
+   OS-level network-isolation attestation. Every command must run in the attested workspace with
+   the exact isolated environment roots and hermetic controls.
 6. Permit no AI call, helper inference, or human correction from the first spawn through scored
    output. The scanner remains blind to the audit and existing blueprint.
 7. Stop the timer only when the initial main layer emits a machine-observable frozen signal.
@@ -218,9 +234,11 @@ known.
 
 The runner performs at least two unchanged rescans from the exact prepared fixture. Each rescan is
 one ordered record with a unique ID and consecutive ordinal. It binds the prepared snapshot digest,
-the actual `groma scan` and `groma` argument vectors, exit codes, stdout, stderr, execution-context
-attestations, per-command start/completion timestamps, digest-capture timestamp, and the five
-digests produced by that same execution instance:
+source hashes captured immediately before and after the rescan commands, the actual `groma scan`
+and `groma` argument vectors, exit codes, stdout, stderr, execution-context and per-command hermetic
+attestations, per-command start/completion timestamps, source-hash capture timestamps,
+digest-capture timestamp, and the five digests produced by that same execution instance. Both
+source hashes use the exact committed source-hash exclusions:
 
 - raw observation sequence ordering;
 - raw observation content;
@@ -228,20 +246,23 @@ digests produced by that same execution instance:
 - stable canonical identities after reconciliation;
 - exact canonical bytes.
 
-Both commands must be present and successful for every rescan, and every rescan input digest must
-match the audit's prepared fixture. Missing, duplicated, out-of-order, failed, wrong-command, or
-wrong-input records earn no repeatability or identity points. Only then must each corresponding
-digest remain identical across the records. Combining these checks into one digest would hide
+Both commands must be present, successful, stdin-closed, and OS-network-isolated for every rescan.
+The prepared digest and both source hashes must match the audit's prepared fixture. Missing,
+duplicated, out-of-order, failed, non-hermetic, wrong-command, or wrong-input records earn no
+repeatability or identity points. Only then must each corresponding digest remain identical across
+the records. Combining these checks into one digest would hide
 whether ordering, observed content, identity, or canonical serialization drifted, while five
 unattached digest arrays could falsely combine evidence from different executions. The contract
 therefore keeps the values separate but attached to one rescan instance.
 
-The first rescan command starts at or after the initial main-layer freeze. Each command completes at
-or after its start, every next command starts at or after the prior completion, each digest-capture
-timestamp is at or after its final command, and the next rescan starts at or after the prior capture.
-Rescans deliberately have no 60-second scoring deadline: they measure unchanged-input stability,
-while the one-minute constraint applies only to the first useful initial layer. The finite
-process-timeout rule still applies to a hung rescan command.
+Each rescan source-before hash is captured at or after the prior boundary and no later than its first
+command start. Each command completes at or after its start, every next command starts at or after
+the prior completion, the source-after hash is captured at or after the final command, and output
+digests are captured at or after that source-after hash. The next rescan source-before capture and
+command start occur at or after the prior digest capture. Rescans deliberately have no 60-second
+scoring deadline: they measure unchanged-input stability, while the one-minute constraint applies
+only to the first useful initial layer. The finite process-timeout rule still applies to a hung
+rescan command.
 
 Stable audit fact IDs do not satisfy the identity checks. The runner hashes the scanner and Groma
 identities actually emitted by the system under test.
@@ -250,14 +271,15 @@ identities actually emitted by the system under test.
 
 A false claim assessment retains the claim text and raw evidence that caused the assessor to mark
 it false. It may link to predeclared audit forbidden-claim IDs; every supplied link must resolve,
-and the audit's severity takes precedence over the run's bucket. Exact forbidden text is checked
-against every emitted claim, including a claim reported as successfully assessed and mapped to an
-audit fact. A claim placed in the noncritical bucket is therefore still critical when it links to a
-critical forbidden claim. An exact match for predeclared forbidden text inherits that severity even
-if the link was omitted or the claim was not placed in a false-claim bucket. Critical false claims
-include invented business meaning, fabricated relationships, incorrect major boundaries, and
-unsupported implemented surfaces. Explicit uncertainty is not a false claim when the map does not
-assert the missing meaning.
+and the audit's severity takes precedence over the run's bucket in both directions: audit-critical
+claims cannot be demoted and audit-noncritical claims cannot be promoted by the run. Exact forbidden
+text is checked against every emitted claim, including a claim reported as successfully assessed
+and mapped to an audit fact. A claim placed in the noncritical bucket is therefore still critical
+when it links to a critical forbidden claim. An exact match for predeclared forbidden text inherits
+that severity even if the link was omitted or the claim was not placed in a false-claim bucket.
+Critical false claims include invented business meaning, fabricated relationships, incorrect major
+boundaries, and unsupported implemented surfaces. Explicit uncertainty is not a false claim when
+the map does not assert the missing meaning.
 An assessed claim that exactly matches noncritical forbidden text receives the same two-point
 false-claim deduction as one noncritical false-claim record, but it is not a conjunctive failure.
 
