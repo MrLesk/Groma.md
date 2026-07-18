@@ -19,6 +19,7 @@ import {
 import {
   benchmarkFailureCodes,
   benchmarkWorkflow,
+  createMachineObservableFreezeSignal,
   createPreRunPlanCommitment,
   scoreBenchmarkRun,
   type BenchmarkFailureCode,
@@ -62,6 +63,7 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
           {
             detail: `raw evidence for ${fact.id}`,
             observationId: `observation:${fact.id}`,
+            provenanceKind: fact.category === "documentation-evidence" ? "documentation" : "source",
             sourcePath: fact.evidence[0]!.path,
           },
         ],
@@ -148,7 +150,7 @@ function passingRun(audit: BenchmarkAudit): BenchmarkRun {
       declaredMainLayerBudget: { nodes: 40, relationships: 80 },
       frozenMainLayer: {
         artifactSha256: digestA,
-        machineObservableFreezeSignal: "main-layer:frozen",
+        machineObservableFreezeSignal: createMachineObservableFreezeSignal(digestA, 50_000),
         nodes: 30,
         relationships: 55,
       },
@@ -844,6 +846,28 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     );
   });
 
+  test("requires the exact artifact and freeze time in the machine freeze signal", async () => {
+    const audit = await loadAudit("groma.json");
+    const valid = scoreBenchmarkRun(audit, parseBenchmarkRun(passingRun(audit)));
+    expect(valid.dimensions.firstMinute).toBe(10);
+
+    for (const signal of [
+      "",
+      "main-layer:frozen",
+      createMachineObservableFreezeSignal(digestB, 50_000),
+      createMachineObservableFreezeSignal(digestA, 49_999),
+    ]) {
+      const run = cloneRun(passingRun(audit));
+      run.presentation.frozenMainLayer.machineObservableFreezeSignal = signal;
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(run));
+      expect(
+        result.failures.map(({ code }) => code),
+        signal,
+      ).toEqual(["MAIN_LAYER_NOT_MACHINE_FROZEN"]);
+      expect(result.dimensions.firstMinute, signal).toBe(0);
+    }
+  });
+
   test("binds comprehension to the exact frozen presentation artifact", async () => {
     const audit = await loadAudit("groma.json");
     const run = cloneRun(passingRun(audit));
@@ -1029,6 +1053,72 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     }
   });
 
+  test("requires a validated provenance discriminator on assessed evidence", async () => {
+    const audit = await loadAudit("groma.json");
+    const missing = cloneRun(passingRun(audit));
+    delete (missing.claims.assessedClaims[0]!.evidence[0] as unknown as Record<string, unknown>)
+      .provenanceKind;
+    expect(() => parseBenchmarkRun(missing)).toThrow(
+      "assessedClaim.evidence[0].provenanceKind must be source or documentation",
+    );
+
+    const wrong = cloneRun(passingRun(audit));
+    (
+      wrong.claims.assessedClaims[0]!.evidence[0] as unknown as Record<string, unknown>
+    ).provenanceKind = "observation";
+    expect(() => parseBenchmarkRun(wrong)).toThrow(
+      "assessedClaim.evidence[0].provenanceKind must be source or documentation",
+    );
+  });
+
+  test("authenticates documentation claims by kind and exact audit witness path", async () => {
+    const audit = await loadAudit("groma.json");
+    const documentationFact = audit.facts.find(
+      (fact) => fact.category === "documentation-evidence",
+    )!;
+    const validDocumentation = cloneRun(passingRun(audit));
+    const validClaim = validDocumentation.claims.assessedClaims.find((claim) =>
+      claim.factIds.includes(documentationFact.id),
+    )!;
+    validClaim.evidence[0]!.sourcePath = documentationFact.evidence.at(-1)!.path;
+    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(validDocumentation)).passed).toBeTrue();
+
+    const sourceObservation = cloneRun(passingRun(audit));
+    const sourceClaim = sourceObservation.claims.assessedClaims.find((claim) =>
+      claim.factIds.includes(documentationFact.id),
+    )!;
+    sourceClaim.evidence[0]!.provenanceKind = "source";
+    const sourceResult = scoreBenchmarkRun(audit, parseBenchmarkRun(sourceObservation));
+    expect(sourceResult.failures.map(({ code }) => code)).toEqual([
+      "REQUIRED_FACT_COVERAGE_INCOMPLETE",
+      "PROVENANCE_INCOMPLETE",
+    ]);
+    expect(sourceResult.dimensions.provenance).toBeLessThan(10);
+
+    const requiredDocumentationAuditSource = structuredClone(audit) as Mutable<BenchmarkAudit>;
+    requiredDocumentationAuditSource.facts.find(
+      (fact) => fact.id === documentationFact.id,
+    )!.importance = "required";
+    const requiredDocumentationAudit = parseBenchmarkAudit(requiredDocumentationAuditSource);
+    const wrongPath = cloneRun(passingRun(requiredDocumentationAudit));
+    const wrongPathClaim = wrongPath.claims.assessedClaims.find((claim) =>
+      claim.factIds.includes(documentationFact.id),
+    )!;
+    wrongPathClaim.evidence[0]!.sourcePath = requiredDocumentationAudit.facts.find(
+      (fact) => fact.category !== "documentation-evidence",
+    )!.evidence[0]!.path;
+    const wrongPathResult = scoreBenchmarkRun(
+      requiredDocumentationAudit,
+      parseBenchmarkRun(wrongPath),
+    );
+    expect(wrongPathResult.failures.map(({ code }) => code)).toEqual([
+      "REQUIRED_FACT_COVERAGE_INCOMPLETE",
+      "PROVENANCE_INCOMPLETE",
+    ]);
+    expect(wrongPathResult.dimensions.observableFactCoverage).toBeLessThan(20);
+    expect(wrongPathResult.dimensions.provenance).toBeLessThan(10);
+  });
+
   test("does not award self-attested false-claim provenance without structured evidence", async () => {
     const audit = await loadAudit("groma.json");
     const run = cloneRun(passingRun(audit));
@@ -1044,10 +1134,37 @@ describe("automatic-blueprint conjunctive scorecard", () => {
     expect(result.failures).toEqual([
       {
         code: "PROVENANCE_INCOMPLETE",
-        evidence: ["claim:self-attested: no structured witness evidence"],
+        evidence: ["claim:self-attested: no valid structured witness evidence"],
       },
     ]);
     expect(result.dimensions.provenance).toBeLessThan(10);
+  });
+
+  test("uses every emitted claim as the provenance score denominator", async () => {
+    const audit = await loadAudit("groma.json");
+    const passing = passingRun(audit);
+    const emittedClaimCount = passing.claims.assessedClaims.length;
+    expect(emittedClaimCount).toBeGreaterThan(1);
+    expect(scoreBenchmarkRun(audit, parseBenchmarkRun(passing)).dimensions.provenance).toBe(10);
+
+    const expectedPartial = Math.round(((emittedClaimCount - 1) / emittedClaimCount) * 1_000) / 100;
+    for (const field of ["inScopeClaimIds", "claimIdsWithValidWitnesses"] as const) {
+      const partial = cloneRun(passingRun(audit));
+      partial.provenance[field].pop();
+      const result = scoreBenchmarkRun(audit, parseBenchmarkRun(partial));
+      expect(
+        result.failures.map(({ code }) => code),
+        field,
+      ).toEqual(["PROVENANCE_INCOMPLETE"]);
+      expect(result.dimensions.provenance, field).toBe(expectedPartial);
+    }
+
+    const empty = cloneRun(passingRun(audit));
+    empty.provenance.inScopeClaimIds = [];
+    empty.provenance.claimIdsWithValidWitnesses = [];
+    const emptyResult = scoreBenchmarkRun(audit, parseBenchmarkRun(empty));
+    expect(emptyResult.failures.map(({ code }) => code)).toEqual(["PROVENANCE_INCOMPLETE"]);
+    expect(emptyResult.dimensions.provenance).toBe(0);
   });
 
   test("requires emitted assessed and false claim IDs to be globally unique", async () => {
@@ -1456,6 +1573,7 @@ describe("automatic-blueprint conjunctive scorecard", () => {
       },
       {
         code: "MAIN_LAYER_NOT_MACHINE_FROZEN",
+        dimensionExpectation: ["firstMinute", 0],
         mutate: (run) =>
           void (run.presentation.frozenMainLayer.machineObservableFreezeSignal = "  "),
       },
@@ -1464,6 +1582,11 @@ describe("automatic-blueprint conjunctive scorecard", () => {
         mutate: (run) => {
           run.execution.mainLayerFrozenAtMonotonicMilliseconds =
             run.execution.spawnedInitAtMonotonicMilliseconds + 60_001;
+          run.presentation.frozenMainLayer.machineObservableFreezeSignal =
+            createMachineObservableFreezeSignal(
+              run.presentation.frozenMainLayer.artifactSha256,
+              run.execution.mainLayerFrozenAtMonotonicMilliseconds,
+            );
           run.repeatability.rescans[0]!.commands[0]!.startedAtMonotonicMilliseconds = 61_001;
           run.repeatability.rescans[0]!.commands[0]!.completedAtMonotonicMilliseconds = 62_000;
           run.repeatability.rescans[0]!.commands[1]!.startedAtMonotonicMilliseconds = 62_000;

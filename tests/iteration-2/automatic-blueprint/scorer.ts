@@ -12,6 +12,13 @@ export const benchmarkWorkflow = [["groma", "init"], ["groma", "scan"], ["groma"
 
 export const maximumFirstMinuteMilliseconds = 60_000;
 
+export function createMachineObservableFreezeSignal(
+  artifactSha256: string,
+  frozenAtMonotonicMilliseconds: number,
+): string {
+  return `main-layer:frozen:sha256-${artifactSha256}:monotonic-ms-${frozenAtMonotonicMilliseconds}`;
+}
+
 export const benchmarkFailureCodes = [
   "AUDIT_MISMATCH",
   "AUDIT_PROJECT_MISMATCH",
@@ -290,6 +297,33 @@ function addFailure(
   failures.push({ code, evidence: [...evidence] });
 }
 
+function assessedClaimBacksFact(
+  audit: BenchmarkAudit,
+  claim: BenchmarkRun["claims"]["assessedClaims"][number],
+  factId: string,
+): boolean {
+  const fact = audit.facts.find((candidate) => candidate.id === factId);
+  if (fact === undefined) return false;
+  if (fact.category !== "documentation-evidence") return true;
+  const authenticatedDocumentationPaths = new Set(fact.evidence.map((witness) => witness.path));
+  return claim.evidence.some(
+    (evidence) =>
+      evidence.provenanceKind === "documentation" &&
+      authenticatedDocumentationPaths.has(evidence.sourcePath),
+  );
+}
+
+function assessedClaimHasValidStructuredEvidence(
+  audit: BenchmarkAudit,
+  claim: BenchmarkRun["claims"]["assessedClaims"][number],
+): boolean {
+  return (
+    claim.evidence.some(
+      (evidence) => evidence.observationId.length > 0 && evidence.sourcePath.length > 0,
+    ) && claim.factIds.every((factId) => assessedClaimBacksFact(audit, claim, factId))
+  );
+}
+
 export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): BenchmarkScore {
   const failures: { code: BenchmarkFailureCode; evidence: string[] }[] = [];
   const requiredFactIds = audit.facts
@@ -305,7 +339,9 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     ...run.claims.assessedClaims.flatMap((claim) => claim.factIds),
   ].filter((id) => !allFactIds.has(id));
   const factsBackedByRawClaims = new Set(
-    run.claims.assessedClaims.flatMap((claim) => claim.factIds),
+    run.claims.assessedClaims.flatMap((claim) =>
+      claim.factIds.filter((factId) => assessedClaimBacksFact(audit, claim, factId)),
+    ),
   );
   const auditedInputPaths = collectAuditedInputPaths(audit);
 
@@ -579,13 +615,16 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       "human evaluation preceded freeze",
     ]);
   }
-  if (
-    !/^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)+$/.test(
-      run.presentation.frozenMainLayer.machineObservableFreezeSignal,
-    )
-  ) {
+  const expectedMachineFreezeSignal = createMachineObservableFreezeSignal(
+    run.presentation.frozenMainLayer.artifactSha256,
+    run.execution.mainLayerFrozenAtMonotonicMilliseconds,
+  );
+  const machineFreezeSignalValid =
+    run.presentation.frozenMainLayer.machineObservableFreezeSignal === expectedMachineFreezeSignal;
+  if (!machineFreezeSignalValid) {
     addFailure(failures, "MAIN_LAYER_NOT_MACHINE_FROZEN", [
       `invalid freeze signal ${JSON.stringify(run.presentation.frozenMainLayer.machineObservableFreezeSignal)}`,
+      `expected ${expectedMachineFreezeSignal}`,
     ]);
   }
 
@@ -808,11 +847,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
   ];
   const evidenceBackedClaimIds = [
     ...run.claims.assessedClaims
-      .filter((claim) =>
-        claim.evidence.some(
-          (evidence) => evidence.observationId.length > 0 && evidence.sourcePath.length > 0,
-        ),
-      )
+      .filter((claim) => assessedClaimHasValidStructuredEvidence(audit, claim))
       .map((claim) => claim.claimId),
     ...allFalseClaims
       .filter((claim) =>
@@ -826,16 +861,15 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     (id) => !evidenceBackedClaimIds.includes(id),
   );
   if (
-    run.provenance.inScopeClaimIds.length === 0 ||
     !sameSet(run.provenance.inScopeClaimIds, emittedClaimIds) ||
-    !sameSet(run.provenance.inScopeClaimIds, evidenceBackedClaimIds) ||
-    !sameSet(run.provenance.claimIdsWithValidWitnesses, evidenceBackedClaimIds)
+    !sameSet(run.provenance.claimIdsWithValidWitnesses, evidenceBackedClaimIds) ||
+    !sameSet(evidenceBackedClaimIds, emittedClaimIds)
   ) {
     addFailure(
       failures,
       "PROVENANCE_INCOMPLETE",
       missingStructuredEvidence.length > 0
-        ? missingStructuredEvidence.map((id) => `${id}: no structured witness evidence`)
+        ? missingStructuredEvidence.map((id) => `${id}: no valid structured witness evidence`)
         : ["claim inventory, structured evidence, and provenance do not match"],
     );
   }
@@ -904,8 +938,14 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
     rescansEligibleForStability && allSame(rescanDigests("canonicalIdentityDigest"));
   const canonicalBytesStable =
     rescansEligibleForStability && allSame(rescanDigests("canonicalByteDigest"));
-  const provenanceCovered = run.provenance.inScopeClaimIds.filter((id) =>
-    evidenceBackedClaimIds.includes(id),
+  const evidenceBackedClaimIdSet = new Set(evidenceBackedClaimIds);
+  const declaredInScopeClaimIdSet = new Set(run.provenance.inScopeClaimIds);
+  const declaredValidWitnessClaimIdSet = new Set(run.provenance.claimIdsWithValidWitnesses);
+  const provenanceCovered = emittedClaimIds.filter(
+    (id) =>
+      evidenceBackedClaimIdSet.has(id) &&
+      declaredInScopeClaimIdSet.has(id) &&
+      declaredValidWitnessClaimIdSet.has(id),
   ).length;
   const answeredCorrectRequiredQuestions = requiredQuestionIds.filter(
     (id) =>
@@ -926,6 +966,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       initialCommandsSuccessful &&
       initialCommandTimingValid &&
       initialCommandContextValid &&
+      machineFreezeSignalValid &&
       firstMinuteMilliseconds >= 0 &&
       firstMinuteMilliseconds <= maximumFirstMinuteMilliseconds
         ? 10
@@ -947,10 +988,7 @@ export function scoreBenchmarkRun(audit: BenchmarkAudit, run: BenchmarkRun): Ben
       run.presentation.uncertainty.nonColorCue !== "none"
         ? 3
         : 0),
-    provenance:
-      run.provenance.inScopeClaimIds.length === 0
-        ? 0
-        : portion(provenanceCovered, run.provenance.inScopeClaimIds.length, 10),
+    provenance: portion(provenanceCovered, emittedClaimIds.length, 10),
     repeatability: (rawStable ? 5 : 0) + (rawDigestStable ? 5 : 0),
     stableIdentityAndCanonicalBytes:
       (observationIdentityStable ? 5 : 0) +

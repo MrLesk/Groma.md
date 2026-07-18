@@ -127,6 +127,7 @@ export interface AssessedClaimEvidence {
   readonly evidence: readonly {
     readonly detail: string;
     readonly observationId: string;
+    readonly provenanceKind: "documentation" | "source";
     readonly sourcePath: string;
   }[];
   readonly factIds: readonly string[];
@@ -915,6 +916,12 @@ export function parseBenchmarkRun(value: unknown): BenchmarkRun {
       const raw = record(evidenceItem, `assessedClaim.evidence[${evidenceIndex}]`, code);
       string(raw.detail, `assessedClaim.evidence[${evidenceIndex}].detail`, code);
       string(raw.observationId, `assessedClaim.evidence[${evidenceIndex}].observationId`, code);
+      if (raw.provenanceKind !== "source" && raw.provenanceKind !== "documentation") {
+        throw new BenchmarkContractError(
+          code,
+          `assessedClaim.evidence[${evidenceIndex}].provenanceKind must be source or documentation`,
+        );
+      }
       const sourcePath = string(
         raw.sourcePath,
         `assessedClaim.evidence[${evidenceIndex}].sourcePath`,

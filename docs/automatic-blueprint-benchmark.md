@@ -264,17 +264,24 @@ Passing requires zero critical false claims and complete coverage of every audit
 aggregate cross-boundary dependencies are conjunctive gates. A high score elsewhere cannot
 compensate for missing either one.
 
-Every in-scope automatic claim, including a claim later assessed as false, must have a valid source
-witness. Assessed and false claim IDs are globally unique and disjoint. Provenance is complete only
-when the complete emitted in-scope claim inventory and the IDs with valid witnesses are the same
-nonempty set.
+Every in-scope automatic claim, including a claim later assessed as false, must have valid
+structured evidence. Assessed and false claim IDs are globally unique and disjoint. Provenance is
+complete only when the complete emitted claim inventory and the IDs with valid witnesses are the
+same nonempty set.
 Every recorded claim-evidence `sourcePath` uses the same strict portable workspace-descendant
 syntax as audit witnesses. The scorer derives valid provenance from evidence rather than trusting
-the declared valid-ID list: an assessed claim retains its required observation ID and source path,
-and a false claim needs at least one evidence record containing both fields. The declared list must
-match that derived set, so a detail-only false-claim assessment cannot earn provenance points.
-Documentation-derived claims retain a documentation provenance kind. Raw scanner evidence remains
-available alongside the assessment rather than being replaced by the score.
+the declared valid-ID list: assessed evidence retains a required observation ID, source path, and
+`source` or `documentation` provenance kind, while a false claim needs at least one evidence record
+containing both observation ID and source path. Every mapped `documentation-evidence` fact requires
+documentation-kind evidence whose source path exactly equals one of that fact's authenticated
+documentation witness paths. A source observation or a different documentation path cannot back
+that fact or its emitting claim. Raw scanner evidence remains available alongside the assessment
+rather than being replaced by the score.
+
+The provenance score denominator is every emitted assessed or false claim, never a self-declared
+subset. An emitted claim contributes to the numerator only when its structured evidence is valid
+and both declared provenance inventories contain its ID. Truncating either inventory therefore
+retains the completeness failure and proportionally reduces diagnostic provenance points.
 
 ## Bounded initial main layer
 
@@ -283,6 +290,11 @@ pre-run plan. The benchmark requires positive declared limits, verifies that the
 matches the commitment, and verifies that the frozen layer stays within them. It does not choose
 numeric production budgets: the renderer prototype and later density work own that product
 decision.
+
+The machine freeze signal is exact and binds the scored artifact and monotonic freeze time:
+`main-layer:frozen:sha256-<artifact-sha256>:monotonic-ms-<freeze-time>`. A missing or malformed
+signal, or one naming a different artifact digest or time, fails the machine-freeze gate and earns
+no first-minute points.
 
 Focus, expansion, folding, and detail views may exist, but they are unavailable during initial
 comprehension scoring. The first frozen layer must expose at least one uncertainty or coverage gap
