@@ -1,6 +1,7 @@
 import type {
   ApplicationOperations,
   ApplicationSnapshotStateDecoder,
+  ReconciliationOperations,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
 import type {
@@ -104,6 +105,7 @@ export interface HostComposition {
   readonly projectionRead: ProjectionReadCapability;
   readonly queryEngine: GraphQueryEngineCapability;
   readonly queries: BoundedQueryContracts;
+  readonly reconciliation: ReconciliationOperations;
   readonly resourceMapper: ComponentResourceMapper;
   readonly resources: LocalResourceProvider;
   readonly scanners: ScannerExecutionRuntime;

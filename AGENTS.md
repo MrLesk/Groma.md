@@ -82,6 +82,14 @@ pull request, verify the task through the Backlog CLI.
 Set the pull request title to exactly `<TASK-ID> - <Task title>`, using the ID and title
 reported by `backlog task view`. Do not abbreviate, reword, or omit either part.
 
+Before opening each pull request, spawn exactly two independent local review agents
+using `gpt-5.6-terra` at `xhigh` reasoning effort. Give both agents the complete diff
+and task boundary, evaluate their findings independently, and address every finding
+that is justified by the task, manifesto, implementation, and checks before the pull
+request is opened. Keep these reviews bounded to one pass from each agent; do not
+spawn recursive or open-ended review loops. These local reviews complement rather
+than replace the required Claude and automatic Codex reviews below.
+
 After creating each pull request, ask Claude to review it and inspect the feedback:
 
 ```sh

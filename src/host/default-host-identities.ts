@@ -23,6 +23,7 @@ export const defaultHostCapabilityIds = Object.freeze({
   projectionRead: "groma.projection-read/v1",
   queryEngine: "groma.graph-query/v2",
   queries: "groma.queries/v1",
+  reconciliation: "groma.reconciliation/v1",
   resourceMapper: "groma.resource-mapper/v1",
   resources: "groma.resources/v1",
   snapshotStateDecoder: "groma.snapshot-state-decoder/v1",

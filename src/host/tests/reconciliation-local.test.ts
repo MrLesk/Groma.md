@@ -1,0 +1,447 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import {
+  createObservationSession,
+  observationSessionApiVersion,
+  parseResourceKey,
+  type CompletedObservationSnapshot,
+  type ObservationRecord,
+  type Result,
+} from "../../core/index.ts";
+import { createReconciliationOperations } from "../../application/index.ts";
+import {
+  allowsCustomLocalCoordinationRoot,
+  markdownEvidenceLocator,
+} from "../../persistence/index.ts";
+import { createDefaultBootstrapRegistry, defaultHostBounds, type HostSurface } from "../index.ts";
+
+const roots: string[] = [];
+const provenance = Object.freeze([
+  Object.freeze({
+    fingerprint: "sha256:aaaaaaaaaaaaaaaa",
+    resource: "src/index.ts",
+    scope: "workspace",
+  }),
+]);
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+});
+
+function valueOf<T>(result: Result<T>): T {
+  if (!result.ok) throw new Error(result.diagnostics.map((item) => item.code).join(", "));
+  return result.value;
+}
+
+async function temporaryWorkspace() {
+  const workspaceRoot = await mkdtemp(path.join(tmpdir(), "groma-reconciliation-local-"));
+  roots.push(workspaceRoot);
+  if (!allowsCustomLocalCoordinationRoot(process.platform)) return { workspaceRoot };
+  const coordinationRoot = await mkdtemp(path.join(tmpdir(), "groma-reconciliation-locks-"));
+  roots.push(coordinationRoot);
+  return { coordinationRoot, workspaceRoot };
+}
+
+async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspace>>) {
+  let entropyValue = 0;
+  const surface: HostSurface = Object.freeze({
+    start: () => ({ completion: Promise.resolve(), stop: async () => {} }),
+  });
+  const registry = createDefaultBootstrapRegistry({
+    ...(workspace.coordinationRoot === undefined
+      ? {}
+      : { coordinationRoot: workspace.coordinationRoot }),
+    entropy: (length) => new Uint8Array(length).fill(entropyValue++),
+    surface,
+  });
+  const composed = await registry.compose({ workspaceRoot: workspace.workspaceRoot });
+  if (!composed.ok) throw new Error("Default host composition failed");
+  return composed.value;
+}
+
+function candidate(key: string, name: string): ObservationRecord {
+  return Object.freeze({
+    candidate: Object.freeze({ name, type: "service" }),
+    key,
+    kind: "component-candidate",
+    provenance,
+    scope: "workspace",
+  });
+}
+
+function relationship(key: string, from: string, to: string): ObservationRecord {
+  return Object.freeze({
+    from: Object.freeze({ key: from, scope: "workspace" }),
+    key,
+    kind: "relationship",
+    provenance,
+    relationshipType: "imports",
+    scope: "workspace",
+    to: Object.freeze({ key: to, scope: "workspace" }),
+  });
+}
+
+function action(key: string, component: string): ObservationRecord {
+  return Object.freeze({
+    component: Object.freeze({ key: component, scope: "workspace" }),
+    key,
+    kind: "action",
+    name: "Serve",
+    provenance,
+    scope: "workspace",
+  });
+}
+
+function snapshot(
+  epoch: string,
+  records: readonly ObservationRecord[],
+  sourceId = "groma.typescript-bun",
+  coverageState: "complete" | "partial" = "complete",
+): CompletedObservationSnapshot {
+  const session = valueOf(
+    createObservationSession({
+      apiVersion: observationSessionApiVersion,
+      epoch,
+      projectId: "project.local",
+      scopes: Object.freeze([Object.freeze({ id: "workspace", resourceRoot: "." })]),
+      source: Object.freeze({ id: sourceId, instance: "builtin", version: "1.0.0" }),
+    }),
+  );
+  valueOf(session.submitBatch({ epoch, records, sequence: 1 }));
+  return valueOf(
+    session.complete({
+      coverage: Object.freeze([
+        Object.freeze({
+          kinds: Object.freeze([
+            "action" as const,
+            "component-candidate" as const,
+            "documentation" as const,
+            "input" as const,
+            "output" as const,
+            "relationship" as const,
+          ]),
+          scope: "workspace",
+          state: coverageState,
+        }),
+      ]),
+      epoch,
+      sequence: 2,
+    }),
+  );
+}
+
+describe("local completed-snapshot reconciliation", () => {
+  test("composes the built-in scanner directly into atomic reconciliation", async () => {
+    const workspace = await temporaryWorkspace();
+    await mkdir(path.join(workspace.workspaceRoot, "src"));
+    await writeFile(
+      path.join(workspace.workspaceRoot, "package.json"),
+      JSON.stringify({ name: "self-scan-fixture" }),
+    );
+    await writeFile(
+      path.join(workspace.workspaceRoot, "src", "index.ts"),
+      "export function serve() { return 'ready'; }\n",
+    );
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const project = await host.projects.add({
+      coverage: [{ id: "workspace", resourceRoot: "." }],
+      name: "Fixture",
+      scanners: [{ configuration: { include: ["src"] }, id: "official.typescript" }],
+      source: ".",
+    });
+    expect(project.ok).toBeTrue();
+    if (!project.ok) return;
+    const started = await host.scanners.start({
+      projectId: project.value.id,
+      scannerId: "official.typescript",
+    });
+    expect(started.ok).toBeTrue();
+    if (!started.ok) return;
+    expect(await started.value.completion).toMatchObject({ status: "completed" });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    expect(components.value.items.length).toBeGreaterThan(0);
+    expect(
+      await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8"),
+    ).toContain("official.typescript");
+  });
+
+  test("publishes stable automatic identity and makes an equivalent rescan a byte no-op", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const first = await host.reconciliation.reconcile(
+      snapshot("epoch-1", [candidate("api", "API")]),
+    );
+    expect(first).toMatchObject({ ok: true, value: { status: "committed" } });
+    if (!first.ok) return;
+    const firstPage = await host.operations.listComponents({ limit: 10 });
+    expect(firstPage.ok).toBeTrue();
+    if (!firstPage.ok) return;
+    expect(firstPage.value.items).toHaveLength(1);
+    const firstComponent = firstPage.value.items[0]!;
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const firstEvidence = await readFile(evidencePath, "utf8");
+
+    const repeated = await host.reconciliation.reconcile(
+      snapshot("epoch-2", [candidate("api", "API")]),
+    );
+    expect(repeated).toEqual({
+      ok: true,
+      value: { generation: first.value.generation, status: "unchanged" },
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(firstEvidence);
+
+    const renamed = await host.reconciliation.reconcile(
+      snapshot("epoch-3", [candidate("api", "Public API")]),
+    );
+    expect(renamed).toMatchObject({ ok: true, value: { status: "committed" } });
+    const renamedPage = await host.operations.listComponents({ limit: 10 });
+    expect(renamedPage.ok).toBeTrue();
+    if (!renamedPage.ok) return;
+    expect(renamedPage.value.items[0]?.component).toMatchObject({
+      id: firstComponent.component.id,
+      name: "Public API",
+    });
+
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const afterRestart = await restarted.operations.listComponents({ limit: 10 });
+    expect(afterRestart.ok).toBeTrue();
+    if (!afterRestart.ok) return;
+    expect(afterRestart.value.items[0]?.component.id).toBe(firstComponent.component.id);
+
+    const evidenceBeforeRemoval = await readFile(evidencePath, "utf8");
+    expect(
+      await restarted.operations.removeComponent({
+        expectedRevision: afterRestart.value.items[0]!.revision,
+        id: firstComponent.component.id,
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await restarted.reconciliation.reconcile(
+        snapshot("epoch-4", [candidate("api", "Public API")]),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-missing" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+  });
+
+  test("rejects a snapshot beyond the single-transaction component envelope", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const records = Array.from({ length: defaultHostBounds.maxEmbeddedItems + 1 }, (_, index) =>
+      candidate(`component-${index}`, `Component ${index}`),
+    );
+    expect(await host.reconciliation.reconcile(snapshot("epoch-limit", records))).toMatchObject({
+      diagnostics: [{ code: "reconciliation-component-limit" }],
+      ok: false,
+    });
+    expect(
+      await Bun.file(path.join(workspace.workspaceRoot, "groma", "evidence.md")).exists(),
+    ).toBeFalse();
+  });
+
+  test("replans when a direct curated edit races revision confirmation", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-1", [candidate("api", "API")])),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    const id = components.value.items[0]!.component.id;
+    const intentPath = path.join(
+      workspace.workspaceRoot,
+      "groma",
+      "intent",
+      id.slice(4, 6),
+      `${id}.md`,
+    );
+    const providerSnapshot = host.transactionProvider.snapshot.bind(host.transactionProvider);
+    let snapshotCalls = 0;
+    let entropyValue = 128;
+    const evidenceResourceMapper = Object.freeze({
+      resourceForEvidence: () => {
+        const locator = markdownEvidenceLocator();
+        return locator.ok ? parseResourceKey(locator.value) : locator;
+      },
+    });
+    const raced = createReconciliationOperations({
+      bounds: {
+        maxComponents: defaultHostBounds.maxEmbeddedItems,
+        maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
+        maxRecords: defaultHostBounds.maxComponents * defaultHostBounds.maxEmbeddedItems,
+        maxRelationships: defaultHostBounds.maxRelationshipMutations,
+        maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
+        maxSources: defaultHostBounds.maxComponents,
+      },
+      entropy: (length) => new Uint8Array(length).fill(entropyValue++),
+      evidenceResourceMapper,
+      resourceMapper: host.resourceMapper,
+      snapshotStateDecoder: host.snapshotStateDecoder,
+      transactionExecution: host.transactionEngine,
+      transactionProvider: Object.freeze({
+        snapshot: async (resources) => {
+          snapshotCalls += 1;
+          if (snapshotCalls === 2) {
+            const before = await readFile(intentPath, "utf8");
+            const after = before.replace("name: API", "name: Curated directly");
+            expect(after).not.toBe(before);
+            await writeFile(intentPath, after);
+          }
+          return providerSnapshot(resources);
+        },
+      }),
+    });
+    expect(
+      await raced.reconcile(snapshot("epoch-2", [candidate("api", "Scanner rename")])),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    expect(snapshotCalls).toBe(3);
+    const afterRace = await host.operations.getComponent({ id, relationships: { limit: 1 } });
+    expect(afterRace.ok).toBeTrue();
+    if (!afterRace.ok) return;
+    expect(afterRace.value.item.component.name).toBe("Curated directly");
+  });
+
+  test("preserves curated meaning, omissions, and other sources while references fail closed", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-1", [
+          candidate("api", "API"),
+          candidate("data", "Data"),
+          relationship("api-data", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const initial = await host.operations.listComponents({ limit: 10 });
+    expect(initial.ok).toBeTrue();
+    if (!initial.ok) return;
+    const api = initial.value.items.find((item) => item.component.name === "API")!;
+    const data = initial.value.items.find((item) => item.component.name === "Data")!;
+    const initialApi = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(initialApi.ok).toBeTrue();
+    if (!initialApi.ok) return;
+    const relationId = initialApi.value.relationships.items[0]!.relationship.id;
+    const curated = await host.operations.updateComponent({
+      expectedRevision: api.revision,
+      id: api.component.id,
+      patch: { intent: "Curated intent", name: "Customer API" },
+    });
+    expect(curated).toMatchObject({ status: "committed" });
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "epoch-partial",
+          [candidate("api", "Renamed by scanner")],
+          "groma.typescript-bun",
+          "partial",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const afterPartial = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(afterPartial.ok).toBeTrue();
+    if (!afterPartial.ok) return;
+    expect(afterPartial.value.relationships.items).toHaveLength(1);
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-2", [candidate("api", "Renamed by scanner")]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const afterCompleteOmission = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(afterCompleteOmission.ok).toBeTrue();
+    if (!afterCompleteOmission.ok) return;
+    expect(afterCompleteOmission.value.relationships.items).toHaveLength(0);
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("other-1", [candidate("api", "Other API")], "other.scanner"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const after = await host.operations.listComponents({ limit: 10 });
+    expect(after.ok).toBeTrue();
+    if (!after.ok) return;
+    expect(after.value.items.map((item) => item.component.id)).toContain(data.component.id);
+    expect(after.value.items.map((item) => item.component.name)).toEqual([
+      "Customer API",
+      "Data",
+      "Other API",
+    ]);
+    expect(
+      after.value.items.find((item) => item.component.id === api.component.id)?.component,
+    ).toMatchObject({ intent: "Curated intent", name: "Customer API" });
+
+    const beforeRejected = await readFile(
+      path.join(workspace.workspaceRoot, "groma", "evidence.md"),
+      "utf8",
+    );
+    const rejected = await host.reconciliation.reconcile(
+      snapshot("epoch-3", [candidate("api", "API"), relationship("broken", "api", "missing")]),
+    );
+    expect(rejected).toMatchObject({
+      diagnostics: [{ code: "unresolved-observation-reference" }],
+      ok: false,
+    });
+    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
+      beforeRejected,
+    );
+
+    const rejectedMember = await host.reconciliation.reconcile(
+      snapshot("epoch-member", [candidate("api", "API"), action("serve", "missing")]),
+    );
+    expect(rejectedMember).toMatchObject({
+      diagnostics: [{ code: "unresolved-observation-reference" }],
+      ok: false,
+    });
+    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
+      beforeRejected,
+    );
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-4", [
+          candidate("api", "API"),
+          candidate("data", "Data"),
+          relationship("api-data", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const reappeared = await host.operations.listComponents({ limit: 10 });
+    expect(reappeared.ok).toBeTrue();
+    if (!reappeared.ok) return;
+    expect(
+      reappeared.value.items.find((item) => item.component.name === "Data")?.component.id,
+    ).toBe(data.component.id);
+    const reappearedApi = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(reappearedApi.ok).toBeTrue();
+    if (!reappearedApi.ok) return;
+    expect(reappearedApi.value.relationships.items[0]?.relationship.id).toBe(relationId);
+  });
+});

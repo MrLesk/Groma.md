@@ -474,6 +474,8 @@ function parseState(
     [
       ["components", "relationships"],
       ["aliases", "components", "relationships"],
+      ["components", "evidence", "relationships"],
+      ["aliases", "components", "evidence", "relationships"],
     ],
     "invalid-standard-model-envelope",
     "priorState",
@@ -833,6 +835,8 @@ function parseMutation(
     [
       ["components", "relationships"],
       ["aliases", "components", "relationships"],
+      ["components", "evidence", "relationships"],
+      ["aliases", "components", "evidence", "relationships"],
     ],
     "invalid-standard-model-envelope",
     "mutation",

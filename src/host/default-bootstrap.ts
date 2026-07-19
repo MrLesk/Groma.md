@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import {
   createApplicationOperations,
   createApplicationSnapshotStateDecoder,
+  createReconciliationOperations,
   type ApplicationOperations,
   type ComponentResourceMapper,
 } from "../application/index.ts";
@@ -18,6 +19,7 @@ import {
   success,
   TransactionEngine,
   type Diagnostic,
+  type CompletedObservationSnapshot,
   type GraphQueryEngineCapability,
   type PluginCapabilityDeclaration,
   type PluginRegistration,
@@ -37,11 +39,13 @@ import {
   createLocalProjectionIndex,
   createProjectionQueryEngine,
   createMarkdownIntentStore,
+  createMarkdownEvidenceStore,
   createTransactionProjectionCanonicalSource,
   createMarkdownIntentTransactionAdapter,
   DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
   DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
   markdownIntentLocator,
+  markdownEvidenceLocator,
 } from "../persistence/index.ts";
 import {
   createStandardModelCapability,
@@ -209,17 +213,6 @@ function runningCapability<T>(plugins: RunningPluginGraph, id: string): T {
 function diagnostic(code: string, message: string): Diagnostic {
   return Object.freeze({ code, message });
 }
-
-const unavailableScannerHandoffConsumer = Object.freeze({
-  async consume() {
-    return failure(
-      diagnostic(
-        "scanner-handoff-consumer-unavailable",
-        "Completed scanner observations cannot be reconciled by this Host yet",
-      ),
-    );
-  },
-});
 
 function localPhaseOneProviderCanRepair(
   item: Diagnostic,
@@ -489,6 +482,13 @@ export function createDefaultBootstrapRegistry(
               },
               resources,
             });
+            const evidence = createMarkdownEvidenceStore({
+              bounds: {
+                maxDepth: defaultHostBounds.maxSnapshotStateDepth,
+                maxValues: defaultHostBounds.maxSnapshotStateValues,
+              },
+              resources,
+            });
             const store = Object.freeze({
               decode: rawStore.decode,
               load: async () => {
@@ -503,6 +503,7 @@ export function createDefaultBootstrapRegistry(
             const transactionProvider = createLocalTransactionJournal({
               adapter: createMarkdownIntentTransactionAdapter({
                 aliases,
+                evidence,
                 maxAliases: defaultHostBounds.maxComponents,
                 model,
                 store: rawStore,
@@ -610,6 +611,7 @@ export function createDefaultBootstrapRegistry(
             1,
             [
               capability(defaultHostCapabilityIds.operations),
+              capability(defaultHostCapabilityIds.reconciliation),
               capability(defaultHostCapabilityIds.resourceMapper),
               capability(defaultHostCapabilityIds.snapshotStateDecoder),
               capability(defaultHostCapabilityIds.transactionEngine),
@@ -760,9 +762,32 @@ export function createDefaultBootstrapRegistry(
               transactionExecution: transactionEngine,
               transactionProvider,
             });
+            const evidenceResourceMapper = Object.freeze({
+              resourceForEvidence: () => {
+                const locator = markdownEvidenceLocator();
+                return locator.ok ? parseResourceKey(locator.value) : locator;
+              },
+            });
+            const reconciliation = createReconciliationOperations({
+              bounds: {
+                maxComponents: defaultHostBounds.maxEmbeddedItems,
+                maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
+                maxRecords: defaultHostBounds.maxComponents * defaultHostBounds.maxEmbeddedItems,
+                maxRelationships: defaultHostBounds.maxRelationshipMutations,
+                maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
+                maxSources: defaultHostBounds.maxComponents,
+              },
+              entropy,
+              evidenceResourceMapper,
+              resourceMapper,
+              snapshotStateDecoder,
+              transactionExecution: transactionEngine,
+              transactionProvider,
+            });
             return Object.freeze({
               capabilities: Object.freeze([
                 output(defaultHostCapabilityIds.operations, operations),
+                output(defaultHostCapabilityIds.reconciliation, reconciliation),
                 output(defaultHostCapabilityIds.resourceMapper, resourceMapper),
                 output(defaultHostCapabilityIds.snapshotStateDecoder, snapshotStateDecoder),
                 output(defaultHostCapabilityIds.transactionEngine, transactionEngine),
@@ -1072,6 +1097,10 @@ export function createDefaultBootstrapRegistry(
         plugins,
         defaultHostCapabilityIds.queries,
       );
+      const reconciliation = runningCapability<HostComposition["reconciliation"]>(
+        plugins,
+        defaultHostCapabilityIds.reconciliation,
+      );
       const projection = runningCapability<HostComposition["projection"]>(
         plugins,
         defaultHostCapabilityIds.projection,
@@ -1109,7 +1138,12 @@ export function createDefaultBootstrapRegistry(
         defaultHostCapabilityIds.transactionProvider,
       );
       const scanners = createScannerExecutionRuntime({
-        consumer: unavailableScannerHandoffConsumer,
+        consumer: Object.freeze({
+          async consume(snapshot: CompletedObservationSnapshot) {
+            const outcome = await reconciliation.reconcile(snapshot);
+            return outcome.ok ? success(undefined) : failure(...outcome.diagnostics);
+          },
+        }),
         entropy,
         plugins,
         projectResources: (project) =>
@@ -1134,6 +1168,7 @@ export function createDefaultBootstrapRegistry(
           projectionRead,
           queryEngine,
           queries,
+          reconciliation,
           resourceMapper,
           resources,
           scanners,
