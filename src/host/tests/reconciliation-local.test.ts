@@ -411,6 +411,208 @@ describe("local completed-snapshot reconciliation", () => {
     ).toMatchObject({ diagnostics: [{ code: "invalid-evidence-state" }], ok: false });
   });
 
+  test("migrates an observed component binding through a curated merge on rescan", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const records = Object.freeze([
+      candidate("observed", "Observed"),
+      candidate("dependency", "Dependency"),
+      candidate("replacement", "Replacement"),
+      action("serve", "observed"),
+      relationship("observed-dependency", "observed", "dependency"),
+    ]);
+    expect(await host.reconciliation.reconcile(snapshot("epoch-merge", records))).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const automatic = await host.operations.listComponents({ limit: 10 });
+    expect(automatic.ok).toBeTrue();
+    if (!automatic.ok) return;
+    const observed = automatic.value.items.find((item) => item.component.name === "Observed")!;
+    const dependency = automatic.value.items.find((item) => item.component.name === "Dependency")!;
+    const replacement = automatic.value.items.find(
+      (item) => item.component.name === "Replacement",
+    )!;
+    const curatedId = "ent_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    expect(
+      await host.operations.createComponent({
+        component: { id: curatedId, intent: "Curated meaning", name: "Curated" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await host.operations.mergeComponent({
+        expectedRevision: observed.revision,
+        obsolete: observed.component.id,
+        survivor: curatedId,
+      }),
+    ).toMatchObject({ status: "committed", value: { id: curatedId } });
+
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const beforeRescan = await readFile(evidencePath, "utf8");
+    const rescanned = await host.reconciliation.reconcile(snapshot("epoch-merge-rescan", records));
+    expect(rescanned).toMatchObject({ ok: true, value: { status: "committed" } });
+    if (!rescanned.ok || rescanned.value.status !== "committed") return;
+    const migratedEvidence = await readFile(evidencePath, "utf8");
+    expect(migratedEvidence).not.toBe(beforeRescan);
+    expect(migratedEvidence).toContain(`"componentId": "${curatedId}"`);
+    expect(migratedEvidence).not.toContain(`"componentId": "${observed.component.id}"`);
+
+    const throughAlias = await host.operations.getComponent({
+      id: observed.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(throughAlias.ok).toBeTrue();
+    if (!throughAlias.ok) return;
+    expect(throughAlias.value.item.component).toMatchObject({
+      id: curatedId,
+      intent: "Curated meaning",
+      name: "Curated",
+    });
+    expect(throughAlias.value.evidence).toMatchObject([
+      {
+        binding: { key: "observed", present: true },
+        records: expect.arrayContaining([
+          expect.objectContaining({ key: "observed", kind: "component-candidate" }),
+          expect.objectContaining({ key: "serve", kind: "action" }),
+          expect.objectContaining({ key: "observed-dependency", kind: "relationship" }),
+        ]),
+      },
+    ]);
+    expect(throughAlias.value.relationships.items).toMatchObject([
+      { relationship: { source: curatedId, target: dependency.component.id, type: "imports" } },
+    ]);
+    const listed = await host.operations.listComponents({ limit: 10 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    expect(listed.value.items.map((item) => item.component.name).sort()).toEqual([
+      "Curated",
+      "Dependency",
+      "Replacement",
+    ]);
+
+    const changedRecords = Object.freeze([
+      candidate("observed", "Observed"),
+      candidate("dependency", "Dependency"),
+      candidate("replacement", "Replacement"),
+      action("serve", "observed"),
+      relationship("observed-dependency", "observed", "replacement"),
+    ]);
+    const changed = await host.reconciliation.reconcile(
+      snapshot("epoch-merge-relationship-change", changedRecords),
+    );
+    expect(changed).toMatchObject({ ok: true, value: { status: "committed" } });
+    if (!changed.ok || changed.value.status !== "committed") return;
+    const afterChange = await host.operations.getComponent({
+      id: observed.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(afterChange).toMatchObject({
+      ok: true,
+      value: {
+        relationships: {
+          items: [{ relationship: { source: curatedId, target: replacement.component.id } }],
+        },
+      },
+    });
+    const changedEvidence = await readFile(evidencePath, "utf8");
+    const repeated = await host.reconciliation.reconcile(
+      snapshot("epoch-merge-repeat", changedRecords),
+    );
+    expect(repeated).toEqual({
+      ok: true,
+      value: { generation: changed.value.generation, status: "unchanged" },
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(changedEvidence);
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    expect(
+      await restarted.operations.getComponent({
+        id: observed.component.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [{ binding: { key: "observed" } }],
+        item: { component: { id: curatedId, intent: "Curated meaning" } },
+      },
+    });
+  });
+
+  test("rejects a rescan when two source bindings resolve to one survivor", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const records = Object.freeze([candidate("left", "Left"), candidate("right", "Right")]);
+    expect(await host.reconciliation.reconcile(snapshot("epoch-collision", records))).toMatchObject(
+      {
+        ok: true,
+        value: { status: "committed" },
+      },
+    );
+    const automatic = await host.operations.listComponents({ limit: 10 });
+    expect(automatic.ok).toBeTrue();
+    if (!automatic.ok) return;
+    const left = automatic.value.items.find((item) => item.component.name === "Left")!;
+    const right = automatic.value.items.find((item) => item.component.name === "Right")!;
+    expect(
+      await host.operations.mergeComponent({
+        expectedRevision: left.revision,
+        obsolete: left.component.id,
+        survivor: right.component.id,
+      }),
+    ).toMatchObject({ status: "committed" });
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidenceBeforeRescan = await readFile(evidencePath, "utf8");
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-collision-rescan", records)),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-ambiguous" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRescan);
+  });
+
+  test("rejects a rescan when a binding resolves to another source's target", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-left", [candidate("left", "Left")], "scanner.left"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-right", [candidate("right", "Right")], "scanner.right"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const automatic = await host.operations.listComponents({ limit: 10 });
+    expect(automatic.ok).toBeTrue();
+    if (!automatic.ok) return;
+    const left = automatic.value.items.find((item) => item.component.name === "Left")!;
+    const right = automatic.value.items.find((item) => item.component.name === "Right")!;
+    expect(
+      await host.operations.mergeComponent({
+        expectedRevision: left.revision,
+        obsolete: left.component.id,
+        survivor: right.component.id,
+      }),
+    ).toMatchObject({ status: "committed" });
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidenceBeforeRescan = await readFile(evidencePath, "utf8");
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-left-rescan", [candidate("left", "Left")], "scanner.left"),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-ambiguous" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRescan);
+  });
+
   test("rejects a snapshot beyond the single-transaction component envelope", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
@@ -462,6 +664,7 @@ describe("local completed-snapshot reconciliation", () => {
       },
       entropy: (length) => new Uint8Array(length).fill(entropyValue++),
       evidenceResourceMapper: evidenceResourceMapper(),
+      graph: host.graph,
       resourceMapper: host.resourceMapper,
       snapshotStateDecoder: host.snapshotStateDecoder,
       transactionExecution: Object.freeze({
@@ -994,6 +1197,7 @@ describe("local completed-snapshot reconciliation", () => {
       },
       entropy: (length) => new Uint8Array(length),
       evidenceResourceMapper: evidenceResourceMapper(),
+      graph: host.graph,
       resourceMapper: host.resourceMapper,
       snapshotStateDecoder: host.snapshotStateDecoder,
       transactionExecution: Object.freeze({
