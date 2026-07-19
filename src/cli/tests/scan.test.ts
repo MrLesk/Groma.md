@@ -166,7 +166,27 @@ async function surfaceResult(report: ScannerExecutionReport, startFailureCode?: 
 describe("CLI scan workflow", () => {
   test("configures, scans, reconciles, and keeps an unchanged rescan byte-stable", async () => {
     const root = await workspace();
+    let presentationAttempts = 0;
+    const missing = await run(root, [], {
+      presentBlueprint: async () => {
+        presentationAttempts += 1;
+        return "unused";
+      },
+      terminal: { stdin: true, stdout: true },
+    });
+    expect(missing.output).toContain("groma init");
+    expect(presentationAttempts).toBe(0);
+
     expect((await run(root, ["--format=json", "init"])).exitCode).toBe(CLI_EXIT.success);
+
+    const noninteractive = await run(root, [], {
+      presentBlueprint: async () => {
+        presentationAttempts += 1;
+        return "unused";
+      },
+    });
+    expect(noninteractive.output).toContain("Run bare groma in an interactive terminal");
+    expect(presentationAttempts).toBe(0);
 
     const first = await run(root, ["--format=json", "scan"]);
     expect(first).toMatchObject({ exitCode: CLI_EXIT.success });
@@ -182,6 +202,30 @@ describe("CLI scan workflow", () => {
       },
     });
     expect(firstResult.result.observations.records).toBeGreaterThan(0);
+
+    const canonicalBeforeVisual = await canonicalFiles(root);
+    let presented = "";
+    const visual = await run(root, [], {
+      presentBlueprint: async (html) => {
+        presented = html;
+        return "/tmp/groma-blueprint/blueprint.html";
+      },
+      terminal: { stdin: true, stdout: true },
+    });
+    expect(visual).toMatchObject({ exitCode: CLI_EXIT.success });
+    expect(visual.output).toContain('"status":"opened"');
+    expect(presented).toContain('aria-label="groma.md lockup"');
+    expect(presented).toContain("scan-fixture");
+    expect(await canonicalFiles(root)).toEqual(canonicalBeforeVisual);
+
+    const presentationFailure = await run(root, [], {
+      presentBlueprint: async () => {
+        throw new Error("unavailable");
+      },
+      terminal: { stdin: true, stdout: true },
+    });
+    expect(presentationFailure.exitCode).toBe(CLI_EXIT.infrastructure);
+    expect(presentationFailure.output).toContain("cli-blueprint-artifact-unavailable");
 
     const listed = await run(root, ["--format=json", "component", "list", "--limit", "10"]);
     expect(listed.exitCode).toBe(CLI_EXIT.success);

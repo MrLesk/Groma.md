@@ -30,8 +30,8 @@ groma scan   # take one careful look at the code and record what is really there
 groma        # open a bounded visual blueprint
 ```
 
-The first two commands work today; the visual third step is next. Groma is built in public, and
-the two lists below say exactly what is real now.
+The three commands now work as one local loop. Groma is built in public, and the two lists below
+say exactly what is real now.
 
 ## What works today
 
@@ -42,14 +42,16 @@ the two lists below say exactly what is real now.
   `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.
 - `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,
   records bounded evidence, and reconciles it without overwriting curated intent.
+- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current
+  hierarchy, with recursive folding, focus, and component detail.
 - `project add` registers additional codebases and scanner coverage explicitly.
 - Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
   whole tool ships as one compiled executable.
 
 ## What is being built next
 
-- The visual blueprint: bare `groma` currently prints a command overview; the local
-  HTML/SVG map is the next milestone (Iteration 2).
+- Relationship tracing and detailed evidence, binding, uncertainty, and coverage inspection in
+  the visual blueprint.
 - Plans (desired future state) and history views (past revisions via Git) come after
   that. A full web UI arrives in Iteration 4.
 
@@ -88,7 +90,7 @@ These are the promises that keep the map trustworthy after the first scan:
 ```sh
 bun ci          # install dependencies
 bun run build   # compile the single-file executable to dist/groma
-./dist/groma    # print the command overview
+./dist/groma    # open the bounded local visual blueprint
 ```
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.

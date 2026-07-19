@@ -10,6 +10,10 @@ export const HELP_TEXT = `Groma ${GROMA_VERSION}
 
 Local-first architectural blueprints for humans and AI agents.
 
+Run bare groma in an interactive terminal to open the bounded local visual blueprint.
+In an interactive terminal, use groma --format json to read the same bounded hierarchy without
+opening an artifact.
+
 Usage:
   groma
   groma --help

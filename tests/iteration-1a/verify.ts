@@ -1,14 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  access,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -339,10 +330,6 @@ const gromaSnapshot = (workspaceRoot: string) => snapshot(path.join(workspaceRoo
 const intentSnapshot = (workspaceRoot: string) =>
   snapshot(path.join(workspaceRoot, "groma", "intent"));
 
-function quotePosixShellArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
 async function expectFailureWithoutChanges(
   executable: string,
   workspaceRoot: string,
@@ -356,29 +343,37 @@ async function expectFailureWithoutChanges(
   assert.deepEqual(await gromaSnapshot(workspaceRoot), before);
 }
 
-async function verifyTerminal(executable: string, workspaceRoot: string): Promise<void> {
-  if (process.platform === "win32") return;
-  const quotedExecutable = path.join(path.dirname(workspaceRoot), "groma terminal 'quoted'");
-  await symlink(executable, quotedExecutable);
-  const command =
-    process.platform === "darwin"
-      ? ["script", "-q", "/dev/null", quotedExecutable]
-      : [
-          "script",
-          "-q",
-          "-e",
-          "-c",
-          `exec ${quotePosixShellArgument(quotedExecutable)}`,
-          "/dev/null",
-        ];
-  const result = await runProcess(command[0]!, workspaceRoot, command.slice(1));
-  assert.equal(result.exitCode, 0, result.stderr);
-  const output = result.stdout.replaceAll("\r", "");
-  assert.ok(output.length < 1_048_576);
-  assert.equal(output.includes("\u001b"), false);
-  assert.ok(output.includes(`  - id="${ids.orders}"`), output);
-  assert.ok(output.includes(`    - id="${ids.orderItem}"`), output);
-  assert.ok(output.includes(`truncated: reason=children parent="${ids.users}"`), output);
+async function verifyTerminal(workspaceRoot: string): Promise<void> {
+  const visualExecutable = path.join(
+    path.dirname(workspaceRoot),
+    process.platform === "win32" ? "groma-visual.exe" : "groma-visual",
+  );
+  const compileExitCode = await compileStandalone({
+    cwd: projectRoot,
+    entrypoint: path.join(projectRoot, "tests", "iteration-1a", "visual-main.ts"),
+    outputFile: visualExecutable,
+  });
+  assert.equal(compileExitCode, 0, "visual verification executable compilation failed");
+  const artifact = path.join(path.dirname(workspaceRoot), "blueprint.html");
+  const before = await gromaSnapshot(workspaceRoot);
+  let expectedHtml: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await runProcess(visualExecutable, workspaceRoot, [artifact]);
+    assert.equal(result.exitCode, 0, result.stderr);
+    const output = result.stdout;
+    assert.ok(output.length < 1_048_576);
+    assert.equal(output.includes("\u001b"), false);
+    assert.ok(output.includes('"status":"opened"'), output);
+    const html = await readFile(artifact, "utf8");
+    assert.ok(html.startsWith("<!doctype html>"));
+    assert.ok(html.includes('aria-label="groma.md lockup"'));
+    assert.ok(html.includes(`data-id="${ids.orders}"`));
+    assert.ok(html.includes(`data-id="${ids.orderItem}"`));
+    assert.ok(html.includes("Bounded view stops here: child page limit."));
+    if (expectedHtml === undefined) expectedHtml = html;
+    else assert.equal(html, expectedHtml);
+  }
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), before);
 }
 
 async function verifyWorkflow(executable: string, workspaceRoot: string): Promise<void> {
@@ -811,7 +806,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
       },
     });
   }
-  await verifyTerminal(executable, workspaceRoot);
+  await verifyTerminal(workspaceRoot);
 
   await expectFailureWithoutChanges(
     executable,
