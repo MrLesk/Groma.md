@@ -1,11 +1,11 @@
 ---
 id: GROM-48
 title: Package and verify standalone preview artifacts
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:59'
-updated_date: '2026-07-19 21:06'
+updated_date: '2026-07-19 21:08'
 labels: []
 milestone: m-3
 dependencies:
@@ -54,3 +54,11 @@ Final post-review validation passed: bun run check completed formatting, strict 
 
 First PR CI exposed one Windows ConPTY framing sequence outside the narrow handwritten CSI regex. Replaced that regex with Node util.stripVTControlCharacters, keeping the same PTY/ConPTY product proof while deleting custom terminal-sequence parsing. Local typecheck and matching packaged smoke passed; native Windows CI is the authoritative verification.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #53 at dfeb224f7a555d585bc932c7dd937b05d6195573. Groma now produces four stable target-named standalone artifacts and a sorted SHA256SUMS in one command instead of overwriting and restoring dist for every target. The matching packaged executable proves clean init, scan, component read, and bounded interactive overview through PTY/ConPTY; the existing composition proves deterministic self-contained HTML without opening a browser. No benchmark framework, installer, updater, publisher, custom executable parser, or fallback path was added.
+
+The full local gate passed with 412 tests and 2,755 assertions, four-target packaging passed, and final GitHub CI passed quality, cross-platform packaging, and native Windows. Packaged self-dogfood was byte-stable at generation 140 with 65 observations and a bounded 51-component blueprint. Exactly two Terra xhigh reviews and one Claude review ran before the PR. Both Terra reviewers found the Windows PTY omission; native Windows CI then exposed an unhandled ConPTY control sequence, fixed by composing Node’s standard stripVTControlCharacters. The first automatic Codex review returned a usage-limit notice; per the bounded workflow it was not restarted, and the PR merged after green post-fix CI without waiting for follow-up.
+<!-- SECTION:FINAL_SUMMARY:END -->
