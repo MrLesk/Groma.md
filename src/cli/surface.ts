@@ -69,6 +69,7 @@ function failedResult(
 
 function diagnosticExit(diagnostics: readonly { readonly code: string }[]): number {
   const codes = diagnostics.map((entry) => entry.code);
+  if (codes.includes("scanner-execution-cancelled")) return CLI_EXIT.cancelled;
   if (codes.includes("project-registry-state-indeterminate")) {
     return CLI_EXIT.indeterminate;
   }

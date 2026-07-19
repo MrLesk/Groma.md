@@ -591,7 +591,7 @@
               "state": "complete"
             }
           ],
-          "epoch": "epoch_2d8b883c27fbd29cf4d247c22a7e48aa",
+          "epoch": "epoch_77145c7d190c8e581477210b4b536bd7",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -1105,13 +1105,13 @@
               }
             },
             {
-              "content": "# Source Layout\n\nThe source tree follows the dependency directions documented in\n[DEVELOPMENT.md](../DEVELOPMENT.md): each directory here is one architectural boundary,\nand each boundary gets a local README before it gets implementation, so later tasks add\ncode intentionally instead of treating an empty directory as an API.\n\n`plugin-sdk/` is the only public authoring boundary. Plugin packages import the\n`groma/plugin-sdk` package export for authoring and `groma/plugin-sdk/conformance` for\nreusable verification; they never import implementation paths from any other source\nboundary.\n",
+              "content": "# Source Layout\n\nThe source tree follows the dependency directions documented in\n[DEVELOPMENT.md](../DEVELOPMENT.md): each directory here is one architectural boundary,\nand each boundary gets a local README before it gets implementation, so later tasks add\ncode intentionally instead of treating an empty directory as an API.\n\n`plugin-sdk/` is the only public authoring boundary. Scanner packages may import the\n`groma/plugin-sdk` package export; they never import implementation paths from any other source\nboundary.\n",
               "format": "markdown",
               "key": "candidate.documentation.dfcdc107207fde7ea951160a1b2ba0a73f952fc612f344472c97f9e8feaec6c9",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:2dd5810a42a267d5abbe1221005732c6ff6acfbe9586415da34fd3145456b85c",
+                  "fingerprint": "sha256:038a38afa38bbdf4e250ee028ec6a9d51be6802748f1aa961aa9e3a8f3708458",
                   "resource": "src/README.md",
                   "scope": "workspace"
                 }
@@ -1259,7 +1259,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:bb447a1798243967b1cc8202e48c272377119a3fcb1e2e17c1a650fa6aa0b7a1",
+                  "fingerprint": "sha256:862578156d07fcc7792cdb6f4af00ae309ad866df8b957793e9abd515e4849f8",
                   "range": {
                     "endByteExclusive": 222,
                     "startByte": 197
@@ -2255,7 +2255,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:bb447a1798243967b1cc8202e48c272377119a3fcb1e2e17c1a650fa6aa0b7a1",
+                  "fingerprint": "sha256:862578156d07fcc7792cdb6f4af00ae309ad866df8b957793e9abd515e4849f8",
                   "range": {
                     "endByteExclusive": 370,
                     "startByte": 352

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 17:22'
+updated_date: '2026-07-19 17:37'
 labels: []
 milestone: m-3
 dependencies:
@@ -55,4 +55,6 @@ Pre-PR review resolution: the CLI no longer invents a second zero-project regist
 Boundary clarification after review: a zero-project initialized registry is supported only as a deterministic selection failure with init/project-add guidance; automatic scanner configuration is reserved for the seeded project.default registration.
 
 Final local proof: 401 tests passed; formatting, typecheck, and architecture boundaries passed; compiled smoke ran init -> scan -> component list; Iteration 1A compiled workflow and crash recovery passed. Final Groma self-scan completed with 63 records in one batch and two signals, and the immediately repeated scan left the complete canonical diff hash unchanged.
+
+First automatic Codex review handled: fixed pre-start scanner cancellation to exit 130 and added coverage; removed nonexistent verification commands and stale plugin-conformance guidance; documented curated versus scanner-owned roots; removed the obsolete frozen-baseline verifier instructions. Alex's explicitly supplied MANIFESTO.md rewrite remains by product-owner authorization. Full check stayed green with 401 tests, and the review-fix self-scan remained byte-stable.
 <!-- SECTION:NOTES:END -->

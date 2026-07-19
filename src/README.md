@@ -5,7 +5,6 @@ The source tree follows the dependency directions documented in
 and each boundary gets a local README before it gets implementation, so later tasks add
 code intentionally instead of treating an empty directory as an API.
 
-`plugin-sdk/` is the only public authoring boundary. Plugin packages import the
-`groma/plugin-sdk` package export for authoring and `groma/plugin-sdk/conformance` for
-reusable verification; they never import implementation paths from any other source
+`plugin-sdk/` is the only public authoring boundary. Scanner packages may import the
+`groma/plugin-sdk` package export; they never import implementation paths from any other source
 boundary.

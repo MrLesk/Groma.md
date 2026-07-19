@@ -110,7 +110,7 @@ function scannerReport(status: "cancelled" | "failed" | "indeterminate"): Scanne
   }) as ScannerExecutionReport;
 }
 
-async function surfaceResult(report: ScannerExecutionReport) {
+async function surfaceResult(report: ScannerExecutionReport, startFailureCode?: string) {
   const cancellation = new AbortController();
   const context = {
     cancellation: cancellation.signal,
@@ -123,21 +123,29 @@ async function surfaceResult(report: ScannerExecutionReport) {
         ok: true,
         value: Object.freeze({ abandoned: 0, acknowledged: 0, consumed: 0 }),
       }),
-      start: async (request: { readonly cancellation?: AbortSignal }) => ({
-        ok: true,
-        value: Object.freeze({
-          cancel: () => {},
-          completion:
-            report.status === "cancelled"
-              ? new Promise<ScannerExecutionReport>((resolve) =>
-                  request.cancellation?.addEventListener("abort", () => resolve(report), {
-                    once: true,
-                  }),
-                )
-              : Promise.resolve(report),
-          inspect: () => report,
-        }),
-      }),
+      start: async (request: { readonly cancellation?: AbortSignal }) =>
+        startFailureCode === undefined
+          ? {
+              ok: true,
+              value: Object.freeze({
+                cancel: () => {},
+                completion:
+                  report.status === "cancelled"
+                    ? new Promise<ScannerExecutionReport>((resolve) =>
+                        request.cancellation?.addEventListener("abort", () => resolve(report), {
+                          once: true,
+                        }),
+                      )
+                    : Promise.resolve(report),
+                inspect: () => report,
+              }),
+            }
+          : {
+              diagnostics: Object.freeze([
+                Object.freeze({ code: startFailureCode, message: "Scan start failed" }),
+              ]),
+              ok: false,
+            },
     },
   } as unknown as HostSurfaceContext;
   const controller = createCliSurfaceController(
@@ -256,6 +264,14 @@ describe("CLI scan workflow", () => {
         recovery: { generation: 2, token: "fixture-recovery" },
         status: "indeterminate",
       },
+    });
+    expect(
+      await surfaceResult(scannerReport("cancelled"), "scanner-execution-cancelled"),
+    ).toMatchObject({
+      command: "scan",
+      exitCode: CLI_EXIT.cancelled,
+      ok: false,
+      result: { diagnostics: [{ code: "scanner-execution-cancelled" }] },
     });
   });
 });

@@ -65,12 +65,12 @@ The CLI-to-renderer path carries bounded shared-operation data and an open/retur
 nothing more. A renderer never reads canonical storage directly and never becomes a second
 semantic path into the model.
 
-## The Nine Roots
+## The Nine Curated Roots
 
-Groma describes itself with its own blueprint. Each root below is a top-level component of
-that self-blueprint, and everything else in the architecture lives inside exactly one of them.
+Groma describes itself with its own blueprint. The nine hand-curated roots below organize its
+intended architecture, and every curated non-root component lives inside exactly one of them.
 
-The self-blueprint contains nine root components:
+The curated self-blueprint contains nine root components:
 
 | Root                           | Orientation                                                                     |
 | ------------------------------ | ------------------------------------------------------------------------------- |
@@ -82,10 +82,14 @@ The self-blueprint contains nine root components:
 | Scanning and Reconciliation    | Blind observation and intent-preserving reconciliation                          |
 | Planning and History           | Desired-state overlays, comparison, and historical views                        |
 | CLI, Service, and Web Surfaces | Shared operations presented to agents and humans                                |
-| Plugin Development             | Public SDK, reusable conformance, and scaffolding                               |
+| Plugin Development             | Public blind-scanner authoring contracts                                        |
 
-Every non-root component has exactly one canonical parent. Ordinary relationships are separate
-from containment and may cross any root boundary. The
+Scans also add source-owned top-level components when package, source-boundary, or external-module
+evidence does not justify canonical containment. Those observed roots remain visibly distinct from
+the curated hierarchy and are a density input for the bounded visual layer; Groma does not guess a
+parent merely to preserve the count of nine. Every curated non-root component has exactly one
+canonical parent. Ordinary relationships are separate from containment and may cross any root
+boundary. The
 [noncanonical component-model examples](docs/component-model-examples.md) keep the Recursive
 Shopify and Ordering System teaching examples available without adding them to Groma's
 self-blueprint.
@@ -264,33 +268,3 @@ When the blueprint, the implementation, or this document appear to disagree:
    implementation drift. Change this document only when its cross-component context is
    incorrect.
 5. Verify the result. If identity or endpoint resolution is still ambiguous, fail closed.
-
-## Verify and Refresh the Frozen Baseline
-
-The self-blueprint verifier proves the canonical architecture is intact. It copies the
-canonical bytes, pages a bounded export through fresh compiled public CLI processes, checks
-structure and declaration-edge correspondence, deletes and rebuilds the disposable projection,
-and proves the canonical copy stayed byte-identical:
-
-```sh
-bun run verify:self-blueprint
-bun run check
-```
-
-A baseline refresh is deliberate and review-only:
-
-1. Edit canonical meaning through the compiled public CLI using current revisions.
-2. Review `groma diff`. Until that comparison command exists, review `git diff -- groma`
-   together with a bounded public `blueprint export`.
-3. Run `bun run tests/iteration-1b/verify-self-blueprint.ts --report-baseline` to print the
-   observed counts, declaration statuses, and opaque digests.
-4. Review that report, then deliberately update the fixed `expectedBaseline` summary — its
-   counts, status counts, and digests — in the verifier. The report never writes or updates
-   expectations automatically.
-5. Run the normal `bun run verify:self-blueprint` to enforce the refreshed baseline.
-
-`--report-baseline` may appear before or after `--executable=<path>`. It bypasses the frozen
-expected-baseline equality for counts, status counts, and digests. Everything else still runs:
-generic identity, containment, intent, declaration-status and edge-ID rules, the
-declaration-edge bijection, the projection rebuild, and the byte-identical canonical proof. A
-frozen baseline is a change detector, not an architectural source.
