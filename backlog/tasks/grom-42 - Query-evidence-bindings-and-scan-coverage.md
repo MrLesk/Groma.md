@@ -1,11 +1,11 @@
 ---
 id: GROM-42
 title: Expose supporting evidence in component detail
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 19:00'
+updated_date: '2026-07-19 19:03'
 labels: []
 milestone: m-3
 dependencies:
@@ -68,3 +68,9 @@ Pre-PR review completed with exactly two independent gpt-5.6-terra xhigh passes 
 
 First automatic Codex review found one justified P2: a stale binding for a removed observed component could fail unrelated component detail reads. The fix ignores unresolvable bindings because they cannot support any currently readable component, while preserving full evidence parsing and valid alias resolution. The existing alias/curated test now removes a second observed component first and proves only relevant evidence is returned. Post-fix focused checks passed (15 tests, 172 assertions) and the full gate passed (403 tests, 2,668 assertions). Final compiled self-scan advanced to generation 119, then repeated byte-identically at digest c21a87b62d9c3bcc8c079fdc1f8ebd6ef6aa5da94587a3654a1b6074f02652f8; component detail remained read-only with six records across twelve provenance resources.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Exposed bounded supporting scan evidence beside exact canonical component detail through the existing shared read path. The result includes source identity, binding state, relevant coverage, directly related records, and provenance from one canonical generation while curated-only components remain explicitly empty. Reused the canonical evidence parser and snapshot composition with no new command, index, store, or persistence format. Fixed the first automatic Codex finding so stale bindings for removed observed components cannot poison unrelated reads. Verified with 403 repository tests and 2,668 assertions, compiled self-scan generation 119 with a byte-stable repeat/read digest, exactly two Terra xhigh reviews, one local Claude review, the first automatic Codex review, and green cross-platform CI. Merged as PR #48.
+<!-- SECTION:FINAL_SUMMARY:END -->
