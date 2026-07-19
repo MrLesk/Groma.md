@@ -1,11 +1,11 @@
 ---
 id: GROM-43
 title: Expose the automatic scan workflow through the CLI
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 17:37'
+updated_date: '2026-07-19 17:39'
 labels: []
 milestone: m-3
 dependencies:
@@ -58,3 +58,9 @@ Final local proof: 401 tests passed; formatting, typecheck, and architecture bou
 
 First automatic Codex review handled: fixed pre-start scanner cancellation to exit 130 and added coverage; removed nonexistent verification commands and stale plugin-conformance guidance; documented curated versus scanner-owned roots; removed the obsolete frozen-baseline verifier instructions. Alex's explicitly supplied MANIFESTO.md rewrite remains by product-owner authorization. Full check stayed green with 401 tests, and the review-fix self-scan remained byte-stable.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added the public groma scan command over the built-in TypeScript/Bun scanner and existing reconciliation path, with deterministic selection, bounded terminal reports, cancellation/indeterminate handling, byte-stable rescans, compiled smoke coverage, and Groma self-dogfood evidence. Incorporated Alex's documentation rewrite and simplified stale plugin, benchmark, and verification guidance. Verified by 401 tests, bun run check, three green CI jobs, two Terra xhigh reviews, Claude, and the first automatic Codex review; merged as PR #45 (cff9f2b).
+<!-- SECTION:FINAL_SUMMARY:END -->
