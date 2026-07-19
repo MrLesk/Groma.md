@@ -1230,11 +1230,9 @@ function componentEvidence(
   for (const source of parsed.value.sources) {
     for (const binding of source.componentBindings) {
       const resolved = options.graph.resolveEntityIdentity(snapshot.graph, binding.componentId);
-      if (!resolved.ok) {
-        return failure(
-          diagnostic("invalid-evidence-state", "A component evidence binding target is missing"),
-        );
-      }
+      // Removal can leave a durable observation binding behind until reconciliation
+      // refreshes that source. It cannot support any currently readable component.
+      if (!resolved.ok) continue;
       if (resolved.value.resolved !== componentId) continue;
       const records = Object.freeze(
         source.snapshot.records.filter((record) => evidenceRecordMatches(record, binding)),

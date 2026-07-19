@@ -353,18 +353,25 @@ describe("local completed-snapshot reconciliation", () => {
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
     expect(
       await host.reconciliation.reconcile(
-        snapshot("epoch-alias", [candidate("observed", "Observed")]),
+        snapshot("epoch-alias", [candidate("observed", "Observed"), candidate("stale", "Stale")]),
       ),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
     const page = await host.operations.listComponents({ limit: 10 });
     expect(page.ok).toBeTrue();
     if (!page.ok) return;
-    const observed = page.value.items[0]!;
+    const observed = page.value.items.find((item) => item.component.name === "Observed")!;
+    const stale = page.value.items.find((item) => item.component.name === "Stale")!;
     const curatedId = "ent_ffffffffffffffffffffffffffffffff";
     const curated = await host.operations.createComponent({
       component: { id: curatedId, intent: "Curated meaning", name: "Curated" },
     });
     expect(curated).toMatchObject({ status: "committed" });
+    expect(
+      await host.operations.removeComponent({
+        expectedRevision: stale.revision,
+        id: stale.component.id,
+      }),
+    ).toMatchObject({ status: "committed" });
     const curatedDetail = await host.operations.getComponent({
       id: curatedId,
       relationships: { limit: 1 },

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 18:50'
+updated_date: '2026-07-19 19:00'
 labels: []
 milestone: m-3
 dependencies:
@@ -65,4 +65,6 @@ Validation: focused reconciliation and CLI tests passed (15 tests, 171 assertion
 Compiled self-dogfood: the final source scan advanced canonical generation to 118, then an unchanged rescan was byte-stable at tree digest 1b90af090cad52faaa7e1c98225f4e03761cd739dab92c497230b93a4836c309. Compiled component get for Groma's application source boundary returned one present binding, complete workspace coverage, one component record, five relationship records, and provenance across twelve source resources in both JSON and plain output; the read left the digest unchanged.
 
 Pre-PR review completed with exactly two independent gpt-5.6-terra xhigh passes and one local Claude pass. Neither Terra reviewer found an actionable issue; Claude returned no findings.
+
+First automatic Codex review found one justified P2: a stale binding for a removed observed component could fail unrelated component detail reads. The fix ignores unresolvable bindings because they cannot support any currently readable component, while preserving full evidence parsing and valid alias resolution. The existing alias/curated test now removes a second observed component first and proves only relevant evidence is returned. Post-fix focused checks passed (15 tests, 172 assertions) and the full gate passed (403 tests, 2,668 assertions). Final compiled self-scan advanced to generation 119, then repeated byte-identically at digest c21a87b62d9c3bcc8c079fdc1f8ebd6ef6aa5da94587a3654a1b6074f02652f8; component detail remained read-only with six records across twelve provenance resources.
 <!-- SECTION:NOTES:END -->
