@@ -1390,6 +1390,123 @@ export function shared() {}
     );
   });
 
+  test("selects Bun-compatible parser syntax from each source extension", async () => {
+    const scanEntry = async (extension: string, source: string) =>
+      scan({
+        "package.json": JSON.stringify({
+          exports: `./src/api/index.${extension}`,
+          name: `parser-policy-${extension}`,
+        }),
+        "src/domain/model.ts": "export const model = { ok: true };\n",
+        [`src/api/index.${extension}`]: source,
+      });
+    const hasPublicAction = (result: Awaited<ReturnType<typeof scan>>): boolean =>
+      result.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ) ?? false;
+    const hasImportRelationship = (result: Awaited<ReturnType<typeof scan>>): boolean =>
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ) ?? false;
+
+    for (const extension of ["ts", "mts"]) {
+      const typed = await scanEntry(
+        extension,
+        [
+          'import { model } from "../domain/model.ts";',
+          "const typed = <{ ok: boolean }>model;",
+          "export function publicApi() { return typed; }",
+        ].join("\n"),
+      );
+      expect(typed.result.ok).toBeTrue();
+      expect(typed.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(hasPublicAction(typed)).toBeTrue();
+      expect(hasImportRelationship(typed)).toBeTrue();
+    }
+
+    const commonTypeScript = await scanEntry(
+      "cts",
+      [
+        'import { model } from "../domain/model.ts";',
+        "const typed = <{ ok: boolean }>model;",
+        "export function publicApi() { return typed; }",
+      ].join("\n"),
+    );
+    expect(commonTypeScript.result.ok).toBeTrue();
+    expect(commonTypeScript.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(hasPublicAction(commonTypeScript)).toBeFalse();
+    expect(hasImportRelationship(commonTypeScript)).toBeTrue();
+
+    for (const extension of ["tsx", "js", "jsx"]) {
+      const jsx = await scanEntry(
+        extension,
+        [
+          'import { model } from "../domain/model.ts";',
+          "const view = <section data-ok={model.ok} />;",
+          "export function publicApi() { return view; }",
+        ].join("\n"),
+      );
+      expect(jsx.result.ok).toBeTrue();
+      expect(jsx.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(hasPublicAction(jsx)).toBeTrue();
+      expect(hasImportRelationship(jsx)).toBeTrue();
+    }
+
+    for (const fixture of [
+      {
+        extension: "tsx",
+        source: [
+          'import { model } from "../domain/model.ts";',
+          "const typed = <{ ok: boolean }>model;",
+          "export function publicApi() { return typed; }",
+        ].join("\n"),
+      },
+      {
+        extension: "js",
+        source: [
+          'import { model } from "../domain/model.ts";',
+          "const typed: { ok: boolean } = model;",
+          "export function publicApi() { return typed; }",
+        ].join("\n"),
+      },
+    ]) {
+      const rejected = await scanEntry(fixture.extension, fixture.source);
+      expect(rejected.result.ok).toBeTrue();
+      expect(rejected.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(hasPublicAction(rejected)).toBeFalse();
+      expect(hasImportRelationship(rejected)).toBeFalse();
+    }
+
+    for (const extension of ["mjs", "cjs"]) {
+      const ordinary = await scanEntry(
+        extension,
+        [
+          'import { model } from "../domain/model.ts";',
+          "export function publicApi() { return model; }",
+        ].join("\n"),
+      );
+      expect(ordinary.result.ok).toBeTrue();
+      expect(ordinary.snapshot?.coverage[0]?.state).toBe(
+        extension === "cjs" ? "partial" : "complete",
+      );
+      expect(hasPublicAction(ordinary)).toBe(extension === "mjs");
+      expect(hasImportRelationship(ordinary)).toBeTrue();
+
+      const rejectedJsx = await scanEntry(
+        extension,
+        [
+          'import { model } from "../domain/model.ts";',
+          "const view = <section data-ok={model.ok} />;",
+          "export function publicApi() { return view; }",
+        ].join("\n"),
+      );
+      expect(rejectedJsx.result.ok).toBeTrue();
+      expect(rejectedJsx.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(hasPublicAction(rejectedJsx)).toBeFalse();
+      expect(hasImportRelationship(rejectedJsx)).toBeFalse();
+    }
+  });
+
   test("omits CommonJS public callables while preserving independent observations", async () => {
     const commonJs = await scan({
       "package.json": JSON.stringify({ exports: "./src/api/index.cjs", name: "common-js" }),

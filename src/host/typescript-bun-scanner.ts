@@ -2077,13 +2077,20 @@ function typeOnlySpecifier(node: AstNode): boolean {
   return node.importKind === "type" || node.importKind === "typeof" || node.exportKind === "type";
 }
 
+function bunParserPlugins(resource: string): Array<"jsx" | "typescript"> {
+  if (/\.tsx$/.test(resource)) return ["typescript", "jsx"];
+  if (/\.(?:ts|mts|cts)$/.test(resource)) return ["typescript"];
+  if (/\.jsx?$/.test(resource)) return ["jsx"];
+  return [];
+}
+
 function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource {
   let tree: unknown;
   try {
     tree = parse(file.text, {
       allowAwaitOutsideFunction: true,
       errorRecovery: false,
-      plugins: ["typescript", "jsx"],
+      plugins: bunParserPlugins(file.resource),
       sourceType: "unambiguous",
     });
   } catch {

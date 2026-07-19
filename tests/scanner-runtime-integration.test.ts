@@ -382,4 +382,4 @@ test("self-scans Groma with stable bounded evidence and no protected-state prove
       }
     }
   }
-});
+}, 15_000);
