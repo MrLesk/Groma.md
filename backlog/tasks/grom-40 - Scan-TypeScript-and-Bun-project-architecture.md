@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-18 22:48'
+updated_date: '2026-07-19 00:16'
 labels: []
 milestone: m-3
 dependencies:
@@ -68,10 +68,12 @@ Context-hunter classification: L2 cross-module scanner semantics and Host integr
 Implemented the bounded official.typescript scanner slice with deterministic paged discovery, package/workspace/source candidates, public callable exports, aggregate literal imports, static Bun routes, raw documentation, supported ignore/config exclusions, stable semantic keys, exact fingerprints/ranges, partial ambiguity, local budgets, and focused lifecycle tests. Focused suite, typecheck, boundaries, formatting, and diff checks are green; Host integration and self-scan verification are in progress.
 
 Completed final semantic hardening after three independent read-only reviews: unsafe policy scopes suppress claims; configured aliases, package imports, type-only dependencies, public subpaths, star-export ambiguity, route/action proof chains, legacy entry encapsulation, validator-safe derived values, strict external specifiers, linear UTF-8 offset caching, and extraction-time work/record/character ceilings are all covered by adversarial fixtures. Validation passed: 19 focused scanner tests (192 assertions), 3 runtime/self-scan tests (1,214 assertions), 1,046 repository tests (8,952 assertions), typecheck, architecture boundaries, formatting, diff checks, Iteration 1B verification, and Darwin ARM64/Linux x64/Windows x64/Windows ARM64 standalone targets. The Groma self-scan is byte-stable across repeated scans and proves the exact seven source boundaries, 13 internal edges, both public SDK subpaths, bounded output, exclusions, and every provenance fingerprint/range.
+
+Post-review hardening addressed every independently verified PR finding: imported-binding barrel/default proof, exact tsconfig files/include/exclude semantics, complete declaration suffix handling, nested scanner blindness, literal alias captures, and fail-closed CommonJS classification with bounded lexical scope analysis. Final validation passed: 31 scanner/runtime tests (1,565 assertions), exact Groma self-scan (1,206 assertions), 1,058 repository tests (9,156 assertions), typecheck, architecture boundaries, formatting, diff checks, Iteration 1B verification, and Darwin ARM64/Linux x64/Windows x64/Windows ARM64 standalone targets. A final independent read-only audit found no actionable issues.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added the requirement-free official.typescript Phase 1 scanner and registered it in the default Host graph while leaving default project enablement and reconciliation to GROM-43 and GROM-41. The scanner inertly derives bounded package/source candidates, explicit public callable actions, static Bun route actions, uniquely resolved value/type import relationships, and raw documentation; unsupported or ambiguous evidence is omitted partial, and no project code or canonical intent is read. Verified through adversarial fixtures, durable Host integration, exact repeated Groma self-scan, the full 1,046-test suite, Iteration 1B binaries, four standalone target builds, and clean independent review.
+Added and registered the requirement-free official.typescript Phase 1 scanner. It inertly derives bounded package/source candidates, explicit public callable actions, static Bun route actions, uniquely resolved value/type relationships, and raw documentation; unsupported or ambiguous evidence fails closed as partial without reading project code or canonical intent. Verified with adversarial scanner fixtures, durable Host integration, repeated exact Groma self-scan, 1,058 repository tests (9,156 assertions), Iteration 1B binaries, four standalone target builds, and clean independent review.
 <!-- SECTION:FINAL_SUMMARY:END -->

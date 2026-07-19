@@ -723,13 +723,15 @@ export function shared() {}
         'export type { B } from "../domain/b.ts";',
         'type C = import("../domain/c.ts").C;',
         'import D = require("../domain/d.ts");',
-        "void (null as A | C | D);",
+        'import type { T } from "../domain/types";',
+        "void (null as A | C | D | T);",
         "export function api() {}",
       ].join("\n"),
       "src/domain/a.ts": "export interface A { a: true }\n",
       "src/domain/b.ts": "export interface B { b: true }\n",
       "src/domain/c.ts": "export interface C { c: true }\n",
       "src/domain/d.ts": "export interface D { d: true }\n",
+      "src/domain/types.d.ts": "export interface T { t: true }\n",
     });
 
     expect(result.result.ok).toBeTrue();
@@ -738,7 +740,7 @@ export function shared() {}
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
     expect(imports).toHaveLength(1);
-    expect(imports?.[0]?.provenance).toHaveLength(4);
+    expect(imports?.[0]?.provenance).toHaveLength(5);
     expect(
       result.snapshot?.records
         .filter((record) => record.kind === "action")
@@ -1038,6 +1040,811 @@ export function shared() {}
         )
         .sort() ?? [];
     expect(externals).toEqual(["@scope/pkg", "lodash", "node:fs", "pkg", "plain"]);
+  });
+
+  test("proves named and default imported bindings re-exported through a local barrel", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({
+        exports: { ".": "./src/alias.ts", "./direct": "./src/direct.ts" },
+        name: "import-reexports",
+      }),
+      "src/alias.ts": [
+        'import defaultLocal, { work as localWork } from "./implementation.ts";',
+        "export { defaultLocal as publicDefault, localWork as publicWork };",
+      ].join("\n"),
+      "src/direct.ts":
+        'export { default as publicDefault, work as publicWork } from "./implementation.ts";\n',
+      "src/implementation.ts": [
+        "export default function defaultWork() {}",
+        "export function work() {}",
+      ].join("\n"),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
+    expect(actions.map((record) => record.name).sort()).toEqual([
+      "publicDefault",
+      "publicDefault",
+      "publicWork",
+      "publicWork",
+    ]);
+    for (const name of ["publicDefault", "publicWork"]) {
+      const aliased = actions.find(
+        (record) => record.name === name && record.description === "Public export at .",
+      );
+      const direct = actions.find(
+        (record) => record.name === name && record.description === "Public export at ./direct",
+      );
+      expect([...new Set(aliased?.provenance.map((item) => item.resource))].sort()).toEqual([
+        "package.json",
+        "src/alias.ts",
+        "src/implementation.ts",
+      ]);
+      expect([...new Set(direct?.provenance.map((item) => item.resource))].sort()).toEqual([
+        "package.json",
+        "src/direct.ts",
+        "src/implementation.ts",
+      ]);
+      expect(aliased?.provenance.find((item) => item.range)).toEqual(
+        direct?.provenance.find((item) => item.range),
+      );
+    }
+
+    for (const entry of [
+      [
+        'import externalDefault from "external-package";',
+        'import * as namespace from "./implementation.ts";',
+        'import type { Shape } from "./implementation.ts";',
+        "export { externalDefault, namespace };",
+        "export type { Shape };",
+      ].join("\n"),
+      'import { missing } from "./missing.ts";\nexport { missing };\n',
+    ]) {
+      const unsupported = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "unsupported-import" }),
+        "src/implementation.ts": "export interface Shape { ok: true }\n",
+        "src/index.ts": entry,
+      });
+      expect(unsupported.result.ok).toBeTrue();
+      expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(unsupported.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    }
+
+    const nonCallableImports = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "non-callable-imports" }),
+      "src/implementation.ts": [
+        "export interface Shape { ok: true }",
+        "export function implementation() {}",
+      ].join("\n"),
+      "src/index.ts": [
+        'import * as namespace from "./implementation.ts";',
+        'import type { Shape } from "./implementation.ts";',
+        "export { namespace };",
+        "export type { Shape };",
+      ].join("\n"),
+    });
+    expect(nonCallableImports.result.ok).toBeTrue();
+    expect(nonCallableImports.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      nonCallableImports.snapshot?.records.some((record) => record.kind === "action"),
+    ).toBeFalse();
+  });
+
+  test("follows defensible imported bindings through a default export", async () => {
+    for (const [importStatement, implementation] of [
+      ['import api from "./implementation.ts";', "export default function api() {}\n"],
+      ['import { api } from "./implementation.ts";', "export function api() {}\n"],
+    ] as const) {
+      const result = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "default-barrel" }),
+        "src/implementation.ts": implementation,
+        "src/index.ts": `${importStatement}\nexport default api;\n`,
+      });
+
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+      const action = result.snapshot?.records.find(
+        (record) => record.kind === "action" && record.name === "default",
+      );
+      expect([...new Set(action?.provenance.map((item) => item.resource))].sort()).toEqual([
+        "package.json",
+        "src/implementation.ts",
+        "src/index.ts",
+      ]);
+      expect(action?.provenance.find((item) => item.range)?.resource).toBe("src/implementation.ts");
+    }
+
+    for (const unsupportedEntry of [
+      'import api from "external-package";\nexport default api;\n',
+      'import api = require("./implementation.ts");\nexport default api;\n',
+      "import api = Namespace.api;\nexport default api;\n",
+      'export import api = require("./implementation.ts");\n',
+    ]) {
+      const unsupported = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "default-unsupported" }),
+        "src/implementation.ts": "export default function api() {}\n",
+        "src/index.ts": unsupportedEntry,
+      });
+      expect(unsupported.result.ok).toBeTrue();
+      expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(unsupported.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    }
+
+    const namespace = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "default-namespace" }),
+      "src/implementation.ts": "export function api() {}\n",
+      "src/index.ts": 'import * as api from "./implementation.ts";\nexport default api;\n',
+    });
+    expect(namespace.result.ok).toBeTrue();
+    expect(namespace.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(namespace.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+  });
+
+  test("honors exact tsconfig files and include source-universe semantics", async () => {
+    const allowlist = await scan({
+      "package.json": JSON.stringify({ exports: "./src/public.ts", name: "files-allowlist" }),
+      "src/private.ts": "export function privateApi() {}\n",
+      "src/public.ts": "export function publicApi() {}\n",
+      "tsconfig.json": JSON.stringify({ files: ["src/public.ts"] }),
+    });
+    expect(allowlist.result.ok).toBeTrue();
+    expect(allowlist.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      allowlist.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["publicApi"]);
+    expect(allowlist.fixture.read).not.toContain("src/private.ts");
+
+    for (const configuration of [{ files: [] }, { include: [] }]) {
+      const empty = await scan({
+        "package.json": JSON.stringify({ name: "empty-source-universe" }),
+        "src/index.ts": "export function invisible() {}\n",
+        "tsconfig.json": JSON.stringify(configuration),
+      });
+      expect(empty.result.ok).toBeTrue();
+      expect(empty.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(empty.fixture.read).not.toContain("src/index.ts");
+      expect(
+        empty.snapshot?.records.some(
+          (record) =>
+            record.kind === "component-candidate" && record.candidate.type === "source-boundary",
+        ),
+      ).toBeFalse();
+    }
+
+    const union = await scan({
+      "package.json": JSON.stringify({
+        exports: {
+          ".": "./src/explicit/index.ts",
+          "./included": "./src/included/kept.ts",
+        },
+        name: "files-include-union",
+      }),
+      "src/explicit/index.ts": "export function explicitApi() {}\n",
+      "src/included/kept.ts": "export function includedApi() {}\n",
+      "src/included/omitted.ts": "export function omittedApi() {}\n",
+      "tsconfig.json": JSON.stringify({
+        exclude: ["src/explicit/**", "src/included/omitted.ts"],
+        files: ["src/explicit/index.ts"],
+        include: ["src/included/**/*.ts"],
+      }),
+    });
+    expect(union.result.ok).toBeTrue();
+    expect(union.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      union.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["explicitApi", "includedApi"]);
+    expect(union.fixture.read).not.toContain("src/included/omitted.ts");
+
+    const incompleteFiles = await scan({
+      "package.json": JSON.stringify({ exports: "./src/valid.ts", name: "incomplete-files" }),
+      "src/unlisted.ts": "export function unlistedApi() {}\n",
+      "src/valid.ts": "export function validApi() {}\n",
+      "tsconfig.json": JSON.stringify({
+        files: ["src/valid.ts", "src/missing.ts", "../escape.ts"],
+      }),
+    });
+    expect(incompleteFiles.result.ok).toBeTrue();
+    expect(incompleteFiles.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      incompleteFiles.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["validApi"]);
+    expect(incompleteFiles.fixture.read).not.toContain("src/unlisted.ts");
+  });
+
+  test("resolves declaration entries without extensions and fails closed on ambiguity", async () => {
+    for (const [target, resource, action] of [
+      ["./src/public", "src/public.d.ts", "publicDeclaration"],
+      ["./types", "types/index.d.ts", "indexDeclaration"],
+      ["./src/javascript.js", "src/javascript.d.ts", "javascriptDeclaration"],
+      ["./src/module", "src/module.d.mts", "moduleDeclaration"],
+      ["./common", "common/index.d.cts", "commonDeclaration"],
+      ["./src/module-stem.mjs", "src/module-stem.d.mts", "moduleStemDeclaration"],
+      ["./src/common-stem.cjs", "src/common-stem.d.cts", "commonStemDeclaration"],
+    ] as const) {
+      const result = await scan({
+        "package.json": JSON.stringify({ exports: target, name: "declaration-resolution" }),
+        [resource]: `export declare function ${action}(): void;\n`,
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(
+        result.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === action,
+        ),
+      ).toBeTrue();
+    }
+
+    const ambiguous = await scan({
+      "package.json": JSON.stringify({ exports: "./src/entry", name: "ambiguous-declaration" }),
+      "src/entry.d.ts": "export declare function declarationEntry(): void;\n",
+      "src/entry.ts": "export function implementationEntry() {}\n",
+    });
+    expect(ambiguous.result.ok).toBeTrue();
+    expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(ambiguous.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+
+    const declarationAmbiguity = await scan({
+      "package.json": JSON.stringify({ exports: "./src/entry", name: "declaration-ambiguity" }),
+      "src/entry.d.cts": "export declare function commonEntry(): void;\n",
+      "src/entry.d.mts": "export declare function moduleEntry(): void;\n",
+    });
+    expect(declarationAmbiguity.result.ok).toBeTrue();
+    expect(declarationAmbiguity.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      declarationAmbiguity.snapshot?.records.some((record) => record.kind === "action"),
+    ).toBeFalse();
+  });
+
+  test("excludes generated and test declarations before reading them", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.d.ts", name: "declarations" }),
+      "src/index.d.ts": "export declare function publicDeclaration(): void;\n",
+      "src/index.gen.d.ts": "export declare function genDeclaration(): void;\n",
+      "src/index.generated.d.ts": "export declare function generatedDeclaration(): void;\n",
+      "src/index.spec.d.ts": "export declare function specDeclaration(): void;\n",
+      "src/index.test.d.ts": "export declare function testDeclaration(): void;\n",
+      "src/module.gen.d.mts": "export declare function moduleGenDeclaration(): void;\n",
+      "src/module.spec.d.mts": "export declare function moduleSpecDeclaration(): void;\n",
+      "src/common.generated.d.cts": "export declare function commonGeneratedDeclaration(): void;\n",
+      "src/common.test.d.cts": "export declare function commonTestDeclaration(): void;\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["publicDeclaration"]);
+    for (const resource of [
+      "src/index.gen.d.ts",
+      "src/index.generated.d.ts",
+      "src/index.spec.d.ts",
+      "src/index.test.d.ts",
+      "src/module.gen.d.mts",
+      "src/module.spec.d.mts",
+      "src/common.generated.d.cts",
+      "src/common.test.d.cts",
+    ])
+      expect(result.fixture.read).not.toContain(resource);
+  });
+
+  test("keeps Groma-owned directories blind at every depth and case", async () => {
+    const result = await scan({
+      ".GROMA-CACHE/root.ts": "export function cachedRoot() {}\n",
+      "GroMa/root.ts": "export function gromaRoot() {}\n",
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "scanner-blindness" }),
+      "src/.gRoMa-CaChE/nested.ts": "export function cachedNested() {}\n",
+      "src/GROMA/nested.ts": "export function gromaNested() {}\n",
+      "src/index.ts": "export function visible() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["visible"]);
+    for (const directory of [".GROMA-CACHE", "GroMa", "src/.gRoMa-CaChE", "src/GROMA"])
+      expect(result.fixture.enumerated).not.toContain(directory);
+    expect(result.fixture.read.every((resource) => !/groma(?:-cache)?/i.test(resource))).toBeTrue();
+  });
+
+  test("substitutes wildcard alias captures as literal resource text", async () => {
+    const result = await scan({
+      "lib/$$.ts": "export const dollars = true;\n",
+      "lib/$&.ts": "export const ampersand = true;\n",
+      "lib/$1.ts": "export const capture = true;\n",
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "literal-captures" }),
+      "src/index.ts": [
+        'import { dollars } from "@literal/$$";',
+        'import { ampersand } from "@literal/$&";',
+        'import { capture } from "@literal/$1";',
+        "void dollars; void ampersand; void capture;",
+        "export function api() {}",
+      ].join("\n"),
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@literal/*": ["lib/*"] } },
+        files: ["lib/$$.ts", "lib/$&.ts", "lib/$1.ts", "src/index.ts"],
+      }),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+    expect(result.fixture.read).toEqual(
+      expect.arrayContaining(["lib/$$.ts", "lib/$&.ts", "lib/$1.ts"]),
+    );
+  });
+
+  test("omits CommonJS public callables while preserving independent observations", async () => {
+    const commonJs = await scan({
+      "package.json": JSON.stringify({ exports: "./src/api/index.cjs", name: "common-js" }),
+      "src/api/index.cjs": [
+        'import { model } from "../domain/model.ts";',
+        'Bun.serve({ routes: { "/health": { GET: () => Response.json(model) } } });',
+        "export function hiddenPublic() {}",
+      ].join("\n"),
+      "src/domain/model.ts": "export const model = { ok: true };\n",
+    });
+    expect(commonJs.result.ok).toBeTrue();
+    expect(commonJs.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      commonJs.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["GET /health"]);
+    expect(
+      commonJs.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+
+    for (const extension of ["cjs", "cts"]) {
+      const internalCommonJs = await scan({
+        "package.json": JSON.stringify({
+          exports: "./src/api/index.ts",
+          name: `internal-common-${extension}`,
+        }),
+        "src/api/index.ts": [
+          `import "../legacy/index.${extension}";`,
+          "export function publicApi() {}",
+        ].join("\n"),
+        "src/domain/model.ts": "export const model = { ok: true };\n",
+        [`src/legacy/index.${extension}`]: [
+          'const model = require("../domain/model.ts");',
+          'Bun.serve({ routes: { "/legacy": { GET: () => Response.json(model) } } });',
+          "module.exports = model;",
+        ].join("\n"),
+      });
+      expect(internalCommonJs.result.ok).toBeTrue();
+      expect(internalCommonJs.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        internalCommonJs.snapshot?.records
+          .filter((record) => record.kind === "action")
+          .map((record) => record.name)
+          .sort(),
+      ).toEqual(["GET /legacy", "publicApi"]);
+      expect(
+        internalCommonJs.snapshot?.records.some(
+          (record) => record.kind === "relationship" && record.relationshipType === "imports",
+        ),
+      ).toBeTrue();
+    }
+
+    const commonJavaScript = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "common-javascript" }),
+      "src/domain/model.js": "export const model = { ok: true };\n",
+      "src/index.js": [
+        'import { model } from "./domain/model.js";',
+        'Bun.serve({ routes: { "/js": { GET: () => Response.json(model) } } });',
+        "export function publicApi() {}",
+        "module.exports = publicApi;",
+        "exports.publicApi = publicApi;",
+      ].join("\n"),
+    });
+    expect(commonJavaScript.result.ok).toBeTrue();
+    expect(commonJavaScript.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      commonJavaScript.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["GET /js", "publicApi"]);
+
+    const esmJavaScript = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "esm-javascript" }),
+      "src/index.js": "export function publicApi() {}\n",
+    });
+    expect(esmJavaScript.result.ok).toBeTrue();
+    expect(esmJavaScript.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      esmJavaScript.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
+
+    const commonTs = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.cts", name: "common-ts" }),
+      "src/index.cts": "export function hiddenPublic() {}\n",
+    });
+    expect(commonTs.result.ok).toBeTrue();
+    expect(commonTs.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(commonTs.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+
+    const esmBarrel = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.mjs", name: "esm-barrel" }),
+      "src/index.mjs": 'export { hiddenPublic } from "./legacy.cjs";\n',
+      "src/legacy.cjs": "export function hiddenPublic() {}\n",
+    });
+    expect(esmBarrel.result.ok).toBeTrue();
+    expect(esmBarrel.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(esmBarrel.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+
+    for (const extension of ["mjs", "mts"]) {
+      const esm = await scan({
+        "package.json": JSON.stringify({
+          exports: `./src/index.${extension}`,
+          name: `esm-${extension}`,
+        }),
+        [`src/index.${extension}`]: "export function publicApi() {}\n",
+      });
+      expect(esm.result.ok).toBeTrue();
+      expect(esm.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(
+        esm.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "publicApi",
+        ),
+      ).toBeTrue();
+    }
+  });
+
+  test("distinguishes lexical CommonJS globals from locally shadowed identifiers", async () => {
+    const topLevelShadows = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "top-level-shadows" }),
+      "src/index.js": [
+        "const exports = {};",
+        "const module = { exports: {} };",
+        "function require() { return {}; }",
+        "exports.api = true;",
+        "module.exports.api = true;",
+        'require("./local-only.js");',
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(topLevelShadows.result.ok).toBeTrue();
+    expect(topLevelShadows.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      topLevelShadows.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["publicApi"]);
+
+    const nestedShadows = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "nested-shadows" }),
+      "src/index.js": [
+        "function local(exports, module, require) {",
+        "  exports.api = true;",
+        "  module.exports.api = true;",
+        '  require("./local-only.js");',
+        "}",
+        "void local;",
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(nestedShadows.result.ok).toBeTrue();
+    expect(nestedShadows.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      nestedShadows.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
+
+    for (const source of [
+      [
+        "function local(exports, module, require) {",
+        "  exports.api = true;",
+        "  module.exports.api = true;",
+        '  require("./local-only.js");',
+        "}",
+        "module.exports = local;",
+      ].join("\n"),
+      ["{ const exports = {}; exports.local = true; }", "exports.outer = true;"].join("\n"),
+    ]) {
+      const unshadowedOutside = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.js", name: "unshadowed-outside" }),
+        "src/index.js": source,
+      });
+      expect(unshadowedOutside.result.ok).toBeTrue();
+      expect(unshadowedOutside.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        unshadowedOutside.snapshot?.records.some((record) => record.kind === "action"),
+      ).toBeFalse();
+    }
+
+    const helper = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "common-js-helper" }),
+      "src/index.js": 'Object.defineProperty(exports, "api", { value: () => true });\n',
+    });
+    expect(helper.result.ok).toBeTrue();
+    expect(helper.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(helper.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+
+    const shadowedHelper = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "shadowed-helper" }),
+      "src/index.js": [
+        "const exports = {};",
+        'Object.defineProperty(exports, "api", { value: () => true });',
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(shadowedHelper.result.ok).toBeTrue();
+    expect(shadowedHelper.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      shadowedHelper.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
+  });
+
+  test("keeps static and TypeScript module var bindings within their boundaries", async () => {
+    const fixtures = [
+      {
+        expected: "partial",
+        extension: "js",
+        name: "static-block-with-outer-use",
+        source: [
+          "class Container {",
+          "  static {",
+          "    var require = () => ({});",
+          '    require("./local-only.js");',
+          "  }",
+          "}",
+          'require("./outer.js");',
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        extension: "js",
+        name: "static-block-only",
+        source: [
+          "class Container {",
+          "  static {",
+          "    var require = () => ({});",
+          '    require("./local-only.js");',
+          "  }",
+          "}",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "partial",
+        extension: "ts",
+        name: "namespace-with-outer-use",
+        source: [
+          "namespace Internal {",
+          "  export var require = () => ({});",
+          '  require("./local-only.js");',
+          "}",
+          'require("./outer.js");',
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        extension: "ts",
+        name: "namespace-only",
+        source: [
+          "namespace Internal {",
+          "  export var require = () => ({});",
+          '  require("./local-only.js");',
+          "}",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const result = await scan({
+        "package.json": JSON.stringify({
+          exports: `./src/index.${fixture.extension}`,
+          name: fixture.name,
+        }),
+        [`src/index.${fixture.extension}`]: fixture.source,
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
+      expect(
+        result.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "publicApi",
+        ),
+      ).toBeTrue();
+    }
+  });
+
+  test("separates parameter defaults and computed keys from method bodies", async () => {
+    const fixtures = [
+      {
+        expected: "partial",
+        name: "default-before-body-var",
+        source: [
+          'function local(value = require("./outer.js")) {',
+          "  var require = () => ({});",
+          "  return value;",
+          "}",
+          "void local;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "partial",
+        name: "class-computed-key",
+        source: [
+          "class Container {",
+          '  [require("./outer.js")](require) {',
+          '    require("./local-only.js");',
+          "  }",
+          "}",
+          "void Container;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "partial",
+        name: "object-computed-key",
+        source: [
+          "const container = {",
+          '  [require("./outer.js")](require) {',
+          '    require("./local-only.js");',
+          "  },",
+          "};",
+          "void container;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "function-body-var",
+        source: [
+          "function local() {",
+          "  var require = () => ({});",
+          '  require("./local-only.js");',
+          "}",
+          "void local;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "parameter-default-shadow",
+        source: [
+          'function local(require, value = require("./local-only.js")) {',
+          '  require("./also-local.js");',
+          "  return value;",
+          "}",
+          "void local;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "ordinary-method-body-shadow",
+        source: [
+          "class Container {",
+          "  method(require) {",
+          '    require("./local-only.js");',
+          "  }",
+          "}",
+          "void Container;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "ordinary-object-body-shadow",
+        source: [
+          "const container = {",
+          "  method(require) {",
+          '    require("./local-only.js");',
+          "  },",
+          "};",
+          "void container;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const result = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.js", name: fixture.name }),
+        "src/index.js": fixture.source,
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
+      expect(
+        result.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "publicApi",
+        ),
+      ).toBeTrue();
+    }
+  });
+
+  test("requires unshadowed Object for defineProperty CommonJS helpers", async () => {
+    const sources = [
+      {
+        expected: "partial",
+        name: "global-object-helper",
+        source: [
+          'Object.defineProperty(exports, "api", { value: () => true });',
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "local-object-helper",
+        source: [
+          "const Object = { defineProperty() {} };",
+          'Object.defineProperty(exports, "api", { value: () => true });',
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+      {
+        expected: "complete",
+        name: "parameter-object-helper",
+        source: [
+          "function local(Object) {",
+          '  Object.defineProperty(exports, "api", { value: () => true });',
+          "}",
+          "void local;",
+          "export function publicApi() {}",
+        ].join("\n"),
+      },
+    ] as const;
+
+    for (const fixture of sources) {
+      const result = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.js", name: fixture.name }),
+        "src/index.js": fixture.source,
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
+      expect(
+        result.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "publicApi",
+        ),
+      ).toBeTrue();
+    }
+
+    const importedObject = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "imported-object-helper" }),
+      "src/helpers.js": "export const objectHelper = { defineProperty() {} };\n",
+      "src/index.js": [
+        'import { objectHelper as Object } from "./helpers.js";',
+        'Object.defineProperty(exports, "api", { value: () => true });',
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(importedObject.result.ok).toBeTrue();
+    expect(importedObject.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      importedObject.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
   });
 
   test("fails stably before an oversized extraction can accumulate records", async () => {

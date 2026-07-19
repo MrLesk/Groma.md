@@ -43,15 +43,16 @@ const maxAstDepth = 512;
 const maxReexportDepth = 32;
 const maxPackageEntryLiterals = 256;
 
-const sourceExtensionPattern = /\.(?:[cm]?[jt]sx?|d\.ts)$/;
-const testFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:test|spec)\.[cm]?[jt]sx?$/i;
-const generatedFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:generated|gen)\.[cm]?[jt]sx?$/i;
+const sourceExtensionPattern = /\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/;
+const testFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:test|spec)\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/i;
+const generatedFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:generated|gen)\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/i;
 const portableResourcePattern =
   /^(?:\.|[^/\\\u0000-\u001f\u007f]+(?:\/[^/\\\u0000-\u001f\u007f]+)*)$/;
 const knownExcludedDirectories = new Set([
   ".cache",
   ".git",
   ".groma",
+  ".groma-cache",
   ".hg",
   ".next",
   ".nuxt",
@@ -65,6 +66,7 @@ const knownExcludedDirectories = new Set([
   "coverage",
   "dist",
   "generated",
+  "groma",
   "fixtures",
   "node_modules",
   "out",
@@ -158,6 +160,11 @@ interface ImportEvidence {
   readonly start: number;
 }
 
+interface ImportedBindingEvidence {
+  readonly imported: string;
+  readonly source: string;
+}
+
 interface CallableEvidence {
   readonly end: number;
   readonly jsdoc?: Readonly<{ readonly end: number; readonly start: number }>;
@@ -201,6 +208,19 @@ interface ExtractionBudget {
   canonicalCharacters: number;
   records: number;
   work: number;
+}
+
+type CommonJsTrackedName = "Object" | "exports" | "module" | "require";
+
+interface CommonJsLexicalScope {
+  readonly bindings: Set<CommonJsTrackedName>;
+  readonly kind: "class" | "function" | "lexical" | "program" | "var-boundary";
+  readonly parent?: CommonJsLexicalScope;
+}
+
+interface CommonJsUse {
+  readonly names: readonly CommonJsTrackedName[];
+  readonly scope: CommonJsLexicalScope;
 }
 
 interface IgnoreRule {
@@ -758,42 +778,84 @@ function parseTsconfig(text: string): Readonly<{
   readonly baseUrl: string;
   readonly baseUrlEnabled: boolean;
   readonly exclude: readonly string[];
+  readonly files: readonly string[];
+  readonly filesPresent: boolean;
+  readonly hardExclude: readonly string[];
   readonly include: readonly string[];
+  readonly includePresent: boolean;
   readonly partial: boolean;
   readonly rootDir?: string;
   readonly rules: readonly ModuleAliasRule[];
+  readonly unsafe: boolean;
 }> {
   const stripped = stripJsonComments(text);
   const invalid = Object.freeze({
     baseUrl: ".",
     baseUrlEnabled: false,
     exclude: Object.freeze([]),
+    files: Object.freeze([]),
+    filesPresent: false,
+    hardExclude: Object.freeze([]),
     include: Object.freeze([]),
+    includePresent: false,
     partial: true,
     rules: Object.freeze([]),
+    unsafe: true,
   });
   if (stripped === undefined) return invalid;
   try {
     const parsed: unknown = JSON.parse(stripTrailingCommas(stripped));
     if (!hasOwnDataRecord(parsed)) return invalid;
-    let partial = Object.hasOwn(parsed, "extends");
-    const copyPatterns = (value: unknown): readonly string[] => {
-      if (value === undefined) return Object.freeze([]);
+    let unsafe = Object.hasOwn(parsed, "extends");
+    let partial = unsafe;
+    const copyPatterns = (value: unknown, present: boolean): readonly string[] => {
+      if (!present) return Object.freeze([]);
       if (!Array.isArray(value) || value.length > 128) {
         partial = true;
+        unsafe = true;
         return Object.freeze([]);
       }
       const copied: string[] = [];
       for (const item of value) {
-        if (!validatePattern(item)) partial = true;
-        else copied.push(item);
+        if (!validatePattern(item)) {
+          partial = true;
+          unsafe = true;
+        } else copied.push(item);
       }
       return Object.freeze(copied.sort(compareCodeUnits));
     };
-    const include = copyPatterns(parsed.include);
-    const exclude = copyPatterns(parsed.exclude);
+    const includePresent = Object.hasOwn(parsed, "include");
+    const include = copyPatterns(parsed.include, includePresent);
+    const exclude = copyPatterns(parsed.exclude, Object.hasOwn(parsed, "exclude"));
+    const filesPresent = Object.hasOwn(parsed, "files");
+    const explicitFiles: string[] = [];
+    if (filesPresent) {
+      if (!Array.isArray(parsed.files) || parsed.files.length > 128) partial = true;
+      else {
+        const seenFiles = new Set<string>();
+        for (const item of parsed.files) {
+          const candidate =
+            typeof item === "string" && item.startsWith("./") ? item.slice(2) : item;
+          if (
+            !validatePattern(candidate) ||
+            candidate.includes("*") ||
+            !sourceExtensionPattern.test(candidate)
+          ) {
+            partial = true;
+            continue;
+          }
+          if (!seenFiles.has(candidate)) {
+            seenFiles.add(candidate);
+            explicitFiles.push(candidate);
+          }
+        }
+      }
+    }
     const compilerOptions = parsed.compilerOptions;
-    if (compilerOptions !== undefined && !hasOwnDataRecord(compilerOptions)) partial = true;
+    if (compilerOptions !== undefined && !hasOwnDataRecord(compilerOptions)) {
+      partial = true;
+      unsafe = true;
+    }
     const outputDirectories: string[] = [];
     for (const field of ["outDir", "declarationDir"] as const) {
       const candidate = hasOwnDataRecord(compilerOptions) ? compilerOptions[field] : undefined;
@@ -805,6 +867,7 @@ function parseTsconfig(text: string): Readonly<{
         candidate.includes("*")
       ) {
         partial = true;
+        unsafe = true;
       } else outputDirectories.push(candidate);
     }
     const rootDir = hasOwnDataRecord(compilerOptions) ? compilerOptions.rootDir : undefined;
@@ -815,7 +878,10 @@ function parseTsconfig(text: string): Readonly<{
         (rootDir === "." || (validatePattern(rootDir) && !rootDir.includes("*")))
       ) {
         copiedRootDir = rootDir;
-      } else partial = true;
+      } else {
+        partial = true;
+        unsafe = true;
+      }
     }
     const baseUrlValue = hasOwnDataRecord(compilerOptions) ? compilerOptions.baseUrl : undefined;
     let baseUrl = ".";
@@ -825,23 +891,32 @@ function parseTsconfig(text: string): Readonly<{
         (baseUrlValue === "." || (validatePattern(baseUrlValue) && !baseUrlValue.includes("*")))
       ) {
         baseUrl = baseUrlValue;
-      } else partial = true;
+      } else {
+        partial = true;
+        unsafe = true;
+      }
     }
     const aliases = parseAliasRules(
       hasOwnDataRecord(compilerOptions) ? compilerOptions.paths : undefined,
       false,
     );
-    if (aliases.unknown) partial = true;
+    if (aliases.unknown) {
+      partial = true;
+      unsafe = true;
+    }
     return Object.freeze({
       baseUrl,
       baseUrlEnabled: baseUrlValue !== undefined,
-      exclude: Object.freeze(
-        [...new Set([...exclude, ...outputDirectories])].sort(compareCodeUnits),
-      ),
+      exclude,
+      files: Object.freeze(explicitFiles.sort(compareCodeUnits)),
+      filesPresent,
+      hardExclude: Object.freeze([...new Set(outputDirectories)].sort(compareCodeUnits)),
       include,
+      includePresent,
       partial,
       ...(copiedRootDir === undefined ? {} : { rootDir: copiedRootDir }),
       rules: aliases.rules,
+      unsafe,
     });
   } catch {
     return invalid;
@@ -1005,7 +1080,11 @@ async function inventoryScope(
   const conflictingAliases = new Set<string>();
   let ignoreRules: readonly IgnoreRule[] = Object.freeze([]);
   let tsExclude: readonly string[] = Object.freeze([]);
+  let tsFiles: readonly string[] = Object.freeze([]);
+  let tsFilesPresent = false;
+  let tsHardExclude: readonly string[] = Object.freeze([]);
   let tsInclude: readonly string[] = Object.freeze([]);
+  let tsIncludePresent = false;
   let configuredSourceRoots: readonly string[] = Object.freeze([]);
   let aliases: ModuleAliasPolicy = Object.freeze({
     baseResource: root,
@@ -1065,8 +1144,13 @@ async function inventoryScope(
           const file = await readFile(request, state, scope, tsconfig.resource);
           const parsed = parseTsconfig(file.text);
           tsExclude = parsed.exclude;
+          tsFiles = parsed.files;
+          tsFilesPresent = parsed.filesPresent;
+          tsHardExclude = parsed.hardExclude;
           tsInclude = parsed.include;
-          if (parsed.partial) return emptyPartial();
+          tsIncludePresent = parsed.includePresent;
+          if (parsed.unsafe) return emptyPartial();
+          partial ||= parsed.partial;
           configuredSourceRoots = Object.freeze(
             parsed.rootDir === undefined
               ? []
@@ -1103,7 +1187,7 @@ async function inventoryScope(
       if (
         excludedByKnownRule(relative, directoryEntry) ||
         matchesPatterns(relative, config.exclude) ||
-        matchesPatterns(relative, tsExclude) ||
+        matchesPatterns(relative, tsHardExclude) ||
         ignored(relative, directoryEntry, ignoreRules)
       ) {
         continue;
@@ -1131,12 +1215,17 @@ async function inventoryScope(
           basename(entry.resource) === "package.json" ||
           /^README(?:\.[^/]*)?$/i.test(basename(entry.resource));
         if (!selectable || (!projectMetadata && !included(relative, config.include))) continue;
-        if (
-          sourceExtensionPattern.test(entry.resource) &&
-          tsInclude.length > 0 &&
-          !included(relative, tsInclude)
-        )
-          continue;
+        if (sourceExtensionPattern.test(entry.resource)) {
+          const explicit = tsFilesPresent && tsFiles.includes(relative);
+          const includedByTsconfig =
+            tsIncludePresent &&
+            tsInclude.length > 0 &&
+            included(relative, tsInclude) &&
+            !matchesPatterns(relative, tsExclude);
+          const implicit =
+            !tsFilesPresent && !tsIncludePresent && !matchesPatterns(relative, tsExclude);
+          if (!explicit && !includedByTsconfig && !implicit) continue;
+        }
         const size = entry.size ?? maxSourceBytes;
         if (size > maxSourceBytes) {
           partial = true;
@@ -1148,6 +1237,18 @@ async function inventoryScope(
       }
     }
     queue.sort(compareCodeUnits);
+  }
+  for (const explicit of tsFiles) {
+    const resource = joinResource(root, explicit);
+    if (
+      !included(explicit, config.include) ||
+      excludedByKnownRule(explicit, false) ||
+      matchesPatterns(explicit, config.exclude) ||
+      matchesPatterns(explicit, tsHardExclude) ||
+      ignored(explicit, false, ignoreRules)
+    )
+      continue;
+    if (!files.includes(resource)) partial = true;
   }
   return Object.freeze({
     aliases,
@@ -1216,12 +1317,18 @@ function matchingResources(
     `${base}.cts`,
     `${base}.js`,
     `${base}.jsx`,
+    `${base}.d.ts`,
+    `${base}.d.mts`,
+    `${base}.d.cts`,
     `${base}/index.ts`,
     `${base}/index.tsx`,
     `${base}/index.mts`,
     `${base}/index.cts`,
     `${base}/index.js`,
     `${base}/index.jsx`,
+    `${base}/index.d.ts`,
+    `${base}/index.d.mts`,
+    `${base}/index.d.cts`,
   ]);
   if (/\.[cm]?jsx?$/.test(base)) {
     const stem = base.replace(/\.[cm]?jsx?$/, "");
@@ -1229,6 +1336,9 @@ function matchingResources(
     candidates.add(`${stem}.tsx`);
     candidates.add(`${stem}.mts`);
     candidates.add(`${stem}.cts`);
+    if (/\.mjs$/.test(base)) candidates.add(`${stem}.d.mts`);
+    else if (/\.cjs$/.test(base)) candidates.add(`${stem}.d.cts`);
+    else if (/\.jsx?$/.test(base)) candidates.add(`${stem}.d.ts`);
   }
   return Object.freeze(
     [...candidates].filter((candidate) => resources.has(candidate)).sort(compareCodeUnits),
@@ -1568,6 +1678,273 @@ function nodeDeclaresBun(value: AstNode, consume: () => void): boolean {
   return false;
 }
 
+function commonJsTrackedName(value: unknown): CommonJsTrackedName | undefined {
+  const name = identifierName(value);
+  return name === "Object" || name === "exports" || name === "module" || name === "require"
+    ? name
+    : undefined;
+}
+
+function collectCommonJsPatternBindings(
+  scope: CommonJsLexicalScope,
+  value: unknown,
+  consume: () => void,
+): boolean {
+  if (!isAstNode(value)) return true;
+  const stack: Array<Readonly<{ readonly depth: number; readonly node: AstNode }>> = [
+    Object.freeze({ depth: 0, node: value }),
+  ];
+  let inspected = 0;
+  while (stack.length > 0) {
+    consume();
+    const current = stack.pop()!;
+    inspected += 1;
+    if (inspected > 256 || current.depth > 32) return false;
+    const binding = commonJsTrackedName(current.node);
+    if (binding !== undefined) {
+      scope.bindings.add(binding);
+      continue;
+    }
+    const children: unknown[] = [];
+    if (current.node.type === "RestElement") children.push(current.node.argument);
+    else if (current.node.type === "AssignmentPattern") children.push(current.node.left);
+    else if (current.node.type === "TSParameterProperty") children.push(current.node.parameter);
+    else if (current.node.type === "ArrayPattern" && Array.isArray(current.node.elements))
+      children.push(...current.node.elements);
+    else if (current.node.type === "ObjectPattern" && Array.isArray(current.node.properties)) {
+      for (const property of current.node.properties) {
+        if (!isAstNode(property)) continue;
+        children.push(property.type === "RestElement" ? property.argument : property.value);
+      }
+    }
+    for (const child of children) {
+      if (isAstNode(child)) stack.push({ depth: current.depth + 1, node: child });
+    }
+  }
+  return true;
+}
+
+function commonJsScopeKind(node: AstNode): CommonJsLexicalScope["kind"] | undefined {
+  if (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod" ||
+    node.type === "ClassPrivateMethod" ||
+    node.type === "TSDeclareFunction" ||
+    node.type === "TSDeclareMethod"
+  )
+    return "function";
+  if (node.type === "ClassDeclaration" || node.type === "ClassExpression") return "class";
+  if (
+    node.type === "BlockStatement" ||
+    node.type === "CatchClause" ||
+    node.type === "ForStatement" ||
+    node.type === "ForInStatement" ||
+    node.type === "ForOfStatement" ||
+    node.type === "SwitchStatement"
+  )
+    return "lexical";
+  if (node.type === "StaticBlock" || node.type === "TSModuleBlock") return "var-boundary";
+  return undefined;
+}
+
+function nearestCommonJsVarScope(scope: CommonJsLexicalScope): CommonJsLexicalScope {
+  let current = scope;
+  while (
+    current.kind !== "function" &&
+    current.kind !== "program" &&
+    current.kind !== "var-boundary" &&
+    current.parent !== undefined
+  )
+    current = current.parent;
+  return current;
+}
+
+function isCommonJsFunctionScope(node: AstNode): boolean {
+  return (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod" ||
+    node.type === "ClassPrivateMethod" ||
+    node.type === "TSDeclareFunction" ||
+    node.type === "TSDeclareMethod"
+  );
+}
+
+function commonJsMemberRoot(
+  value: unknown,
+  consume: () => void,
+): Readonly<{ readonly bounded: boolean; readonly name?: "exports" | "module" }> {
+  let current = value;
+  for (let depth = 0; depth <= 32; depth += 1) {
+    consume();
+    if (!isAstNode(current) || current.type !== "MemberExpression") {
+      return Object.freeze({ bounded: true });
+    }
+    const object = current.object;
+    if (identifierName(object) === "exports") {
+      return Object.freeze({ bounded: true, name: "exports" });
+    }
+    if (
+      identifierName(object) === "module" &&
+      propertyName(current.property, current.computed) === "exports"
+    ) {
+      return Object.freeze({ bounded: true, name: "module" });
+    }
+    current = object;
+  }
+  return Object.freeze({ bounded: false });
+}
+
+function commonJsUse(scope: CommonJsLexicalScope, ...names: CommonJsTrackedName[]): CommonJsUse {
+  return Object.freeze({ names: Object.freeze(names), scope });
+}
+
+function hasUnshadowedCommonJsUsage(root: AstNode, consume: () => void): boolean {
+  const program: CommonJsLexicalScope = {
+    bindings: new Set(),
+    kind: "program",
+  };
+  const uses: CommonJsUse[] = [];
+  const stack: Array<
+    Readonly<{
+      readonly depth: number;
+      readonly enclosing: CommonJsLexicalScope;
+      readonly node: AstNode;
+      readonly scope: CommonJsLexicalScope;
+    }>
+  > = [Object.freeze({ depth: 0, enclosing: program, node: root, scope: program })];
+  let bounded = true;
+  let nodes = 0;
+  while (stack.length > 0) {
+    consume();
+    const current = stack.pop()!;
+    nodes += 1;
+    if (nodes > maxAstNodesPerFile || current.depth > maxAstDepth) return true;
+    const node = current.node;
+    const scope = current.scope;
+    const enclosing = current.enclosing;
+    if (node.type === "VariableDeclaration" && Array.isArray(node.declarations)) {
+      const target = node.kind === "var" ? nearestCommonJsVarScope(scope) : scope;
+      for (const declaration of node.declarations) {
+        if (!isAstNode(declaration)) continue;
+        bounded = collectCommonJsPatternBindings(target, declaration.id, consume) && bounded;
+      }
+    } else if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod" ||
+      node.type === "TSDeclareFunction" ||
+      node.type === "TSDeclareMethod"
+    ) {
+      const name = commonJsTrackedName(node.id);
+      if (name !== undefined) {
+        if (node.type === "FunctionDeclaration") enclosing.bindings.add(name);
+        scope.bindings.add(name);
+      }
+      if (Array.isArray(node.params)) {
+        for (const parameter of node.params)
+          bounded = collectCommonJsPatternBindings(scope, parameter, consume) && bounded;
+      }
+    } else if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      const name = commonJsTrackedName(node.id);
+      if (name !== undefined) {
+        if (node.type === "ClassDeclaration") enclosing.bindings.add(name);
+        scope.bindings.add(name);
+      }
+    } else if (node.type === "ImportDeclaration" && Array.isArray(node.specifiers)) {
+      for (const specifier of node.specifiers) {
+        if (!isAstNode(specifier)) continue;
+        const name = commonJsTrackedName(specifier.local);
+        if (name !== undefined) scope.bindings.add(name);
+      }
+    } else if (node.type === "TSImportEqualsDeclaration") {
+      const name = commonJsTrackedName(node.id);
+      if (name !== undefined) scope.bindings.add(name);
+    } else if (node.type === "CatchClause") {
+      bounded = collectCommonJsPatternBindings(scope, node.param, consume) && bounded;
+    }
+    if (
+      (node.type === "CallExpression" || node.type === "OptionalCallExpression") &&
+      identifierName(node.callee) === "require"
+    ) {
+      uses.push(commonJsUse(scope, "require"));
+    }
+    if (node.type === "MemberExpression") {
+      const rootName = commonJsMemberRoot(node, consume);
+      bounded &&= rootName.bounded;
+      if (rootName.name !== undefined) uses.push(commonJsUse(scope, rootName.name));
+    }
+    if (
+      (node.type === "CallExpression" || node.type === "OptionalCallExpression") &&
+      isAstNode(node.callee) &&
+      node.callee.type === "MemberExpression" &&
+      identifierName(node.callee.object) === "Object" &&
+      propertyName(node.callee.property, node.callee.computed) === "defineProperty" &&
+      Array.isArray(node.arguments)
+    ) {
+      const target = node.arguments[0];
+      if (identifierName(target) === "exports") uses.push(commonJsUse(scope, "Object", "exports"));
+      else {
+        const rootName = commonJsMemberRoot(target, consume);
+        bounded &&= rootName.bounded;
+        if (rootName.name !== undefined) uses.push(commonJsUse(scope, "Object", rootName.name));
+      }
+    }
+    const children: Array<Readonly<{ readonly key: string; readonly node: AstNode }>> = [];
+    for (const [key, child] of Object.entries(node)) {
+      if (isAstNode(child)) children.push(Object.freeze({ key, node: child }));
+      else if (Array.isArray(child)) {
+        for (const item of child)
+          if (isAstNode(item)) children.push(Object.freeze({ key, node: item }));
+      }
+    }
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index]!;
+      const evaluatesOutsideFunction =
+        child.key === "key" &&
+        node.computed === true &&
+        (node.type === "ObjectMethod" ||
+          node.type === "ClassMethod" ||
+          node.type === "ClassPrivateMethod");
+      const parentScope = evaluatesOutsideFunction ? enclosing : scope;
+      const kind =
+        child.key === "body" &&
+        child.node.type === "BlockStatement" &&
+        isCommonJsFunctionScope(node)
+          ? "var-boundary"
+          : commonJsScopeKind(child.node);
+      const childScope: CommonJsLexicalScope =
+        kind === undefined ? parentScope : { bindings: new Set(), kind, parent: parentScope };
+      stack.push({
+        depth: current.depth + 1,
+        enclosing: parentScope,
+        node: child.node,
+        scope: childScope,
+      });
+    }
+  }
+  if (uses.length === 0) return false;
+  if (!bounded) return true;
+  return uses.some((use) => {
+    return use.names.every((name) => {
+      let scope: CommonJsLexicalScope | undefined = use.scope;
+      while (scope !== undefined) {
+        if (scope.bindings.has(name)) return false;
+        scope = scope.parent;
+      }
+      return true;
+    });
+  });
+}
+
 function walkAst(root: AstNode, visit: (node: AstNode) => void, consume: () => void): boolean {
   const stack: Array<Readonly<{ readonly depth: number; readonly node: AstNode }>> = [
     Object.freeze({ depth: 0, node: root }),
@@ -1729,9 +2106,12 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   }
   const body = tree.program.body;
   let bunShadowed = false;
-  let traversalPartial = false;
+  let traversalPartial = hasUnshadowedCommonJsUsage(tree.program, () =>
+    chargeExtractionWork(budget),
+  );
   const bunServeCalls: AstNode[] = [];
   const nestedTypeImports: ImportEvidence[] = [];
+  const unsupportedImportedBindings = new Set<string>();
   const boundedAst = walkAst(
     tree.program,
     (node) => {
@@ -1741,7 +2121,6 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
       } else if (node.type === "CallExpression" || node.type === "OptionalCallExpression") {
         const callee = node.callee;
         if (isAstNode(callee) && callee.type === "Import") traversalPartial = true;
-        if (identifierName(callee) === "require") traversalPartial = true;
         if (
           isAstNode(callee) &&
           callee.type === "MemberExpression" &&
@@ -1750,6 +2129,8 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         ) {
           bunServeCalls.push(node);
         }
+      } else if (node.type === "TSExportAssignment") {
+        traversalPartial = true;
       } else if (node.type === "TSImportType") {
         const sourceNode = isAstNode(node.source) ? node.source : node.argument;
         const source = literalString(sourceNode);
@@ -1757,6 +2138,9 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         if (source === undefined) traversalPartial = true;
         else nestedTypeImports.push(Object.freeze({ end: range.end, source, start: range.start }));
       } else if (node.type === "TSImportEqualsDeclaration") {
+        const local = identifierName(node.id);
+        if (local === undefined || node.isExport === true) traversalPartial = true;
+        else unsupportedImportedBindings.add(local);
         const moduleReference = node.moduleReference;
         const expression =
           isAstNode(moduleReference) && moduleReference.type === "TSExternalModuleReference"
@@ -1779,13 +2163,55 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
       routes: Object.freeze([]),
     });
   }
+  let partial = traversalPartial;
+  const importedBindings = new Map<string, ImportedBindingEvidence>();
   const locals = new Map<string, Readonly<{ readonly name: string; readonly node: AstNode }>>();
   for (const statement of body) {
     if (!isAstNode(statement)) continue;
+    if (
+      statement.type === "ExportNamedDeclaration" &&
+      isAstNode(statement.declaration) &&
+      statement.declaration.type === "TSImportEqualsDeclaration"
+    ) {
+      partial = true;
+    }
+    if (
+      statement.type === "ImportDeclaration" &&
+      statement.importKind !== "type" &&
+      statement.importKind !== "typeof" &&
+      Array.isArray(statement.specifiers)
+    ) {
+      const source = literalString(statement.source);
+      if (source === undefined) partial = true;
+      else {
+        for (const specifier of statement.specifiers) {
+          if (!isAstNode(specifier) || typeOnlySpecifier(specifier)) continue;
+          const local = identifierName(specifier.local);
+          const imported =
+            specifier.type === "ImportDefaultSpecifier"
+              ? "default"
+              : specifier.type === "ImportSpecifier"
+                ? propertyName(specifier.imported, false)
+                : undefined;
+          if (specifier.type === "ImportNamespaceSpecifier") continue;
+          if (
+            local === undefined ||
+            imported === undefined ||
+            !validObservationText(local, 256) ||
+            !validObservationText(imported, 256) ||
+            importedBindings.has(local)
+          ) {
+            partial = true;
+            continue;
+          }
+          importedBindings.set(local, Object.freeze({ imported, source }));
+        }
+      }
+    }
     const localDeclaration =
       statement.type === "ExportNamedDeclaration" &&
-      statement.exportKind !== "type" &&
-      isAstNode(statement.declaration)
+      isAstNode(statement.declaration) &&
+      (statement.exportKind !== "type" || statement.declaration.type === "TSDeclareFunction")
         ? statement.declaration
         : statement;
     const declared = callableDeclaration(localDeclaration);
@@ -1796,7 +2222,6 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   const imports: ImportEvidence[] = [...nestedTypeImports];
   const reexports: ReexportEvidence[] = [];
   const routes: RouteEvidence[] = [];
-  let partial = traversalPartial;
   const addCallable = (name: string, declaration: AstNode, exportNode: AstNode): void => {
     const range = nodeRange(declaration);
     if (range.end <= range.start || !validObservationText(name, 256)) {
@@ -1826,7 +2251,10 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
       else imports.push(Object.freeze({ end: range.end, source, start: range.start }));
     }
     if (statement.type === "ExportNamedDeclaration") {
-      if (statement.exportKind !== "type" && isAstNode(statement.declaration)) {
+      if (
+        isAstNode(statement.declaration) &&
+        (statement.exportKind !== "type" || statement.declaration.type === "TSDeclareFunction")
+      ) {
         const declared = callableDeclaration(statement.declaration);
         if (declared !== undefined) addCallable(declared.name, declared.node, statement);
         for (const variable of variableCallables(statement.declaration))
@@ -1874,6 +2302,19 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
           const local = locals.get(localName);
           if (local !== undefined && exportedName !== undefined)
             addCallable(exportedName, local.node, statement);
+          else {
+            const imported = importedBindings.get(localName);
+            if (imported !== undefined) {
+              reexports.push(
+                Object.freeze({
+                  exported: Object.freeze([
+                    Object.freeze({ imported: imported.imported, name: exportedName }),
+                  ]),
+                  source: imported.source,
+                }),
+              );
+            } else if (unsupportedImportedBindings.has(localName)) partial = true;
+          }
         }
       }
     } else if (statement.type === "ExportAllDeclaration") {
@@ -1894,8 +2335,22 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
       ) {
         addCallable("default", statement.declaration, statement);
       } else if (statement.declaration.type === "Identifier") {
-        const local = locals.get(identifierName(statement.declaration) ?? "");
+        const localName = identifierName(statement.declaration) ?? "";
+        const local = locals.get(localName);
         if (local !== undefined) addCallable("default", local.node, statement);
+        else {
+          const imported = importedBindings.get(localName);
+          if (imported !== undefined) {
+            reexports.push(
+              Object.freeze({
+                exported: Object.freeze([
+                  Object.freeze({ imported: imported.imported, name: "default" }),
+                ]),
+                source: imported.source,
+              }),
+            );
+          } else if (unsupportedImportedBindings.has(localName)) partial = true;
+        }
       }
     }
   }
@@ -2081,7 +2536,7 @@ function resolveAlias(
     if (selected.rule.targets.length !== 1) {
       return Object.freeze({ matched: true, partial: true });
     }
-    const target = selected.rule.targets[0]!.replace("*", selected.capture!);
+    const target = selected.rule.targets[0]!.replace("*", () => selected.capture!);
     const matches = matchingResources(policy.baseResource, target, resources);
     return matches.length === 1
       ? Object.freeze({ matched: true, partial: false, resource: matches[0]! })
@@ -2115,6 +2570,10 @@ function documentationRecord(
   });
 }
 
+function commonJsImplementationResource(resource: string): boolean {
+  return /\.(?:cjs|cts)$/.test(resource) && !/\.d\.cts$/.test(resource);
+}
+
 function publicCallables(
   entry: string,
   parsed: ReadonlyMap<string, ParsedSource>,
@@ -2123,7 +2582,8 @@ function publicCallables(
   visiting = new Set<string>(),
   depth = 0,
 ): ReadonlyMap<string, PublicCallableEvidence> | undefined {
-  if (visiting.has(entry) || depth > maxReexportDepth) return undefined;
+  if (commonJsImplementationResource(entry) || visiting.has(entry) || depth > maxReexportDepth)
+    return undefined;
   const source = parsed.get(entry);
   if (source === undefined) return undefined;
   visiting.add(entry);
