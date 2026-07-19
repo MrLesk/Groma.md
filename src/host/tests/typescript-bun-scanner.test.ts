@@ -383,13 +383,107 @@ export function publicApi() {}
     ).toBeFalse();
   });
 
+  test("resolves each Bun serve call against its bounded lexical scope", async () => {
+    const unrelatedShadow = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "bun-call-scope" }),
+      "src/index.ts": [
+        'Bun.serve({ routes: { "/top": () => new Response("ok") } });',
+        "function unrelated(Bun: unknown) { return Bun; }",
+        "void unrelated;",
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(unrelatedShadow.result.ok).toBeTrue();
+    expect(unrelatedShadow.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      unrelatedShadow.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["ROUTE /top", "publicApi"]);
+
+    const shadowedFixtures = [
+      {
+        name: "parameter",
+        source: [
+          "function local(Bun: { serve(value: unknown): void }) {",
+          '  Bun.serve({ routes: { "/parameter": () => true } });',
+          "}",
+          "void local;",
+        ].join("\n"),
+      },
+      {
+        name: "block",
+        source: [
+          "{",
+          "  const Bun = { serve(value: unknown) { return value; } };",
+          '  Bun.serve({ routes: { "/block": () => true } });',
+          "}",
+        ].join("\n"),
+      },
+      {
+        extra: { "src/shim.ts": "export default { serve(value: unknown) { return value; } };\n" },
+        name: "import",
+        source: [
+          'import Bun from "./shim.ts";',
+          'Bun.serve({ routes: { "/import": () => true } });',
+        ].join("\n"),
+      },
+      {
+        name: "hoisted-var",
+        source: [
+          "function local() {",
+          '  Bun.serve({ routes: { "/var": () => true } });',
+          "  var Bun = { serve(value: unknown) { return value; } };",
+          "}",
+          "void local;",
+        ].join("\n"),
+      },
+      {
+        name: "inherited",
+        source: [
+          "function outer(Bun: { serve(value: unknown): void }) {",
+          "  function inner() {",
+          '    Bun.serve({ routes: { "/inherited": () => true } });',
+          "  }",
+          "  return inner;",
+          "}",
+          "void outer;",
+        ].join("\n"),
+      },
+    ] as const;
+
+    for (const fixture of shadowedFixtures) {
+      const shadowed = await scan({
+        ...("extra" in fixture ? fixture.extra : {}),
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `bun-shadowed-${fixture.name}`,
+        }),
+        "src/index.ts": `${fixture.source}\nexport function publicApi() {}\n`,
+      });
+      expect(shadowed.result.ok).toBeTrue();
+      expect(shadowed.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        shadowed.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name?.startsWith("ROUTE "),
+        ),
+      ).toBeFalse();
+      expect(
+        shadowed.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "publicApi",
+        ),
+      ).toBeTrue();
+    }
+  });
+
   test("uses rootDir as a source root without widening a narrower include", async () => {
     const result = await scan({
       "code/private/hidden.ts": "export function hidden() {}",
       "code/public/index.ts": "export function visible() {}\n",
       "package.json": JSON.stringify({ exports: "./code/public/index.ts", name: "root-dir" }),
       "tsconfig.json": JSON.stringify({
-        compilerOptions: { rootDir: "code" },
+        compilerOptions: { rootDir: "./code" },
         include: ["code/public/**/*.ts"],
       }),
     });
@@ -479,6 +573,71 @@ export function api() { return model; }
       ambiguous.snapshot?.records.some(
         (record) =>
           record.kind === "relationship" && record.relationshipType === "workspace-member",
+      ),
+    ).toBeFalse();
+  });
+
+  test("requires every workspace package import to name an exported subpath", async () => {
+    const workspaceFiles = {
+      "package.json": JSON.stringify({ name: "@fixture/root", workspaces: ["packages/*"] }),
+      "packages/api/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/api",
+      }),
+      "packages/member/package.json": JSON.stringify({
+        exports: {
+          ".": "./src/index.ts",
+          "./public": "./src/public.ts",
+        },
+        name: "@fixture/member",
+      }),
+      "packages/member/src/index.ts": "export const rootValue = true;\n",
+      "packages/member/src/private.ts": "export const privateValue = true;\n",
+      "packages/member/src/public.ts": "export const publicValue = true;\n",
+    } as const;
+    const exported = await scan({
+      ...workspaceFiles,
+      "packages/api/src/index.ts": [
+        'import { rootValue } from "@fixture/member";',
+        'import { publicValue } from "@fixture/member/public";',
+        "void rootValue; void publicValue;",
+        "export function api() {}",
+      ].join("\n"),
+    });
+    expect(exported.result.ok).toBeTrue();
+    expect(exported.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      exported.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+    expect(
+      exported.snapshot?.records.some(
+        (record) => record.kind === "component-candidate" && record.candidate.type === "external",
+      ),
+    ).toBeFalse();
+
+    const unexported = await scan({
+      ...workspaceFiles,
+      "packages/api/src/index.ts": [
+        'import { privateValue } from "@fixture/member/private";',
+        "void privateValue;",
+        "export function api() {}",
+      ].join("\n"),
+    });
+    expect(unexported.result.ok).toBeTrue();
+    expect(unexported.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      unexported.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeFalse();
+    expect(
+      unexported.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.type === "external" &&
+          record.candidate.name === "@fixture/member",
       ),
     ).toBeFalse();
   });
@@ -628,7 +787,7 @@ export function shared() {}
       "package.json": JSON.stringify({ exports: "./src/index.ts", name: "outputs" }),
       "src/index.ts": "export function live() {}\n",
       "tsconfig.json": JSON.stringify({
-        compilerOptions: { declarationDir: "declarations", outDir: "artifacts" },
+        compilerOptions: { declarationDir: "./declarations", outDir: "./artifacts" },
       }),
     });
     expect(outputDirectories.result.ok).toBeTrue();
@@ -681,7 +840,7 @@ export function shared() {}
       "src/domain/model.ts": "export const model = true;\n",
       "tsconfig.json": JSON.stringify({
         compilerOptions: {
-          baseUrl: ".",
+          baseUrl: "./",
           paths: {
             "@ambiguous/*": ["src/domain/*", "src/other/*"],
             "@domain/*": ["src/domain/*"],
@@ -788,6 +947,119 @@ export function shared() {}
     expect(ambiguous.result.ok).toBeTrue();
     expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
     expect(ambiguous.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+  });
+
+  test("resolves public barrels through owned package imports and tsconfig aliases only", async () => {
+    const packageImport = await scan({
+      "package.json": JSON.stringify({
+        imports: { "#internal": "./src/missing.ts" },
+        name: "@fixture/root",
+        workspaces: ["packages/*"],
+      }),
+      "packages/member/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        imports: { "#internal": "./src/internal.ts" },
+        name: "@fixture/member",
+      }),
+      "packages/member/src/index.ts": 'export { api } from "#internal";\n',
+      "packages/member/src/internal.ts": "export function api() {}\n",
+    });
+    expect(packageImport.result.ok).toBeTrue();
+    expect(packageImport.snapshot?.coverage[0]?.state).toBe("complete");
+    const packageImportAction = packageImport.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "api",
+    );
+    expect(packageImportAction?.provenance.map((item) => item.resource)).toEqual(
+      expect.arrayContaining([
+        "packages/member/package.json",
+        "packages/member/src/index.ts",
+        "packages/member/src/internal.ts",
+      ]),
+    );
+
+    const tsconfigAlias = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "alias-barrel" }),
+      "src/index.ts": 'export { api } from "@internal";\n',
+      "src/internal.ts": "export function api() {}\n",
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "@internal": ["src/internal.ts"] } },
+      }),
+    });
+    expect(tsconfigAlias.result.ok).toBeTrue();
+    expect(tsconfigAlias.snapshot?.coverage[0]?.state).toBe("complete");
+    const aliasAction = tsconfigAlias.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "api",
+    );
+    expect(aliasAction?.provenance.map((item) => item.resource)).toEqual(
+      expect.arrayContaining(["package.json", "src/index.ts", "src/internal.ts"]),
+    );
+
+    for (const fixture of [
+      {
+        configuration: {},
+        name: "external",
+        source: 'export { api } from "external-package";\n',
+      },
+      {
+        configuration: {
+          compilerOptions: { paths: { "@internal": ["src/missing.ts"] } },
+        },
+        name: "missing",
+        source: 'export { api } from "@internal";\n',
+      },
+      {
+        configuration: {
+          compilerOptions: {
+            paths: { "@internal": ["src/a.ts", "src/b.ts"] },
+          },
+        },
+        extra: {
+          "src/a.ts": "export function api() {}\n",
+          "src/b.ts": "export function api() {}\n",
+        },
+        name: "ambiguous",
+        source: 'export { api } from "@internal";\n',
+      },
+    ] as const) {
+      const unresolved = await scan({
+        ...("extra" in fixture ? fixture.extra : {}),
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `${fixture.name}-barrel`,
+        }),
+        "src/index.ts": fixture.source,
+        "tsconfig.json": JSON.stringify(fixture.configuration),
+      });
+      expect(unresolved.result.ok).toBeTrue();
+      expect(unresolved.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(unresolved.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    }
+
+    const workspaceReexport = await scan({
+      "package.json": JSON.stringify({ name: "@fixture/root", workspaces: ["packages/*"] }),
+      "packages/api/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/api",
+      }),
+      "packages/api/src/index.ts": 'export { memberApi as reexported } from "@fixture/member";\n',
+      "packages/member/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/member",
+      }),
+      "packages/member/src/index.ts": "export function memberApi() {}\n",
+    });
+    expect(workspaceReexport.result.ok).toBeTrue();
+    expect(workspaceReexport.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      workspaceReexport.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "reexported",
+      ),
+    ).toBeFalse();
+    expect(
+      workspaceReexport.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "memberApi",
+      ),
+    ).toBeTrue();
   });
 
   test("does not treat an unlisted nested package collision as a workspace dependency", async () => {
@@ -1186,7 +1458,7 @@ export function shared() {}
       "package.json": JSON.stringify({ exports: "./src/public.ts", name: "files-allowlist" }),
       "src/private.ts": "export function privateApi() {}\n",
       "src/public.ts": "export function publicApi() {}\n",
-      "tsconfig.json": JSON.stringify({ files: ["src/public.ts"] }),
+      "tsconfig.json": JSON.stringify({ files: ["./src/public.ts"] }),
     });
     expect(allowlist.result.ok).toBeTrue();
     expect(allowlist.snapshot?.coverage[0]?.state).toBe("complete");
@@ -1196,6 +1468,29 @@ export function shared() {}
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
     expect(allowlist.fixture.read).not.toContain("src/private.ts");
+
+    for (const include of ["./src", "./src/**/*.ts"]) {
+      const normalizedPatterns = await scan({
+        "package.json": JSON.stringify({
+          exports: "./src/public/index.ts",
+          name: "normalized-tsconfig-patterns",
+        }),
+        "src/private/hidden.ts": "export function hiddenApi() {}\n",
+        "src/public/index.ts": "export function publicApi() {}\n",
+        "tsconfig.json": JSON.stringify({
+          exclude: ["./src/private/**"],
+          include: [include],
+        }),
+      });
+      expect(normalizedPatterns.result.ok).toBeTrue();
+      expect(normalizedPatterns.snapshot?.coverage[0]?.state).toBe("complete");
+      expect(
+        normalizedPatterns.snapshot?.records
+          .filter((record) => record.kind === "action")
+          .map((record) => record.name),
+      ).toEqual(["publicApi"]);
+      expect(normalizedPatterns.fixture.read).not.toContain("src/private/hidden.ts");
+    }
 
     for (const configuration of [{ files: [] }, { include: [] }]) {
       const empty = await scan({
@@ -1300,6 +1595,56 @@ export function shared() {}
     expect(declarationAmbiguity.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       declarationAmbiguity.snapshot?.records.some((record) => record.kind === "action"),
+    ).toBeFalse();
+  });
+
+  test("prefers exact runtime resources over declaration sidecar fallbacks", async () => {
+    const packageEntry = await scan({
+      "package.json": JSON.stringify({ exports: "./src/api/index.js", name: "exact-entry" }),
+      "src/api/index.d.ts": "export declare function declarationApi(): void;\n",
+      "src/api/index.js": "export function runtimeApi() {}\n",
+    });
+    expect(packageEntry.result.ok).toBeTrue();
+    expect(packageEntry.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      packageEntry.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["runtimeApi"]);
+
+    const relativeImport = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/api/index.ts",
+        name: "exact-relative-import",
+      }),
+      "src/api/index.ts": [
+        'import { run } from "../domain/service.js";',
+        'export { run as runtimeImport } from "../domain/service.js";',
+        "export function publicApi() { return run(); }",
+      ].join("\n"),
+      "src/domain/service.d.ts": [
+        "export declare function declarationOnly(): void;",
+        "export declare function run(): void;",
+      ].join("\n"),
+      "src/domain/service.js": "export function run() { return true; }\n",
+    });
+    expect(relativeImport.result.ok).toBeTrue();
+    expect(relativeImport.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      relativeImport.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["publicApi", "runtimeImport"]);
+    expect(
+      relativeImport.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+    expect(
+      relativeImport.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "declarationOnly",
+      ),
     ).toBeFalse();
   });
 

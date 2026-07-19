@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 00:38'
+updated_date: '2026-07-19 01:18'
 labels: []
 milestone: m-3
 dependencies:
@@ -72,10 +72,12 @@ Completed final semantic hardening after three independent read-only reviews: un
 Post-review hardening addressed every independently verified PR finding: imported-binding barrel/default proof, exact tsconfig files/include/exclude semantics, complete declaration suffix handling, nested scanner blindness, literal alias captures, and fail-closed CommonJS classification with bounded lexical scope analysis. Final validation passed: 31 scanner/runtime tests (1,565 assertions), exact Groma self-scan (1,206 assertions), 1,058 repository tests (9,156 assertions), typecheck, architecture boundaries, formatting, diff checks, Iteration 1B verification, and Darwin ARM64/Linux x64/Windows x64/Windows ARM64 standalone targets. A final independent read-only audit found no actionable issues.
 
 Final review follow-up made Babel parsing explicitly Bun-compatible by source extension, restoring valid angle-bracket TypeScript assertions without accepting TypeScript or JSX in loaders that do not support them. After two CI-only expirations at the default 5-second test ceiling with every other assertion passing, the unchanged full Groma self-scan integration test alone now has a 15-second timeout; production bounds and assertions are unchanged. Final validation passed: 1,059 repository tests (9,204 assertions), focused parser/declaration/CommonJS regressions, exact self-scan, typecheck, boundaries, formatting, diff checks, build, Iteration 1B verification, and all four executable targets; independent replay found no actionable issue.
+
+The final exact-head Codex review produced five additional scanner findings; all were independently reproduced and closed. Supported tsconfig-relative values now normalize a safe leading ./, exact inventoried resources outrank fallbacks, Bun.serve calls use bounded per-call lexical shadow analysis, every workspace import validates its exported public subpath, and public callable traversal shares the supported relative/package-import/tsconfig-alias resolver without traversing arbitrary external or workspace reexports. Final validation passed: 1,063 repository tests (9,270 assertions), focused five-finding and adjacent fail-closed matrices, exact self-scan, typecheck, boundaries, formatting, diff checks, build, Iteration 1B verification, and all four executable targets; final independent replay found no actionable issue.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added and registered the requirement-free official.typescript Phase 1 scanner. It inertly derives bounded package/source candidates, explicit public callable actions, static Bun route actions, uniquely resolved value/type relationships, and raw documentation; unsupported or ambiguous evidence fails closed as partial without reading project code or canonical intent. Verified with adversarial scanner and Bun-extension fixtures, durable Host integration, repeated exact Groma self-scan, 1,059 repository tests (9,204 assertions), Iteration 1B binaries, four standalone target builds, and clean independent review.
+Added and registered the requirement-free official.typescript Phase 1 scanner. It inertly derives bounded package/source candidates, explicit public callable actions, static Bun route actions, uniquely resolved value/type relationships, and raw documentation; unsupported or ambiguous evidence fails closed as partial without reading project code or canonical intent. Verified with adversarial scanner, lexical-scope, resolver, workspace, and Bun-extension fixtures, durable Host integration, repeated exact Groma self-scan, 1,063 repository tests (9,270 assertions), Iteration 1B binaries, four standalone target builds, and clean independent review.
 <!-- SECTION:FINAL_SUMMARY:END -->
