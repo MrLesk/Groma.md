@@ -35,13 +35,13 @@
 | **tree**     | overview (bounded terminal hierarchy overview; component roots/children)     | Tree (100)       | An outline showing which parts live inside which parts.                                |
 | **list**     | paged reads (component list, blueprint export/search pages, cursor, hasMore) | List (87)        | A plain batch of parts, a few at a time, with a note when there are more.              |
 | **detail**   | component get (single-component read)                                        | Detail (96)      | One part's own page: what it is for, what goes in, what comes out, and what it can do. |
-| **history**  | rev:<ref> historical view (read-only Git revision view)                      | Timeline (92)    | See how the map looked before.                                                         |
+| **history**  | planned `rev:<ref>` historical view (read-only Git revision view)            | Timeline (92)    | A later view of how the map looked before.                                             |
 
 ## Plain narration vocabulary
 
 Approved plain-English translations for narrating Groma to a general audience. (Originally
-drafted as "kid words" for the retired kid-language GROMA.md; the mappings remain the approved
-plain-word source for first-run prose and narration.)
+drafted for an earlier kid-language guide; the mappings remain the approved plain-word source for
+first-run prose and narration.)
 
 | Groma term                 | Plain words                                                     |
 | -------------------------- | --------------------------------------------------------------- |
@@ -73,7 +73,7 @@ plain-word source for first-run prose and narration.)
 | bounded                    | never too big                                                   |
 | fail closed                | when unsure, stop and ask                                       |
 | revision                   | the version number you saw                                      |
-| rev:<ref> history          | how the map looked before                                       |
+| planned rev:<ref> history  | how the map looked before                                       |
 | observation session        | one whole look (it only counts if it finishes)                  |
 | plugin                     | an add-on helper                                                |
 | indeterminate              | we are not sure it saved - go check first                       |
@@ -106,14 +106,14 @@ The decisions behind the counts:
    accept, Audit as evidence), drops the other ~96 with reasons, and adds only four of its own:
    component, blueprint, relationship, scanner — the periodic table reduced to what an
    architecture map needs.
-6. **Open flags for the product owner.** `groma scan` now exposes the keystone verb promised in
-   the [Manifesto](../MANIFESTO.md). 'project' stays, but UI prose should always say 'scanned
-   project'. The
-   blueprint-vs-component CLI split should converge so whole-map reads live under blueprint and
-   single-part reads under component, matching the noun glossary.
+6. **Resolved and open product flags.** The [Manifesto](../MANIFESTO.md) promise now has a
+   working local loop: `groma init -> groma scan -> groma` in an interactive terminal. 'project'
+   stays, but UI prose should always say 'scanned project'. The blueprint-vs-component CLI split
+   should converge so whole-map reads live under blueprint and single-part reads under component,
+   matching the noun glossary.
 7. **Node has exactly one name (decided 2026-07-19).** The drawn element keeps the single name
-   _node_, and it is expert vocabulary only: product surfaces never say node — they show
-   component names and, for a folded node, a count (for example "Payments +37"). The earlier
-   "box" narration word is retired along with GROMA.md. "group" was considered and rejected:
-   most nodes show exactly one component, and group reads as canonical containment — the very
-   confusion the component/node distinction exists to prevent.
+   _node_, and it is expert vocabulary only. The visual uses it once in compact technical count
+   metadata; its primary labels remain component names and, for a folded node, a count (for
+   example "Payments +37"). The earlier "box" narration word is retired. "group" was considered
+   and rejected: most nodes show exactly one component, and group reads as canonical containment
+   — the very confusion the component/node distinction exists to prevent.

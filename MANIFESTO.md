@@ -99,18 +99,18 @@ Type stays open, but the official vocabulary may recommend small, legible tokens
 not own. An external system is still an ordinary component with intent and
 relationships; it needs no special graph primitive.
 
-For v0.1, the structured meaning a component carries is deliberately limited to
-**intent, inputs, outputs, actions, and relationships**. Name, type, and parent are
-small identity and structural metadata. Three optional recognition fields — a short
+A component's structured meaning is deliberately limited to **intent, inputs, outputs,
+actions, and relationships**. Name, type, and parent are small identity and structural
+metadata. Three optional recognition fields — a short
 label, a one-sentence summary, and an `iconDomain` favicon-domain hint — help people
 recognize a component at a glance; they are not a separate taxonomy or a
 questionnaire. When a node shows one component, its display text is the short label
 if present, otherwise the name, otherwise the stable canonical component ID. When
-`iconDomain` is present, the first renderer uses it only to derive a deterministic,
+`iconDomain` is present, a renderer uses it only to derive a deterministic,
 self-contained domain badge, monogram, or text hint. It never fetches a favicon or
 makes any network request, and `iconDomain` never determines identity, evidence, or
-trust. A future icon-resolution capability would be separate from the first
-renderer and would require explicit user action and a privacy policy.
+trust. Any icon-resolution capability is separate from rendering and requires explicit
+user action and a privacy policy.
 
 Requirements are expressed through relationships. Important failures and events are
 inputs or outputs. State, guarantees, triggers, and effects stay readable intent
@@ -180,14 +180,14 @@ Every surface expresses one shared application model.
 4. **Scanners** are one-way producers of observations, never an alternative way to
    mutate the blueprint.
 
-The shipped Iteration 1A bare `groma` opens a bounded aggregate terminal overview
-built from shared application operations. Iteration 2 evolves that same entry point
-to reconstruct and open a disposable local HTML or SVG projection from the same
-bounded reads. The long-lived web application later replaces that artifact as the
-default human experience. The local artifact makes no network request, uploads
-nothing by default, and never becomes a mutation surface. Terminal, local-artifact,
-and web behavior must remain semantically equivalent, and none of them may bypass
-shared operations or transactions.
+Bare `groma` is the shortest human entry point to the blueprint. In an interactive
+terminal it reconstructs and opens a disposable local visual from bounded shared
+reads. Automation and nonvisual use stay within the CLI's bounded structured or
+terminal views. The web interface is the complete human navigation and editing
+surface. The local artifact makes no network request, uploads nothing by default,
+and never becomes a mutation surface. Terminal, local-artifact, and web behavior
+must remain semantically equivalent, and none of them may bypass shared operations
+or transactions.
 
 ## Plugin Posture
 
@@ -287,14 +287,14 @@ approval.
 5. **Plugin surface drift.** Features can acquire incompatible models. Mitigation:
    one transaction model, explicit capabilities, and conformance suites.
 6. **Scale failure.** A correct small graph can become unusable at organizational
-   scale. Mitigation: prove storage, reconciliation, queries, and browser budgets
-   with representative fixtures before interfaces freeze.
+   scale. Mitigation: enforce explicit storage, reconciliation, query, and browser
+   budgets with representative fixtures.
 7. **Automation outrunning understanding.** Agents can generate more architecture
    than people can review. Mitigation: bounded views, explainable diagnostics, and
    explicit reconciliation.
-8. **Two sources of architectural truth.** Transitional documents can outlive their
-   purpose. Mitigation: once Groma can describe itself, `groma/` becomes canonical
-   and overview documents remain navigational only.
+8. **Two sources of architectural truth.** Overview documents can become competing
+   ledgers. Mitigation: `groma/` is canonical architectural state; overview documents
+   remain navigational only.
 
 ## Questions That Guide Product Changes
 

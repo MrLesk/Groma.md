@@ -177,10 +177,9 @@ in the production entry point or production executable.
 
 ## Deliberately Deferred
 
-The approved web stack is Bun's embedded HTTP server and Bun's React bundler. Neither is needed for
-the first disposable local visual artifact. A later iteration introduces the application service
-and complete web viewing and editing experience together.
+In an interactive terminal, bare `groma` already opens the first disposable local visual artifact
+without an HTTP server or React. The approved web stack remains Bun's embedded HTTP server and
+React bundler for a later complete viewing and editing experience.
 
-The bounded scan, observation, evidence, binding, and reconciliation path is implemented. The
-next vertical slice is local visual navigation and rendering through bare `groma`. Plans and Git
-history views remain later work.
+The bounded scan, reconciliation, and local visual loop is implemented. Plans, Git history views,
+and browser editing remain later work.
