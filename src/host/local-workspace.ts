@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { setTimeout as wait } from "node:timers/promises";
-import { isProxy as isNativeProxy } from "node:util/types";
 
 import type {
   ApplicationSnapshotStateDecoder,
@@ -269,8 +268,8 @@ function captureBounds(value: unknown): LocalWorkspaceBounds {
 }
 
 function requireCapabilityReceiver(value: unknown, subject: string): object {
-  if (typeof value !== "object" || value === null || isHostProxy(value) || isNativeProxy(value)) {
-    throw new TypeError(`${subject} must be a non-proxy capability object`);
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError(`${subject} must be a capability object`);
   }
   return value;
 }
@@ -282,9 +281,6 @@ function captureCapabilityMethod<TFunction extends Function>(
 ): TFunction {
   let current: object | null = receiver;
   for (let depth = 0; current !== null && depth < 32; depth += 1) {
-    if (isHostProxy(current) || isNativeProxy(current)) {
-      throw new TypeError(`${subject} prototype chain must not contain a proxy`);
-    }
     let descriptor: PropertyDescriptor | undefined;
     try {
       descriptor = intrinsicObjectGetOwnPropertyDescriptor(current, name);
@@ -292,11 +288,7 @@ function captureCapabilityMethod<TFunction extends Function>(
       throw new TypeError(`${subject}.${name} could not be inspected safely`);
     }
     if (descriptor !== undefined) {
-      if (
-        !("value" in descriptor) ||
-        typeof descriptor.value !== "function" ||
-        isNativeProxy(descriptor.value)
-      ) {
+      if (!("value" in descriptor) || typeof descriptor.value !== "function") {
         throw new TypeError(`${subject}.${name} must be a callable data method`);
       }
       return descriptor.value as TFunction;
@@ -374,7 +366,6 @@ function captureWorkspaceConfiguration(
     typeof bytes !== "object" ||
     bytes === null ||
     isHostProxy(bytes) ||
-    isNativeProxy(bytes) ||
     intrinsicObjectGetPrototypeOf(bytes) !== intrinsicUint8ArrayPrototype
   ) {
     throw new TypeError("Local workspace initial configuration is malformed");
@@ -426,8 +417,8 @@ function captureLocalWorkspaceOptions(
 
   const optionsReceiver = value as object;
   const operations = inspected.value.operations;
-  if (typeof operations !== "function" || isNativeProxy(operations)) {
-    throw new TypeError("Local workspace operations must be a non-proxy function");
+  if (typeof operations !== "function") {
+    throw new TypeError("Local workspace operations must be a function");
   }
   const bounds = captureBounds(inspected.value.bounds);
   const configuration = captureWorkspaceConfiguration(inspected.value.configuration, bounds);

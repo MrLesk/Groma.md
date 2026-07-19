@@ -5,10 +5,6 @@ import {
   failure,
   parseContentRevision,
   parseEntityId,
-  parseGraphGeneration,
-  parseProjectionCanonicalFingerprint,
-  parseProjectionReadIntegrity,
-  parseProjectionReadResourceCount,
   parseRelationId,
   parseResourceKey,
   success,
@@ -20,9 +16,6 @@ import {
   type GraphEntity,
   type GraphRelation,
   type ProposedTransaction,
-  type ProjectionContinuityCapability,
-  type ProjectionContinuityCheckpoint,
-  type ProjectionReadIdentity,
   type RelationId,
   type ResourceKey,
   type ResourceRevisionInput,
@@ -149,10 +142,6 @@ type StoredSettlement = StoredCommittedSettlement | StoredNotCommittedSettlement
 interface IdleState {
   readonly generation: number;
   readonly phase: "idle";
-  readonly projectionFingerprint: string | null;
-  readonly projectionIntegrity: string | null;
-  readonly projectionResourceCount: number | null;
-  readonly projectionWatermark: number | null;
   readonly settlement: StoredSettlement | null;
   readonly version: 1;
 }
@@ -162,14 +151,8 @@ interface PendingState {
   readonly baseGeneration: number;
   readonly generation: number;
   readonly phase: "committing" | "prepared";
-  readonly projectionFingerprint: string | null;
-  readonly projectionIntegrity: string | null;
-  readonly projectionResourceCount: number | null;
-  readonly projectionWatermark: number | null;
   readonly targets: readonly StoredTarget[];
   readonly token: string;
-  /** Preserve the pre-checkpoint token evidence until this pending state settles. */
-  readonly usesLegacyTokenEvidence?: true;
   readonly version: 1;
 }
 
@@ -199,15 +182,7 @@ if (!journalLocatorResult.ok) throw new Error("invalid built-in transaction-stat
 export const localTransactionStateLocator = journalLocatorResult.value;
 
 const intrinsicNormalize = String.prototype.normalize;
-const intrinsicObjectHasOwn = Object.hasOwn;
 const intrinsicToLowerCase = String.prototype.toLowerCase;
-
-function usesLegacyTokenEvidence(state: PendingState): boolean {
-  return (
-    (Reflect.apply(intrinsicObjectHasOwn, Object, [state, "usesLegacyTokenEvidence"]) as boolean) &&
-    state.usesLegacyTokenEvidence === true
-  );
-}
 
 function conservativeLocatorAlias(locator: string): string {
   const normalized = Reflect.apply(intrinsicNormalize, locator, ["NFC"]) as string;
@@ -848,30 +823,12 @@ function initialState(): IdleState {
   return Object.freeze({
     generation: 0,
     phase: "idle",
-    projectionFingerprint: null,
-    projectionIntegrity: null,
-    projectionResourceCount: null,
-    projectionWatermark: null,
     settlement: null,
     version: 1,
   });
 }
 
 function encodeState(state: JournalState): Uint8Array {
-  if (state.phase !== "idle" && usesLegacyTokenEvidence(state)) {
-    return textEncoder.encode(
-      `${JSON.stringify({
-        affected: state.affected,
-        baseGeneration: state.baseGeneration,
-        generation: state.generation,
-        phase: state.phase,
-        projectionWatermark: state.projectionWatermark,
-        targets: state.targets,
-        token: state.token,
-        version: 1,
-      })}\n`,
-    );
-  }
   return textEncoder.encode(`${JSON.stringify(state)}\n`);
 }
 
@@ -1029,53 +986,10 @@ function parseState(
       throw new Error();
     const value = decoded as Readonly<Record<string, unknown>>;
     if (value.version !== 1) throw new Error();
-    const legacy = !Object.hasOwn(value, "projectionFingerprint");
     if (value.phase === "idle") {
-      const expectedKeys = legacy
-        ? ["generation", "phase", "projectionWatermark", "settlement", "version"]
-        : [
-            "generation",
-            "phase",
-            "projectionFingerprint",
-            "projectionIntegrity",
-            "projectionResourceCount",
-            "projectionWatermark",
-            "settlement",
-            "version",
-          ];
+      const expectedKeys = ["generation", "phase", "settlement", "version"];
       if (Object.keys(value).sort().join(",") !== expectedKeys.sort().join(",")) throw new Error();
       if (!isSafeGeneration(value.generation)) throw new Error();
-      if (
-        value.projectionWatermark !== null &&
-        (!isSafeGeneration(value.projectionWatermark) ||
-          value.projectionWatermark > value.generation)
-      )
-        throw new Error();
-      const fingerprint = legacy
-        ? null
-        : value.projectionFingerprint === null
-          ? null
-          : parseProjectionCanonicalFingerprint(value.projectionFingerprint);
-      if (fingerprint !== null && !fingerprint.ok) throw new Error();
-      const integrity = legacy
-        ? null
-        : value.projectionIntegrity === null
-          ? null
-          : parseProjectionReadIntegrity(value.projectionIntegrity);
-      if (integrity !== null && !integrity.ok) throw new Error();
-      const resourceCount = legacy
-        ? null
-        : value.projectionResourceCount === null
-          ? null
-          : parseProjectionReadResourceCount(value.projectionResourceCount);
-      if (resourceCount !== null && !resourceCount.ok) throw new Error();
-      if (
-        !legacy &&
-        ((value.projectionWatermark === null) !== (value.projectionFingerprint === null) ||
-          (value.projectionWatermark === null) !== (value.projectionIntegrity === null) ||
-          (value.projectionWatermark === null) !== (value.projectionResourceCount === null))
-      )
-        throw new Error();
       const settlement = parseSettlement(value.settlement, limits);
       if (settlement === undefined) throw new Error();
       if (settlement?.outcome === "committed" && settlement.generation !== value.generation) {
@@ -1084,24 +998,10 @@ function parseState(
       const state: IdleState = Object.freeze({
         generation: value.generation,
         phase: "idle",
-        projectionFingerprint: fingerprint === null ? null : fingerprint.value,
-        projectionIntegrity: integrity === null ? null : integrity.value,
-        projectionResourceCount: resourceCount === null ? null : resourceCount.value,
-        projectionWatermark: legacy ? null : value.projectionWatermark,
         settlement,
         version: 1,
       });
-      const canonicalBytes = legacy
-        ? textEncoder.encode(
-            `${JSON.stringify({
-              generation: value.generation,
-              phase: "idle",
-              projectionWatermark: value.projectionWatermark,
-              settlement,
-              version: 1,
-            })}\n`,
-          )
-        : encodeState(state);
+      const canonicalBytes = encodeState(state);
       if (!Buffer.from(canonicalBytes).equals(Buffer.from(bytes))) throw new Error();
       return success(state);
     }
@@ -1114,81 +1014,20 @@ function parseState(
       !tokenPattern.test(value.token)
     )
       throw new Error();
-    const expectedKeys = legacy
-      ? [
-          "affected",
-          "baseGeneration",
-          "generation",
-          "phase",
-          "projectionWatermark",
-          "targets",
-          "token",
-          "version",
-        ]
-      : [
-          "affected",
-          "baseGeneration",
-          "generation",
-          "phase",
-          "projectionFingerprint",
-          "projectionIntegrity",
-          "projectionResourceCount",
-          "projectionWatermark",
-          "targets",
-          "token",
-          "version",
-        ];
+    const expectedKeys = [
+      "affected",
+      "baseGeneration",
+      "generation",
+      "phase",
+      "targets",
+      "token",
+      "version",
+    ];
     if (Object.keys(value).sort().join(",") !== expectedKeys.sort().join(",")) throw new Error();
-    if (
-      value.projectionWatermark !== null &&
-      (!isSafeGeneration(value.projectionWatermark) ||
-        value.projectionWatermark > value.baseGeneration)
-    )
-      throw new Error();
-    const fingerprint = legacy
-      ? null
-      : value.projectionFingerprint === null
-        ? null
-        : parseProjectionCanonicalFingerprint(value.projectionFingerprint);
-    if (fingerprint !== null && !fingerprint.ok) throw new Error();
-    const integrity = legacy
-      ? null
-      : value.projectionIntegrity === null
-        ? null
-        : parseProjectionReadIntegrity(value.projectionIntegrity);
-    if (integrity !== null && !integrity.ok) throw new Error();
-    const resourceCount = legacy
-      ? null
-      : value.projectionResourceCount === null
-        ? null
-        : parseProjectionReadResourceCount(value.projectionResourceCount);
-    if (resourceCount !== null && !resourceCount.ok) throw new Error();
-    if (
-      !legacy &&
-      ((value.projectionWatermark === null) !== (value.projectionFingerprint === null) ||
-        (value.projectionWatermark === null) !== (value.projectionIntegrity === null) ||
-        (value.projectionWatermark === null) !== (value.projectionResourceCount === null))
-    )
-      throw new Error();
     const affected = parseAffected(value.affected);
     const targets = parseStoredTargets(value.targets, limits);
     if (affected === undefined || targets === undefined) throw new Error();
-    if (
-      tokenFor(
-        value.baseGeneration,
-        value.generation,
-        affected,
-        targets,
-        legacy
-          ? undefined
-          : {
-              fingerprint: fingerprint === null ? null : fingerprint.value,
-              integrity: integrity === null ? null : integrity.value,
-              resourceCount: resourceCount === null ? null : resourceCount.value,
-              watermark: value.projectionWatermark as number | null,
-            },
-      ) !== value.token
-    ) {
+    if (tokenFor(value.baseGeneration, value.generation, affected, targets) !== value.token) {
       throw new Error();
     }
     const state: PendingState = Object.freeze({
@@ -1196,29 +1035,11 @@ function parseState(
       baseGeneration: value.baseGeneration,
       generation: value.generation,
       phase: value.phase,
-      projectionFingerprint: fingerprint === null ? null : fingerprint.value,
-      projectionIntegrity: integrity === null ? null : integrity.value,
-      projectionResourceCount: resourceCount === null ? null : resourceCount.value,
-      projectionWatermark: value.projectionWatermark as number | null,
       targets,
       token: value.token,
-      ...(legacy ? { usesLegacyTokenEvidence: true as const } : {}),
       version: 1,
     });
-    const canonicalBytes = legacy
-      ? textEncoder.encode(
-          `${JSON.stringify({
-            affected,
-            baseGeneration: value.baseGeneration,
-            generation: value.generation,
-            phase: value.phase,
-            projectionWatermark: value.projectionWatermark,
-            targets,
-            token: value.token,
-            version: 1,
-          })}\n`,
-        )
-      : encodeState(state);
+    const canonicalBytes = encodeState(state);
     if (!Buffer.from(canonicalBytes).equals(Buffer.from(bytes))) throw new Error();
     return success(state);
   } catch {
@@ -1291,18 +1112,11 @@ function tokenFor(
   generation: number,
   affected: AffectedGraphIdentities,
   targets: readonly StoredTarget[],
-  projection?: Readonly<{
-    fingerprint: string | null;
-    integrity: string | null;
-    resourceCount: number | null;
-    watermark: number | null;
-  }>,
 ): string {
   const evidence = JSON.stringify({
     affected,
     baseGeneration,
     generation,
-    ...(projection === undefined ? {} : { projection }),
     targets,
     version: 1,
   });
@@ -1311,7 +1125,7 @@ function tokenFor(
 
 export function createLocalTransactionJournal(
   options: LocalTransactionJournalOptions,
-): TransactionProvider & ProjectionContinuityCapability {
+): TransactionProvider {
   const limits = bounds(options.bounds);
   const live = new Map<string, LivePreparation>();
   const pendingJournalStages = new Map<StagedReplacementHandle, PendingJournalStage>();
@@ -1530,14 +1344,9 @@ export function createLocalTransactionJournal(
   };
   const rollback = async (state: PendingState): Promise<TransactionCommitResultInput> => {
     await discardLiveStages(state.token, state);
-    const legacy = usesLegacyTokenEvidence(state);
     const idle: IdleState = Object.freeze({
       generation: state.baseGeneration,
       phase: "idle",
-      projectionFingerprint: legacy ? null : state.projectionFingerprint,
-      projectionIntegrity: legacy ? null : state.projectionIntegrity,
-      projectionResourceCount: legacy ? null : state.projectionResourceCount,
-      projectionWatermark: legacy ? null : state.projectionWatermark,
       settlement: Object.freeze({ outcome: "not-committed", token: state.token }),
       version: 1,
     });
@@ -1614,14 +1423,9 @@ export function createLocalTransactionJournal(
       revisions,
       token: state.token,
     });
-    const legacy = usesLegacyTokenEvidence(state);
     const idle: IdleState = Object.freeze({
       generation: state.generation,
       phase: "idle",
-      projectionFingerprint: legacy ? null : state.projectionFingerprint,
-      projectionIntegrity: legacy ? null : state.projectionIntegrity,
-      projectionResourceCount: legacy ? null : state.projectionResourceCount,
-      projectionWatermark: legacy ? null : state.projectionWatermark,
       settlement,
       version: 1,
     });
@@ -1689,28 +1493,6 @@ export function createLocalTransactionJournal(
     if (retainedTransactionLease === lease) retainedTransactionLease = undefined;
     clearActiveTransactionLease(lease);
   };
-  const releaseProjectionCheckpointLease = async <T>(
-    lease: LocalCoordinationLease,
-    result: Result<T>,
-  ): Promise<Result<T>> => {
-    try {
-      await releaseTransactionLease(lease);
-      return result;
-    } catch {
-      // Preserve a more specific checkpoint validation or generation failure.
-      // A successful operation whose lease cannot be released is unavailable
-      // until the retained opaque lease is handed to a later operation.
-      return result.ok
-        ? failure(
-            diagnostic(
-              "projection-checkpoint-unavailable",
-              "Projection continuity coordination could not be released safely",
-            ),
-          )
-        : result;
-    }
-  };
-
   const snapshotInput = (
     requested: readonly ResourceKey[],
     state: IdleState,
@@ -1857,21 +1639,12 @@ export function createLocalTransactionJournal(
           return Object.freeze({ reason: "revision", status: "conflict" });
         }
       }
-      token = tokenFor(proposal.baseGeneration, proposal.generation, proposal.affected, targets, {
-        fingerprint: state.projectionFingerprint,
-        integrity: state.projectionIntegrity,
-        resourceCount: state.projectionResourceCount,
-        watermark: state.projectionWatermark,
-      });
+      token = tokenFor(proposal.baseGeneration, proposal.generation, proposal.affected, targets);
       const pending: PendingState = Object.freeze({
         affected: proposal.affected,
         baseGeneration: proposal.baseGeneration,
         generation: proposal.generation,
         phase: "prepared",
-        projectionFingerprint: state.projectionFingerprint,
-        projectionIntegrity: state.projectionIntegrity,
-        projectionResourceCount: state.projectionResourceCount,
-        projectionWatermark: state.projectionWatermark,
         targets,
         token,
         version: 1,
@@ -1998,191 +1771,9 @@ export function createLocalTransactionJournal(
     return result;
   };
 
-  const checkpointFromIdleState = (state: IdleState): Result<ProjectionContinuityCheckpoint> => {
-    const generation = parseGraphGeneration(state.generation);
-    if (!generation.ok) return generation;
-    if (
-      state.projectionWatermark === null ||
-      state.projectionFingerprint === null ||
-      state.projectionIntegrity === null ||
-      state.projectionResourceCount === null
-    ) {
-      return success(
-        Object.freeze({
-          generation: generation.value,
-          projection: null,
-          projectionIntegrity: null,
-          projectionResourceCount: null,
-        }),
-      );
-    }
-    const projectionGeneration = parseGraphGeneration(state.projectionWatermark);
-    const fingerprint = parseProjectionCanonicalFingerprint(state.projectionFingerprint);
-    const integrity = parseProjectionReadIntegrity(state.projectionIntegrity);
-    const resourceCount = parseProjectionReadResourceCount(state.projectionResourceCount);
-    if (!projectionGeneration.ok || !fingerprint.ok || !integrity.ok || !resourceCount.ok) {
-      return failure(
-        diagnostic(
-          "projection-checkpoint-unavailable",
-          "Projection continuity metadata is malformed",
-        ),
-      );
-    }
-    return success(
-      Object.freeze({
-        generation: generation.value,
-        projection: Object.freeze({
-          fingerprint: fingerprint.value,
-          generation: projectionGeneration.value,
-        }),
-        projectionIntegrity: integrity.value,
-        projectionResourceCount: resourceCount.value,
-      }),
-    );
-  };
-
-  const sameCheckpointState = (left: IdleState, right: IdleState): boolean =>
-    left.generation === right.generation &&
-    left.projectionFingerprint === right.projectionFingerprint &&
-    left.projectionIntegrity === right.projectionIntegrity &&
-    left.projectionResourceCount === right.projectionResourceCount &&
-    left.projectionWatermark === right.projectionWatermark;
-
-  const optimisticProjectionCheckpoint = async (): Promise<
-    Result<ProjectionContinuityCheckpoint> | undefined
-  > => {
-    if (retainedTransactionLease !== undefined || activeTransactionLease !== undefined) {
-      return undefined;
-    }
-    let before: JournalState;
-    let after: JournalState;
-    try {
-      before = await readState();
-      if (
-        before.phase !== "idle" ||
-        retainedTransactionLease !== undefined ||
-        activeTransactionLease !== undefined
-      ) {
-        return undefined;
-      }
-      after = await readState();
-    } catch {
-      return undefined;
-    }
-    return after.phase === "idle" &&
-      sameCheckpointState(before, after) &&
-      retainedTransactionLease === undefined &&
-      activeTransactionLease === undefined
-      ? checkpointFromIdleState(after)
-      : undefined;
-  };
-
-  const readProjectionCheckpoint = async (): Promise<Result<ProjectionContinuityCheckpoint>> => {
-    const optimistic = await optimisticProjectionCheckpoint();
-    if (optimistic !== undefined) return optimistic;
-    const acquired = await acquireTransactionLease();
-    if (!acquired.ok) return acquired;
-    const lease = acquired.value;
-    const read = async (): Promise<Result<ProjectionContinuityCheckpoint>> => {
-      try {
-        const settled = await settle(undefined);
-        if (settled?.status === "indeterminate") {
-          return failure(
-            diagnostic(
-              "projection-checkpoint-unavailable",
-              "Projection continuity is unavailable while a canonical transaction is indeterminate",
-            ),
-          );
-        }
-        const state = await readState();
-        if (state.phase !== "idle") {
-          return failure(
-            diagnostic(
-              "projection-checkpoint-unavailable",
-              "Projection continuity is unavailable until the canonical transaction settles",
-            ),
-          );
-        }
-        return checkpointFromIdleState(state);
-      } catch {
-        return failure(
-          diagnostic(
-            "projection-checkpoint-unavailable",
-            "Projection continuity metadata could not be read safely",
-          ),
-        );
-      }
-    };
-    return releaseProjectionCheckpointLease(lease, await read());
-  };
-
-  const recordProjectionCheckpoint = async (
-    input: ProjectionReadIdentity,
-    integrityInput: unknown,
-    resourceCountInput: unknown,
-  ): Promise<Result<void>> => {
-    const generation = parseGraphGeneration(input?.generation);
-    const fingerprint = parseProjectionCanonicalFingerprint(input?.fingerprint);
-    const integrity = parseProjectionReadIntegrity(integrityInput);
-    const resourceCount = parseProjectionReadResourceCount(resourceCountInput);
-    if (!generation.ok || !fingerprint.ok || !integrity.ok || !resourceCount.ok) {
-      return failure(
-        diagnostic(
-          "invalid-projection-checkpoint",
-          "Projection continuity requires one bounded generation, fingerprint, read integrity root, and resource count",
-        ),
-      );
-    }
-    const acquired = await acquireTransactionLease();
-    if (!acquired.ok) return acquired;
-    const lease = acquired.value;
-    const record = async (): Promise<Result<void>> => {
-      try {
-        const settled = await settle(undefined);
-        if (settled?.status === "indeterminate") {
-          return failure(
-            diagnostic(
-              "projection-checkpoint-unavailable",
-              "Projection continuity cannot advance while a canonical transaction is indeterminate",
-            ),
-          );
-        }
-        const state = await readState();
-        if (state.phase !== "idle" || state.generation !== generation.value) {
-          return failure(
-            diagnostic(
-              "projection-checkpoint-generation-mismatch",
-              "Projection continuity can record only the current canonical generation",
-            ),
-          );
-        }
-        await writeState(
-          Object.freeze({
-            ...state,
-            projectionFingerprint: fingerprint.value,
-            projectionIntegrity: integrity.value,
-            projectionResourceCount: resourceCount.value,
-            projectionWatermark: generation.value,
-          }),
-        );
-        return success(undefined);
-      } catch {
-        return failure(
-          diagnostic(
-            "projection-checkpoint-unavailable",
-            "Projection continuity metadata could not be recorded safely",
-          ),
-        );
-      }
-    };
-    return releaseProjectionCheckpointLease(lease, await record());
-  };
-
   return Object.freeze({
     commit: (token: string) => finish(token, false),
     prepare,
-    readProjectionCheckpoint,
-    recordProjectionCheckpoint,
     recover: (token: string) => finish(token, true),
     snapshot,
   });

@@ -1,6 +1,7 @@
 import {
   failure,
   observeNativePromise,
+  defaultObservationSessionBounds,
   parseGraphGeneration,
   success,
   type Diagnostic,
@@ -23,15 +24,13 @@ import type {
   WorkspaceRecoveryReport,
   WorkspaceStatus,
 } from "./contracts.ts";
-import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
 import {
   scannerExecutionApiVersion,
   type ScannerExecutionReport,
   type ScannerExecutionRuntime,
 } from "./scanner-runtime.ts";
-import type { ApplicationOperations, SchemaMigrationOperations } from "../application/index.ts";
-import { localObservationJournalSessionBounds } from "../persistence/index.ts";
+import type { ApplicationOperations } from "../application/index.ts";
 import {
   copyHostDiagnostics,
   inspectHostDenseArray,
@@ -491,51 +490,6 @@ function canonicalSurface(value: unknown): Result<HostSurface> {
   );
 }
 
-function canonicalPackageOperations(value: unknown): Result<PluginPackageOperations> {
-  const packages = inspectHostRecord(
-    value,
-    [["add", "disable", "enable", "inspect", "remove", "scaffold"]],
-    "invalid-host-composition",
-    "Plugin package operations",
-  );
-  if (
-    !packages.ok ||
-    typeof packages.value.add !== "function" ||
-    typeof packages.value.disable !== "function" ||
-    typeof packages.value.enable !== "function" ||
-    typeof packages.value.inspect !== "function" ||
-    typeof packages.value.remove !== "function" ||
-    typeof packages.value.scaffold !== "function"
-  ) {
-    return failure(
-      diagnostic("invalid-host-composition", "Plugin package operations are malformed"),
-    );
-  }
-  const receiver = value as object;
-  const add = packages.value.add as PluginPackageOperations["add"];
-  const disable = packages.value.disable as PluginPackageOperations["disable"];
-  const enable = packages.value.enable as PluginPackageOperations["enable"];
-  const inspect = packages.value.inspect as PluginPackageOperations["inspect"];
-  const remove = packages.value.remove as PluginPackageOperations["remove"];
-  const scaffold = packages.value.scaffold as PluginPackageOperations["scaffold"];
-  return success(
-    Object.freeze({
-      add: (request: Parameters<PluginPackageOperations["add"]>[0]) =>
-        intrinsicReflectApply(add, receiver, [request]),
-      disable: (request: Parameters<PluginPackageOperations["disable"]>[0]) =>
-        intrinsicReflectApply(disable, receiver, [request]),
-      enable: (request: Parameters<PluginPackageOperations["enable"]>[0]) =>
-        intrinsicReflectApply(enable, receiver, [request]),
-      inspect: (request: Parameters<PluginPackageOperations["inspect"]>[0]) =>
-        intrinsicReflectApply(inspect, receiver, [request]),
-      remove: (request: Parameters<PluginPackageOperations["remove"]>[0]) =>
-        intrinsicReflectApply(remove, receiver, [request]),
-      scaffold: (request: Parameters<PluginPackageOperations["scaffold"]>[0]) =>
-        intrinsicReflectApply(scaffold, receiver, [request]),
-    }) as PluginPackageOperations,
-  );
-}
-
 function canonicalProjectOperations(value: unknown): Result<ProjectRegistrationOperations> {
   const projects = inspectHostRecord(
     value,
@@ -572,36 +526,6 @@ function canonicalProjectOperations(value: unknown): Result<ProjectRegistrationO
         intrinsicReflectApply(remove, receiver, [request]),
       update: (request: Parameters<ProjectRegistrationOperations["update"]>[0]) =>
         intrinsicReflectApply(update, receiver, [request]),
-    }),
-  );
-}
-
-function canonicalSchemaMigrationOperations(value: unknown): Result<SchemaMigrationOperations> {
-  const migrations = inspectHostRecord(
-    value,
-    [["apply", "preview", "status"]],
-    "invalid-host-composition",
-    "Schema migration operations",
-  );
-  if (
-    !migrations.ok ||
-    typeof migrations.value.apply !== "function" ||
-    typeof migrations.value.preview !== "function" ||
-    typeof migrations.value.status !== "function"
-  ) {
-    return failure(
-      diagnostic("invalid-host-composition", "Schema migration operations are malformed"),
-    );
-  }
-  const receiver = value as object;
-  const apply = migrations.value.apply as SchemaMigrationOperations["apply"];
-  const preview = migrations.value.preview as SchemaMigrationOperations["preview"];
-  const status = migrations.value.status as SchemaMigrationOperations["status"];
-  return success(
-    Object.freeze({
-      apply: () => intrinsicReflectApply(apply, receiver, []),
-      preview: () => intrinsicReflectApply(preview, receiver, []),
-      status: () => intrinsicReflectApply(status, receiver, []),
     }),
   );
 }
@@ -790,29 +714,6 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "invariant",
         "model",
         "operations",
-        "packages",
-        "projects",
-        "projection",
-        "projectionRead",
-        "queryEngine",
-        "queries",
-        "resourceMapper",
-        "resources",
-        "scanners",
-        "snapshotStateDecoder",
-        "store",
-        "surface",
-        "transactionEngine",
-        "transactionProvider",
-        "workspace",
-      ],
-      [
-        "graph",
-        "invariant",
-        "model",
-        "migrations",
-        "operations",
-        "packages",
         "projects",
         "projection",
         "projectionRead",
@@ -833,7 +734,26 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "invariant",
         "model",
         "operations",
-        "packages",
+        "projects",
+        "projection",
+        "projectionRead",
+        "queryEngine",
+        "queries",
+        "resourceMapper",
+        "resources",
+        "scanners",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "operations",
         "projects",
         "plugins",
         "projection",
@@ -854,9 +774,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "graph",
         "invariant",
         "model",
-        "migrations",
         "operations",
-        "packages",
         "projects",
         "plugins",
         "projection",
@@ -884,16 +802,10 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
   if (!workspace.ok) return workspace;
   const surface = canonicalSurface(composition.value.surface);
   if (!surface.ok) return surface;
-  const packages = canonicalPackageOperations(composition.value.packages);
-  if (!packages.ok) return packages;
   const projects = canonicalProjectOperations(composition.value.projects);
   if (!projects.ok) return projects;
   const scanners = canonicalScannerRuntime(composition.value.scanners);
   if (!scanners.ok) return scanners;
-  const migrations = Object.hasOwn(composition.value, "migrations")
-    ? canonicalSchemaMigrationOperations(composition.value.migrations)
-    : undefined;
-  if (migrations !== undefined && !migrations.ok) return migrations;
   const plugins = Object.hasOwn(composition.value, "plugins")
     ? canonicalPluginLifecycle(composition.value.plugins)
     : undefined;
@@ -927,8 +839,6 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       initialization: operations.value.initialization,
       invariant: composition.value.invariant,
       model: composition.value.model,
-      ...(migrations === undefined ? {} : { migrations: migrations.value }),
-      packages: packages.value,
       projects: projects.value,
       ...(plugins === undefined ? {} : { plugins: plugins.value }),
       projection: composition.value.projection,
@@ -1065,18 +975,15 @@ function validScannerCancellationReport(value: unknown): value is ScannerExecuti
     typeof report.value.epoch === "string" &&
     scannerCleanupEpochPattern.test(report.value.epoch) &&
     typeof report.value.projectId === "string" &&
-    report.value.projectId.length <= localObservationJournalSessionBounds.maxTokenCharacters &&
+    report.value.projectId.length <= defaultObservationSessionBounds.maxTokenCharacters &&
     scannerCleanupProjectIdPattern.test(report.value.projectId) &&
     typeof report.value.scannerId === "string" &&
-    report.value.scannerId.length <= localObservationJournalSessionBounds.maxTokenCharacters &&
+    report.value.scannerId.length <= defaultObservationSessionBounds.maxTokenCharacters &&
     scannerCleanupScannerIdPattern.test(report.value.scannerId) &&
     terminalStatus &&
-    validScannerReportCount(batchCount, localObservationJournalSessionBounds.maxBatches) &&
-    validScannerReportCount(
-      report.value.recordCount,
-      localObservationJournalSessionBounds.maxRecords,
-    ) &&
-    validScannerReportCount(signalCount, localObservationJournalSessionBounds.maxSignals) &&
+    validScannerReportCount(batchCount, defaultObservationSessionBounds.maxBatches) &&
+    validScannerReportCount(report.value.recordCount, defaultObservationSessionBounds.maxRecords) &&
+    validScannerReportCount(signalCount, defaultObservationSessionBounds.maxSignals) &&
     validScannerReportCount(lastSequence, Number.MAX_SAFE_INTEGER) &&
     validScannerReportCount(lastHeartbeatSequence, Number.MAX_SAFE_INTEGER) &&
     (signalCount === 0 ? lastSequence === 0 : (lastSequence as number) > 0) &&
@@ -1587,10 +1494,6 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                   const context = Object.freeze({
                     cancellation: hostCancellation.signal,
                     initialization: composition.initialization,
-                    ...(composition.migrations === undefined
-                      ? {}
-                      : { migrations: composition.migrations }),
-                    packages: composition.packages,
                     projects: composition.projects,
                     recovery: Object.freeze({ status: recovery }),
                     scanners: Object.freeze({

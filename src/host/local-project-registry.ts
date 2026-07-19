@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { isProxy as isNativeProxy } from "node:util/types";
 
 import {
   containNativePromise,
@@ -184,7 +183,7 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 function copyBoundedConfigurationBytes(value: unknown): Result<Uint8Array> {
-  if (typeof value !== "object" || value === null || isHostProxy(value) || isNativeProxy(value)) {
+  if (typeof value !== "object" || value === null) {
     return projectFailure(
       "project-registry-unavailable",
       "Project registration state is unavailable",
@@ -226,7 +225,6 @@ function isOpaqueStageHandle(value: unknown): value is StagedReplacementHandle {
     typeof value === "object" &&
     value !== null &&
     !isHostProxy(value) &&
-    !isNativeProxy(value) &&
     containNativePromise(value) === "not-native"
   );
 }
@@ -481,7 +479,6 @@ export function projectObservationBoundary(
 function projectRevision(project: ConfiguredProjectRegistration): string {
   const canonical = serializeBootstrapConfiguration(
     Object.freeze({
-      packageDeclarations: Object.freeze([]),
       projectRegistrations: Object.freeze([project]),
       requestedRuntimePlugins: Object.freeze([]),
       retiredProjectIds: Object.freeze([]),

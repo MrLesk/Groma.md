@@ -179,26 +179,13 @@ describe("architecture boundary checker", () => {
     ]);
   });
 
-  test("allows exactly one nonliteral import only at the audited local plugin loader boundary", async () => {
-    const allowed = await createSourceFixture({
-      "host/plugin-module-loader.ts": "export const load = (url: string) => import(url);",
+  test("rejects nonliteral imports at every production boundary", async () => {
+    const sourceRoot = await createSourceFixture({
+      "host/loader.ts": "export const load = (url: string) => import(url);",
     });
-    expect(await checkArchitectureBoundaries(allowed)).toEqual([]);
-
-    const expanded = await createSourceFixture({
-      "host/plugin-module-loader.ts": [
-        "export const load = (url: string) => import(url);",
-        "export const loadAgain = (url: string) => import(url);",
-      ].join("\n"),
-    });
-    expect(await checkArchitectureBoundaries(expanded)).toEqual([
+    expect(await checkArchitectureBoundaries(sourceRoot)).toEqual([
       {
-        file: "host/plugin-module-loader.ts",
-        reason:
-          "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
-      },
-      {
-        file: "host/plugin-module-loader.ts",
+        file: "host/loader.ts",
         reason:
           "Dynamic import dependency must use a string literal so its architectural boundary can be verified",
       },

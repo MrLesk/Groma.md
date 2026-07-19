@@ -6,12 +6,7 @@ import type { EntityId, RelationId } from "./identity.ts";
 import { failure, type Result, success } from "./result.ts";
 
 declare const projectionCanonicalFingerprintBrand: unique symbol;
-declare const projectionReadIntegrityBrand: unique symbol;
 export const PROJECTION_CANONICAL_FINGERPRINT_MAX_CHARACTERS = 128;
-export const PROJECTION_READ_INTEGRITY_MAX_CHARACTERS = 71;
-export const PROJECTION_READ_RESOURCE_COUNT_MAX = 64_000_000;
-const projectionReadIntegrityPattern = /^sha256:[0-9a-f]{64}$/;
-const intrinsicRegExpTest = RegExp.prototype.test;
 
 /** Provider-defined bounded identity of the exact canonical content represented by a projection. */
 export type ProjectionCanonicalFingerprint = string & {
@@ -33,42 +28,6 @@ export function parseProjectionCanonicalFingerprint(
     });
   }
   return success(value as ProjectionCanonicalFingerprint);
-}
-
-/** Bounded content root authenticating one disposable partial-read publication. */
-export type ProjectionReadIntegrity = string & {
-  readonly [projectionReadIntegrityBrand]: true;
-};
-
-export function parseProjectionReadIntegrity(value: unknown): Result<ProjectionReadIntegrity> {
-  if (
-    typeof value !== "string" ||
-    value.length !== PROJECTION_READ_INTEGRITY_MAX_CHARACTERS ||
-    !(Reflect.apply(intrinsicRegExpTest, projectionReadIntegrityPattern, [value]) as boolean)
-  ) {
-    return failure({
-      code: "invalid-projection-read-integrity",
-      details: { maximumCharacters: PROJECTION_READ_INTEGRITY_MAX_CHARACTERS },
-      message: "Projection read integrity must be one exact bounded SHA-256 content root",
-    });
-  }
-  return success(value as ProjectionReadIntegrity);
-}
-
-export function parseProjectionReadResourceCount(value: unknown): Result<number> {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value <= 0 ||
-    value > PROJECTION_READ_RESOURCE_COUNT_MAX
-  ) {
-    return failure({
-      code: "invalid-projection-read-resource-count",
-      details: { maximum: PROJECTION_READ_RESOURCE_COUNT_MAX },
-      message: "Projection read resource count must be one bounded positive safe integer",
-    });
-  }
-  return success(value);
 }
 
 /** One exact canonical generation supplied to a replaceable projection provider. */
@@ -100,26 +59,6 @@ export interface ProjectionAdjacency {
 export interface ProjectionReadIdentity {
   readonly fingerprint: ProjectionCanonicalFingerprint;
   readonly generation: GraphGeneration;
-}
-
-/**
- * Tracked operational marker for the last projection publication confirmed by the
- * canonical transaction provider. It is continuity metadata, never graph meaning.
- */
-export interface ProjectionContinuityCheckpoint {
-  readonly generation: GraphGeneration;
-  readonly projection: ProjectionReadIdentity | null;
-  readonly projectionIntegrity: ProjectionReadIntegrity | null;
-  readonly projectionResourceCount: number | null;
-}
-
-export interface ProjectionContinuityCapability {
-  readProjectionCheckpoint(): Promise<Result<ProjectionContinuityCheckpoint>>;
-  recordProjectionCheckpoint(
-    identity: ProjectionReadIdentity,
-    integrity: ProjectionReadIntegrity,
-    resourceCount: number,
-  ): Promise<Result<void>>;
 }
 
 export interface ProjectionCatalogReadRequest {
