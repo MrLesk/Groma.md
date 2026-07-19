@@ -1,11 +1,11 @@
 ---
 id: GROM-58
 title: Restore Groma self-blueprint readability after projection cleanup
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-19 14:59'
-updated_date: '2026-07-19 15:00'
+updated_date: '2026-07-19 15:05'
 labels: []
 dependencies: []
 references:
@@ -42,6 +42,8 @@ Bring the checked-in Groma self-blueprint transaction state onto the exact curre
 Context-hunter classification: L1 bounded repository-state compatibility repair. The current exact journal parser is correct; the checked-in pre-release self-blueprint is stale after disposable projection metadata was removed. Supported boundary is this repository-owned idle journal only; no general migration or permissive legacy decoding is introduced.
 
 Validation: source CLI blueprint export and search both read the checked-in self-blueprint at generation 102; bare Groma starts normally. bun run check passes with 386 tests plus formatting, types, boundaries, native build/smoke, and compiled crash-recovery verification.
+
+Ready PR #43 passed all GitHub checks and the automatic Codex review accepted it with no findings. The single required Claude invocation stalled without output and was stopped after a bounded wait; it was not retried. PR #43 merged as 8b9653c.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
