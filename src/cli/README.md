@@ -13,5 +13,10 @@ remains side-effect free.
 bounded evidence list, so plain and JSON consumers can inspect what a scan observed without
 mistaking it for curated intent.
 
+Binding-aware curation reuses existing commands: inspect the observed component and its revision,
+merge it into the intended curated component with `component merge`, then scan again. The scan
+follows the canonical alias, preserves curated intent, and keeps supporting evidence separate; no
+second binding command or direct canonical-file edit is required.
+
 Local package-management and schema-migration commands are deliberately absent. Adding them back
 requires a concrete product need, not adapter completeness.

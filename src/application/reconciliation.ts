@@ -14,6 +14,7 @@ import {
   type EntropySource,
   type GraphData,
   type GraphDataRecord,
+  type GraphKernel,
   type ObservationRecord,
   type ResourceKey,
   type Result,
@@ -50,6 +51,7 @@ export interface ReconciliationOptions {
   readonly bounds: ReconciliationBounds;
   readonly entropy: EntropySource;
   readonly evidenceResourceMapper: EvidenceResourceMapper;
+  readonly graph: Pick<GraphKernel, "resolveEntityIdentity">;
   readonly resourceMapper: ComponentResourceMapper;
   readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
   readonly transactionExecution: TransactionExecutionCapability;
@@ -738,9 +740,6 @@ export function createReconciliationOperations(
         decoded.value.relationships.map((relationship) => [relationship.id, relationship]),
       );
       if (
-        priorSource?.componentBindings.some(
-          (binding) => !existingComponents.has(binding.componentId),
-        ) ||
         priorSource?.relationshipBindings.some(
           (binding) => binding.present && !existingRelationships.has(binding.relationId),
         )
@@ -758,12 +757,48 @@ export function createReconciliationOperations(
           diagnostic("reconciliation-component-limit", "Observed component capacity is exceeded"),
         );
       }
-      const priorComponents = new Map(
-        (priorSource?.componentBindings ?? []).map((binding) => [
+      const priorComponents = new Map<string, ComponentBinding>();
+      const resolvedComponentIds = new Set<string>();
+      const otherSourceComponentIds = new Set<string>();
+      for (const source of evidence.value.sources) {
+        if (source.sourceKey === key) continue;
+        for (const binding of source.componentBindings) {
+          const resolved = options.graph.resolveEntityIdentity(
+            decoded.value.graph,
+            binding.componentId,
+          );
+          if (resolved.ok) otherSourceComponentIds.add(resolved.value.resolved);
+        }
+      }
+      for (const binding of priorSource?.componentBindings ?? []) {
+        const resolved = options.graph.resolveEntityIdentity(
+          decoded.value.graph,
+          binding.componentId,
+        );
+        if (!resolved.ok || !existingComponents.has(resolved.value.resolved)) {
+          return failure(
+            diagnostic("reconciliation-binding-missing", "A component binding target is missing"),
+          );
+        }
+        if (
+          resolvedComponentIds.has(resolved.value.resolved) ||
+          otherSourceComponentIds.has(resolved.value.resolved)
+        ) {
+          return failure(
+            diagnostic(
+              "reconciliation-binding-ambiguous",
+              "Several component bindings resolve to one target",
+            ),
+          );
+        }
+        resolvedComponentIds.add(resolved.value.resolved);
+        priorComponents.set(
           qualified(binding.scope, binding.key),
-          binding,
-        ]),
-      );
+          binding.componentId === resolved.value.resolved
+            ? binding
+            : Object.freeze({ ...binding, componentId: resolved.value.resolved }),
+        );
+      }
       const componentBindings = new Map(priorComponents);
       const unavailableComponents = new Set([
         ...evidence.value.sources.flatMap((source) =>
@@ -890,12 +925,41 @@ export function createReconciliationOperations(
           ),
         );
       }
-      const priorRelationships = new Map(
-        (priorSource?.relationshipBindings ?? []).map((binding) => [
-          qualified(binding.scope, binding.key),
-          binding,
-        ]),
-      );
+      const priorRelationships = new Map<string, RelationshipBinding>();
+      const resolvedRelationshipProjections = new Map<string, RelationshipProjection>();
+      for (const binding of priorSource?.relationshipBindings ?? []) {
+        const source = options.graph.resolveEntityIdentity(
+          decoded.value.graph,
+          binding.projection.source,
+        );
+        const target = options.graph.resolveEntityIdentity(
+          decoded.value.graph,
+          binding.projection.target,
+        );
+        if (
+          !source.ok ||
+          !target.ok ||
+          !resolvedComponentIds.has(source.value.resolved) ||
+          !resolvedComponentIds.has(target.value.resolved)
+        ) {
+          return failure(
+            diagnostic(
+              "reconciliation-binding-missing",
+              "A relationship binding endpoint is missing or ambiguous",
+            ),
+          );
+        }
+        const identity = qualified(binding.scope, binding.key);
+        priorRelationships.set(identity, binding);
+        resolvedRelationshipProjections.set(
+          identity,
+          Object.freeze({
+            source: source.value.resolved,
+            target: target.value.resolved,
+            type: binding.projection.type,
+          }),
+        );
+      }
       const relationshipBindings = new Map(priorRelationships);
       const unavailableRelations = new Set([
         ...evidence.value.sources.flatMap((source) =>
@@ -988,9 +1052,14 @@ export function createReconciliationOperations(
           );
           continue;
         }
-        let appliedProjection = binding.projection;
-        if (relationshipMatches(existing, binding.projection)) {
-          if (!same(binding.projection, projection)) {
+        const resolvedPriorProjection =
+          resolvedRelationshipProjections.get(identity) ?? binding.projection;
+        let appliedProjection = resolvedPriorProjection;
+        if (
+          relationshipMatches(existing, binding.projection) ||
+          relationshipMatches(existing, resolvedPriorProjection)
+        ) {
+          if (!relationshipMatches(existing, projection)) {
             relationshipMutations.push(
               Object.freeze({
                 relationship: Object.freeze({
@@ -1003,7 +1072,7 @@ export function createReconciliationOperations(
                 type: "upsert",
               }),
             );
-            touchedComponents.add(binding.projection.source);
+            touchedComponents.add(resolvedPriorProjection.source);
             touchedComponents.add(source);
             touchedRelationships.add(binding.relationId);
           }
@@ -1022,16 +1091,38 @@ export function createReconciliationOperations(
       for (const [identity, binding] of relationshipBindings) {
         if (relationshipRecords.some((record) => qualified(record.scope, record.key) === identity))
           continue;
-        if (!hasCompleteCoverage(snapshot.value, binding.scope, "relationship")) continue;
+        const resolvedProjection =
+          resolvedRelationshipProjections.get(identity) ?? binding.projection;
+        if (!hasCompleteCoverage(snapshot.value, binding.scope, "relationship")) {
+          if (!same(binding.projection, resolvedProjection)) {
+            relationshipBindings.set(
+              identity,
+              Object.freeze({ ...binding, projection: resolvedProjection }),
+            );
+          }
+          continue;
+        }
         const existing = existingRelationships.get(binding.relationId);
         let removed = existing === undefined ? binding.removed : false;
-        if (existing !== undefined && relationshipMatches(existing, binding.projection)) {
+        if (
+          existing !== undefined &&
+          (relationshipMatches(existing, binding.projection) ||
+            relationshipMatches(existing, resolvedProjection))
+        ) {
           relationshipMutations.push(Object.freeze({ id: binding.relationId, type: "remove" }));
-          touchedComponents.add(binding.projection.source);
+          touchedComponents.add(resolvedProjection.source);
           touchedRelationships.add(binding.relationId);
           removed = true;
         }
-        relationshipBindings.set(identity, Object.freeze({ ...binding, present: false, removed }));
+        relationshipBindings.set(
+          identity,
+          Object.freeze({
+            ...binding,
+            present: false,
+            projection: resolvedProjection,
+            removed,
+          }),
+        );
       }
       if (relationshipBindings.size > options.bounds.maxRelationships) {
         return failure(

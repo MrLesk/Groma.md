@@ -784,6 +784,7 @@ export function createDefaultBootstrapRegistry(
               },
               entropy,
               evidenceResourceMapper,
+              graph,
               resourceMapper,
               snapshotStateDecoder,
               transactionExecution: transactionEngine,

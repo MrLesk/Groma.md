@@ -159,7 +159,7 @@
             "scope": "workspace"
           },
           {
-            "componentId": "ent_70eb3f258a30b901b69684b60b4ab648",
+            "componentId": "ent_596f62cc63bacd108c69d5600f37fac1",
             "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
             "present": true,
             "projection": {
@@ -197,7 +197,7 @@
             "present": true,
             "projection": {
               "source": "ent_3319aa91fc8f5e925cf98a80c68a5bcf",
-              "target": "ent_70eb3f258a30b901b69684b60b4ab648",
+              "target": "ent_596f62cc63bacd108c69d5600f37fac1",
               "type": "imports"
             },
             "relationId": "rel_e76d95e8c1c1540cabd97b27040ed1d9",
@@ -209,7 +209,7 @@
             "present": true,
             "projection": {
               "source": "ent_fe8d27059e4bcb6fdd566e59c0d9f739",
-              "target": "ent_70eb3f258a30b901b69684b60b4ab648",
+              "target": "ent_596f62cc63bacd108c69d5600f37fac1",
               "type": "imports"
             },
             "relationId": "rel_a1ce96dfee93cec038c2be77aa99484a",
@@ -220,7 +220,7 @@
             "key": "candidate.relationship.2268a6ff235458ff788dd6a78a75b77953ef102fdc5004a3adf36f4b05464006",
             "present": true,
             "projection": {
-              "source": "ent_70eb3f258a30b901b69684b60b4ab648",
+              "source": "ent_596f62cc63bacd108c69d5600f37fac1",
               "target": "ent_81a8f8af18d92d35d9a6fa2eaa068019",
               "type": "imports"
             },
@@ -268,7 +268,7 @@
             "key": "candidate.relationship.3ba861e70b20d4e5e2389827f95b8e54091a3870105b66686a36ae1bce6244c7",
             "present": true,
             "projection": {
-              "source": "ent_70eb3f258a30b901b69684b60b4ab648",
+              "source": "ent_596f62cc63bacd108c69d5600f37fac1",
               "target": "ent_4a1fca8c12e5cf49bbf87f5819d8dad7",
               "type": "imports"
             },
@@ -497,7 +497,7 @@
             "present": true,
             "projection": {
               "source": "ent_523188851f940496fef5a4fee5c3d038",
-              "target": "ent_70eb3f258a30b901b69684b60b4ab648",
+              "target": "ent_596f62cc63bacd108c69d5600f37fac1",
               "type": "source-boundary"
             },
             "relationId": "rel_f454fec7118d4da475d1e8dce45406ae",
@@ -615,7 +615,7 @@
               "state": "complete"
             }
           ],
-          "epoch": "epoch_d682bf344d0a9f267499068b26428ffd",
+          "epoch": "epoch_3870261abbc585167b72ffa23bebc235",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -717,7 +717,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 41,
                     "startByte": 28
@@ -1075,13 +1075,13 @@
               }
             },
             {
-              "content": "# CLI\n\nThe CLI is a bounded adapter over shared application operations. It parses commands, reads explicit\nJSON input, and renders human or JSON envelopes. It never reads canonical files, project sources, or\ntransaction state directly.\n\nThe implemented surface includes initialization, project registration, one bounded `scan`,\ncanonical component operations, bounded blueprint export/search/traversal, and a deterministic\nself-contained local HTML blueprint opened by bare interactive `groma`. Noninteractive bare output\nremains side-effect free.\n\n`component get` returns canonical component detail and outgoing relationships alongside a separate\nbounded evidence list, so plain and JSON consumers can inspect what a scan observed without\nmistaking it for curated intent.\n\nLocal package-management and schema-migration commands are deliberately absent. Adding them back\nrequires a concrete product need, not adapter completeness.\n",
+              "content": "# CLI\n\nThe CLI is a bounded adapter over shared application operations. It parses commands, reads explicit\nJSON input, and renders human or JSON envelopes. It never reads canonical files, project sources, or\ntransaction state directly.\n\nThe implemented surface includes initialization, project registration, one bounded `scan`,\ncanonical component operations, bounded blueprint export/search/traversal, and a deterministic\nself-contained local HTML blueprint opened by bare interactive `groma`. Noninteractive bare output\nremains side-effect free.\n\n`component get` returns canonical component detail and outgoing relationships alongside a separate\nbounded evidence list, so plain and JSON consumers can inspect what a scan observed without\nmistaking it for curated intent.\n\nBinding-aware curation reuses existing commands: inspect the observed component and its revision,\nmerge it into the intended curated component with `component merge`, then scan again. The scan\nfollows the canonical alias, preserves curated intent, and keeps supporting evidence separate; no\nsecond binding command or direct canonical-file edit is required.\n\nLocal package-management and schema-migration commands are deliberately absent. Adding them back\nrequires a concrete product need, not adapter completeness.\n",
               "format": "markdown",
               "key": "candidate.documentation.649e0e6c5793ebc700b520620e79298cf270b9e2afde667327cfb7594fe4dbf1",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:bb9471af38ebfabf662f96f9783d7f476f8315468b29c399a0b5f833f0a47f46",
+                  "fingerprint": "sha256:b79f7bd4f9faa550ed58e55e6eb87c8162000f7692be8a81aafaed8c3379531a",
                   "resource": "src/cli/README.md",
                   "scope": "workspace"
                 }
@@ -1111,13 +1111,13 @@
               }
             },
             {
-              "content": "# Application\n\nApplication composes Groma use cases from Core capabilities and the Standard Model. It owns semantic\noperation order, transaction preparation, snapshot reads, and bounded query routing. It does not own\nstorage formats, project paths, scanner syntax, CLI rendering, or visual layout.\n\nCanonical mutations preserve intent/evidence separation and go through the shared transaction\nengine. Application reads use the same bounded query contracts whether the provider is the local\ncanonical store or a disposable projection.\n\nAn exact component read keeps canonical meaning and supporting scan evidence separate in one\ngeneration-locked result. Evidence detail includes its source binding, coverage, observations, and\nprovenance; a curated-only component has an empty evidence list.\n\nReconciliation accepts one completed observation snapshot, resolves only exact source-owned\nbindings, and prepares evidence plus Standard Model mutations as one transaction. It preserves\ncurated fields by changing a scanner-derived value only while the canonical value still matches the\nprevious observation. Partial coverage never turns an omission into deletion.\n\nCapability results are copied as ordinary bounded plain data. The Host is a trusted same-process\ncomposition; accessor, Proxy, Promise-species, and mutable-intrinsic attack containment are not a\nsupported boundary. Validation still fails closed for malformed, oversized, ambiguous, or\nunsupported canonical values.\n\nThere is no schema-migration application surface before a real incompatible release requires one.\n",
+              "content": "# Application\n\nApplication composes Groma use cases from Core capabilities and the Standard Model. It owns semantic\noperation order, transaction preparation, snapshot reads, and bounded query routing. It does not own\nstorage formats, project paths, scanner syntax, CLI rendering, or visual layout.\n\nCanonical mutations preserve intent/evidence separation and go through the shared transaction\nengine. Application reads use the same bounded query contracts whether the provider is the local\ncanonical store or a disposable projection.\n\nAn exact component read keeps canonical meaning and supporting scan evidence separate in one\ngeneration-locked result. Evidence detail includes its source binding, coverage, observations, and\nprovenance; a curated-only component has an empty evidence list.\n\nReconciliation accepts one completed observation snapshot, resolves only exact source-owned\nbindings, and prepares evidence plus Standard Model mutations as one transaction. It preserves\ncurated fields by changing a scanner-derived value only while the canonical value still matches the\nprevious observation. Partial coverage never turns an omission into deletion.\n\nWhen a supported component merge supersedes an observed identity with a curated component,\nreconciliation follows the canonical alias and migrates the source-owned binding and relationship\nprojections to the survivor. Later scans continue to refresh evidence without replacing curated\nintent or recreating the automatic component.\n\nCapability results are copied as ordinary bounded plain data. The Host is a trusted same-process\ncomposition; accessor, Proxy, Promise-species, and mutable-intrinsic attack containment are not a\nsupported boundary. Validation still fails closed for malformed, oversized, ambiguous, or\nunsupported canonical values.\n\nThere is no schema-migration application surface before a real incompatible release requires one.\n",
               "format": "markdown",
               "key": "candidate.documentation.bbcbdba0925d0e68a725c1551eca347bdfef7f1e464ed18e1069d9f1fe81754c",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:5bde7f332800163c0af8bba98299e8247be2b1235b98d4152ed643a4a9d86d66",
+                  "fingerprint": "sha256:77cc03588c6d2f6c5f65df17270d906f69147893111170cbe9cf7e5f7c702ac7",
                   "resource": "src/application/README.md",
                   "scope": "workspace"
                 }
@@ -1231,7 +1231,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 1317,
                     "startByte": 1292
@@ -1326,7 +1326,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 253,
                     "startByte": 228
@@ -1432,10 +1432,10 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:6b9957df5cc42124262df9f5cf13312ce4016abca8591afa38a6f4dd992c1a40",
+                  "fingerprint": "sha256:be7203e0e18de22423c6d60fda1f347fec5a3f1a276384b86f52ca42b9f5977f",
                   "range": {
-                    "endByteExclusive": 660,
-                    "startByte": 632
+                    "endByteExclusive": 680,
+                    "startByte": 652
                   },
                   "resource": "src/application/reconciliation.ts",
                   "scope": "workspace"
@@ -1748,19 +1748,19 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:6b9957df5cc42124262df9f5cf13312ce4016abca8591afa38a6f4dd992c1a40",
+                  "fingerprint": "sha256:be7203e0e18de22423c6d60fda1f347fec5a3f1a276384b86f52ca42b9f5977f",
                   "range": {
-                    "endByteExclusive": 512,
-                    "startByte": 494
+                    "endByteExclusive": 532,
+                    "startByte": 514
                   },
                   "resource": "src/application/reconciliation.ts",
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:6b9957df5cc42124262df9f5cf13312ce4016abca8591afa38a6f4dd992c1a40",
+                  "fingerprint": "sha256:be7203e0e18de22423c6d60fda1f347fec5a3f1a276384b86f52ca42b9f5977f",
                   "range": {
-                    "endByteExclusive": 886,
-                    "startByte": 866
+                    "endByteExclusive": 906,
+                    "startByte": 886
                   },
                   "resource": "src/application/reconciliation.ts",
                   "scope": "workspace"
@@ -1818,7 +1818,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 41,
                     "startByte": 28
@@ -1903,7 +1903,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 1516,
                     "startByte": 1492
@@ -2694,7 +2694,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 815,
                     "startByte": 797
@@ -2818,7 +2818,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:ae2cca5f68cd06f3a9390426101928138035aca02edc49ad20d713ee02b749f1",
+                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
                   "range": {
                     "endByteExclusive": 1428,
                     "startByte": 1400

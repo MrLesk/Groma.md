@@ -17,6 +17,11 @@ bindings, and prepares evidence plus Standard Model mutations as one transaction
 curated fields by changing a scanner-derived value only while the canonical value still matches the
 previous observation. Partial coverage never turns an omission into deletion.
 
+When a supported component merge supersedes an observed identity with a curated component,
+reconciliation follows the canonical alias and migrates the source-owned binding and relationship
+projections to the survivor. Later scans continue to refresh evidence without replacing curated
+intent or recreating the automatic component.
+
 Capability results are copied as ordinary bounded plain data. The Host is a trusted same-process
 composition; accessor, Proxy, Promise-species, and mutable-intrinsic attack containment are not a
 supported boundary. Validation still fails closed for malformed, oversized, ambiguous, or
