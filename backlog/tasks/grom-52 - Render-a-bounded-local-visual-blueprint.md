@@ -1,10 +1,11 @@
 ---
 id: GROM-52
 title: Render a bounded local visual blueprint
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-15 00:21'
+updated_date: '2026-07-19 17:56'
 labels:
   - visualization
   - first-run
@@ -12,7 +13,7 @@ labels:
 milestone: m-3
 dependencies:
   - GROM-30
-  - GROM-42
+  - GROM-43
   - GROM-51
   - GROM-54
 references:
@@ -28,17 +29,31 @@ ordinal: 49000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Give the living-blueprint release its immediate human payoff: a self-contained local visual projection that opens from Groma, follows the official brand and architectural-sheet direction, stays within a readable main-layer budget, and reveals additional architecture through focus and detail without becoming canonical state. It uses iconDomain only for deterministic offline recognition and contains no remote icon-resolution capability.
+Complete the shortest first-use loop by turning bare groma into one bounded, deterministic, self-contained local HTML blueprint. Reuse the existing generation-locked overview read and its display fallback directly; the CLI owns temporary artifact presentation. This first visual proves recursive containment, focus/detail, folding, brand direction, and local-only behavior without a server, React application, generalized evidence queries, or persisted view state.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A shared bounded current-view read can be rendered as a self-contained local HTML artifact with embedded SVG or equivalent deterministic graph output
-- [ ] #2 The main layer uses a presentation density budget rather than a canonical component cap and supports recursive focus, detail expansion, relationship tracing, and view-local folding; a node projecting one component falls back from label to name to stable canonical component ID, while each folded group receives a deterministic view-local label derived from its grouping rule and bounded member count and never a synthetic canonical component ID or identity
-- [ ] #3 When iconDomain is supplied, the renderer uses it only to derive a deterministic self-contained domain badge, monogram, or text hint and never fetches a favicon or other remote asset; icon resolution is outside GROM-52, and any future capability requires explicit user action and a privacy policy
-- [ ] #4 The view visibly distinguishes curated intent, automatic candidates, bound evidence, ambiguity or missing coverage, containment, and ordinary relationships without relying on color alone
-- [ ] #5 Selecting a projected node opens concise intent plus structured provenance, binding, uncertainty, and coverage details
-- [ ] #6 Rendering the same generation is deterministic, performs no canonical write or network request, uploads nothing by default, and stores no layout, folding, focus, zoom, or theme state in the blueprint
-- [ ] #7 Bare groma can deterministically reconstruct and open the artifact for the current blueprint generation through supported CLI behavior
-- [ ] #8 The first renderer follows brand/README.md and brand/STYLE.md: one white architectural-sheet theme, graphite structure, exact #1D9E75 surveyed-point accent, lowercase groma.md identity, technical-sheet content density, permitted neutral shadows, and flat official marks without shadows or gradients; it provides no theme switch, dashboard chrome, or cartoon visual direction
+- [x] #1 In an initialized workspace, bare groma in an interactive terminal renders the existing bounded current overview as a self-contained local HTML artifact and opens it through the platform adapter
+- [x] #2 The artifact preserves recursive containment, label-to-name-to-stable-ID display fallback, concise component detail, view-local focus and folding, and explicit bounded truncation without creating canonical nodes or identities
+- [x] #3 Rendering one overview generation is byte-deterministic and performs no canonical write, project-code execution, network request, upload, or persistence of layout, focus, folding, zoom, or theme
+- [x] #4 The renderer follows the approved single architectural-sheet direction: warm white drafting surface, graphite hierarchy, exact #1D9E75 surveyed-point accent, lowercase groma.md identity, technical-sheet density, and no dashboard chrome, theme switch, gradients, or modified official marks
+- [x] #5 Noninteractive bare output remains deterministic and side-effect free, while missing workspaces retain clear init guidance and artifact presentation failures return a bounded nonzero diagnostic
+- [x] #6 Focused renderer/program tests and a compiled fixture prove artifact content, bounded node counts, deterministic bytes, presentation behavior, and unchanged canonical workspace bytes; Groma renders its own self-scan for visual inspection
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Reuse the existing bounded overview read unchanged as the renderer input and add one pure deterministic HTML renderer in the CLI boundary. 2. Add a small injectable artifact presenter in the program adapter; production writes a temporary HTML file and opens it with a bounded platform command, while noninteractive output remains unchanged. 3. Implement recursive technical-sheet containment, native view-local folding, selected focus/detail, reason-aware truncation notation, and canonical brand styling using embedded CSS/JS only. 4. Add focused pure-renderer and program tests plus a compiled PTY artifact fixture without adding a server or browser framework. 5. Render Groma's 65-record self-scan, prove the repeat scan byte-stable, run the full gate, and complete the bounded review workflow.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Context-hunter classification: L2 public surface. Supported semantic boundary: one generation-locked hierarchy already bounded to 50 nodes, 10 roots, depth 4, and 50 queries. Partial by design: relationships and evidence/binding/provenance inspection remain later work because GROM-42 is not required for the first useful picture. Artifact presentation is local and temporary; canonical state is read-only.
+
+Implemented a pure bounded HTML renderer and injectable temporary-file presenter for interactive bare groma. Compiled self-dogfood scan recorded 65 observations, then repeated byte-identically. Verification: bun run check passed with 402 tests; the compiled PTY fixture intercepts the platform opener, reads two generated artifacts, proves byte equality, hierarchy/truncation content, and unchanged canonical bytes. Direct compiled self-run opened generation 112 with 27 nodes. In-app file URL inspection was unavailable because the browser security policy blocks file:// navigation; no bypass was attempted.
+
+Pre-PR review completed exactly once by two independent Terra xhigh agents and Claude. Accepted findings: truthful reason-aware truncation, visible/semantic selected state, canonical lockup markup, bounded platform-opener wait, and documented bare JSON read. Rejected as out of scope or counter to the accepted boundary: a headless text fallback, temp-artifact sweeper, and a new DOM/browser dependency. Post-fix bun run check passed with 402 tests and 2642 expectations; compiled verification remained green.
+<!-- SECTION:NOTES:END -->

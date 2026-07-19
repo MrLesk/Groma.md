@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -360,6 +361,15 @@ async function verifyTerminal(executable: string, workspaceRoot: string): Promis
   if (process.platform === "win32") return;
   const quotedExecutable = path.join(path.dirname(workspaceRoot), "groma terminal 'quoted'");
   await symlink(executable, quotedExecutable);
+  const openerDirectory = path.join(path.dirname(workspaceRoot), "groma opener");
+  const artifactCapture = path.join(openerDirectory, "artifact.txt");
+  const opener = path.join(openerDirectory, process.platform === "darwin" ? "open" : "xdg-open");
+  await mkdir(openerDirectory);
+  await writeFile(
+    opener,
+    `#!/bin/sh\nprintf '%s' "$1" > ${quotePosixShellArgument(artifactCapture)}\n`,
+  );
+  await chmod(opener, 0o755);
   const command =
     process.platform === "darwin"
       ? ["script", "-q", "/dev/null", quotedExecutable]
@@ -371,14 +381,28 @@ async function verifyTerminal(executable: string, workspaceRoot: string): Promis
           `exec ${quotePosixShellArgument(quotedExecutable)}`,
           "/dev/null",
         ];
-  const result = await runProcess(command[0]!, workspaceRoot, command.slice(1));
-  assert.equal(result.exitCode, 0, result.stderr);
-  const output = result.stdout.replaceAll("\r", "");
-  assert.ok(output.length < 1_048_576);
-  assert.equal(output.includes("\u001b"), false);
-  assert.ok(output.includes(`  - id="${ids.orders}"`), output);
-  assert.ok(output.includes(`    - id="${ids.orderItem}"`), output);
-  assert.ok(output.includes(`truncated: reason=children parent="${ids.users}"`), output);
+  const before = await gromaSnapshot(workspaceRoot);
+  let expectedHtml: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await runProcess(command[0]!, workspaceRoot, command.slice(1), undefined, {
+      PATH: `${openerDirectory}:${process.env.PATH ?? ""}`,
+    });
+    assert.equal(result.exitCode, 0, result.stderr);
+    const output = result.stdout.replaceAll("\r", "");
+    assert.ok(output.length < 1_048_576);
+    assert.equal(output.includes("\u001b"), false);
+    assert.ok(output.includes('"status":"opened"'), output);
+    const artifact = await readFile(artifactCapture, "utf8");
+    const html = await readFile(artifact, "utf8");
+    assert.ok(html.startsWith("<!doctype html>"));
+    assert.ok(html.includes('aria-label="groma.md lockup"'));
+    assert.ok(html.includes(`data-id="${ids.orders}"`));
+    assert.ok(html.includes(`data-id="${ids.orderItem}"`));
+    assert.ok(html.includes("Bounded view stops here: child page limit."));
+    if (expectedHtml === undefined) expectedHtml = html;
+    else assert.equal(html, expectedHtml);
+  }
+  assert.deepEqual(await gromaSnapshot(workspaceRoot), before);
 }
 
 async function verifyWorkflow(executable: string, workspaceRoot: string): Promise<void> {

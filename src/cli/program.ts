@@ -1,4 +1,6 @@
 import path from "node:path";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 import {
   createDefaultBootstrapRegistry,
@@ -16,11 +18,13 @@ import {
   type CliCommandResult,
   type CliFormat,
   type CliInputSource,
+  type CliOverviewResult,
 } from "./contracts.ts";
 import { GROMA_VERSION, HELP_TEXT } from "./help.ts";
 import { parseInvocation } from "./parser.ts";
 import { renderCommandResult } from "./render.ts";
 import { createCliSurfaceController, type CliInputReader } from "./surface.ts";
+import { renderBlueprintHtml } from "./blueprint-html.ts";
 
 export { GROMA_VERSION, HELP_TEXT } from "./help.ts";
 
@@ -32,10 +36,41 @@ export interface ProgramOutput {
 export interface ProgramOptions {
   readonly createRegistry?: (surface: HostSurface) => HostBootstrapRegistry;
   readonly inputReader?: CliInputReader;
+  readonly presentBlueprint?: (html: string) => Promise<string>;
   readonly signalSource?: HostSignalSource;
   readonly terminal?: { readonly stdin: boolean; readonly stdout: boolean };
   readonly userDataRoot?: string;
   readonly workspaceRoot?: string;
+}
+
+async function presentBlueprint(html: string): Promise<string> {
+  const directory = await mkdtemp(path.join(tmpdir(), "groma-blueprint-"));
+  const artifact = path.join(directory, "blueprint.html");
+  await writeFile(artifact, html, { encoding: "utf8", mode: 0o600 });
+  const command =
+    process.platform === "darwin"
+      ? ["open", artifact]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", artifact]
+        : ["xdg-open", artifact];
+  const opened = Bun.spawn({ cmd: command, stderr: "ignore", stdout: "ignore" });
+  const exitCode = await new Promise<number | undefined>((resolve) => {
+    let complete = false;
+    const timeout = setTimeout(() => {
+      if (complete) return;
+      complete = true;
+      opened.kill();
+      resolve(undefined);
+    }, 5_000);
+    void opened.exited.then((code) => {
+      if (complete) return;
+      complete = true;
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+  if (exitCode !== 0) throw new Error("Blueprint artifact could not be opened");
+  return artifact;
 }
 
 function decodeUtf8(bytes: Uint8Array): string {
@@ -263,7 +298,50 @@ export async function runProgram(
       output,
     );
   }
-  const commandResult = controller.result();
+  let commandResult = controller.result();
+  if (
+    invocation.command.kind === "overview" &&
+    invocation.format === "plain" &&
+    commandResult?.ok === true &&
+    typeof commandResult.result === "object" &&
+    commandResult.result !== null &&
+    (commandResult.result as { readonly kind?: unknown }).kind === "hierarchy"
+  ) {
+    const rendered = renderBlueprintHtml(
+      commandResult.result as Extract<CliOverviewResult, { readonly kind: "hierarchy" }>,
+    );
+    if (!rendered.ok) {
+      commandResult = diagnosticResult(
+        command,
+        CLI_EXIT.infrastructure,
+        "cli-blueprint-artifact-bound-exceeded",
+        "The bounded visual blueprint exceeds the local artifact limit",
+      );
+    } else {
+      try {
+        const artifact = await (options.presentBlueprint ?? presentBlueprint)(rendered.html);
+        commandResult = Object.freeze({
+          command,
+          exitCode: CLI_EXIT.success,
+          ok: true,
+          result: Object.freeze({
+            artifact,
+            generation: (commandResult.result as { readonly generation: number }).generation,
+            nodeCount: (commandResult.result as { readonly nodes: readonly unknown[] }).nodes
+              .length,
+            status: "opened",
+          }),
+        });
+      } catch {
+        commandResult = diagnosticResult(
+          command,
+          CLI_EXIT.infrastructure,
+          "cli-blueprint-artifact-unavailable",
+          "The local visual blueprint could not be opened",
+        );
+      }
+    }
+  }
   return emit(
     commandResult ??
       diagnosticResult(

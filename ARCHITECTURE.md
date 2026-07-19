@@ -188,6 +188,10 @@ bun run build
 ./dist/groma blueprint export --limit 7
 ```
 
+In an interactive terminal, bare `groma` reconstructs a temporary self-contained HTML artifact
+from the same bounded current hierarchy and opens it locally. The artifact owns only disposable
+folding, focus, and selection state; it performs no canonical write or network request.
+
 An installed distribution uses the same commands with `groma` in place of `./dist/groma`.
 Export is explicitly paged: pass each returned cursor unchanged until `hasMore` is false.
 Cursors are bound to one generation of the projection, so a stale result means starting again
