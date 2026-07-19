@@ -11,22 +11,29 @@
     "dev": "bun run src/cli/main.ts",
     "build": "bun run scripts/build.ts",
     "package": "bun run scripts/package.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "bun test",
-    "format": "prettier --write src scripts tests .github ARCHITECTURE.md DEVELOPMENT.md docs package.json tsconfig.json .prettierrc.json",
-    "format:check": "prettier --check src scripts tests .github ARCHITECTURE.md DEVELOPMENT.md docs package.json tsconfig.json .prettierrc.json",
+    "web:css": "bun run scripts/build-web-css.ts",
+    "format": "prettier --write src scripts tests .github ARCHITECTURE.md DEVELOPMENT.md docs package.json tsconfig.json tsconfig.web.json .prettierrc.json",
+    "format:check": "prettier --check src scripts tests .github ARCHITECTURE.md DEVELOPMENT.md docs package.json tsconfig.json tsconfig.web.json .prettierrc.json",
     "check:boundaries": "bun run scripts/check-boundaries.ts",
     "smoke": "bun run scripts/verify-binary.ts",
     "verify:1a": "bun run build && bun run smoke && bun run tests/iteration-1a/verify.ts",
-    "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a"
+    "check": "bun run format:check && bun run web:css && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
     "@types/bun": "1.3.14",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "prettier": "3.9.5",
+    "tailwindcss": "4.3.3",
     "typescript": "7.0.2"
   },
   "dependencies": {
     "@babel/parser": "8.0.4",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "yaml": "2.9.0"
   }
 }

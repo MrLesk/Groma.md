@@ -19,6 +19,7 @@ Usage:
   groma --help
   groma --version
   groma [--format plain|json] init
+  groma [--format plain|json] web [--port <0-65535>]
   groma [--format plain|json] scan [--project <project-id>] [--scanner <scanner-id>]
   groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
@@ -38,6 +39,9 @@ Usage:
   groma [--format plain|json] component reparent <id> --revision <revision> (--parent <parent-id> | --root)
   groma [--format plain|json] component remove <id> --revision <revision>
 
+Web serves the embedded interactive blueprint on 127.0.0.1 only (default port 4766, 0 for an
+ephemeral port) until Ctrl+C. It exposes bounded GET reads through the shared application
+operations and is not a mutation surface; it makes no request beyond the local listener.
 Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
 Scan uses the only registered project and scanner when selection is unambiguous. The initialized
 default project is configured for the built-in TypeScript/Bun scanner before its first scan.

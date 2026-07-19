@@ -1,3 +1,7 @@
+import { fileURLToPath } from "node:url";
+
+import { generateWebStylesheet } from "./web-stylesheet.ts";
+
 export interface StandaloneCompileOptions {
   readonly cwd: string;
   readonly entrypoint: string;
@@ -5,7 +9,11 @@ export interface StandaloneCompileOptions {
   readonly target?: string;
 }
 
+const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+
 export async function compileStandalone(options: StandaloneCompileOptions): Promise<number> {
+  const stylesheet = await generateWebStylesheet(projectRoot);
+  if (stylesheet !== 0) return stylesheet;
   const command = [
     process.execPath,
     "build",

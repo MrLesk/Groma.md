@@ -96,6 +96,47 @@ async function runInteractiveJson(
   return parsed as Record<string, unknown>;
 }
 
+async function verifyWebServer(executable: string, cwd: string): Promise<void> {
+  const child = Bun.spawn({
+    cmd: [executable, "web", "--port", "0"],
+    cwd,
+    stderr: "inherit",
+    stdout: "pipe",
+  });
+  const reader = child.stdout.getReader();
+  const decoder = new TextDecoder();
+  const deadline = setTimeout(() => child.kill(), 15_000);
+  try {
+    let buffered = "";
+    while (!buffered.includes("Serving the current blueprint at ")) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error("Compiled web server did not announce its URL");
+      buffered += decoder.decode(chunk.value, { stream: true });
+    }
+    const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(buffered)?.[0];
+    if (url === undefined) throw new Error("Compiled web server URL was not loopback");
+    const document = await fetch(url);
+    const documentText = await document.text();
+    if (!document.ok || !documentText.includes('<div id="root">')) {
+      throw new Error("Compiled web server did not serve the embedded shell");
+    }
+    const roots = await fetch(`${url}api/roots?limit=5`);
+    const rootsBody = (await roots.json()) as { readonly ok?: unknown };
+    if (!roots.ok || rootsBody.ok !== true) {
+      throw new Error("Compiled web server did not answer a bounded read");
+    }
+    child.kill("SIGINT");
+    const exitCode = await child.exited;
+    // Windows signal emulation terminates without the graceful shutdown path.
+    if (process.platform !== "win32" && exitCode !== 0) {
+      throw new Error("Compiled web server did not stop cleanly");
+    }
+  } finally {
+    clearTimeout(deadline);
+    reader.releaseLock();
+  }
+}
+
 const options = parseOptions(Bun.argv.slice(2));
 const artifact = await stat(options.executable);
 if (!artifact.isFile() || artifact.size === 0) throw new Error("Executable artifact is empty");
@@ -146,4 +187,5 @@ if (!options.skipRun) {
   ) {
     throw new Error("Compiled visual overview was not bounded or evidence-grounded");
   }
+  await verifyWebServer(options.executable, workspace);
 }

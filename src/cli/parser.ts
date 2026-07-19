@@ -11,6 +11,7 @@ import {
   type CliInputSource,
   type CliInvocationResult,
 } from "./contracts.ts";
+import { WEB_DEFAULT_PORT } from "../web/server.ts";
 
 function diagnostic(message: string): CliDiagnostic {
   return Object.freeze({ code: "cli-invalid-invocation", message });
@@ -297,6 +298,27 @@ function projectCommand(args: readonly string[]): CliCommand | undefined {
     : Object.freeze({ expectedRevision, id, input, kind: "project-update" });
 }
 
+function webCommand(args: readonly string[]): CliCommand | undefined {
+  let port: number | undefined;
+  for (let index = 0; index < args.length; index += 2) {
+    const option = args[index];
+    const value = args[index + 1];
+    if (
+      option === "--port" &&
+      port === undefined &&
+      value !== undefined &&
+      /^(?:0|[1-9][0-9]{0,4})$/.test(value)
+    ) {
+      const parsed = Number(value);
+      if (parsed > 65_535) return undefined;
+      port = parsed;
+    } else {
+      return undefined;
+    }
+  }
+  return Object.freeze({ kind: "web" as const, port: port ?? WEB_DEFAULT_PORT });
+}
+
 function scanCommand(args: readonly string[]): CliCommand | undefined {
   let projectId: string | undefined;
   let scannerId: string | undefined;
@@ -376,13 +398,15 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
   const command =
     commandArgs[0] === "scan"
       ? scanCommand(commandArgs.slice(1))
-      : commandArgs[0] === "blueprint"
-        ? blueprintCommand(commandArgs.slice(1))
-        : commandArgs[0] === "component"
-          ? componentCommand(commandArgs.slice(1))
-          : commandArgs[0] === "project"
-            ? projectCommand(commandArgs.slice(1))
-            : undefined;
+      : commandArgs[0] === "web"
+        ? webCommand(commandArgs.slice(1))
+        : commandArgs[0] === "blueprint"
+          ? blueprintCommand(commandArgs.slice(1))
+          : commandArgs[0] === "component"
+            ? componentCommand(commandArgs.slice(1))
+            : commandArgs[0] === "project"
+              ? projectCommand(commandArgs.slice(1))
+              : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

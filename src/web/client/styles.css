@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@source "./";
+
+/* Groma single white theme: brand tokens from brand/STYLE.md. No dark mode. */
+@theme {
+  --color-paper: #fbfaf6;
+  --color-desk: #edeeea;
+  --color-ink: #202422;
+  --color-ink-muted: #69716d;
+  --color-line: #a9afab;
+  --color-fine: #dfe2de;
+  --color-survey: #1d9e75;
+  --color-amber: #8a5b12;
+  --font-sheet: "DIN 2014", "Bahnschrift", "Avenir Next", sans-serif;
+  --font-plan: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-desk);
+  color: var(--color-ink);
+  font-family: var(--font-sheet);
+}
