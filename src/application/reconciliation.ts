@@ -455,11 +455,11 @@ function automaticItems(
   componentKey: string,
   previous?: readonly AutomaticItem[],
 ): readonly AutomaticItem[] | undefined {
-  const items: AutomaticItem[] = [];
+  const items = new Map<string, AutomaticItem>();
   for (const item of previous ?? []) {
     const identity = itemIdentity(item.id);
     if (identity !== undefined && !hasCompleteCoverage(snapshot, identity.scope, kind)) {
-      items.push(item);
+      items.set(item.id, item);
     }
   }
   for (const record of snapshot.records) {
@@ -470,17 +470,15 @@ function automaticItems(
     ) {
       continue;
     }
-    if (!hasCompleteCoverage(snapshot, record.scope, kind)) continue;
-    items.push(
-      Object.freeze({
-        ...(record.description === undefined ? {} : { description: record.description }),
-        id: itemId(record.scope, record.key),
-        ...(record.name === undefined ? {} : { name: record.name }),
-      }),
-    );
+    const item = Object.freeze({
+      ...(record.description === undefined ? {} : { description: record.description }),
+      id: itemId(record.scope, record.key),
+      ...(record.name === undefined ? {} : { name: record.name }),
+    });
+    items.set(item.id, item);
   }
-  items.sort((left, right) => compareText(left.id, right.id));
-  return items.length === 0 ? undefined : Object.freeze(items);
+  const sorted = [...items.values()].sort((left, right) => compareText(left.id, right.id));
+  return sorted.length === 0 ? undefined : Object.freeze(sorted);
 }
 
 function hasCompleteCoverage(
@@ -540,26 +538,36 @@ function currentItems(
   return Object.freeze(items);
 }
 
-function ownedPatch(
+function ownedUpdate(
   component: StandardComponent,
   previous: ComponentProjection,
   next: ComponentProjection,
-): StandardComponentPatch {
+): {
+  readonly patch: StandardComponentPatch;
+  readonly projection: ComponentProjection;
+} {
   const patch: Record<string, unknown> = {};
+  const projection: Record<string, unknown> = {};
   for (const field of ["iconDomain", "label", "name", "summary", "type"] as const) {
-    if (component[field] === previous[field] && component[field] !== next[field]) {
+    const owned = component[field] === previous[field];
+    const value = owned ? next[field] : previous[field];
+    if (owned && component[field] !== next[field]) {
       patch[field] = next[field] ?? null;
     }
+    if (value !== undefined) projection[field] = value;
   }
   for (const field of ["actions", "inputs", "outputs"] as const) {
-    if (
-      same(currentItems(component[field]), previous[field]) &&
-      !same(previous[field], next[field])
-    ) {
+    const owned = same(currentItems(component[field]), previous[field]);
+    const value = owned ? next[field] : previous[field];
+    if (owned && !same(previous[field], next[field])) {
       patch[field] = next[field] ?? null;
     }
+    if (value !== undefined) projection[field] = value;
   }
-  return Object.freeze(patch) as StandardComponentPatch;
+  return Object.freeze({
+    patch: Object.freeze(patch) as StandardComponentPatch,
+    projection: Object.freeze(projection) as ComponentProjection,
+  });
 }
 
 function relationshipMatches(
@@ -709,12 +717,6 @@ export function createReconciliationOperations(
           diagnostic("reconciliation-binding-missing", "A durable binding target is missing"),
         );
       }
-      if (
-        priorSource !== undefined &&
-        sameObservationContent(priorSource.snapshot, snapshot.value)
-      ) {
-        return success(Object.freeze({ generation: generation.value, status: "unchanged" }));
-      }
       const componentRecords = snapshot.value.records.filter(
         (record): record is Extract<ObservationRecord, { kind: "component-candidate" }> =>
           record.kind === "component-candidate",
@@ -793,12 +795,12 @@ export function createReconciliationOperations(
           return failure(
             diagnostic("reconciliation-binding-missing", "A component binding target is missing"),
           );
-        const patch = ownedPatch(existing, binding.projection, nextProjection);
-        if (Object.keys(patch).length > 0) {
+        const update = ownedUpdate(existing, binding.projection, nextProjection);
+        if (Object.keys(update.patch).length > 0) {
           componentMutations.push(
             Object.freeze({
               id: binding.componentId,
-              patch: patch as unknown as GraphData,
+              patch: update.patch as unknown as GraphData,
               type: "patch",
             }),
           );
@@ -806,7 +808,7 @@ export function createReconciliationOperations(
         }
         componentBindings.set(
           identity,
-          Object.freeze({ ...binding, present: true, projection: nextProjection }),
+          Object.freeze({ ...binding, present: true, projection: update.projection }),
         );
       }
       for (const [identity, binding] of componentBindings) {
@@ -954,29 +956,35 @@ export function createReconciliationOperations(
           );
           continue;
         }
-        if (
-          relationshipMatches(existing, binding.projection) &&
-          !same(binding.projection, projection)
-        ) {
-          relationshipMutations.push(
-            Object.freeze({
-              relationship: Object.freeze({
-                id: binding.relationId,
-                payload: Object.freeze({}),
-                source,
-                target,
-                type: record.relationshipType,
+        let appliedProjection = binding.projection;
+        if (relationshipMatches(existing, binding.projection)) {
+          if (!same(binding.projection, projection)) {
+            relationshipMutations.push(
+              Object.freeze({
+                relationship: Object.freeze({
+                  id: binding.relationId,
+                  payload: Object.freeze({}),
+                  source,
+                  target,
+                  type: record.relationshipType,
+                }),
+                type: "upsert",
               }),
-              type: "upsert",
-            }),
-          );
-          touchedComponents.add(binding.projection.source);
-          touchedComponents.add(source);
-          touchedRelationships.add(binding.relationId);
+            );
+            touchedComponents.add(binding.projection.source);
+            touchedComponents.add(source);
+            touchedRelationships.add(binding.relationId);
+          }
+          appliedProjection = projection;
         }
         relationshipBindings.set(
           identity,
-          Object.freeze({ ...binding, present: true, projection, removed: false }),
+          Object.freeze({
+            ...binding,
+            present: true,
+            projection: appliedProjection,
+            removed: false,
+          }),
         );
       }
       for (const [identity, binding] of relationshipBindings) {
@@ -1015,6 +1023,16 @@ export function createReconciliationOperations(
         snapshot: snapshot.value,
         sourceKey: key,
       });
+      if (
+        priorSource !== undefined &&
+        sameObservationContent(priorSource.snapshot, snapshot.value) &&
+        same(priorSource.componentBindings, nextSource.componentBindings) &&
+        same(priorSource.relationshipBindings, nextSource.relationshipBindings) &&
+        componentMutations.length === 0 &&
+        relationshipMutations.length === 0
+      ) {
+        return success(Object.freeze({ generation: generation.value, status: "unchanged" }));
+      }
       const sources = evidence.value.sources
         .filter((source) => source.sourceKey !== key)
         .concat(nextSource)

@@ -484,6 +484,7 @@ export function createDefaultBootstrapRegistry(
             });
             const evidence = createMarkdownEvidenceStore({
               bounds: {
+                maxBytes: 4 * 1024 * 1024,
                 maxDepth: defaultHostBounds.maxSnapshotStateDepth,
                 maxValues: defaultHostBounds.maxSnapshotStateValues,
               },

@@ -612,6 +612,175 @@ describe("local completed-snapshot reconciliation", () => {
     expect(components.value.items[0]?.component.inputs).toMatchObject([
       { id: "observation:contracts:contract", name: "contract" },
     ]);
+
+    expect(
+      await host.reconciliation.reconcile(
+        scopedSnapshot(
+          "epoch-partial-observed",
+          [candidate("api", "API"), scopedMember("request")],
+          "partial",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const afterObservedPartial = await host.operations.listComponents({ limit: 10 });
+    expect(afterObservedPartial.ok).toBeTrue();
+    if (!afterObservedPartial.ok) return;
+    expect(afterObservedPartial.value.items[0]?.component.inputs).toMatchObject([
+      { id: "observation:contracts:contract", name: "contract" },
+      { id: "observation:contracts:request", name: "request" },
+    ]);
+  });
+
+  test("advances automatic component ownership only for values applied to canonical state", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-1", [candidate("api", "API")])),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const initial = await host.operations.listComponents({ limit: 10 });
+    expect(initial.ok).toBeTrue();
+    if (!initial.ok) return;
+    const api = initial.value.items[0]!;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: api.revision,
+        id: api.component.id,
+        patch: {
+          inputs: [{ "example.test/note": "curated", id: "curated-input" }],
+          name: "Customer API",
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const observed = snapshot("epoch-2", [
+      candidate("api", "Public API"),
+      member("input", "request", "api"),
+    ]);
+    expect(await host.reconciliation.reconcile(observed)).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const curated = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 1 },
+    });
+    expect(curated.ok).toBeTrue();
+    if (!curated.ok) return;
+    expect(curated.value.item.component).toMatchObject({
+      inputs: [{ extensions: { "example.test/note": "curated" }, id: "curated-input" }],
+      name: "Customer API",
+    });
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: curated.value.item.revision,
+        id: api.component.id,
+        patch: { inputs: null, name: "API" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(await host.reconciliation.reconcile(observed)).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const relinquished = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 1 },
+    });
+    expect(relinquished.ok).toBeTrue();
+    if (!relinquished.ok) return;
+    expect(relinquished.value.item.component).toMatchObject({
+      inputs: [{ id: "observation:workspace:request", name: "request" }],
+      name: "Public API",
+    });
+  });
+
+  test("keeps curated relationship ownership at the last applied projection", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-1", [
+          candidate("api", "API"),
+          candidate("cache", "Cache"),
+          candidate("data", "Data"),
+          relationship("api-dependency", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    const api = components.value.items.find((item) => item.component.name === "API")!;
+    const cache = components.value.items.find((item) => item.component.name === "Cache")!;
+    const data = components.value.items.find((item) => item.component.name === "Data")!;
+    const initial = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(initial.ok).toBeTrue();
+    if (!initial.ok) return;
+    const relation = initial.value.relationships.items[0]!.relationship;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: initial.value.item.revision,
+        id: api.component.id,
+        patch: {},
+        relationships: {
+          upsert: [
+            {
+              description: "Curated dependency",
+              id: relation.id,
+              target: data.component.id,
+              type: relation.type,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const movedObservation = snapshot("epoch-2", [
+      candidate("api", "API"),
+      candidate("cache", "Cache"),
+      candidate("data", "Data"),
+      relationship("api-dependency", "api", "cache"),
+    ]);
+    expect(await host.reconciliation.reconcile(movedObservation)).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const curated = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(curated.ok).toBeTrue();
+    if (!curated.ok) return;
+    expect(curated.value.relationships.items[0]?.relationship).toMatchObject({
+      description: "Curated dependency",
+      target: data.component.id,
+    });
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: curated.value.item.revision,
+        id: api.component.id,
+        patch: {},
+        relationships: {
+          upsert: [{ id: relation.id, target: data.component.id, type: relation.type }],
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(await host.reconciliation.reconcile(movedObservation)).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const relinquished = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(relinquished.ok).toBeTrue();
+    if (!relinquished.ok) return;
+    expect(relinquished.value.relationships.items[0]?.relationship).toMatchObject({
+      target: cache.component.id,
+    });
+    expect(relinquished.value.relationships.items[0]?.relationship.description).toBeUndefined();
   });
 
   test("does not resurrect a curated relationship after explicit removal", async () => {
