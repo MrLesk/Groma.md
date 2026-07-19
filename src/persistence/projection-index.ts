@@ -324,6 +324,7 @@ export function createLocalProjectionIndex(
   const selected = resolveBounds(options.bounds);
   let current: ProjectionSnapshot | undefined;
   const rebuild = async (): Promise<Result<ProjectionSnapshot>> => {
+    current = undefined;
     const source = await options.canonical.snapshot();
     if (!source.ok) return source;
     const canonical = normalizeCanonical(source.value, selected);

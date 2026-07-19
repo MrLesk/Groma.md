@@ -1855,7 +1855,7 @@ describe("projection query engine", () => {
     ).toMatchObject({ diagnostics: [{ code: "graph-query-unavailable" }], ok: false });
   });
 
-  test("queries equivalent rebuilt and incrementally updated projections without canonical mutation", async () => {
+  test("retries a failed committed rebuild and keeps equivalent projections canonical-neutral", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "groma-query-engine-"));
     roots.push(root);
     const resources = await createLocalResourceProvider({ workspaceRoot: root });
@@ -1881,7 +1881,9 @@ describe("projection query engine", () => {
     const beforeQueries = JSON.stringify(source.value);
     const event = createGraphCommittedEvent(2, { entities: [ids.b], relations: [ids.r2] });
     if (!event.ok) throw new Error("invalid event fixture");
-    expect((await projection.update(event.value)).ok).toBeTrue();
+    source.failures = 1;
+    expect(await projection.update(event.value)).toMatchObject({ ok: false });
+    expect(await projection.load()).toMatchObject({ ok: true, value: { generation: 2 } });
     const beforeIncrementalQueries = source.calls;
     const incrementalPages = await representativePages(query);
     expect(source.calls).toBe(beforeIncrementalQueries);
@@ -1918,6 +1920,7 @@ function canonical(
 
 class MutableCanonicalSource implements ProjectionCanonicalSource {
   calls = 0;
+  failures = 0;
   value: ProjectionCanonicalSnapshot;
 
   constructor(value: ProjectionCanonicalSnapshot) {
@@ -1926,6 +1929,10 @@ class MutableCanonicalSource implements ProjectionCanonicalSource {
 
   async snapshot() {
     this.calls += 1;
+    if (this.failures > 0) {
+      this.failures -= 1;
+      return failure({ code: "fixture-canonical-unavailable", message: "Unavailable" });
+    }
     return success(this.value);
   }
 }

@@ -58,7 +58,7 @@ export interface ScannerRuntimeRecoveryReport {
   readonly consumed: number;
 }
 export interface CompletedObservationConsumer {
-  consume(snapshot: CompletedObservationSnapshot): Promise<Result<void>>;
+  consume(snapshot: CompletedObservationSnapshot, cancellation: AbortSignal): Promise<Result<void>>;
 }
 export type ScannerProjectResourcesFactory = (
   project: ProjectRegistrationSnapshot,
@@ -170,6 +170,7 @@ export function createScannerExecutionRuntime(
   const selected = resolveBounds(options.bounds);
   const catalog = providers(options.plugins);
   const active = new Map<string, ScannerExecutionSession>();
+  const reservations = new Set<string>();
   let stopping = false;
   const recover = async () =>
     success(Object.freeze({ abandoned: 0, acknowledged: 0, consumed: 0 }));
@@ -191,6 +192,8 @@ export function createScannerExecutionRuntime(
       return failure(
         diagnostic("invalid-scanner-execution-request", "Scanner execution request is invalid"),
       );
+    if (request.cancellation?.aborted)
+      return failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled"));
     let projectResult: Result<ProjectRegistrationSnapshot>;
     try {
       projectResult = await options.projects.get({ id: request.projectId });
@@ -200,6 +203,8 @@ export function createScannerExecutionRuntime(
       );
     }
     if (!projectResult.ok) return projectResult;
+    if (request.cancellation?.aborted)
+      return failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled"));
     const project = projectResult.value;
     if (project.availability !== "available")
       return failure(
@@ -216,27 +221,38 @@ export function createScannerExecutionRuntime(
         diagnostic("scanner-provider-unavailable", "Configured scanner provider is unavailable"),
       );
     const key = JSON.stringify([project.id, provider.pluginId]);
-    if (active.has(key))
+    if (active.has(key) || reservations.has(key))
       return failure(
         diagnostic(
           "scanner-session-conflict",
           "A scanner execution is already active for this project and scanner",
         ),
       );
+    reservations.add(key);
+    function releaseReservation<T>(result: Result<T>): Result<T> {
+      reservations.delete(key);
+      return result;
+    }
     let resources: Result<ScannerProjectResources>;
     try {
       resources = await options.projectResources(project);
     } catch {
-      return failure(
-        diagnostic(
-          "scanner-project-resources-unavailable",
-          "Scanner project resources are unavailable",
+      return releaseReservation(
+        failure(
+          diagnostic(
+            "scanner-project-resources-unavailable",
+            "Scanner project resources are unavailable",
+          ),
         ),
       );
     }
-    if (!resources.ok) return resources;
+    if (!resources.ok) return releaseReservation(resources);
+    if (request.cancellation?.aborted)
+      return releaseReservation(
+        failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled")),
+      );
     const createdEpoch = epoch(options.entropy);
-    if (!createdEpoch.ok) return createdEpoch;
+    if (!createdEpoch.ok) return releaseReservation(createdEpoch);
     const begin = Object.freeze({
       apiVersion: observationSessionApiVersion,
       epoch: createdEpoch.value,
@@ -253,10 +269,11 @@ export function createScannerExecutionRuntime(
       }),
     });
     const created = createObservationSession(begin);
-    if (!created.ok) return created;
+    if (!created.ok) return releaseReservation(created);
     const observation = created.value;
     let status: ScannerExecutionStatus = "running";
     let cancelled = false;
+    const cancellationController = new AbortController();
     let resolveCancellation!: () => void;
     const cancellation = new Promise<void>((resolve) => {
       resolveCancellation = resolve;
@@ -279,6 +296,7 @@ export function createScannerExecutionRuntime(
     const cancel = () => {
       if (status !== "running") return;
       cancelled = true;
+      cancellationController.abort();
       observation.cancel({ epoch: begin.epoch, sequence: observation.inspect().lastSequence + 1 });
       resolveCancellation();
     };
@@ -317,25 +335,30 @@ export function createScannerExecutionRuntime(
         session: begin,
       }),
     );
-    if (!scannerRequest.ok) return scannerRequest;
+    if (!scannerRequest.ok) return releaseReservation(scannerRequest);
     const timeout = setTimeout(cancel, selected.maxDurationMilliseconds);
     const abort = () => cancel();
     request.cancellation?.addEventListener("abort", abort, { once: true });
+    if (request.cancellation?.aborted) cancel();
     const completion = (async (): Promise<ScannerExecutionReport> => {
       const failures: Diagnostic[] = [];
-      let scan: Promise<unknown>;
-      try {
-        scan = Promise.resolve(provider.scan.call(provider.receiver, scannerRequest.value));
-      } catch {
-        scan = Promise.reject(new Error("scanner threw"));
-      }
-      const settled = await Promise.race([
-        scan.then(
-          (value) => ({ type: "scan" as const, value }),
-          () => ({ type: "rejected" as const }),
-        ),
-        cancellation.then(() => ({ type: "cancelled" as const })),
-      ]);
+      const settled = cancelled
+        ? ({ type: "cancelled" } as const)
+        : await (async () => {
+            let scan: Promise<unknown>;
+            try {
+              scan = Promise.resolve(provider.scan.call(provider.receiver, scannerRequest.value));
+            } catch {
+              scan = Promise.reject(new Error("scanner threw"));
+            }
+            return Promise.race([
+              scan.then(
+                (value) => ({ type: "scan" as const, value }),
+                () => ({ type: "rejected" as const }),
+              ),
+              cancellation.then(() => ({ type: "cancelled" as const })),
+            ]);
+          })();
       if (settled.type === "cancelled") status = "cancelled";
       else if (
         settled.type === "rejected" ||
@@ -356,21 +379,25 @@ export function createScannerExecutionRuntime(
             ),
           );
         } else {
-          let consumed: Result<void>;
-          try {
-            consumed = await options.consumer.consume(snapshot.value);
-          } catch {
-            consumed = failure(
-              diagnostic(
-                "scanner-handoff-consumer-failed",
-                "Completed scanner observations could not be consumed",
-              ),
-            );
-          }
-          if (consumed.ok) status = "completed";
+          const consumed = await Promise.race([
+            Promise.resolve()
+              .then(() => options.consumer.consume(snapshot.value, cancellationController.signal))
+              .catch(() =>
+                failure(
+                  diagnostic(
+                    "scanner-handoff-consumer-failed",
+                    "Completed scanner observations could not be consumed",
+                  ),
+                ),
+              )
+              .then((result) => ({ result, type: "consumed" as const })),
+            cancellation.then(() => ({ type: "cancelled" as const })),
+          ]);
+          if (consumed.type === "cancelled") status = "cancelled";
+          else if (consumed.result.ok) status = "completed";
           else {
             status = "failed";
-            failures.push(...consumed.diagnostics);
+            failures.push(...consumed.result.diagnostics);
           }
         }
       }
@@ -384,6 +411,7 @@ export function createScannerExecutionRuntime(
       });
     })();
     const session = Object.freeze({ cancel, completion, inspect });
+    reservations.delete(key);
     active.set(key, session);
     return success(session);
   };
