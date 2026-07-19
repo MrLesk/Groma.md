@@ -1,11 +1,11 @@
 ---
 id: GROM-41
 title: Reconcile observations without destroying intent
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 16:55'
+updated_date: '2026-07-19 16:57'
 labels: []
 milestone: m-3
 dependencies:
@@ -59,3 +59,9 @@ A third automatic Codex pass found four supported-boundary issues. Fixed all fou
 
 The awaited online Codex pass found three final fail-closed issues. Fixed all three: indeterminate reconciliation now remains an explicit scanner report with its recovery token; present null evidence is rejected rather than treated as an absent evidence plane; and evidence is limited to half the shared snapshot-value envelope while retaining the 4 MiB byte cap. Regression coverage was added. Verification after fixes: bun run check passed with 399 tests and bun run check:targets passed for all four targets. Per Alex's amended review policy, subsequent automatic Codex passes are not awaited after these reviewed fixes; green CI is the remaining merge gate.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented bounded completed-snapshot reconciliation for the built-in scanner: stable opaque component and relationship bindings, scanner-owned field refresh with curated override preservation and explicit relinquishment, source-scoped complete/partial coverage, fail-closed references and malformed evidence, atomic evidence/intent publication, conflict retry, and recoverable indeterminate scan reports. Verified with 399 passing tests, formatting, typecheck, architecture boundaries, compiled binary smoke/crash recovery, all four target builds, two Terra xhigh reviews, one Claude attempt, the awaited Codex review findings, and green PR CI. Merged in PR #44.
+<!-- SECTION:FINAL_SUMMARY:END -->
