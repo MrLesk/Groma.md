@@ -188,6 +188,12 @@ interface PackageEntryEvidence {
   readonly target: string;
 }
 
+interface WorkspaceEvidence {
+  readonly owner?: PackageEvidence;
+  readonly patterns: readonly string[];
+  readonly root: string;
+}
+
 interface ModuleAliasRule {
   readonly key: string;
   readonly targets: readonly string[];
@@ -894,7 +900,9 @@ function parseTsconfig(text: string): Readonly<{
   });
   if (stripped === undefined) return invalid;
   try {
-    const parsed: unknown = JSON.parse(stripTrailingCommas(stripped));
+    const normalized = stripTrailingCommas(stripped);
+    if (hasDuplicateJsonKeys(normalized)) return invalid;
+    const parsed: unknown = JSON.parse(normalized);
     if (!hasOwnDataRecord(parsed)) return invalid;
     let unsafe = Object.hasOwn(parsed, "extends");
     let partial = unsafe;
@@ -1443,12 +1451,14 @@ function matchingResources(
     `${base}.cts`,
     `${base}.js`,
     `${base}.jsx`,
+    `${base}.mjs`,
     `${base}/index.ts`,
     `${base}/index.tsx`,
     `${base}/index.mts`,
     `${base}/index.cts`,
     `${base}/index.js`,
     `${base}/index.jsx`,
+    `${base}/index.mjs`,
   ]);
   if (/\.[cm]?jsx?$/.test(base)) {
     const stem = base.replace(/\.[cm]?jsx?$/, "");
@@ -1640,11 +1650,12 @@ function workspacePatterns(
   const patterns: string[] = [];
   const seen = new Set<string>();
   for (const item of candidate) {
-    if (!validatePattern(item) || item === "." || seen.has(item)) {
+    const normalized = normalizeTsconfigRelativeValue(item);
+    if (!validatePattern(normalized) || normalized === "." || seen.has(normalized)) {
       return Object.freeze({ partial: true, patterns: Object.freeze([]) });
     }
-    seen.add(item);
-    patterns.push(item);
+    seen.add(normalized);
+    patterns.push(normalized);
   }
   return Object.freeze({
     partial: false,
@@ -1704,43 +1715,55 @@ function parsePackage(
   readonly description?: string;
   readonly package?: PackageEvidence;
   readonly partial: boolean;
+  readonly workspace?: WorkspaceEvidence;
 }> {
   try {
     const parsed: unknown = JSON.parse(file.text);
     if (!hasOwnDataRecord(parsed) || hasDuplicateJsonKeys(file.text)) {
       return Object.freeze({ partial: true });
     }
-    const name = parsed.name;
-    if (typeof name !== "string" || !validObservationText(name, 256)) {
-      return Object.freeze({ partial: true });
-    }
-    const entries = packageEntries(parsed, file.resource, resources);
-    const imports = packageImportRules(parsed.imports);
     const root = dirname(file.resource);
     const workspaces =
       root === scopeRoot
         ? workspacePatterns(parsed.workspaces)
         : Object.freeze({ partial: false, patterns: Object.freeze([]) });
+    const workspace =
+      root === scopeRoot && parsed.workspaces !== undefined
+        ? Object.freeze({ patterns: workspaces.patterns, root })
+        : undefined;
+    const name = parsed.name;
+    if (typeof name !== "string" || !validObservationText(name, 256)) {
+      return Object.freeze({
+        partial: name !== undefined || workspace === undefined || workspaces.partial,
+        ...(workspace === undefined ? {} : { workspace }),
+      });
+    }
+    const entries = packageEntries(parsed, file.resource, resources);
+    const imports = packageImportRules(parsed.imports);
+    const packageEvidence: PackageEvidence = Object.freeze({
+      entries: entries.entries,
+      imports: Object.freeze({
+        baseResource: root,
+        fallback: false,
+        rules: imports.rules,
+        unknown: imports.unknown,
+      }),
+      name,
+      provenance: fullProvenance(file),
+      resource: file.resource,
+      root,
+      scope: file.scope,
+      workspacePatterns: workspaces.patterns,
+    });
     return Object.freeze({
       ...(typeof parsed.description === "string" && parsed.description.length > 0
         ? { description: parsed.description }
         : {}),
-      package: Object.freeze({
-        entries: entries.entries,
-        imports: Object.freeze({
-          baseResource: root,
-          fallback: false,
-          rules: imports.rules,
-          unknown: imports.unknown,
-        }),
-        name,
-        provenance: fullProvenance(file),
-        resource: file.resource,
-        root,
-        scope: file.scope,
-        workspacePatterns: workspaces.patterns,
-      }),
+      package: packageEvidence,
       partial: entries.partial || imports.partial || workspaces.partial,
+      ...(workspace === undefined
+        ? {}
+        : { workspace: Object.freeze({ ...workspace, owner: packageEvidence }) }),
     });
   } catch {
     return Object.freeze({ partial: true });
@@ -1823,7 +1846,7 @@ function unsupportedVariableCallableNames(node: AstNode): readonly string[] {
       isAstNode(initializer) &&
       (initializer.type === "ArrowFunctionExpression" || initializer.type === "FunctionExpression");
     const declarationCallable =
-      !isAstNode(initializer) &&
+      !runtimeCallable &&
       isAstNode(declaration.id) &&
       directCallableType(declaration.id.typeAnnotation);
     if (name !== undefined && ((runtimeCallable && node.kind !== "const") || declarationCallable)) {
@@ -2048,6 +2071,7 @@ function analyzeLexicalUsage(root: AstNode, consume: () => void): LexicalUsageAn
       const rootName = commonJsMemberRoot(node, consume);
       bounded &&= rootName.bounded;
       if (rootName.name !== undefined) uses.push(commonJsUse(scope, rootName.name));
+      if (identifierName(node.object) === "require") uses.push(commonJsUse(scope, "require"));
     }
     if (
       (node.type === "CallExpression" || node.type === "OptionalCallExpression") &&
@@ -3171,6 +3195,7 @@ async function scanScope(
     }
   };
   const packages: PackageEvidence[] = [];
+  const workspaceDeclarations: WorkspaceEvidence[] = [];
   const packageDescriptions = new Map<string, string>();
   for (const resource of inventory.files.filter((item) => basename(item) === "package.json")) {
     chargeExtractionWork(budget);
@@ -3178,6 +3203,7 @@ async function scanScope(
     if (file === undefined) continue;
     const parsed = parsePackage(file, resourceSet, root);
     partial ||= parsed.partial;
+    if (parsed.workspace !== undefined) workspaceDeclarations.push(parsed.workspace);
     if (parsed.package !== undefined) {
       packages.push(parsed.package);
       if (parsed.description !== undefined)
@@ -3185,6 +3211,7 @@ async function scanScope(
     }
   }
   packages.sort((left, right) => compareCodeUnits(left.root, right.root));
+  workspaceDeclarations.sort((left, right) => compareCodeUnits(left.root, right.root));
   const sourceFiles = inventory.files.filter((item) => sourceExtensionPattern.test(item));
   const boundaryBuilders = new Map<
     string,
@@ -3306,22 +3333,15 @@ async function scanScope(
       );
     } else if (description !== undefined) partial = true;
   }
-  for (const declaration of packages) {
+  for (const declaration of workspaceDeclarations) {
     chargeExtractionWork(budget);
-    if (declaration.workspacePatterns.length === 0) continue;
-    const fromKey = observationKey(
-      "component-candidate",
-      scope,
-      "package",
-      declaration.root,
-      declaration.name,
-    );
+    if (declaration.patterns.length === 0) continue;
     for (const member of packages) {
       chargeExtractionWork(budget);
-      if (member === declaration || member.root === declaration.root) continue;
+      if (member.root === declaration.root) continue;
       const relativeMember = relativeResource(member.root, declaration.root);
       if (relativeMember === undefined || relativeMember === ".") continue;
-      const matches = declaration.workspacePatterns.filter((pattern) => {
+      const matches = declaration.patterns.filter((pattern) => {
         chargeExtractionWork(budget);
         return workspacePatternMatches(relativeMember, pattern);
       });
@@ -3331,6 +3351,14 @@ async function scanScope(
       }
       if (matches.length !== 1) continue;
       workspaceMemberPackages.add(member);
+      if (declaration.owner === undefined) continue;
+      const fromKey = observationKey(
+        "component-candidate",
+        scope,
+        "package",
+        declaration.owner.root,
+        declaration.owner.name,
+      );
       const toKey = observationKey(
         "component-candidate",
         scope,
@@ -3343,7 +3371,7 @@ async function scanScope(
           from: reference(scope, fromKey),
           key: observationKey("relationship", scope, "workspace-member", fromKey, toKey),
           kind: "relationship",
-          provenance: Object.freeze([declaration.provenance, member.provenance]),
+          provenance: Object.freeze([declaration.owner.provenance, member.provenance]),
           relationshipType: "workspace-member",
           scope,
           to: reference(scope, toKey),
@@ -3683,13 +3711,15 @@ async function scanScope(
           partial = true;
           continue;
         } else {
+          const builtinName = nodeBuiltinName(imported.source);
           const runtimeSpecifier =
-            imported.source.startsWith("node:") || imported.source.startsWith("bun:");
+            builtinName !== undefined ||
+            imported.source.startsWith("node:") ||
+            imported.source.startsWith("bun:");
           if (owner === undefined && !runtimeSpecifier) {
             partial = true;
             continue;
           }
-          const builtinName = nodeBuiltinName(imported.source);
           const externalName = builtinName ?? externalPackageName(imported.source);
           if (externalName === undefined || !validObservationText(externalName, 256)) {
             partial = true;

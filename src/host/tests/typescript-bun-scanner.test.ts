@@ -650,6 +650,7 @@ export function publicApi() {}
         { name: "api", type: "source-boundary" },
         { name: "bun:sqlite", type: "external" },
         { name: "domain", type: "source-boundary" },
+        { name: "node:domain", type: "external" },
         { name: "node:fs", type: "external" },
       ]),
     );
@@ -662,7 +663,7 @@ export function publicApi() {}
       result.snapshot?.records.filter(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
       ) ?? [];
-    expect(imports).toHaveLength(3);
+    expect(imports).toHaveLength(4);
     expect(imports.some((record) => record.provenance.length === 2)).toBeTrue();
     expect(
       result.snapshot?.records
@@ -672,7 +673,7 @@ export function publicApi() {}
             : [],
         )
         .sort(),
-    ).toEqual(["bun:sqlite", "node:fs"]);
+    ).toEqual(["bun:sqlite", "node:domain", "node:fs"]);
     expect(
       result.snapshot?.records.some(
         (record) => record.kind === "action" && record.name === "ROUTE /health",
@@ -3187,6 +3188,141 @@ export function shared() {}
     expect(
       importedObject.snapshot?.records.some(
         (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
+  });
+
+  test("marks duplicate root tsconfig keys partial without scanning the affected scope", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "duplicate-tsconfig" }),
+      "src/index.ts": "export function api() {}\n",
+      "tsconfig.json": '{"include":["src/**"],"include":["other/**"]}',
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(result.snapshot?.records).toEqual([]);
+  });
+
+  test("resolves extensionless runtime mjs file and index targets", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({
+        exports: { ".": "./src/file", "./directory": "./src/directory" },
+        name: "mjs-resolution",
+      }),
+      "src/directory/index.mjs": "export function directoryApi() {}\n",
+      "src/file.mjs": "export function fileApi() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["directoryApi", "fileApi"]);
+  });
+
+  test("marks unshadowed require member surfaces partial", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.js", name: "require-member" }),
+      "src/index.js": "void require.cache;\nexport function publicApi() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["publicApi"]);
+  });
+
+  test("discovers workspace members when the root manifest has no package name", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ private: true, workspaces: ["packages/*"] }),
+      "packages/api/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/api",
+      }),
+      "packages/api/src/index.ts":
+        'import { model } from "@fixture/model";\nexport function api() { return model; }\n',
+      "packages/model/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/model",
+      }),
+      "packages/model/src/index.ts": "export const model = true;\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "component-candidate" && record.candidate.type === "external",
+      ),
+    ).toBeFalse();
+  });
+
+  test("marks indirectly initialized function-typed public consts partial", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "typed-const" }),
+      "src/index.ts": [
+        "const createApi = () => () => true;",
+        "export const indirectApi: () => boolean = createApi();",
+        "export function safeApi() {}",
+      ].join("\n"),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["safeApi"]);
+  });
+
+  test("classifies bare Node builtins as runtime imports in source-only scopes", async () => {
+    const result = await scan({
+      "src/index.ts": 'import fs from "fs";\nvoid fs;\nexport function api() {}\n',
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.type === "external" &&
+          record.candidate.name === "node:fs",
+      ),
+    ).toBeTrue();
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+  });
+
+  test("normalizes a safe leading relative workspace pattern", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ name: "@fixture/root", workspaces: ["./packages/*"] }),
+      "packages/member/package.json": JSON.stringify({ name: "@fixture/member" }),
+      "packages/member/src/index.ts": "export const member = true;\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records.some(
+        (record) =>
+          record.kind === "relationship" && record.relationshipType === "workspace-member",
       ),
     ).toBeTrue();
   });
