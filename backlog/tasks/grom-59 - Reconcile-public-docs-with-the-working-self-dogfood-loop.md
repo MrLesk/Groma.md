@@ -1,11 +1,11 @@
 ---
 id: GROM-59
 title: Reconcile public docs with the working self-dogfood loop
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-19 18:12'
-updated_date: '2026-07-19 18:30'
+updated_date: '2026-07-19 18:35'
 labels:
   - documentation
   - self-dogfood
@@ -60,4 +60,12 @@ Alex explicitly decided that MANIFESTO.md contains no implementation state (what
 Bounded pre-PR review completed with exactly two independent Terra xhigh passes and one local Claude pass. Terra identified and we fixed the interactive-TTY boundary, deferred history wording, and the shipped visual's technical node-count label. Claude identified the manifesto's rollout/status contradiction; Alex then explicitly defined the manifesto as timeless canonical vision, authorizing removal of version, shipped-iteration, future-renderer, interface-freeze, and eventual-canonicalization language.
 
 Final verification after those fixes: Prettier passed; `bun run check` passed with 402 tests and 2642 expectations; two more self-scans completed with 65 records and 2 signals while the complete `groma/` tree digest stayed `a1561c518e4c5907148b5769309e0a5cc6e3cffea9fa8b10057585888d75b8fd` before and after both runs.
+
+Ready PR #47 passed all three CI jobs and the first automatic Codex review completed with 👍 and no findings. PR merged as `936dea91b777b1c2925682a0ff5f8fba05e7e392`.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Reconciled the public documentation with the working self-dogfood loop and Alex's plain-language rewrite. The manifesto is now timeless canonical vision with release/status/roadmap language removed; implementation guidance accurately bounds the interactive local visual; stale glossary history and node-language claims were corrected; and the retired GROMA.md guide has no live references. Verified with Prettier, `bun run check` (402 tests, 2642 expectations), two repeated 65-record self-scans with an unchanged canonical tree digest, exactly two Terra xhigh reviews, one Claude review, green CI, and the accepted first automatic Codex review on PR #47.
+<!-- SECTION:FINAL_SUMMARY:END -->
