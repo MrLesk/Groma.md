@@ -50,4 +50,22 @@ describe("local blueprint HTML", () => {
     expect(first.html).not.toContain("https://");
     expect(first.html).not.toContain("linear-gradient");
   });
+
+  test("presents the sheet inside a pannable zoomable canvas with disposable view state", () => {
+    const rendered = renderBlueprintHtml(fixture);
+    expect(rendered.ok).toBeTrue();
+    if (!rendered.ok) return;
+    expect(rendered.html).toContain('class="viewport" id="viewport"');
+    expect(rendered.html).toContain('class="stage" id="stage"');
+    expect(rendered.html).toContain('id="fit"');
+    expect(rendered.html).toContain('aria-label="Zoom in"');
+    expect(rendered.html).toContain('aria-label="Zoom out"');
+    expect(rendered.html).toContain("overflow:hidden");
+    expect(rendered.html).toContain("The view is never saved.");
+    expect(rendered.html).not.toContain("localStorage");
+    expect(rendered.html).not.toContain("sessionStorage");
+    expect(rendered.html).not.toContain("indexedDB");
+    expect(rendered.html).not.toContain("document.cookie");
+    expect(rendered.html).not.toContain("fetch(");
+  });
 });
