@@ -1,11 +1,11 @@
 ---
 id: GROM-47
 title: Automatically blueprint codex-events
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 20:44'
+updated_date: '2026-07-19 20:51'
 labels: []
 milestone: m-4
 dependencies:
@@ -61,3 +61,9 @@ The required pre-PR reviews completed exactly once each. The Terra product/simpl
 
 Focused scanner and CLI regressions passed 66 tests / 801 assertions, including atomic publication of 120 accepted routes alongside a 65-route area whose actions fail closed without failing the scan. The final complete gate passed 412 tests / 2,755 assertions plus formatting, TypeScript, architecture boundaries, build, smoke, and compiled crash recovery. Final codex-events output repeated byte-stably after the review fixes. Groma's own compiled self-scan advanced once for the changed scanner evidence and repeated byte-stably at generation 137 with 51 components, 139 relationships, and 158 actions.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Delivered the clean codex-events automatic-blueprint slice in PR #52. The exact clean Nuxt generated-reference aggregator now activates existing TypeScript scanning without reading generated state; explicit method-suffixed server routes become evidence-backed HTTP actions grouped into readable /api areas. Conflicting and over-dense areas fail closed as partial without breaking atomic publication. Compiled dogfood produced 92 components, 149 relationships, and 171 actions, repeated byte-stably, and preserved the last complete blueprint on failure. Full CI and the required two Terra xhigh reviews, Claude review, and first automatic Codex review passed.
+<!-- SECTION:FINAL_SUMMARY:END -->
