@@ -1,10 +1,11 @@
 ---
 id: GROM-48
-title: Verify and package the automatic-blueprint aha release
-status: To Do
-assignee: []
-created_date: "2026-07-14 19:59"
-updated_date: "2026-07-14 23:05"
+title: Package and verify standalone preview artifacts
+status: In Progress
+assignee:
+  - '@codex'
+created_date: '2026-07-14 19:59'
+updated_date: '2026-07-19 21:04'
 labels: []
 milestone: m-3
 dependencies:
@@ -24,22 +25,30 @@ ordinal: 45000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-
-Close Iteration 2 with black-box proof that a friend can run one standalone Groma binary on an unfamiliar TypeScript or Bun project and quickly receive an understandable, correct, evidence-grounded local blueprint before asking an agent to improve its intent.
+Turn the already-supported standalone targets into one deterministic local preview package and prove the host-compatible executable completes the public init -> scan -> groma visual loop on a clean held-out TypeScript project. This is packaging and verification only: no benchmark score, installer, updater, publication workflow, network access, or expanded platform promise.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
-
 <!-- AC:BEGIN -->
-
-- [ ] #1 From a clean checkout and a held-out project with no Groma state, the standalone executable completes the documented groma init, groma scan, groma workflow and opens a bounded local visual blueprint without Bun installed, AI calls, network inference, uploads, or human correction
-- [ ] #2 The held-out project and Groma results pass the recorded aha benchmark with zero critical false architectural claims and the recorded time-to-first-understandable-visual target
-- [ ] #3 Black-box scenarios cover unchanged rescan, implementation rename or move, disappearance and reappearance, overlapping observations, partial coverage, explicit binding, ambiguity, cancellation, crash, projection rebuild, focus navigation, and structured evidence inspection
-- [ ] #4 The friend workflow demonstrates that dense main-layer presentation remains readable while focus and detail views expose deeper structure without changing canonical meaning
-- [ ] #5 One runner cross-compiles exact standalone artifacts for macOS arm64, Linux x64 baseline, Windows x64 baseline, and Windows arm64, and the host-compatible artifact runs the complete workflow without an installed Bun runtime
-- [ ] #6 User documentation shows the no-AI first-run experience and how to inspect intent, raw evidence, automatic architecture, uncertainty, and coverage before optional agent curation
-- [ ] #7 The Iteration 2 release resolves and records the scheduled state-taxonomy, plaintext-grammar, and local-artifact main-layer, focus, and expansion budget decisions from the local prototype; verifies the bounded initial 256-bucket evidence strategy; leaves browser retained-node limits unfrozen until the End of Iteration 4; and defers organization-scale fanout and browser evidence to GROM-53
-- [ ] #8 Iteration 2 release notes scope the supported first-run path to one active CLI process, identify concurrent independent read processes as a known fail-closed limitation owned by GROM-31, and black-box overlapping-access checks prove canonical state remains byte-for-byte unchanged without claiming that concurrent reads work
-- [ ] #9 Iteration 2 release notes declare a preview schema contract: incompatible canonical schemas fail closed with an actionable diagnostic, no silent or in-place migration is promised before GROM-27, and upgrade guidance tells users how to preserve or export state before changing versions
-
+- [x] #1 One command builds all four already-supported standalone targets into stable target-specific filenames without serial overwrite and emits a deterministically ordered checksum manifest.
+- [x] #2 The matching packaged executable runs directly, without an installed runtime in the child process, through clean init and scan and returns the bounded evidence-grounded hierarchy used by bare groma; the existing presentation composition renders that hierarchy as deterministic self-contained HTML without opening a browser during verification.
+- [x] #3 Packaging fails on missing, empty, duplicate, or unsorted artifact outputs and relies on Bun target compilation plus matching-host runtime proof rather than custom executable-format parsers.
+- [x] #4 User and contributor documentation explains how to build and inspect the local preview package, states the supported target boundary, and does not claim publication or native runtime proof for cross-compiled targets.
+- [x] #5 The release proof reuses existing scanner, presentation, smoke, and target verification paths, replacing the old certification-style matrix with a small end-to-end fixture and no new framework or fallback path.
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Replace serial cross-target overwrite with one packaging command that retains stable target-named artifacts and writes a sorted checksum manifest using the existing standalone compiler. 2. Extend compiled smoke to exercise the matching artifact’s interactive bounded overview through PTY/ConPTY, while reusing the existing deterministic HTML presentation fixture. 3. Update CI and concise public/development documentation for the unpublished package and remove stale roadmap claims without changing the timeless manifesto. 4. Run focused and full verification, then use packaged Groma on its own repository to inspect bounded complexity and byte stability. 5. Complete exactly two Terra xhigh reviews and one Claude review before the ready PR, then follow the bounded one-Codex-review merge workflow.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Replaced the serial target verifier, which repeatedly erased dist and restored a native binary, with one package command that retains four sorted target-named artifacts and writes SHA256SUMS. The matching packaged process now exercises version, help, clean init, scan, component read, and an interactive-terminal JSON overview through Bun PTY; the existing Iteration 1A presentation composition writes and validates deterministic self-contained HTML without launching a browser. No installer, publisher, updater, environment test hook, custom binary parser, or benchmark framework was added. MANIFESTO.md was audited and left unchanged because it contains canonical vision and semantic uses of present/current, not delivery state.
+
+Pre-PR review completed with exactly two independent gpt-5.6-terra xhigh passes and one Claude pass. Both Terra reviewers found the same Windows omission in the packaged PTY overview proof; the platform guard was removed so the native Windows smoke now uses Bun ConPTY, with terminal framing normalized before JSON validation. Claude found no blocking issue; accepted feedback added a 15-second PTY timeout, moved package mechanics below the simple native README build, and documented that packaging intentionally leaves target-named artifacts. Rejected restoring the deleted README roadmap because its claimed next evidence work is already shipped, and rejected a smoke fallback in favor of explicit composition.
+
+Final post-review validation passed: bun run check completed formatting, strict types, architecture boundaries, 412 tests / 2,755 assertions, native standalone smoke, full compiled Iteration 1A workflow, and crash recovery. bun run package retained four non-empty target artifacts plus a sorted SHA256SUMS and exercised the matching packaged executable through init, scan, component read, and PTY overview plus deterministic HTML composition. Final packaged self-dogfood reached generation 140 with 65 observations and a bounded 51-component blueprint; the repeated scan left every canonical byte unchanged.
+<!-- SECTION:NOTES:END -->

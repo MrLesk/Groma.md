@@ -32,8 +32,8 @@ bun run test          # Bun tests
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
-bun run check:targets # cross-compile every baseline target and run the host-compatible one
 bun run build         # compile the native standalone executable to dist/groma
+bun run package       # package every baseline target with a checksum manifest
 bun run smoke         # verify one native artifact and the public init -> scan -> read workflow
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
 bun run check         # run every required local verification gate
@@ -104,16 +104,17 @@ Add deeper fixture or golden-output directories only when a test suite demonstra
 ## Build Targets
 
 One binary is produced per target; "single-file" describes the runtime artifact, not one
-universal binary for every operating system. The target matrix proves cross-compilation, one
-exact artifact, and the executable format and architecture shown below. It does not claim
-native runtime verification for an artifact the current runner cannot execute.
+universal binary for every operating system. `bun run package` retains all four artifacts under
+stable target-specific names and writes their SHA-256 digests to `dist/SHA256SUMS`. Successful Bun
+cross-compilation and a non-empty artifact prove packaging for each target. They do not claim native
+runtime verification for an artifact the current runner cannot execute.
 
-| Bun target                 | Packaged baseline artifact          | Matrix proof                                               |
-| -------------------------- | ----------------------------------- | ---------------------------------------------------------- |
-| `bun-darwin-arm64`         | Apple Silicon macOS executable      | One Mach-O arm64 artifact; runtime only on a matching host |
-| `bun-linux-x64-baseline`   | Baseline x64 glibc Linux executable | One ELF x86-64 artifact; runtime on a matching Linux host  |
-| `bun-windows-x64-baseline` | Baseline x64 Windows executable     | One PE x86-64 artifact; runtime only on a matching host    |
-| `bun-windows-arm64`        | ARM64 Windows executable            | One PE arm64 artifact; runtime only on a matching host     |
+| Bun target                 | Preview artifact          | Runtime proof                          |
+| -------------------------- | ------------------------- | -------------------------------------- |
+| `bun-darwin-arm64`         | `groma-darwin-arm64`      | Matching Apple Silicon macOS host      |
+| `bun-linux-x64-baseline`   | `groma-linux-x64`         | Matching baseline x64 glibc Linux host |
+| `bun-windows-x64-baseline` | `groma-windows-x64.exe`   | Matching x64 Windows host              |
+| `bun-windows-arm64`        | `groma-windows-arm64.exe` | Matching ARM64 Windows host            |
 
 Build the Linux target explicitly:
 
@@ -139,20 +140,21 @@ GitHub Actions runs on every pull request and every push to `main`:
 
 1. The required quality job starts from a clean checkout, installs with `bun ci`, and runs the
    same `bun run check` used locally.
-2. A second job uses one Linux runner to cross-compile all four baseline targets and verify
-   the exact single-file output and format-specific architecture header for every one. For the
+2. A second job uses one Linux runner to package all four baseline targets with checksums. For the
    Linux artifact the host can actually run, it then executes the compiled smoke and Iteration 1A
-   workflow.
+   workflow, including the deterministic local visual fixture.
 3. A bounded third job builds the native Windows executable on Windows and runs version, help,
    and scan smoke checks against the real process.
 
-`bun run check:targets` applies the same rule locally: it cross-compiles every target and
-black-box tests the one matching the current operating system and architecture through the
-compiled smoke and Iteration 1A workflow. The compiled child process is executed directly — Bun remains
-only the development harness that builds and drives it. A successful cross-compile is not
-native runtime verification for a different operating system; when no baseline target matches
-the local host, the command says so instead of claiming it ran the complete workflow. After
-the serial matrix, it restores a native artifact so `bun run smoke` can run immediately.
+`bun run package` applies the same rule locally: it cross-compiles every target and black-box tests
+the one matching the current operating system and architecture through the compiled smoke and
+Iteration 1A workflow. The compiled child process is executed directly — Bun remains only the
+development harness that builds and drives it. The visual fixture composes the same overview and
+HTML presentation path with a file presenter so verification never launches a browser. A successful
+cross-compile is not native runtime verification for a different operating system; when no baseline
+target matches the local host, the command says so instead of claiming it ran the complete workflow.
+Packaging intentionally leaves only the target-named artifacts. Run `bun run build` before the
+default `bun run smoke` when a generic native `dist/groma` or `dist/groma.exe` is needed.
 
 The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun`, keeping
 their release tags as comments for review. Setup Bun reads the exact Bun version from

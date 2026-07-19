@@ -30,8 +30,8 @@ groma scan   # take one careful look at the code and record what is really there
 groma        # open a bounded visual blueprint
 ```
 
-The three commands now work as one local loop. Groma is built in public, and the two lists below
-say exactly what is real now.
+The three commands now work as one local loop. Groma is built in public, and the list below says
+exactly what is real now.
 
 ## What works today
 
@@ -47,13 +47,6 @@ say exactly what is real now.
 - `project add` registers additional codebases and scanner coverage explicitly.
 - Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
   whole tool ships as one compiled executable.
-
-## What is being built next
-
-- Relationship tracing and detailed evidence, binding, uncertainty, and coverage inspection in
-  the visual blueprint.
-- Plans (desired future state) and history views (past revisions via Git) come after
-  that. A full web UI arrives in Iteration 4.
 
 ## The rules Groma refuses to break
 
@@ -92,5 +85,10 @@ bun ci          # install dependencies
 bun run build   # compile the single-file executable to dist/groma
 ./dist/groma    # open the bounded local visual blueprint
 ```
+
+To create the unpublished four-target preview package, run `bun run package`. It writes
+target-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching
+host artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging
+proofs only; native runtime behavior is claimed only on a matching host.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.
