@@ -49,10 +49,10 @@ async function presentBlueprint(html: string): Promise<string> {
   await writeFile(artifact, html, { encoding: "utf8", mode: 0o600 });
   const command =
     process.platform === "darwin"
-      ? ["open", artifact]
+      ? ["/usr/bin/open", artifact]
       : process.platform === "win32"
-        ? ["cmd", "/c", "start", "", artifact]
-        : ["xdg-open", artifact];
+        ? ["C:\\Windows\\System32\\cmd.exe", "/c", "start", "", artifact]
+        : ["/usr/bin/xdg-open", artifact];
   const opened = Bun.spawn({ cmd: command, stderr: "ignore", stdout: "ignore" });
   const exitCode = await new Promise<number | undefined>((resolve) => {
     let complete = false;

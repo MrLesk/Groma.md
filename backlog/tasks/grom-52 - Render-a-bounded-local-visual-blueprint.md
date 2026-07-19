@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-19 17:56'
+updated_date: '2026-07-19 18:08'
 labels:
   - visualization
   - first-run
@@ -56,4 +56,6 @@ Context-hunter classification: L2 public surface. Supported semantic boundary: o
 Implemented a pure bounded HTML renderer and injectable temporary-file presenter for interactive bare groma. Compiled self-dogfood scan recorded 65 observations, then repeated byte-identically. Verification: bun run check passed with 402 tests; the compiled PTY fixture intercepts the platform opener, reads two generated artifacts, proves byte equality, hierarchy/truncation content, and unchanged canonical bytes. Direct compiled self-run opened generation 112 with 27 nodes. In-app file URL inspection was unavailable because the browser security policy blocks file:// navigation; no bypass was attempted.
 
 Pre-PR review completed exactly once by two independent Terra xhigh agents and Claude. Accepted findings: truthful reason-aware truncation, visible/semantic selected state, canonical lockup markup, bounded platform-opener wait, and documented bare JSON read. Rejected as out of scope or counter to the accepted boundary: a headless text fallback, temp-artifact sweeper, and a new DOM/browser dependency. Post-fix bun run check passed with 402 tests and 2642 expectations; compiled verification remained green.
+
+First automatic Codex review completed on baf2b42 with two justified findings. Fixed opener command resolution by using absolute OS paths so a project-controlled PATH cannot execute observed code; clarified that bare JSON hierarchy requires an interactive terminal. Compiled artifact verification now uses a purpose-built injected standalone harness rather than weakening production opener resolution. Post-fix bun run check passed with 402 tests and 2642 expectations, and the two-pass 65-record self-scan remained byte-stable.
 <!-- SECTION:NOTES:END -->
