@@ -17,6 +17,7 @@ import {
   type ObservationRecord,
   type ResourceKey,
   type Result,
+  type TransactionRecovery,
   type TransactionOutcome,
   type TransactionProvider,
 } from "../core/index.ts";
@@ -57,6 +58,11 @@ export interface ReconciliationOptions {
 
 export type ReconciliationOutcome =
   | { readonly generation: number; readonly status: "committed" }
+  | {
+      readonly diagnostics: readonly Diagnostic[];
+      readonly recovery: TransactionRecovery;
+      readonly status: "indeterminate";
+    }
   | { readonly generation: number; readonly status: "unchanged" };
 
 export interface ReconciliationOperations {
@@ -99,6 +105,7 @@ interface RelationshipBinding {
   readonly present: boolean;
   readonly projection: RelationshipProjection;
   readonly relationId: string;
+  readonly removed: boolean;
   readonly scope: string;
 }
 
@@ -134,6 +141,20 @@ function qualified(scope: string, key: string): string {
 
 function itemId(scope: string, key: string): string {
   return `observation:${encodeURIComponent(scope)}:${encodeURIComponent(key)}`;
+}
+
+function itemIdentity(id: string): { readonly key: string; readonly scope: string } | undefined {
+  const prefix = "observation:";
+  if (!id.startsWith(prefix)) return undefined;
+  const separator = id.indexOf(":", prefix.length);
+  if (separator < 0) return undefined;
+  try {
+    const scope = decodeURIComponent(id.slice(prefix.length, separator));
+    const key = decodeURIComponent(id.slice(separator + 1));
+    return itemId(scope, key) === id ? Object.freeze({ key, scope }) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function same(left: unknown, right: unknown): boolean {
@@ -242,6 +263,7 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
           Object.keys(entry).sort().join(","),
         ) ||
         typeof entry.id !== "string" ||
+        itemIdentity(entry.id) === undefined ||
         (entry.name !== undefined && typeof entry.name !== "string") ||
         (entry.description !== undefined && typeof entry.description !== "string")
       ) {
@@ -360,7 +382,8 @@ function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Resul
         typeof inputBinding !== "object" ||
         inputBinding === null ||
         Array.isArray(inputBinding) ||
-        Object.keys(inputBinding).sort().join(",") !== "key,present,projection,relationId,scope"
+        Object.keys(inputBinding).sort().join(",") !==
+          "key,present,projection,relationId,removed,scope"
       ) {
         return failure(
           diagnostic("invalid-evidence-state", "Canonical relationship binding is malformed"),
@@ -378,6 +401,8 @@ function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Resul
         typeof binding.scope !== "string" ||
         typeof binding.key !== "string" ||
         typeof binding.present !== "boolean" ||
+        typeof binding.removed !== "boolean" ||
+        (binding.present && binding.removed) ||
         identity <= priorBinding ||
         globallyBoundRelations.has(id.value) ||
         typeof projection !== "object" ||
@@ -406,6 +431,7 @@ function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Resul
             type: projection.type,
           }),
           relationId: id.value,
+          removed: binding.removed,
           scope: binding.scope,
         }),
       );
@@ -424,12 +450,19 @@ function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Resul
 }
 
 function automaticItems(
-  records: readonly ObservationRecord[],
+  snapshot: CompletedObservationSnapshot,
   kind: "action" | "input" | "output",
   componentKey: string,
+  previous?: readonly AutomaticItem[],
 ): readonly AutomaticItem[] | undefined {
   const items: AutomaticItem[] = [];
-  for (const record of records) {
+  for (const item of previous ?? []) {
+    const identity = itemIdentity(item.id);
+    if (identity !== undefined && !hasCompleteCoverage(snapshot, identity.scope, kind)) {
+      items.push(item);
+    }
+  }
+  for (const record of snapshot.records) {
     if (
       (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") ||
       record.kind !== kind ||
@@ -437,6 +470,7 @@ function automaticItems(
     ) {
       continue;
     }
+    if (!hasCompleteCoverage(snapshot, record.scope, kind)) continue;
     items.push(
       Object.freeze({
         ...(record.description === undefined ? {} : { description: record.description }),
@@ -465,15 +499,9 @@ function componentProjection(
   previous?: ComponentProjection,
 ): ComponentProjection {
   const key = qualified(record.scope, record.key);
-  const inputs = hasCompleteCoverage(snapshot, record.scope, "input")
-    ? automaticItems(snapshot.records, "input", key)
-    : previous?.inputs;
-  const outputs = hasCompleteCoverage(snapshot, record.scope, "output")
-    ? automaticItems(snapshot.records, "output", key)
-    : previous?.outputs;
-  const actions = hasCompleteCoverage(snapshot, record.scope, "action")
-    ? automaticItems(snapshot.records, "action", key)
-    : previous?.actions;
+  const inputs = automaticItems(snapshot, "input", key, previous?.inputs);
+  const outputs = automaticItems(snapshot, "output", key, previous?.outputs);
+  const actions = automaticItems(snapshot, "action", key, previous?.actions);
   return Object.freeze({
     ...record.candidate,
     ...(inputs === undefined ? {} : { inputs }),
@@ -494,11 +522,13 @@ function projectionItemCount(projection: ComponentProjection): number {
   );
 }
 
-function currentItems(value: StandardComponent["actions"]): readonly AutomaticItem[] | undefined {
+function currentItems(
+  value: StandardComponent["actions"],
+): readonly AutomaticItem[] | null | undefined {
   if (value === undefined) return undefined;
   const items: AutomaticItem[] = [];
   for (const item of value) {
-    if (Object.keys(item.extensions).length > 0) return undefined;
+    if (Object.keys(item.extensions).length > 0) return null;
     items.push(
       Object.freeze({
         ...(item.description === undefined ? {} : { description: item.description }),
@@ -585,9 +615,16 @@ function revisionMap(value: unknown): Result<Map<string, ContentRevision | null>
 function outcomeResult(outcome: TransactionOutcome): Result<ReconciliationOutcome> {
   if (outcome.status === "committed")
     return success(Object.freeze({ generation: outcome.generation, status: "committed" }));
-  return failure(
-    ...outcome.diagnostics.map((item) => Object.freeze({ code: item.code, message: item.message })),
-  );
+  if (outcome.status === "indeterminate") {
+    return success(
+      Object.freeze({
+        diagnostics: outcome.diagnostics,
+        recovery: outcome.recovery,
+        status: "indeterminate" as const,
+      }),
+    );
+  }
+  return failure(...outcome.diagnostics);
 }
 
 function mintIdentity(
@@ -867,6 +904,7 @@ export function createReconciliationOperations(
             present: true,
             projection,
             relationId: relationId.value,
+            removed: false,
             scope: record.scope,
           });
           relationshipBindings.set(identity, binding);
@@ -888,7 +926,7 @@ export function createReconciliationOperations(
         }
         const existing = existingRelationships.get(binding.relationId);
         if (existing === undefined) {
-          if (binding.present) {
+          if (binding.present || !binding.removed) {
             return failure(
               diagnostic(
                 "reconciliation-binding-missing",
@@ -912,7 +950,7 @@ export function createReconciliationOperations(
           touchedRelationships.add(binding.relationId);
           relationshipBindings.set(
             identity,
-            Object.freeze({ ...binding, present: true, projection }),
+            Object.freeze({ ...binding, present: true, projection, removed: false }),
           );
           continue;
         }
@@ -938,7 +976,7 @@ export function createReconciliationOperations(
         }
         relationshipBindings.set(
           identity,
-          Object.freeze({ ...binding, present: true, projection }),
+          Object.freeze({ ...binding, present: true, projection, removed: false }),
         );
       }
       for (const [identity, binding] of relationshipBindings) {
@@ -946,12 +984,14 @@ export function createReconciliationOperations(
           continue;
         if (!hasCompleteCoverage(snapshot.value, binding.scope, "relationship")) continue;
         const existing = existingRelationships.get(binding.relationId);
+        let removed = existing === undefined ? binding.removed : false;
         if (existing !== undefined && relationshipMatches(existing, binding.projection)) {
           relationshipMutations.push(Object.freeze({ id: binding.relationId, type: "remove" }));
           touchedComponents.add(binding.projection.source);
           touchedRelationships.add(binding.relationId);
+          removed = true;
         }
-        relationshipBindings.set(identity, Object.freeze({ ...binding, present: false }));
+        relationshipBindings.set(identity, Object.freeze({ ...binding, present: false, removed }));
       }
       if (relationshipBindings.size > options.bounds.maxRelationships) {
         return failure(
@@ -1052,6 +1092,7 @@ export function createReconciliationOperations(
       });
       if (!boundedRequest.ok) return boundedRequest;
       const outcome = await options.transactionExecution.execute(request);
+      if (outcome.status === "conflict") continue;
       return outcomeResult(outcome);
     }
     return failure(

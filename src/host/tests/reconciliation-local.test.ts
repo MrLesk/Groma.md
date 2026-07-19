@@ -10,6 +10,7 @@ import {
   type CompletedObservationSnapshot,
   type ObservationRecord,
   type Result,
+  type TransactionOutcome,
 } from "../../core/index.ts";
 import { createReconciliationOperations } from "../../application/index.ts";
 import {
@@ -145,6 +146,74 @@ function snapshot(
   );
 }
 
+function scopedMember(key: string): ObservationRecord {
+  return Object.freeze({
+    component: Object.freeze({ key: "api", scope: "workspace" }),
+    key,
+    kind: "input",
+    name: key,
+    provenance: Object.freeze([
+      Object.freeze({
+        fingerprint: "sha256:bbbbbbbbbbbbbbbb",
+        resource: "contracts/api.ts",
+        scope: "contracts",
+      }),
+    ]),
+    scope: "contracts",
+  });
+}
+
+function scopedSnapshot(
+  epoch: string,
+  records: readonly ObservationRecord[],
+  memberCoverage: "complete" | "partial",
+): CompletedObservationSnapshot {
+  const session = valueOf(
+    createObservationSession({
+      apiVersion: observationSessionApiVersion,
+      epoch,
+      projectId: "project.local",
+      scopes: Object.freeze([
+        Object.freeze({ id: "contracts", resourceRoot: "contracts" }),
+        Object.freeze({ id: "workspace", resourceRoot: "." }),
+      ]),
+      source: Object.freeze({
+        id: "groma.typescript-bun",
+        instance: "builtin",
+        version: "1.0.0",
+      }),
+    }),
+  );
+  valueOf(session.submitBatch({ epoch, records, sequence: 1 }));
+  return valueOf(
+    session.complete({
+      coverage: Object.freeze([
+        Object.freeze({
+          kinds: Object.freeze(["input" as const]),
+          scope: "contracts",
+          state: memberCoverage,
+        }),
+        Object.freeze({
+          kinds: Object.freeze(["component-candidate" as const]),
+          scope: "workspace",
+          state: "complete" as const,
+        }),
+      ]),
+      epoch,
+      sequence: 2,
+    }),
+  );
+}
+
+function evidenceResourceMapper() {
+  return Object.freeze({
+    resourceForEvidence: () => {
+      const locator = markdownEvidenceLocator();
+      return locator.ok ? parseResourceKey(locator.value) : locator;
+    },
+  });
+}
+
 describe("local completed-snapshot reconciliation", () => {
   test("composes the built-in scanner directly into atomic reconciliation", async () => {
     const workspace = await temporaryWorkspace();
@@ -192,7 +261,7 @@ describe("local completed-snapshot reconciliation", () => {
       snapshot("epoch-1", [candidate("api", "API")]),
     );
     expect(first).toMatchObject({ ok: true, value: { status: "committed" } });
-    if (!first.ok) return;
+    if (!first.ok || first.value.status === "indeterminate") return;
     const firstPage = await host.operations.listComponents({ limit: 10 });
     expect(firstPage.ok).toBeTrue();
     if (!firstPage.ok) return;
@@ -283,13 +352,8 @@ describe("local completed-snapshot reconciliation", () => {
     );
     const providerSnapshot = host.transactionProvider.snapshot.bind(host.transactionProvider);
     let snapshotCalls = 0;
+    let executionCalls = 0;
     let entropyValue = 128;
-    const evidenceResourceMapper = Object.freeze({
-      resourceForEvidence: () => {
-        const locator = markdownEvidenceLocator();
-        return locator.ok ? parseResourceKey(locator.value) : locator;
-      },
-    });
     const raced = createReconciliationOperations({
       bounds: {
         maxComponents: defaultHostBounds.maxEmbeddedItems,
@@ -302,10 +366,22 @@ describe("local completed-snapshot reconciliation", () => {
         maxTransactionDataValues: defaultHostBounds.maxSnapshotStateValues,
       },
       entropy: (length) => new Uint8Array(length).fill(entropyValue++),
-      evidenceResourceMapper,
+      evidenceResourceMapper: evidenceResourceMapper(),
       resourceMapper: host.resourceMapper,
       snapshotStateDecoder: host.snapshotStateDecoder,
-      transactionExecution: host.transactionEngine,
+      transactionExecution: Object.freeze({
+        execute: async (request: Parameters<typeof host.transactionEngine.execute>[0]) => {
+          executionCalls += 1;
+          return executionCalls === 1
+            ? (Object.freeze({
+                diagnostics: Object.freeze([
+                  Object.freeze({ code: "fixture-conflict", message: "retry" }),
+                ]),
+                status: "conflict",
+              }) as TransactionOutcome)
+            : host.transactionEngine.execute(request);
+        },
+      }),
       transactionProvider: Object.freeze({
         snapshot: async (resources) => {
           snapshotCalls += 1;
@@ -322,7 +398,8 @@ describe("local completed-snapshot reconciliation", () => {
     expect(
       await raced.reconcile(snapshot("epoch-2", [candidate("api", "Scanner rename")])),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
-    expect(snapshotCalls).toBe(3);
+    expect(snapshotCalls).toBe(4);
+    expect(executionCalls).toBe(2);
     const afterRace = await host.operations.getComponent({ id, relationships: { limit: 1 } });
     expect(afterRace.ok).toBeTrue();
     if (!afterRace.ok) return;
@@ -357,7 +434,11 @@ describe("local completed-snapshot reconciliation", () => {
     const curated = await host.operations.updateComponent({
       expectedRevision: api.revision,
       id: api.component.id,
-      patch: { intent: "Curated intent", name: "Customer API" },
+      patch: {
+        inputs: [{ "example.test/note": "curated", id: "curated-input" }],
+        intent: "Curated intent",
+        name: "Customer API",
+      },
     });
     expect(curated).toMatchObject({ status: "committed" });
 
@@ -381,7 +462,10 @@ describe("local completed-snapshot reconciliation", () => {
 
     expect(
       await host.reconciliation.reconcile(
-        snapshot("epoch-2", [candidate("api", "Renamed by scanner")]),
+        snapshot("epoch-2", [
+          candidate("api", "Renamed by scanner"),
+          member("input", "observed-input", "api"),
+        ]),
       ),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
     const afterCompleteOmission = await host.operations.getComponent({
@@ -417,7 +501,11 @@ describe("local completed-snapshot reconciliation", () => {
     ]);
     expect(
       after.value.items.find((item) => item.component.id === api.component.id)?.component,
-    ).toMatchObject({ intent: "Curated intent", name: "Customer API" });
+    ).toMatchObject({
+      inputs: [{ extensions: { "example.test/note": "curated" }, id: "curated-input" }],
+      intent: "Curated intent",
+      name: "Customer API",
+    });
 
     const beforeRejected = await readFile(
       path.join(workspace.workspaceRoot, "groma", "evidence.md"),
@@ -498,5 +586,164 @@ describe("local completed-snapshot reconciliation", () => {
       ),
     ).toMatchObject({ diagnostics: [{ code: "reconciliation-item-limit" }], ok: false });
     expect(await readFile(evidencePath, "utf8")).toBe(before);
+  });
+
+  test("retains member evidence according to the member observation scope", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        scopedSnapshot(
+          "epoch-complete",
+          [candidate("api", "API"), scopedMember("contract")],
+          "complete",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    expect(
+      await host.reconciliation.reconcile(
+        scopedSnapshot("epoch-partial", [candidate("api", "API")], "partial"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    expect(components.value.items[0]?.component.inputs).toMatchObject([
+      { id: "observation:contracts:contract", name: "contract" },
+    ]);
+  });
+
+  test("does not resurrect a curated relationship after explicit removal", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-1", [
+          candidate("api", "API"),
+          candidate("data", "Data"),
+          relationship("api-data", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    const api = components.value.items.find((item) => item.component.name === "API")!;
+    const data = components.value.items.find((item) => item.component.name === "Data")!;
+    const exact = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(exact.ok).toBeTrue();
+    if (!exact.ok) return;
+    const relation = exact.value.relationships.items[0]!.relationship;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: exact.value.item.revision,
+        id: api.component.id,
+        patch: {},
+        relationships: {
+          upsert: [
+            {
+              description: "Curated dependency",
+              id: relation.id,
+              target: data.component.id,
+              type: relation.type,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-2", [candidate("api", "API"), candidate("data", "Data")]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const curated = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(curated.ok).toBeTrue();
+    if (!curated.ok) return;
+    expect(curated.value.relationships.items[0]?.relationship.description).toBe(
+      "Curated dependency",
+    );
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: curated.value.item.revision,
+        id: api.component.id,
+        patch: {},
+        relationships: { remove: [relation.id] },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const before = await readFile(
+      path.join(workspace.workspaceRoot, "groma", "evidence.md"),
+      "utf8",
+    );
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-3", [
+          candidate("api", "API"),
+          candidate("data", "Data"),
+          relationship("api-data", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-missing" }],
+      ok: false,
+    });
+    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
+      before,
+    );
+  });
+
+  test("preserves an indeterminate transaction recovery outcome", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const reconciliation = createReconciliationOperations({
+      bounds: {
+        maxComponents: defaultHostBounds.maxEmbeddedItems,
+        maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
+        maxRecords: defaultHostBounds.maxRequestDataValues,
+        maxRelationships: defaultHostBounds.maxRelationshipMutations,
+        maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
+        maxSources: defaultHostBounds.maxComponents,
+        maxTransactionDataDepth: defaultHostBounds.maxRequestDataDepth,
+        maxTransactionDataValues: defaultHostBounds.maxSnapshotStateValues,
+      },
+      entropy: (length) => new Uint8Array(length),
+      evidenceResourceMapper: evidenceResourceMapper(),
+      resourceMapper: host.resourceMapper,
+      snapshotStateDecoder: host.snapshotStateDecoder,
+      transactionExecution: Object.freeze({
+        execute: async () =>
+          Object.freeze({
+            diagnostics: Object.freeze([
+              Object.freeze({ code: "transaction-outcome-indeterminate", message: "Recover" }),
+            ]),
+            recovery: Object.freeze({
+              baseGeneration: 0,
+              generation: 0,
+              resources: Object.freeze([]),
+              token: "fixture-recovery",
+            }),
+            status: "indeterminate",
+          }) as unknown as TransactionOutcome,
+      }),
+      transactionProvider: host.transactionProvider,
+    });
+    const outcome = await reconciliation.reconcile(
+      snapshot("epoch-indeterminate", [candidate("api", "API")]),
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      value: {
+        recovery: { token: "fixture-recovery" },
+        status: "indeterminate",
+      },
+    });
   });
 });

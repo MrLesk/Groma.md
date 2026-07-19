@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 15:54'
+updated_date: '2026-07-19 16:16'
 labels: []
 milestone: m-3
 dependencies:
@@ -52,4 +52,6 @@ Implemented as one Application reconciliation operation, one deterministic groma
 Pre-PR review: two independent gpt-5.6-terra xhigh agents completed one bounded pass each. Their justified findings were fixed: reconciliation now aligns its 100-component/100-relationship/member envelope with one Standard Model transaction, rejects stale component bindings consistently, replans if any canonical state changes during revision confirmation, and covers these cases with focused regression tests. Final verification after fixes: bun run check passed with 391 tests; bun run check:targets passed for all four targets.
 
 Automatic Codex review identified five actionable edge cases. Fixed all five: relationships now require endpoints observed in the current snapshot; retained and refreshed members share one aggregate bound; cancellation is no longer reported after atomic publication starts; reconciliation preflights the same 100,000-value transaction envelope used by the engine and caps records at 10,000; member item IDs percent-encode scope and key. Regression coverage was added. Verification after fixes: bun run check passed with 392 tests and bun run check:targets passed.
+
+A follow-up automatic Codex review identified five additional reconciliation edge cases. Fixed all five: member retention now follows each member observation's coverage scope; transaction conflicts retry through the bounded replan loop; indeterminate outcomes preserve their recovery token at the Application seam; curated member lists with extensions remain distinguishable from absent scanner-owned fields; and explicitly deleted curated relationships are not resurrected while scanner-owned omissions can still reappear. Regression coverage was added. Verification after fixes: bun run check passed with 395 tests and bun run check:targets passed for all four targets.
 <!-- SECTION:NOTES:END -->

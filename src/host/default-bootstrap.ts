@@ -1143,7 +1143,10 @@ export function createDefaultBootstrapRegistry(
         consumer: Object.freeze({
           async consume(snapshot: CompletedObservationSnapshot) {
             const outcome = await reconciliation.reconcile(snapshot);
-            return outcome.ok ? success(undefined) : failure(...outcome.diagnostics);
+            if (!outcome.ok) return failure(...outcome.diagnostics);
+            return outcome.value.status === "indeterminate"
+              ? failure(...outcome.value.diagnostics)
+              : success(undefined);
           },
         }),
         entropy,
