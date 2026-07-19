@@ -269,6 +269,35 @@ describe("local completed-snapshot reconciliation", () => {
     const firstComponent = firstPage.value.items[0]!;
     const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
     const firstEvidence = await readFile(evidencePath, "utf8");
+    const firstDetail = await host.operations.getComponent({
+      id: firstComponent.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(firstDetail.ok).toBeTrue();
+    if (!firstDetail.ok) return;
+    expect(firstDetail.value.evidence).toEqual([
+      {
+        binding: { key: "api", present: true, scope: "workspace" },
+        coverage: [
+          {
+            kinds: [
+              "action",
+              "component-candidate",
+              "documentation",
+              "input",
+              "output",
+              "relationship",
+            ],
+            scope: "workspace",
+            state: "complete",
+          },
+        ],
+        projectId: "project.local",
+        records: [candidate("api", "API")],
+        scanner: { id: "groma.typescript-bun", instance: "builtin", version: "1.0.0" },
+      },
+    ]);
+    expect(await readFile(evidencePath, "utf8")).toBe(firstEvidence);
 
     const restartedBeforeRepeat = await composition(workspace);
     expect(await restartedBeforeRepeat.workspace.recover()).toMatchObject({ ok: true });
@@ -316,6 +345,63 @@ describe("local completed-snapshot reconciliation", () => {
       ok: false,
     });
     expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+  });
+
+  test("keeps curated detail empty and resolves automatic evidence through an alias", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-alias", [candidate("observed", "Observed")]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const page = await host.operations.listComponents({ limit: 10 });
+    expect(page.ok).toBeTrue();
+    if (!page.ok) return;
+    const observed = page.value.items[0]!;
+    const curatedId = "ent_ffffffffffffffffffffffffffffffff";
+    const curated = await host.operations.createComponent({
+      component: { id: curatedId, intent: "Curated meaning", name: "Curated" },
+    });
+    expect(curated).toMatchObject({ status: "committed" });
+    const curatedDetail = await host.operations.getComponent({
+      id: curatedId,
+      relationships: { limit: 1 },
+    });
+    expect(curatedDetail).toMatchObject({ ok: true, value: { evidence: [] } });
+
+    const merged = await host.operations.mergeComponent({
+      expectedRevision: observed.revision,
+      obsolete: observed.component.id,
+      survivor: curatedId,
+    });
+    expect(merged).toMatchObject({ status: "committed" });
+    const throughAlias = await host.operations.getComponent({
+      id: observed.component.id,
+      relationships: { limit: 1 },
+    });
+    expect(throughAlias.ok).toBeTrue();
+    if (!throughAlias.ok) return;
+    expect(throughAlias.value.item.component).toMatchObject({
+      id: curatedId,
+      intent: "Curated meaning",
+    });
+    expect(throughAlias.value.evidence).toMatchObject([
+      {
+        binding: { key: "observed", present: true, scope: "workspace" },
+        projectId: "project.local",
+      },
+    ]);
+
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const validEvidence = await readFile(evidencePath, "utf8");
+    const malformedEvidence = validEvidence.replace('"version": 1', '"version": 2');
+    expect(malformedEvidence).not.toBe(validEvidence);
+    await writeFile(evidencePath, malformedEvidence);
+    expect(
+      await host.operations.getComponent({ id: curatedId, relationships: { limit: 1 } }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-evidence-state" }], ok: false });
   });
 
   test("rejects a snapshot beyond the single-transaction component envelope", async () => {
@@ -630,6 +716,20 @@ describe("local completed-snapshot reconciliation", () => {
     expect(afterObservedPartial.value.items[0]?.component.inputs).toMatchObject([
       { id: "observation:contracts:contract", name: "contract" },
       { id: "observation:contracts:request", name: "request" },
+    ]);
+    const detail = await host.operations.getComponent({
+      id: afterObservedPartial.value.items[0]!.component.id,
+      relationships: { limit: 1 },
+    });
+    expect(detail.ok).toBeTrue();
+    if (!detail.ok) return;
+    expect(detail.value.evidence[0]?.coverage).toEqual([
+      { kinds: ["input"], scope: "contracts", state: "partial" },
+      { kinds: ["component-candidate"], scope: "workspace", state: "complete" },
+    ]);
+    expect(detail.value.evidence[0]?.records.map((record) => record.scope)).toEqual([
+      "contracts",
+      "workspace",
     ]);
   });
 

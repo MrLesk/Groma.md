@@ -229,7 +229,51 @@ describe("CLI scan workflow", () => {
 
     const listed = await run(root, ["--format=json", "component", "list", "--limit", "10"]);
     expect(listed.exitCode).toBe(CLI_EXIT.success);
-    expect(JSON.parse(listed.output).result.value.items.length).toBeGreaterThan(0);
+    const listedResult = JSON.parse(listed.output);
+    expect(listedResult.result.value.items.length).toBeGreaterThan(0);
+
+    const observed = listedResult.result.value.items.find(
+      (item: { component: { name?: string } }) => item.component.name === "scan-fixture",
+    );
+    expect(observed).toBeDefined();
+    const canonicalBeforeDetail = await canonicalFiles(root);
+    const detail = await run(root, [
+      "--format=json",
+      "component",
+      "get",
+      observed.component.id,
+      "--relationships-limit",
+      "10",
+    ]);
+    expect(detail.exitCode).toBe(CLI_EXIT.success);
+    const detailResult = JSON.parse(detail.output).result.value;
+    expect(detailResult.evidence).toHaveLength(1);
+    expect(detailResult.evidence[0]).toMatchObject({
+      binding: { present: true, scope: "workspace" },
+      coverage: [{ scope: "workspace", state: "complete" }],
+      projectId: firstResult.result.project.id,
+      scanner: { id: "official.typescript" },
+    });
+    expect(detailResult.evidence[0].records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "component-candidate",
+          provenance: expect.arrayContaining([
+            expect.objectContaining({ resource: "package.json", scope: "workspace" }),
+          ]),
+        }),
+      ]),
+    );
+    const plainDetail = await run(root, [
+      "component",
+      "get",
+      observed.component.id,
+      "--relationships-limit",
+      "10",
+    ]);
+    expect(plainDetail.output).toContain('"evidence":[{');
+    expect(plainDetail.output).toContain('"scanner":{"id":"official.typescript"');
+    expect(await canonicalFiles(root)).toEqual(canonicalBeforeDetail);
 
     const before = await canonicalFiles(root);
     const second = await run(root, ["--format=json", "scan"]);

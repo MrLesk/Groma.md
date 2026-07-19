@@ -9,5 +9,9 @@ canonical component operations, bounded blueprint export/search/traversal, and a
 self-contained local HTML blueprint opened by bare interactive `groma`. Noninteractive bare output
 remains side-effect free.
 
+`component get` returns canonical component detail and outgoing relationships alongside a separate
+bounded evidence list, so plain and JSON consumers can inspect what a scan observed without
+mistaking it for curated intent.
+
 Local package-management and schema-migration commands are deliberately absent. Adding them back
 requires a concrete product need, not adapter completeness.

@@ -19,6 +19,8 @@ import {
   type GraphRelation,
   type GraphSnapshot,
   type GraphTraversalQuery,
+  type ObservationRecord,
+  type ObservationReference,
   type PreparedBoundedQuery,
   type ProjectionReadIdentity,
   type ResourceKey,
@@ -52,6 +54,7 @@ import type {
   BlueprintExportPage,
   BlueprintTraversalHit,
   BlueprintTraversalPage,
+  ComponentEvidenceView,
   ComponentPage,
   ComponentRelationshipChanges,
   ComponentRelationshipInput,
@@ -84,6 +87,7 @@ import {
 import { containCapabilityValue } from "./capability-value.ts";
 import { measureCanonicalJsonUtf8Bytes } from "./canonical-json-utf8.ts";
 import { observeNativePromise } from "./promise-observation.ts";
+import { parseEvidenceState, type ComponentBinding } from "./reconciliation.ts";
 
 type LoadedState = DecodedApplicationSnapshotState;
 
@@ -1084,7 +1088,10 @@ function decodeSnapshotState(
     }
     const state = inspectExactRecord(
       result.value.value,
-      [["aliases", "components", "graph", "relationships"]],
+      [
+        ["aliases", "components", "graph", "relationships"],
+        ["aliases", "components", "evidence", "graph", "relationships"],
+      ],
       "application-snapshot-decode-failed",
       "Decoded application snapshot state",
     );
@@ -1163,6 +1170,9 @@ function decodeSnapshotState(
       Object.freeze({
         aliases: aliases.value as DecodedApplicationSnapshotState["aliases"],
         components: components.value as readonly StandardComponent[],
+        ...(Object.hasOwn(state.value, "evidence")
+          ? { evidence: state.value.evidence as GraphData }
+          : {}),
         graph: graph as GraphSnapshot,
         relationships: relationships.value as readonly StandardRelationship[],
       }),
@@ -1176,6 +1186,78 @@ function queryCapabilityFailure<T>(): Result<T> {
   return frozenFailure(
     diagnostic("query-capability-failed", "The bounded query capability failed safely"),
   );
+}
+
+function evidenceReferenceMatches(
+  reference: ObservationReference,
+  binding: ComponentBinding,
+): boolean {
+  return reference.scope === binding.scope && reference.key === binding.key;
+}
+
+function evidenceRecordMatches(record: ObservationRecord, binding: ComponentBinding): boolean {
+  switch (record.kind) {
+    case "component-candidate":
+      return record.scope === binding.scope && record.key === binding.key;
+    case "action":
+    case "input":
+    case "output":
+      return evidenceReferenceMatches(record.component, binding);
+    case "documentation":
+      return record.subject !== undefined && evidenceReferenceMatches(record.subject, binding);
+    case "relationship":
+      return (
+        evidenceReferenceMatches(record.from, binding) ||
+        evidenceReferenceMatches(record.to, binding)
+      );
+  }
+}
+
+function componentEvidence(
+  snapshot: ReadSnapshot,
+  componentId: EntityId,
+  options: ApplicationOperationsContext,
+): Result<readonly ComponentEvidenceView[]> {
+  if (snapshot.evidence === undefined) return success(Object.freeze([]));
+  const parsed = parseEvidenceState(snapshot.evidence, {
+    maxComponents: options.bounds.maxEmbeddedItems,
+    maxRecords: options.bounds.maxRequestDataValues,
+    maxRelationships: options.bounds.maxRelationshipMutations,
+    maxSources: options.bounds.maxComponents,
+  });
+  if (!parsed.ok) return parsed;
+  const views: ComponentEvidenceView[] = [];
+  for (const source of parsed.value.sources) {
+    for (const binding of source.componentBindings) {
+      const resolved = options.graph.resolveEntityIdentity(snapshot.graph, binding.componentId);
+      if (!resolved.ok) {
+        return failure(
+          diagnostic("invalid-evidence-state", "A component evidence binding target is missing"),
+        );
+      }
+      if (resolved.value.resolved !== componentId) continue;
+      const records = Object.freeze(
+        source.snapshot.records.filter((record) => evidenceRecordMatches(record, binding)),
+      );
+      const scopes = new Set<string>([binding.scope, ...records.map((record) => record.scope)]);
+      views.push(
+        Object.freeze({
+          binding: Object.freeze({
+            key: binding.key,
+            present: binding.present,
+            scope: binding.scope,
+          }),
+          coverage: Object.freeze(
+            source.snapshot.coverage.filter((entry) => scopes.has(entry.scope)),
+          ),
+          projectId: source.snapshot.projectId,
+          records,
+          scanner: source.snapshot.source,
+        }),
+      );
+    }
+  }
+  return success(Object.freeze(views));
 }
 
 const boundedQueryDiagnosticCodes = new Set([
@@ -3675,9 +3757,12 @@ export function createApplicationOperations(
         options,
       );
       if (!relationships.ok) return relationships;
+      const evidence = componentEvidence(read.value, confirmed.value.resolved, options);
+      if (!evidence.ok) return evidence;
       const exact = exactQuery(
         read.value.generation,
         Object.freeze({
+          evidence: evidence.value,
           generation: read.value.generation,
           item: Object.freeze({ component, revision: revision.value }),
           relationships: relationships.value,

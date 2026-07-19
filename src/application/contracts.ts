@@ -6,6 +6,9 @@ import type {
   GraphQueryEngineCapability,
   GraphTraversalDirection,
   GraphKernel,
+  ObservationCoverage,
+  ObservationRecord,
+  ObservationSourceIdentity,
   ResourceKey,
   Result,
   TransactionOutcome,
@@ -209,9 +212,22 @@ export interface RelationshipPage {
 }
 
 export interface ExactComponentRead {
+  readonly evidence: readonly ComponentEvidenceView[];
   readonly generation: GraphGeneration;
   readonly item: ComponentView;
   readonly relationships: RelationshipPage;
+}
+
+export interface ComponentEvidenceView {
+  readonly binding: {
+    readonly key: string;
+    readonly present: boolean;
+    readonly scope: string;
+  };
+  readonly coverage: readonly ObservationCoverage[];
+  readonly projectId: string;
+  readonly records: readonly ObservationRecord[];
+  readonly scanner: ObservationSourceIdentity;
 }
 
 export interface ComponentPage {

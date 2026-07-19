@@ -54,6 +54,7 @@ export interface ApplicationSnapshotStateDecoderOptions {
 export interface DecodedApplicationSnapshotState {
   readonly aliases: readonly EntityAlias[];
   readonly components: readonly StandardComponent[];
+  readonly evidence?: GraphData;
   readonly graph: GraphSnapshot;
   readonly relationships: readonly StandardRelationship[];
 }
@@ -1699,6 +1700,9 @@ function decode(
     Object.freeze({
       components: canonical.value.components,
       aliases: aliasResolver.value.records,
+      ...(Object.hasOwn(envelope.value, "evidence")
+        ? { evidence: envelope.value.evidence as GraphData }
+        : {}),
       graph: loaded.value,
       relationships: canonical.value.relationships,
     }),
