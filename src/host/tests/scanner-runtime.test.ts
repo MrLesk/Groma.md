@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  parseGraphGeneration,
+  parseResourceKey,
   pluginRuntimeApiVersion,
   success,
   type CompletedObservationSnapshot,
@@ -230,5 +232,52 @@ describe("scanner execution runtime", () => {
     release.resolve();
     expect(await session.completion).toMatchObject({ status: "completed" });
     expect(published).toBeTrue();
+  });
+
+  test("preserves an indeterminate completed-snapshot handoff", async () => {
+    const scanner: Scanner = Object.freeze({
+      scan: async (request: ScannerRequest) => {
+        expect(
+          request.observations.complete({
+            coverage: Object.freeze([
+              Object.freeze({
+                kinds: Object.freeze(["component-candidate" as const]),
+                scope: "source",
+                state: "complete" as const,
+              }),
+            ]),
+            epoch: request.session.epoch,
+            sequence: 1,
+          }),
+        ).toMatchObject({ ok: true });
+        return success(undefined);
+      },
+    });
+    const recovery = Object.freeze({
+      baseGeneration: valueOf(parseGraphGeneration(0)),
+      generation: valueOf(parseGraphGeneration(1)),
+      resources: Object.freeze([valueOf(parseResourceKey("groma/evidence.md"))]),
+      token: "prepared-fixture",
+    });
+    const execution = runtime(scanner, {
+      consumer: Object.freeze({
+        consume: async () =>
+          success(
+            Object.freeze({
+              diagnostics: Object.freeze([
+                Object.freeze({ code: "transaction-outcome-indeterminate", message: "Recover" }),
+              ]),
+              recovery,
+              status: "indeterminate" as const,
+            }),
+          ),
+      }),
+    });
+    const session = valueOf(await execution.start({ projectId: project.id, scannerId }));
+    expect(await session.completion).toMatchObject({
+      diagnostics: [{ code: "transaction-outcome-indeterminate" }],
+      recovery: { token: "prepared-fixture" },
+      status: "indeterminate",
+    });
   });
 });

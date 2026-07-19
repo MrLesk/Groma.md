@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -914,5 +914,24 @@ describe("local completed-snapshot reconciliation", () => {
         status: "indeterminate",
       },
     });
+  });
+
+  test("rejects a present null evidence payload instead of resetting bindings", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const canonicalRoot = path.join(workspace.workspaceRoot, "groma");
+    await writeFile(
+      path.join(canonicalRoot, "evidence.md"),
+      '# Groma Evidence\n\n```json\n{"evidence":null,"schema":"groma/evidence/v0.1"}\n```\n',
+    );
+    const before = await readdir(canonicalRoot, { recursive: true });
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-null", [candidate("api", "API")])),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-snapshot-failed" }],
+      ok: false,
+    });
+    expect(await readdir(canonicalRoot, { recursive: true })).toEqual(before);
   });
 });

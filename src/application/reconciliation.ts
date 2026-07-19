@@ -679,8 +679,9 @@ export function createReconciliationOperations(
       }
       const generation = parseGraphGeneration(initial.generation);
       const decoded = options.snapshotStateDecoder.decode(initial.state);
+      const storedEvidence = evidenceFromSnapshotState(initial.state);
       const evidence = parseEvidenceState(
-        evidenceFromSnapshotState(initial.state) ?? { sources: [], version: 1 },
+        storedEvidence === undefined ? { sources: [], version: 1 } : storedEvidence,
         options.bounds,
       );
       const initialRevisions = revisionMap(initial.revisions);

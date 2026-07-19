@@ -486,7 +486,7 @@ export function createDefaultBootstrapRegistry(
               bounds: {
                 maxBytes: 4 * 1024 * 1024,
                 maxDepth: defaultHostBounds.maxSnapshotStateDepth,
-                maxValues: defaultHostBounds.maxSnapshotStateValues,
+                maxValues: Math.floor(defaultHostBounds.maxSnapshotStateValues / 2),
               },
               resources,
             });
@@ -1146,7 +1146,13 @@ export function createDefaultBootstrapRegistry(
             const outcome = await reconciliation.reconcile(snapshot);
             if (!outcome.ok) return failure(...outcome.diagnostics);
             return outcome.value.status === "indeterminate"
-              ? failure(...outcome.value.diagnostics)
+              ? success(
+                  Object.freeze({
+                    diagnostics: outcome.value.diagnostics,
+                    recovery: outcome.value.recovery,
+                    status: "indeterminate" as const,
+                  }),
+                )
               : success(undefined);
           },
         }),
