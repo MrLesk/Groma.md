@@ -64,6 +64,7 @@ function resourceFixture(
   options: Readonly<{
     readonly failEnumeration?: boolean;
     readonly pageSize?: number;
+    readonly rawBytes?: Readonly<Record<string, Uint8Array>>;
     readonly reportedSizes?: Readonly<Record<string, number>>;
     readonly resourceRoot?: string;
     readonly stalledCursor?: boolean;
@@ -71,7 +72,8 @@ function resourceFixture(
 ): ResourceFixture {
   const files = new Map(
     Object.entries(source).map(
-      ([resource, content]) => [resource, encoder.encode(content)] as const,
+      ([resource, content]) =>
+        [resource, options.rawBytes?.[resource] ?? encoder.encode(content)] as const,
     ),
   );
   const directories = new Set<string>(["."]);
@@ -183,6 +185,7 @@ async function scan(
   resourceOptions: Readonly<{
     readonly failEnumeration?: boolean;
     readonly pageSize?: number;
+    readonly rawBytes?: Readonly<Record<string, Uint8Array>>;
     readonly reportedSizes?: Readonly<Record<string, number>>;
     readonly resourceRoot?: string;
     readonly stalledCursor?: boolean;
@@ -403,6 +406,22 @@ export function publicApi() {}
         .map((record) => record.name)
         .sort(),
     ).toEqual(["ROUTE /top", "publicApi"]);
+
+    const replacedServe = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "bun-replaced" }),
+      "src/index.ts": [
+        "Bun.serve = (() => undefined) as typeof Bun.serve;",
+        'Bun.serve({ routes: { "/unsafe": () => new Response("ok") } });',
+        "export function publicApi() {}",
+      ].join("\n"),
+    });
+    expect(replacedServe.result.ok).toBeTrue();
+    expect(replacedServe.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      replacedServe.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["publicApi"]);
 
     const shadowedFixtures = [
       {
@@ -730,6 +749,36 @@ export function api() { return model; }
           record.kind === "relationship" && record.relationshipType === "workspace-member",
       ),
     ).toBeFalse();
+
+    const rootImport = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/root",
+        workspaces: ["packages/*"],
+      }),
+      "packages/member/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/member",
+      }),
+      "packages/member/src/index.ts":
+        'import { rootApi } from "@fixture/root";\nexport function memberApi() { return rootApi(); }\n',
+      "src/index.ts": "export function rootApi() { return true; }\n",
+    });
+    expect(rootImport.result.ok).toBeTrue();
+    expect(rootImport.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      rootImport.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.type === "external" &&
+          record.candidate.name === "@fixture/root",
+      ),
+    ).toBeFalse();
+    expect(
+      rootImport.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
   });
 
   test("requires every workspace package import to name an exported subpath", async () => {
@@ -862,6 +911,33 @@ export function start() {}
     expect(pureNull.result.ok).toBeTrue();
     expect(pureNull.snapshot?.coverage[0]?.state).toBe("complete");
     expect(pureNull.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+
+    const conditionalImport = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        imports: { "#model": { default: "./src/model.ts", import: null } },
+        name: "conditional-import",
+      }),
+      "src/index.ts": 'import model from "#model";\nvoid model;\nexport function api() {}\n',
+      "src/model.ts": "export default {};\n",
+    });
+    expect(conditionalImport.result.ok).toBeTrue();
+    expect(conditionalImport.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      conditionalImport.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeFalse();
+
+    const duplicateMetadata = await scan({
+      "package.json": '{"name":"first","name":"second","exports":"./src/index.ts"}',
+      "src/index.ts": "export function api() {}\n",
+    });
+    expect(duplicateMetadata.result.ok).toBeTrue();
+    expect(duplicateMetadata.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      duplicateMetadata.snapshot?.records.some((record) => record.kind === "action"),
+    ).toBeFalse();
   });
 
   test("keeps public subpath identities distinct and observes type-only edges", async () => {
@@ -927,6 +1003,19 @@ export function shared() {}
     expect(oversized.snapshot?.records).toEqual([]);
     expect(oversized.fixture.read).not.toContain(".gitignore");
     expect(oversized.fixture.read).not.toContain("tsconfig.json");
+
+    const invalidPolicyText = await scan(
+      {
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "invalid-policy" }),
+        "src/index.ts": "export function api() {}\n",
+        "tsconfig.json": "",
+      },
+      {},
+      { rawBytes: { "tsconfig.json": new Uint8Array([0xff]) } },
+    );
+    expect(invalidPolicyText.result.ok).toBeTrue();
+    expect(invalidPolicyText.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(invalidPolicyText.snapshot?.records).toEqual([]);
 
     const spacedIgnore = await scan({
       ".gitignore": " groma/\n",
@@ -1088,12 +1177,12 @@ export function shared() {}
     });
 
     expect(result.result.ok).toBeTrue();
-    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     const imports = result.snapshot?.records.filter(
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
     expect(imports).toHaveLength(1);
-    expect(imports?.[0]?.provenance).toHaveLength(5);
+    expect(imports?.[0]?.provenance).toHaveLength(4);
     expect(
       result.snapshot?.records
         .filter((record) => record.kind === "action")
@@ -2145,7 +2234,7 @@ export function shared() {}
     ).toBeTrue();
   });
 
-  test("proves named and default imported bindings re-exported through a local barrel", async () => {
+  test("keeps direct re-exports while imported-then-exported bindings remain partial", async () => {
     const result = await scan({
       "package.json": JSON.stringify({
         exports: { ".": "./src/alias.ts", "./direct": "./src/direct.ts" },
@@ -2164,34 +2253,16 @@ export function shared() {}
     });
 
     expect(result.result.ok).toBeTrue();
-    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
-    expect(actions.map((record) => record.name).sort()).toEqual([
-      "publicDefault",
-      "publicDefault",
-      "publicWork",
-      "publicWork",
-    ]);
-    for (const name of ["publicDefault", "publicWork"]) {
-      const aliased = actions.find(
-        (record) => record.name === name && record.description === "Public export at .",
-      );
-      const direct = actions.find(
-        (record) => record.name === name && record.description === "Public export at ./direct",
-      );
-      expect([...new Set(aliased?.provenance.map((item) => item.resource))].sort()).toEqual([
-        "package.json",
-        "src/alias.ts",
-        "src/implementation.ts",
-      ]);
-      expect([...new Set(direct?.provenance.map((item) => item.resource))].sort()).toEqual([
+    expect(actions.map((record) => record.name).sort()).toEqual(["publicDefault", "publicWork"]);
+    for (const action of actions) {
+      expect(action.description).toBe("Public export at ./direct");
+      expect([...new Set(action.provenance.map((item) => item.resource))].sort()).toEqual([
         "package.json",
         "src/direct.ts",
         "src/implementation.ts",
       ]);
-      expect(aliased?.provenance.find((item) => item.range)).toEqual(
-        direct?.provenance.find((item) => item.range),
-      );
     }
 
     for (const entry of [
@@ -2228,13 +2299,13 @@ export function shared() {}
       ].join("\n"),
     });
     expect(nonCallableImports.result.ok).toBeTrue();
-    expect(nonCallableImports.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(nonCallableImports.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       nonCallableImports.snapshot?.records.some((record) => record.kind === "action"),
     ).toBeFalse();
   });
 
-  test("follows defensible imported bindings through a default export", async () => {
+  test("leaves imported bindings re-exported as default partial without actions", async () => {
     for (const [importStatement, implementation] of [
       ['import api from "./implementation.ts";', "export default function api() {}\n"],
       ['import { api } from "./implementation.ts";', "export function api() {}\n"],
@@ -2246,16 +2317,8 @@ export function shared() {}
       });
 
       expect(result.result.ok).toBeTrue();
-      expect(result.snapshot?.coverage[0]?.state).toBe("complete");
-      const action = result.snapshot?.records.find(
-        (record) => record.kind === "action" && record.name === "default",
-      );
-      expect([...new Set(action?.provenance.map((item) => item.resource))].sort()).toEqual([
-        "package.json",
-        "src/implementation.ts",
-        "src/index.ts",
-      ]);
-      expect(action?.provenance.find((item) => item.range)?.resource).toBe("src/implementation.ts");
+      expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
     }
 
     for (const unsupportedEntry of [
@@ -2280,8 +2343,30 @@ export function shared() {}
       "src/index.ts": 'import * as api from "./implementation.ts";\nexport default api;\n',
     });
     expect(namespace.result.ok).toBeTrue();
-    expect(namespace.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(namespace.snapshot?.coverage[0]?.state).toBe("partial");
     expect(namespace.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+  });
+
+  test("omits mutable, declaration-typed, and overloaded callable bindings", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "unsupported-callables" }),
+      "src/index.ts": [
+        "export let mutableApi = () => true;",
+        "export declare const declaredApi: () => void;",
+        "export function overloadedApi(value: string): void;",
+        "export function overloadedApi(value: number): void;",
+        "export function overloadedApi(value: string | number): void { void value; }",
+        "export function safeApi() {}",
+      ].join("\n"),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["safeApi"]);
   });
 
   test("honors exact tsconfig files and include source-universe semantics", async () => {
@@ -2385,48 +2470,14 @@ export function shared() {}
     expect(incompleteFiles.fixture.read).not.toContain("src/unlisted.ts");
   });
 
-  test("resolves declaration entries without extensions and fails closed on ambiguity", async () => {
-    for (const [target, resource, action] of [
-      ["./src/public", "src/public.d.ts", "publicDeclaration"],
-      ["./types", "types/index.d.ts", "indexDeclaration"],
-      ["./src/javascript.js", "src/javascript.d.ts", "javascriptDeclaration"],
-      ["./src/module", "src/module.d.mts", "moduleDeclaration"],
-      ["./common", "common/index.d.cts", "commonDeclaration"],
-      ["./src/module-stem.mjs", "src/module-stem.d.mts", "moduleStemDeclaration"],
-      ["./src/common-stem.cjs", "src/common-stem.d.cts", "commonStemDeclaration"],
-    ] as const) {
-      const result = await scan({
-        "package.json": JSON.stringify({ exports: target, name: "declaration-resolution" }),
-        [resource]: `export declare function ${action}(): void;\n`,
-      });
-      expect(result.result.ok).toBeTrue();
-      expect(result.snapshot?.coverage[0]?.state).toBe("complete");
-      expect(
-        result.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === action,
-        ),
-      ).toBeTrue();
-    }
-
-    const ambiguous = await scan({
-      "package.json": JSON.stringify({ exports: "./src/entry", name: "ambiguous-declaration" }),
-      "src/entry.d.ts": "export declare function declarationEntry(): void;\n",
-      "src/entry.ts": "export function implementationEntry() {}\n",
+  test("leaves extensionless declaration-only entries partial without actions", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/public", name: "declaration-resolution" }),
+      "src/public.d.ts": "export declare function publicDeclaration(): void;\n",
     });
-    expect(ambiguous.result.ok).toBeTrue();
-    expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(ambiguous.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
-
-    const declarationAmbiguity = await scan({
-      "package.json": JSON.stringify({ exports: "./src/entry", name: "declaration-ambiguity" }),
-      "src/entry.d.cts": "export declare function commonEntry(): void;\n",
-      "src/entry.d.mts": "export declare function moduleEntry(): void;\n",
-    });
-    expect(declarationAmbiguity.result.ok).toBeTrue();
-    expect(declarationAmbiguity.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(
-      declarationAmbiguity.snapshot?.records.some((record) => record.kind === "action"),
-    ).toBeFalse();
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
   });
 
   test("prefers exact runtime resources over declaration sidecar fallbacks", async () => {

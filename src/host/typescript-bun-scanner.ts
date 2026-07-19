@@ -216,11 +216,6 @@ interface ImportEvidence {
   readonly start: number;
 }
 
-interface ImportedBindingEvidence {
-  readonly imported: string;
-  readonly source: string;
-}
-
 interface CallableEvidence {
   readonly end: number;
   readonly jsdoc?: Readonly<{ readonly end: number; readonly start: number }>;
@@ -1201,6 +1196,16 @@ async function inventoryScope(
       files: Object.freeze([]),
       partial: true,
     });
+  const readPolicyFile = async (resource: string): Promise<FileEvidence | undefined> => {
+    try {
+      return await readFile(request, state, scope, resource);
+    } catch (error) {
+      if (error instanceof ScannerStop && error.code === "typescript-scanner-invalid-text") {
+        return undefined;
+      }
+      throw error;
+    }
+  };
   while (queue.length > 0) {
     const directory = queue.shift()!;
     directories += 1;
@@ -1232,7 +1237,8 @@ async function inventoryScope(
       if (gitignore?.kind === "file") {
         if (gitignore.size === undefined || gitignore.size > maxSourceBytes) return emptyPartial();
         else {
-          const file = await readFile(request, state, scope, gitignore.resource);
+          const file = await readPolicyFile(gitignore.resource);
+          if (file === undefined) return emptyPartial();
           const parsed = parseGitignore(file.text);
           ignoreRules = parsed.rules;
           if (parsed.partial) return emptyPartial();
@@ -1243,7 +1249,8 @@ async function inventoryScope(
       if (tsconfig?.kind === "file") {
         if (tsconfig.size === undefined || tsconfig.size > maxSourceBytes) return emptyPartial();
         else {
-          const file = await readFile(request, state, scope, tsconfig.resource);
+          const file = await readPolicyFile(tsconfig.resource);
+          if (file === undefined) return emptyPartial();
           const parsed = parseTsconfig(file.text);
           tsExclude = parsed.exclude;
           tsFiles = parsed.files;
@@ -1436,18 +1443,12 @@ function matchingResources(
     `${base}.cts`,
     `${base}.js`,
     `${base}.jsx`,
-    `${base}.d.ts`,
-    `${base}.d.mts`,
-    `${base}.d.cts`,
     `${base}/index.ts`,
     `${base}/index.tsx`,
     `${base}/index.mts`,
     `${base}/index.cts`,
     `${base}/index.js`,
     `${base}/index.jsx`,
-    `${base}/index.d.ts`,
-    `${base}/index.d.mts`,
-    `${base}/index.d.cts`,
   ]);
   if (/\.[cm]?jsx?$/.test(base)) {
     const stem = base.replace(/\.[cm]?jsx?$/, "");
@@ -1455,9 +1456,6 @@ function matchingResources(
     candidates.add(`${stem}.tsx`);
     candidates.add(`${stem}.mts`);
     candidates.add(`${stem}.cts`);
-    if (/\.mjs$/.test(base)) candidates.add(`${stem}.d.mts`);
-    else if (/\.cjs$/.test(base)) candidates.add(`${stem}.d.cts`);
-    else if (/\.jsx?$/.test(base)) candidates.add(`${stem}.d.ts`);
   }
   return Object.freeze(
     [...candidates].filter((candidate) => resources.has(candidate)).sort(compareCodeUnits),
@@ -1596,6 +1594,7 @@ function packageImportRules(value: unknown): Readonly<{
       !validModulePattern(key, true) ||
       !key.startsWith("#") ||
       key === "#" ||
+      containsConditionalNull(value[key]) ||
       !collectConditionalTargets(value[key], targets, 0, true) ||
       targets.length === 0 ||
       targets.length > 8
@@ -1603,6 +1602,10 @@ function packageImportRules(value: unknown): Readonly<{
       return Object.freeze({ partial: true, rules: Object.freeze([]), unknown: true });
     }
     const local = targets.every((target) => target.startsWith("./"));
+    const uniqueTargets = [...new Set(targets)].sort(compareCodeUnits);
+    if (uniqueTargets.length !== 1) {
+      return Object.freeze({ partial: true, rules: Object.freeze([]), unknown: true });
+    }
     if (local && targets.some((target) => !validPackagePath(target, true, true))) {
       return Object.freeze({ partial: true, rules: Object.freeze([]), unknown: true });
     }
@@ -1610,7 +1613,7 @@ function packageImportRules(value: unknown): Readonly<{
     rules.push(
       Object.freeze({
         key,
-        targets: Object.freeze(local ? [...new Set(targets)].sort(compareCodeUnits) : []),
+        targets: Object.freeze(local ? uniqueTargets : []),
       }),
     );
   }
@@ -1655,6 +1658,44 @@ function workspacePatternMatches(root: string, pattern: string): boolean {
     : root === pattern;
 }
 
+function hasDuplicateJsonKeys(text: string): boolean {
+  const stack: Array<
+    | Readonly<{ readonly kind: "array" }>
+    | { readonly keys: Set<string>; readonly kind: "object"; expectsKey: boolean }
+  > = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (character === '"') {
+      const start = index;
+      for (index += 1; index < text.length; index += 1) {
+        if (text[index] === "\\") index += 1;
+        else if (text[index] === '"') break;
+      }
+      const frame = stack.at(-1);
+      if (frame?.kind === "object" && frame.expectsKey) {
+        let cursor = index + 1;
+        while (cursor < text.length && /\s/.test(text[cursor]!)) cursor += 1;
+        if (text[cursor] === ":") {
+          const key: unknown = JSON.parse(text.slice(start, index + 1));
+          if (typeof key !== "string" || frame.keys.has(key)) return true;
+          frame.keys.add(key);
+          frame.expectsKey = false;
+        }
+      }
+    } else if (character === "{") {
+      stack.push({ expectsKey: true, keys: new Set(), kind: "object" });
+    } else if (character === "[") {
+      stack.push(Object.freeze({ kind: "array" }));
+    } else if (character === "}" || character === "]") {
+      stack.pop();
+    } else if (character === ",") {
+      const frame = stack.at(-1);
+      if (frame?.kind === "object") frame.expectsKey = true;
+    }
+  }
+  return false;
+}
+
 function parsePackage(
   file: FileEvidence,
   resources: ReadonlySet<string>,
@@ -1666,7 +1707,9 @@ function parsePackage(
 }> {
   try {
     const parsed: unknown = JSON.parse(file.text);
-    if (!hasOwnDataRecord(parsed)) return Object.freeze({ partial: true });
+    if (!hasOwnDataRecord(parsed) || hasDuplicateJsonKeys(file.text)) {
+      return Object.freeze({ partial: true });
+    }
     const name = parsed.name;
     if (typeof name !== "string" || !validObservationText(name, 256)) {
       return Object.freeze({ partial: true });
@@ -1739,7 +1782,11 @@ function callableDeclaration(
 function variableCallables(
   node: AstNode,
 ): readonly Readonly<{ readonly name: string; readonly node: AstNode }>[] {
-  if (node.type !== "VariableDeclaration" || !Array.isArray(node.declarations))
+  if (
+    node.type !== "VariableDeclaration" ||
+    node.kind !== "const" ||
+    !Array.isArray(node.declarations)
+  )
     return Object.freeze([]);
   const output: Array<Readonly<{ readonly name: string; readonly node: AstNode }>> = [];
   for (const declaration of node.declarations) {
@@ -1752,6 +1799,35 @@ function variableCallables(
       (initializer.type === "ArrowFunctionExpression" || initializer.type === "FunctionExpression")
     ) {
       output.push(Object.freeze({ name, node: declaration }));
+    }
+  }
+  return Object.freeze(output);
+}
+
+function directCallableType(value: unknown): boolean {
+  if (!isAstNode(value)) return false;
+  if (value.type === "TSTypeAnnotation") return directCallableType(value.typeAnnotation);
+  return value.type === "TSFunctionType";
+}
+
+function unsupportedVariableCallableNames(node: AstNode): readonly string[] {
+  if (node.type !== "VariableDeclaration" || !Array.isArray(node.declarations)) {
+    return Object.freeze([]);
+  }
+  const output: string[] = [];
+  for (const declaration of node.declarations) {
+    if (!isAstNode(declaration)) continue;
+    const name = identifierName(declaration.id);
+    const initializer = declaration.init;
+    const runtimeCallable =
+      isAstNode(initializer) &&
+      (initializer.type === "ArrowFunctionExpression" || initializer.type === "FunctionExpression");
+    const declarationCallable =
+      !isAstNode(initializer) &&
+      isAstNode(declaration.id) &&
+      directCallableType(declaration.id.typeAnnotation);
+    if (name !== undefined && ((runtimeCallable && node.kind !== "const") || declarationCallable)) {
+      output.push(name);
     }
   }
   return Object.freeze(output);
@@ -1894,6 +1970,7 @@ function analyzeLexicalUsage(root: AstNode, consume: () => void): LexicalUsageAn
   };
   const uses: CommonJsUse[] = [];
   const bunServeUses: BunServeUse[] = [];
+  const bunMutationScopes: CommonJsLexicalScope[] = [];
   const stack: Array<
     Readonly<{
       readonly depth: number;
@@ -1997,6 +2074,18 @@ function analyzeLexicalUsage(root: AstNode, consume: () => void): LexicalUsageAn
     ) {
       bunServeUses.push(Object.freeze({ call: node, scope }));
     }
+    if (node.type === "AssignmentExpression") {
+      const target = node.left;
+      if (
+        identifierName(target) === "Bun" ||
+        (isAstNode(target) &&
+          target.type === "MemberExpression" &&
+          identifierName(target.object) === "Bun" &&
+          propertyName(target.property, target.computed) === "serve")
+      ) {
+        bunMutationScopes.push(scope);
+      }
+    }
     const children: Array<Readonly<{ readonly key: string; readonly node: AstNode }>> = [];
     for (const [key, child] of Object.entries(node)) {
       if (isAstNode(child)) children.push(Object.freeze({ key, node: child }));
@@ -2045,9 +2134,13 @@ function analyzeLexicalUsage(root: AstNode, consume: () => void): LexicalUsageAn
   const bunServeCalls: AstNode[] = [];
   let partial = !bounded;
   if (bounded) {
-    for (const use of bunServeUses) {
-      if (unshadowed(use.scope, ["Bun"])) bunServeCalls.push(use.call);
-      else partial = true;
+    if (bunMutationScopes.some((scope) => unshadowed(scope, ["Bun"]))) {
+      partial = true;
+    } else {
+      for (const use of bunServeUses) {
+        if (unshadowed(use.scope, ["Bun"])) bunServeCalls.push(use.call);
+        else partial = true;
+      }
     }
   }
   return Object.freeze({
@@ -2285,8 +2378,19 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
     });
   }
   let partial = traversalPartial;
-  const importedBindings = new Map<string, ImportedBindingEvidence>();
   const locals = new Map<string, Readonly<{ readonly name: string; readonly node: AstNode }>>();
+  const unsupportedLocalCallables = new Set<string>();
+  const rememberLocal = (
+    local: Readonly<{ readonly name: string; readonly node: AstNode }>,
+  ): void => {
+    if (unsupportedLocalCallables.has(local.name)) return;
+    if (locals.has(local.name)) {
+      locals.delete(local.name);
+      unsupportedLocalCallables.add(local.name);
+    } else {
+      locals.set(local.name, local);
+    }
+  };
   for (const statement of body) {
     if (!isAstNode(statement)) continue;
     if (
@@ -2302,30 +2406,13 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
       statement.importKind !== "typeof" &&
       Array.isArray(statement.specifiers)
     ) {
-      const source = literalString(statement.source);
-      if (source === undefined) partial = true;
-      else {
-        for (const specifier of statement.specifiers) {
-          if (!isAstNode(specifier) || typeOnlySpecifier(specifier)) continue;
-          const local = identifierName(specifier.local);
-          const imported =
-            specifier.type === "ImportDefaultSpecifier"
-              ? "default"
-              : specifier.type === "ImportSpecifier"
-                ? propertyName(specifier.imported, false)
-                : undefined;
-          if (specifier.type === "ImportNamespaceSpecifier") continue;
-          if (
-            local === undefined ||
-            imported === undefined ||
-            !validObservationText(local, 256) ||
-            !validObservationText(imported, 256) ||
-            importedBindings.has(local)
-          ) {
-            partial = true;
-            continue;
-          }
-          importedBindings.set(local, Object.freeze({ imported, source }));
+      for (const specifier of statement.specifiers) {
+        if (!isAstNode(specifier) || typeOnlySpecifier(specifier)) continue;
+        const local = identifierName(specifier.local);
+        if (local === undefined || !validObservationText(local, 256)) {
+          partial = true;
+        } else {
+          unsupportedImportedBindings.add(local);
         }
       }
     }
@@ -2336,8 +2423,12 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         ? statement.declaration
         : statement;
     const declared = callableDeclaration(localDeclaration);
-    if (declared !== undefined) locals.set(declared.name, declared);
-    for (const variable of variableCallables(localDeclaration)) locals.set(variable.name, variable);
+    if (declared !== undefined) rememberLocal(declared);
+    for (const name of unsupportedVariableCallableNames(localDeclaration)) {
+      locals.delete(name);
+      unsupportedLocalCallables.add(name);
+    }
+    for (const variable of variableCallables(localDeclaration)) rememberLocal(variable);
   }
   const callables = new Map<string, CallableEvidence>();
   const imports: ImportEvidence[] = [...nestedTypeImports];
@@ -2377,9 +2468,15 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         (statement.exportKind !== "type" || statement.declaration.type === "TSDeclareFunction")
       ) {
         const declared = callableDeclaration(statement.declaration);
-        if (declared !== undefined) addCallable(declared.name, declared.node, statement);
-        for (const variable of variableCallables(statement.declaration))
-          addCallable(variable.name, variable.node, statement);
+        if (declared !== undefined) {
+          if (unsupportedLocalCallables.has(declared.name)) partial = true;
+          else addCallable(declared.name, declared.node, statement);
+        }
+        for (const variable of variableCallables(statement.declaration)) {
+          if (unsupportedLocalCallables.has(variable.name)) partial = true;
+          else addCallable(variable.name, variable.node, statement);
+        }
+        if (unsupportedVariableCallableNames(statement.declaration).length > 0) partial = true;
       }
       const source = literalString(statement.source);
       if (source !== undefined) {
@@ -2423,19 +2520,11 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
           const local = locals.get(localName);
           if (local !== undefined && exportedName !== undefined)
             addCallable(exportedName, local.node, statement);
-          else {
-            const imported = importedBindings.get(localName);
-            if (imported !== undefined) {
-              reexports.push(
-                Object.freeze({
-                  exported: Object.freeze([
-                    Object.freeze({ imported: imported.imported, name: exportedName }),
-                  ]),
-                  source: imported.source,
-                }),
-              );
-            } else if (unsupportedImportedBindings.has(localName)) partial = true;
-          }
+          else if (
+            unsupportedImportedBindings.has(localName) ||
+            unsupportedLocalCallables.has(localName)
+          )
+            partial = true;
         }
       }
     } else if (statement.type === "ExportAllDeclaration") {
@@ -2459,19 +2548,11 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         const localName = identifierName(statement.declaration) ?? "";
         const local = locals.get(localName);
         if (local !== undefined) addCallable("default", local.node, statement);
-        else {
-          const imported = importedBindings.get(localName);
-          if (imported !== undefined) {
-            reexports.push(
-              Object.freeze({
-                exported: Object.freeze([
-                  Object.freeze({ imported: imported.imported, name: "default" }),
-                ]),
-                source: imported.source,
-              }),
-            );
-          } else if (unsupportedImportedBindings.has(localName)) partial = true;
-        }
+        else if (
+          unsupportedImportedBindings.has(localName) ||
+          unsupportedLocalCallables.has(localName)
+        )
+          partial = true;
       }
     }
   }
@@ -3272,7 +3353,9 @@ async function scanScope(
   }
   const workspaceByName = new Map<string, PackageEvidence>();
   const ambiguousWorkspaceNames = new Set<string>();
-  for (const member of workspaceMemberPackages) {
+  for (const member of packages.filter(
+    (item) => workspaceMemberPackages.has(item) || item.workspacePatterns.length > 0,
+  )) {
     chargeExtractionWork(budget);
     if (workspaceByName.has(member.name)) ambiguousWorkspaceNames.add(member.name);
     else workspaceByName.set(member.name, member);
