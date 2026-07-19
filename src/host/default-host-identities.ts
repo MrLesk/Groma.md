@@ -1,5 +1,3 @@
-import { canonicalSchemaMigratorCapabilityId } from "../core/index.ts";
-
 export const defaultHostPluginIds = Object.freeze({
   application: "official.application",
   configurationDiscovery: "official.configuration-discovery",
@@ -10,7 +8,6 @@ export const defaultHostPluginIds = Object.freeze({
   projection: "official.projection",
   queryEngine: "official.query-engine",
   resources: "official.resources",
-  schemaMigrations: "official.schema-migrations",
   surface: "official.surface",
   typescript: "official.typescript",
 });
@@ -28,10 +25,6 @@ export const defaultHostCapabilityIds = Object.freeze({
   queries: "groma.queries/v1",
   resourceMapper: "groma.resource-mapper/v1",
   resources: "groma.resources/v1",
-  schemaMigrationCatalog: "groma.schema-migration-catalog/v1",
-  schemaMigrationOperations: "groma.schema-migration-operations/v1",
-  schemaMigrationTransactionProvider: "groma.schema-migration-transaction-provider/v1",
-  schemaMigrators: canonicalSchemaMigratorCapabilityId,
   snapshotStateDecoder: "groma.snapshot-state-decoder/v1",
   store: "groma.intent-store/v1",
   surface: "groma.host-surface/v1",

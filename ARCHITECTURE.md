@@ -1,263 +1,111 @@
 # Groma Architecture
 
-Groma's architectural sources have distinct roles:
+The [Manifesto](MANIFESTO.md) is authoritative. This document describes the architecture that
+exists in the repository today. It does not claim that the public scan, reconcile, or visual
+workflow has shipped.
 
-- [MANIFESTO.md](MANIFESTO.md) is the constitution for product and architectural
-  principles and takes precedence when a principle is in question.
-- The canonical workspace under [`groma/`](groma/) is the detailed source of truth for
-  component identity, containment, intent, inputs, outputs, actions, extension metadata,
-  and ordinary relationships.
-- This document is the cross-component navigator: it retains context, topology,
-  sequences, data-plane orientation, and scheduled decisions without repeating the
-  canonical component field ledger.
+## The shortest path
 
-The contextual and sequence views below are deliberately not a second field ledger.
-Implementation behavior remains documented beside [`src/`](src/), and presentation follows
-the [brand guide](brand/README.md) and [visual style direction](brand/STYLE.md). Layout,
-folding, focus, zoom, and theme are disposable projection state rather than canonical
-meaning.
+Groma is being built around one local workflow:
 
-## System Context and High-Level Topology
-
-Groma sits between projects being built and the humans, agents, and automation reasoning
-about them. Scanners observe project files and contracts without seeing the existing
-blueprint. Groma reconciles those observations with durable intent, exposes one shared
-application model through CLI and web surfaces, reconstructs bounded visual projections,
-and uses Git revisions and plan overlays for past and future views. Backlog.md coordinates
-implementation work outside Groma.
-
-```mermaid
-flowchart LR
-    Project["Project files and contracts"] --> Scanner["Blind scanner plugins"]
-    Scanner --> Sessions["Observation sessions"]
-    Sessions --> Reconcile["Reconciliation"]
-
-    Actor["Human, agent, or automation"] --> CLI["CLI"]
-    Human["Human"] --> Web["Web surface"]
-    Web --> Service["Application service"]
-    CLI --> Operations["Shared application operations"]
-    Service --> Operations
-    Reconcile --> Core["Groma Core"]
-    Operations --> Core
-    Core --> Model["Standard blueprint model"]
-    Core --> Persistence["Canonical persistence"]
-    Persistence --> Projection["Disposable projection"]
-    Projection --> Operations
-    Operations --> Renderer["Bounded visual renderer"]
-    Renderer --> Artifact["Local HTML or SVG"]
-    Artifact --> Actor
-
-    Git["Git history"] --> Views["View resolution and comparison"]
-    Plans["Desired-state plans"] --> Views
-    Projection --> Views
-    Views --> Operations
-    Backlog["Backlog.md"] -. "coordinates external implementation" .-> Actor
+```text
+groma init -> groma scan -> groma
 ```
 
-The CLI-to-renderer path carries bounded shared-operation data and open/return lifecycle
-only. A renderer never reads canonical storage directly or creates another semantic path.
+`groma init` and the canonical read/write foundation exist. The built-in TypeScript/Bun scanner
+exists behind an internal Host composition. The public `scan`, reconciliation, and visual renderer
+remain future vertical slices.
 
-## Canonical Orientation
+## Semantic boundary
 
-The self-blueprint contains nine root components:
+Groma promises deterministic behavior for bounded local projects and inputs that its scanners can
+classify without guessing. Scanner syntax may be reported as partial or unsupported. Groma does not
+attempt whole-program alias, mutation, or runtime capability analysis.
 
-| Root                           | Orientation                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------------- |
-| Core                           | Technology-neutral graph, transaction, query, observation, and plugin contracts |
-| Official Host                  | Default local composition and bootstrap behavior                                |
-| Standard Blueprint Model       | The official recursively composable component vocabulary                        |
-| Canonical Persistence          | Deterministic local intent, evidence, alias, journal, and migration state       |
-| Projection                     | Reconstructable indexes, bounded queries, and visual projection                 |
-| Scanning and Reconciliation    | Blind observation and intent-preserving reconciliation                          |
-| Planning and History           | Desired-state overlays, comparison, and historical views                        |
-| CLI, Service, and Web Surfaces | Shared operations presented to agents and humans                                |
-| Plugin Development             | Public SDK, reusable conformance, and scaffolding                               |
+The load-bearing invariants are:
 
-Every non-root component has exactly one canonical parent. Ordinary relationships are
-separate from containment and may cross any root boundary. The
-[noncanonical component-model examples](docs/component-model-examples.md) preserve the
-Recursive Shopify and Ordering System teaching examples without adding them to Groma's
-self-blueprint.
+- opaque stable identity is independent of names, paths, and layout;
+- curated intent and scanner evidence are separate;
+- scanners cannot read canonical intent or prior evidence;
+- failed, cancelled, incomplete, or ambiguous scans publish no replacement snapshot;
+- canonical state is readable, deterministic, locally owned, and atomically published;
+- canonical components and relations are separate from disposable visual nodes;
+- every read, scan, and projection has explicit bounds;
+- source and canonical data stay local unless a future explicit feature says otherwise.
 
-## Canonical Data Planes
+## Dependency direction
 
-| Plane    | Canonical responsibility                                                 | Changes through                                   |
-| -------- | ------------------------------------------------------------------------ | ------------------------------------------------- |
-| Intent   | Components, containment, curated meaning, and declared relationships     | Semantic human or agent operations                |
-| Evidence | Completed observations, provenance, and coverage                         | Valid completed scan sessions and reconciliation  |
-| Binding  | Automatic, explicit, ignored, and superseded evidence-to-intent mappings | Groma-owned reconciliation and explicit decisions |
-| Alias    | Stable identity continuity after explicit merges and key migrations      | Alias-aware semantic transactions                 |
-| Plan     | Ordered sparse desired-state overlays                                    | Plan operations, never implementation commands    |
-
-Projection joins these planes into bounded current, historical, and planned views. It is
-reconstructable and never canonical. Detailed ownership and constraints remain on the
-canonical component cards rather than in this table.
-
-## Primary Workflow Sequences
-
-| Journey                 | Primary sequence                                                                                                                                                      | Preserved boundary                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| First useful blueprint  | `groma init -> groma scan -> groma -> bounded current view -> local visual blueprint`                                                                                 | Local, understandable, no upload or AI call by default                                    |
-| Initialize              | Host Phase 0 -> detect no workspace -> init -> create canonical resources -> load Phase 1 -> validate                                                                 | Initialization works before a workspace exists                                            |
-| Create or edit intent   | CLI or web -> shared operation -> current revision -> model invariants -> canonical transaction -> projection event                                                   | Never writes evidence or guesses identity                                                 |
-| Scan and reconcile      | Registry -> confined project view -> blind finite session -> durable completed snapshot -> handoff -> deterministic binding -> evidence transaction -> one generation | Failure or ambiguity infers no absence and erases no intent                               |
-| Local visual navigation | Bounded current read -> projected nodes -> presentation budget -> layout/folding -> focus, expand, trace, inspect                                                     | Visual state is disposable; detail remains reachable                                      |
-| Plans and comparison    | Current + ordered overlays -> cumulative view; selected assertions + current + aliases -> scoped diff                                                                 | Plans state desired truth, never work commands; unrelated work does not block convergence |
-| History                 | `rev:<ref>` -> historical canonical resources -> temporary projection -> read-only view                                                                               | Git semantics stay outside Core                                                           |
-| Web navigation          | Browser -> application service -> bounded query/subgraph -> layout -> incremental expansion                                                                           | Browser never requests or lays out the whole organization graph                           |
-| Backlog self-hosting    | Groma plan -> linked Backlog milestone -> external tasks -> implementation -> scan/reconcile -> plan diff -> milestone outcome                                        | Backlog owns work; Groma owns architectural state                                         |
-
-These sequences explain cross-component flow; they do not replace the canonical actions,
-inputs, outputs, relationships, or constraints that make each step precise.
-
-The GROM-39 Host currently stops at the durable handoff boundary: it accepts an empty scanner
-catalog, executes configured providers from the already-started plugin graph, and exposes only a
-frozen `{recover, start}` scanner view to surfaces. Lifecycle shutdown awaits the internal
-runtime's `cancelAll()` before plugin shutdown; process cancellation starts it before awaiting a
-surface that may itself be waiting on scanner work. Reconciliation is not a no-op placeholder:
-until GROM-41 supplies the consumer, delivery fails closed and the completed handoff remains
-pending without acknowledgement, cleanup, or canonical mutation.
-
-The first built-in contribution is the requirement-free `official.typescript` scanner. It walks
-only the Host-confined project resource surface, parses TypeScript and JavaScript inertly, and
-emits bounded source-local observations for packages, source boundaries, explicit public
-callable exports, uniquely resolved value and type-only cross-boundary imports, defensible
-static Bun routes, and raw documentation. Static TypeScript path aliases and package import
-maps are resolved only when they identify one inventoried resource. Generated, dependency,
-vendor, build, test, configured-excluded, and supported ignored resources are outside its
-declared production universe. Unsafe root policy makes the scope empty and partial; nested
-policy makes that subtree opaque. Other unsupported, dynamic, malformed, or ambiguous evidence
-is omitted and makes the affected coverage partial;
-it never executes project code, reads canonical intent, emits canonical IDs or bindings, or
-turns prose into architecture. Stable observation keys derive from logical source identity,
-while exact resource bytes and UTF-8 ranges remain evidence provenance.
-
-The execution deadline and cancellation fence cover the complete pipeline, including durable
-drain, revision validation, handoff, consumption, acknowledgement, and cleanup. An unsettled Host
-operation after interruption quarantines only its project/source lane until that promise settles;
-settlement schedules fresh journal recovery and never restarts the interrupted pipeline. Other
-lanes continue independently, so one unavailable consumer or storage operation cannot stop
-unrelated projects or sources.
-
-## Inspect the Blueprint
-
-Build the public executable before inspecting a source checkout:
-
-```sh
-bun run build
-./dist/groma
-./dist/groma component roots --limit 100
-./dist/groma blueprint search "reconciliation" --limit 20
-./dist/groma blueprint traverse <component-id> --direction both --depth 2 --limit 20
-./dist/groma blueprint export --limit 7
+```text
+Core <- Standard Model <- Application <- Host <- CLI
+  ^            ^               ^          ^
+  +------ Plugin SDK           +------ Persistence
 ```
 
-An installed distribution uses the same commands with `groma` in place of
-`./dist/groma`. Export is explicitly paged: pass each returned cursor unchanged until
-`hasMore` is false. Cursors are generation-bound, so a stale result requires restarting
-from the first page.
+- `src/core` owns identity, bounded graph values, observations, transactions, plugin lifecycle,
+  diagnostics, and query contracts. It knows no filesystem, scanner syntax, or presentation.
+- `src/standard-model` defines Groma's current component and relationship vocabulary plus the
+  transaction invariant for that vocabulary.
+- `src/application` composes use cases over capabilities. It does not own storage or UI.
+- `src/persistence` provides local resources, readable Markdown intent, aliases, atomic canonical
+  transactions, and an in-memory disposable projection rebuilt from canonical reads.
+- `src/plugin-sdk` exposes the blind scanner contract and the Core types needed to implement it.
+- `src/host` composes the built-in providers, owns local project/source access, and contains one
+  bounded scan run.
+- `src/cli` parses and renders the currently supported command surface.
 
-Canonical Markdown is readable for review, but architectural meaning changes only through
-supported public Groma operations. Do not hand-edit generated intent shards or derive
-identity from a component name, path, parent, or migration seed key.
+The boundary checker enforces this direction and rejects unverifiable dynamic production imports.
 
-## Relationship Declarations
+## Canonical state and publication
 
-The migration preserves all 87 documented relationship declarations as structured
-`groma.md/relationship-declarations` metadata on their owning components. Every record
-retains its stable key and exact source text in one of four states:
+Canonical intent is stored as human-readable Markdown under `groma/`. Stable IDs determine durable
+locations; names and containment do not. Alias records preserve explicit identity continuity.
+Application mutations prepare a complete transaction and publish atomically through the local
+transaction provider. An uncertain filesystem result is reported as indeterminate rather than
+guessed.
 
-- `edge` means all declared endpoints are explicit and materialized as one or more
-  canonical `relates-to` edges whose IDs the declaration records;
-- `partial` means one or more exact endpoints are materialized and recorded while an
-  unresolved remainder of the declaration stays visible;
-- `ambiguous` means no endpoint is sufficiently defensible to materialize without a
-  guess;
-- `constraint` means the declaration is an architectural boundary rather than an edge.
+Schema migration is intentionally absent before a real incompatible release exists. The current
+schema is exact-validated and fails closed when unsupported.
 
-Both `edge` and `partial` declarations have a nonempty `edgeIds` list. `ambiguous` and
-`constraint` declarations have no edge IDs. Missing, collective, or open-ended endpoints
-never receive synthetic components merely to make the graph appear complete.
+## Blind scanning
 
-The neutral `relates-to` owner-to-target direction records declaration ownership and
-serialization. It does **not** claim dependency, control, or data-flow direction. Use
-`blueprint traverse <id> --direction both ...` when exploring adjacency unless the
-declaration text itself gives the semantic direction.
+The built-in TypeScript/Bun scanner receives only a bounded project resource capability and its
+scanner configuration. It cannot read canonical intent, prior evidence, visual state, or another
+scanner's output.
 
-## Invariants, Open Decisions, and Exclusions
+One Host scan run creates an in-memory finite observation session. Batches become publishable only
+after the scanner reports successful complete coverage. Failure, cancellation, timeout, incomplete
+coverage, or malformed output produces no completed snapshot and never invokes the evidence
+consumer. Provisional batches, heartbeats, recovery lanes, and observation journals are not durable.
 
-This navigator intentionally does not restore a parallel invariant list. The
-[Manifesto](MANIFESTO.md) states the governing invariants, while the canonical **Model
-Invariants** component and individual card constraints record detailed enforcement and
-ownership. Inspect them through the public search, exact-read, and traversal commands.
+This is a same-process trusted composition with ordinary boundary validation. Groma does not defend
+against a plugin deliberately mutating JavaScript intrinsics or using Proxy traps inside the same
+process. Supporting third-party package acquisition or stronger isolation requires an explicit
+future product and security decision.
 
-Nine decisions remain deliberately unresolved until their scheduled evidence and freeze
-points. Earlier work must not guess them.
+## Disposable projections
 
-| Decision                                                     | Earliest evidence                                 | Freeze point       |
-| ------------------------------------------------------------ | ------------------------------------------------- | ------------------ |
-| Exact standard state taxonomy and display precedence         | Self-scan and drift cases                         | End of Iteration 2 |
-| External observation transport grammar                       | Synthetic scanner and agent submission            | End of Iteration 3 |
-| Plaintext grammar details                                    | Real agent use across scanning and binding        | End of Iteration 2 |
-| Evidence shard fanout beyond the initial 256-bucket strategy | 500,000-observation fixture                       | End of Iteration 3 |
-| Default CLI page size                                        | Real query and comparison benchmarks              | End of Iteration 3 |
-| Plan ordering UX                                             | Concurrent plan dogfood                           | End of Iteration 3 |
-| Event batching thresholds                                    | Viewer and scan load tests                        | End of Iteration 4 |
-| Local-artifact main-layer, focus, and expansion budgets      | Iteration 2 local visual prototype                | End of Iteration 2 |
-| Browser retained-node budgets                                | Iteration 3 scale evidence and browser load tests | End of Iteration 4 |
+The projection index is an in-memory read model reconstructed from a bounded canonical transaction
+snapshot. It owns no canonical meaning. On a committed generation it rebuilds deterministic entity,
+catalog, relationship, search, and adjacency reads and derives a content fingerprint. It has no
+durable chunks, Merkle tree, repair protocol, checkpoint, or second semantic path.
 
-The following are explicit v0.1 exclusions rather than unresolved questions:
+Renderers must consume bounded shared application reads. Layout, folding, focus, zoom, theme, and
+visual nodes never enter canonical state.
 
-- hosted coordination and multi-host writes;
-- plugin marketplace and sandboxing;
-- blueprint federation and importing;
-- branching alternative futures;
-- plan application or code generation;
-- agent approval and permission workflows;
-- organization-wide global canvas layout.
+## Local resource boundary
 
-## Resolve Disagreements
+The local resource provider applies portable locator validation, path containment, explicit byte and
+page limits, symlink rejection, and atomic replacement. The canonical transaction journal exists
+only to preserve atomic canonical publication and recovery; it is not a general durability framework.
 
-When the blueprint, implementation, or this navigator appears to disagree:
+Groma performs no upload by default. Cross-compilation verification checks that target artifacts are
+non-empty and executable on the compatible host; it does not maintain custom Mach-O, ELF, or PE
+parsers.
 
-1. Check the Manifesto first. If the disagreement changes a principle, stop for an
-   explicit product decision.
-2. Inspect the affected components and relationships through bounded public reads, and
-   record the stable component, item, declaration, and edge IDs involved.
-3. Decide which layer is wrong: canonical architectural meaning, current implementation,
-   or this high-level navigator. Scanner evidence alone does not replace curated intent.
-4. Change canonical meaning only through supported public operations. Change code for
-   implementation drift, and change this navigator only for incorrect cross-component
-   context.
-5. Verify the result. If identity or endpoint resolution remains ambiguous, fail closed.
+## Deliberately absent
 
-## Verify and Refresh the Frozen Baseline
-
-The self-blueprint verifier copies canonical bytes, uses fresh compiled public CLI
-processes to page a bounded export, checks structure and declaration-edge correspondence,
-deletes and rebuilds disposable projection state, and proves the canonical copy stayed
-byte-identical:
-
-```sh
-bun run verify:self-blueprint
-bun run check
-```
-
-A baseline refresh is deliberate and review-only:
-
-1. Edit canonical meaning through the compiled public CLI using current revisions.
-2. Review `groma diff`. Until that comparison command is delivered, review
-   `git diff -- groma` together with a bounded public `blueprint export`.
-3. Run
-   `bun run tests/iteration-1b/verify-self-blueprint.ts --report-baseline` to print the
-   observed counts, declaration statuses, and opaque digests.
-4. Review that report and deliberately update the fixed `expectedBaseline` summary—its
-   counts, status counts, and digests—in the verifier. The report never writes or updates
-   expectations automatically.
-5. Run normal `bun run verify:self-blueprint` to enforce the refreshed baseline.
-
-`--report-baseline` may appear before or after `--executable=<path>`. It bypasses frozen
-expected-baseline equality for counts, status counts, and digests. Generic identity,
-containment, intent, declaration-status and edge-ID rules, the declaration-edge
-bijection, projection rebuild, and byte-identical canonical proof still run. A frozen
-baseline is a change detector, not an architectural source.
+The current architecture does not include local plugin package acquisition, scaffolding, trust
+ledgers, SDK certification, schema migration catalogs, durable observation recovery, evidence
+sharding, persistent projection repair, an automatic-blueprint certification benchmark, or a frozen
+self-blueprint fixture. Reintroducing one of these requires evidence from the thin product loop and a
+clearer benefit than its maintenance cost.

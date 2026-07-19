@@ -123,24 +123,14 @@ function diagnosticResult(
 
 function hostExit(diagnostics: readonly { readonly code: string }[], fallback: number): number {
   return diagnostics.length > 0 &&
-    diagnostics.every(
-      (entry) =>
-        [
-          "invalid-local-plugin-package-source",
-          "personal-plugin-capability-forbidden",
-          "project-plugin-validation-required",
-          "plugin-full-user-permissions-trust-required",
-          "remote-plugin-package-acquisition-out-of-scope",
-          "runtime-plugin-unavailable",
-          "workspace-configuration-changed",
-          "workspace-configuration-conflict",
-          "workspace-configuration-malformed",
-          "workspace-discovery-conflict",
-        ].includes(entry.code) ||
-        entry.code.startsWith("plugin-package-") ||
-        entry.code.startsWith("invalid-plugin-package-") ||
-        entry.code.startsWith("incompatible-plugin-") ||
-        entry.code === "unsupported-plugin-package-manifest-version",
+    diagnostics.every((entry) =>
+      [
+        "runtime-plugin-unavailable",
+        "workspace-configuration-changed",
+        "workspace-configuration-conflict",
+        "workspace-configuration-malformed",
+        "workspace-discovery-conflict",
+      ].includes(entry.code),
     )
     ? CLI_EXIT.workspace
     : fallback;
@@ -168,12 +158,6 @@ function emit(value: CliCommandResult, format: CliFormat, output: ProgramOutput)
 
 function isRegistryManagementCommand(command: CliCommand): boolean {
   switch (command.kind) {
-    case "package-add":
-    case "package-disable":
-    case "package-enable":
-    case "package-inspect":
-    case "package-remove":
-    case "package-scaffold":
     case "project-add":
     case "project-get":
     case "project-list":
@@ -249,12 +233,7 @@ export async function runProgram(
   const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =
     options.createRegistry?.(controller.surface) ??
-    createDefaultBootstrapRegistry({
-      loadLocalPluginPackages: !managementCommand,
-      migrationOnly: invocation.command.kind.startsWith("migrate-"),
-      surface: controller.surface,
-      ...(options.userDataRoot === undefined ? {} : { userDataRoot: options.userDataRoot }),
-    });
+    createDefaultBootstrapRegistry({ surface: controller.surface });
   const hostOutcome = await runHost({
     context: { workspaceRoot },
     recoveryPolicy: managementCommand ? "management-not-required" : "semantic-required",

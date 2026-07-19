@@ -1,5 +1,4 @@
 import path from "node:path";
-import { isProxy as isNativeProxy } from "node:util/types";
 
 import { isAlias, parseDocument, visit } from "yaml";
 
@@ -43,12 +42,6 @@ export interface RequestedRuntimePlugin {
   readonly namespace: "official" | "project";
 }
 
-export interface ConfiguredPluginPackage {
-  readonly enabled: readonly string[];
-  readonly name: string;
-  readonly source: string;
-}
-
 export interface ConfiguredProjectScanner {
   readonly configuration: GraphData;
   readonly id: string;
@@ -68,7 +61,6 @@ export interface ConfiguredProjectRegistration {
 }
 
 export interface BootstrapBaseConfiguration {
-  readonly packageDeclarations: readonly ConfiguredPluginPackage[];
   readonly projectRegistrations?: readonly ConfiguredProjectRegistration[];
   readonly requestedRuntimePlugins: readonly RequestedRuntimePlugin[];
   readonly retiredProjectIds?: readonly string[];
@@ -104,10 +96,6 @@ export type BootstrapConfigurationLoad =
 export const bootstrapConfigurationBounds = Object.freeze({
   maxConfigurationBytes: 64 * 1_024,
   maxDiscoveryCandidates: 8,
-  maxEnabledLocalPlugins: 52,
-  maxPackageDeclarations: 64,
-  maxPackageEntryCharacters: 512,
-  maxPackageSourceCharacters: 4_096,
   maxProjectCoverageScopes: 64,
   maxProjectDisplayNameCharacters: 256,
   maxProjectRegistrations: 64,
@@ -138,8 +126,6 @@ export const localWorkspaceLocator: WorkspaceLocator = Object.freeze({
 const pluginIdPattern = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const projectIdPattern = /^(?:project\.default|project_[0-9a-f]{32})$/;
 const projectCoverageIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/;
-const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
-const packagePathSegmentPattern = /^[A-Za-z0-9@](?:[A-Za-z0-9._@-]*[A-Za-z0-9_@-])?$/;
 const intrinsicTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const intrinsicUint8Array = Uint8Array;
 const intrinsicUint8ArrayPrototype = Uint8Array.prototype;
@@ -200,33 +186,6 @@ function isSafeProjectDisplayName(value: unknown): value is string {
     if (codePoints > bootstrapConfigurationBounds.maxProjectDisplayNameCharacters) return false;
   }
   return codePoints > 0;
-}
-
-function isPortablePackagePath(value: unknown, maximumCharacters: number): value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > maximumCharacters ||
-    !value.startsWith("./") ||
-    value.includes("\\") ||
-    value.includes("\0")
-  ) {
-    return false;
-  }
-  const segments = value.split("/");
-  return (
-    segments[0] === "." &&
-    segments.length > 1 &&
-    segments.slice(1).every((segment) => packagePathSegmentPattern.test(segment))
-  );
-}
-
-function isPackageEntry(value: unknown): value is string {
-  return isPortablePackagePath(value, bootstrapConfigurationBounds.maxPackageEntryCharacters);
-}
-
-export function isBlueprintPackageSource(value: unknown): value is string {
-  return isPortablePackagePath(value, bootstrapConfigurationBounds.maxPackageSourceCharacters);
 }
 
 export function isProjectRegistrationId(value: unknown): value is string {
@@ -421,74 +380,6 @@ export function canonicalizeProjectRegistration(
     : failure(diagnostic("invalid-project-registration", "Project registration is malformed"));
 }
 
-function parseConfiguredPackages(
-  value: unknown,
-  boundary: "configuration" | "parser" = "configuration",
-): Result<readonly ConfiguredPluginPackage[]> {
-  const invalid = () =>
-    boundary === "configuration"
-      ? malformed()
-      : failure(
-          diagnostic(
-            "workspace-configuration-parser-failed",
-            "Workspace configuration parsing failed",
-          ),
-        );
-  const inspected = inspectHostDenseArray(
-    value,
-    bootstrapConfigurationBounds.maxPackageDeclarations,
-    "workspace-configuration-parser-failed",
-    "Configured plugin packages",
-  );
-  if (!inspected.ok) return invalid();
-  const packages: ConfiguredPluginPackage[] = [];
-  const names = new Set<string>();
-  let enabledCount = 0;
-  for (const item of inspected.value) {
-    const inspectedRecord = inspectHostRecord(
-      item,
-      [["enabled", "name", "source"]],
-      "workspace-configuration-parser-failed",
-      "Configured plugin package",
-    );
-    if (!inspectedRecord.ok) return invalid();
-    const record = inspectedRecord.value;
-    const enabled = inspectHostDenseArray(
-      record.enabled,
-      64,
-      "workspace-configuration-parser-failed",
-      "Configured plugin entries",
-    );
-    if (
-      !enabled.ok ||
-      typeof record.name !== "string" ||
-      record.name.length > 214 ||
-      !packageNamePattern.test(record.name) ||
-      names.has(record.name) ||
-      !isBlueprintPackageSource(record.source)
-    ) {
-      return invalid();
-    }
-    const entries = new Set<string>();
-    for (const entry of enabled.value) {
-      if (!isPackageEntry(entry) || entries.has(entry)) return invalid();
-      entries.add(entry);
-    }
-    enabledCount += entries.size;
-    if (enabledCount > bootstrapConfigurationBounds.maxEnabledLocalPlugins) return invalid();
-    names.add(record.name);
-    packages.push(
-      Object.freeze({
-        enabled: Object.freeze([...entries].sort(compareCodeUnits)),
-        name: record.name,
-        source: record.source,
-      }),
-    );
-  }
-  packages.sort((left, right) => compareCodeUnits(left.name, right.name));
-  return success(Object.freeze(packages));
-}
-
 export function serializeBootstrapConfiguration(configuration: BootstrapBaseConfiguration): string {
   const lines = [`schema: ${configuration.schema}`];
   const projectRegistrations = configuration.projectRegistrations ?? Object.freeze([]);
@@ -497,16 +388,6 @@ export function serializeBootstrapConfiguration(configuration: BootstrapBaseConf
     lines.push("plugins:");
     for (const plugin of configuration.requestedRuntimePlugins) {
       lines.push(`  - ${JSON.stringify(plugin.id)}`);
-    }
-  }
-  if (configuration.packageDeclarations.length > 0) {
-    lines.push("packages:");
-    for (const declaration of configuration.packageDeclarations) {
-      lines.push(`  - name: ${JSON.stringify(declaration.name)}`);
-      lines.push(`    source: ${JSON.stringify(declaration.source)}`);
-      lines.push("    enabled:");
-      for (const entry of declaration.enabled) lines.push(`      - ${JSON.stringify(entry)}`);
-      if (declaration.enabled.length === 0) lines[lines.length - 1] = "    enabled: []";
     }
   }
   if (projectRegistrations.length > 0) {
@@ -538,7 +419,7 @@ export function serializeBootstrapConfiguration(configuration: BootstrapBaseConf
 }
 
 function copyBytes(value: unknown): Result<Uint8Array> {
-  if (typeof value !== "object" || value === null || isHostProxy(value) || isNativeProxy(value)) {
+  if (typeof value !== "object" || value === null) {
     return failure(
       diagnostic("workspace-discovery-failed", "Workspace configuration discovery failed"),
     );
@@ -744,15 +625,7 @@ export function createLocalConfigurationDiscovery(
   });
 }
 
-export interface YamlConfigurationParserOptions {
-  /** Read-only compatibility used only to compose explicit migration commands. */
-  readonly allowLegacySchemaForMigration?: boolean;
-}
-
-export function createYamlConfigurationParser(
-  options: YamlConfigurationParserOptions = Object.freeze({}),
-): ConfigurationParserProvider {
-  const allowLegacySchemaForMigration = options.allowLegacySchemaForMigration === true;
+export function createYamlConfigurationParser(): ConfigurationParserProvider {
   return Object.freeze({
     parse: (bytes: Uint8Array): Result<BootstrapBaseConfiguration> => {
       const copied = copyBytes(bytes);
@@ -786,19 +659,16 @@ export function createYamlConfigurationParser(
       if (typeof value !== "object" || value === null || Array.isArray(value)) return malformed();
       const record = value as Record<string, unknown>;
       const keys = Object.keys(record).sort();
-      const schemaAccepted =
-        record.schema === "groma/v0.1" ||
-        (allowLegacySchemaForMigration && record.schema === "groma/v0");
+      const schemaAccepted = record.schema === "groma/v0.1";
       if (Object.hasOwn(record, "schema") && typeof record.schema === "string" && !schemaAccepted) {
         return incompatible();
       }
       if (
         keys.length < 1 ||
-        keys.length > 5 ||
+        keys.length > 4 ||
         !keys.includes("schema") ||
         keys.some(
           (key) =>
-            key !== "packages" &&
             key !== "plugins" &&
             key !== "projects" &&
             key !== "retiredProjectIds" &&
@@ -834,10 +704,6 @@ export function createYamlConfigurationParser(
         }
       }
       requested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-      const packageDeclarations = Object.hasOwn(record, "packages")
-        ? parseConfiguredPackages(record.packages)
-        : success(Object.freeze([]));
-      if (!packageDeclarations.ok) return packageDeclarations;
       const projectRegistrations = Object.hasOwn(record, "projects")
         ? parseConfiguredProjects(record.projects)
         : success(Object.freeze([]));
@@ -864,7 +730,6 @@ export function createYamlConfigurationParser(
       retiredProjectIds.sort(compareCodeUnits);
       return success(
         Object.freeze({
-          packageDeclarations: packageDeclarations.value,
           projectRegistrations: projectRegistrations.value,
           requestedRuntimePlugins: Object.freeze(requested),
           retiredProjectIds: Object.freeze(retiredProjectIds),
@@ -925,16 +790,10 @@ export function parseBootstrapConfiguration(
   const configuration = inspectHostRecord(
     parsed.value.value,
     [
-      ["packageDeclarations", "requestedRuntimePlugins", "schema"],
-      ["packageDeclarations", "projectRegistrations", "requestedRuntimePlugins", "schema"],
-      ["packageDeclarations", "requestedRuntimePlugins", "retiredProjectIds", "schema"],
-      [
-        "packageDeclarations",
-        "projectRegistrations",
-        "requestedRuntimePlugins",
-        "retiredProjectIds",
-        "schema",
-      ],
+      ["requestedRuntimePlugins", "schema"],
+      ["projectRegistrations", "requestedRuntimePlugins", "schema"],
+      ["requestedRuntimePlugins", "retiredProjectIds", "schema"],
+      ["projectRegistrations", "requestedRuntimePlugins", "retiredProjectIds", "schema"],
     ],
     "workspace-configuration-parser-failed",
     "Bootstrap base configuration",
@@ -987,15 +846,6 @@ export function parseBootstrapConfiguration(
     );
   }
   canonicalRequested.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-  const packageDeclarations = parseConfiguredPackages(
-    configuration.value.packageDeclarations,
-    "parser",
-  );
-  if (!packageDeclarations.ok) {
-    return failure(
-      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
-    );
-  }
   const projectRegistrations = Object.hasOwn(configuration.value, "projectRegistrations")
     ? parseConfiguredProjects(configuration.value.projectRegistrations, "parser")
     : success(Object.freeze([]));
@@ -1035,7 +885,6 @@ export function parseBootstrapConfiguration(
   retiredProjectIds.sort(compareCodeUnits);
   return success(
     Object.freeze({
-      packageDeclarations: packageDeclarations.value,
       projectRegistrations: projectRegistrations.value,
       requestedRuntimePlugins: Object.freeze(canonicalRequested),
       retiredProjectIds: Object.freeze(retiredProjectIds),
@@ -1058,7 +907,6 @@ export function bootstrapConfigurationStillUsable(
     return (
       actual.state === "missing" ||
       (actual.configuration.requestedRuntimePlugins.length === 0 &&
-        actual.configuration.packageDeclarations.length === 0 &&
         (actual.configuration.projectRegistrations?.length ?? 0) === 0 &&
         (actual.configuration.retiredProjectIds?.length ?? 0) === 0)
     );
@@ -1066,8 +914,6 @@ export function bootstrapConfigurationStillUsable(
   if (actual.state === "missing") return false;
   const expectedPlugins = expected.configuration.requestedRuntimePlugins;
   const actualPlugins = actual.configuration.requestedRuntimePlugins;
-  const expectedPackages = expected.configuration.packageDeclarations;
-  const actualPackages = actual.configuration.packageDeclarations;
   const expectedProjects = expected.configuration.projectRegistrations ?? Object.freeze([]);
   const actualProjects = actual.configuration.projectRegistrations ?? Object.freeze([]);
   const expectedRetiredProjectIds = expected.configuration.retiredProjectIds ?? Object.freeze([]);
@@ -1080,17 +926,6 @@ export function bootstrapConfigurationStillUsable(
         plugin.id === actualPlugins[index]?.id &&
         plugin.namespace === actualPlugins[index]?.namespace,
     ) &&
-    expectedPackages.length === actualPackages.length &&
-    expectedPackages.every((declaration, index) => {
-      const current = actualPackages[index];
-      return (
-        current !== undefined &&
-        declaration.name === current.name &&
-        declaration.source === current.source &&
-        declaration.enabled.length === current.enabled.length &&
-        declaration.enabled.every((entry, entryIndex) => entry === current.enabled[entryIndex])
-      );
-    }) &&
     expectedRetiredProjectIds.length === actualRetiredProjectIds.length &&
     expectedRetiredProjectIds.every((id, index) => id === actualRetiredProjectIds[index]) &&
     expectedProjects.length === actualProjects.length &&

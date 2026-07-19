@@ -5,7 +5,6 @@ import {
   type ComponentPage,
   type CreateComponentRequest,
   type UpdateComponentRequest,
-  type SchemaMigrationApplyOutcome,
 } from "../application/index.ts";
 import type { HostSurface, HostSurfaceContext, ProjectRegistrationInput } from "../host/index.ts";
 import {
@@ -65,16 +64,12 @@ function failedResult(
 
 function diagnosticExit(diagnostics: readonly { readonly code: string }[]): number {
   const codes = diagnostics.map((entry) => entry.code);
-  if (codes.includes("plugin-package-state-indeterminate")) {
-    return CLI_EXIT.indeterminate;
-  }
   if (codes.includes("project-registry-state-indeterminate")) {
     return CLI_EXIT.indeterminate;
   }
   if (
     codes.some(
       (code) =>
-        code === "plugin-scaffold-publication-failed" ||
         code === "graph-query-unavailable" ||
         code.includes("provider") ||
         code.includes("initialization-failed") ||
@@ -95,14 +90,6 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
         code === "no-workspace" ||
         code.startsWith("project-registry-") ||
         code === "project-revision-conflict" ||
-        code === "plugin-package-enabled-limit-exceeded" ||
-        code === "plugin-package-plugin-id-conflict" ||
-        code === "plugin-package-integrity-drift" ||
-        code === "plugin-package-state-limit-exceeded" ||
-        code === "plugin-package-state-unavailable" ||
-        code === "plugin-package-trust-root-unattested" ||
-        code.includes("plugin-package-lock") ||
-        code.includes("plugin-package-user-state") ||
         code.includes("workspace-configuration") ||
         code.includes("workspace-initialization-conflict"),
     )
@@ -134,25 +121,6 @@ function mutationResult<T>(
       return result(command, CLI_EXIT.indeterminate, false, value);
     case "provider-failure":
       return result(command, CLI_EXIT.infrastructure, false, value);
-    default:
-      return result(command, CLI_EXIT.semantic, false, value);
-  }
-}
-
-function migrationResult(
-  command: CliCommand,
-  value: SchemaMigrationApplyOutcome,
-): CliCommandResult {
-  switch (value.status) {
-    case "applied":
-    case "current":
-      return result(command, CLI_EXIT.success, true, value);
-    case "indeterminate":
-      return result(command, CLI_EXIT.indeterminate, false, value);
-    case "provider-failure":
-      return result(command, CLI_EXIT.infrastructure, false, value);
-    case "conflict":
-      return result(command, CLI_EXIT.workspace, false, value);
     default:
       return result(command, CLI_EXIT.semantic, false, value);
   }
@@ -379,24 +347,6 @@ async function execute(
           : CLI_EXIT.success;
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
   }
-  if (command.kind === "package-add") {
-    return applicationResult(command, await context.packages.add(command));
-  }
-  if (command.kind === "package-scaffold") {
-    return applicationResult(command, await context.packages.scaffold(command));
-  }
-  if (command.kind === "package-inspect") {
-    return applicationResult(command, await context.packages.inspect(command));
-  }
-  if (command.kind === "package-enable") {
-    return applicationResult(command, await context.packages.enable(command));
-  }
-  if (command.kind === "package-disable") {
-    return applicationResult(command, await context.packages.disable(command));
-  }
-  if (command.kind === "package-remove") {
-    return applicationResult(command, await context.packages.remove(command));
-  }
   if (command.kind === "project-add") {
     const request = await structuredRequest(command, command.input, reader, context.cancellation);
     if (!request.ok) return request.result;
@@ -432,27 +382,6 @@ async function execute(
         id: command.id,
       }),
     );
-  }
-  if (command.kind.startsWith("migrate-")) {
-    const available = context.workspace.requireWorkspace();
-    if (!available.ok) {
-      return result(command, diagnosticExit(available.diagnostics), false, available);
-    }
-    if (context.migrations === undefined) {
-      return failedResult(
-        command,
-        CLI_EXIT.infrastructure,
-        "schema-migration-capability-unavailable",
-        "Schema migration operations are unavailable in this host",
-      );
-    }
-    if (command.kind === "migrate-status") {
-      return applicationResult(command, await context.migrations.status());
-    }
-    if (command.kind === "migrate-preview") {
-      return applicationResult(command, await context.migrations.preview());
-    }
-    return migrationResult(command, await context.migrations.apply());
   }
   const operations = workspaceOperations(command, context);
   if (!("listRoots" in operations)) return operations;

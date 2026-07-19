@@ -1,7 +1,6 @@
 import type {
   ApplicationOperations,
   ApplicationSnapshotStateDecoder,
-  SchemaMigrationOperations,
   WorkspaceInitializationCapability,
 } from "../application/index.ts";
 import type {
@@ -30,7 +29,6 @@ import type {
   TransactionProvider,
 } from "../core/index.ts";
 import type { ComponentResourceMapper } from "../application/index.ts";
-import type { PluginPackageOperations } from "./local-plugin-packages.ts";
 import type { ProjectRegistrationOperations } from "./local-project-registry.ts";
 import type { ScannerExecutionRuntime } from "./scanner-runtime.ts";
 
@@ -67,9 +65,7 @@ export type ScannerSurfaceOperations = Readonly<Pick<ScannerExecutionRuntime, "r
 export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;
   readonly initialization: HostInitializationOperations;
-  readonly packages: PluginPackageOperations;
   readonly projects: ProjectRegistrationOperations;
-  readonly migrations?: SchemaMigrationOperations;
   readonly recovery: { readonly status: "completed" | "not-required" };
   readonly scanners: ScannerSurfaceOperations;
   readonly workspace: WorkspaceAccessCapability;
@@ -100,9 +96,7 @@ export interface HostComposition {
   readonly graph: GraphKernel;
   readonly invariant: TransactionInvariant;
   readonly model: StandardModelCapability;
-  readonly migrations?: SchemaMigrationOperations;
   readonly operations: ApplicationOperations;
-  readonly packages: PluginPackageOperations;
   readonly projects: ProjectRegistrationOperations;
   /** Present for runtime-composed hosts; optional for compatible injected test/legacy registries. */
   readonly plugins?: RunningPluginGraph;
@@ -132,17 +126,11 @@ export interface DefaultBootstrapRegistryOptions {
   readonly additionalRuntimePlugins?: readonly PluginRegistration[];
   readonly coordinationRoot?: string;
   readonly entropy?: EntropySource;
-  /** Package-management recovery seam; ordinary startup always loads enabled packages. */
-  readonly loadLocalPluginPackages?: boolean;
-  /** Explicit CLI recovery seam for workspaces whose canonical documents require migration. */
-  readonly migrationOnly?: boolean;
   /** Explicit verification seam; production composition does not supply one. */
   readonly resourceFaultInjector?: LocalResourceFaultInjector;
   readonly surface: HostSurface;
   /** Pure target-convention seam. Production derives this from the running binary. */
   readonly target?: Omit<LocalBootstrapTarget, "workspaceRoot">;
-  /** Host-owned state for personal package declarations and exact trust grants. */
-  readonly userDataRoot?: string;
 }
 
 export type HostRunOutcome =

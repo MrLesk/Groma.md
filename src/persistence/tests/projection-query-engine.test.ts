@@ -1861,7 +1861,7 @@ describe("projection query engine", () => {
     const resources = await createLocalResourceProvider({ workspaceRoot: root });
     const initial = canonical(1, "Payment service");
     const source = new MutableCanonicalSource(initial);
-    const projection = createLocalProjectionIndex({ canonical: source, resources });
+    const projection = createLocalProjectionIndex({ canonical: source });
     const query = createQueryFlow({
       bounds: {
         maxEntities: 8,

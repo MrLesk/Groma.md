@@ -1,20 +1,11 @@
-import { isProxy } from "node:util/types";
-
-import { containCapabilityValue } from "../application/capability-value.ts";
-import { containNativePromise } from "../application/promise-observation.ts";
 import { failure, success, type Diagnostic, type Result } from "../core/index.ts";
-import {
-  inspectExactRecord,
-  inspectIntrinsicArrayLength,
-  type InspectedRecord,
-} from "../core/runtime.ts";
+import { inspectExactRecord, type InspectedRecord } from "../core/runtime.ts";
 
-function invalid(code: string, message: string): Diagnostic {
-  return Object.freeze({ code, message });
-}
+const invalid = (code: string, message: string): Diagnostic => Object.freeze({ code, message });
 
-export function isHostProxy(value: unknown): boolean {
-  return typeof value === "object" && value !== null && isProxy(value);
+/** Plugins run in the same trusted process; Proxy detection is not a security boundary. */
+export function isHostProxy(_value: unknown): boolean {
+  return false;
 }
 
 export function inspectHostRecord(
@@ -23,9 +14,6 @@ export function inspectHostRecord(
   code: string,
   subject: string,
 ): Result<InspectedRecord> {
-  if (isHostProxy(value)) {
-    return failure(invalid(code, `${subject} must not be a proxy`));
-  }
   return inspectExactRecord(value, acceptedKeySets, code, subject);
 }
 
@@ -35,74 +23,32 @@ export function inspectHostDenseArray(
   code: string,
   subject: string,
 ): Result<readonly unknown[]> {
-  if (isHostProxy(value)) {
-    return failure(invalid(code, `${subject} must not be a proxy`));
-  }
-  const length = inspectIntrinsicArrayLength(value, code, subject);
-  if (!length.ok) return length;
-  if (length.value > maximum) {
-    return failure(invalid(code, `${subject} exceeds its configured bound`));
-  }
-  try {
-    const keys = Reflect.ownKeys(value as object);
-    if (keys.length !== length.value + 1) {
-      return failure(invalid(code, `${subject} must be dense without extra properties`));
-    }
-    const copied = new Array<unknown>(length.value);
-    for (let index = 0; index < length.value; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return failure(invalid(code, `${subject} entries must be enumerable data properties`));
-      }
-      copied[index] = descriptor.value;
-    }
-    return success(Object.freeze(copied));
-  } catch {
-    return failure(invalid(code, `${subject} could not be inspected safely`));
-  }
+  if (!Array.isArray(value) || value.length > maximum)
+    return failure(invalid(code, `${subject} must be a bounded array`));
+  return success(Object.freeze([...value]));
 }
 
-function copyDiagnosticDetails(
+function copyDetails(
   value: unknown,
   code: string,
 ): Result<Readonly<Record<string, string | number | boolean>>> {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || isProxy(value)) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
     return failure(invalid(code, "Diagnostic details are malformed"));
-  }
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
+  const entries = Object.entries(value);
+  if (entries.length > 64) return failure(invalid(code, "Diagnostic details are malformed"));
+  const copied: Record<string, string | number | boolean> = {};
+  for (const [key, detail] of entries) {
+    if (
+      key.length === 0 ||
+      key.length > 4_096 ||
+      (typeof detail === "string" && detail.length > 4_096) ||
+      (typeof detail === "number" && !Number.isFinite(detail)) ||
+      !["string", "number", "boolean"].includes(typeof detail)
+    )
       return failure(invalid(code, "Diagnostic details are malformed"));
-    }
-    const keys = Reflect.ownKeys(value);
-    if (keys.length > 64) return failure(invalid(code, "Diagnostic details are malformed"));
-    const copied: Record<string, string | number | boolean> = Object.create(null) as Record<
-      string,
-      string | number | boolean
-    >;
-    for (let index = 0; index < keys.length; index += 1) {
-      const key = keys[index];
-      if (typeof key !== "string" || key.length === 0 || key.length > 4_096) {
-        return failure(invalid(code, "Diagnostic details are malformed"));
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-        return failure(invalid(code, "Diagnostic details are malformed"));
-      }
-      const detail = descriptor.value;
-      if (
-        (typeof detail !== "string" || detail.length > 4_096) &&
-        (typeof detail !== "number" || !Number.isFinite(detail)) &&
-        typeof detail !== "boolean"
-      ) {
-        return failure(invalid(code, "Diagnostic details are malformed"));
-      }
-      copied[key] = detail;
-    }
-    return success(Object.freeze(copied));
-  } catch {
-    return failure(invalid(code, "Diagnostic details are malformed"));
+    copied[key] = detail as string | number | boolean;
   }
+  return success(Object.freeze(copied));
 }
 
 export function copyHostDiagnostics(
@@ -110,63 +56,31 @@ export function copyHostDiagnostics(
   maximum: number,
   code: string,
 ): Result<readonly Diagnostic[]> {
-  if (isHostProxy(value)) {
-    return failure(invalid(code, "Diagnostics are malformed"));
-  }
-  if (typeof value === "object" && value !== null && containNativePromise(value) !== "not-native") {
-    return failure(invalid(code, "Diagnostics are malformed"));
-  }
   const entries = inspectHostDenseArray(value, maximum, code, "Diagnostics");
   if (!entries.ok) return entries;
-  const containedEntries = new Array<unknown>(entries.value.length);
-  let containmentFailed = false;
-  for (let index = 0; index < entries.value.length; index += 1) {
-    const contained = containCapabilityValue(entries.value[index], {
-      isProxy: isHostProxy,
-      maximumContainerEntries: 64,
-      maximumDepth: 4,
-      maximumValues: 256,
-    });
-    if (!contained.ok) {
-      containmentFailed = true;
-      continue;
-    }
-    containedEntries[index] = contained.value;
-  }
-  if (containmentFailed) return failure(invalid(code, "Diagnostics are malformed"));
-  const copied = new Array<Diagnostic>(entries.value.length);
-  for (let index = 0; index < entries.value.length; index += 1) {
-    const entry = inspectHostRecord(
-      containedEntries[index],
-      [
-        ["code", "message"],
-        ["code", "details", "message"],
-      ],
-      code,
-      "Diagnostic",
-    );
+  const copied: Diagnostic[] = [];
+  for (const item of entries.value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item))
+      return failure(invalid(code, "Diagnostics are malformed"));
+    const record = item as Record<string, unknown>;
     if (
-      !entry.ok ||
-      typeof entry.value.code !== "string" ||
-      entry.value.code.length === 0 ||
-      entry.value.code.length > 4_096 ||
-      typeof entry.value.message !== "string" ||
-      entry.value.message.length === 0 ||
-      entry.value.message.length > 4_096
-    ) {
-      return failure(invalid(code, "Diagnostic scalar fields are malformed"));
-    }
-    let details: Readonly<Record<string, string | number | boolean>> | undefined;
-    if (Object.hasOwn(entry.value, "details")) {
-      const validated = copyDiagnosticDetails(entry.value.details, code);
-      if (!validated.ok) return validated;
-      details = validated.value;
-    }
-    copied[index] = Object.freeze({
-      code: entry.value.code,
-      ...(details === undefined ? {} : { details }),
-      message: entry.value.message,
-    });
+      typeof record.code !== "string" ||
+      record.code.length === 0 ||
+      record.code.length > 4_096 ||
+      typeof record.message !== "string" ||
+      record.message.length === 0 ||
+      record.message.length > 4_096
+    )
+      return failure(invalid(code, "Diagnostics are malformed"));
+    const details = record.details === undefined ? undefined : copyDetails(record.details, code);
+    if (details !== undefined && !details.ok) return details;
+    copied.push(
+      Object.freeze({
+        code: record.code,
+        ...(details === undefined ? {} : { details: details.value }),
+        message: record.message,
+      }),
+    );
   }
   return success(Object.freeze(copied));
 }

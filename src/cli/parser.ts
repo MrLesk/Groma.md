@@ -242,80 +242,6 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
   return undefined;
 }
 
-function packageScope(args: readonly string[]): "blueprint" | "personal" | undefined {
-  if (args.length === 0) return "blueprint";
-  return args.length === 1 && args[0] === "--personal" ? "personal" : undefined;
-}
-
-function packageCommand(args: readonly string[]): CliCommand | undefined {
-  const action = args[0];
-  const rest = args.slice(1);
-  if (action === "scaffold") {
-    const destination = rest[0];
-    if (!identifier(destination)) return undefined;
-    let name: string | undefined;
-    let pluginId: string | undefined;
-    const provides: string[] = [];
-    for (let index = 1; index < rest.length; index += 2) {
-      const option = rest[index];
-      const value = rest[index + 1];
-      if (!identifier(value)) return undefined;
-      if (option === "--name" && name === undefined) name = value;
-      else if (option === "--plugin" && pluginId === undefined) pluginId = value;
-      else if (option === "--provides") provides.push(value);
-      else return undefined;
-    }
-    return name === undefined || pluginId === undefined || provides.length === 0
-      ? undefined
-      : Object.freeze({
-          destination,
-          kind: "package-scaffold",
-          name,
-          pluginId,
-          provides: Object.freeze(provides),
-        });
-  }
-  if (action === "add") {
-    const source = rest[0];
-    const scope = packageScope(rest.slice(1));
-    return identifier(source) && scope !== undefined
-      ? Object.freeze({ kind: "package-add", scope, source })
-      : undefined;
-  }
-  if (action === "inspect" || action === "remove") {
-    const name = rest[0];
-    const scope = packageScope(rest.slice(1));
-    return identifier(name) && scope !== undefined
-      ? Object.freeze({ kind: `package-${action}` as const, name, scope })
-      : undefined;
-  }
-  if (action === "enable" || action === "disable") {
-    const name = rest[0];
-    const entry = rest[1];
-    if (!identifier(name) || !identifier(entry)) return undefined;
-    let scope: "blueprint" | "personal" = "blueprint";
-    let trustFullUserPermissions = false;
-    for (const option of rest.slice(2)) {
-      if (option === "--personal" && scope === "blueprint") scope = "personal";
-      else if (
-        action === "enable" &&
-        option === "--trust-full-user-permissions" &&
-        !trustFullUserPermissions
-      ) {
-        trustFullUserPermissions = true;
-      } else return undefined;
-    }
-    return Object.freeze({
-      entry,
-      kind: `package-${action}` as const,
-      name,
-      scope,
-      ...(trustFullUserPermissions ? { trustFullUserPermissions: true } : {}),
-    });
-  }
-  return undefined;
-}
-
 function projectCommand(args: readonly string[]): CliCommand | undefined {
   const action = args[0];
   const rest = args.slice(1);
@@ -427,17 +353,9 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
       ? blueprintCommand(commandArgs.slice(1))
       : commandArgs[0] === "component"
         ? componentCommand(commandArgs.slice(1))
-        : commandArgs[0] === "package"
-          ? packageCommand(commandArgs.slice(1))
-          : commandArgs[0] === "project"
-            ? projectCommand(commandArgs.slice(1))
-            : commandArgs[0] === "migrate" &&
-                commandArgs.length === 2 &&
-                (commandArgs[1] === "status" ||
-                  commandArgs[1] === "preview" ||
-                  commandArgs[1] === "apply")
-              ? Object.freeze({ kind: `migrate-${commandArgs[1]}` as const })
-              : undefined;
+        : commandArgs[0] === "project"
+          ? projectCommand(commandArgs.slice(1))
+          : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

@@ -50,31 +50,6 @@ export type CliCommand =
       readonly limit: number;
       readonly relationType?: string;
     }
-  | { readonly kind: "migrate-apply" | "migrate-preview" | "migrate-status" }
-  | {
-      readonly kind: "package-add";
-      readonly scope: "blueprint" | "personal";
-      readonly source: string;
-    }
-  | {
-      readonly destination: string;
-      readonly kind: "package-scaffold";
-      readonly name: string;
-      readonly pluginId: string;
-      readonly provides: readonly string[];
-    }
-  | {
-      readonly kind: "package-inspect" | "package-remove";
-      readonly name: string;
-      readonly scope: "blueprint" | "personal";
-    }
-  | {
-      readonly entry: string;
-      readonly kind: "package-disable" | "package-enable";
-      readonly name: string;
-      readonly scope: "blueprint" | "personal";
-      readonly trustFullUserPermissions?: boolean;
-    }
   | { readonly input: CliInputSource; readonly kind: "component-create" }
   | { readonly input: CliInputSource; readonly kind: "project-add" }
   | { readonly id: string; readonly kind: "project-get" }
@@ -196,18 +171,6 @@ export function commandName(command: CliCommand): string {
       return "component reparent";
     case "component-remove":
       return "component remove";
-    case "package-add":
-      return "package add";
-    case "package-scaffold":
-      return "package scaffold";
-    case "package-inspect":
-      return "package inspect";
-    case "package-enable":
-      return "package enable";
-    case "package-disable":
-      return "package disable";
-    case "package-remove":
-      return "package remove";
     case "project-add":
       return "project add";
     case "project-get":
@@ -218,12 +181,6 @@ export function commandName(command: CliCommand): string {
       return "project update";
     case "project-remove":
       return "project remove";
-    case "migrate-apply":
-      return "migrate apply";
-    case "migrate-preview":
-      return "migrate preview";
-    case "migrate-status":
-      return "migrate status";
     default:
       return command.kind;
   }
