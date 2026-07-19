@@ -2516,6 +2516,130 @@ export function shared() {}
     expect(incompleteFiles.fixture.read).not.toContain("src/unlisted.ts");
   });
 
+  test("scans the bounded clean Nuxt aggregator and exposes explicit server routes", async () => {
+    const references = [
+      { path: "./.nuxt/tsconfig.app.json" },
+      { path: "./.nuxt/tsconfig.server.json" },
+      { path: "./.nuxt/tsconfig.shared.json" },
+      { path: "./.nuxt/tsconfig.node.json" },
+    ];
+    const result = await scan({
+      "app/composables/useEvent.ts":
+        'import { event } from "../../shared/domain/event.ts";\nexport const useEvent = () => event;\n',
+      "app/pages/index.vue": "<template><main>Events</main></template>\n",
+      "nuxt.config.ts": "export default defineNuxtConfig({});\n",
+      "package.json": JSON.stringify({ name: "nuxt-project", private: true }),
+      "server/api/events/[eventId]/index.get.ts":
+        "export default defineEventHandler(() => ({ ok: true }));\n",
+      "server/api/health.post.ts": "export default defineEventHandler(() => ({ ok: true }));\n",
+      "server/api/unqualified.ts": "export default defineEventHandler(() => ({ ok: true }));\n",
+      "shared/domain/event.ts": "export const event = { id: 'event' };\n",
+      "tsconfig.json": JSON.stringify({ files: [], references }),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "component-candidate")
+        .map((record) => record.candidate.name)
+        .sort(),
+    ).toEqual(["/api", "/api/events", "composables", "domain", "nuxt-project", "source"]);
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["GET /api/events/[eventId]", "POST /api/health"]);
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .flatMap((record) => record.provenance.map((item) => item.resource))
+        .sort(),
+    ).toEqual(["server/api/events/[eventId]/index.get.ts", "server/api/health.post.ts"]);
+    expect(result.fixture.read).not.toContain("app/pages/index.vue");
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
+  });
+
+  test("keeps near-miss Nuxt project-reference aggregators fail-closed", async () => {
+    const references = [
+      { path: "./.nuxt/tsconfig.app.json" },
+      { path: "./.nuxt/tsconfig.server.json" },
+      { path: "./.nuxt/tsconfig.shared.json" },
+      { path: "./.nuxt/tsconfig.node.json" },
+    ];
+    const configurations = [
+      { files: [], references: references.slice(0, -1) },
+      { files: [], references: [...references, { path: "./tsconfig.extra.json" }] },
+      {
+        files: [],
+        references: references.map((reference, index) =>
+          index === 0 ? { ...reference, prepend: true } : reference,
+        ),
+      },
+    ];
+    for (const configuration of configurations) {
+      const result = await scan({
+        "nuxt.config.ts": "export default defineNuxtConfig({});\n",
+        "package.json": JSON.stringify({ name: "near-miss-nuxt" }),
+        "server/api/health.get.ts": "export default defineEventHandler(() => ({ ok: true }));\n",
+        "tsconfig.json": JSON.stringify(configuration),
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(result.fixture.read).not.toContain("server/api/health.get.ts");
+      expect(
+        result.snapshot?.records.some(
+          (record) =>
+            record.kind === "component-candidate" && record.candidate.type === "source-boundary",
+        ),
+      ).toBeFalse();
+      expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    }
+
+    const missingMarker = await scan({
+      "package.json": JSON.stringify({ name: "missing-nuxt-marker" }),
+      "server/api/health.get.ts": "export default defineEventHandler(() => ({ ok: true }));\n",
+      "tsconfig.json": JSON.stringify({ files: [], references }),
+    });
+    expect(missingMarker.result.ok).toBeTrue();
+    expect(missingMarker.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(missingMarker.fixture.read).not.toContain("server/api/health.get.ts");
+    expect(missingMarker.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+  });
+
+  test("omits conflicting Nuxt route claims across directories and extensions", async () => {
+    const result = await scan({
+      "nuxt.config.ts": "export default defineNuxtConfig({});\n",
+      "package.json": JSON.stringify({ name: "conflicting-nuxt-routes" }),
+      "server/api/extension.get.mts":
+        "export default defineEventHandler(() => ({ source: 'mts' }));\n",
+      "server/api/extension.get.ts":
+        "export default defineEventHandler(() => ({ source: 'ts' }));\n",
+      "server/api/profile.get.ts":
+        "export default defineEventHandler(() => ({ source: 'file' }));\n",
+      "server/api/profile/index.get.ts":
+        "export default defineEventHandler(() => ({ source: 'index' }));\n",
+      "tsconfig.json": JSON.stringify({
+        files: [],
+        references: [
+          { path: "./.nuxt/tsconfig.app.json" },
+          { path: "./.nuxt/tsconfig.server.json" },
+          { path: "./.nuxt/tsconfig.shared.json" },
+          { path: "./.nuxt/tsconfig.node.json" },
+        ],
+      }),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+  });
+
   test("leaves extensionless declaration-only entries partial without actions", async () => {
     const result = await scan({
       "package.json": JSON.stringify({ exports: "./src/public", name: "declaration-resolution" }),
