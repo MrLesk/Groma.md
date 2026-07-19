@@ -1,11 +1,11 @@
 ---
 id: GROM-45
 title: Self-scan Groma and preserve its curated architecture
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 19:50'
+updated_date: '2026-07-19 19:57'
 labels: []
 milestone: m-3
 dependencies:
@@ -55,3 +55,11 @@ A second unchanged scan was byte-identical at generation 131 with canonical dige
 
 Pre-PR review completed with exactly two independent Terra xhigh passes and one local Claude pass. Both Terra reviews found no actionable issue and independently confirmed alias resolution, evidence attachment, curated-state preservation, external separation, and use of the existing semantic path. Claude identified imprecise wording that could imply every canonical relationship target was rewritten; the task now distinguishes normalized evidence projections from canonical old references intentionally preserved through durable aliases. No manual canonical rewrite or new mechanism was introduced.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #50 at a6c6af8e50e1e3c6c857c88f29cb77ca81a6be05. Groma used its own compiled public CLI to merge seven internal automatic observations into their existing curated components, reducing the self-blueprint from 58 to 51 components and deleting seven duplicate intent files. Curated identities, intent, containment, and members remained exact; evidence bindings/projections moved to survivors; durable aliases preserve old canonical references; eight real external dependencies remain visibly separate.
+
+Repeated scans were byte-stable at generation 131 and digest 3d457570a639583d4ad2649b436479a4d5817856c33230485f0310952c365bbc. The full gate passed with 406 tests and 2,702 assertions plus build, smoke, and compiled crash recovery. Exactly two Terra xhigh reviews and one local Claude review completed before the ready PR; the first automatic Codex review accepted with no comments and all CI passed.
+<!-- SECTION:FINAL_SUMMARY:END -->
