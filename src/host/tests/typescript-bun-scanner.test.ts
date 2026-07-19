@@ -39,12 +39,12 @@ function valueOf<T>(result: Result<T>): T {
   return result.value;
 }
 
-function begin(): ObservationSessionBegin {
+function begin(resourceRoot = "."): ObservationSessionBegin {
   return Object.freeze({
     apiVersion: observationSessionApiVersion,
     epoch: "epoch.fixture",
     projectId: "project.fixture",
-    scopes: Object.freeze([Object.freeze({ id: "workspace", resourceRoot: "." })]),
+    scopes: Object.freeze([Object.freeze({ id: "workspace", resourceRoot })]),
     source: Object.freeze({
       id: typescriptBunScannerIdentity.id,
       instance: "fixture",
@@ -65,6 +65,7 @@ function resourceFixture(
     readonly failEnumeration?: boolean;
     readonly pageSize?: number;
     readonly reportedSizes?: Readonly<Record<string, number>>;
+    readonly resourceRoot?: string;
     readonly stalledCursor?: boolean;
   }> = {},
 ): ResourceFixture {
@@ -183,6 +184,7 @@ async function scan(
     readonly failEnumeration?: boolean;
     readonly pageSize?: number;
     readonly reportedSizes?: Readonly<Record<string, number>>;
+    readonly resourceRoot?: string;
     readonly stalledCursor?: boolean;
   }> = {},
 ): Promise<
@@ -194,7 +196,7 @@ async function scan(
     readonly snapshot?: CompletedObservationSnapshot;
   }>
 > {
-  const descriptor = begin();
+  const descriptor = begin(resourceOptions.resourceRoot);
   const session = valueOf(createObservationSession(descriptor));
   const fixture = resourceFixture(source, resourceOptions);
   const emittedKeys: string[] = [];
@@ -477,6 +479,72 @@ export function publicApi() {}
     }
   });
 
+  test("separates static Bun routes from unrelated sibling uncertainty", async () => {
+    const ordinary = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "bun-port" }),
+      "src/index.ts": [
+        'Bun.serve({ port: 3000, routes: { "/health": () => true } });',
+        "export function api() {}",
+      ].join("\n"),
+    });
+    expect(ordinary.result.ok).toBeTrue();
+    expect(ordinary.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      ordinary.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "ROUTE /health",
+      ),
+    ).toBeTrue();
+
+    for (const sibling of [
+      'fetch: () => new Response("ok")',
+      'error: () => new Response("error")',
+      "websocket: {}",
+      'fetch() { return new Response("ok"); }',
+      'error() { return new Response("error"); }',
+      "websocket() {}",
+      "port: 3000, port: 4000",
+      '["port"]: 3000',
+      '["fetch"]() {}',
+    ]) {
+      const retained = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "bun-sibling" }),
+        "src/index.ts": `Bun.serve({ routes: { "/health": () => true }, ${sibling} });\nexport function api() {}\n`,
+      });
+      expect(retained.result.ok).toBeTrue();
+      expect(retained.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        retained.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "ROUTE /health",
+        ),
+      ).toBeTrue();
+    }
+
+    for (const configuration of [
+      '{ routes: { "/health": () => true }, routes: { "/other": () => true } }',
+      '{ routes: { "/health": () => true }, [key]: () => true }',
+      '{ routes: { "/health": () => true }, ...extra }',
+      "{ routes() {} }",
+      '{ routes: { "/health": () => true }, routes() {} }',
+    ]) {
+      const rejected = await scan({
+        "package.json": JSON.stringify({ exports: "./src/index.ts", name: "bun-rejected" }),
+        "src/index.ts": `const extra = {};\nconst key = "fetch";\nBun.serve(${configuration});\nexport function api() {}\n`,
+      });
+      expect(rejected.result.ok).toBeTrue();
+      expect(rejected.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        rejected.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name?.includes("/health"),
+        ),
+      ).toBeFalse();
+      expect(
+        rejected.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "api",
+        ),
+      ).toBeTrue();
+    }
+  });
+
   test("uses rootDir as a source root without widening a narrower include", async () => {
     const result = await scan({
       "code/private/hidden.ts": "export function hidden() {}",
@@ -504,6 +572,93 @@ export function publicApi() {}
       ),
     ).toBeTrue();
     expect(result.fixture.read).not.toContain("code/private/hidden.ts");
+  });
+
+  test("keeps source-only scopes unowned and strictly inside their resource root", async () => {
+    const result = await scan(
+      {
+        "README.md": "# parent metadata\n",
+        "package.json": JSON.stringify({
+          name: "out-of-scope-parent",
+          workspaces: ["packages/*"],
+        }),
+        "packages/member/package.json": JSON.stringify({ name: "@fixture/member" }),
+        "packages/member/src/index.ts": "export const member = true;\n",
+        "src/api/index.ts": [
+          'import { model } from "../domain/model.ts";',
+          'import { model as aliasedModel } from "@local/model";',
+          'import member from "@fixture/member";',
+          'import ancestorAlias from "domain";',
+          'import fs from "node:fs";',
+          'import sqlite from "bun:sqlite";',
+          'Bun.serve({ routes: { "/health": () => new Response(String(model)) } });',
+          "void aliasedModel; void member; void ancestorAlias; void fs; void sqlite;",
+        ].join("\n"),
+        "src/domain/model.ts": "export const model = true;\n",
+        "src/tsconfig.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@local/model": ["domain/model.ts"] },
+          },
+        }),
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: { baseUrl: ".", paths: { domain: ["src/domain/model.ts"] } },
+        }),
+      },
+      {},
+      { resourceRoot: "src" },
+    );
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(result.fixture.enumerated).not.toContain(".");
+    expect(result.fixture.read).not.toContain("package.json");
+    expect(result.fixture.read).not.toContain("README.md");
+    expect(result.fixture.read).not.toContain("tsconfig.json");
+    expect(
+      result.snapshot?.records.every((record) =>
+        record.provenance.every(
+          (provenance) => provenance.resource === "src" || provenance.resource.startsWith("src/"),
+        ),
+      ),
+    ).toBeTrue();
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "component-candidate")
+        .map((record) => record.candidate),
+    ).toEqual(
+      expect.arrayContaining([
+        { name: "api", type: "source-boundary" },
+        { name: "bun:sqlite", type: "external" },
+        { name: "domain", type: "source-boundary" },
+        { name: "node:fs", type: "external" },
+      ]),
+    );
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "source-boundary",
+      ),
+    ).toBeFalse();
+    const imports =
+      result.snapshot?.records.filter(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ) ?? [];
+    expect(imports).toHaveLength(3);
+    expect(imports.some((record) => record.provenance.length === 2)).toBeTrue();
+    expect(
+      result.snapshot?.records
+        .flatMap((record) =>
+          record.kind === "component-candidate" && record.candidate.type === "external"
+            ? [record.candidate.name]
+            : [],
+        )
+        .sort(),
+    ).toEqual(["bun:sqlite", "node:fs"]);
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "ROUTE /health",
+      ),
+    ).toBeTrue();
   });
 
   test("discovers workspace packages and resolves literal workspace imports", async () => {
@@ -668,6 +823,45 @@ export function start() {}
         (record) => record.kind === "action" && record.name === "ROUTE /health",
       ),
     ).toBeTrue();
+  });
+
+  test("coalesces equivalent export conditions and isolates ambiguous subpaths", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({
+        exports: {
+          ".": { default: "./src/default.ts", import: "./src/import.ts" },
+          "./absent": null,
+          "./array": ["./src/array.ts"],
+          "./mixed": { default: null, import: "./src/mixed.ts" },
+          "./safe": { default: "./src/safe.ts", import: "./src/safe.ts" },
+        },
+        name: "conditional-exports",
+      }),
+      "src/array.ts": "export function arrayApi() {}\n",
+      "src/default.ts": "export function defaultApi() {}\n",
+      "src/import.ts": "export function importApi() {}\n",
+      "src/mixed.ts": "export function mixedApi() {}\n",
+      "src/safe.ts": "export function safeApi() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["safeApi"]);
+
+    const pureNull = await scan({
+      "package.json": JSON.stringify({
+        exports: { ".": null, "./also-absent": { default: null, import: null } },
+        name: "null-exports",
+      }),
+      "src/private.ts": "export function privateApi() {}\n",
+    });
+    expect(pureNull.result.ok).toBeTrue();
+    expect(pureNull.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(pureNull.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
   });
 
   test("keeps public subpath identities distinct and observes type-only edges", async () => {
@@ -940,13 +1134,436 @@ export function shared() {}
 
     const ambiguous = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.ts", name: "ambiguous-stars" }),
-      "src/a.ts": "export function shared() { return 'a'; }\n",
-      "src/b.ts": "export function shared() { return 'b'; }\n",
-      "src/index.ts": 'export * from "./a.ts";\nexport * from "./b.ts";\n',
+      "src/a.ts": "export function aOnly() {}\nexport function shared() { return 'a'; }\n",
+      "src/b.ts": "export function bOnly() {}\nexport function shared() { return 'b'; }\n",
+      "src/c.ts": "export function explicitApi() {}\n",
+      "src/index.ts":
+        'export function directApi() {}\nexport { explicitApi } from "./c.ts";\nexport * from "./a.ts";\nexport * from "./b.ts";\n',
     });
     expect(ambiguous.result.ok).toBeTrue();
     expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(ambiguous.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(
+      ambiguous.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["aOnly", "bOnly", "directApi", "explicitApi"]);
+    expect(
+      ambiguous.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
+  });
+
+  test("coalesces equivalent star bindings across duplicate and diamond paths", async () => {
+    const duplicateTarget = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "duplicate-star-target",
+      }),
+      "src/index.ts": 'export * from "./shared.ts";\nexport * from "./shared.ts";\n',
+      "src/shared.ts": "export function shared() {}\n",
+    });
+    expect(duplicateTarget.result.ok).toBeTrue();
+    expect(duplicateTarget.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      duplicateTarget.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["shared"]);
+
+    const diamond = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "diamond-stars" }),
+      "src/base.ts": "export function shared() {}\n",
+      "src/index.ts": 'export * from "./left.ts";\nexport * from "./right.ts";\n',
+      "src/left.ts": 'export * from "./base.ts";\n',
+      "src/right.ts": 'export * from "./base.ts";\n',
+    });
+    expect(diamond.result.ok).toBeTrue();
+    expect(diamond.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      diamond.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name),
+    ).toEqual(["shared"]);
+  });
+
+  test("preserves independent public callables beside unsupported reexports", async () => {
+    const partialBarrel = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "partial-barrel" }),
+      "src/index.ts": [
+        "export function directApi() {}",
+        'export { otherApi } from "./other.ts";',
+        'export { missingApi } from "external-package";',
+        'export * from "unsupported-star";',
+      ].join("\n"),
+      "src/other.ts": "export function otherApi() {}\n",
+    });
+    expect(partialBarrel.result.ok).toBeTrue();
+    expect(partialBarrel.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      partialBarrel.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["directApi", "otherApi"]);
+
+    const cyclic = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "cyclic-barrel" }),
+      "src/cycle.ts": 'export * from "./index.ts";\n',
+      "src/index.ts":
+        'export function directApi() {}\nexport { explicitApi } from "./other.ts";\nexport * from "./cycle.ts";\n',
+      "src/other.ts": "export function explicitApi() {}\n",
+    });
+    expect(cyclic.result.ok).toBeTrue();
+    expect(cyclic.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      cyclic.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["directApi", "explicitApi"]);
+
+    const depthFiles: Record<string, string> = {
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "deep-barrel" }),
+      "src/index.ts":
+        'export function directApi() {}\nexport { explicitApi } from "./other.ts";\nexport * from "./deep/00.ts";\n',
+      "src/other.ts": "export function explicitApi() {}\n",
+    };
+    for (let index = 0; index < 34; index += 1) {
+      const current = String(index).padStart(2, "0");
+      const next = String(index + 1).padStart(2, "0");
+      depthFiles[`src/deep/${current}.ts`] =
+        index === 33 ? "export function tooDeepApi() {}\n" : `export * from "./${next}.ts";\n`;
+    }
+    const depthOverflow = await scan(depthFiles);
+    expect(depthOverflow.result.ok).toBeTrue();
+    expect(depthOverflow.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      depthOverflow.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["directApi", "explicitApi"]);
+  });
+
+  test("localizes public proof overflow at the exact target-chain boundary", async () => {
+    const scanChain = async (targetFiles: number) => {
+      const source: Record<string, string> = {
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `proof-chain-${targetFiles}`,
+        }),
+        "src/index.ts": [
+          "export function directApi() {}",
+          'export { safeApi } from "./safe.ts";',
+          'export * from "./deep/00.ts";',
+        ].join("\n"),
+        "src/safe.ts": "export function safeApi() {}\n",
+      };
+      for (let index = 0; index < targetFiles; index += 1) {
+        const current = String(index).padStart(2, "0");
+        const next = String(index + 1).padStart(2, "0");
+        source[`src/deep/${current}.ts`] =
+          index === targetFiles - 1
+            ? "export function deepApi() {}\n"
+            : `export * from "./${next}.ts";\n`;
+      }
+      return scan(source);
+    };
+
+    const exactBound = await scanChain(29);
+    expect(exactBound.result.ok).toBeTrue();
+    expect(exactBound.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      exactBound.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["deepApi", "directApi", "safeApi"]);
+
+    for (const targetFiles of [30, 31]) {
+      const overflow = await scanChain(targetFiles);
+      expect(overflow.result.ok).toBeTrue();
+      expect(overflow.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        overflow.snapshot?.records
+          .filter((record) => record.kind === "action")
+          .map((record) => record.name)
+          .sort(),
+      ).toEqual(["directApi", "safeApi"]);
+      expect(
+        overflow.snapshot?.records.some(
+          (record) => record.kind === "action" && record.name === "deepApi",
+        ),
+      ).toBeFalse();
+    }
+  });
+
+  test("retains bounded same-binding proofs beside known overlong paths", async () => {
+    for (const longFirst of [true, false]) {
+      const source: Record<string, string> = {
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `same-binding-overflow-${longFirst ? "long" : "short"}-first`,
+        }),
+        "src/base.ts": "/** Shared API. */\nexport function shared() {}\n",
+        "src/index.ts": [
+          longFirst ? 'export * from "./long/00.ts";' : 'export * from "./short.ts";',
+          longFirst ? 'export * from "./short.ts";' : 'export * from "./long/00.ts";',
+        ].join("\n"),
+        "src/short.ts": 'export * from "./base.ts";\n',
+      };
+      for (let index = 0; index < 29; index += 1) {
+        const current = String(index).padStart(2, "0");
+        const next = String(index + 1).padStart(2, "0");
+        source[`src/long/${current}.ts`] =
+          index === 28 ? 'export * from "../base.ts";\n' : `export * from "./${next}.ts";\n`;
+      }
+
+      const result = await scan(source);
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+      const action = result.snapshot?.records.find(
+        (record) => record.kind === "action" && record.name === "shared",
+      );
+      expect(action?.kind).toBe("action");
+      expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
+      expect(action?.provenance.some((item) => item.resource.startsWith("src/long/"))).toBeFalse();
+    }
+
+    const explicitSource: Record<string, string> = {
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "same-binding-explicit-overflow",
+      }),
+      "src/base.ts": "/** Shared API. */\nexport function shared() {}\n",
+      "src/index.ts": 'export * from "./mid.ts";\nexport * from "./short.ts";\n',
+      "src/mid.ts": 'export { shared } from "./long/00.ts";\n',
+      "src/short.ts": 'export * from "./base.ts";\n',
+    };
+    for (let index = 0; index < 29; index += 1) {
+      const current = String(index).padStart(2, "0");
+      const next = String(index + 1).padStart(2, "0");
+      explicitSource[`src/long/${current}.ts`] =
+        index === 28 ? 'export * from "../base.ts";\n' : `export * from "./${next}.ts";\n`;
+    }
+    const explicitOverflow = await scan(explicitSource);
+    expect(explicitOverflow.result.ok).toBeTrue();
+    expect(explicitOverflow.snapshot?.coverage[0]?.state).toBe("partial");
+    const explicitAction = explicitOverflow.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "shared",
+    );
+    expect(explicitAction?.kind).toBe("action");
+    expect(explicitAction?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
+    expect(
+      explicitAction?.provenance.some((item) => item.resource.startsWith("src/long/")),
+    ).toBeFalse();
+
+    const differentBinding: Record<string, string> = {
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "different-binding-overflow",
+      }),
+      "src/base.ts": "export function shared() { return 'short'; }\n",
+      "src/index.ts": 'export * from "./long/00.ts";\nexport * from "./short.ts";\n',
+      "src/other-base.ts": "export function shared() { return 'long'; }\n",
+      "src/short.ts": 'export * from "./base.ts";\n',
+    };
+    for (let index = 0; index < 29; index += 1) {
+      const current = String(index).padStart(2, "0");
+      const next = String(index + 1).padStart(2, "0");
+      differentBinding[`src/long/${current}.ts`] =
+        index === 28 ? 'export * from "../other-base.ts";\n' : `export * from "./${next}.ts";\n`;
+    }
+    const differentOverflow = await scan(differentBinding);
+    expect(differentOverflow.result.ok).toBeTrue();
+    expect(differentOverflow.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      differentOverflow.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
+  });
+
+  test("chooses the shortest deterministic proof for equivalent star bindings", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "shortest-proof" }),
+      "src/base.ts": "/** Shared API. */\nexport function shared() {}\n",
+      "src/index.ts": 'export * from "./long/00.ts";\nexport * from "./short.ts";\n',
+      "src/long/00.ts": 'export * from "./01.ts";\n',
+      "src/long/01.ts": 'export * from "./02.ts";\n',
+      "src/long/02.ts": 'export * from "../base.ts";\n',
+      "src/short.ts": 'export * from "./base.ts";\n',
+    });
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    const action = result.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "shared",
+    );
+    expect(action?.kind).toBe("action");
+    expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
+    expect(action?.provenance.some((item) => item.resource.startsWith("src/long/"))).toBeFalse();
+  });
+
+  test("uses a star proof only for an equivalent unresolved explicit binding", async () => {
+    const overflowFixture = (sameBinding: boolean): Record<string, string> => {
+      const source: Record<string, string> = {
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `same-level-explicit-${sameBinding ? "same" : "different"}`,
+        }),
+        "src/base.ts": "export function shared() { return 'short'; }\n",
+        "src/index.ts": 'export { shared } from "./long/00.ts";\nexport * from "./short.ts";\n',
+        "src/other-base.ts": "export function shared() { return 'long'; }\n",
+        "src/short.ts": 'export * from "./base.ts";\n',
+      };
+      for (let index = 0; index < 29; index += 1) {
+        const current = String(index).padStart(2, "0");
+        const next = String(index + 1).padStart(2, "0");
+        source[`src/long/${current}.ts`] =
+          index === 28
+            ? `export * from "../${sameBinding ? "base" : "other-base"}.ts";\n`
+            : `export * from "./${next}.ts";\n`;
+      }
+      return source;
+    };
+
+    const equivalent = await scan(overflowFixture(true));
+    expect(equivalent.result.ok).toBeTrue();
+    expect(equivalent.snapshot?.coverage[0]?.state).toBe("partial");
+    const equivalentAction = equivalent.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "shared",
+    );
+    expect(equivalentAction?.kind).toBe("action");
+    expect(
+      equivalentAction?.provenance.some((item) => item.resource === "src/short.ts"),
+    ).toBeTrue();
+    expect(
+      equivalentAction?.provenance.some((item) => item.resource.startsWith("src/long/")),
+    ).toBeFalse();
+
+    const different = await scan(overflowFixture(false));
+    expect(different.result.ok).toBeTrue();
+    expect(different.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      different.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
+
+    const unknown = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "same-level-explicit-unknown",
+      }),
+      "src/base.ts": "export function shared() {}\n",
+      "src/index.ts": 'export { shared } from "external-package";\nexport * from "./short.ts";\n',
+      "src/short.ts": 'export * from "./base.ts";\n',
+    });
+    expect(unknown.result.ok).toBeTrue();
+    expect(unknown.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      unknown.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
+
+    const proved = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "same-level-explicit-proved",
+      }),
+      "src/explicit.ts": "export function shared() { return 'explicit'; }\n",
+      "src/index.ts": 'export * from "./star.ts";\nexport { shared } from "./explicit.ts";\n',
+      "src/star.ts": "export function shared() { return 'star'; }\n",
+    });
+    expect(proved.result.ok).toBeTrue();
+    expect(proved.snapshot?.coverage[0]?.state).toBe("complete");
+    const provedAction = proved.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "shared",
+    );
+    expect(provedAction?.kind).toBe("action");
+    expect(provedAction?.provenance.some((item) => item.resource === "src/explicit.ts")).toBeTrue();
+    expect(provedAction?.provenance.some((item) => item.resource === "src/star.ts")).toBeFalse();
+  });
+
+  test("propagates child-owned callables through bounded star uncertainty", async () => {
+    for (const fixture of [
+      {
+        extra: {},
+        name: "named",
+        tail: 'export { missingApi } from "external-package";',
+      },
+      {
+        extra: {},
+        name: "star",
+        tail: 'export * from "external-package";',
+      },
+      {
+        extra: { "src/cycle.ts": 'export * from "./mid.ts";\n' },
+        name: "cycle",
+        tail: 'export * from "./cycle.ts";',
+      },
+    ] as const) {
+      const result = await scan({
+        ...fixture.extra,
+        "package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: `partial-child-${fixture.name}`,
+        }),
+        "src/index.ts": 'export * from "./mid.ts";\n',
+        "src/mid.ts": `export function safeApi() {}\n${fixture.tail}\n`,
+      });
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(
+        result.snapshot?.records
+          .filter((record) => record.kind === "action")
+          .map((record) => record.name),
+      ).toEqual(["safeApi"]);
+    }
+  });
+
+  test("lets malformed star surfaces suppress only possibly colliding star names", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "malformed-star" }),
+      "src/good.ts": "export function shared() {}\n",
+      "src/index.ts": [
+        "export function directApi() {}",
+        'export { safeApi } from "./safe.ts";',
+        'export * from "./good.ts";',
+        'export * from "./malformed.ts";',
+      ].join("\n"),
+      "src/malformed.ts": "export function shared( {\n",
+      "src/safe.ts": "export function safeApi() {}\n",
+    });
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      result.snapshot?.records
+        .filter((record) => record.kind === "action")
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["directApi", "safeApi"]);
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
+
+    const unknownSibling = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "unknown-star" }),
+      "src/good.ts": "export function shared() {}\n",
+      "src/index.ts": 'export * from "./good.ts";\nexport * from "external-package";\n',
+    });
+    expect(unknownSibling.result.ok).toBeTrue();
+    expect(unknownSibling.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      unknownSibling.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "shared",
+      ),
+    ).toBeFalse();
   });
 
   test("resolves public barrels through owned package imports and tsconfig aliases only", async () => {
@@ -1209,6 +1826,137 @@ export function shared() {}
     }
   });
 
+  test("aggregates same-named legacy exports without losing declarations or JSDoc", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({
+        main: "src/runtime.ts",
+        module: "src/module.ts",
+        name: "aggregate-legacy",
+        types: "src/index.d.ts",
+      }),
+      "src/index.d.ts": "/** Declaration API. */\nexport declare function api(): void;\n",
+      "src/module.ts": "/** Module API. */\nexport function api() {}\n",
+      "src/runtime.ts": "/** Runtime API. */\nexport function api() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
+    expect(actions.map((record) => record.name)).toEqual(["api"]);
+    expect(new Set(actions[0]?.provenance.map((item) => item.resource))).toEqual(
+      new Set(["package.json", "src/index.d.ts", "src/module.ts", "src/runtime.ts"]),
+    );
+    const docs =
+      result.snapshot?.records.flatMap((record) =>
+        record.kind === "documentation" && record.subject?.key === actions[0]?.key
+          ? [record.content]
+          : [],
+      ) ?? [];
+    expect(docs.sort()).toEqual([
+      "/** Declaration API. */",
+      "/** Module API. */",
+      "/** Runtime API. */",
+    ]);
+
+    const sameResourceDocs = await scan({
+      "package.json": JSON.stringify({
+        main: "src/runtime.ts",
+        module: "src/module.ts",
+        name: "same-resource-docs",
+      }),
+      "src/implementation.ts": [
+        "/** First API. */",
+        "export function first() {}",
+        "/** Second API. */",
+        "export function second() {}",
+      ].join("\n"),
+      "src/module.ts": 'export { second as api } from "./implementation.ts";\n',
+      "src/runtime.ts": 'export { first as api } from "./implementation.ts";\n',
+    });
+    expect(sameResourceDocs.result.ok).toBeTrue();
+    expect(sameResourceDocs.snapshot?.coverage[0]?.state).toBe("complete");
+    const sameResourceAction = sameResourceDocs.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "api",
+    );
+    const retainedDocs =
+      sameResourceDocs.snapshot?.records.flatMap((record) =>
+        record.kind === "documentation" && record.subject?.key === sameResourceAction?.key
+          ? [record]
+          : [],
+      ) ?? [];
+    expect(retainedDocs.map((record) => record.content).sort()).toEqual([
+      "/** First API. */",
+      "/** Second API. */",
+    ]);
+    expect(new Set(retainedDocs.map((record) => record.key)).size).toBe(2);
+    expect(
+      retainedDocs.every((record) => record.subject?.key === sameResourceAction?.key),
+    ).toBeTrue();
+
+    const declarationsOnly = await scan({
+      "package.json": JSON.stringify({ name: "declarations-only", types: "src/index.d.ts" }),
+      "src/index.d.ts": "export declare function typeApi(): void;\n",
+    });
+    expect(declarationsOnly.result.ok).toBeTrue();
+    expect(
+      declarationsOnly.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "typeApi",
+      ),
+    ).toBeTrue();
+
+    const alternateEntry = await scan({
+      "package.json": JSON.stringify({ main: "src/alternate.ts", name: "alternate-entry" }),
+      "src/alternate.ts": "export function api() {}\n",
+    });
+    const alternateAction = alternateEntry.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "api",
+    );
+    expect(alternateAction?.key).toBe(actions[0]?.key);
+  });
+
+  test("retains a deterministic bounded public proof when later aggregates overflow", async () => {
+    const source: Record<string, string> = {
+      "package.json": JSON.stringify({
+        main: "src/a-short.ts",
+        module: "src/z-chain/00.ts",
+        name: "bounded-aggregate",
+      }),
+      "src/a-short.ts": "/** Short API. */\nexport function api() {}\n",
+    };
+    for (let index = 0; index < 29; index += 1) {
+      const current = String(index).padStart(2, "0");
+      const next = String(index + 1).padStart(2, "0");
+      source[`src/z-chain/${current}.ts`] =
+        index === 28
+          ? "/** Long API. */\nexport function api() {}\n"
+          : `export { api } from "./${next}.ts";\n`;
+    }
+    const first = await scan(source);
+    const replay = await scan(Object.fromEntries(Object.entries(source).reverse()));
+
+    expect(first.result.ok).toBeTrue();
+    expect(replay.result.ok).toBeTrue();
+    expect(first.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(replay.snapshot).toEqual(first.snapshot);
+    expect(replay.emittedKeys).toEqual(first.emittedKeys);
+    const action = first.snapshot?.records.find(
+      (record) => record.kind === "action" && record.name === "api",
+    );
+    expect(action).toBeDefined();
+    expect(action?.provenance).toHaveLength(3);
+    expect(new Set(action?.provenance.map((item) => item.resource))).toEqual(
+      new Set(["package.json", "src/a-short.ts"]),
+    );
+    expect(action?.provenance.some((item) => item.resource.startsWith("src/z-chain/"))).toBeFalse();
+    expect(
+      first.snapshot?.records.flatMap((record) =>
+        record.kind === "documentation" && record.subject?.key === action?.key
+          ? [record.content]
+          : [],
+      ),
+    ).toEqual(["/** Short API. */"]);
+  });
+
   test("never reinterprets an external package-import target as a local file", async () => {
     const result = await scan({
       "left-pad.ts": "export function collision() {}\n",
@@ -1312,6 +2060,89 @@ export function shared() {}
         )
         .sort() ?? [];
     expect(externals).toEqual(["@scope/pkg", "lodash", "node:fs", "pkg", "plain"]);
+  });
+
+  test("normalizes exact Node builtins after aliases without prefix guesses", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/api/index.ts", name: "builtins" }),
+      "src/api/index.ts": [
+        'import fs from "fs";',
+        'import promises from "fs/promises";',
+        'import runtimePromises from "node:fs/promises";',
+        'import timers from "timers";',
+        'import timerPromises from "timers/promises";',
+        'import bareBun from "bun";',
+        'import bunSqlite from "bun:sqlite";',
+        'import extra from "fs-extra";',
+        'import socket from "ws";',
+        'import undici from "undici";',
+        'import bareTest from "test";',
+        'import nodeTest from "node:test";',
+        "void fs; void promises; void runtimePromises; void timers; void timerPromises;",
+        "void bareBun; void bunSqlite; void extra; void socket; void undici;",
+        "void bareTest; void nodeTest;",
+      ].join("\n"),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    const candidates =
+      result.snapshot?.records.flatMap((record) =>
+        record.kind === "component-candidate" && record.candidate.type === "external"
+          ? [record]
+          : [],
+      ) ?? [];
+    expect(candidates.map((record) => record.candidate.name).sort()).toEqual([
+      "bun",
+      "bun:sqlite",
+      "fs-extra",
+      "node:fs",
+      "node:test",
+      "node:timers",
+      "test",
+      "undici",
+      "ws",
+    ]);
+    const nodeFs = candidates.find((record) => record.candidate.name === "node:fs");
+    const nodeFsImport = result.snapshot?.records.find(
+      (record) =>
+        record.kind === "relationship" &&
+        record.relationshipType === "imports" &&
+        record.to.key === nodeFs?.key,
+    );
+    expect(nodeFsImport?.provenance).toHaveLength(3);
+    const nodeTimers = candidates.find((record) => record.candidate.name === "node:timers");
+    const nodeTimersImport = result.snapshot?.records.find(
+      (record) =>
+        record.kind === "relationship" &&
+        record.relationshipType === "imports" &&
+        record.to.key === nodeTimers?.key,
+    );
+    expect(nodeTimersImport?.provenance).toHaveLength(2);
+
+    const aliased = await scan({
+      "package.json": JSON.stringify({ exports: "./src/api/index.ts", name: "builtin-alias" }),
+      "src/api/index.ts": 'import fs from "fs";\nvoid fs;\n',
+      "src/domain/fs.ts": "export default {};\n",
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { fs: ["src/domain/fs.ts"] } },
+      }),
+    });
+    expect(aliased.result.ok).toBeTrue();
+    expect(aliased.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      aliased.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.type === "external" &&
+          record.candidate.name === "node:fs",
+      ),
+    ).toBeFalse();
+    expect(
+      aliased.snapshot?.records.some(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ),
+    ).toBeTrue();
   });
 
   test("proves named and default imported bindings re-exported through a local barrel", async () => {
