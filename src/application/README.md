@@ -8,6 +8,10 @@ Canonical mutations preserve intent/evidence separation and go through the share
 engine. Application reads use the same bounded query contracts whether the provider is the local
 canonical store or a disposable projection.
 
+An exact component read keeps canonical meaning and supporting scan evidence separate in one
+generation-locked result. Evidence detail includes its source binding, coverage, observations, and
+provenance; a curated-only component has an empty evidence list.
+
 Reconciliation accepts one completed observation snapshot, resolves only exact source-owned
 bindings, and prepares evidence plus Standard Model mutations as one transaction. It preserves
 curated fields by changing a scanner-derived value only while the canonical value still matches the

@@ -86,7 +86,7 @@ interface ComponentProjection {
   readonly type?: string;
 }
 
-interface ComponentBinding {
+export interface ComponentBinding {
   readonly componentId: string;
   readonly key: string;
   readonly present: boolean;
@@ -301,7 +301,13 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
   return success(record as unknown as ComponentProjection);
 }
 
-function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Result<EvidenceState> {
+export function parseEvidenceState(
+  value: unknown,
+  bounds: Pick<
+    ReconciliationBounds,
+    "maxComponents" | "maxRecords" | "maxRelationships" | "maxSources"
+  >,
+): Result<EvidenceState> {
   if (
     typeof value !== "object" ||
     value === null ||
