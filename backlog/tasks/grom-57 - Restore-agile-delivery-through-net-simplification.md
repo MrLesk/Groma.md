@@ -1,11 +1,11 @@
 ---
 id: GROM-57
 title: Restore agile delivery through net simplification
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-19 13:43'
-updated_date: '2026-07-19 14:48'
+updated_date: '2026-07-19 14:56'
 labels: []
 dependencies: []
 references:
@@ -33,7 +33,7 @@ Remove premature and disproportionate infrastructure that has made the first use
 - [x] #5 Bounded blueprint reads remain reconstructable from canonical state while disposable projection persistence, repair, integrity-tree, and premature sharding machinery are removed or collapsed
 - [x] #6 Premature schema migration, custom executable-format verification, certification benchmark, and oversized frozen self-blueprint verification are removed in favor of proportionate current-format and end-to-end checks
 - [x] #7 Architecture and development documentation describe the simplified current boundary without changing MANIFESTO.md or claiming the future scan/reconcile/visual loop is delivered
-- [ ] #8 Focused tests and the repository check demonstrate the preserved behavior and one ready-for-review PR is green and merged before the task is closed
+- [x] #8 Focused tests and the repository check demonstrate the preserved behavior and one ready-for-review PR is green and merged before the task is closed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -48,4 +48,12 @@ Remove premature and disproportionate infrastructure that has made the first use
 Context-hunter classification: L2 cross-module simplification. Supported semantic boundary: the built-in TypeScript/Bun scanner reports only its documented bounded static syntax; ambiguous or unsupported syntax yields partial/no evidence. Only completed scans are eligible for reconciliation/publication. The cleanup does not promise crash-resumable provisional scans, third-party package acquisition, hostile same-process object containment, pre-release schema compatibility, custom binary parsing, persistent disposable projections, or organization-scale certification.
 
 Implemented subtraction-first cleanup: 96 changed files, 69,305 lines removed and 1,334 added overall. Removed local plugin packages and package declarations, schema migration, durable observation recovery, evidence sharding, persistent projection bundles/Merkle/repair/checkpoints, custom executable parsing, the certification benchmark, and frozen self-blueprint/foundation proof suites. Replaced them with built-in-only scanner composition, completed-snapshot-only in-process scan execution, an in-memory reconstructable projection, ordinary same-process validation, and focused compiled verification. One bounded independent audit confirmed the same major seams; no repeated open-ended review loop was started. bun run check passes: formatting, types, boundaries, 386 tests, native build/smoke, and compiled crash-recovery workflow. bun run check:targets cross-compiles four targets, runs the host-compatible workflow, and restores the native artifact. Two automatic Codex review passes identified seven valid refresh, reservation, shutdown, and cancellation races. The fixes invalidate failed projection refreshes, serialize projection publication, reserve scan keys before asynchronous setup, prevent post-shutdown scan starts, clean synchronous cancellation registration, and propagate cancellation through completed-snapshot consumption; focused regressions cover each behavior. Claude was invoked once as required, but its sandbox could not read the pull request or local diff and it returned no substantive findings.
+
+Final automatic Codex review accepted commit babad25 with a thumbs-up and no new findings. GitHub quality gates, cross-platform binaries, and native Windows binary checks all passed. Ready PR #42 merged to main as e9e6e4f on 2026-07-19.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Removed 69,305 lines while collapsing premature package management, migration, durable scan recovery, persistent projection integrity/repair, sharding, custom binary verification, certification, and frozen self-blueprint machinery. Preserved stable identity, scanner blindness, intent/evidence separation, completed-snapshot-only publication, reconstructable bounded blueprint reads, deterministic local canonical state, and failed-scan safety. Verified with 386 tests, full repository checks, four target builds, focused concurrency/cancellation regressions, one independent audit, Claude invocation, automatic Codex acceptance, and green ready PR #42 merged as e9e6e4f.
+<!-- SECTION:FINAL_SUMMARY:END -->
