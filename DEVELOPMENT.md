@@ -1,67 +1,186 @@
-# Development
+# Groma Development
 
-Read [MANIFESTO.md](MANIFESTO.md) and [ARCHITECTURE.md](ARCHITECTURE.md) before changing product or
-architecture behavior. Keep the next change on the shortest useful path:
+Groma is written in TypeScript, runs on Bun, and ships as one compiled single-file executable.
+This document records the implementation choices: toolchain, commands, source boundaries,
+tests, build targets, and CI.
 
-```text
-groma init -> groma scan -> groma
+For everything else: [MANIFESTO.md](MANIFESTO.md) governs product and architectural
+principles, the canonical [`groma/`](groma/) workspace holds the detailed architecture, and
+[ARCHITECTURE.md](ARCHITECTURE.md) is the cross-component tour.
+
+## Toolchain
+
+- Bun `1.3.14` is the package manager, runtime, test runner, and bundler.
+- TypeScript provides strict static type checking. Bun runs TypeScript but does not replace
+  the type checker.
+- Prettier formats TypeScript and project configuration.
+- `bun.lock` is committed. Clean and CI installs use `bun ci`, which fails when the package
+  manifest and lockfile disagree.
+
+Install dependencies:
+
+```sh
+bun ci
 ```
-
-## Requirements
-
-- Bun 1.3.14
-- TypeScript 7.0.2
-
-Install the pinned dependencies with `bun ci`.
 
 ## Commands
 
 ```sh
-bun run dev               # run the source CLI
-bun run build             # build the native executable
-bun run smoke             # verify the native executable starts
-bun run typecheck         # TypeScript without emit
-bun run test              # focused unit and integration tests
-bun run check:boundaries  # enforce layer dependency direction
-bun run check:targets     # cross-compile and smoke compatible targets
-bun run verify:1a         # compiled CLI end-to-end fixture
-bun run check             # formatting, types, boundaries, tests, compiled fixtures
+bun run dev           # run the TypeScript CLI entry point
+bun run typecheck     # strict TypeScript validation
+bun run test          # Bun tests
+bun run format        # format source, scripts, and configuration
+bun run format:check  # verify formatting without writing
+bun run check:boundaries # enforce architectural dependency directions
+bun run check:targets # cross-compile every baseline target and run the host-compatible one
+bun run build         # compile the native standalone executable to dist/groma
+bun run smoke         # verify one native artifact and the public init -> scan workflow
+bun run verify:1a     # build and black-box verify the complete native 1A workflow
+bun run check         # run every required local verification gate
 ```
 
-## Change shape
+The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
+`package.json` at runtime. Any configuration Groma needs must arrive through supported
+application and host capabilities, never through ambient build-tool files.
 
-Prefer a complete vertical slice over generalized infrastructure. A useful change should remove or
-avoid concepts whenever possible, keep canonical meaning in Core/Application, and leave adapters and
-renderers replaceable.
+## Change Review
 
-For scanner changes, state the supported syntax boundary. Ambiguous syntax must produce partial
-evidence or no claim. Do not broaden the scanner into whole-program analysis to satisfy a fixture.
+Before a pull request is opened, two independent `gpt-5.6-terra` agents at `xhigh` and one
+local Claude pass review the complete change. Justified findings are fixed before the PR is
+created. The ready PR then receives one awaited automatic Codex review. If that review finds
+issues, fix the justified ones and require green CI after the fix; do not wait for the
+automatic follow-up Codex review, even if the PR shows a new 👀 reaction. This keeps review
+bounded at three local passes and one online pass.
 
-For persistence changes, preserve readable deterministic canonical files, stable IDs, exact schema
-validation, and atomic publication. A failed or indeterminate write must not be reported as success.
+## Source Boundaries
 
-For projection or renderer changes, prove that the output is bounded and reconstructable. Visual
-state must not enter canonical records.
+The repository is one build workspace. Most source boundaries are private dependency
+directions; `groma/plugin-sdk` is the one deliberately supported subpath for plugin packages.
+Package acquisition and publication are separate Host concerns.
 
-## Tests
+| Boundary             | Responsibility                                                                         | May depend on                            |
+| -------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `src/core`           | Technology-neutral graph, transaction, query, observation, event, and plugin contracts | Nothing outside Core                     |
+| `src/plugin-sdk`     | Public blind-scanner authoring contracts                                               | Core                                     |
+| `src/standard-model` | The official minimal blueprint model and its invariants                                | Core                                     |
+| `src/persistence`    | Official local-resource, Markdown, journal, and later projection providers             | Core and the standard model              |
+| `src/application`    | Presentation-neutral semantic operations                                               | Core, model, and capability contracts    |
+| `src/host`           | Official composition, lifecycle, and process integration                               | All registered capabilities and surfaces |
+| `src/cli`            | CLI parsing and terminal presentation                                                  | Host and application operations          |
 
-Tests should demonstrate public contracts and high-risk seams rather than restate private branches.
-The preferred stack is:
+The rules behind the table:
 
-1. focused Core/model contract tests;
-2. a small number of Host/Persistence composition tests;
-3. compiled end-to-end fixtures for the public CLI path.
+- Core must never import Bun APIs, filesystem or Markdown implementations, CLI, HTTP, React,
+  or any other surface technology.
+- Application operations must never reach into provider implementations directly.
+- The SDK may expose Core plugin contracts, but Core never depends on the SDK façade.
+- The host is the composition root.
 
-Add a matrix only when the product promises the matrix. Avoid certification harnesses, frozen
-repository snapshots, hostile same-process JavaScript simulations, or duplicated proof suites unless
-a real supported boundary requires them.
+`bun run check:boundaries` enforces this. It parses TypeScript imports, exports, dynamic
+imports, import types, and `require` calls. Production Core files may import only other Core
+files. Tests may import `bun:test`, but test code still cannot cross architectural layers.
+Unresolved relative imports fail the check rather than being ignored.
 
-`bun run check:targets` builds each declared artifact, verifies it is non-empty, runs native smoke,
-and exercises the compiled iteration workflow on host-compatible targets. It deliberately does not
-parse executable formats itself.
+Directory names broadly follow the canonical root and component terminology. One-time
+migration seed keys are not authoritative source names: they are preserved as namespaced
+`groma.md/seed-key` metadata and can be inspected through the public bounded
+`blueprint export`. Use the canonical workspace for detailed architecture and
+`ARCHITECTURE.md` for navigation. The plugin SDK is a public package subpath today; splitting
+it into an independently acquired package belongs to the later package workflow.
 
-## Pull requests
+## Test Layout
 
-Use Backlog.md for task planning and completion. Every PR must map to one task and use the exact title
-`<TASK-ID> - <Task title>`. Run `bun run check` before publishing. Repository instructions require a
-ready-for-review PR, one Claude review, the automatic Codex review, and green CI before merge.
+Tests live in a `tests/` directory inside the boundary they verify, for example
+`src/core/tests/` and `src/cli/tests/`. Tooling tests live in `scripts/tests/`. Bun discovers
+`*.test.ts` recursively, and keeping tests inside their owning boundary lets the architecture
+checker enforce the same dependency direction without cluttering production module roots.
+
+Release-level black-box verification lives in `tests/iteration-1a/` because it exercises the
+compiled artifact across every source boundary without importing product implementation APIs. The
+compiled smoke also proves `init -> scan -> component list` on a small TypeScript fixture.
+
+Add deeper fixture or golden-output directories only when a test suite demonstrates the need.
+
+## Build Targets
+
+One binary is produced per target; "single-file" describes the runtime artifact, not one
+universal binary for every operating system. The target matrix proves cross-compilation, one
+exact artifact, and the executable format and architecture shown below. It does not claim
+native runtime verification for an artifact the current runner cannot execute.
+
+| Bun target                 | Packaged baseline artifact          | Matrix proof                                               |
+| -------------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| `bun-darwin-arm64`         | Apple Silicon macOS executable      | One Mach-O arm64 artifact; runtime only on a matching host |
+| `bun-linux-x64-baseline`   | Baseline x64 glibc Linux executable | One ELF x86-64 artifact; runtime on a matching Linux host  |
+| `bun-windows-x64-baseline` | Baseline x64 Windows executable     | One PE x86-64 artifact; runtime only on a matching host    |
+| `bun-windows-arm64`        | ARM64 Windows executable            | One PE arm64 artifact; runtime only on a matching host     |
+
+Build the Linux target explicitly:
+
+```sh
+bun run build -- --target=bun-linux-x64-baseline
+```
+
+Build the Windows targets explicitly. Bun's standalone-executable contract uses the `.exe`
+suffix for Windows outputs, and Groma writes `dist/groma.exe` explicitly:
+
+```sh
+bun run build -- --target=bun-windows-x64-baseline
+bun run build -- --target=bun-windows-arm64
+```
+
+Intel macOS, Linux arm64, and musl targets are not packaging baselines. Adding a
+target requires cross-compiled artifact verification. Runtime behavior is recorded separately
+and only for a compatible CI or local host.
+
+## Continuous Verification
+
+GitHub Actions runs on every pull request and every push to `main`:
+
+1. The required quality job starts from a clean checkout, installs with `bun ci`, and runs the
+   same `bun run check` used locally.
+2. A second job uses one Linux runner to cross-compile all four baseline targets and verify
+   the exact single-file output and format-specific architecture header for every one. For the
+   Linux artifact the host can actually run, it then executes the compiled smoke and Iteration 1A
+   workflow.
+3. A bounded third job builds the native Windows executable on Windows and runs version, help,
+   and scan smoke checks against the real process.
+
+`bun run check:targets` applies the same rule locally: it cross-compiles every target and
+black-box tests the one matching the current operating system and architecture through the
+compiled smoke and Iteration 1A workflow. The compiled child process is executed directly — Bun remains
+only the development harness that builds and drives it. A successful cross-compile is not
+native runtime verification for a different operating system; when no baseline target matches
+the local host, the command says so instead of claiming it ran the complete workflow. After
+the serial matrix, it restores a native artifact so `bun run smoke` can run immediately.
+
+The workflow pins release commits for `actions/checkout` and `oven-sh/setup-bun`, keeping
+their release tags as comments for review. Setup Bun reads the exact Bun version from
+`package.json`.
+
+When verification fails, run `bun run check` first. Its fail-fast order is formatting, types,
+architectural boundaries, unit tests, then `verify:1a` (standalone build, smoke, and the complete
+black-box/crash-recovery suite). Once you know which gate fails, run its named subcommand directly.
+
+## Compiled Verification
+
+`bun run verify:1a` covers initialization,
+recursive component, relationship, bounded-query, expected-revision, identity-continuity,
+restart, deterministic-output, malformed-state, negative-invariant, and crash-recovery
+contract.
+
+The Iteration 1A suite compiles a separate verification-only entry with an explicit host fault
+injector. Real child processes are terminated at every prepared, committing, replacement,
+settlement, and deletion durability boundary. Recovery must always expose the complete old or
+complete new graph, and must accept a later valid mutation. This fault control does not exist
+in the production entry point or production executable.
+
+## Deliberately Deferred
+
+The approved web stack is Bun's embedded HTTP server and Bun's React bundler. Neither is needed for
+the first disposable local visual artifact. A later iteration introduces the application service
+and complete web viewing and editing experience together.
+
+The bounded scan, observation, evidence, binding, and reconciliation path is implemented. The
+next vertical slice is local visual navigation and rendering through bare `groma`. Plans and Git
+history views remain later work.

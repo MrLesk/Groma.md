@@ -83,6 +83,8 @@ import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-i
 
 const intrinsicReflectApply = Reflect.apply;
 
+export const defaultProjectRegistrationId = "project.default" as const;
+
 export function initialProjectDisplayName(
   workspaceRoot: string,
   platform: "darwin" | "linux" | "win32",
@@ -320,7 +322,7 @@ export function createDefaultBootstrapRegistry(
     const initialProject = canonicalizeProjectRegistration(
       Object.freeze({
         coverage: Object.freeze([Object.freeze({ id: "workspace", resourceRoot: "." })]),
-        id: "project.default",
+        id: defaultProjectRegistrationId,
         name: initialProjectDisplayName(
           convention.value.workspaceRoot,
           selectedTarget.platform as "darwin" | "linux" | "win32",

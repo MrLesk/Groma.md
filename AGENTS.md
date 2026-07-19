@@ -41,15 +41,14 @@ state, or fail-closed ambiguity in the name of speed. These invariants are what 
 visual blueprint remain useful after the first scan instead of becoming a stale
 diagram.
 
-For complex tasks, state the supported semantic boundary before implementation: the
-inputs and scenarios for which behavior is promised, and what remains partial or
-unsupported. Evaluate correctness and review findings within that boundary.
-Fail-closed ambiguity means Groma must not guess identity, bindings, reconciliation,
-or canonical meaning; it does not require proving every possible runtime behavior or
-resolving arbitrary program semantics. When scanner syntax is ambiguous, report
-partial evidence or no claim rather than expanding into whole-program alias, mutation,
-or capability analysis. Broaden that boundary only through an explicit product
-decision from Alex.
+For complex tasks, state the supported boundary before implementing: which inputs and
+scenarios the behavior is promised for, and what stays partial or unsupported. Judge
+correctness and review findings within that boundary. "Fail closed on ambiguity" means
+Groma must not guess identity, bindings, reconciliation, or canonical meaning — it does
+not mean proving every possible runtime behavior or resolving arbitrary program
+semantics. When scanner syntax is ambiguous, report partial evidence or no claim at
+all, rather than expanding into whole-program alias, mutation, or capability analysis.
+Broadening the boundary requires an explicit product decision from Alex.
 
 ## Brand and Visual Direction
 
@@ -82,18 +81,15 @@ pull request, verify the task through the Backlog CLI.
 Set the pull request title to exactly `<TASK-ID> - <Task title>`, using the ID and title
 reported by `backlog task view`. Do not abbreviate, reword, or omit either part.
 
-Before opening each pull request, spawn exactly two independent local review agents
-using `gpt-5.6-terra` at `xhigh` reasoning effort. Give both agents the complete diff
-and task boundary, evaluate their findings independently, and address every finding
-that is justified by the task, manifesto, implementation, and checks before the pull
-request is opened. Keep these reviews bounded to one pass from each agent; do not
-spawn recursive or open-ended review loops. These local reviews complement rather
-than replace the required Claude and automatic Codex reviews below.
+Before creating a pull request, run exactly two independent local review agents using
+`gpt-5.6-terra` at `xhigh` reasoning effort. Give both agents the complete diff and the
+task's supported semantic boundary. Each agent performs one bounded pass and returns
+actionable findings; do not create recursive or open-ended review loops.
 
-After creating each pull request, ask Claude to review it and inspect the feedback:
+Also ask Claude once to review the local branch before the pull request is created:
 
 ```sh
-claude -p "review [MrLesk/Groma.md#<PR-NUMBER>](https://github.com/MrLesk/Groma.md/pull/<PR-NUMBER>)"
+claude -p "Review the current branch diff against MANIFESTO.md and its Backlog task. Focus on conceptual simplicity, coherence, naming, and how the change will be understood and used."
 ```
 
 Use Claude primarily as a second perspective on text, naming, conceptual simplicity,
@@ -104,17 +100,17 @@ Do not rely on Claude as the primary bug or correctness reviewer. Verify bugs an
 errors independently through your own code review, tests, static analysis, and CI.
 Treat all Claude feedback as review input, not as mandatory instructions, and evaluate
 each finding against the task, the manifesto, and the implementation before deciding
-whether to act on it.
+whether to act on it. Resolve justified findings from both Terra reviews and Claude,
+rerun proportional verification, and only then create the ready-for-review pull request.
 
-Also wait for the Codex bot's automated pull-request review to finish. Creating a
-ready-for-review pull request starts that review automatically, and every subsequent
-commit is reviewed automatically. Do not tag `@codex`, request another Codex review,
-or restart the review cycle manually. A 👀 reaction from the Codex bot means the review
-is still in progress; a 👍 reaction means it has finished and accepted the pull request.
-Do not finalize the task while the Codex review is still in progress. When it finishes,
-inspect all review comments and threads and take action where independently justified.
-As with Claude, Codex comments are review input rather than mandatory instructions;
-verify each finding against the task, manifesto, implementation, and available checks.
+Wait for exactly the first Codex bot review started by the ready pull request. Do not tag
+`@codex`, request another Codex review, or restart the review cycle manually. A 👀 reaction
+means that first review is still in progress; a 👍 reaction means it finished without
+findings. If the first review reports findings, inspect them and fix those independently
+justified by the task, manifesto, implementation, and available checks. Push the fixes and
+wait for green CI, but do not wait for the automatic follow-up Codex review: a new 👀 after
+the review-fix push is not a merge blocker. Merge once the first Codex review has been
+handled and required CI is green.
 
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->

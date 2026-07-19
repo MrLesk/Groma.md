@@ -1,1 +1,11 @@
 schema: groma/v0.1
+projects:
+  - id: "project_198bde57c817528c9d08d0ebdf630196"
+    name: "groma"
+    source: "."
+    scanners:
+      - id: "official.typescript"
+        configuration: {}
+    coverage:
+      - id: "workspace"
+        resourceRoot: "."

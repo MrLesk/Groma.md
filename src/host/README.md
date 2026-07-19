@@ -22,7 +22,7 @@ canonical commit after a cancelled report.
 
 The default consumer is the Application reconciliation operation. It records source-owned evidence,
 maintains stable opaque component bindings, and publishes all resulting canonical and projection
-changes atomically. This composition is internal until the public `scan` command is added.
+changes atomically. The public `scan` command is the thin adapter over this same composition.
 
 There is no durable provisional scan state, observation journal, restart replay, recovery lane,
 heartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is

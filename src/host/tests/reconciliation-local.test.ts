@@ -270,7 +270,9 @@ describe("local completed-snapshot reconciliation", () => {
     const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
     const firstEvidence = await readFile(evidencePath, "utf8");
 
-    const repeated = await host.reconciliation.reconcile(
+    const restartedBeforeRepeat = await composition(workspace);
+    expect(await restartedBeforeRepeat.workspace.recover()).toMatchObject({ ok: true });
+    const repeated = await restartedBeforeRepeat.reconciliation.reconcile(
       snapshot("epoch-2", [candidate("api", "API")]),
     );
     expect(repeated).toEqual({

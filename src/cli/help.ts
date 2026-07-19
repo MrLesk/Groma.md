@@ -15,6 +15,7 @@ Usage:
   groma --help
   groma --version
   groma [--format plain|json] init
+  groma [--format plain|json] scan [--project <project-id>] [--scanner <scanner-id>]
   groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint traverse <id> --direction incoming|outgoing|both --depth <1-${CLI_MAX_TRAVERSAL_DEPTH}> [--relation-type <type>] --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
@@ -34,6 +35,8 @@ Usage:
   groma [--format plain|json] component remove <id> --revision <revision>
 
 Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
+Scan uses the only registered project and scanner when selection is unambiguous. The initialized
+default project is configured for the built-in TypeScript/Bun scanner before its first scan.
 Project input contains name, a portable aggregate-workspace-relative source, sorted enabled scanner
 records with canonical data-only configuration, and project-source-relative coverage roots. Project
 updates and removal require the exact current registration revision. Availability is derived locally;

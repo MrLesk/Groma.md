@@ -30,6 +30,10 @@ function projectRevision(value: string | undefined): value is string {
   return value !== undefined && /^sha256:[0-9a-f]{64}$/.test(value);
 }
 
+function scannerIdentifier(value: string | undefined): value is string {
+  return value !== undefined && /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/.test(value);
+}
+
 function failed(format: CliFormat, message: string): CliInvocationResult {
   return Object.freeze({ diagnostic: diagnostic(message), format, ok: false as const });
 }
@@ -293,6 +297,27 @@ function projectCommand(args: readonly string[]): CliCommand | undefined {
     : Object.freeze({ expectedRevision, id, input, kind: "project-update" });
 }
 
+function scanCommand(args: readonly string[]): CliCommand | undefined {
+  let projectId: string | undefined;
+  let scannerId: string | undefined;
+  for (let index = 0; index < args.length; index += 2) {
+    const option = args[index];
+    const value = args[index + 1];
+    if (option === "--project" && projectId === undefined && projectIdentifier(value)) {
+      projectId = value;
+    } else if (option === "--scanner" && scannerId === undefined && scannerIdentifier(value)) {
+      scannerId = value;
+    } else {
+      return undefined;
+    }
+  }
+  return Object.freeze({
+    kind: "scan" as const,
+    ...(projectId === undefined ? {} : { projectId }),
+    ...(scannerId === undefined ? {} : { scannerId }),
+  });
+}
+
 export function parseInvocation(args: readonly string[]): CliInvocationResult {
   const boundedFailureFormat: CliFormat =
     (args[0] === "--format" && args[1] === "json") || args[0] === "--format=json"
@@ -349,13 +374,15 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
     });
   }
   const command =
-    commandArgs[0] === "blueprint"
-      ? blueprintCommand(commandArgs.slice(1))
-      : commandArgs[0] === "component"
-        ? componentCommand(commandArgs.slice(1))
-        : commandArgs[0] === "project"
-          ? projectCommand(commandArgs.slice(1))
-          : undefined;
+    commandArgs[0] === "scan"
+      ? scanCommand(commandArgs.slice(1))
+      : commandArgs[0] === "blueprint"
+        ? blueprintCommand(commandArgs.slice(1))
+        : commandArgs[0] === "component"
+          ? componentCommand(commandArgs.slice(1))
+          : commandArgs[0] === "project"
+            ? projectCommand(commandArgs.slice(1))
+            : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

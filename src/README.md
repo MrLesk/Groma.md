@@ -1,8 +1,10 @@
 # Source Layout
 
-The source tree follows the dependency direction in [ARCHITECTURE.md](../ARCHITECTURE.md): Core,
-Standard Model, Application, Persistence, Host, and CLI. Each directory README states the current
-boundary and deliberately absent responsibilities.
+The source tree follows the dependency directions documented in
+[DEVELOPMENT.md](../DEVELOPMENT.md): each directory here is one architectural boundary,
+and each boundary gets a local README before it gets implementation, so later tasks add
+code intentionally instead of treating an empty directory as an API.
 
-`plugin-sdk/` is the one public authoring facade. It exposes the blind scanner contract used by the
-built-in TypeScript/Bun scanner; it is not a package-management or certification framework.
+`plugin-sdk/` is the only public authoring boundary. Scanner packages may import the
+`groma/plugin-sdk` package export; they never import implementation paths from any other source
+boundary.
