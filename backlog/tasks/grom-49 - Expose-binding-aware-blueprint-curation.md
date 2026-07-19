@@ -1,11 +1,11 @@
 ---
 id: GROM-49
 title: Preserve observed-component merges across rescans
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 20:00'
-updated_date: '2026-07-19 19:26'
+updated_date: '2026-07-19 19:32'
 labels: []
 milestone: m-3
 dependencies:
@@ -60,3 +60,11 @@ Compiled self-dogfood used existing commands to merge observed application compo
 
 Pre-PR review completed with exactly two independent gpt-5.6-terra xhigh passes and one local Claude pass. One Terra reviewer found a missing cross-source alias-collision regression; the added two-scanner test proves reconciliation-binding-ambiguous and unchanged evidence. Claude found that a relationship endpoint change after alias migration added the obsolete source ID to touchedComponents; the fix uses the resolved prior source and the merge regression now changes a stable relationship key to a new endpoint before proving byte-stable repetition. The other Terra pass had no findings. Post-review full validation passed with 406 tests and 2,702 assertions. The final compiled self-scan advanced to generation 123 and repeated byte-identically at digest 8ba0d203402712911db9d3b8c503b9b048acf3d3474a7fd1666d22e9d8459c21; alias-based detail still returned the curated survivor, ten relationships, and six evidence records without changing bytes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #49 at 5791ff82f41b06c2b88fbeece70450b0b222b57b. Reconciliation now follows canonical aliases so an observed component can be merged into curated intent and remain merged across rescans. Binding and relationship projections migrate to the curated survivor, ambiguous same-source and cross-source collisions fail closed, and no parallel curation framework or command was added.
+
+The complete gate passed with 406 tests and 2,702 assertions. Groma self-dogfood reduced the blueprint from 59 to 58 components by merging its observed application boundary into Shared Application Operations; curated intent, stable identity, ten relationships, and six evidence records survived repeated byte-stable scans at generation 123 and digest 8ba0d203402712911db9d3b8c503b9b048acf3d3474a7fd1666d22e9d8459c21. Two Terra xhigh reviews, one Claude review, and the first automatic Codex review completed; justified findings were fixed before merge.
+<!-- SECTION:FINAL_SUMMARY:END -->
