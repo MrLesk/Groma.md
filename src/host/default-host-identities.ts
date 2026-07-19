@@ -12,6 +12,7 @@ export const defaultHostPluginIds = Object.freeze({
   resources: "official.resources",
   schemaMigrations: "official.schema-migrations",
   surface: "official.surface",
+  typescript: "official.typescript",
 });
 
 export const defaultHostCapabilityIds = Object.freeze({

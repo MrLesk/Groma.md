@@ -10,3 +10,4 @@ export * from "./plugin-runtime-bounds.ts";
 export * from "./plugin-scaffolding.ts";
 export * from "./scanner-project-resources.ts";
 export * from "./scanner-runtime.ts";
+export * from "./typescript-bun-scanner.ts";

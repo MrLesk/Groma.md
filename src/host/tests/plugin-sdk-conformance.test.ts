@@ -13,6 +13,7 @@ import {
 
 import { pluginRuntimeApiVersion, type PluginRegistration } from "../../core/index.ts";
 import { parseWorkspaceResourceLocator } from "../../persistence/index.ts";
+import { scannerCapabilityId } from "../../plugin-sdk/index.ts";
 import {
   createDefaultBootstrapRegistry,
   defaultHostCapabilityIds,
@@ -357,11 +358,14 @@ describe("default host plugin SDK conformance", () => {
       check(defaultHostCapabilityIds.surface, defaultHostPluginIds.surface, (value) =>
         hasMethod(value, "start"),
       ),
+      checkMultiple(scannerCapabilityId, defaultHostPluginIds.typescript, (value) =>
+        hasMethod(value, "scan"),
+      ),
     ]);
 
     const report = await runPluginConformanceSuite({ fixture, providers });
 
-    expect(providers).toHaveLength(Object.keys(defaultHostCapabilityIds).length);
+    expect(providers).toHaveLength(Object.keys(defaultHostCapabilityIds).length + 1);
     expect(report.ok).toBeTrue();
     expect(report.diagnostics).toEqual([]);
     expect(normalizedCancellationEvidence).toBeTrue();

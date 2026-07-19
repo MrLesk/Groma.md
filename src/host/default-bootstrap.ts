@@ -86,6 +86,7 @@ import { createLocalPluginPackageManager } from "./local-plugin-packages.ts";
 import { createLocalProjectRegistry } from "./local-project-registry.ts";
 import { createLocalScannerProjectResources } from "./scanner-project-resources.ts";
 import { createScannerExecutionRuntime } from "./scanner-runtime.ts";
+import { typescriptBunScannerRegistration } from "./typescript-bun-scanner.ts";
 import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-identities.ts";
 
@@ -1071,6 +1072,7 @@ export function createDefaultBootstrapRegistry(
               capabilities: Object.freeze([output(defaultHostCapabilityIds.surface, surface)]),
             }),
         }),
+        typescriptBunScannerRegistration,
       ]);
       const runtime = new PluginRuntime({
         maxCapabilitiesPerPlugin: defaultHostPluginRegistrationBounds.maxCapabilitiesPerPlugin,

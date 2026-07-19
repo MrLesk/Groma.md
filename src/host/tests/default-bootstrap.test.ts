@@ -545,6 +545,7 @@ describe("default bootstrap registry", () => {
         { id: "official.schema-migrations", phase: 1 },
         { id: "official.application", phase: 1 },
         { id: "official.surface", phase: 1 },
+        { id: "official.typescript", phase: 1 },
       ],
       state: "running",
     });
@@ -570,6 +571,13 @@ describe("default bootstrap registry", () => {
         .find((plugin) => plugin.id === "official.application")
         ?.requires.map((item) => item.id),
     ).toContain(defaultHostCapabilityIds.queryEngine);
+    expect(
+      pluginInspection?.plugins.find((plugin) => plugin.id === "official.typescript"),
+    ).toMatchObject({
+      provides: [{ cardinality: "multiple", id: scannerCapabilityId, version: "1.0.0" }],
+      requires: [],
+      version: "1.0.0",
+    });
     expect(defaultHostCapabilityIds.operations).toBe("groma.operations/v2");
     expect(defaultHostCapabilityIds.queryEngine).toBe("groma.graph-query/v2");
     expect(composed.value.plugins?.capabilities("groma.operations/v1", "1.0.0")).toEqual([]);

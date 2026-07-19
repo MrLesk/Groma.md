@@ -118,6 +118,20 @@ surface that may itself be waiting on scanner work. Reconciliation is not a no-o
 until GROM-41 supplies the consumer, delivery fails closed and the completed handoff remains
 pending without acknowledgement, cleanup, or canonical mutation.
 
+The first built-in contribution is the requirement-free `official.typescript` scanner. It walks
+only the Host-confined project resource surface, parses TypeScript and JavaScript inertly, and
+emits bounded source-local observations for packages, source boundaries, explicit public
+callable exports, uniquely resolved value and type-only cross-boundary imports, defensible
+static Bun routes, and raw documentation. Static TypeScript path aliases and package import
+maps are resolved only when they identify one inventoried resource. Generated, dependency,
+vendor, build, test, configured-excluded, and supported ignored resources are outside its
+declared production universe. Unsafe root policy makes the scope empty and partial; nested
+policy makes that subtree opaque. Other unsupported, dynamic, malformed, or ambiguous evidence
+is omitted and makes the affected coverage partial;
+it never executes project code, reads canonical intent, emits canonical IDs or bindings, or
+turns prose into architecture. Stable observation keys derive from logical source identity,
+while exact resource bytes and UTF-8 ranges remain evidence provenance.
+
 The execution deadline and cancellation fence cover the complete pipeline, including durable
 drain, revision validation, handoff, consumption, acknowledgement, and cleanup. An unsettled Host
 operation after interruption quarantines only its project/source lane until that promise settles;

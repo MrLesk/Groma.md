@@ -6,7 +6,7 @@ assembles explicit capabilities without placing its technology choices in Core.
 ## Default local plugin profile
 
 `createDefaultBootstrapRegistry` is the official local composition seam. It constructs
-eleven explicit built-in plugin registrations and resolves them through Core's
+twelve explicit built-in plugin registrations and resolves them through Core's
 `PluginRuntime`: Phase 0 local resources, configuration discovery, and YAML parsing,
 then Phase 1 kernel, Standard Model, canonical persistence, schema migration,
 disposable projection, bounded graph query, application/workspace, and surface plugins. These are ordinary
@@ -143,7 +143,7 @@ These fields are the only keys. Each package declaration contains exactly `name`
 aliases, explicit tags, duplicate keys, IDs, package names, or entry paths, non-scalar
 entries, unknown keys, non-portable blueprint sources, and configured bounds. Requests
 and declarations are sorted by code unit for deterministic selection. The document may
-enable at most 53 local package entries in the default profile. That is one shared Host
+enable at most 52 local package entries in the default profile. That is one shared Host
 capacity with enabled personal entries, not an independent per-scope allowance; an
 embedder that adds bootstrap registrations reduces the remaining local capacity.
 The shipped default CLI has no optional official contributions today. Required built-in
@@ -202,6 +202,26 @@ captured project source, supplies only bounded read/enumerate authority, scanner
 declared scopes, an observation sink, and cancellation, and retains locators and cursors relative
 to that project. Root projects cannot observe aggregate `groma/`, `.groma-cache/`, or `.git/`
 state through direct or historical paths.
+
+The default Phase 1 graph includes `official.typescript`, a zero-requirement TypeScript and Bun
+scanner. It uses only that confined resource authority, cancellation, and the one-way observation
+sink. A bounded, sorted, maximum-depth-zero directory walk excludes dependencies, vendors,
+generated and build output, tests, configured exclusions, and the scanner's supported ignore
+rules before descent. Inert parsing can contribute package and populated source-boundary
+candidates, explicit public callable export actions, uniquely resolved aggregate value and
+type-only import relationships, static Bun route actions, and raw README, package-description,
+or public-JSDoc documentation. Supported TypeScript path aliases and package import maps must
+resolve uniquely; unsafe root policy suppresses every claim in that scope, while nested policy
+makes the affected subtree opaque. It never imports or executes project code. Dynamic,
+unresolved, malformed, or ambiguous constructs produce no guessed claim and leave affected
+coverage partial. Observation keys hash stable logical tuples rather than content, offsets,
+epochs, host paths, or platform; fingerprints hash exact bytes, and AST ranges are converted to
+exact UTF-8 byte offsets.
+
+The scanner remains disabled in the initial project record in this iteration. GROM-43 owns
+enabling it in the shortest `groma init -> groma scan -> groma` path; GROM-41 owns the
+reconciliation consumer. This task therefore proves production observation output without
+creating a second canonical or CLI execution path.
 
 `HostComposition.scanners` retains the complete runtime for lifecycle fencing. A surface receives
 only one frozen `{recover, start}` view; it cannot call `cancelAll`. Shutdown awaits runtime
@@ -329,9 +349,9 @@ personal package inspection. Inspection reports a changed valid manifest as an i
 `manifest-drift` snapshot without resolving entries that the changed manifest no longer
 declares; exact-manifest entry drift remains `entry-drift`.
 
-The runtime accepts at most 128 registrations. The default profile reserves its eleven
+The runtime accepts at most 128 registrations. The default profile reserves its twelve
 built-ins and the full 64-entry official-runtime selection bound before admitting local
-entries, leaving 53 enabled local entries. Enable and ordinary startup count blueprint
+entries, leaving 52 enabled local entries. Enable and ordinary startup count blueprint
 and personal selections together before any local import. Exceeding the remaining
 capacity fails closed without changing configuration, lock, or user-state bytes.
 Each local registration is preflighted with the same ordinary Host manifest bounds:
