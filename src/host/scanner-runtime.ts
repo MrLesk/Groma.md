@@ -203,6 +203,10 @@ export function createScannerExecutionRuntime(
       );
     }
     if (!projectResult.ok) return projectResult;
+    if (stopping)
+      return failure(
+        diagnostic("scanner-runtime-shutting-down", "Scanner runtime is shutting down"),
+      );
     if (request.cancellation?.aborted)
       return failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled"));
     const project = projectResult.value;
@@ -247,6 +251,10 @@ export function createScannerExecutionRuntime(
       );
     }
     if (!resources.ok) return releaseReservation(resources);
+    if (stopping)
+      return releaseReservation(
+        failure(diagnostic("scanner-runtime-shutting-down", "Scanner runtime is shutting down")),
+      );
     if (request.cancellation?.aborted)
       return releaseReservation(
         failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled")),
@@ -340,7 +348,7 @@ export function createScannerExecutionRuntime(
     const abort = () => cancel();
     request.cancellation?.addEventListener("abort", abort, { once: true });
     if (request.cancellation?.aborted) cancel();
-    const completion = (async (): Promise<ScannerExecutionReport> => {
+    const completion = Promise.resolve().then(async (): Promise<ScannerExecutionReport> => {
       const failures: Diagnostic[] = [];
       const settled = cancelled
         ? ({ type: "cancelled" } as const)
@@ -409,7 +417,7 @@ export function createScannerExecutionRuntime(
         diagnostics: boundedDiagnostics(failures, selected.maxDiagnostics),
         status: status as ScannerExecutionTerminalStatus,
       });
-    })();
+    });
     const session = Object.freeze({ cancel, completion, inspect });
     reservations.delete(key);
     active.set(key, session);

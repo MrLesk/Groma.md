@@ -140,6 +140,57 @@ describe("scanner execution runtime", () => {
     expect(calls).toBe(0);
   });
 
+  test("shutdown prevents a scanner suspended in resource setup from starting", async () => {
+    const setupStarted = deferred<void>();
+    const setup = deferred<Result<ScannerProjectResources>>();
+    let calls = 0;
+    const scanner: Scanner = Object.freeze({
+      scan: async () => {
+        calls += 1;
+        return success(undefined);
+      },
+    });
+    const execution = runtime(scanner, {
+      projectResources: async () => {
+        setupStarted.resolve();
+        return setup.promise;
+      },
+    });
+    const starting = execution.start({ projectId: project.id, scannerId });
+    await setupStarted.promise;
+    expect(await execution.cancelAll()).toEqual([]);
+    setup.resolve(success(resources));
+    expect(await starting).toMatchObject({
+      diagnostics: [{ code: "scanner-runtime-shutting-down" }],
+      ok: false,
+    });
+    expect(calls).toBe(0);
+  });
+
+  test("cleans a cancellation detected while the session is being registered", async () => {
+    let abortedReads = 0;
+    const cancellation = {
+      get aborted() {
+        abortedReads += 1;
+        return abortedReads >= 4;
+      },
+      addEventListener() {},
+      removeEventListener() {},
+    } as unknown as AbortSignal;
+    const scanner: Scanner = Object.freeze({
+      scan: async (): Promise<Result<void>> => new Promise<Result<void>>(() => {}),
+    });
+    const execution = runtime(scanner);
+    const first = valueOf(
+      await execution.start({ cancellation, projectId: project.id, scannerId }),
+    );
+    expect(await first.completion).toMatchObject({ status: "cancelled" });
+
+    const second = valueOf(await execution.start({ projectId: project.id, scannerId }));
+    second.cancel();
+    expect(await second.completion).toMatchObject({ status: "cancelled" });
+  });
+
   test("cancels completed-snapshot consumption without publishing it", async () => {
     const consuming = deferred<void>();
     let published = false;

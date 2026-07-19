@@ -1895,6 +1895,44 @@ describe("projection query engine", () => {
     expect(rebuiltPages).toEqual(incrementalPages);
     expect(JSON.stringify(source.value)).toBe(beforeQueries);
   });
+
+  test("serializes concurrent committed rebuild publication by generation", async () => {
+    let calls = 0;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const source: ProjectionCanonicalSource = Object.freeze({
+      snapshot: async () => {
+        calls += 1;
+        if (calls === 1) {
+          markFirstStarted();
+          await firstGate;
+          return success(canonical(1, "First generation"));
+        }
+        return success(canonical(2, "Second generation"));
+      },
+    });
+    const projection = createLocalProjectionIndex({ canonical: source });
+    const firstEvent = createGraphCommittedEvent(1, { entities: [ids.a], relations: [] });
+    const secondEvent = createGraphCommittedEvent(2, { entities: [ids.b], relations: [] });
+    if (!firstEvent.ok || !secondEvent.ok) throw new Error("invalid event fixture");
+
+    const first = projection.update(firstEvent.value);
+    await firstStarted;
+    const second = projection.update(secondEvent.value);
+    releaseFirst();
+    expect((await first).ok).toBeTrue();
+    expect((await second).ok).toBeTrue();
+    expect(await projection.identity()).toMatchObject({
+      ok: true,
+      value: { generation: 2 },
+    });
+  });
 });
 
 function canonical(

@@ -323,15 +323,29 @@ export function createLocalProjectionIndex(
 ): ProjectionIndexCapability & ProjectionReadCapability {
   const selected = resolveBounds(options.bounds);
   let current: ProjectionSnapshot | undefined;
-  const rebuild = async (): Promise<Result<ProjectionSnapshot>> => {
+  let rebuildTail = Promise.resolve();
+  const performRebuild = async (): Promise<Result<ProjectionSnapshot>> => {
     current = undefined;
-    const source = await options.canonical.snapshot();
+    let source: Result<ProjectionCanonicalSnapshot>;
+    try {
+      source = await options.canonical.snapshot();
+    } catch {
+      return unavailable("canonical-snapshot-failed");
+    }
     if (!source.ok) return source;
     const canonical = normalizeCanonical(source.value, selected);
     if (!canonical.ok) return canonical;
     const built = materialize(canonical.value, selected);
     if (built.ok) current = built.value;
     return built;
+  };
+  const rebuild = (): Promise<Result<ProjectionSnapshot>> => {
+    const pending = rebuildTail.then(performRebuild);
+    rebuildTail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
   };
   const load = async () => (current === undefined ? rebuild() : success(current));
   const snapshotFor = async (identity: ProjectionReadIdentity) => {
