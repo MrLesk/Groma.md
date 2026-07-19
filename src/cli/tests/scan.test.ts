@@ -191,6 +191,68 @@ describe("CLI scan workflow", () => {
     expect(JSON.parse(scanned.output).result.observations.records).toBeGreaterThan(100);
   });
 
+  test("publishes more than one hundred Nuxt routes through bounded API areas", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "groma-cli-nuxt-scan-"));
+    roots.push(root);
+    await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "nuxt-scan" }));
+    await writeFile(path.join(root, "nuxt.config.ts"), "export default defineNuxtConfig({});\n");
+    await writeFile(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({
+        files: [],
+        references: [
+          { path: "./.nuxt/tsconfig.app.json" },
+          { path: "./.nuxt/tsconfig.server.json" },
+          { path: "./.nuxt/tsconfig.shared.json" },
+          { path: "./.nuxt/tsconfig.node.json" },
+        ],
+      }),
+    );
+    for (const area of ["applications", "teams"]) {
+      const directory = path.join(root, "server", "api", "events", "[eventId]", area);
+      await mkdir(directory, { recursive: true });
+      await Promise.all(
+        Array.from({ length: 60 }, (_, index) =>
+          writeFile(
+            path.join(directory, `route-${index}.get.ts`),
+            "export default defineEventHandler(() => ({ ok: true }));\n",
+          ),
+        ),
+      );
+    }
+    const denseDirectory = path.join(root, "server", "api", "users");
+    await mkdir(denseDirectory, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 65 }, (_, index) =>
+        writeFile(
+          path.join(denseDirectory, `route-${index}.get.ts`),
+          "export default defineEventHandler(() => ({ ok: true }));\n",
+        ),
+      ),
+    );
+
+    expect((await run(root, ["--format=json", "init"])).exitCode).toBe(CLI_EXIT.success);
+    const scanned = await run(root, ["--format=json", "scan"]);
+    expect(scanned.exitCode).toBe(CLI_EXIT.success);
+    expect(JSON.parse(scanned.output).result.observations.records).toBeGreaterThan(100);
+
+    const exported = await run(root, ["--format=json", "blueprint", "export", "--limit", "100"]);
+    expect(exported.exitCode).toBe(CLI_EXIT.success);
+    const items = JSON.parse(exported.output).result.value.items as Array<{
+      component: { actions?: readonly unknown[]; name: string };
+    }>;
+    expect(items.flatMap((item) => item.component.actions ?? [])).toHaveLength(120);
+    expect(
+      items.find((item) => item.component.name === "/api/users")?.component.actions,
+    ).toBeUndefined();
+    expect(
+      items
+        .filter((item) => item.component.name.startsWith("/api/"))
+        .map((item) => item.component.name)
+        .sort(),
+    ).toEqual(["/api/events/[eventId]/applications", "/api/events/[eventId]/teams", "/api/users"]);
+  });
+
   test("configures, scans, reconciles, and keeps an unchanged rescan byte-stable", async () => {
     const root = await workspace();
     let presentationAttempts = 0;

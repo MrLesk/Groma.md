@@ -42,6 +42,7 @@ const maxAstNodesPerFile = 200_000;
 const maxAstDepth = 512;
 const maxReexportDepth = 32;
 const maxPackageEntryLiterals = 256;
+const maxNuxtActionsPerBoundary = 64;
 
 const sourceExtensionPattern = /\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/;
 const testFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:test|spec)\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/i;
@@ -134,6 +135,23 @@ const nodeBareBuiltins: ReadonlySet<string> = new Set([
   "zlib",
 ]);
 const conventionalSourceDirectories = new Set(["app", "lib", "server", "src"]);
+const generatedNuxtTsconfigReferences: ReadonlySet<string> = new Set([
+  ".nuxt/tsconfig.app.json",
+  ".nuxt/tsconfig.node.json",
+  ".nuxt/tsconfig.server.json",
+  ".nuxt/tsconfig.shared.json",
+]);
+const nuxtRouteMethods: ReadonlySet<string> = new Set([
+  "connect",
+  "delete",
+  "get",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put",
+  "trace",
+]);
 const coverageKinds: readonly ObservationRecordKind[] = Object.freeze([
   "action",
   "component-candidate",
@@ -278,6 +296,7 @@ interface ScopeInventory {
   readonly aliases: ModuleAliasPolicy;
   readonly configuredSourceRoots: readonly string[];
   readonly files: readonly string[];
+  readonly nuxtGeneratedAggregator: boolean;
   readonly partial: boolean;
 }
 
@@ -963,6 +982,7 @@ function parseTsconfig(text: string): Readonly<{
   readonly hardExclude: readonly string[];
   readonly include: readonly string[];
   readonly includePresent: boolean;
+  readonly nuxtGeneratedAggregator: boolean;
   readonly partial: boolean;
   readonly rootDir?: string;
   readonly rules: readonly ModuleAliasRule[];
@@ -978,6 +998,7 @@ function parseTsconfig(text: string): Readonly<{
     hardExclude: Object.freeze([]),
     include: Object.freeze([]),
     includePresent: false,
+    nuxtGeneratedAggregator: false,
     partial: true,
     rules: Object.freeze([]),
     unsafe: true,
@@ -1031,6 +1052,43 @@ function parseTsconfig(text: string): Readonly<{
             explicitFiles.push(candidate);
           }
         }
+      }
+    }
+    const referencesPresent = Object.hasOwn(parsed, "references");
+    let nuxtGeneratedAggregator = false;
+    if (referencesPresent) {
+      partial = true;
+      if (
+        filesPresent &&
+        explicitFiles.length === 0 &&
+        Array.isArray(parsed.files) &&
+        parsed.files.length === 0 &&
+        !includePresent &&
+        Array.isArray(parsed.references) &&
+        parsed.references.length === generatedNuxtTsconfigReferences.size
+      ) {
+        const references = new Set<string>();
+        for (const reference of parsed.references) {
+          if (
+            !hasOwnDataRecord(reference) ||
+            Object.keys(reference).length !== 1 ||
+            !Object.hasOwn(reference, "path")
+          ) {
+            references.clear();
+            break;
+          }
+          const path = normalizeTsconfigRelativeValue(reference.path);
+          if (
+            typeof path !== "string" ||
+            !generatedNuxtTsconfigReferences.has(path) ||
+            references.has(path)
+          ) {
+            references.clear();
+            break;
+          }
+          references.add(path);
+        }
+        nuxtGeneratedAggregator = references.size === generatedNuxtTsconfigReferences.size;
       }
     }
     const compilerOptions = parsed.compilerOptions;
@@ -1102,6 +1160,7 @@ function parseTsconfig(text: string): Readonly<{
       hardExclude: Object.freeze([...new Set(outputDirectories)].sort(compareCodeUnits)),
       include,
       includePresent,
+      nuxtGeneratedAggregator,
       partial,
       ...(copiedRootDir === undefined ? {} : { rootDir: copiedRootDir }),
       rules: aliases.rules,
@@ -1275,6 +1334,7 @@ async function inventoryScope(
   let tsInclude: readonly string[] = Object.freeze([]);
   let tsIncludePresent = false;
   let configuredSourceRoots: readonly string[] = Object.freeze([]);
+  let nuxtGeneratedAggregator = false;
   let aliases: ModuleAliasPolicy = Object.freeze({
     baseResource: root,
     fallback: false,
@@ -1286,6 +1346,7 @@ async function inventoryScope(
       aliases,
       configuredSourceRoots: Object.freeze([]),
       files: Object.freeze([]),
+      nuxtGeneratedAggregator: false,
       partial: true,
     });
   const readPolicyFile = async (resource: string): Promise<FileEvidence | undefined> => {
@@ -1350,6 +1411,8 @@ async function inventoryScope(
           tsHardExclude = parsed.hardExclude;
           tsInclude = parsed.include;
           tsIncludePresent = parsed.includePresent;
+          nuxtGeneratedAggregator =
+            parsed.nuxtGeneratedAggregator && byName.get("nuxt.config.ts")?.kind === "file";
           if (parsed.unsafe) return emptyPartial();
           partial ||= parsed.partial;
           configuredSourceRoots = Object.freeze(
@@ -1424,7 +1487,9 @@ async function inventoryScope(
             included(relative, tsInclude) &&
             !matchesPatterns(relative, tsExclude);
           const implicit =
-            !tsFilesPresent && !tsIncludePresent && !matchesPatterns(relative, tsExclude);
+            (!tsFilesPresent || nuxtGeneratedAggregator) &&
+            !tsIncludePresent &&
+            !matchesPatterns(relative, tsExclude);
           if (!explicit && !includedByTsconfig && !implicit) continue;
         }
         const size = entry.size ?? maxSourceBytes;
@@ -1459,6 +1524,7 @@ async function inventoryScope(
         .filter((resource) => !conflictingAliases.has(resource.normalize("NFC").toLowerCase()))
         .sort(compareCodeUnits),
     ),
+    nuxtGeneratedAggregator,
     partial,
   });
 }
@@ -2722,6 +2788,50 @@ function packageForResource(
   return owner;
 }
 
+function nuxtServerRoute(resource: string): string | undefined {
+  const relative = relativeResource(resource, "server/api");
+  if (relative === undefined || relative === ".") return undefined;
+  const match = /^(.*)\.([^.]+)\.([cm]?ts)$/.exec(relative);
+  if (match === null) return undefined;
+  const path = match[1];
+  const method = match[2]?.toLowerCase();
+  if (path === undefined || method === undefined || !nuxtRouteMethods.has(method)) return undefined;
+  const segments = path.split("/");
+  if (segments.some((segment) => segment.length === 0)) return undefined;
+  if (segments.at(-1) === "index") segments.pop();
+  const routePath = segments.length === 0 ? "/api" : `/api/${segments.join("/")}`;
+  const name = `${method.toUpperCase()} ${routePath}`;
+  return validObservationText(name, 256) ? name : undefined;
+}
+
+function nuxtBoundaryForFile(
+  file: string,
+  owner: PackageEvidence,
+):
+  | Readonly<{
+      readonly name: string;
+      readonly package: PackageEvidence;
+      readonly resource: string;
+    }>
+  | undefined {
+  const apiRelative = relativeResource(file, "server/api");
+  if (apiRelative !== undefined && apiRelative !== ".") {
+    const directories = apiRelative.split("/").slice(0, -1);
+    const dynamicResource = /^\[[^\]/]+\]$/.test(directories[1] ?? "");
+    const depth = dynamicResource && directories.length >= 3 ? 3 : 1;
+    const resource =
+      directories.length === 0
+        ? "server/api"
+        : `server/api/${directories.slice(0, depth).join("/")}`;
+    return Object.freeze({ name: resource.slice("server".length), package: owner, resource });
+  }
+  const sharedRelative = relativeResource(file, "shared");
+  if (sharedRelative === undefined || sharedRelative === ".") return undefined;
+  const first = sharedRelative.split("/")[0]!;
+  const resource = sharedRelative.includes("/") ? `shared/${first}` : "shared";
+  return Object.freeze({ name: basename(resource), package: owner, resource });
+}
+
 function boundaryForFile(
   file: string,
   packages: readonly PackageEvidence[],
@@ -3260,6 +3370,7 @@ async function scanScope(
   Readonly<{ readonly partial: boolean; readonly records: readonly ObservationRecord[] }>
 > {
   const inventory = await inventoryScope(request, state, config, scope, root);
+  const nuxtGeneratedAggregator = inventory.nuxtGeneratedAggregator;
   const resourceSet = new Set(inventory.files);
   const fileCache = new Map<string, FileEvidence>();
   let partial = inventory.partial;
@@ -3307,9 +3418,10 @@ async function scanScope(
     const ownedBoundary =
       owner === undefined
         ? undefined
-        : boundaryForFile(resource, [owner], inventory.configuredSourceRoots, () =>
+        : ((nuxtGeneratedAggregator ? nuxtBoundaryForFile(resource, owner) : undefined) ??
+          boundaryForFile(resource, [owner], inventory.configuredSourceRoots, () =>
             chargeExtractionWork(budget),
-          );
+          ));
     const boundary =
       ownedBoundary ??
       (owner === undefined
@@ -3751,6 +3863,7 @@ async function scanScope(
     string,
     { from: string; provenance: ObservationProvenance[]; to: string }
   >();
+  const nuxtRoutes = new Map<string, Array<{ componentKey: string; file: FileEvidence }>>();
   for (const [resource, parsed] of parsedSources) {
     chargeExtractionWork(budget);
     const from = boundaryByFile.get(resource);
@@ -3882,6 +3995,44 @@ async function scanScope(
         }),
       );
     }
+    const nuxtRoute = nuxtGeneratedAggregator ? nuxtServerRoute(resource) : undefined;
+    if (nuxtRoute !== undefined) {
+      const candidates = nuxtRoutes.get(nuxtRoute);
+      const candidate = { componentKey: from.key, file };
+      if (candidates === undefined) nuxtRoutes.set(nuxtRoute, [candidate]);
+      else candidates.push(candidate);
+    }
+  }
+  const nuxtActionCounts = new Map<string, number>();
+  for (const candidates of nuxtRoutes.values()) {
+    chargeExtractionWork(budget);
+    if (candidates.length !== 1) continue;
+    const componentKey = candidates[0]!.componentKey;
+    nuxtActionCounts.set(componentKey, (nuxtActionCounts.get(componentKey) ?? 0) + 1);
+  }
+  for (const [name, candidates] of [...nuxtRoutes].sort((left, right) =>
+    compareCodeUnits(left[0], right[0]),
+  )) {
+    chargeExtractionWork(budget);
+    if (candidates.length !== 1) {
+      partial = true;
+      continue;
+    }
+    const candidate = candidates[0]!;
+    if ((nuxtActionCounts.get(candidate.componentKey) ?? 0) > maxNuxtActionsPerBoundary) {
+      partial = true;
+      continue;
+    }
+    append(
+      Object.freeze({
+        component: reference(scope, candidate.componentKey),
+        key: observationKey("action", scope, "nuxt-route", candidate.componentKey, name),
+        kind: "action",
+        name,
+        provenance: Object.freeze([fullProvenance(candidate.file)]),
+        scope,
+      }),
+    );
   }
   for (const aggregate of relationships.values()) {
     chargeExtractionWork(budget);

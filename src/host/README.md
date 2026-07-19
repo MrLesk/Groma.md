@@ -29,6 +29,16 @@ at most two `*` wildcards per path segment, `**` path segments, and bounded alph
 underscore character classes such as `[0-9]`. Malformed rules and syntax outside that supported
 boundary fail the affected scope closed with partial coverage and no source claims.
 
+A clean Nuxt project may use a root `tsconfig.json` containing `files: []` plus the four generated
+`.nuxt/tsconfig.{app,node,server,shared}.json` project references, even though `.nuxt` does not exist
+until the framework prepares the checkout. When that exact aggregator and a root `nuxt.config.ts`
+are both present, the scanner reads the repository's ordinary TypeScript sources and keeps coverage
+partial for the unavailable generated configuration, Vue single-file components, and unresolved
+framework aliases. Explicit method-suffixed `server/api` modules become evidence-backed HTTP
+actions. Their existing route directories form public `/api/...` source areas. Ambiguous route
+collisions make no route claim, and an area with more than 64 unique routes keeps its component and
+relationships but omits its actions as partial instead of failing publication.
+
 There is no durable provisional scan state, observation journal, restart replay, recovery lane,
 heartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is
 discarded. Canonical publication remains the responsibility of the atomic application/persistence
