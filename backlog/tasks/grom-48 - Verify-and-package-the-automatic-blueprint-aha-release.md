@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:59'
-updated_date: '2026-07-19 21:04'
+updated_date: '2026-07-19 21:06'
 labels: []
 milestone: m-3
 dependencies:
@@ -51,4 +51,6 @@ Replaced the serial target verifier, which repeatedly erased dist and restored a
 Pre-PR review completed with exactly two independent gpt-5.6-terra xhigh passes and one Claude pass. Both Terra reviewers found the same Windows omission in the packaged PTY overview proof; the platform guard was removed so the native Windows smoke now uses Bun ConPTY, with terminal framing normalized before JSON validation. Claude found no blocking issue; accepted feedback added a 15-second PTY timeout, moved package mechanics below the simple native README build, and documented that packaging intentionally leaves target-named artifacts. Rejected restoring the deleted README roadmap because its claimed next evidence work is already shipped, and rejected a smoke fallback in favor of explicit composition.
 
 Final post-review validation passed: bun run check completed formatting, strict types, architecture boundaries, 412 tests / 2,755 assertions, native standalone smoke, full compiled Iteration 1A workflow, and crash recovery. bun run package retained four non-empty target artifacts plus a sorted SHA256SUMS and exercised the matching packaged executable through init, scan, component read, and PTY overview plus deterministic HTML composition. Final packaged self-dogfood reached generation 140 with 65 observations and a bounded 51-component blueprint; the repeated scan left every canonical byte unchanged.
+
+First PR CI exposed one Windows ConPTY framing sequence outside the narrow handwritten CSI regex. Replaced that regex with Node util.stripVTControlCharacters, keeping the same PTY/ConPTY product proof while deleting custom terminal-sequence parsing. Local typecheck and matching packaged smoke passed; native Windows CI is the authoritative verification.
 <!-- SECTION:NOTES:END -->

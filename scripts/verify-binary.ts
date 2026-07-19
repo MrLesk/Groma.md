@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -85,10 +86,8 @@ async function runInteractiveJson(
   } finally {
     terminal.close();
   }
-  const output = new TextDecoder()
-    .decode(Buffer.concat(chunks))
+  const output = stripVTControlCharacters(new TextDecoder().decode(Buffer.concat(chunks)))
     .replaceAll("\r", "")
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
     .trim();
   const parsed = JSON.parse(output);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
