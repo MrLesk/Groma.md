@@ -37,14 +37,17 @@
 | **detail**   | component get (single-component read)                                        | Detail (96)      | One part's own page: what it is for, what goes in, what comes out, and what it can do. |
 | **history**  | rev:<ref> historical view (read-only Git revision view)                      | Timeline (92)    | See how the map looked before.                                                         |
 
-## Kid words (narration vocabulary, used in GROMA.md)
+## Plain narration vocabulary
 
-| Groma term                 | Kid words                                                       |
+Approved plain-English translations for narrating Groma to a general audience. (Originally
+drafted as "kid words" for the retired kid-language GROMA.md; the mappings remain the approved
+plain-word source for first-run prose and narration.)
+
+| Groma term                 | Plain words                                                     |
 | -------------------------- | --------------------------------------------------------------- |
 | blueprint                  | the map                                                         |
-| component                  | a part (a box on the map)                                       |
-| node                       | a box in the picture                                            |
-| relationship               | a line between boxes                                            |
+| component                  | a part of the system                                            |
+| relationship               | a line between parts                                            |
 | requires / informs         | needs / tells                                                   |
 | intent                     | what we want it to do                                           |
 | evidence                   | what we really found                                            |
@@ -57,14 +60,14 @@
 | accept                     | say yes to a guess                                              |
 | ignore                     | say no thanks (we still keep the note)                          |
 | binding                    | a match                                                         |
-| merge                      | squish two boxes into one                                       |
+| merge                      | squish two copies of the same part into one                     |
 | alias / supersession       | the old name still works                                        |
 | drift                      | the code and the map stopped matching                           |
 | canonical                  | the real copy                                                   |
 | workspace                  | Groma's folder                                                  |
 | project                    | the code we look at                                             |
-| root                       | the biggest boxes                                               |
-| parent / child             | the box it lives in / the boxes inside it                       |
+| root                       | the biggest parts                                               |
+| parent / child             | the part it lives in / the parts inside it                      |
 | inputs / outputs / actions | what goes in / what comes out / what it can do                  |
 | cursor / hasMore           | there is more - ask again                                       |
 | bounded                    | never too big                                                   |
@@ -77,4 +80,40 @@
 
 ## Design notes
 
-Design decisions behind the counts. (1) Free words, taught nowhere: init, get, list, status, preview, apply, search, export are ordinary English and keep their periodic mappings silently (Search 66, Export 71, View 65); the glossary spends slots only on words carrying Groma-specific meaning. (2) Hidden-but-retained expert layer: projection, reconciliation, binding, observation session, candidate, canonical, supersession, alias, data plane, generation, cursor, bounded, envelope, and provenance remain in ARCHITECTURE.md, JSON envelopes, and diagnostics, but never in first-run UI prose or bare-groma output; each has a plain surface phrase (map, tidy-in, match, one scan run, suggestion, the real copy, old name still works, next-page code, never too big). (3) Kept property elements not listed as nouns: ID (50) is load-bearing (stable opaque IDs are identity; names and paths are not) and Status (36) appears as the lifecycle/desired fields - both stay field names, not glossary nouns. (4) Honesty constraints enforced: no surface verb implies execution (no run/trigger/schedule/apply-a-plan); 'plan' is always something Groma shows, never something Groma does; tasks are explicitly Backlog.md's job, reflected in dropping Task/Subtask/Workflow/Kanban. (5) Positioning asset in one line: of the 115 elements, Groma keeps about 19 (Project 13, Note 18, Plan 24, Status 36, ID 50, Create 61, Update 62, Delete 64, Search 66, Import 70, Export 71, Approve 76, Reject 77 as 'ignore', List 87, Map 91, Timeline 92, Detail 96, Tree 100, Audit 115), repurposes four of them (Plan from pricing to desired future, Import as scan, Approve as accept, Audit as evidence), drops the other ~96 with reasons, and adds only four elements of its own: component, blueprint, relationship, scanner - the periodic table reduced to what an architecture map needs. (6) Open flags for the product owner: `groma scan` is promised in the [Manifesto](../MANIFESTO.md) but absent from `src/cli/parser.ts`, so the keystone verb must ship; 'project' stays but UI prose should always say 'scanned project'; the blueprint-vs-component CLI split should converge so whole-map reads live under blueprint and single-part reads under component, matching the noun glossary.
+The decisions behind the counts:
+
+1. **Free words, taught nowhere.** init, get, list, status, preview, apply, enable, disable,
+   inspect, search, and export are ordinary English and keep their periodic mappings silently
+   (Search 66, Export 71, View 65). The glossary spends slots only on words carrying
+   Groma-specific meaning.
+2. **Hidden-but-retained expert layer.** node, projection, reconciliation, binding, observation
+   session, candidate, canonical, supersession, alias, data plane, generation, cursor, bounded,
+   envelope, provenance, handoff, and quarantine remain in ARCHITECTURE.md, JSON envelopes, and
+   diagnostics — but never in first-run UI prose or bare-groma output. Each has a plain surface
+   phrase (map, tidy-in, match, one scan run, suggestion, the real copy, old name still works,
+   next-page code, never too big).
+3. **Kept property elements not listed as nouns.** ID (50) is load-bearing (stable opaque IDs
+   are identity; names and paths are not) and Status (36) appears as the lifecycle/desired
+   fields. Both stay field names, not glossary nouns.
+4. **Honesty constraints enforced.** No surface verb implies execution (no
+   run/trigger/schedule/apply-a-plan); 'plan' is always something Groma shows, never something
+   Groma does; tasks are explicitly Backlog.md's job, reflected in dropping
+   Task/Subtask/Workflow/Kanban.
+5. **Positioning in one line.** Of the 115 elements, Groma keeps about 19 (Project 13, Note 18,
+   Plan 24, Status 36, ID 50, Create 61, Update 62, Delete 64, Search 66, Import 70, Export 71,
+   Approve 76, Reject 77 as 'ignore', List 87, Map 91, Timeline 92, Detail 96, Tree 100, Audit
+   115), repurposes four (Plan from pricing to desired future, Import as scan, Approve as
+   accept, Audit as evidence), drops the other ~96 with reasons, and adds only four of its own:
+   component, blueprint, relationship, scanner — the periodic table reduced to what an
+   architecture map needs.
+6. **Open flags for the product owner.** `groma scan` now exposes the keystone verb promised in
+   the [Manifesto](../MANIFESTO.md). 'project' stays, but UI prose should always say 'scanned
+   project'. The
+   blueprint-vs-component CLI split should converge so whole-map reads live under blueprint and
+   single-part reads under component, matching the noun glossary.
+7. **Node has exactly one name (decided 2026-07-19).** The drawn element keeps the single name
+   _node_, and it is expert vocabulary only: product surfaces never say node — they show
+   component names and, for a folded node, a count (for example "Payments +37"). The earlier
+   "box" narration word is retired along with GROMA.md. "group" was considered and rejected:
+   most nodes show exactly one component, and group reads as canonical containment — the very
+   confusion the component/node distinction exists to prevent.

@@ -1,10 +1,10 @@
 # Component Model Teaching Examples
 
-These examples are explanatory and **noncanonical**. They do not belong to Groma's
-self-blueprint, do not define product behavior, and do not replace the canonical component
-model under [`../groma/`](../groma/). Every `ent_`, item, and `rel_` identity below is an
-illustrative example ID, not a canonical or reusable Groma identity. Real canonical state
-must be created through supported public Groma operations, which mint or validate its IDs.
+These are teaching examples, and they are **noncanonical**: they are not part of Groma's
+self-blueprint, they do not define product behavior, and they do not replace the canonical
+component model under [`../groma/`](../groma/). Every `ent_`, item, and `rel_` ID below is
+made up for illustration and must never be reused. Real canonical state is created through
+supported public Groma operations, which mint or validate real IDs.
 
 ## Recursive Shopify Blueprint
 

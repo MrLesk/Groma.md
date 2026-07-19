@@ -15,6 +15,11 @@ describe("CLI provisional grammar", () => {
     const cases = [
       [[], { kind: "overview" }],
       [["init"], { kind: "init" }],
+      [["scan"], { kind: "scan" }],
+      [
+        ["scan", "--scanner", "official.typescript", "--project", projectId],
+        { kind: "scan", projectId, scannerId: "official.typescript" },
+      ],
       [["blueprint", "export", "--limit", "5"], { kind: "blueprint-export", limit: 5 }],
       [
         ["blueprint", "search", "order lifecycle", "--limit", "5"],
@@ -112,6 +117,10 @@ describe("CLI provisional grammar", () => {
       ["project", "update", id, "--revision", revision, "--revision", revision, "--stdin"],
       ["project", "update", id, "--revision", revision, "--stdin", "--input", "other.json"],
       ["project", "remove", id, "--revision", "sha256:ABC"],
+      ["scan", "--project", "project_bad"],
+      ["scan", "--scanner", "Bad Scanner"],
+      ["scan", "--scanner", "official.typescript", "--scanner", "official.typescript"],
+      ["scan", "extra"],
     ]) {
       expect(parseInvocation(args)).toMatchObject({
         diagnostic: { code: "cli-invalid-invocation" },

@@ -6,7 +6,12 @@ import {
   type CreateComponentRequest,
   type UpdateComponentRequest,
 } from "../application/index.ts";
-import type { HostSurface, HostSurfaceContext, ProjectRegistrationInput } from "../host/index.ts";
+import {
+  defaultProjectRegistrationId,
+  type HostSurface,
+  type HostSurfaceContext,
+  type ProjectRegistrationInput,
+} from "../host/index.ts";
 import {
   CLI_EXIT,
   commandName,
@@ -347,6 +352,105 @@ async function execute(
           : CLI_EXIT.success;
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
   }
+  if (command.kind === "scan") {
+    const listed = await context.projects.list();
+    if (!listed.ok) return applicationResult(command, listed);
+    let project;
+    if (command.projectId !== undefined) {
+      const selected = await context.projects.get({ id: command.projectId });
+      if (!selected.ok) return applicationResult(command, selected);
+      project = selected.value;
+    } else if (listed.value.length === 0) {
+      return failedResult(
+        command,
+        CLI_EXIT.workspace,
+        "scan-project-selection-required",
+        "No scanned project is registered; run groma init or project add",
+      );
+    } else if (listed.value.length === 1) {
+      project = listed.value[0]!;
+    } else {
+      return failedResult(
+        command,
+        CLI_EXIT.workspace,
+        "scan-project-selection-required",
+        "More than one scanned project is registered; choose one with --project",
+      );
+    }
+    if (
+      project.id === defaultProjectRegistrationId &&
+      project.scanners.length === 0 &&
+      (command.scannerId === undefined || command.scannerId === "official.typescript")
+    ) {
+      const configured = await context.projects.update({
+        coverage: project.coverage,
+        expectedRevision: project.revision,
+        id: project.id,
+        name: project.name,
+        scanners: Object.freeze([
+          Object.freeze({ configuration: Object.freeze({}), id: "official.typescript" }),
+        ]),
+        source: project.source,
+      });
+      if (!configured.ok) return applicationResult(command, configured);
+      project = configured.value;
+    }
+    if (project.availability !== "available") {
+      return failedResult(
+        command,
+        CLI_EXIT.workspace,
+        "scan-project-unavailable",
+        "The selected scanned project is unavailable",
+      );
+    }
+    let scannerId = command.scannerId;
+    if (scannerId === undefined) {
+      if (project.scanners.length !== 1) {
+        return failedResult(
+          command,
+          CLI_EXIT.workspace,
+          "scan-scanner-selection-required",
+          "The selected project does not have exactly one scanner; choose one with --scanner",
+        );
+      }
+      scannerId = project.scanners[0]!.id;
+    } else if (!project.scanners.some((scanner) => scanner.id === scannerId)) {
+      return failedResult(
+        command,
+        CLI_EXIT.workspace,
+        "scan-scanner-not-configured",
+        "The selected scanner is not enabled for this project",
+      );
+    }
+    const started = await context.scanners.start({
+      cancellation: context.cancellation,
+      projectId: project.id,
+      scannerId,
+    });
+    if (!started.ok) return applicationResult(command, started);
+    const report = await started.value.completion;
+    const value = Object.freeze({
+      diagnostics: report.diagnostics,
+      observations: Object.freeze({
+        batches: report.batchCount,
+        records: report.recordCount,
+        signals: report.signalCount,
+      }),
+      project: Object.freeze({ id: project.id, name: project.name }),
+      ...(report.recovery === undefined ? {} : { recovery: report.recovery }),
+      scanner: report.scannerId,
+      status: report.status,
+    });
+    const exitCode =
+      report.status === "completed"
+        ? CLI_EXIT.success
+        : report.status === "cancelled"
+          ? CLI_EXIT.cancelled
+          : report.status === "indeterminate"
+            ? CLI_EXIT.indeterminate
+            : diagnosticExit(report.diagnostics);
+    return result(command, exitCode, exitCode === CLI_EXIT.success, value);
+  }
   if (command.kind === "project-add") {
     const request = await structuredRequest(command, command.input, reader, context.cancellation);
     if (!request.ok) return request.result;
@@ -503,18 +607,19 @@ export function createCliSurfaceController(
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
+  let completion: Promise<void> | undefined;
   let started = false;
   let stopped = false;
   const surface: HostSurface = Object.freeze({
     start(context: HostSurfaceContext) {
       if (started) throw new Error("CLI surface can start only once");
       started = true;
-      const completion = execute(invocation, context, reader, terminal).then(
+      completion = execute(invocation, context, reader, terminal).then(
         (value) => {
-          if (!stopped) captured = value;
+          if (!stopped || invocation.command.kind === "scan") captured = value;
         },
         () => {
-          if (!stopped) {
+          if (!stopped || invocation.command.kind === "scan") {
             captured = failedResult(
               invocation.command,
               CLI_EXIT.infrastructure,
@@ -528,6 +633,7 @@ export function createCliSurfaceController(
         completion,
         stop: async () => {
           stopped = true;
+          if (invocation.command.kind === "scan") await completion;
         },
       });
     },

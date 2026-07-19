@@ -158,14 +158,39 @@ function itemIdentity(id: string): { readonly key: string; readonly scope: strin
 }
 
 function same(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  if (Object.is(left, right)) return true;
+  if (
+    typeof left !== "object" ||
+    left === null ||
+    typeof right !== "object" ||
+    right === null ||
+    Array.isArray(left) !== Array.isArray(right)
+  ) {
+    return false;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => same(value, right[index]));
+  }
+  const leftRecord = left as Readonly<Record<string, unknown>>;
+  const rightRecord = right as Readonly<Record<string, unknown>>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) => key === rightKeys[index] && same(leftRecord[key], rightRecord[key]),
+    )
+  );
 }
 
 function sameObservationContent(
   left: CompletedObservationSnapshot,
   right: CompletedObservationSnapshot,
 ): boolean {
-  return same({ ...left, epoch: undefined }, { ...right, epoch: undefined });
+  return same(
+    [left.apiVersion, left.projectId, left.scopes, left.source, left.records, left.coverage],
+    [right.apiVersion, right.projectId, right.scopes, right.source, right.records, right.coverage],
+  );
 }
 
 function canonicalSnapshot(

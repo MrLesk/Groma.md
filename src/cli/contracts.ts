@@ -31,6 +31,11 @@ export type CliCommand =
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
   | {
+      readonly kind: "scan";
+      readonly projectId?: string;
+      readonly scannerId?: string;
+    }
+  | {
       readonly cursor?: string;
       readonly kind: "blueprint-export";
       readonly limit: number;
@@ -181,6 +186,8 @@ export function commandName(command: CliCommand): string {
       return "project update";
     case "project-remove":
       return "project remove";
+    case "scan":
+      return "scan";
     default:
       return command.kind;
   }

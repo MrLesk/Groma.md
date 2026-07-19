@@ -242,6 +242,8 @@ export async function runProgram(
   });
   const command = commandName(invocation.command);
   if (hostOutcome.status === "cancelled") {
+    const scanResult = invocation.command.kind === "scan" ? controller.result() : undefined;
+    if (scanResult !== undefined) return emit(scanResult, invocation.format, output);
     const exitCode = hostOutcome.signal === "SIGTERM" ? 143 : CLI_EXIT.cancelled;
     return emit(
       Object.freeze({ command, exitCode, ok: false, result: hostOutcome }),

@@ -1,0 +1,94 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/lockup-dark.svg">
+  <img src="brand/lockup.svg" alt="groma.md" width="300">
+</picture>
+
+# Groma
+
+Groma keeps a living map of your system's architecture inside your repo, as plain
+Markdown files you can read and review.
+
+The map records two kinds of truth side by side and never confuses them:
+
+- **Intent** — what a person or AI agent said each part of the system is _for_.
+- **Evidence** — what a scanner actually found in the code.
+
+Scans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a
+failure. Humans and AI agents use the same commands and see the same model. Everything
+stays local: no server, no account, no upload.
+
+_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool
+for projecting a plan onto the ground.)_
+
+## The goal
+
+The target three-command loop takes you from an unfamiliar codebase to a map you can understand:
+
+```sh
+groma init   # create the groma/ workspace inside your repo
+groma scan   # take one careful look at the code and record what is really there
+groma        # open a bounded visual blueprint
+```
+
+The first two commands work today; the visual third step is next. Groma is built in public, and
+the two lists below say exactly what is real now.
+
+## What works today
+
+- `groma init` creates the workspace in any project.
+- You build the map by hand (or an agent does): `component create`, `update`, `merge`,
+  `reparent`, `remove`, plus relationships between components.
+- You explore the map from the terminal: `component roots`, `component children`,
+  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.
+- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,
+  records bounded evidence, and reconciles it without overwriting curated intent.
+- `project add` registers additional codebases and scanner coverage explicitly.
+- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
+  whole tool ships as one compiled executable.
+
+## What is being built next
+
+- The visual blueprint: bare `groma` currently prints a command overview; the local
+  HTML/SVG map is the next milestone (Iteration 2).
+- Plans (desired future state) and history views (past revisions via Git) come after
+  that. A full web UI arrives in Iteration 4.
+
+## The rules Groma refuses to break
+
+These are the promises that keep the map trustworthy after the first scan:
+
+- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees
+  the existing map, so it can never "helpfully" reorganize your architecture.
+- **Meaning survives evidence.** A failed or partial scan can never erase what people
+  wrote. Missing evidence is not proof that a part is gone.
+- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two
+  things are the same component, it asks instead of merging them.
+- **Stable IDs, not names.** Components keep their identity through renames, moves, and
+  refactors. Paths and names are labels, not identity.
+- **One semantic path.** CLI, web, and plugins all go through the same operations and
+  validation. There are no secret side doors for agents.
+- **Local first.** Your architecture lives in your repo, readable without Groma, with
+  Git as its history.
+
+## Where to read more
+
+| Document                                                             | What it answers                                            |
+| -------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |
+| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |
+| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |
+| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |
+| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |
+| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |
+| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |
+
+## Build it yourself
+
+```sh
+bun ci          # install dependencies
+bun run build   # compile the single-file executable to dist/groma
+./dist/groma    # print the command overview
+```
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.
