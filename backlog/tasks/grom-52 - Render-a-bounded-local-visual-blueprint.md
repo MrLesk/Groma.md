@@ -1,11 +1,11 @@
 ---
 id: GROM-52
 title: Render a bounded local visual blueprint
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 20:37'
-updated_date: '2026-07-19 18:08'
+updated_date: '2026-07-19 18:10'
 labels:
   - visualization
   - first-run
@@ -59,3 +59,9 @@ Pre-PR review completed exactly once by two independent Terra xhigh agents and C
 
 First automatic Codex review completed on baf2b42 with two justified findings. Fixed opener command resolution by using absolute OS paths so a project-controlled PATH cannot execute observed code; clarified that bare JSON hierarchy requires an interactive terminal. Compiled artifact verification now uses a purpose-built injected standalone harness rather than weakening production opener resolution. Post-fix bun run check passed with 402 tests and 2642 expectations, and the two-pass 65-record self-scan remained byte-stable.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Completed the public init -> scan -> groma loop with one deterministic self-contained local HTML blueprint over the existing bounded overview read. The artifact provides recursive native folding, selected focus/detail, reason-aware truncation, and the canonical architectural-sheet brand without canonical writes, uploads, project execution, or persisted view state. Verified by 402 tests and 2642 expectations, compiled macOS/Linux/Windows gates, a two-pass byte-identical compiled artifact fixture, and repeated byte-stable 65-record Groma self-scans. Two Terra xhigh reviews, one Claude review, and the first automatic Codex review were handled; PR #46 merged as d6f5cd7.
+<!-- SECTION:FINAL_SUMMARY:END -->
