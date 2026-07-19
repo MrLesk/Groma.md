@@ -1,11 +1,11 @@
 ---
 id: GROM-40
 title: Scan TypeScript and Bun project architecture
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 13:27'
+updated_date: '2026-07-19 13:38'
 labels: []
 milestone: m-3
 dependencies:
@@ -82,10 +82,12 @@ Subtraction-first reset after repeated review. Supported semantic boundary: the 
 Subtraction-first final correction batch now enforces the recorded supported boundary: duplicate or conditionally divergent package policy, invalid root policy text, direct unshadowed Bun.serve replacement, mutable/declaration-typed/overloaded callable bindings, imported-then-exported bindings, and extensionless declaration-only resolution all fail closed as partial/no claim. Exact runtime and declaration resources, direct exact re-exports, workspace-root imports, static routes, and independent safe callables remain observable. Validation passed: 51 focused scanner tests (684 assertions), 24 runtime/self-scan tests (1,301 assertions), 1,078 repository tests across 48 files (9,444 assertions), formatting, TypeScript typecheck, architecture boundaries, and diff checks. Standalone targets were not rerun because target packaging and cross-platform build inputs are unchanged; the protected capability-flow stash remains untouched.
 
 Complete final Codex batch closed seven bounded scanner findings without expanding inference: duplicate root tsconfig keys fail the affected scope partial; extensionless file.mjs and index.mjs targets resolve; unshadowed require member surfaces are partial; unnamed root manifests still contribute exact workspace patterns; indirectly initialized function-typed public consts are partial/no-action; bare Node builtins resolve as runtime imports in source-only scopes; and safe leading ./ workspace patterns normalize. One complete-batch self-review removed an adjacent cjs resolver change and retained partial/no claim for unsupported forms. Validation passed: 58 focused scanner tests (707 assertions), 24 runtime/self-scan tests (1,301 assertions), 1,085 repository tests across 48 files (9,467 assertions), full bun run check including format, typecheck, architecture boundaries, build/smoke, Iteration 1A recovery, Iteration 1B foundation, and stable self-blueprint (43 components, 9 roots, 398 embedded items, 87 declarations, 104 edges), plus git diff --check. The capability-flow stash remains untouched; this batch is intentionally uncommitted and unpushed for fresh review.
+
+Completion verification: the final seven-finding correction batch was approved by one fresh complete-batch reviewer. Focused scanner verification passed 58 tests and 707 assertions; runtime/self-scan passed 24 tests and 1,301 assertions; full bun run check passed 1,085 tests across 48 files with 9,467 assertions plus formatting, typecheck, architecture boundaries, build/smoke, Iteration 1A/1B, and stable self-blueprint. Final GitHub CI was green for quality, cross-platform binaries, and native Windows. Claude returned no feedback. Alex explicitly authorized merging PR #41 while the final Codex exact-head review still showed its in-progress eyes signal.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added and registered the bounded official.typescript Phase 1 scanner and completed the final fail-closed review batches. Exact manifests/scopes, literal imports, public callable declarations/re-exports, and Bun routes are observed; duplicate policy, unsupported CommonJS/callable surfaces, ambiguous resolution, and indirect inference remain partial/no claim. Final seven-finding correction is verified by 1,085 repository tests (9,467 assertions), focused scanner and runtime/self-scan suites, full bun run check, stable self-blueprint, and diff checks.
+Added and registered the requirement-free official.typescript Phase 1 scanner at a bounded, subtraction-first semantic boundary. It deterministically observes exact workspace/package/source boundaries, direct supported imports and public callables/re-exports, and literal Bun routes while making ambiguous or unsupported surfaces partial rather than inferred. Verified by 1,085 repository tests (9,467 assertions), focused scanner and durable runtime/self-scan coverage, formatting, typecheck, boundaries, build/smoke, Iteration 1A/1B, stable self-blueprint, all supported binary targets, a fresh complete-batch review, and green final CI; merged in PR #41.
 <!-- SECTION:FINAL_SUMMARY:END -->
