@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-14 19:58'
-updated_date: '2026-07-19 15:39'
+updated_date: '2026-07-19 15:54'
 labels: []
 milestone: m-3
 dependencies:
@@ -50,4 +50,6 @@ Context-hunter classification: L2 cross-module semantic change. Supported bounda
 Implemented as one Application reconciliation operation, one deterministic groma/evidence.md store, and a small extension to the existing atomic Markdown transaction adapter. Equivalent observations ignore operational scan epochs for canonical no-op behavior; partial coverage never infers absence. Groma self-queries confirmed the seam matches the intended Reconciliation Engine while also exposing stale speculative self-blueprint descriptions that remain for later supported curation. Verification: bun run check (389 tests) and bun run check:targets passed on 2026-07-19.
 
 Pre-PR review: two independent gpt-5.6-terra xhigh agents completed one bounded pass each. Their justified findings were fixed: reconciliation now aligns its 100-component/100-relationship/member envelope with one Standard Model transaction, rejects stale component bindings consistently, replans if any canonical state changes during revision confirmation, and covers these cases with focused regression tests. Final verification after fixes: bun run check passed with 391 tests; bun run check:targets passed for all four targets.
+
+Automatic Codex review identified five actionable edge cases. Fixed all five: relationships now require endpoints observed in the current snapshot; retained and refreshed members share one aggregate bound; cancellation is no longer reported after atomic publication starts; reconciliation preflights the same 100,000-value transaction envelope used by the engine and caps records at 10,000; member item IDs percent-encode scope and key. Regression coverage was added. Verification after fixes: bun run check passed with 392 tests and bun run check:targets passed.
 <!-- SECTION:NOTES:END -->

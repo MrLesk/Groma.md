@@ -87,6 +87,10 @@ whose coverage is complete. Failure, cancellation, timeout, an incomplete sessio
 output produces no completed snapshot and never invokes reconciliation. Provisional batches,
 heartbeats, recovery lanes, and observation journals are not durable.
 
+Cancellation is accepted until completed-snapshot publication begins. Once the atomic reconciliation
+handoff starts, the run waits for publication and reports its real completed or failed outcome; it
+never reports cancellation while a detached write can still commit later.
+
 This is a same-process trusted composition with ordinary boundary validation. Groma does not defend
 against a plugin deliberately mutating JavaScript intrinsics or using Proxy traps inside the same
 process. Supporting third-party package acquisition or stronger isolation requires an explicit

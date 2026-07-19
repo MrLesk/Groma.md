@@ -95,11 +95,30 @@ function action(key: string, component: string): ObservationRecord {
   });
 }
 
+function member(kind: "input" | "output", key: string, component: string): ObservationRecord {
+  return Object.freeze({
+    component: Object.freeze({ key: component, scope: "workspace" }),
+    key,
+    kind,
+    name: key,
+    provenance,
+    scope: "workspace",
+  });
+}
+
 function snapshot(
   epoch: string,
   records: readonly ObservationRecord[],
   sourceId = "groma.typescript-bun",
   coverageState: "complete" | "partial" = "complete",
+  coverageKinds: readonly ObservationRecord["kind"][] = Object.freeze([
+    "action",
+    "component-candidate",
+    "documentation",
+    "input",
+    "output",
+    "relationship",
+  ]),
 ): CompletedObservationSnapshot {
   const session = valueOf(
     createObservationSession({
@@ -115,14 +134,7 @@ function snapshot(
     session.complete({
       coverage: Object.freeze([
         Object.freeze({
-          kinds: Object.freeze([
-            "action" as const,
-            "component-candidate" as const,
-            "documentation" as const,
-            "input" as const,
-            "output" as const,
-            "relationship" as const,
-          ]),
+          kinds: Object.freeze([...coverageKinds]),
           scope: "workspace",
           state: coverageState,
         }),
@@ -286,6 +298,8 @@ describe("local completed-snapshot reconciliation", () => {
         maxRelationships: defaultHostBounds.maxRelationshipMutations,
         maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
         maxSources: defaultHostBounds.maxComponents,
+        maxTransactionDataDepth: defaultHostBounds.maxRequestDataDepth,
+        maxTransactionDataValues: defaultHostBounds.maxSnapshotStateValues,
       },
       entropy: (length) => new Uint8Array(length).fill(entropyValue++),
       evidenceResourceMapper,
@@ -377,6 +391,16 @@ describe("local completed-snapshot reconciliation", () => {
     expect(afterCompleteOmission.ok).toBeTrue();
     if (!afterCompleteOmission.ok) return;
     expect(afterCompleteOmission.value.relationships.items).toHaveLength(0);
+    const staleRelationship = await host.reconciliation.reconcile(
+      snapshot("epoch-stale-relation", [
+        candidate("api", "Renamed by scanner"),
+        relationship("api-data", "api", "data"),
+      ]),
+    );
+    expect(staleRelationship).toMatchObject({
+      diagnostics: [{ code: "unresolved-observation-reference" }],
+      ok: false,
+    });
     expect(
       await host.reconciliation.reconcile(
         snapshot("other-1", [candidate("api", "Other API")], "other.scanner"),
@@ -443,5 +467,36 @@ describe("local completed-snapshot reconciliation", () => {
     expect(reappearedApi.ok).toBeTrue();
     if (!reappearedApi.ok) return;
     expect(reappearedApi.value.relationships.items[0]?.relationship.id).toBe(relationId);
+  });
+
+  test("counts retained and refreshed members in one component bound", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const inputs = Array.from({ length: defaultHostBounds.maxEmbeddedItems }, (_, index) =>
+      member("input", `input-${index}`, "api"),
+    );
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-inputs", [candidate("api", "API"), ...inputs]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const before = await readFile(evidencePath, "utf8");
+    const outputs = Array.from({ length: defaultHostBounds.maxEmbeddedItems }, (_, index) =>
+      member("output", `output-${index}`, "api"),
+    );
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "epoch-outputs",
+          [candidate("api", "API"), ...outputs],
+          "groma.typescript-bun",
+          "complete",
+          ["component-candidate", "output"],
+        ),
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "reconciliation-item-limit" }], ok: false });
+    expect(await readFile(evidencePath, "utf8")).toBe(before);
   });
 });

@@ -28,6 +28,7 @@ import type {
 } from "../standard-model/index.ts";
 import type { ComponentResourceMapper, TransactionExecutionCapability } from "./contracts.ts";
 import type { ApplicationSnapshotStateDecoder } from "./snapshot-state.ts";
+import { copyGraphPayload } from "../core/payload.ts";
 
 export interface EvidenceResourceMapper {
   resourceForEvidence(): Result<ResourceKey>;
@@ -40,6 +41,8 @@ export interface ReconciliationBounds {
   readonly maxRelationships: number;
   readonly maxSnapshotAttempts: number;
   readonly maxSources: number;
+  readonly maxTransactionDataDepth: number;
+  readonly maxTransactionDataValues: number;
 }
 
 export interface ReconciliationOptions {
@@ -130,7 +133,7 @@ function qualified(scope: string, key: string): string {
 }
 
 function itemId(scope: string, key: string): string {
-  return `observation:${scope}:${key}`;
+  return `observation:${encodeURIComponent(scope)}:${encodeURIComponent(key)}`;
 }
 
 function same(left: unknown, right: unknown): boolean {
@@ -483,6 +486,14 @@ function componentInput(id: string, projection: ComponentProjection): StandardCo
   return Object.freeze({ id, ...projection }) as unknown as StandardComponentInput;
 }
 
+function projectionItemCount(projection: ComponentProjection): number {
+  return (
+    (projection.actions?.length ?? 0) +
+    (projection.inputs?.length ?? 0) +
+    (projection.outputs?.length ?? 0)
+  );
+}
+
 function currentItems(value: StandardComponent["actions"]): readonly AutomaticItem[] | undefined {
   if (value === undefined) return undefined;
   const items: AutomaticItem[] = [];
@@ -695,6 +706,15 @@ export function createReconciliationOperations(
         const identity = qualified(record.scope, record.key);
         let binding = componentBindings.get(identity);
         if (binding === undefined) {
+          const projection = componentProjection(record, snapshot.value);
+          if (projectionItemCount(projection) > options.bounds.maxEmbeddedItems) {
+            return failure(
+              diagnostic(
+                "reconciliation-item-limit",
+                "Observed component member capacity is exceeded",
+              ),
+            );
+          }
           const componentId = mintIdentity(
             ids.nextEntityId,
             unavailableComponents,
@@ -706,7 +726,7 @@ export function createReconciliationOperations(
             componentId: componentId.value,
             key: record.key,
             present: true,
-            projection: componentProjection(record, snapshot.value),
+            projection,
             scope: record.scope,
           });
           componentBindings.set(identity, binding);
@@ -723,6 +743,14 @@ export function createReconciliationOperations(
           continue;
         }
         const nextProjection = componentProjection(record, snapshot.value, binding.projection);
+        if (projectionItemCount(nextProjection) > options.bounds.maxEmbeddedItems) {
+          return failure(
+            diagnostic(
+              "reconciliation-item-limit",
+              "Observed component member capacity is exceeded",
+            ),
+          );
+        }
         const existing = existingComponents.get(binding.componentId);
         if (existing === undefined)
           return failure(
@@ -765,7 +793,6 @@ export function createReconciliationOperations(
       const currentComponentIdentities = new Set(
         componentRecords.map((record) => qualified(record.scope, record.key)),
       );
-      const embeddedItemCounts = new Map<string, number>();
       for (const record of snapshot.value.records) {
         if (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") {
           continue;
@@ -779,16 +806,6 @@ export function createReconciliationOperations(
             ),
           );
         }
-        const count = (embeddedItemCounts.get(reference) ?? 0) + 1;
-        if (count > options.bounds.maxEmbeddedItems) {
-          return failure(
-            diagnostic(
-              "reconciliation-item-limit",
-              "Observed component member capacity is exceeded",
-            ),
-          );
-        }
-        embeddedItemCounts.set(reference, count);
       }
       const relationshipRecords = snapshot.value.records.filter(
         (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
@@ -819,9 +836,16 @@ export function createReconciliationOperations(
       const touchedRelationships = new Set<string>();
       for (const record of relationshipRecords) {
         const identity = qualified(record.scope, record.key);
-        const source = componentIds.get(qualified(record.from.scope, record.from.key));
-        const target = componentIds.get(qualified(record.to.scope, record.to.key));
-        if (source === undefined || target === undefined)
+        const sourceReference = qualified(record.from.scope, record.from.key);
+        const targetReference = qualified(record.to.scope, record.to.key);
+        const source = componentIds.get(sourceReference);
+        const target = componentIds.get(targetReference);
+        if (
+          source === undefined ||
+          target === undefined ||
+          !currentComponentIdentities.has(sourceReference) ||
+          !currentComponentIdentities.has(targetReference)
+        )
           return failure(
             diagnostic(
               "unresolved-observation-reference",
@@ -1002,26 +1026,32 @@ export function createReconciliationOperations(
           );
         }
       }
-      const outcome = await options.transactionExecution.execute(
-        Object.freeze({
-          affected: Object.freeze({
-            entities: Object.freeze([...touchedComponents].sort(compareText)),
-            relations: Object.freeze([...touchedRelationships].sort(compareText)),
-          }),
-          context: Object.freeze({
-            ownership: Object.freeze({ owner: key, plane: "evidence" }),
-            pinnedComponentIds: Object.freeze([]),
-          }),
-          expectedRevisions: Object.freeze(
-            expectedRevisions.sort((left, right) => compareText(left.resource, right.resource)),
-          ),
-          mutation: Object.freeze({
-            components: Object.freeze(componentMutations),
-            evidence: evidenceGraphData(nextEvidence),
-            relationships: Object.freeze(relationshipMutations),
-          }),
+      const request = Object.freeze({
+        affected: Object.freeze({
+          entities: Object.freeze([...touchedComponents].sort(compareText)),
+          relations: Object.freeze([...touchedRelationships].sort(compareText)),
         }),
-      );
+        context: Object.freeze({
+          ownership: Object.freeze({ owner: key, plane: "evidence" }),
+          pinnedComponentIds: Object.freeze([]),
+        }),
+        expectedRevisions: Object.freeze(
+          expectedRevisions.sort((left, right) => compareText(left.resource, right.resource)),
+        ),
+        mutation: Object.freeze({
+          components: Object.freeze(componentMutations),
+          evidence: evidenceGraphData(nextEvidence),
+          relationships: Object.freeze(relationshipMutations),
+        }),
+      });
+      const boundedRequest = copyGraphPayload(request as unknown as GraphData, "transaction", {
+        code: "reconciliation-transaction-limit",
+        maximumDepth: options.bounds.maxTransactionDataDepth,
+        maximumValues: options.bounds.maxTransactionDataValues,
+        message: "Reconciliation exceeds the atomic transaction envelope",
+      });
+      if (!boundedRequest.ok) return boundedRequest;
+      const outcome = await options.transactionExecution.execute(request);
       return outcomeResult(outcome);
     }
     return failure(

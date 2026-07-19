@@ -666,7 +666,7 @@ export function createDefaultBootstrapRegistry(
                 maxAffectedIdentities:
                   defaultHostBounds.maxComponents + defaultHostBounds.maxRelationships,
                 maxRequestDataDepth: defaultHostBounds.maxRequestDataDepth,
-                maxRequestDataValues: defaultHostBounds.maxRequestDataValues,
+                maxRequestDataValues: defaultHostBounds.maxSnapshotStateValues,
                 maxSnapshotStateDepth: defaultHostBounds.maxSnapshotStateDepth,
                 maxSnapshotStateValues: defaultHostBounds.maxSnapshotStateValues,
                 provider: transactionProvider,
@@ -772,10 +772,12 @@ export function createDefaultBootstrapRegistry(
               bounds: {
                 maxComponents: defaultHostBounds.maxEmbeddedItems,
                 maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
-                maxRecords: defaultHostBounds.maxComponents * defaultHostBounds.maxEmbeddedItems,
+                maxRecords: defaultHostBounds.maxRequestDataValues,
                 maxRelationships: defaultHostBounds.maxRelationshipMutations,
                 maxSnapshotAttempts: defaultHostBounds.maxSnapshotAttempts,
                 maxSources: defaultHostBounds.maxComponents,
+                maxTransactionDataDepth: defaultHostBounds.maxRequestDataDepth,
+                maxTransactionDataValues: defaultHostBounds.maxSnapshotStateValues,
               },
               entropy,
               evidenceResourceMapper,

@@ -281,6 +281,7 @@ export function createScannerExecutionRuntime(
     const observation = created.value;
     let status: ScannerExecutionStatus = "running";
     let cancelled = false;
+    let publicationStarted = false;
     const cancellationController = new AbortController();
     let resolveCancellation!: () => void;
     const cancellation = new Promise<void>((resolve) => {
@@ -302,7 +303,7 @@ export function createScannerExecutionRuntime(
       });
     };
     const cancel = () => {
-      if (status !== "running") return;
+      if (status !== "running" || publicationStarted) return;
       cancelled = true;
       cancellationController.abort();
       observation.cancel({ epoch: begin.epoch, sequence: observation.inspect().lastSequence + 1 });
@@ -386,26 +387,24 @@ export function createScannerExecutionRuntime(
               "Scanner returned without completing its observation session",
             ),
           );
+        } else if (cancelled) {
+          status = "cancelled";
         } else {
-          const consumed = await Promise.race([
-            Promise.resolve()
-              .then(() => options.consumer.consume(snapshot.value, cancellationController.signal))
-              .catch(() =>
-                failure(
-                  diagnostic(
-                    "scanner-handoff-consumer-failed",
-                    "Completed scanner observations could not be consumed",
-                  ),
+          publicationStarted = true;
+          const consumed = await Promise.resolve()
+            .then(() => options.consumer.consume(snapshot.value, cancellationController.signal))
+            .catch(() =>
+              failure(
+                diagnostic(
+                  "scanner-handoff-consumer-failed",
+                  "Completed scanner observations could not be consumed",
                 ),
-              )
-              .then((result) => ({ result, type: "consumed" as const })),
-            cancellation.then(() => ({ type: "cancelled" as const })),
-          ]);
-          if (consumed.type === "cancelled") status = "cancelled";
-          else if (consumed.result.ok) status = "completed";
+              ),
+            );
+          if (consumed.ok) status = "completed";
           else {
             status = "failed";
-            failures.push(...consumed.result.diagnostics);
+            failures.push(...consumed.diagnostics);
           }
         }
       }
