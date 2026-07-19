@@ -41,6 +41,16 @@ state, or fail-closed ambiguity in the name of speed. These invariants are what 
 visual blueprint remain useful after the first scan instead of becoming a stale
 diagram.
 
+For complex tasks, state the supported semantic boundary before implementation: the
+inputs and scenarios for which behavior is promised, and what remains partial or
+unsupported. Evaluate correctness and review findings within that boundary.
+Fail-closed ambiguity means Groma must not guess identity, bindings, reconciliation,
+or canonical meaning; it does not require proving every possible runtime behavior or
+resolving arbitrary program semantics. When scanner syntax is ambiguous, report
+partial evidence or no claim rather than expanding into whole-program alias, mutation,
+or capability analysis. Broaden that boundary only through an explicit product
+decision from Alex.
+
 ## Brand and Visual Direction
 
 Before designing or implementing any public Groma surface, renderer, visual artifact,
