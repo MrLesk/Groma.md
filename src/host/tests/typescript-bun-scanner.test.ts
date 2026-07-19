@@ -1046,15 +1046,60 @@ export function shared() {}
     ).toBeFalse();
   });
 
+  test("applies ordered root ignore negation and bounded character classes", async () => {
+    const result = await scan({
+      ".gitignore": [
+        "src/*.ts",
+        "!src/index.ts",
+        "internal/private-[0-9].ts",
+        "private/**/secret.ts",
+        "*.local.*",
+        "",
+      ].join("\n"),
+      "internal/private-1.ts": "export function excludedByClass() {}\n",
+      "internal/private-a.ts": "export function retainedSibling() {}\n",
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "ordered-ignore" }),
+      "private/deep/secret.ts": "export function excludedByRecursiveGlob() {}\n",
+      "private/deep/visible.ts": "export function retainedRecursiveSibling() {}\n",
+      "src/hidden.ts": "export function excludedBeforeNegation() {}\n",
+      "src/index.ts": "export function publicApi() {}\n",
+      "settings.local.ts": "export function excludedByTwoWildcards() {}\n",
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      result.snapshot?.records.some(
+        (record) => record.kind === "action" && record.name === "publicApi",
+      ),
+    ).toBeTrue();
+    expect(result.fixture.read).toContain("src/index.ts");
+    expect(result.fixture.read).toContain("internal/private-a.ts");
+    expect(result.fixture.read).toContain("private/deep/visible.ts");
+    expect(result.fixture.read).not.toContain("src/hidden.ts");
+    expect(result.fixture.read).not.toContain("internal/private-1.ts");
+    expect(result.fixture.read).not.toContain("private/deep/secret.ts");
+    expect(result.fixture.read).not.toContain("settings.local.ts");
+  });
+
   test("fails closed on unsafe policies and excludes configured output directories", async () => {
     const unsupportedIgnore = await scan({
-      ".gitignore": "[ab].ts\n",
+      ".gitignore": "a?.ts\n",
       "a.ts": "export function invented() {}\n",
       "package.json": JSON.stringify({ exports: "./a.ts", name: "unsafe-ignore" }),
     });
     expect(unsupportedIgnore.result.ok).toBeTrue();
     expect(unsupportedIgnore.snapshot?.coverage[0]?.state).toBe("partial");
     expect(unsupportedIgnore.snapshot?.records).toEqual([]);
+
+    const ambiguousWildcards = await scan({
+      ".gitignore": `${"*a".repeat(20)}b\n`,
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "unsafe-wildcards" }),
+      "src/index.ts": "export function invented() {}\n",
+    });
+    expect(ambiguousWildcards.result.ok).toBeTrue();
+    expect(ambiguousWildcards.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(ambiguousWildcards.snapshot?.records).toEqual([]);
 
     const malformedConfig = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.ts", name: "unsafe-config" }),

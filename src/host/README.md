@@ -24,6 +24,11 @@ The default consumer is the Application reconciliation operation. It records sou
 maintains stable opaque component bindings, and publishes all resulting canonical and projection
 changes atomically. The public `scan` command is the thin adapter over this same composition.
 
+The TypeScript/Bun scanner applies root `.gitignore` rules in file order, including negated rules,
+at most two `*` wildcards per path segment, `**` path segments, and bounded alphanumeric and
+underscore character classes such as `[0-9]`. Malformed rules and syntax outside that supported
+boundary fail the affected scope closed with partial coverage and no source claims.
+
 There is no durable provisional scan state, observation journal, restart replay, recovery lane,
 heartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is
 discarded. Canonical publication remains the responsibility of the atomic application/persistence

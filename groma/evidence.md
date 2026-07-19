@@ -615,7 +615,7 @@
               "state": "complete"
             }
           ],
-          "epoch": "epoch_da54dd2736366f89e1c4527bd67f0a75",
+          "epoch": "epoch_683f4d664e8e96e85c0560d401c26013",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -717,7 +717,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 41,
                     "startByte": 28
@@ -841,7 +841,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0bfdca501aee667833a804a5213e812b2a7e19e6935c34cec5511e8ce8275521",
+                  "fingerprint": "sha256:132e40a3e8375584d15e9914f5c0194965733a76c601d863a14312b0aaa1b94f",
                   "range": {
                     "endByteExclusive": 80,
                     "startByte": 65
@@ -1147,13 +1147,13 @@
               }
             },
             {
-              "content": "# Host\n\nHost is Groma's composition root. It connects the built-in providers, local project resources,\nStandard Model, application operations, scanner runtime, and CLI surface without moving canonical\nmeaning into adapters.\n\nThe current default composition supports the built-in TypeScript/Bun scanner only. Local plugin\npackage discovery, acquisition, scaffolding, trust ledgers, dynamic module loading, and SDK\ncertification are deliberately absent.\n\n## Scan runtime\n\nOne configured scan is bounded by project coverage, resource limits, observation limits, and a\nmaximum duration. The scanner receives only its blind project-resource capability and configuration.\nThe runtime buffers observations in a finite in-memory session and invokes the consumer only with a\nsuccessfully completed snapshot. Failure, cancellation, timeout, an incomplete session, or malformed\noutput invokes no consumer and leaves the last published blueprint untouched.\n\nCancellation stops at the publication boundary. After completed-snapshot consumption starts, the\nruntime waits for it and reports the actual completed or failed result instead of allowing a detached\ncanonical commit after a cancelled report.\n\nThe default consumer is the Application reconciliation operation. It records source-owned evidence,\nmaintains stable opaque component bindings, and publishes all resulting canonical and projection\nchanges atomically. The public `scan` command is the thin adapter over this same composition.\n\nThere is no durable provisional scan state, observation journal, restart replay, recovery lane,\nheartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is\ndiscarded. Canonical publication remains the responsibility of the atomic application/persistence\ntransaction path.\n\n## Trust boundary\n\nHost validates capability presence and ordinary result shapes, owns cancellation, and cleans up the\nplugin graph. Plugins are trusted code in the same process. Proxy traps, Promise-species attacks, and\nglobal-intrinsic mutation are not contained. Stronger isolation requires a future explicit product\ndecision and a process boundary.\n",
+              "content": "# Host\n\nHost is Groma's composition root. It connects the built-in providers, local project resources,\nStandard Model, application operations, scanner runtime, and CLI surface without moving canonical\nmeaning into adapters.\n\nThe current default composition supports the built-in TypeScript/Bun scanner only. Local plugin\npackage discovery, acquisition, scaffolding, trust ledgers, dynamic module loading, and SDK\ncertification are deliberately absent.\n\n## Scan runtime\n\nOne configured scan is bounded by project coverage, resource limits, observation limits, and a\nmaximum duration. The scanner receives only its blind project-resource capability and configuration.\nThe runtime buffers observations in a finite in-memory session and invokes the consumer only with a\nsuccessfully completed snapshot. Failure, cancellation, timeout, an incomplete session, or malformed\noutput invokes no consumer and leaves the last published blueprint untouched.\n\nCancellation stops at the publication boundary. After completed-snapshot consumption starts, the\nruntime waits for it and reports the actual completed or failed result instead of allowing a detached\ncanonical commit after a cancelled report.\n\nThe default consumer is the Application reconciliation operation. It records source-owned evidence,\nmaintains stable opaque component bindings, and publishes all resulting canonical and projection\nchanges atomically. The public `scan` command is the thin adapter over this same composition.\n\nThe TypeScript/Bun scanner applies root `.gitignore` rules in file order, including negated rules,\nat most two `*` wildcards per path segment, `**` path segments, and bounded alphanumeric and\nunderscore character classes such as `[0-9]`. Malformed rules and syntax outside that supported\nboundary fail the affected scope closed with partial coverage and no source claims.\n\nThere is no durable provisional scan state, observation journal, restart replay, recovery lane,\nheartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is\ndiscarded. Canonical publication remains the responsibility of the atomic application/persistence\ntransaction path.\n\n## Trust boundary\n\nHost validates capability presence and ordinary result shapes, owns cancellation, and cleans up the\nplugin graph. Plugins are trusted code in the same process. Proxy traps, Promise-species attacks, and\nglobal-intrinsic mutation are not contained. Stronger isolation requires a future explicit product\ndecision and a process boundary.\n",
               "format": "markdown",
               "key": "candidate.documentation.e3b9cff6ae24258d11c24b2847f411b7a619833819a4ae59b477a53dc102b86a",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:34da86a968b8e70586cd509c0484b807d2abac5e81cc60e8b96ddc8a72942df9",
+                  "fingerprint": "sha256:dcb73bed18c00a4c7c674dd60280af8920c8e3f8fe41f8cb0c9e2c67af04a3bf",
                   "resource": "src/host/README.md",
                   "scope": "workspace"
                 }
@@ -1231,7 +1231,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 1317,
                     "startByte": 1292
@@ -1326,7 +1326,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 253,
                     "startByte": 228
@@ -1466,7 +1466,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0bfdca501aee667833a804a5213e812b2a7e19e6935c34cec5511e8ce8275521",
+                  "fingerprint": "sha256:132e40a3e8375584d15e9914f5c0194965733a76c601d863a14312b0aaa1b94f",
                   "range": {
                     "endByteExclusive": 80,
                     "startByte": 65
@@ -1818,7 +1818,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 41,
                     "startByte": 28
@@ -1836,7 +1836,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:0bfdca501aee667833a804a5213e812b2a7e19e6935c34cec5511e8ce8275521",
+                  "fingerprint": "sha256:132e40a3e8375584d15e9914f5c0194965733a76c601d863a14312b0aaa1b94f",
                   "range": {
                     "endByteExclusive": 40,
                     "startByte": 27
@@ -1903,7 +1903,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 1516,
                     "startByte": 1492
@@ -1930,7 +1930,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:0bfdca501aee667833a804a5213e812b2a7e19e6935c34cec5511e8ce8275521",
+                  "fingerprint": "sha256:132e40a3e8375584d15e9914f5c0194965733a76c601d863a14312b0aaa1b94f",
                   "range": {
                     "endByteExclusive": 499,
                     "startByte": 475
@@ -2694,7 +2694,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 815,
                     "startByte": 797
@@ -2818,7 +2818,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:65fd9c20fc9fe65b3a0e4dbfdf3b82f64fb93101a13bcfde359257966d6571d1",
+                  "fingerprint": "sha256:4380ad3b42976814a5270afdd4fafa05104ea08c1ca34d5edbe3f9efa873687c",
                   "range": {
                     "endByteExclusive": 1428,
                     "startByte": 1400
