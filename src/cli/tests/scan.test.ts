@@ -164,6 +164,33 @@ async function surfaceResult(report: ScannerExecutionReport, startFailureCode?: 
 }
 
 describe("CLI scan workflow", () => {
+  test("atomically publishes a first scan beyond one hundred observed relationships", async () => {
+    const root = await workspace();
+    const modules = Array.from({ length: 11 }, (_, index) => `module-${index}`);
+    await Promise.all(
+      modules.map(async (module) => {
+        const directory = path.join(root, "src", module);
+        await mkdir(directory);
+        const imports = modules
+          .filter((target) => target !== module)
+          .map((target) => `import "../${target}/index.ts";`);
+        await writeFile(path.join(directory, "index.ts"), `${imports.join("\n")}\n`);
+      }),
+    );
+
+    expect((await run(root, ["--format=json", "init"])).exitCode).toBe(CLI_EXIT.success);
+    const scanned = await run(root, ["--format=json", "scan"]);
+
+    expect(scanned.exitCode).toBe(CLI_EXIT.success);
+    expect(JSON.parse(scanned.output)).toMatchObject({
+      ok: true,
+      result: {
+        status: "completed",
+      },
+    });
+    expect(JSON.parse(scanned.output).result.observations.records).toBeGreaterThan(100);
+  });
+
   test("configures, scans, reconciles, and keeps an unchanged rescan byte-stable", async () => {
     const root = await workspace();
     let presentationAttempts = 0;

@@ -314,6 +314,7 @@ interface LexicalUsageAnalysis {
 interface IgnoreRule {
   readonly directoryOnly: boolean;
   readonly expression: RegExp;
+  readonly ignored: boolean;
 }
 
 interface ScanState {
@@ -644,6 +645,80 @@ function globExpression(pattern: string, anywhere: boolean, directoryOnly: boole
   return new RegExp(source);
 }
 
+function gitignoreCharacterClass(value: string): string | undefined {
+  if (value.length === 0) return undefined;
+  let index = 0;
+  while (index < value.length) {
+    const start = value[index]!;
+    if (!/[A-Za-z0-9_]/.test(start)) return undefined;
+    if (value[index + 1] === "-") {
+      const end = value[index + 2];
+      if (end === undefined || !/[A-Za-z0-9_]/.test(end) || start > end) return undefined;
+      index += 3;
+    } else {
+      index += 1;
+    }
+  }
+  return value;
+}
+
+function gitignoreSegmentExpression(segment: string): string | undefined {
+  let source = "";
+  let wildcards = 0;
+  for (let index = 0; index < segment.length; index += 1) {
+    const character = segment[index]!;
+    if (character === "*") {
+      wildcards += 1;
+      if (wildcards > 2 || segment[index + 1] === "*") return undefined;
+      source += "[^/]*";
+      continue;
+    }
+    if (character === "[") {
+      const close = segment.indexOf("]", index + 1);
+      if (close < 0) return undefined;
+      const characterClass = gitignoreCharacterClass(segment.slice(index + 1, close));
+      if (characterClass === undefined) return undefined;
+      source += `[${characterClass}]`;
+      index = close;
+      continue;
+    }
+    if (character === "]") return undefined;
+    source += escapeExpression(character);
+  }
+  return source;
+}
+
+function gitignoreExpression(
+  pattern: string,
+  anywhere: boolean,
+  directoryOnly: boolean,
+): RegExp | undefined {
+  if (
+    pattern.length === 0 ||
+    pattern.length > 512 ||
+    !portableResourcePattern.test(pattern) ||
+    /^(?:\/|[A-Za-z]:)/.test(pattern)
+  ) {
+    return undefined;
+  }
+  const segments = pattern.split("/");
+  let source = anywhere ? "(?:^|/)" : "^";
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    if (segment === "." || segment === ".." || segment.length === 0) return undefined;
+    if (segment === "**") {
+      source += index === segments.length - 1 ? ".*" : "(?:[^/]+/)*";
+      continue;
+    }
+    const expression = gitignoreSegmentExpression(segment);
+    if (expression === undefined) return undefined;
+    source += expression;
+    if (index < segments.length - 1) source += "/";
+  }
+  source += directoryOnly ? "(?:/.*)?$" : "$";
+  return new RegExp(source);
+}
+
 function matchesPatterns(resource: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => {
     if (!pattern.includes("*")) return resource === pattern || resource.startsWith(`${pattern}/`);
@@ -667,45 +742,54 @@ function excludedByKnownRule(relative: string, directory: boolean): boolean {
 }
 
 function ignored(relative: string, directory: boolean, rules: readonly IgnoreRule[]): boolean {
-  return rules.some((rule) => (!rule.directoryOnly || directory) && rule.expression.test(relative));
+  let excluded = false;
+  for (const rule of rules) {
+    if ((!rule.directoryOnly || directory) && rule.expression.test(relative)) {
+      excluded = rule.ignored;
+    }
+  }
+  return excluded;
 }
 
 function parseGitignore(
   text: string,
-): Readonly<{ readonly partial: boolean; readonly rules: readonly IgnoreRule[] }> {
+): Readonly<{ readonly rules: readonly IgnoreRule[]; readonly unsafe: boolean }> {
   const rules: IgnoreRule[] = [];
-  let partial = false;
+  let unsafe = false;
   for (const original of text.split(/\r?\n/)) {
     if (original !== original.trim()) {
-      partial = true;
+      unsafe = true;
       continue;
     }
-    const line = original;
+    let line = original;
     if (line.length === 0 || line.startsWith("#")) continue;
-    if (
-      line.startsWith("!") ||
-      line.startsWith("\\") ||
-      /[[\]{}?]/.test(line) ||
-      line.includes("***")
-    ) {
-      partial = true;
+    const negated = line.startsWith("!");
+    if (negated) line = line.slice(1);
+    if (line.length === 0 || line.startsWith("\\") || /[{}?]/.test(line)) {
+      unsafe = true;
       continue;
     }
     const directoryOnly = line.endsWith("/");
     const rooted = line.startsWith("/");
     const pattern = line.slice(rooted ? 1 : 0, directoryOnly ? -1 : undefined);
-    if (!validatePattern(pattern)) {
-      partial = true;
+    const expression = gitignoreExpression(
+      pattern,
+      !rooted && !pattern.includes("/"),
+      directoryOnly,
+    );
+    if (expression === undefined) {
+      unsafe = true;
       continue;
     }
     rules.push(
       Object.freeze({
         directoryOnly,
-        expression: globExpression(pattern, !rooted && !pattern.includes("/"), directoryOnly),
+        expression,
+        ignored: !negated,
       }),
     );
   }
-  return Object.freeze({ partial, rules: Object.freeze(rules) });
+  return Object.freeze({ rules: Object.freeze(rules), unsafe });
 }
 
 function stripJsonComments(source: string): string | undefined {
@@ -1249,7 +1333,7 @@ async function inventoryScope(
           if (file === undefined) return emptyPartial();
           const parsed = parseGitignore(file.text);
           ignoreRules = parsed.rules;
-          if (parsed.partial) return emptyPartial();
+          if (parsed.unsafe) return emptyPartial();
         }
       }
       const tsconfig = byName.get("tsconfig.json");

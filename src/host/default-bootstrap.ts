@@ -126,7 +126,7 @@ export const defaultHostBounds = Object.freeze({
   maxPageSize: 100,
   maxPluginRegistrations: 128,
   maxPinnedComponentIds: 100,
-  maxRelationshipMutations: 100,
+  maxRelationshipMutations: 1_000,
   maxRelationships: 1_000,
   maxRequestDataDepth: 30,
   maxRequestDataValues: 10_000,
