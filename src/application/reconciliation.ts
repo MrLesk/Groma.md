@@ -1,0 +1,1126 @@
+import {
+  createObservationSession,
+  createOpaqueIdSource,
+  failure,
+  observationSessionApiVersion,
+  parseContentRevision,
+  parseEntityId,
+  parseGraphGeneration,
+  parseRelationId,
+  success,
+  type CompletedObservationSnapshot,
+  type ContentRevision,
+  type Diagnostic,
+  type EntropySource,
+  type GraphData,
+  type GraphDataRecord,
+  type ObservationRecord,
+  type ResourceKey,
+  type Result,
+  type TransactionRecovery,
+  type TransactionOutcome,
+  type TransactionProvider,
+} from "../core/index.ts";
+import type {
+  StandardComponent,
+  StandardComponentInput,
+  StandardComponentPatch,
+  StandardRelationship,
+} from "../standard-model/index.ts";
+import type { ComponentResourceMapper, TransactionExecutionCapability } from "./contracts.ts";
+import type { ApplicationSnapshotStateDecoder } from "./snapshot-state.ts";
+import { copyGraphPayload } from "../core/payload.ts";
+
+export interface EvidenceResourceMapper {
+  resourceForEvidence(): Result<ResourceKey>;
+}
+
+export interface ReconciliationBounds {
+  readonly maxComponents: number;
+  readonly maxEmbeddedItems: number;
+  readonly maxRecords: number;
+  readonly maxRelationships: number;
+  readonly maxSnapshotAttempts: number;
+  readonly maxSources: number;
+  readonly maxTransactionDataDepth: number;
+  readonly maxTransactionDataValues: number;
+}
+
+export interface ReconciliationOptions {
+  readonly bounds: ReconciliationBounds;
+  readonly entropy: EntropySource;
+  readonly evidenceResourceMapper: EvidenceResourceMapper;
+  readonly resourceMapper: ComponentResourceMapper;
+  readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
+  readonly transactionExecution: TransactionExecutionCapability;
+  readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
+}
+
+export type ReconciliationOutcome =
+  | { readonly generation: number; readonly status: "committed" }
+  | {
+      readonly diagnostics: readonly Diagnostic[];
+      readonly recovery: TransactionRecovery;
+      readonly status: "indeterminate";
+    }
+  | { readonly generation: number; readonly status: "unchanged" };
+
+export interface ReconciliationOperations {
+  reconcile(snapshot: CompletedObservationSnapshot): Promise<Result<ReconciliationOutcome>>;
+}
+
+interface AutomaticItem {
+  readonly description?: string;
+  readonly id: string;
+  readonly name?: string;
+}
+
+interface ComponentProjection {
+  readonly actions?: readonly AutomaticItem[];
+  readonly iconDomain?: string;
+  readonly inputs?: readonly AutomaticItem[];
+  readonly label?: string;
+  readonly name?: string;
+  readonly outputs?: readonly AutomaticItem[];
+  readonly summary?: string;
+  readonly type?: string;
+}
+
+interface ComponentBinding {
+  readonly componentId: string;
+  readonly key: string;
+  readonly present: boolean;
+  readonly projection: ComponentProjection;
+  readonly scope: string;
+}
+
+interface RelationshipProjection {
+  readonly source: string;
+  readonly target: string;
+  readonly type: string;
+}
+
+interface RelationshipBinding {
+  readonly key: string;
+  readonly present: boolean;
+  readonly projection: RelationshipProjection;
+  readonly relationId: string;
+  readonly removed: boolean;
+  readonly scope: string;
+}
+
+interface EvidenceSourceState {
+  readonly componentBindings: readonly ComponentBinding[];
+  readonly relationshipBindings: readonly RelationshipBinding[];
+  readonly snapshot: CompletedObservationSnapshot;
+  readonly sourceKey: string;
+}
+
+interface EvidenceState {
+  readonly sources: readonly EvidenceSourceState[];
+  readonly version: 1;
+}
+
+const maximumIdentityAttempts = 16;
+
+function diagnostic(code: string, message: string): Diagnostic {
+  return Object.freeze({ code, message });
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sourceKey(snapshot: CompletedObservationSnapshot): string {
+  return JSON.stringify([snapshot.projectId, snapshot.source.id, snapshot.source.instance]);
+}
+
+function qualified(scope: string, key: string): string {
+  return `${scope}\u0000${key}`;
+}
+
+function itemId(scope: string, key: string): string {
+  return `observation:${encodeURIComponent(scope)}:${encodeURIComponent(key)}`;
+}
+
+function itemIdentity(id: string): { readonly key: string; readonly scope: string } | undefined {
+  const prefix = "observation:";
+  if (!id.startsWith(prefix)) return undefined;
+  const separator = id.indexOf(":", prefix.length);
+  if (separator < 0) return undefined;
+  try {
+    const scope = decodeURIComponent(id.slice(prefix.length, separator));
+    const key = decodeURIComponent(id.slice(separator + 1));
+    return itemId(scope, key) === id ? Object.freeze({ key, scope }) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function same(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameObservationContent(
+  left: CompletedObservationSnapshot,
+  right: CompletedObservationSnapshot,
+): boolean {
+  return same({ ...left, epoch: undefined }, { ...right, epoch: undefined });
+}
+
+function canonicalSnapshot(
+  value: unknown,
+  maximumRecords: number,
+): Result<CompletedObservationSnapshot> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
+  }
+  const record = value as Readonly<Record<string, unknown>>;
+  if (
+    Object.keys(record).sort().join(",") !==
+      "apiVersion,coverage,epoch,projectId,records,scopes,source" ||
+    record.apiVersion !== observationSessionApiVersion ||
+    !Array.isArray(record.records) ||
+    record.records.length > maximumRecords
+  ) {
+    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
+  }
+  const session = createObservationSession({
+    apiVersion: observationSessionApiVersion,
+    epoch: record.epoch as string,
+    projectId: record.projectId as string,
+    scopes: record.scopes as CompletedObservationSnapshot["scopes"],
+    source: record.source as CompletedObservationSnapshot["source"],
+  });
+  if (!session.ok)
+    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
+  let sequence = 0;
+  for (let index = 0; index < record.records.length; index += 2_048) {
+    sequence += 1;
+    const submitted = session.value.submitBatch({
+      epoch: record.epoch as string,
+      records: record.records.slice(index, index + 2_048) as readonly ObservationRecord[],
+      sequence,
+    });
+    if (!submitted.ok)
+      return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
+  }
+  const completed = session.value.complete({
+    coverage: record.coverage as CompletedObservationSnapshot["coverage"],
+    epoch: record.epoch as string,
+    sequence: sequence + 1,
+  });
+  return completed.ok
+    ? completed
+    : failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
+}
+
+function projectionValue(value: unknown): Result<ComponentProjection> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return failure(
+      diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+    );
+  }
+  const record = value as Readonly<Record<string, unknown>>;
+  const allowed = new Set([
+    "actions",
+    "iconDomain",
+    "inputs",
+    "label",
+    "name",
+    "outputs",
+    "summary",
+    "type",
+  ]);
+  if (Object.keys(record).some((key) => !allowed.has(key))) {
+    return failure(
+      diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+    );
+  }
+  for (const field of ["iconDomain", "label", "name", "summary", "type"] as const) {
+    if (record[field] !== undefined && typeof record[field] !== "string") {
+      return failure(
+        diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+      );
+    }
+  }
+  for (const field of ["actions", "inputs", "outputs"] as const) {
+    if (record[field] === undefined) continue;
+    if (!Array.isArray(record[field])) {
+      return failure(
+        diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+      );
+    }
+    for (const item of record[field]) {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+        );
+      }
+      const entry = item as Readonly<Record<string, unknown>>;
+      if (
+        !["id", "id,name", "description,id", "description,id,name"].includes(
+          Object.keys(entry).sort().join(","),
+        ) ||
+        typeof entry.id !== "string" ||
+        itemIdentity(entry.id) === undefined ||
+        (entry.name !== undefined && typeof entry.name !== "string") ||
+        (entry.description !== undefined && typeof entry.description !== "string")
+      ) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+        );
+      }
+    }
+  }
+  return success(record as unknown as ComponentProjection);
+}
+
+function parseEvidenceState(value: unknown, bounds: ReconciliationBounds): Result<EvidenceState> {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !== "sources,version"
+  ) {
+    return failure(diagnostic("invalid-evidence-state", "Canonical evidence state is malformed"));
+  }
+  const envelope = value as Readonly<Record<string, unknown>>;
+  if (
+    envelope.version !== 1 ||
+    !Array.isArray(envelope.sources) ||
+    envelope.sources.length > bounds.maxSources
+  ) {
+    return failure(diagnostic("invalid-evidence-state", "Canonical evidence state is malformed"));
+  }
+  const sources: EvidenceSourceState[] = [];
+  const globallyBoundComponents = new Set<string>();
+  const globallyBoundRelations = new Set<string>();
+  let previous = "";
+  for (const input of envelope.sources) {
+    if (
+      typeof input !== "object" ||
+      input === null ||
+      Array.isArray(input) ||
+      Object.keys(input).sort().join(",") !==
+        "componentBindings,relationshipBindings,snapshot,sourceKey"
+    ) {
+      return failure(
+        diagnostic("invalid-evidence-state", "Canonical evidence source is malformed"),
+      );
+    }
+    const source = input as Readonly<Record<string, unknown>>;
+    if (
+      typeof source.sourceKey !== "string" ||
+      source.sourceKey <= previous ||
+      !Array.isArray(source.componentBindings) ||
+      source.componentBindings.length > bounds.maxComponents ||
+      !Array.isArray(source.relationshipBindings) ||
+      source.relationshipBindings.length > bounds.maxRelationships
+    ) {
+      return failure(
+        diagnostic("invalid-evidence-state", "Canonical evidence source is malformed"),
+      );
+    }
+    const snapshot = canonicalSnapshot(source.snapshot, bounds.maxRecords);
+    if (!snapshot.ok || source.sourceKey !== sourceKey(snapshot.value)) {
+      return failure(
+        diagnostic("invalid-evidence-state", "Canonical evidence source is malformed"),
+      );
+    }
+    const componentBindings: ComponentBinding[] = [];
+    let priorBinding = "";
+    const sourceComponents = new Set<string>();
+    for (const inputBinding of source.componentBindings) {
+      if (
+        typeof inputBinding !== "object" ||
+        inputBinding === null ||
+        Array.isArray(inputBinding) ||
+        Object.keys(inputBinding).sort().join(",") !== "componentId,key,present,projection,scope"
+      ) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Canonical component binding is malformed"),
+        );
+      }
+      const binding = inputBinding as Readonly<Record<string, unknown>>;
+      const id =
+        typeof binding.componentId === "string"
+          ? parseEntityId(binding.componentId)
+          : failure(diagnostic("invalid", "invalid"));
+      const projection = projectionValue(binding.projection);
+      const identity = `${binding.scope}\u0000${binding.key}`;
+      if (
+        !id.ok ||
+        !projection.ok ||
+        typeof binding.scope !== "string" ||
+        typeof binding.key !== "string" ||
+        typeof binding.present !== "boolean" ||
+        identity <= priorBinding ||
+        globallyBoundComponents.has(id.value)
+      ) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Canonical component binding is malformed"),
+        );
+      }
+      globallyBoundComponents.add(id.value);
+      sourceComponents.add(id.value);
+      priorBinding = identity;
+      componentBindings.push(
+        Object.freeze({
+          componentId: id.value,
+          key: binding.key,
+          present: binding.present,
+          projection: projection.value,
+          scope: binding.scope,
+        }),
+      );
+    }
+    const relationshipBindings: RelationshipBinding[] = [];
+    priorBinding = "";
+    for (const inputBinding of source.relationshipBindings) {
+      if (
+        typeof inputBinding !== "object" ||
+        inputBinding === null ||
+        Array.isArray(inputBinding) ||
+        Object.keys(inputBinding).sort().join(",") !==
+          "key,present,projection,relationId,removed,scope"
+      ) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Canonical relationship binding is malformed"),
+        );
+      }
+      const binding = inputBinding as Readonly<Record<string, unknown>>;
+      const id =
+        typeof binding.relationId === "string"
+          ? parseRelationId(binding.relationId)
+          : failure(diagnostic("invalid", "invalid"));
+      const projection = binding.projection as Readonly<Record<string, unknown>>;
+      const identity = `${binding.scope}\u0000${binding.key}`;
+      if (
+        !id.ok ||
+        typeof binding.scope !== "string" ||
+        typeof binding.key !== "string" ||
+        typeof binding.present !== "boolean" ||
+        typeof binding.removed !== "boolean" ||
+        (binding.present && binding.removed) ||
+        identity <= priorBinding ||
+        globallyBoundRelations.has(id.value) ||
+        typeof projection !== "object" ||
+        projection === null ||
+        Array.isArray(projection) ||
+        Object.keys(projection).sort().join(",") !== "source,target,type" ||
+        !parseEntityId(projection.source as string).ok ||
+        !parseEntityId(projection.target as string).ok ||
+        !sourceComponents.has(projection.source as string) ||
+        !sourceComponents.has(projection.target as string) ||
+        typeof projection.type !== "string"
+      ) {
+        return failure(
+          diagnostic("invalid-evidence-state", "Canonical relationship binding is malformed"),
+        );
+      }
+      globallyBoundRelations.add(id.value);
+      priorBinding = identity;
+      relationshipBindings.push(
+        Object.freeze({
+          key: binding.key,
+          present: binding.present,
+          projection: Object.freeze({
+            source: projection.source as string,
+            target: projection.target as string,
+            type: projection.type,
+          }),
+          relationId: id.value,
+          removed: binding.removed,
+          scope: binding.scope,
+        }),
+      );
+    }
+    sources.push(
+      Object.freeze({
+        componentBindings: Object.freeze(componentBindings),
+        relationshipBindings: Object.freeze(relationshipBindings),
+        snapshot: snapshot.value,
+        sourceKey: source.sourceKey,
+      }),
+    );
+    previous = source.sourceKey;
+  }
+  return success(Object.freeze({ sources: Object.freeze(sources), version: 1 }));
+}
+
+function automaticItems(
+  snapshot: CompletedObservationSnapshot,
+  kind: "action" | "input" | "output",
+  componentKey: string,
+  previous?: readonly AutomaticItem[],
+): readonly AutomaticItem[] | undefined {
+  const items = new Map<string, AutomaticItem>();
+  for (const item of previous ?? []) {
+    const identity = itemIdentity(item.id);
+    if (identity !== undefined && !hasCompleteCoverage(snapshot, identity.scope, kind)) {
+      items.set(item.id, item);
+    }
+  }
+  for (const record of snapshot.records) {
+    if (
+      (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") ||
+      record.kind !== kind ||
+      qualified(record.component.scope, record.component.key) !== componentKey
+    ) {
+      continue;
+    }
+    const item = Object.freeze({
+      ...(record.description === undefined ? {} : { description: record.description }),
+      id: itemId(record.scope, record.key),
+      ...(record.name === undefined ? {} : { name: record.name }),
+    });
+    items.set(item.id, item);
+  }
+  const sorted = [...items.values()].sort((left, right) => compareText(left.id, right.id));
+  return sorted.length === 0 ? undefined : Object.freeze(sorted);
+}
+
+function hasCompleteCoverage(
+  snapshot: CompletedObservationSnapshot,
+  scope: string,
+  kind: ObservationRecord["kind"],
+): boolean {
+  return snapshot.coverage.some(
+    (entry) => entry.scope === scope && entry.state === "complete" && entry.kinds.includes(kind),
+  );
+}
+
+function componentProjection(
+  record: Extract<ObservationRecord, { kind: "component-candidate" }>,
+  snapshot: CompletedObservationSnapshot,
+  previous?: ComponentProjection,
+): ComponentProjection {
+  const key = qualified(record.scope, record.key);
+  const inputs = automaticItems(snapshot, "input", key, previous?.inputs);
+  const outputs = automaticItems(snapshot, "output", key, previous?.outputs);
+  const actions = automaticItems(snapshot, "action", key, previous?.actions);
+  return Object.freeze({
+    ...record.candidate,
+    ...(inputs === undefined ? {} : { inputs }),
+    ...(outputs === undefined ? {} : { outputs }),
+    ...(actions === undefined ? {} : { actions }),
+  });
+}
+
+function componentInput(id: string, projection: ComponentProjection): StandardComponentInput {
+  return Object.freeze({ id, ...projection }) as unknown as StandardComponentInput;
+}
+
+function projectionItemCount(projection: ComponentProjection): number {
+  return (
+    (projection.actions?.length ?? 0) +
+    (projection.inputs?.length ?? 0) +
+    (projection.outputs?.length ?? 0)
+  );
+}
+
+function currentItems(
+  value: StandardComponent["actions"],
+): readonly AutomaticItem[] | null | undefined {
+  if (value === undefined) return undefined;
+  const items: AutomaticItem[] = [];
+  for (const item of value) {
+    if (Object.keys(item.extensions).length > 0) return null;
+    items.push(
+      Object.freeze({
+        ...(item.description === undefined ? {} : { description: item.description }),
+        id: item.id,
+        ...(item.name === undefined ? {} : { name: item.name }),
+      }),
+    );
+  }
+  return Object.freeze(items);
+}
+
+function ownedUpdate(
+  component: StandardComponent,
+  previous: ComponentProjection,
+  next: ComponentProjection,
+): {
+  readonly patch: StandardComponentPatch;
+  readonly projection: ComponentProjection;
+} {
+  const patch: Record<string, unknown> = {};
+  const projection: Record<string, unknown> = {};
+  for (const field of ["iconDomain", "label", "name", "summary", "type"] as const) {
+    const owned = component[field] === previous[field];
+    const value = owned ? next[field] : previous[field];
+    if (owned && component[field] !== next[field]) {
+      patch[field] = next[field] ?? null;
+    }
+    if (value !== undefined) projection[field] = value;
+  }
+  for (const field of ["actions", "inputs", "outputs"] as const) {
+    const owned = same(currentItems(component[field]), previous[field]);
+    const value = owned ? next[field] : previous[field];
+    if (owned && !same(previous[field], next[field])) {
+      patch[field] = next[field] ?? null;
+    }
+    if (value !== undefined) projection[field] = value;
+  }
+  return Object.freeze({
+    patch: Object.freeze(patch) as StandardComponentPatch,
+    projection: Object.freeze(projection) as ComponentProjection,
+  });
+}
+
+function relationshipMatches(
+  value: StandardRelationship,
+  projection: RelationshipProjection,
+): boolean {
+  return (
+    value.source === projection.source &&
+    value.target === projection.target &&
+    value.type === projection.type &&
+    value.description === undefined &&
+    Object.keys(value.extensions).length === 0
+  );
+}
+
+function evidenceGraphData(state: EvidenceState): GraphData {
+  return state as unknown as GraphData;
+}
+
+function evidenceFromSnapshotState(value: unknown): unknown {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>).evidence
+    : undefined;
+}
+
+function revisionMap(value: unknown): Result<Map<string, ContentRevision | null>> {
+  if (!Array.isArray(value))
+    return failure(
+      diagnostic("reconciliation-snapshot-failed", "Canonical revisions are malformed"),
+    );
+  const result = new Map<string, ContentRevision | null>();
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item))
+      return failure(
+        diagnostic("reconciliation-snapshot-failed", "Canonical revisions are malformed"),
+      );
+    const record = item as Readonly<Record<string, unknown>>;
+    if (typeof record.resource !== "string" || result.has(record.resource))
+      return failure(
+        diagnostic("reconciliation-snapshot-failed", "Canonical revisions are malformed"),
+      );
+    const parsed =
+      record.revision === null ? null : parseContentRevision(record.revision as string);
+    if (parsed !== null && !parsed.ok)
+      return failure(
+        diagnostic("reconciliation-snapshot-failed", "Canonical revisions are malformed"),
+      );
+    result.set(record.resource, parsed === null ? null : parsed.value);
+  }
+  return success(result);
+}
+
+function outcomeResult(outcome: TransactionOutcome): Result<ReconciliationOutcome> {
+  if (outcome.status === "committed")
+    return success(Object.freeze({ generation: outcome.generation, status: "committed" }));
+  if (outcome.status === "indeterminate") {
+    return success(
+      Object.freeze({
+        diagnostics: outcome.diagnostics,
+        recovery: outcome.recovery,
+        status: "indeterminate" as const,
+      }),
+    );
+  }
+  return failure(...outcome.diagnostics);
+}
+
+function mintIdentity(
+  next: () => string,
+  unavailable: ReadonlySet<string>,
+  code: string,
+): Result<string> {
+  for (let attempt = 0; attempt < maximumIdentityAttempts; attempt += 1) {
+    try {
+      const id = next();
+      if (!unavailable.has(id)) return success(id);
+    } catch {
+      break;
+    }
+  }
+  return failure(diagnostic(code, "A unique opaque reconciliation identity is unavailable"));
+}
+
+export function createReconciliationOperations(
+  options: ReconciliationOptions,
+): ReconciliationOperations {
+  for (const [name, value] of Object.entries(options.bounds)) {
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new RangeError(`${name} must be a positive safe integer`);
+  }
+  const ids = createOpaqueIdSource(options.entropy);
+
+  const reconcile = async (
+    input: CompletedObservationSnapshot,
+  ): Promise<Result<ReconciliationOutcome>> => {
+    const snapshot = canonicalSnapshot(input, options.bounds.maxRecords);
+    if (!snapshot.ok) return snapshot;
+    const evidenceResource = options.evidenceResourceMapper.resourceForEvidence();
+    if (!evidenceResource.ok) return evidenceResource;
+
+    for (let attempt = 0; attempt < options.bounds.maxSnapshotAttempts; attempt += 1) {
+      let initial: Awaited<ReturnType<TransactionProvider["snapshot"]>>;
+      try {
+        initial = await options.transactionProvider.snapshot([evidenceResource.value]);
+      } catch {
+        return failure(
+          diagnostic("reconciliation-snapshot-failed", "Canonical state could not be read"),
+        );
+      }
+      const generation = parseGraphGeneration(initial.generation);
+      const decoded = options.snapshotStateDecoder.decode(initial.state);
+      const storedEvidence = evidenceFromSnapshotState(initial.state);
+      const evidence = parseEvidenceState(
+        storedEvidence === undefined ? { sources: [], version: 1 } : storedEvidence,
+        options.bounds,
+      );
+      const initialRevisions = revisionMap(initial.revisions);
+      if (!generation.ok || !decoded.ok || !evidence.ok || !initialRevisions.ok) {
+        return failure(
+          diagnostic("reconciliation-snapshot-failed", "Canonical state could not be read"),
+        );
+      }
+      const key = sourceKey(snapshot.value);
+      const priorSource = evidence.value.sources.find((source) => source.sourceKey === key);
+      if (priorSource === undefined && evidence.value.sources.length >= options.bounds.maxSources) {
+        return failure(
+          diagnostic(
+            "reconciliation-source-limit",
+            "Canonical evidence source capacity is exhausted",
+          ),
+        );
+      }
+      const existingComponents = new Map<string, StandardComponent>(
+        decoded.value.components.map((component) => [component.id, component]),
+      );
+      const existingRelationships = new Map<string, StandardRelationship>(
+        decoded.value.relationships.map((relationship) => [relationship.id, relationship]),
+      );
+      if (
+        priorSource?.componentBindings.some(
+          (binding) => !existingComponents.has(binding.componentId),
+        ) ||
+        priorSource?.relationshipBindings.some(
+          (binding) => binding.present && !existingRelationships.has(binding.relationId),
+        )
+      ) {
+        return failure(
+          diagnostic("reconciliation-binding-missing", "A durable binding target is missing"),
+        );
+      }
+      const componentRecords = snapshot.value.records.filter(
+        (record): record is Extract<ObservationRecord, { kind: "component-candidate" }> =>
+          record.kind === "component-candidate",
+      );
+      if (componentRecords.length > options.bounds.maxComponents) {
+        return failure(
+          diagnostic("reconciliation-component-limit", "Observed component capacity is exceeded"),
+        );
+      }
+      const priorComponents = new Map(
+        (priorSource?.componentBindings ?? []).map((binding) => [
+          qualified(binding.scope, binding.key),
+          binding,
+        ]),
+      );
+      const componentBindings = new Map(priorComponents);
+      const unavailableComponents = new Set([
+        ...evidence.value.sources.flatMap((source) =>
+          source.componentBindings.map((binding) => binding.componentId),
+        ),
+        ...existingComponents.keys(),
+      ]);
+      const componentMutations: GraphDataRecord[] = [];
+      const touchedComponents = new Set<string>();
+      for (const record of componentRecords) {
+        const identity = qualified(record.scope, record.key);
+        let binding = componentBindings.get(identity);
+        if (binding === undefined) {
+          const projection = componentProjection(record, snapshot.value);
+          if (projectionItemCount(projection) > options.bounds.maxEmbeddedItems) {
+            return failure(
+              diagnostic(
+                "reconciliation-item-limit",
+                "Observed component member capacity is exceeded",
+              ),
+            );
+          }
+          const componentId = mintIdentity(
+            ids.nextEntityId,
+            unavailableComponents,
+            "component-identity-unavailable",
+          );
+          if (!componentId.ok) return componentId;
+          unavailableComponents.add(componentId.value);
+          binding = Object.freeze({
+            componentId: componentId.value,
+            key: record.key,
+            present: true,
+            projection,
+            scope: record.scope,
+          });
+          componentBindings.set(identity, binding);
+          componentMutations.push(
+            Object.freeze({
+              component: componentInput(
+                componentId.value,
+                binding.projection,
+              ) as unknown as GraphData,
+              type: "create",
+            }),
+          );
+          touchedComponents.add(componentId.value);
+          continue;
+        }
+        const nextProjection = componentProjection(record, snapshot.value, binding.projection);
+        if (projectionItemCount(nextProjection) > options.bounds.maxEmbeddedItems) {
+          return failure(
+            diagnostic(
+              "reconciliation-item-limit",
+              "Observed component member capacity is exceeded",
+            ),
+          );
+        }
+        const existing = existingComponents.get(binding.componentId);
+        if (existing === undefined)
+          return failure(
+            diagnostic("reconciliation-binding-missing", "A component binding target is missing"),
+          );
+        const update = ownedUpdate(existing, binding.projection, nextProjection);
+        if (Object.keys(update.patch).length > 0) {
+          componentMutations.push(
+            Object.freeze({
+              id: binding.componentId,
+              patch: update.patch as unknown as GraphData,
+              type: "patch",
+            }),
+          );
+          touchedComponents.add(binding.componentId);
+        }
+        componentBindings.set(
+          identity,
+          Object.freeze({ ...binding, present: true, projection: update.projection }),
+        );
+      }
+      for (const [identity, binding] of componentBindings) {
+        if (
+          !componentRecords.some((record) => qualified(record.scope, record.key) === identity) &&
+          hasCompleteCoverage(snapshot.value, binding.scope, "component-candidate")
+        )
+          componentBindings.set(identity, Object.freeze({ ...binding, present: false }));
+      }
+      if (componentBindings.size > options.bounds.maxComponents) {
+        return failure(
+          diagnostic(
+            "reconciliation-component-limit",
+            "Canonical component binding capacity is exceeded",
+          ),
+        );
+      }
+      const componentIds = new Map(
+        [...componentBindings].map(([identity, binding]) => [identity, binding.componentId]),
+      );
+      const currentComponentIdentities = new Set(
+        componentRecords.map((record) => qualified(record.scope, record.key)),
+      );
+      for (const record of snapshot.value.records) {
+        if (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") {
+          continue;
+        }
+        const reference = qualified(record.component.scope, record.component.key);
+        if (!componentIds.has(reference) || !currentComponentIdentities.has(reference)) {
+          return failure(
+            diagnostic(
+              "unresolved-observation-reference",
+              "An observed component member is not exactly bound in this snapshot",
+            ),
+          );
+        }
+      }
+      const relationshipRecords = snapshot.value.records.filter(
+        (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
+          record.kind === "relationship",
+      );
+      if (relationshipRecords.length > options.bounds.maxRelationships) {
+        return failure(
+          diagnostic(
+            "reconciliation-relationship-limit",
+            "Observed relationship capacity is exceeded",
+          ),
+        );
+      }
+      const priorRelationships = new Map(
+        (priorSource?.relationshipBindings ?? []).map((binding) => [
+          qualified(binding.scope, binding.key),
+          binding,
+        ]),
+      );
+      const relationshipBindings = new Map(priorRelationships);
+      const unavailableRelations = new Set([
+        ...evidence.value.sources.flatMap((source) =>
+          source.relationshipBindings.map((binding) => binding.relationId),
+        ),
+        ...existingRelationships.keys(),
+      ]);
+      const relationshipMutations: GraphDataRecord[] = [];
+      const touchedRelationships = new Set<string>();
+      for (const record of relationshipRecords) {
+        const identity = qualified(record.scope, record.key);
+        const sourceReference = qualified(record.from.scope, record.from.key);
+        const targetReference = qualified(record.to.scope, record.to.key);
+        const source = componentIds.get(sourceReference);
+        const target = componentIds.get(targetReference);
+        if (
+          source === undefined ||
+          target === undefined ||
+          !currentComponentIdentities.has(sourceReference) ||
+          !currentComponentIdentities.has(targetReference)
+        )
+          return failure(
+            diagnostic(
+              "unresolved-observation-reference",
+              "An observed relationship endpoint is not exactly bound",
+            ),
+          );
+        const projection = Object.freeze({ source, target, type: record.relationshipType });
+        let binding = relationshipBindings.get(identity);
+        if (binding === undefined) {
+          const relationId = mintIdentity(
+            ids.nextRelationId,
+            unavailableRelations,
+            "relationship-identity-unavailable",
+          );
+          if (!relationId.ok) return relationId;
+          unavailableRelations.add(relationId.value);
+          binding = Object.freeze({
+            key: record.key,
+            present: true,
+            projection,
+            relationId: relationId.value,
+            removed: false,
+            scope: record.scope,
+          });
+          relationshipBindings.set(identity, binding);
+          relationshipMutations.push(
+            Object.freeze({
+              relationship: Object.freeze({
+                id: relationId.value,
+                payload: Object.freeze({}),
+                source,
+                target,
+                type: record.relationshipType,
+              }),
+              type: "upsert",
+            }),
+          );
+          touchedComponents.add(source);
+          touchedRelationships.add(relationId.value);
+          continue;
+        }
+        const existing = existingRelationships.get(binding.relationId);
+        if (existing === undefined) {
+          if (binding.present || !binding.removed) {
+            return failure(
+              diagnostic(
+                "reconciliation-binding-missing",
+                "A relationship binding target is missing",
+              ),
+            );
+          }
+          relationshipMutations.push(
+            Object.freeze({
+              relationship: Object.freeze({
+                id: binding.relationId,
+                payload: Object.freeze({}),
+                source,
+                target,
+                type: record.relationshipType,
+              }),
+              type: "upsert",
+            }),
+          );
+          touchedComponents.add(source);
+          touchedRelationships.add(binding.relationId);
+          relationshipBindings.set(
+            identity,
+            Object.freeze({ ...binding, present: true, projection, removed: false }),
+          );
+          continue;
+        }
+        let appliedProjection = binding.projection;
+        if (relationshipMatches(existing, binding.projection)) {
+          if (!same(binding.projection, projection)) {
+            relationshipMutations.push(
+              Object.freeze({
+                relationship: Object.freeze({
+                  id: binding.relationId,
+                  payload: Object.freeze({}),
+                  source,
+                  target,
+                  type: record.relationshipType,
+                }),
+                type: "upsert",
+              }),
+            );
+            touchedComponents.add(binding.projection.source);
+            touchedComponents.add(source);
+            touchedRelationships.add(binding.relationId);
+          }
+          appliedProjection = projection;
+        }
+        relationshipBindings.set(
+          identity,
+          Object.freeze({
+            ...binding,
+            present: true,
+            projection: appliedProjection,
+            removed: false,
+          }),
+        );
+      }
+      for (const [identity, binding] of relationshipBindings) {
+        if (relationshipRecords.some((record) => qualified(record.scope, record.key) === identity))
+          continue;
+        if (!hasCompleteCoverage(snapshot.value, binding.scope, "relationship")) continue;
+        const existing = existingRelationships.get(binding.relationId);
+        let removed = existing === undefined ? binding.removed : false;
+        if (existing !== undefined && relationshipMatches(existing, binding.projection)) {
+          relationshipMutations.push(Object.freeze({ id: binding.relationId, type: "remove" }));
+          touchedComponents.add(binding.projection.source);
+          touchedRelationships.add(binding.relationId);
+          removed = true;
+        }
+        relationshipBindings.set(identity, Object.freeze({ ...binding, present: false, removed }));
+      }
+      if (relationshipBindings.size > options.bounds.maxRelationships) {
+        return failure(
+          diagnostic(
+            "reconciliation-relationship-limit",
+            "Canonical relationship binding capacity is exceeded",
+          ),
+        );
+      }
+      const nextSource: EvidenceSourceState = Object.freeze({
+        componentBindings: Object.freeze(
+          [...componentBindings.values()].sort((left, right) =>
+            compareText(qualified(left.scope, left.key), qualified(right.scope, right.key)),
+          ),
+        ),
+        relationshipBindings: Object.freeze(
+          [...relationshipBindings.values()].sort((left, right) =>
+            compareText(qualified(left.scope, left.key), qualified(right.scope, right.key)),
+          ),
+        ),
+        snapshot: snapshot.value,
+        sourceKey: key,
+      });
+      if (
+        priorSource !== undefined &&
+        sameObservationContent(priorSource.snapshot, snapshot.value) &&
+        same(priorSource.componentBindings, nextSource.componentBindings) &&
+        same(priorSource.relationshipBindings, nextSource.relationshipBindings) &&
+        componentMutations.length === 0 &&
+        relationshipMutations.length === 0
+      ) {
+        return success(Object.freeze({ generation: generation.value, status: "unchanged" }));
+      }
+      const sources = evidence.value.sources
+        .filter((source) => source.sourceKey !== key)
+        .concat(nextSource)
+        .sort((left, right) => compareText(left.sourceKey, right.sourceKey));
+      const nextEvidence: EvidenceState = Object.freeze({
+        sources: Object.freeze(sources),
+        version: 1,
+      });
+      const expectedRevisions: Array<{ expected: string | null; resource: string }> = [
+        {
+          expected: initialRevisions.value.get(evidenceResource.value) ?? null,
+          resource: evidenceResource.value,
+        },
+      ];
+      for (const id of touchedComponents) {
+        const resource = options.resourceMapper.resourceForComponent(id);
+        if (!resource.ok) return resource;
+        const component = existingComponents.get(id);
+        expectedRevisions.push({
+          expected:
+            component === undefined ? null : (initialRevisions.value.get(resource.value) ?? null),
+          resource: resource.value,
+        });
+      }
+      const requestedResources = expectedRevisions.map((entry) => entry.resource).sort(compareText);
+      if (
+        requestedResources.some(
+          (resource, index) => index > 0 && requestedResources[index - 1] === resource,
+        )
+      ) {
+        return failure(
+          diagnostic("reconciliation-resource-conflict", "Reconciliation resources are ambiguous"),
+        );
+      }
+      if (touchedComponents.size > 0) {
+        try {
+          const confirmed = await options.transactionProvider.snapshot(
+            requestedResources as ResourceKey[],
+          );
+          if (confirmed.generation !== initial.generation || !same(confirmed.state, initial.state))
+            continue;
+          const confirmedRevisions = revisionMap(confirmed.revisions);
+          if (!confirmedRevisions.ok) continue;
+          for (const entry of expectedRevisions)
+            entry.expected = confirmedRevisions.value.get(entry.resource) ?? null;
+        } catch {
+          return failure(
+            diagnostic("reconciliation-snapshot-failed", "Canonical state could not be confirmed"),
+          );
+        }
+      }
+      const request = Object.freeze({
+        affected: Object.freeze({
+          entities: Object.freeze([...touchedComponents].sort(compareText)),
+          relations: Object.freeze([...touchedRelationships].sort(compareText)),
+        }),
+        context: Object.freeze({
+          ownership: Object.freeze({ owner: key, plane: "evidence" }),
+          pinnedComponentIds: Object.freeze([]),
+        }),
+        expectedRevisions: Object.freeze(
+          expectedRevisions.sort((left, right) => compareText(left.resource, right.resource)),
+        ),
+        mutation: Object.freeze({
+          components: Object.freeze(componentMutations),
+          evidence: evidenceGraphData(nextEvidence),
+          relationships: Object.freeze(relationshipMutations),
+        }),
+      });
+      const boundedRequest = copyGraphPayload(request as unknown as GraphData, "transaction", {
+        code: "reconciliation-transaction-limit",
+        maximumDepth: options.bounds.maxTransactionDataDepth,
+        maximumValues: options.bounds.maxTransactionDataValues,
+        message: "Reconciliation exceeds the atomic transaction envelope",
+      });
+      if (!boundedRequest.ok) return boundedRequest;
+      const outcome = await options.transactionExecution.execute(request);
+      if (outcome.status === "conflict") continue;
+      return outcomeResult(outcome);
+    }
+    return failure(
+      diagnostic(
+        "reconciliation-snapshot-conflict",
+        "Canonical state changed repeatedly during reconciliation",
+      ),
+    );
+  };
+
+  return Object.freeze({ reconcile });
+}

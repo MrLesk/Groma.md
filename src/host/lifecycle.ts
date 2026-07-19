@@ -3,6 +3,7 @@ import {
   observeNativePromise,
   defaultObservationSessionBounds,
   parseGraphGeneration,
+  parseResourceKey,
   success,
   type Diagnostic,
   type NativePromiseObservation,
@@ -719,6 +720,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "projectionRead",
         "queryEngine",
         "queries",
+        "reconciliation",
         "resourceMapper",
         "resources",
         "scanners",
@@ -739,27 +741,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "projectionRead",
         "queryEngine",
         "queries",
-        "resourceMapper",
-        "resources",
-        "scanners",
-        "snapshotStateDecoder",
-        "store",
-        "surface",
-        "transactionEngine",
-        "transactionProvider",
-        "workspace",
-      ],
-      [
-        "graph",
-        "invariant",
-        "model",
-        "operations",
-        "projects",
-        "plugins",
-        "projection",
-        "projectionRead",
-        "queryEngine",
-        "queries",
+        "reconciliation",
         "resourceMapper",
         "resources",
         "scanners",
@@ -781,6 +763,29 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
         "projectionRead",
         "queryEngine",
         "queries",
+        "reconciliation",
+        "resourceMapper",
+        "resources",
+        "scanners",
+        "snapshotStateDecoder",
+        "store",
+        "surface",
+        "transactionEngine",
+        "transactionProvider",
+        "workspace",
+      ],
+      [
+        "graph",
+        "invariant",
+        "model",
+        "operations",
+        "projects",
+        "plugins",
+        "projection",
+        "projectionRead",
+        "queryEngine",
+        "queries",
+        "reconciliation",
         "resourceMapper",
         "resources",
         "scanners",
@@ -818,6 +823,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
     "projectionRead",
     "queryEngine",
     "queries",
+    "reconciliation",
     "resourceMapper",
     "resources",
     "snapshotStateDecoder",
@@ -845,6 +851,7 @@ function canonicalComposition(value: unknown): Result<ContainedHostComposition> 
       projectionRead: composition.value.projectionRead,
       queryEngine: composition.value.queryEngine,
       queries: composition.value.queries,
+      reconciliation: composition.value.reconciliation,
       resourceMapper: composition.value.resourceMapper,
       resources: composition.value.resources,
       scanners: scanners.value,
@@ -950,6 +957,20 @@ function validScannerCancellationReport(value: unknown): value is ScannerExecuti
         "signalCount",
         "status",
       ],
+      [
+        "apiVersion",
+        "batchCount",
+        "diagnostics",
+        "epoch",
+        "lastHeartbeatSequence",
+        "lastSequence",
+        "projectId",
+        "recordCount",
+        "recovery",
+        "scannerId",
+        "signalCount",
+        "status",
+      ],
     ],
     "invalid-host-scanner-cleanup",
     "Scanner cancellation report",
@@ -964,11 +985,41 @@ function validScannerCancellationReport(value: unknown): value is ScannerExecuti
     report.value.status === "cancelled" ||
     report.value.status === "completed" ||
     report.value.status === "expired" ||
-    report.value.status === "failed";
+    report.value.status === "failed" ||
+    report.value.status === "indeterminate";
   const lastSequence = report.value.lastSequence;
   const lastHeartbeatSequence = report.value.lastHeartbeatSequence;
   const signalCount = report.value.signalCount;
   const batchCount = report.value.batchCount;
+  const recovery = report.value.recovery;
+  const validRecovery = (() => {
+    if (report.value.status !== "indeterminate") return recovery === undefined;
+    const parsed = inspectHostRecord(
+      recovery,
+      [["baseGeneration", "generation", "resources", "token"]],
+      "invalid-host-scanner-cleanup",
+      "Scanner recovery",
+    );
+    if (!parsed.ok) return false;
+    const baseGeneration = parseGraphGeneration(parsed.value.baseGeneration);
+    const generation = parseGraphGeneration(parsed.value.generation);
+    const resources = inspectHostDenseArray(
+      parsed.value.resources,
+      scannerCleanupReportLimit,
+      "invalid-host-scanner-cleanup",
+      "Scanner recovery resources",
+    );
+    return (
+      baseGeneration.ok &&
+      generation.ok &&
+      generation.value === baseGeneration.value + 1 &&
+      typeof parsed.value.token === "string" &&
+      parsed.value.token.length > 0 &&
+      parsed.value.token.length <= 4_096 &&
+      resources.ok &&
+      resources.value.every((resource) => parseResourceKey(resource).ok)
+    );
+  })();
   return (
     diagnostics.ok &&
     report.value.apiVersion === scannerExecutionApiVersion &&
@@ -981,6 +1032,7 @@ function validScannerCancellationReport(value: unknown): value is ScannerExecuti
     report.value.scannerId.length <= defaultObservationSessionBounds.maxTokenCharacters &&
     scannerCleanupScannerIdPattern.test(report.value.scannerId) &&
     terminalStatus &&
+    validRecovery &&
     validScannerReportCount(batchCount, defaultObservationSessionBounds.maxBatches) &&
     validScannerReportCount(report.value.recordCount, defaultObservationSessionBounds.maxRecords) &&
     validScannerReportCount(signalCount, defaultObservationSessionBounds.maxSignals) &&

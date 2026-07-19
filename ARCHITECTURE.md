@@ -1,8 +1,8 @@
 # Groma Architecture
 
 The [Manifesto](MANIFESTO.md) is authoritative. This document describes the architecture that
-exists in the repository today. It does not claim that the public scan, reconcile, or visual
-workflow has shipped.
+exists in the repository today. It does not claim that the public scan or visual workflow has
+shipped.
 
 ## The shortest path
 
@@ -12,9 +12,9 @@ Groma is being built around one local workflow:
 groma init -> groma scan -> groma
 ```
 
-`groma init` and the canonical read/write foundation exist. The built-in TypeScript/Bun scanner
-exists behind an internal Host composition. The public `scan`, reconciliation, and visual renderer
-remain future vertical slices.
+`groma init`, the canonical read/write foundation, and built-in TypeScript/Bun scan reconciliation
+exist behind the Host composition. The public `scan` command and visual renderer remain the next
+vertical slices.
 
 ## Semantic boundary
 
@@ -47,7 +47,8 @@ Core <- Standard Model <- Application <- Host <- CLI
   transaction invariant for that vocabulary.
 - `src/application` composes use cases over capabilities. It does not own storage or UI.
 - `src/persistence` provides local resources, readable Markdown intent, aliases, atomic canonical
-  transactions, and an in-memory disposable projection rebuilt from canonical reads.
+  transactions, one readable evidence document, and an in-memory disposable projection rebuilt
+  from canonical reads.
 - `src/plugin-sdk` exposes the blind scanner contract and the Core types needed to implement it.
 - `src/host` composes the built-in providers, owns local project/source access, and contains one
   bounded scan run.
@@ -63,6 +64,13 @@ Application mutations prepare a complete transaction and publish atomically thro
 transaction provider. An uncertain filesystem result is reported as indeterminate rather than
 guessed.
 
+Completed observations and their source-owned bindings are stored in one deterministic
+`groma/evidence.md` document. Reconciliation creates ordinary canonical automatic components with
+opaque IDs, reuses exact source/scope/key bindings across scans, and refreshes an automatic field
+only while its current value still equals the prior observation. Curated overrides and conceptual
+parents therefore survive later scans. Evidence, component changes, relationships, and projection
+notification share one transaction.
+
 Schema migration is intentionally absent before a real incompatible release exists. The current
 schema is exact-validated and fails closed when unsupported.
 
@@ -73,9 +81,15 @@ scanner configuration. It cannot read canonical intent, prior evidence, visual s
 scanner's output.
 
 One Host scan run creates an in-memory finite observation session. Batches become publishable only
-after the scanner reports successful complete coverage. Failure, cancellation, timeout, incomplete
-coverage, or malformed output produces no completed snapshot and never invokes the evidence
-consumer. Provisional batches, heartbeats, recovery lanes, and observation journals are not durable.
+after the scanner completes the session. A completed session may report partial coverage; omissions
+remove scanner-owned relationships or mark bindings missing only for the exact scope and record kind
+whose coverage is complete. Failure, cancellation, timeout, an incomplete session, or malformed
+output produces no completed snapshot and never invokes reconciliation. Provisional batches,
+heartbeats, recovery lanes, and observation journals are not durable.
+
+Cancellation is accepted until completed-snapshot publication begins. Once the atomic reconciliation
+handoff starts, the run waits for publication and reports its real completed or failed outcome; it
+never reports cancellation while a detached write can still commit later.
 
 This is a same-process trusted composition with ordinary boundary validation. Groma does not defend
 against a plugin deliberately mutating JavaScript intrinsics or using Proxy traps inside the same

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  parseGraphGeneration,
+  parseResourceKey,
   pluginRuntimeApiVersion,
   success,
   type CompletedObservationSnapshot,
@@ -191,8 +193,9 @@ describe("scanner execution runtime", () => {
     expect(await second.completion).toMatchObject({ status: "cancelled" });
   });
 
-  test("cancels completed-snapshot consumption without publishing it", async () => {
+  test("does not report cancellation after completed-snapshot publication starts", async () => {
     const consuming = deferred<void>();
+    const release = deferred<void>();
     let published = false;
     const scanner: Scanner = Object.freeze({
       scan: async (request: ScannerRequest) => {
@@ -216,10 +219,9 @@ describe("scanner execution runtime", () => {
       consumer: Object.freeze({
         consume: async (_snapshot: CompletedObservationSnapshot, cancellation: AbortSignal) => {
           consuming.resolve();
-          await new Promise<void>((resolve) =>
-            cancellation.addEventListener("abort", () => resolve(), { once: true }),
-          );
-          if (!cancellation.aborted) published = true;
+          await release.promise;
+          expect(cancellation.aborted).toBeFalse();
+          published = true;
           return success(undefined);
         },
       }),
@@ -227,7 +229,55 @@ describe("scanner execution runtime", () => {
     const session = valueOf(await execution.start({ projectId: project.id, scannerId }));
     await consuming.promise;
     session.cancel();
-    expect(await session.completion).toMatchObject({ status: "cancelled" });
-    expect(published).toBeFalse();
+    release.resolve();
+    expect(await session.completion).toMatchObject({ status: "completed" });
+    expect(published).toBeTrue();
+  });
+
+  test("preserves an indeterminate completed-snapshot handoff", async () => {
+    const scanner: Scanner = Object.freeze({
+      scan: async (request: ScannerRequest) => {
+        expect(
+          request.observations.complete({
+            coverage: Object.freeze([
+              Object.freeze({
+                kinds: Object.freeze(["component-candidate" as const]),
+                scope: "source",
+                state: "complete" as const,
+              }),
+            ]),
+            epoch: request.session.epoch,
+            sequence: 1,
+          }),
+        ).toMatchObject({ ok: true });
+        return success(undefined);
+      },
+    });
+    const recovery = Object.freeze({
+      baseGeneration: valueOf(parseGraphGeneration(0)),
+      generation: valueOf(parseGraphGeneration(1)),
+      resources: Object.freeze([valueOf(parseResourceKey("groma/evidence.md"))]),
+      token: "prepared-fixture",
+    });
+    const execution = runtime(scanner, {
+      consumer: Object.freeze({
+        consume: async () =>
+          success(
+            Object.freeze({
+              diagnostics: Object.freeze([
+                Object.freeze({ code: "transaction-outcome-indeterminate", message: "Recover" }),
+              ]),
+              recovery,
+              status: "indeterminate" as const,
+            }),
+          ),
+      }),
+    });
+    const session = valueOf(await execution.start({ projectId: project.id, scannerId }));
+    expect(await session.completion).toMatchObject({
+      diagnostics: [{ code: "transaction-outcome-indeterminate" }],
+      recovery: { token: "prepared-fixture" },
+      status: "indeterminate",
+    });
   });
 });

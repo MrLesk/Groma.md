@@ -1429,6 +1429,8 @@ function decode(
     [
       ["components", "relationships"],
       ["aliases", "components", "relationships"],
+      ["components", "evidence", "relationships"],
+      ["aliases", "components", "evidence", "relationships"],
     ],
     "invalid-standard-model-state",
     "Standard Model transaction state",
@@ -1522,6 +1524,8 @@ function decode(
     [
       ["components", "relationships"],
       ["aliases", "components", "relationships"],
+      ["components", "evidence", "relationships"],
+      ["aliases", "components", "evidence", "relationships"],
     ],
     "invalid-standard-model-state",
     "Standard Model transaction state",

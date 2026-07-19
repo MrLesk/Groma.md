@@ -8,6 +8,7 @@ import {
   type EntropySource,
   type Result,
   type RunningPluginGraph,
+  type TransactionRecovery,
 } from "../core/index.ts";
 import {
   createScannerRequest,
@@ -24,7 +25,8 @@ import type {
 } from "./local-project-registry.ts";
 
 export const scannerExecutionApiVersion = "groma.scanner-execution/v1" as const;
-export type ScannerExecutionStatus = "cancelled" | "completed" | "failed" | "running";
+export type ScannerExecutionStatus =
+  "cancelled" | "completed" | "failed" | "indeterminate" | "running";
 export type ScannerExecutionTerminalStatus = Exclude<ScannerExecutionStatus, "running">;
 export interface ScannerExecutionInspection {
   readonly apiVersion: typeof scannerExecutionApiVersion;
@@ -40,6 +42,7 @@ export interface ScannerExecutionInspection {
 }
 export interface ScannerExecutionReport extends ScannerExecutionInspection {
   readonly diagnostics: readonly Diagnostic[];
+  readonly recovery?: TransactionRecovery;
   readonly status: ScannerExecutionTerminalStatus;
 }
 export interface ScannerExecutionSession {
@@ -58,7 +61,15 @@ export interface ScannerRuntimeRecoveryReport {
   readonly consumed: number;
 }
 export interface CompletedObservationConsumer {
-  consume(snapshot: CompletedObservationSnapshot, cancellation: AbortSignal): Promise<Result<void>>;
+  consume(
+    snapshot: CompletedObservationSnapshot,
+    cancellation: AbortSignal,
+  ): Promise<Result<void | CompletedObservationIndeterminate>>;
+}
+export interface CompletedObservationIndeterminate {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly recovery: TransactionRecovery;
+  readonly status: "indeterminate";
 }
 export type ScannerProjectResourcesFactory = (
   project: ProjectRegistrationSnapshot,
@@ -281,6 +292,7 @@ export function createScannerExecutionRuntime(
     const observation = created.value;
     let status: ScannerExecutionStatus = "running";
     let cancelled = false;
+    let publicationStarted = false;
     const cancellationController = new AbortController();
     let resolveCancellation!: () => void;
     const cancellation = new Promise<void>((resolve) => {
@@ -302,7 +314,7 @@ export function createScannerExecutionRuntime(
       });
     };
     const cancel = () => {
-      if (status !== "running") return;
+      if (status !== "running" || publicationStarted) return;
       cancelled = true;
       cancellationController.abort();
       observation.cancel({ epoch: begin.epoch, sequence: observation.inspect().lastSequence + 1 });
@@ -350,6 +362,7 @@ export function createScannerExecutionRuntime(
     if (request.cancellation?.aborted) cancel();
     const completion = Promise.resolve().then(async (): Promise<ScannerExecutionReport> => {
       const failures: Diagnostic[] = [];
+      let recovery: TransactionRecovery | undefined;
       const settled = cancelled
         ? ({ type: "cancelled" } as const)
         : await (async () => {
@@ -386,26 +399,30 @@ export function createScannerExecutionRuntime(
               "Scanner returned without completing its observation session",
             ),
           );
+        } else if (cancelled) {
+          status = "cancelled";
         } else {
-          const consumed = await Promise.race([
-            Promise.resolve()
-              .then(() => options.consumer.consume(snapshot.value, cancellationController.signal))
-              .catch(() =>
-                failure(
-                  diagnostic(
-                    "scanner-handoff-consumer-failed",
-                    "Completed scanner observations could not be consumed",
-                  ),
+          publicationStarted = true;
+          const consumed = await Promise.resolve()
+            .then(() => options.consumer.consume(snapshot.value, cancellationController.signal))
+            .catch(() =>
+              failure(
+                diagnostic(
+                  "scanner-handoff-consumer-failed",
+                  "Completed scanner observations could not be consumed",
                 ),
-              )
-              .then((result) => ({ result, type: "consumed" as const })),
-            cancellation.then(() => ({ type: "cancelled" as const })),
-          ]);
-          if (consumed.type === "cancelled") status = "cancelled";
-          else if (consumed.result.ok) status = "completed";
-          else {
+              ),
+            );
+          if (consumed.ok) {
+            if (consumed.value === undefined) status = "completed";
+            else {
+              status = "indeterminate";
+              recovery = consumed.value.recovery;
+              failures.push(...consumed.value.diagnostics);
+            }
+          } else {
             status = "failed";
-            failures.push(...consumed.result.diagnostics);
+            failures.push(...consumed.diagnostics);
           }
         }
       }
@@ -415,6 +432,7 @@ export function createScannerExecutionRuntime(
       return Object.freeze({
         ...inspect(),
         diagnostics: boundedDiagnostics(failures, selected.maxDiagnostics),
+        ...(recovery === undefined ? {} : { recovery }),
         status: status as ScannerExecutionTerminalStatus,
       });
     });

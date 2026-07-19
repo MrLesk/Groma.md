@@ -13,8 +13,16 @@ certification are deliberately absent.
 One configured scan is bounded by project coverage, resource limits, observation limits, and a
 maximum duration. The scanner receives only its blind project-resource capability and configuration.
 The runtime buffers observations in a finite in-memory session and invokes the consumer only with a
-successfully completed snapshot. Failure, cancellation, timeout, incomplete coverage, or malformed
+successfully completed snapshot. Failure, cancellation, timeout, an incomplete session, or malformed
 output invokes no consumer and leaves the last published blueprint untouched.
+
+Cancellation stops at the publication boundary. After completed-snapshot consumption starts, the
+runtime waits for it and reports the actual completed or failed result instead of allowing a detached
+canonical commit after a cancelled report.
+
+The default consumer is the Application reconciliation operation. It records source-owned evidence,
+maintains stable opaque component bindings, and publishes all resulting canonical and projection
+changes atomically. This composition is internal until the public `scan` command is added.
 
 There is no durable provisional scan state, observation journal, restart replay, recovery lane,
 heartbeat lease, or quarantine. `recover()` reports no pending work because incomplete work is

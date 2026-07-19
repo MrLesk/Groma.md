@@ -39,6 +39,7 @@ import {
   type MarkdownIntentSnapshot,
 } from "./markdown-intent-store.ts";
 import type { AliasStore, AliasStoreSnapshot } from "./alias-store.ts";
+import type { MarkdownEvidenceStore, MarkdownEvidenceSnapshot } from "./markdown-evidence-store.ts";
 import {
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
@@ -97,6 +98,7 @@ export interface CanonicalTransactionAdapter {
 
 export interface MarkdownIntentTransactionAdapterOptions {
   readonly aliases?: AliasStore;
+  readonly evidence?: MarkdownEvidenceStore;
   readonly maxAliases?: number;
   readonly model: StandardModelCapability;
   readonly store: MarkdownIntentStore;
@@ -276,6 +278,7 @@ function bounds(input: Partial<LocalTransactionJournalBounds> | undefined) {
 function stateFromSnapshot(
   snapshot: MarkdownIntentSnapshot,
   aliases?: AliasStoreSnapshot,
+  evidence?: MarkdownEvidenceSnapshot,
 ): StandardModelTransactionState {
   const components = snapshot.entities
     .map((entity) => Object.freeze({ id: entity.id, kind: entity.kind, payload: entity.payload }))
@@ -306,6 +309,7 @@ function stateFromSnapshot(
           ),
         }),
     components: Object.freeze(components),
+    ...(evidence === undefined ? {} : { evidence: evidence.state }),
     relationships: Object.freeze(relationships),
   });
 }
@@ -660,6 +664,9 @@ export function createMarkdownIntentTransactionAdapter(
   const load = async (): Promise<Result<CanonicalTransactionSnapshot>> => {
     const aliasSnapshot = options.aliases === undefined ? undefined : await options.aliases.load();
     if (aliasSnapshot !== undefined && !aliasSnapshot.ok) return aliasSnapshot;
+    const evidenceSnapshot =
+      options.evidence === undefined ? undefined : await options.evidence.load();
+    if (evidenceSnapshot !== undefined && !evidenceSnapshot.ok) return evidenceSnapshot;
     const loaded = await options.store.load(aliasSnapshot?.value.aliases);
     if (!loaded.ok) return loaded;
     const resources = loaded.value.documents
@@ -681,11 +688,22 @@ export function createMarkdownIntentTransactionAdapter(
               }),
             ],
       )
+      .concat(
+        evidenceSnapshot?.value.revision === null || evidenceSnapshot === undefined
+          ? []
+          : [
+              Object.freeze({
+                locator: evidenceSnapshot.value.locator,
+                resource: evidenceSnapshot.value.resource,
+                revision: evidenceSnapshot.value.revision,
+              }),
+            ],
+      )
       .sort((left, right) => compareText(left.resource, right.resource));
     return success(
       Object.freeze({
         resources: Object.freeze(resources),
-        state: stateFromSnapshot(loaded.value, aliasSnapshot?.value),
+        state: stateFromSnapshot(loaded.value, aliasSnapshot?.value, evidenceSnapshot?.value),
       }),
     );
   };
@@ -773,6 +791,39 @@ export function createMarkdownIntentTransactionAdapter(
         }),
       );
     }
+    const mutation = proposal.mutation as StandardModelTransactionMutation & {
+      readonly evidence?: GraphData;
+    };
+    if (Object.hasOwn(mutation, "evidence")) {
+      if (options.evidence === undefined || mutation.evidence === undefined) {
+        return failure(
+          diagnostic(
+            "evidence-store-unavailable",
+            "Canonical evidence persistence is unavailable for this transaction",
+          ),
+        );
+      }
+      const current = options.evidence.serialize(mutation.evidence);
+      if (!current.ok) return current;
+      if (!expected.has(current.value.resource)) {
+        return failure(
+          diagnostic(
+            "transaction-resource-set-mismatch",
+            "The canonical evidence resource must have an expected revision",
+            { resource: current.value.resource },
+          ),
+        );
+      }
+      targets.push(
+        Object.freeze({
+          expected: expected.get(current.value.resource)!,
+          locator: current.value.locator,
+          replacement: current.value.bytes!,
+          resource: current.value.resource,
+          result: current.value.revision,
+        }),
+      );
+    }
     if (targets.length !== expected.size) {
       return failure(
         diagnostic(
@@ -810,6 +861,16 @@ export function createMarkdownIntentTransactionAdapter(
                 ) as GraphData,
               }),
           components: Object.freeze(components),
+          ...(Object.hasOwn(mutation, "evidence")
+            ? { evidence: mutation.evidence! }
+            : typeof proposal.priorState === "object" &&
+                proposal.priorState !== null &&
+                !Array.isArray(proposal.priorState) &&
+                Object.hasOwn(proposal.priorState, "evidence")
+              ? {
+                  evidence: (proposal.priorState as Readonly<Record<string, GraphData>>).evidence!,
+                }
+              : {}),
           relationships: Object.freeze(relationships),
         }),
         targets: Object.freeze(targets),
