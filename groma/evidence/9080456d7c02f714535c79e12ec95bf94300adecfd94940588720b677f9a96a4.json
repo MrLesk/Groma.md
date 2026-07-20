@@ -189,6 +189,21 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_ae3b6aeb186f6e1541d02b0c056c7ca2",
+        "key": "candidate.component-candidate.a60f3eca3a716529a7bd658285c8ec0287d36d782bf221149dce688fdbac3717",
+        "present": true,
+        "projection": {
+          "name": "@dagrejs/dagre",
+          "type": "external"
+        },
+        "scaleAssessment": {
+          "derivation": "groma/structural-scale/v1",
+          "proposal": "element",
+          "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_d900583069d4f258c239e4be909e20a9",
         "key": "candidate.component-candidate.c1112eab6fb8a2c35abc037797d0ad45dcfefd291a57550b48200a31e7af84e3",
         "present": true,
@@ -260,6 +275,21 @@
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
+          "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_5e8bd0eb44079871a6be2f920df0d5a2",
+        "key": "candidate.component-candidate.ed1eb4b58e6804dc4399eb6f2b3755828f5c8025e4097f4bfe7a81cbc4c465f3",
+        "present": true,
+        "projection": {
+          "name": "@xyflow/react",
+          "type": "external"
+        },
+        "scaleAssessment": {
+          "derivation": "groma/structural-scale/v1",
+          "proposal": "element",
           "status": "proposed"
         },
         "scope": "workspace"
@@ -414,6 +444,18 @@
         "scope": "workspace"
       },
       {
+        "key": "candidate.relationship.60ab0019056ef32f048964555fea97277dc4f55546ac88e136317184ad300be6",
+        "present": true,
+        "projection": {
+          "source": "ent_df026a00c094f2c586ac953ff361783e",
+          "target": "ent_5e8bd0eb44079871a6be2f920df0d5a2",
+          "type": "imports"
+        },
+        "relationId": "rel_8ed2a4fe9e2d3e0c7fcaba8cfdfca01e",
+        "removed": false,
+        "scope": "workspace"
+      },
+      {
         "key": "candidate.relationship.6be3756393203870fd3d8b6669f4b3bbba55aa33a8dcaab4199e21d75f2e0809",
         "present": true,
         "projection": {
@@ -542,6 +584,18 @@
           "type": "imports"
         },
         "relationId": "rel_9ad12ca9dff00a83c64ac6169e0483b7",
+        "removed": false,
+        "scope": "workspace"
+      },
+      {
+        "key": "candidate.relationship.90e615fed45988bebd38a1cb06c9867f430d424580953939345c59f0c6ebe57d",
+        "present": true,
+        "projection": {
+          "source": "ent_df026a00c094f2c586ac953ff361783e",
+          "target": "ent_ae3b6aeb186f6e1541d02b0c056c7ca2",
+          "type": "imports"
+        },
+        "relationId": "rel_28d618e37c491dc411b72cf4df2a4b85",
         "removed": false,
         "scope": "workspace"
       },
@@ -752,7 +806,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_fd45af5cb34f38000633c6b7858d035e",
+      "epoch": "epoch_ae6fdd30f1dd93ffceadb796a2564e40",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -766,7 +820,7 @@
           "name": "defineScanner",
           "provenance": [
             {
-              "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
+              "fingerprint": "sha256:06ef774d44363d761cc35e9efd4011cc4c4f5b4632e6dcee97a0a9f2843d5e24",
               "resource": "package.json",
               "scope": "workspace"
             },
@@ -803,7 +857,7 @@
           "name": "createScannerRequest",
           "provenance": [
             {
-              "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
+              "fingerprint": "sha256:06ef774d44363d761cc35e9efd4011cc4c4f5b4632e6dcee97a0a9f2843d5e24",
               "resource": "package.json",
               "scope": "workspace"
             },
@@ -1071,7 +1125,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
+              "fingerprint": "sha256:06ef774d44363d761cc35e9efd4011cc4c4f5b4632e6dcee97a0a9f2843d5e24",
               "resource": "package.json",
               "scope": "workspace"
             }
@@ -1097,7 +1151,30 @@
           "scope": "workspace",
           "signals": {
             "declaredBoundary": true,
-            "fileCount": 5,
+            "fileCount": 6,
+            "reuseBreadth": 1
+          }
+        },
+        {
+          "candidate": {
+            "name": "@dagrejs/dagre",
+            "type": "external"
+          },
+          "key": "candidate.component-candidate.a60f3eca3a716529a7bd658285c8ec0287d36d782bf221149dce688fdbac3717",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:be8447433fadddd5711de223d08f859ec91339811624679b039479a256aa81d2",
+              "range": {
+                "endByteExclusive": 34,
+                "startByte": 18
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace",
+          "signals": {
             "reuseBreadth": 1
           }
         },
@@ -1208,6 +1285,29 @@
             "declaredBoundary": true,
             "fileCount": 9,
             "reuseBreadth": 3
+          }
+        },
+        {
+          "candidate": {
+            "name": "@xyflow/react",
+            "type": "external"
+          },
+          "key": "candidate.component-candidate.ed1eb4b58e6804dc4399eb6f2b3755828f5c8025e4097f4bfe7a81cbc4c465f3",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:be8447433fadddd5711de223d08f859ec91339811624679b039479a256aa81d2",
+              "range": {
+                "endByteExclusive": 98,
+                "startByte": 83
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace",
+          "signals": {
+            "reuseBreadth": 1
           }
         },
         {
@@ -2185,6 +2285,31 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.60ab0019056ef32f048964555fea97277dc4f55546ac88e136317184ad300be6",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:be8447433fadddd5711de223d08f859ec91339811624679b039479a256aa81d2",
+              "range": {
+                "endByteExclusive": 98,
+                "startByte": 83
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "imports",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.ed1eb4b58e6804dc4399eb6f2b3755828f5c8025e4097f4bfe7a81cbc4c465f3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
             "scope": "workspace"
           },
@@ -2618,6 +2743,31 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.90e615fed45988bebd38a1cb06c9867f430d424580953939345c59f0c6ebe57d",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:be8447433fadddd5711de223d08f859ec91339811624679b039479a256aa81d2",
+              "range": {
+                "endByteExclusive": 34,
+                "startByte": 18
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "imports",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.a60f3eca3a716529a7bd658285c8ec0287d36d782bf221149dce688fdbac3717",
             "scope": "workspace"
           }
         },
