@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   fetchChildren,
+  fetchConnections,
   fetchRoots,
   fetchSearch,
+  type ApiComponentScale,
   type ApiFailure,
   type ApiSearchPage,
 } from "./api.ts";
@@ -20,6 +22,7 @@ import { SpecPanel } from "./spec.tsx";
 
 const ROOT_LIMIT = 20;
 const CHILD_LIMIT = 10;
+const CONNECTION_LIMIT = 100;
 const SEARCH_LIMIT = 20;
 
 interface SearchState {
@@ -34,6 +37,10 @@ export function App() {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState<SearchState>({ open: false, text: "" });
+  const [dependencies, setDependencies] = useState<
+    readonly { source: string; target: string; type: string }[]
+  >([]);
+  const [visibleScale, setVisibleScale] = useState<ApiComponentScale | undefined>(undefined);
   const pending = useRef(new Set<string>());
 
   useEffect(() => {
@@ -42,6 +49,26 @@ export function App() {
       if (disposed) return;
       if (result.ok) setModel((current) => mergeRootsPage(current, result.value));
       else setFailure(result);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  // One bounded page of observed dependencies, so the sheet can draw what the
+  // scan already knows about how the parts depend on each other.
+  useEffect(() => {
+    let disposed = false;
+    void fetchConnections(CONNECTION_LIMIT).then((result) => {
+      if (disposed || !result.ok) return;
+      const edges = result.value.items.flatMap((item) =>
+        item.relationships.map((relationship) => ({
+          source: relationship.source,
+          target: relationship.target,
+          type: relationship.type,
+        })),
+      );
+      setDependencies(edges);
     });
     return () => {
       disposed = true;
@@ -194,7 +221,10 @@ export function App() {
         ) : (
           <div className="h-full pr-0 md:pr-72">
             <Canvas
+              dependencies={dependencies}
               folded={folded}
+              onVisibleScale={setVisibleScale}
+              visibleScale={visibleScale}
               model={model}
               onExpand={onExpand}
               onLoadMoreChildren={onLoadMoreChildren}

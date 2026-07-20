@@ -98,6 +98,18 @@ const apiRoutes: ReadonlyMap<string, ApiHandler> = new Map<string, ApiHandler>([
     },
   ],
   [
+    // One bounded page of components with their relationships: the canvas needs
+    // dependency edges for everything it draws, not one component at a time.
+    "/api/connections",
+    async (url, operations) => {
+      const page = pageRequest(url);
+      if (page === undefined) {
+        return apiFailure(400, "web-invalid-request", "limit must be an integer from 1 to 100");
+      }
+      return apiJson(await operations.exportBlueprint(page), 200);
+    },
+  ],
+  [
     "/api/search",
     async (url, operations) => {
       const page = pageRequest(url);

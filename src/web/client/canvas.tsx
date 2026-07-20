@@ -11,10 +11,13 @@ import {
 import { createContext, useContext, useMemo, type KeyboardEvent, type ReactNode } from "react";
 
 import type { BlueprintModel } from "./model.ts";
+import type { ApiComponentScale } from "./api.ts";
 import {
   buildBlueprintFlowGraph,
   nextScaleLabel,
+  SCALE_ORDER,
   type BlueprintFlowNode,
+  type BlueprintGroupNode,
   type BlueprintNotation,
 } from "./graph.ts";
 
@@ -27,6 +30,12 @@ interface CanvasActions {
 }
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
+
+/** Keeps the drawing clear of the fixed title block and view controls. */
+const FIT_VIEW = Object.freeze({
+  maxZoom: 1,
+  padding: Object.freeze({ bottom: "9%", left: "4%", right: "4%", top: "26%" }),
+});
 
 const NOTATION_LABELS: Readonly<Record<BlueprintNotation, string>> = Object.freeze({
   domain: "domain plate",
@@ -69,6 +78,16 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
       >
         {data.label}
       </button>
+      <ul className="groma-node__evidence" aria-label={`Observed facts about ${data.label}`}>
+        {data.shared ? <li className="groma-chip groma-chip--shared">shared</li> : null}
+        {data.entryPoint ? <li className="groma-chip groma-chip--entry">entry</li> : null}
+        {data.dependencyCount > 0 ? (
+          <li className="groma-chip">
+            {data.dependencyCount} link{data.dependencyCount === 1 ? "" : "s"}
+          </li>
+        ) : null}
+        {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
+      </ul>
       <div className="groma-node__disclosure nodrag nopan">
         {data.childState === "empty" ? (
           <span className="groma-node__terminal">No contained components</span>
@@ -106,7 +125,18 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   );
 }
 
-const NODE_TYPES = Object.freeze({ component: ComponentNode });
+function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
+  return (
+    <div
+      className={`groma-group groma-group--${data.kind} groma-group--${data.notation}`}
+      data-scale={data.notation}
+    >
+      <span className="groma-group__title">{data.label}</span>
+    </div>
+  );
+}
+
+const NODE_TYPES = Object.freeze({ component: ComponentNode, group: GroupNode });
 
 function LegendItem({ notation }: { notation: BlueprintNotation }) {
   return (
@@ -120,12 +150,16 @@ function LegendItem({ notation }: { notation: BlueprintNotation }) {
 }
 
 export interface CanvasProps extends CanvasActions {
+  readonly dependencies: readonly { source: string; target: string; type: string }[];
   readonly folded: ReadonlySet<string>;
   readonly model: BlueprintModel;
+  readonly onVisibleScale: (scale: ApiComponentScale | undefined) => void;
   readonly selectedId?: string | undefined;
+  readonly visibleScale: ApiComponentScale | undefined;
 }
 
 export function Canvas({
+  dependencies,
   folded,
   model,
   onExpand,
@@ -133,9 +167,14 @@ export function Canvas({
   onLoadMoreRoots,
   onSelect,
   onToggleFold,
+  onVisibleScale,
   selectedId,
+  visibleScale,
 }: CanvasProps) {
-  const graph = useMemo(() => buildBlueprintFlowGraph(model, folded), [folded, model]);
+  const graph = useMemo(
+    () => buildBlueprintFlowGraph({ dependencies, folded, model, visibleScale }),
+    [dependencies, folded, model, visibleScale],
+  );
   const nodes = useMemo(
     () => graph.nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
     [graph.nodes, selectedId],
@@ -148,12 +187,13 @@ export function Canvas({
   return (
     <CanvasActionsContext.Provider value={actions}>
       <div className="groma-flow" data-renderer="react-flow-dagre">
-        <ReactFlow<BlueprintFlowNode>
+        <ReactFlow<BlueprintFlowNode | BlueprintGroupNode>
+          key={visibleScale ?? "everything"}
           nodes={[...nodes]}
           edges={[...graph.edges]}
           nodeTypes={NODE_TYPES}
           fitView
-          fitViewOptions={{ maxZoom: 1, padding: 0.22 }}
+          fitViewOptions={FIT_VIEW}
           minZoom={0.12}
           maxZoom={2.5}
           nodesConnectable={false}
@@ -172,7 +212,7 @@ export function Canvas({
             position="bottom-left"
             orientation="horizontal"
             showInteractive={false}
-            fitViewOptions={{ maxZoom: 1, padding: 0.22 }}
+            fitViewOptions={FIT_VIEW}
           />
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
@@ -180,16 +220,38 @@ export function Canvas({
               <span>Generation {model.generation}</span>
               <span>{model.nodes.size} loaded</span>
             </div>
-            <ol aria-label="Component scale notation">
-              <LegendItem notation="system" />
-              <LegendItem notation="domain" />
-              <LegendItem notation="part" />
-              <LegendItem notation="element" />
-              <LegendItem notation="unscaled" />
-            </ol>
+            <div className="groma-scale-selector">
+              <span id="groma-scale-label">Show down to</span>
+              <div role="group" aria-labelledby="groma-scale-label">
+                {SCALE_ORDER.map((scale) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    aria-pressed={visibleScale === scale}
+                    onClick={() => onVisibleScale(visibleScale === scale ? undefined : scale)}
+                  >
+                    {scale}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  aria-pressed={visibleScale === undefined}
+                  onClick={() => onVisibleScale(undefined)}
+                >
+                  everything
+                </button>
+              </div>
+            </div>
+            {graph.notations.length > 0 ? (
+              <ol aria-label="Component scale notation">
+                {graph.notations.map((notation) => (
+                  <LegendItem key={notation} notation={notation} />
+                ))}
+              </ol>
+            ) : null}
             <p className="groma-title-block__hint">
-              Open one component to descend one bounded page. Tab reaches every component and view
-              control.
+              Scale sets what the sheet shows; zoom only changes how large it looks. Tab reaches
+              every component and view control.
             </p>
           </Panel>
           {model.hasMoreRoots ? (
