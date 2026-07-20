@@ -377,6 +377,7 @@ async function execute(
   reader: CliInputReader,
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
+  confirmInit?: (question: string) => Promise<boolean>,
 ): Promise<CliCommandResult> {
   const command = invocation.command;
   if (command.kind === "overview") return overview(command, context, terminal);
@@ -393,6 +394,30 @@ async function execute(
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
   }
   if (command.kind === "scan") {
+    if (confirmInit !== undefined && context.workspace.status().state === "missing") {
+      const accepted = await confirmInit(
+        "No groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
+      );
+      if (accepted) {
+        const initialized = await context.initialization.initialize(Object.freeze({}));
+        if (!initialized.ok) return applicationResult(command, initialized);
+        if (initialized.value.status !== "initialized") {
+          return result(
+            command,
+            initialized.value.status === "already-initialized"
+              ? CLI_EXIT.success
+              : initialized.value.status === "conflict"
+                ? CLI_EXIT.workspace
+                : CLI_EXIT.infrastructure,
+            false,
+            initialized,
+          );
+        }
+        const recovered = await context.workspace.recover();
+        if (!recovered.ok) return applicationResult(command, recovered);
+      }
+      // A declined offer falls through to the unchanged missing-workspace diagnostic.
+    }
     const listed = await context.projects.list();
     if (!listed.ok) return applicationResult(command, listed);
     let project;
@@ -646,6 +671,7 @@ export function createCliSurfaceController(
   reader: CliInputReader,
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
+  confirmInit?: (question: string) => Promise<boolean>,
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
   let completion: Promise<void> | undefined;
@@ -657,7 +683,7 @@ export function createCliSurfaceController(
     start(context: HostSurfaceContext) {
       if (started) throw new Error("CLI surface can start only once");
       started = true;
-      completion = execute(invocation, context, reader, terminal, webReady).then(
+      completion = execute(invocation, context, reader, terminal, webReady, confirmInit).then(
         (value) => {
           if (!stopped || longRunning) captured = value;
         },

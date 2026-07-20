@@ -40,6 +40,7 @@ export interface ProgramOutput {
 }
 
 export interface ProgramOptions {
+  readonly confirm?: (question: string) => Promise<boolean>;
   readonly createRegistry?: (surface: HostSurface) => HostBootstrapRegistry;
   readonly inputReader?: CliInputReader;
   readonly presentBlueprint?: (html: string) => Promise<string>;
@@ -81,6 +82,21 @@ async function presentBlueprint(html: string): Promise<string> {
   });
   if (exitCode !== 0) throw new Error("Blueprint artifact could not be opened");
   return artifact;
+}
+
+async function defaultConfirm(question: string): Promise<boolean> {
+  process.stderr.write(question);
+  const reader = Bun.stdin.stream().getReader();
+  try {
+    const item = await reader.read();
+    const answer =
+      item.value === undefined ? "" : new TextDecoder().decode(item.value).trim().toLowerCase();
+    return answer === "y" || answer === "yes";
+  } catch {
+    return false;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function decodeUtf8(bytes: Uint8Array): string {
@@ -338,11 +354,16 @@ export async function runProgram(
         Bun.spawn({ cmd: [...systemOpenCommand(url)], stderr: "ignore", stdout: "ignore" });
       }
     });
+  const confirmInit =
+    invocation.format === "plain" && terminal.stdin && terminal.stdout
+      ? (options.confirm ?? defaultConfirm)
+      : undefined;
   const controller = createCliSurfaceController(
     invocation,
     options.inputReader ?? defaultInputReader(workspaceRoot),
     terminal,
     webReady,
+    confirmInit,
   );
   const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =

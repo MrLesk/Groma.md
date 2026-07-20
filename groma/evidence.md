@@ -671,7 +671,7 @@
               "state": "partial"
             }
           ],
-          "epoch": "epoch_e3ecfff3de44333a2ab100d2e8d57eaf",
+          "epoch": "epoch_4e0770abe22c9e8f3a3e4879078662cb",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -685,7 +685,7 @@
               "name": "defineScanner",
               "provenance": [
                 {
-                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
+                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -722,7 +722,7 @@
               "name": "createScannerRequest",
               "provenance": [
                 {
-                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
+                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -903,7 +903,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 83,
                     "startByte": 65
@@ -959,7 +959,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
+                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
                   "resource": "package.json",
                   "scope": "workspace"
                 }
@@ -991,7 +991,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 28,
                     "startByte": 17
@@ -1011,7 +1011,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 117,
                     "startByte": 108
@@ -1279,13 +1279,13 @@
               }
             },
             {
-              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine\n  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci          # install dependencies\nbun run build   # compile the single-file executable to dist/groma\n./dist/groma    # open the bounded local visual blueprint\n```\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching\nhost artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
+              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine\n  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.\n- `groma instructions` prints built-in working guides for humans and AI agents, before any\n  workspace exists.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci          # install dependencies\nbun run build   # compile the single-file executable to dist/groma\n./dist/groma    # open the bounded local visual blueprint\n```\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching\nhost artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
               "format": "markdown",
               "key": "candidate.documentation.edca51985031745711780a11350fae55d14c75f03cb88b03b679ab7f93d0c74b",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:a7e6069400cdbb532d796462a5b8ebd3b8e3851ace99791b0473eb79b5f0425d",
+                  "fingerprint": "sha256:c22609ffa718b89c8d836c0a93c594a7f9534fa7a20c665cc0dd82d5ea79011f",
                   "resource": "README.md",
                   "scope": "workspace"
                 }
@@ -1397,7 +1397,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:d4e0c5b4639926f1068bc087a4dbe0f1f91fe11f74ff54ba4f7de572f2e95f5f",
+                  "fingerprint": "sha256:c152ea43d6e76d0eb92ffebcf4e2684aef409b222b15747c3e86cc350fd61c02",
                   "range": {
                     "endByteExclusive": 222,
                     "startByte": 197
@@ -2430,7 +2430,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:4e3147537f85e7a4677c7b8d21a339c5d8857a5ac37eaa7afa928d5088dbbe19",
+                  "fingerprint": "sha256:16bacf9561770bcfa3c8b18c2c53229d88ab18f415f05e729b84681bb5859a67",
                   "range": {
                     "endByteExclusive": 353,
                     "startByte": 335
@@ -2455,7 +2455,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 303,
                     "startByte": 285
@@ -2464,7 +2464,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:d4e0c5b4639926f1068bc087a4dbe0f1f91fe11f74ff54ba4f7de572f2e95f5f",
+                  "fingerprint": "sha256:c152ea43d6e76d0eb92ffebcf4e2684aef409b222b15747c3e86cc350fd61c02",
                   "range": {
                     "endByteExclusive": 370,
                     "startByte": 352
@@ -2747,7 +2747,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 83,
                     "startByte": 65
@@ -2772,7 +2772,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 117,
                     "startByte": 108
@@ -2797,7 +2797,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
+                  "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
                   "range": {
                     "endByteExclusive": 28,
                     "startByte": 17
