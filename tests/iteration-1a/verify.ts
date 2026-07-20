@@ -328,7 +328,13 @@ async function snapshot(directory: string): Promise<readonly SnapshotEntry[]> {
 
 const gromaSnapshot = (workspaceRoot: string) => snapshot(path.join(workspaceRoot, "groma"));
 const intentSnapshot = (workspaceRoot: string) =>
-  snapshot(path.join(workspaceRoot, "groma", "intent"));
+  snapshot(path.join(workspaceRoot, "groma", "components"));
+
+function intentPathForId(entries: readonly SnapshotEntry[], id: string): string | undefined {
+  return entries.find((entry) =>
+    Buffer.from(entry.bytes, "base64").toString("utf8").includes(`\nid: ${id}\n`),
+  )?.path;
+}
 
 async function expectFailureWithoutChanges(
   executable: string,
@@ -736,9 +742,7 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     }),
   );
   assert.deepEqual(await gromaSnapshot(workspaceRoot), beforeRepeat);
-  const originalPath = (await intentSnapshot(workspaceRoot)).find((entry) =>
-    entry.path.includes(ids.orders),
-  )?.path;
+  const originalPath = intentPathForId(await intentSnapshot(workspaceRoot), ids.orders);
   assert.equal(typeof originalPath, "string");
 
   const renamed = await success(
@@ -780,10 +784,9 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.equal(moved.component.id, ids.orders);
   assert.equal(moved.component.name, "Ordering");
   assert.equal(moved.component.parent, ids.users);
-  assert.equal(
-    (await intentSnapshot(workspaceRoot)).find((entry) => entry.path.includes(ids.orders))?.path,
-    originalPath,
-  );
+  const movedPath = intentPathForId(await intentSnapshot(workspaceRoot), ids.orders);
+  assert.equal(movedPath, "Users/Ordering.md");
+  assert.notEqual(movedPath, originalPath);
 
   const firstStable = await success(executable, workspaceRoot, [
     "component",
@@ -933,7 +936,7 @@ async function verifyMalformedCanonicalDocument(executable: string, workspaceRoo
   });
   const files = await intentSnapshot(workspaceRoot);
   assert.equal(files.length, 1);
-  const file = path.join(workspaceRoot, "groma", "intent", files[0]!.path);
+  const file = path.join(workspaceRoot, "groma", "components", files[0]!.path);
   await writeFile(file, "---\nschema: groma/v0.1\nschema: duplicate\n---\n", "utf8");
   const malformed = await gromaSnapshot(workspaceRoot);
   const result = await failure(
@@ -1022,8 +1025,10 @@ const crashCases: readonly CrashCase[] = [
   },
 ];
 
-function intentLocator(id: string): string {
-  return `groma/intent/${id.slice(4, 6)}/${id}.md`;
+function intentLocator(operation: CrashCase["operation"]): string {
+  return operation === "create"
+    ? "groma/components/Recovery target/Crash candidate.md"
+    : "groma/components/Delete candidate.md";
 }
 
 async function verifyCrashCase(
@@ -1061,7 +1066,9 @@ async function verifyCrashCase(
   }
   const crashed = await runProcess(crashExecutable, workspaceRoot, command, input, {
     GROMA_VERIFY_FAULT_LOCATOR:
-      crashCase.locator === "journal" ? transactionStateLocator : intentLocator(sourceId),
+      crashCase.locator === "journal"
+        ? transactionStateLocator
+        : intentLocator(crashCase.operation),
     GROMA_VERIFY_FAULT_OCCURRENCE: String(crashCase.occurrence),
     GROMA_VERIFY_FAULT_PHASE: crashCase.phase,
   });

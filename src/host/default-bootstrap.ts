@@ -44,7 +44,7 @@ import {
   createMarkdownIntentTransactionAdapter,
   DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
   DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
-  markdownIntentLocator,
+  markdownIntentResource,
   jsonEvidenceIndexLocator,
   jsonEvidenceSourceLocator,
 } from "../persistence/index.ts";
@@ -504,6 +504,7 @@ export function createDefaultBootstrapRegistry(
                   ? rawStore.load(loadedAliases.value.aliases)
                   : loadedAliases;
               },
+              locations: rawStore.locations,
               read: rawStore.read,
               serialize: rawStore.serialize,
             });
@@ -515,7 +516,7 @@ export function createDefaultBootstrapRegistry(
                 model,
                 store: rawStore,
               }),
-              bounds: { maxTargets: defaultHostBounds.maxComponents },
+              bounds: { maxTargets: defaultHostBounds.maxComponents * 2 + 3 },
               resources,
             });
             return Object.freeze({
@@ -686,8 +687,7 @@ export function createDefaultBootstrapRegistry(
               resourceForComponent: (value: string) => {
                 const id = parseEntityId(value);
                 if (!id.ok) return id;
-                const intent = markdownIntentLocator(id.value);
-                return intent.ok ? parseResourceKey(intent.value) : intent;
+                return markdownIntentResource(id.value);
               },
             });
             const aliasResourceMapper = Object.freeze({

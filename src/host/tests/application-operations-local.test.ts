@@ -208,43 +208,34 @@ describe("official local application operations composition", () => {
     expect(String(laterRead.value.relationships.items[0]?.relationship.target)).toBe(
       conformanceIds.serviceB,
     );
+    const laterDocument = canonicalStore.value.documents.find(
+      (document) => document.entity.id === conformanceIds.module,
+    );
+    const survivorDocument = canonicalStore.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceB,
+    );
+    expect(laterDocument).toBeDefined();
+    expect(survivorDocument).toBeDefined();
+    if (laterDocument === undefined || survivorDocument === undefined) return;
     const laterIntent = await readFile(
-      path.join(
-        workspace.workspaceRoot,
-        "groma",
-        "intent",
-        conformanceIds.module.slice(4, 6),
-        `${conformanceIds.module}.md`,
-      ),
+      path.join(workspace.workspaceRoot, ...String(laterDocument.locator).split("/")),
       "utf8",
     );
     expect(laterIntent).toContain(`parent: ${conformanceIds.serviceB}`);
-    expect(laterIntent).toContain(`target: ${conformanceIds.serviceB}`);
+    expect(laterIntent).toContain(`target=${conformanceIds.serviceB}`);
     const survivorIntent = await readFile(
-      path.join(
-        workspace.workspaceRoot,
-        "groma",
-        "intent",
-        conformanceIds.serviceB.slice(4, 6),
-        `${conformanceIds.serviceB}.md`,
-      ),
+      path.join(workspace.workspaceRoot, ...String(survivorDocument.locator).split("/")),
       "utf8",
     );
-    expect(survivorIntent).toContain(`target: ${conformanceIds.serviceB}`);
+    expect(survivorIntent).toContain(`target=${conformanceIds.serviceB}`);
 
     expect(await readFile(path.join(workspace.workspaceRoot, "groma", "aliases.md"), "utf8")).toBe(
       `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${conformanceIds.rootA}\n    target: ${conformanceIds.rootB}\n  - source: ${conformanceIds.rootB}\n    target: ${conformanceIds.serviceB}\n---\n`,
     );
     expect(
-      await Bun.file(
-        path.join(
-          workspace.workspaceRoot,
-          "groma",
-          "intent",
-          conformanceIds.rootA.slice(4, 6),
-          `${conformanceIds.rootA}.md`,
-        ),
-      ).exists(),
+      canonicalStore.value.documents.some(
+        (document) => document.entity.id === conformanceIds.rootA,
+      ),
     ).toBeFalse();
   });
 
@@ -530,6 +521,78 @@ describe("official local application operations composition", () => {
     if (!finalRead.ok) return;
     expect(finalRead.value.item.component.inputs).toBeUndefined();
     expect(finalRead.value.item.component.outputs).toHaveLength(100);
+  });
+
+  test("moves renamed and reparented component subtrees in one logical operation", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const platform = await host.operations.createComponent({
+      component: { id: conformanceIds.rootA, name: "Platform" },
+    });
+    const archive = await host.operations.createComponent({
+      component: { id: conformanceIds.rootB, name: "Archive" },
+    });
+    const orders = await host.operations.createComponent({
+      component: {
+        id: conformanceIds.serviceA,
+        name: "Orders",
+        parent: conformanceIds.rootA,
+      },
+    });
+    const worker = await host.operations.createComponent({
+      component: {
+        id: conformanceIds.nestedService,
+        name: "Worker",
+        parent: conformanceIds.serviceA,
+      },
+    });
+    for (const result of [platform, archive, orders, worker]) {
+      expect(result).toMatchObject({ status: "committed" });
+    }
+    if (platform.status !== "committed" || orders.status !== "committed") return;
+    const platformRevision = platform.revisions.find(
+      (entry) => entry.componentId === conformanceIds.rootA,
+    )?.revision;
+    const ordersRevision = orders.revisions.find(
+      (entry) => entry.componentId === conformanceIds.serviceA,
+    )?.revision;
+    if (platformRevision == null || ordersRevision == null) throw new Error("missing revision");
+
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: platformRevision,
+        id: conformanceIds.rootA,
+        patch: { name: "Commerce" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const afterRename = await host.store.load();
+    if (!afterRename.ok) throw new Error(afterRename.diagnostics[0]?.message);
+    expect(afterRename.value.documents.map((document) => String(document.locator))).toEqual([
+      "groma/components/Commerce.md",
+      "groma/components/Archive.md",
+      "groma/components/Commerce/Orders.md",
+      "groma/components/Commerce/Orders/Worker.md",
+    ]);
+
+    expect(
+      await host.operations.reparentComponent({
+        expectedRevision: ordersRevision,
+        id: conformanceIds.serviceA,
+        parent: conformanceIds.rootB,
+      }),
+    ).toMatchObject({ status: "committed" });
+    const restarted = await composition(workspace);
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const afterReparent = await restarted.store.load();
+    if (!afterReparent.ok) throw new Error(afterReparent.diagnostics[0]?.message);
+    expect(afterReparent.value.documents.map((document) => String(document.locator))).toEqual([
+      "groma/components/Commerce.md",
+      "groma/components/Archive.md",
+      "groma/components/Archive/Orders.md",
+      "groma/components/Archive/Orders/Worker.md",
+    ]);
   });
 
   test("fails closed when a component scale would be coarser than its parent", async () => {
