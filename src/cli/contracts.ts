@@ -30,6 +30,7 @@ export type CliCommand =
   | { readonly kind: "version" }
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
+  | { readonly guide?: string; readonly kind: "instructions" }
   | { readonly kind: "web"; readonly port: number }
   | {
       readonly kind: "scan";
