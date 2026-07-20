@@ -380,7 +380,16 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   const missingBare = await runProcess(executable, workspaceRoot, []);
   assert.equal(missingBare.exitCode, 0);
   assert.equal(missingBare.stderr, "");
-  assert.equal(missingBare.stdout, "No Groma workspace is initialized here.\nRun: groma init\n");
+  assert.ok(missingBare.stdout.includes("groma.md v"), "splash carries the wordmark and version");
+  assert.ok(
+    missingBare.stdout.includes("No groma workspace exists in this directory yet."),
+    "splash states the missing workspace",
+  );
+  for (const expected of ["groma init", "groma scan", "groma web", "groma blueprint export"]) {
+    assert.ok(missingBare.stdout.includes(expected), `splash lists ${expected}`);
+  }
+  assert.ok(missingBare.stdout.includes("groma instructions overview"), "splash lists the guides");
+  assert.ok(!missingBare.stdout.includes("\u001B"), "non-interactive splash stays uncolored");
   assert.deepEqual(await gromaSnapshot(workspaceRoot), []);
   await failure(
     executable,
@@ -795,7 +804,14 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
   assert.equal(firstHelp.exitCode, 0);
   assert.equal(firstHelp.stderr, "");
   assert.equal(firstHelp.stdout, secondHelp.stdout);
-  assert.ok(firstHelp.stdout.includes("Usage:\n"));
+  assert.ok(
+    firstHelp.stdout.includes("Run bare groma in an interactive terminal"),
+    "ready splash keeps the interactive-terminal pointer",
+  );
+  for (const expected of ["groma scan", "groma web", "groma instructions overview"]) {
+    assert.ok(firstHelp.stdout.includes(expected), `ready splash lists ${expected}`);
+  }
+  assert.ok(!firstHelp.stdout.includes("\u001B"), "non-interactive splash stays uncolored");
   for (let index = 0; index < 9; index += 1) {
     await createComponent(executable, workspaceRoot, {
       component: {

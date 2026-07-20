@@ -181,9 +181,14 @@ function hostExit(diagnostics: readonly { readonly code: string }[], fallback: n
     : fallback;
 }
 
-function emit(value: CliCommandResult, format: CliFormat, output: ProgramOutput): number {
+function emit(
+  value: CliCommandResult,
+  format: CliFormat,
+  output: ProgramOutput,
+  color = false,
+): number {
   let emitted = value;
-  let rendered = renderCommandResult(emitted, format);
+  let rendered = renderCommandResult(emitted, format, { color });
   if (!rendered.ok) {
     emitted = diagnosticResult(
       value.command,
@@ -191,7 +196,7 @@ function emit(value: CliCommandResult, format: CliFormat, output: ProgramOutput)
       "cli-output-bound-exceeded",
       "The command result exceeds the supported output bound",
     );
-    rendered = renderCommandResult(emitted, format);
+    rendered = renderCommandResult(emitted, format, { color });
     if (!rendered.ok) {
       output.writeError("Groma could not render the bounded command result.\n");
       return CLI_EXIT.infrastructure;
@@ -321,6 +326,8 @@ export async function runProgram(
     stdin: process.stdin.isTTY === true,
     stdout: process.stdout.isTTY === true,
   };
+  const color =
+    invocation.format === "plain" && terminal.stdout && process.env.NO_COLOR === undefined;
   const webReady =
     options.presentWebUrl ??
     ((url: string) => {
@@ -353,12 +360,13 @@ export async function runProgram(
       invocation.command.kind === "scan" || invocation.command.kind === "web"
         ? controller.result()
         : undefined;
-    if (scanResult !== undefined) return emit(scanResult, invocation.format, output);
+    if (scanResult !== undefined) return emit(scanResult, invocation.format, output, color);
     const exitCode = hostOutcome.signal === "SIGTERM" ? 143 : CLI_EXIT.cancelled;
     return emit(
       Object.freeze({ command, exitCode, ok: false, result: hostOutcome }),
       invocation.format,
       output,
+      color,
     );
   }
   if (hostOutcome.status === "startup-failure" || hostOutcome.status === "surface-failure") {
@@ -371,6 +379,7 @@ export async function runProgram(
       }),
       invocation.format,
       output,
+      color,
     );
   }
   let commandResult = controller.result();
@@ -427,5 +436,6 @@ export async function runProgram(
       ),
     invocation.format,
     output,
+    color,
   );
 }

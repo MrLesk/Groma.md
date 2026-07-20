@@ -6,7 +6,7 @@ import {
   type CliFormat,
   type CliOverviewResult,
 } from "./contracts.ts";
-import { HELP_TEXT } from "./help.ts";
+import { formatSplash } from "./splash.ts";
 
 const intrinsicArrayIsArray = Array.isArray;
 const intrinsicGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
@@ -89,11 +89,11 @@ function canonicalJson(value: unknown): string | undefined {
   }
 }
 
-function overviewPlain(result: CliOverviewResult): string | undefined {
+function overviewPlain(result: CliOverviewResult, color: boolean): string | undefined {
   if (result.kind === "workspace-missing") {
-    return "No Groma workspace is initialized here.\nRun: groma init\n";
+    return formatSplash({ color, workspace: "missing" });
   }
-  if (result.kind === "help") return HELP_TEXT;
+  if (result.kind === "help") return formatSplash({ color, workspace: "ready" });
   const lines = ["Groma blueprint", `generation: ${result.generation}`];
   for (const node of result.nodes) {
     const fields = [
@@ -122,7 +122,11 @@ function isOverviewResult(value: unknown): value is CliOverviewResult {
   return kind === "help" || kind === "workspace-missing" || kind === "hierarchy";
 }
 
-export function renderCommandResult(value: CliCommandResult, format: CliFormat): RenderResult {
+export function renderCommandResult(
+  value: CliCommandResult,
+  format: CliFormat,
+  presentation?: { readonly color?: boolean },
+): RenderResult {
   let text: string | undefined;
   try {
     if (format === "json") {
@@ -134,7 +138,7 @@ export function renderCommandResult(value: CliCommandResult, format: CliFormat):
       });
       text = encoded === undefined ? undefined : `${encoded}\n`;
     } else if (value.command === "overview" && isOverviewResult(value.result)) {
-      text = overviewPlain(value.result);
+      text = overviewPlain(value.result, presentation?.color === true);
     } else {
       const encoded = canonicalJson(value.result);
       text =
