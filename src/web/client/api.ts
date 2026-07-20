@@ -23,7 +23,7 @@ export interface ApiComponentPage {
   readonly generation: number;
   readonly hasMore: boolean;
   readonly items: readonly ApiComponentView[];
-  readonly nextCursor?: unknown;
+  readonly nextCursor?: string;
 }
 
 export interface ApiRelationshipView {
@@ -45,7 +45,7 @@ export interface ApiComponentRead {
     readonly generation: number;
     readonly hasMore: boolean;
     readonly items: readonly ApiRelationshipView[];
-    readonly nextCursor?: unknown;
+    readonly nextCursor?: string;
   };
 }
 
@@ -53,7 +53,7 @@ export interface ApiSearchPage {
   readonly generation: number;
   readonly hasMore: boolean;
   readonly items: readonly ApiComponent[];
-  readonly nextCursor?: unknown;
+  readonly nextCursor?: string;
 }
 
 export interface ApiFailure {

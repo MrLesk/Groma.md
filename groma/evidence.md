@@ -119,6 +119,26 @@
             "scope": "workspace"
           },
           {
+            "componentId": "ent_d444bd275e715ef4271bf65e5e3603f2",
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "present": true,
+            "projection": {
+              "actions": [
+                {
+                  "id": "observation:workspace:candidate.action.e59ca7230690c5d151063d82c1eee82601cb61edec6961b0f90b596256c03516",
+                  "name": "ROUTE /api/*"
+                },
+                {
+                  "id": "observation:workspace:candidate.action.f0df27213b313b6a35c2b9995e683bfaa86d10c3d8ea9a9e992fbf5c37b3a728",
+                  "name": "ROUTE /"
+                }
+              ],
+              "name": "web",
+              "type": "source-boundary"
+            },
+            "scope": "workspace"
+          },
+          {
             "componentId": "ent_56de6a501d662a224c07bcb26fdbe971",
             "key": "candidate.component-candidate.c1112eab6fb8a2c35abc037797d0ad45dcfefd291a57550b48200a31e7af84e3",
             "present": true,
@@ -201,6 +221,18 @@
               "type": "imports"
             },
             "relationId": "rel_e76d95e8c1c1540cabd97b27040ed1d9",
+            "removed": false,
+            "scope": "workspace"
+          },
+          {
+            "key": "candidate.relationship.0b3522c0b93dba5da2547a47ecf56395feaf3ab1963d0830cba4a391a44af20e",
+            "present": true,
+            "projection": {
+              "source": "ent_62fa113ff584f566c68a702c450d7f7a",
+              "target": "ent_d444bd275e715ef4271bf65e5e3603f2",
+              "type": "source-boundary"
+            },
+            "relationId": "rel_5a276c0d2b66144509f06faa2b1302a6",
             "removed": false,
             "scope": "workspace"
           },
@@ -325,6 +357,18 @@
             "scope": "workspace"
           },
           {
+            "key": "candidate.relationship.74e659d234b20e9bf05402cff7de54dfa08d8a0c78e7d95dd7c35e37002824e3",
+            "present": true,
+            "projection": {
+              "source": "ent_d444bd275e715ef4271bf65e5e3603f2",
+              "target": "ent_596f62cc63bacd108c69d5600f37fac1",
+              "type": "imports"
+            },
+            "relationId": "rel_3acbbff607355cc53fe1de0500ee75b7",
+            "removed": false,
+            "scope": "workspace"
+          },
+          {
             "key": "candidate.relationship.77475ab4260cbfb0a76b30a2d264a6d6a46a8dffde47dd284351428149accb0f",
             "present": true,
             "projection": {
@@ -405,6 +449,18 @@
               "type": "imports"
             },
             "relationId": "rel_c67e23f1e5b6ed87cbe69ac05ae83a13",
+            "removed": false,
+            "scope": "workspace"
+          },
+          {
+            "key": "candidate.relationship.8570c298533c4b5b5b4def3863ea2dc98bc0f775fe789cd2edb3dcdf9354882f",
+            "present": true,
+            "projection": {
+              "source": "ent_f396b626740ffefdbf4116f5322c77cf",
+              "target": "ent_d444bd275e715ef4271bf65e5e3603f2",
+              "type": "imports"
+            },
+            "relationId": "rel_0f3dfbe4679e7b39ff950bc1c19d59ac",
             "removed": false,
             "scope": "workspace"
           },
@@ -612,10 +668,10 @@
                 "relationship"
               ],
               "scope": "workspace",
-              "state": "complete"
+              "state": "partial"
             }
           ],
-          "epoch": "epoch_3bc8b1e63c85b73e8556d5ee9906b2a3",
+          "epoch": "epoch_e3ecfff3de44333a2ab100d2e8d57eaf",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -629,7 +685,7 @@
               "name": "defineScanner",
               "provenance": [
                 {
-                  "fingerprint": "sha256:83127125bdd4fb3b4cb956fbbd3c2f3aeef19a6d112bd35e7f47ad87d02f3c5b",
+                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -666,7 +722,7 @@
               "name": "createScannerRequest",
               "provenance": [
                 {
-                  "fingerprint": "sha256:83127125bdd4fb3b4cb956fbbd3c2f3aeef19a6d112bd35e7f47ad87d02f3c5b",
+                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -687,6 +743,48 @@
                     "startByte": 24655
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
+                  "scope": "workspace"
+                }
+              ],
+              "scope": "workspace"
+            },
+            {
+              "component": {
+                "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+                "scope": "workspace"
+              },
+              "key": "candidate.action.e59ca7230690c5d151063d82c1eee82601cb61edec6961b0f90b596256c03516",
+              "kind": "action",
+              "name": "ROUTE /api/*",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:2de411580b46e7dfec63062fd548d1b761e290a793114effbb30e366dbd45c09",
+                  "range": {
+                    "endByteExclusive": 5483,
+                    "startByte": 4900
+                  },
+                  "resource": "src/web/server.ts",
+                  "scope": "workspace"
+                }
+              ],
+              "scope": "workspace"
+            },
+            {
+              "component": {
+                "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+                "scope": "workspace"
+              },
+              "key": "candidate.action.f0df27213b313b6a35c2b9995e683bfaa86d10c3d8ea9a9e992fbf5c37b3a728",
+              "kind": "action",
+              "name": "ROUTE /",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:2de411580b46e7dfec63062fd548d1b761e290a793114effbb30e366dbd45c09",
+                  "range": {
+                    "endByteExclusive": 5483,
+                    "startByte": 4900
+                  },
+                  "resource": "src/web/server.ts",
                   "scope": "workspace"
                 }
               ],
@@ -805,7 +903,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 83,
                     "startByte": 65
@@ -861,8 +959,24 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:83127125bdd4fb3b4cb956fbbd3c2f3aeef19a6d112bd35e7f47ad87d02f3c5b",
+                  "fingerprint": "sha256:bbfde9fe0513c1a4fc7727df54e162001eb8c24c819f64c1435d2418622471dd",
                   "resource": "package.json",
+                  "scope": "workspace"
+                }
+              ],
+              "scope": "workspace"
+            },
+            {
+              "candidate": {
+                "name": "web",
+                "type": "source-boundary"
+              },
+              "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+              "kind": "component-candidate",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+                  "resource": "src/web/assets.ts",
                   "scope": "workspace"
                 }
               ],
@@ -877,7 +991,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 28,
                     "startByte": 17
@@ -897,7 +1011,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 117,
                     "startByte": 108
@@ -1165,13 +1279,13 @@
               }
             },
             {
-              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci          # install dependencies\nbun run build   # compile the single-file executable to dist/groma\n./dist/groma    # open the bounded local visual blueprint\n```\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching\nhost artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
+              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine\n  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci          # install dependencies\nbun run build   # compile the single-file executable to dist/groma\n./dist/groma    # open the bounded local visual blueprint\n```\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching\nhost artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
               "format": "markdown",
               "key": "candidate.documentation.edca51985031745711780a11350fae55d14c75f03cb88b03b679ab7f93d0c74b",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:20d524cf0740e2d1023d78582e7992dc0a852afa73af49b352444034440b451c",
+                  "fingerprint": "sha256:a7e6069400cdbb532d796462a5b8ebd3b8e3851ace99791b0473eb79b5f0425d",
                   "resource": "README.md",
                   "scope": "workspace"
                 }
@@ -1283,7 +1397,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:862578156d07fcc7792cdb6f4af00ae309ad866df8b957793e9abd515e4849f8",
+                  "fingerprint": "sha256:d4e0c5b4639926f1068bc087a4dbe0f1f91fe11f74ff54ba4f7de572f2e95f5f",
                   "range": {
                     "endByteExclusive": 222,
                     "startByte": 197
@@ -1296,6 +1410,27 @@
               "scope": "workspace",
               "to": {
                 "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+                "scope": "workspace"
+              }
+            },
+            {
+              "from": {
+                "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
+                "scope": "workspace"
+              },
+              "key": "candidate.relationship.0b3522c0b93dba5da2547a47ecf56395feaf3ab1963d0830cba4a391a44af20e",
+              "kind": "relationship",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+                  "resource": "src/web/assets.ts",
+                  "scope": "workspace"
+                }
+              ],
+              "relationshipType": "source-boundary",
+              "scope": "workspace",
+              "to": {
+                "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
                 "scope": "workspace"
               }
             },
@@ -1948,6 +2083,31 @@
             },
             {
               "from": {
+                "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+                "scope": "workspace"
+              },
+              "key": "candidate.relationship.74e659d234b20e9bf05402cff7de54dfa08d8a0c78e7d95dd7c35e37002824e3",
+              "kind": "relationship",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:2de411580b46e7dfec63062fd548d1b761e290a793114effbb30e366dbd45c09",
+                  "range": {
+                    "endByteExclusive": 68,
+                    "startByte": 43
+                  },
+                  "resource": "src/web/server.ts",
+                  "scope": "workspace"
+                }
+              ],
+              "relationshipType": "imports",
+              "scope": "workspace",
+              "to": {
+                "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+                "scope": "workspace"
+              }
+            },
+            {
+              "from": {
                 "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
                 "scope": "workspace"
               },
@@ -2266,11 +2426,36 @@
                 "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
                 "scope": "workspace"
               },
+              "key": "candidate.relationship.8570c298533c4b5b5b4def3863ea2dc98bc0f775fe789cd2edb3dcdf9354882f",
+              "kind": "relationship",
+              "provenance": [
+                {
+                  "fingerprint": "sha256:4e3147537f85e7a4677c7b8d21a339c5d8857a5ac37eaa7afa928d5088dbbe19",
+                  "range": {
+                    "endByteExclusive": 353,
+                    "startByte": 335
+                  },
+                  "resource": "src/cli/parser.ts",
+                  "scope": "workspace"
+                }
+              ],
+              "relationshipType": "imports",
+              "scope": "workspace",
+              "to": {
+                "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+                "scope": "workspace"
+              }
+            },
+            {
+              "from": {
+                "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+                "scope": "workspace"
+              },
               "key": "candidate.relationship.98c136f584c583e93839e3950d3067763c1de29da01b482ec1b1ef5e443d36ab",
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 303,
                     "startByte": 285
@@ -2279,7 +2464,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:862578156d07fcc7792cdb6f4af00ae309ad866df8b957793e9abd515e4849f8",
+                  "fingerprint": "sha256:d4e0c5b4639926f1068bc087a4dbe0f1f91fe11f74ff54ba4f7de572f2e95f5f",
                   "range": {
                     "endByteExclusive": 370,
                     "startByte": 352
@@ -2562,7 +2747,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 83,
                     "startByte": 65
@@ -2587,7 +2772,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 117,
                     "startByte": 108
@@ -2612,7 +2797,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:7a99b71f12b9d97c2805da37d0a1ec82c919b47109dcbfc13d5a278ec77af8af",
+                  "fingerprint": "sha256:0e5fba4c95bdc3f76ab724d8e0db2f5102fd3b1352dbf7b9275512a4b5e9a8ab",
                   "range": {
                     "endByteExclusive": 28,
                     "startByte": 17
