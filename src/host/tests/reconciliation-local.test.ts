@@ -15,7 +15,8 @@ import {
 import { createReconciliationOperations } from "../../application/index.ts";
 import {
   allowsCustomLocalCoordinationRoot,
-  markdownEvidenceLocator,
+  jsonEvidenceIndexLocator,
+  jsonEvidenceSourceLocator,
 } from "../../persistence/index.ts";
 import { createDefaultBootstrapRegistry, defaultHostBounds, type HostSurface } from "../index.ts";
 
@@ -208,10 +209,29 @@ function scopedSnapshot(
 function evidenceResourceMapper() {
   return Object.freeze({
     resourceForEvidence: () => {
-      const locator = markdownEvidenceLocator();
+      const locator = jsonEvidenceIndexLocator();
+      return locator.ok ? parseResourceKey(locator.value) : locator;
+    },
+    resourceForEvidenceSource: (sourceKey: string) => {
+      const locator = jsonEvidenceSourceLocator(sourceKey);
       return locator.ok ? parseResourceKey(locator.value) : locator;
     },
   });
+}
+
+function evidenceIndexPath(workspaceRoot: string): string {
+  return path.join(workspaceRoot, "groma", "evidence", "index.json");
+}
+
+function evidenceSourcePath(
+  workspaceRoot: string,
+  sourceId = "groma.typescript-bun",
+  sourceInstance = "builtin",
+): string {
+  const sourceKey = JSON.stringify(["project.local", sourceId, sourceInstance]);
+  const locator = jsonEvidenceSourceLocator(sourceKey);
+  if (!locator.ok) throw new Error("test evidence source locator is invalid");
+  return path.join(workspaceRoot, ...String(locator.value).split("/"));
 }
 
 describe("local completed-snapshot reconciliation", () => {
@@ -247,8 +267,14 @@ describe("local completed-snapshot reconciliation", () => {
     expect(components.ok).toBeTrue();
     if (!components.ok) return;
     expect(components.value.items.length).toBeGreaterThan(0);
+    const evidenceFiles = await readdir(path.join(workspace.workspaceRoot, "groma", "evidence"));
+    const sourceFiles = evidenceFiles.filter((file) => file !== "index.json");
+    expect(sourceFiles).toHaveLength(1);
     expect(
-      await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8"),
+      await readFile(
+        path.join(workspace.workspaceRoot, "groma", "evidence", sourceFiles[0]!),
+        "utf8",
+      ),
     ).toContain("official.typescript");
   });
 
@@ -267,7 +293,7 @@ describe("local completed-snapshot reconciliation", () => {
     if (!firstPage.ok) return;
     expect(firstPage.value.items).toHaveLength(1);
     const firstComponent = firstPage.value.items[0]!;
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const firstEvidence = await readFile(evidencePath, "utf8");
     const firstDetail = await host.operations.getComponent({
       id: firstComponent.component.id,
@@ -401,14 +427,17 @@ describe("local completed-snapshot reconciliation", () => {
       },
     ]);
 
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const validEvidence = await readFile(evidencePath, "utf8");
-    const malformedEvidence = validEvidence.replace('"version": 1', '"version": 2');
+    const malformedEvidence = validEvidence.replace(
+      /"sourceKey": "[^"]*(?:\\.[^"]*)*"/,
+      '"sourceKey": null',
+    );
     expect(malformedEvidence).not.toBe(validEvidence);
     await writeFile(evidencePath, malformedEvidence);
     expect(
       await host.operations.getComponent({ id: curatedId, relationships: { limit: 1 } }),
-    ).toMatchObject({ diagnostics: [{ code: "invalid-evidence-state" }], ok: false });
+    ).toMatchObject({ diagnostics: [{ code: "provider-snapshot-failed" }], ok: false });
   });
 
   test("migrates an observed component binding through a curated merge on rescan", async () => {
@@ -448,7 +477,7 @@ describe("local completed-snapshot reconciliation", () => {
       }),
     ).toMatchObject({ status: "committed", value: { id: curatedId } });
 
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const beforeRescan = await readFile(evidencePath, "utf8");
     const rescanned = await host.reconciliation.reconcile(snapshot("epoch-merge-rescan", records));
     expect(rescanned).toMatchObject({ ok: true, value: { status: "committed" } });
@@ -563,7 +592,7 @@ describe("local completed-snapshot reconciliation", () => {
         survivor: right.component.id,
       }),
     ).toMatchObject({ status: "committed" });
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const evidenceBeforeRescan = await readFile(evidencePath, "utf8");
     expect(
       await host.reconciliation.reconcile(snapshot("epoch-collision-rescan", records)),
@@ -600,7 +629,7 @@ describe("local completed-snapshot reconciliation", () => {
         survivor: right.component.id,
       }),
     ).toMatchObject({ status: "committed" });
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot, "scanner.left");
     const evidenceBeforeRescan = await readFile(evidencePath, "utf8");
     expect(
       await host.reconciliation.reconcile(
@@ -624,9 +653,7 @@ describe("local completed-snapshot reconciliation", () => {
       diagnostics: [{ code: "reconciliation-component-limit" }],
       ok: false,
     });
-    expect(
-      await Bun.file(path.join(workspace.workspaceRoot, "groma", "evidence.md")).exists(),
-    ).toBeFalse();
+    expect(await Bun.file(evidenceIndexPath(workspace.workspaceRoot)).exists()).toBeFalse();
   });
 
   test("replans when a direct curated edit races revision confirmation", async () => {
@@ -696,7 +723,7 @@ describe("local completed-snapshot reconciliation", () => {
     expect(
       await raced.reconcile(snapshot("epoch-2", [candidate("api", "Scanner rename")])),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
-    expect(snapshotCalls).toBe(4);
+    expect(snapshotCalls).toBe(6);
     expect(executionCalls).toBe(2);
     const afterRace = await host.operations.getComponent({ id, relationships: { limit: 1 } });
     expect(afterRace.ok).toBeTrue();
@@ -805,10 +832,7 @@ describe("local completed-snapshot reconciliation", () => {
       name: "Customer API",
     });
 
-    const beforeRejected = await readFile(
-      path.join(workspace.workspaceRoot, "groma", "evidence.md"),
-      "utf8",
-    );
+    const beforeRejected = await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8");
     const rejected = await host.reconciliation.reconcile(
       snapshot("epoch-3", [candidate("api", "API"), relationship("broken", "api", "missing")]),
     );
@@ -816,7 +840,7 @@ describe("local completed-snapshot reconciliation", () => {
       diagnostics: [{ code: "unresolved-observation-reference" }],
       ok: false,
     });
-    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
+    expect(await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8")).toBe(
       beforeRejected,
     );
 
@@ -827,7 +851,7 @@ describe("local completed-snapshot reconciliation", () => {
       diagnostics: [{ code: "unresolved-observation-reference" }],
       ok: false,
     });
-    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
+    expect(await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8")).toBe(
       beforeRejected,
     );
 
@@ -867,7 +891,7 @@ describe("local completed-snapshot reconciliation", () => {
         snapshot("epoch-inputs", [candidate("api", "API"), ...inputs]),
       ),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
-    const evidencePath = path.join(workspace.workspaceRoot, "groma", "evidence.md");
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const before = await readFile(evidencePath, "utf8");
     const outputs = Array.from({ length: defaultHostBounds.maxEmbeddedItems }, (_, index) =>
       member("output", `output-${index}`, "api"),
@@ -1159,10 +1183,7 @@ describe("local completed-snapshot reconciliation", () => {
         relationships: { remove: [relation.id] },
       }),
     ).toMatchObject({ status: "committed" });
-    const before = await readFile(
-      path.join(workspace.workspaceRoot, "groma", "evidence.md"),
-      "utf8",
-    );
+    const before = await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8");
     expect(
       await host.reconciliation.reconcile(
         snapshot("epoch-3", [
@@ -1175,9 +1196,7 @@ describe("local completed-snapshot reconciliation", () => {
       diagnostics: [{ code: "reconciliation-binding-missing" }],
       ok: false,
     });
-    expect(await readFile(path.join(workspace.workspaceRoot, "groma", "evidence.md"), "utf8")).toBe(
-      before,
-    );
+    expect(await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8")).toBe(before);
   });
 
   test("preserves an indeterminate transaction recovery outcome", async () => {
@@ -1227,6 +1246,55 @@ describe("local completed-snapshot reconciliation", () => {
         status: "indeterminate",
       },
     });
+  });
+
+  test("keeps bindings from a legacy fenced evidence file and converts on the next write", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const first = await host.reconciliation.reconcile(
+      snapshot("epoch-legacy-1", [candidate("api", "API")]),
+    );
+    expect(first).toMatchObject({ ok: true, value: { status: "committed" } });
+    const firstPage = await host.operations.listComponents({ limit: 10 });
+    expect(firstPage.ok).toBeTrue();
+    if (!firstPage.ok) return;
+    const boundId = firstPage.value.items[0]!.component.id;
+
+    const canonicalRoot = path.join(workspace.workspaceRoot, "groma");
+    const sourcePath = evidenceSourcePath(workspace.workspaceRoot);
+    const sourceDocument = JSON.parse(await readFile(sourcePath, "utf8")) as {
+      source: unknown;
+    };
+    const jsonBody = `${JSON.stringify(
+      {
+        evidence: { sources: [sourceDocument.source], version: 1 },
+        schema: "groma/evidence/v0.1",
+      },
+      null,
+      2,
+    )}\n`;
+    await rm(path.join(canonicalRoot, "evidence"), { recursive: true });
+    await writeFile(
+      path.join(canonicalRoot, "evidence.md"),
+      `# Groma Evidence\n\n\`\`\`json\n${jsonBody.trimEnd()}\n\`\`\`\n`,
+    );
+
+    const restarted = await composition(workspace);
+    const repeat = await restarted.reconciliation.reconcile(
+      snapshot("epoch-legacy-2", [candidate("api", "API"), candidate("web", "Web")]),
+    );
+    expect(repeat).toMatchObject({ ok: true, value: { status: "committed" } });
+    const repeatPage = await restarted.operations.listComponents({ limit: 10 });
+    expect(repeatPage.ok).toBeTrue();
+    if (!repeatPage.ok) return;
+    expect(repeatPage.value.items).toHaveLength(2);
+    expect(repeatPage.value.items.map((item) => item.component.id)).toContain(boundId);
+    const converted = await readFile(sourcePath, "utf8");
+    expect(converted.startsWith("{")).toBeTrue();
+    expect(converted).toContain('"key": "api"');
+    expect(await Bun.file(evidenceIndexPath(workspace.workspaceRoot)).exists()).toBeTrue();
   });
 
   test("rejects a present null evidence payload instead of resetting bindings", async () => {

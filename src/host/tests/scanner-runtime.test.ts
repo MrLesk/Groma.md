@@ -256,7 +256,7 @@ describe("scanner execution runtime", () => {
     const recovery = Object.freeze({
       baseGeneration: valueOf(parseGraphGeneration(0)),
       generation: valueOf(parseGraphGeneration(1)),
-      resources: Object.freeze([valueOf(parseResourceKey("groma/evidence.md"))]),
+      resources: Object.freeze([valueOf(parseResourceKey("groma/evidence/index.json"))]),
       token: "prepared-fixture",
     });
     const execution = runtime(scanner, {

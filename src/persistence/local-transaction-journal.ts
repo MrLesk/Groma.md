@@ -39,7 +39,7 @@ import {
   type MarkdownIntentSnapshot,
 } from "./markdown-intent-store.ts";
 import type { AliasStore, AliasStoreSnapshot } from "./alias-store.ts";
-import type { MarkdownEvidenceStore, MarkdownEvidenceSnapshot } from "./markdown-evidence-store.ts";
+import type { JsonEvidenceSnapshot, JsonEvidenceStore } from "./json-evidence-store.ts";
 import {
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
@@ -98,7 +98,7 @@ export interface CanonicalTransactionAdapter {
 
 export interface MarkdownIntentTransactionAdapterOptions {
   readonly aliases?: AliasStore;
-  readonly evidence?: MarkdownEvidenceStore;
+  readonly evidence?: JsonEvidenceStore;
   readonly maxAliases?: number;
   readonly model: StandardModelCapability;
   readonly store: MarkdownIntentStore;
@@ -278,7 +278,7 @@ function bounds(input: Partial<LocalTransactionJournalBounds> | undefined) {
 function stateFromSnapshot(
   snapshot: MarkdownIntentSnapshot,
   aliases?: AliasStoreSnapshot,
-  evidence?: MarkdownEvidenceSnapshot,
+  evidence?: JsonEvidenceSnapshot,
 ): StandardModelTransactionState {
   const components = snapshot.entities
     .map((entity) => Object.freeze({ id: entity.id, kind: entity.kind, payload: entity.payload }))
@@ -689,15 +689,15 @@ export function createMarkdownIntentTransactionAdapter(
             ],
       )
       .concat(
-        evidenceSnapshot?.value.revision === null || evidenceSnapshot === undefined
+        evidenceSnapshot === undefined
           ? []
-          : [
+          : evidenceSnapshot.value.documents.map((document) =>
               Object.freeze({
-                locator: evidenceSnapshot.value.locator,
-                resource: evidenceSnapshot.value.resource,
-                revision: evidenceSnapshot.value.revision,
+                locator: document.locator,
+                resource: document.resource,
+                revision: document.revision,
               }),
-            ],
+            ),
       )
       .sort((left, right) => compareText(left.resource, right.resource));
     return success(
@@ -805,24 +805,28 @@ export function createMarkdownIntentTransactionAdapter(
       }
       const current = options.evidence.serialize(mutation.evidence);
       if (!current.ok) return current;
-      if (!expected.has(current.value.resource)) {
+      let matched = 0;
+      for (const document of current.value.documents) {
+        if (!expected.has(document.resource)) continue;
+        matched += 1;
+        targets.push(
+          Object.freeze({
+            expected: expected.get(document.resource)!,
+            locator: document.locator,
+            replacement: document.bytes,
+            resource: document.resource,
+            result: document.revision,
+          }),
+        );
+      }
+      if (matched < 2) {
         return failure(
           diagnostic(
             "transaction-resource-set-mismatch",
-            "The canonical evidence resource must have an expected revision",
-            { resource: current.value.resource },
+            "An evidence mutation must replace its index and one source shard",
           ),
         );
       }
-      targets.push(
-        Object.freeze({
-          expected: expected.get(current.value.resource)!,
-          locator: current.value.locator,
-          replacement: current.value.bytes!,
-          resource: current.value.resource,
-          result: current.value.revision,
-        }),
-      );
     }
     if (targets.length !== expected.size) {
       return failure(
