@@ -45,7 +45,8 @@ Web serves the embedded interactive blueprint on 127.0.0.1 only (default port 47
 ephemeral port) until Ctrl+C. It exposes bounded GET reads through the shared application
 operations and is not a mutation surface; it makes no request beyond the local listener.
 Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
-Scan uses the only registered project and scanner when selection is unambiguous. The initialized
+Scan uses the only registered project and scanner when selection is unambiguous. In an
+interactive terminal, scan offers to run groma init first when no workspace exists yet. The initialized
 default project is configured for the built-in TypeScript/Bun scanner before its first scan.
 Project input contains name, a portable aggregate-workspace-relative source, sorted enabled scanner
 records with canonical data-only configuration, and project-source-relative coverage roots. Project
