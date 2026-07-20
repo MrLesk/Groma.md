@@ -113,6 +113,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.entryPoint ? <li className="groma-chip groma-chip--entry">entry</li> : null}
         {data.dependsOn > 0 ? <li className="groma-chip">uses {data.dependsOn}</li> : null}
         {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
+        {data.borrows > 0 ? <li className="groma-chip">borrows {data.borrows}</li> : null}
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
@@ -250,7 +251,7 @@ export function Canvas({
             <div className="groma-title-block__heading">
               <p>Architectural blueprint</p>
               <span>Generation {model.generation}</span>
-              <span>{model.nodes.size} loaded</span>
+              <span>{model.nodes.size} components drawn</span>
             </div>
             <div className="groma-scale-selector">
               <span id="groma-scale-label">Show down to</span>
@@ -275,7 +276,7 @@ export function Canvas({
               </div>
             </div>
             {graph.notations.length > 0 ? (
-              <details className="groma-title-block__key">
+              <details className="groma-title-block__key" open>
                 <summary>Notation</summary>
                 <ol aria-label="Component scale notation">
                   {graph.notations.map((notation) => (
@@ -287,13 +288,23 @@ export function Canvas({
                       aria-hidden="true"
                     />
                     <span>
-                      <strong>arrow</strong> · depends on
+                      <strong>A → B</strong> · A uses B
+                    </span>
+                  </li>
+                  <li>
+                    <span
+                      className="groma-legend-mark groma-legend-mark--quote"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      <strong>quoted line</strong> · the source&rsquo;s own words
                     </span>
                   </li>
                 </ol>
                 <p className="groma-title-block__hint">
-                  Scale sets what the sheet shows; zoom only changes how large it looks. Tab reaches
-                  every component and view control. Descriptions are quoted from the source.
+                  Counts are measured. Descriptions are quoted verbatim from each component&rsquo;s
+                  own documentation, never written here; where the source says nothing, this sheet
+                  says nothing. Scale sets what is shown; zoom only changes how large it looks.
                 </p>
               </details>
             ) : null}

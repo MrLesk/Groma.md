@@ -133,10 +133,13 @@ describe("interactive map view-model", () => {
     expect(edge?.className).toContain("groma-edge--external");
     // Direction is kept on both endpoints: the component that reaches out and the
     // one reached for are opposite kinds of thing, and one total would hide that.
+    // Borrowed code is counted apart from the system's own parts, so a card's
+    // "uses" can always be reconciled against the siblings drawn beside it.
     const owned = graph.nodes.find((node) => node.id === "ent_owned");
     expect(owned?.data).toMatchObject({
+      borrows: 1,
       dependents: 0,
-      dependsOn: 1,
+      dependsOn: 0,
       external: false,
       shared: false,
     });

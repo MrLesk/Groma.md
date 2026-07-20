@@ -9,7 +9,9 @@ export type BlueprintNotation = ApiComponentScale | "unscaled";
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly childCount: number;
   readonly childState: "collapsed" | "empty" | "expanded" | "unread";
-  /** Components this one draws on. */
+  /** Borrowed dependencies this one draws on, counted apart from the system's own. */
+  readonly borrows: number;
+  /** Components of this system that this one draws on. */
   readonly dependsOn: number;
   /** Components that draw on this one. */
   readonly dependents: number;
@@ -218,13 +220,18 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   // Counted in both directions, because "used by many" and "uses many" describe
   // opposite kinds of component and a single total tells the two apart from
   // neither. Distinct partners, so one busy file cannot inflate a count.
+  // Borrowed code is counted separately from the system's own parts. Merging the
+  // two produces a total a reader cannot reconcile against anything drawn: a
+  // card reading "uses 12" beside seven visible siblings looks simply wrong.
   const dependsOn = new Map<string, Set<string>>();
+  const borrows = new Map<string, Set<string>>();
   const dependents = new Map<string, Set<string>>();
   for (const dependency of dependencies) {
     if (dependency.source === dependency.target) continue;
-    const out = dependsOn.get(dependency.source) ?? new Set<string>();
+    const bucket = isExternal(dependency.target) ? borrows : dependsOn;
+    const out = bucket.get(dependency.source) ?? new Set<string>();
     out.add(dependency.target);
-    dependsOn.set(dependency.source, out);
+    bucket.set(dependency.source, out);
     const into = dependents.get(dependency.target) ?? new Set<string>();
     into.add(dependency.source);
     dependents.set(dependency.target, into);
@@ -344,6 +351,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         data: Object.freeze({
           childCount: childIds?.length ?? 0,
           childState,
+          borrows: borrows.get(id)?.size ?? 0,
           dependsOn: dependsOn.get(id)?.size ?? 0,
           dependents: dependents.get(id)?.size ?? 0,
           entryPoint: (component.actions?.length ?? 0) > 0,
