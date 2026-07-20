@@ -27,8 +27,9 @@ bun ci
 
 ```sh
 bun run dev           # run the TypeScript CLI entry point
-bun run typecheck     # strict TypeScript validation
+bun run typecheck     # strict TypeScript validation (CLI and web client configs)
 bun run test          # Bun tests
+bun run web:css       # generate the embedded web stylesheet from the Tailwind source
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
@@ -38,6 +39,12 @@ bun run smoke         # verify one native artifact and the public init -> scan -
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
 bun run check         # run every required local verification gate
 ```
+
+The embedded web surface is compiled into the executable: `src/web/client/index.html` and its
+React modules are bundled by Bun's full-stack compile, and `bun run web:css` turns the Tailwind
+source `src/web/client/styles.css` into the gitignored `styles.generated.css` the page links.
+Run `bun run web:css` once before `bun run dev web` or the web typecheck; `bun run build` and
+`bun run check` run it automatically.
 
 The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
@@ -66,7 +73,8 @@ Package acquisition and publication are separate Host concerns.
 | `src/persistence`    | Official local-resource, Markdown, journal, and later projection providers             | Core and the standard model              |
 | `src/application`    | Presentation-neutral semantic operations                                               | Core, model, and capability contracts    |
 | `src/host`           | Official composition, lifecycle, and process integration                               | All registered capabilities and surfaces |
-| `src/cli`            | CLI parsing and terminal presentation                                                  | Host and application operations          |
+| `src/cli`            | CLI parsing and terminal presentation                                                  | Host, application operations, and web    |
+| `src/web`            | The embedded loopback web surface: server routes and bundled browser client            | Application and host surface contracts   |
 
 The rules behind the table:
 
@@ -179,9 +187,10 @@ in the production entry point or production executable.
 
 ## Deliberately Deferred
 
-In an interactive terminal, bare `groma` already opens the first disposable local visual artifact
-without an HTTP server or React. The approved web stack remains Bun's embedded HTTP server and
-React bundler for a later complete viewing and editing experience.
+In an interactive terminal, bare `groma` opens the disposable local visual artifact without an
+HTTP server or React. `groma web` serves the embedded interactive web surface from the compiled
+binary — Bun's embedded HTTP server with a bundled React and Tailwind client — bound to the
+loopback interface, exposing only bounded reads through shared application operations.
 
 The bounded scan, reconciliation, and local visual loop is implemented. Plans, Git history views,
-and browser editing remain later work.
+browser editing, and replacing bare `groma` with the web surface remain later work.

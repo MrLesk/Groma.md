@@ -1,3 +1,4 @@
 backlog/
 dist/
 node_modules/
+src/web/client/styles.generated.css

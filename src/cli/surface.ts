@@ -334,14 +334,53 @@ async function overview(
   return result(command, CLI_EXIT.success, true, value);
 }
 
+async function serveWeb(
+  command: Extract<CliCommand, { readonly kind: "web" }>,
+  context: HostSurfaceContext,
+  onReady: ((url: string) => void) | undefined,
+): Promise<CliCommandResult> {
+  const status = context.workspace.status();
+  if (status.state === "missing") {
+    return failedResult(
+      command,
+      CLI_EXIT.workspace,
+      "web-workspace-missing",
+      "No Groma workspace exists here; run groma init first",
+    );
+  }
+  const operations = workspaceOperations(command, context);
+  if (!("listRoots" in operations)) return operations;
+  const [{ webFrontend }, { serveWebBlueprint }] = await Promise.all([
+    import("../web/assets.ts"),
+    import("../web/server.ts"),
+  ]);
+  const outcome = await serveWebBlueprint({
+    cancellation: context.cancellation,
+    frontend: webFrontend,
+    ...(onReady === undefined ? {} : { onReady }),
+    operations,
+    port: command.port,
+  });
+  return outcome.ok
+    ? result(command, CLI_EXIT.success, true, outcome.value)
+    : failedResult(
+        command,
+        CLI_EXIT.infrastructure,
+        outcome.diagnostic.code,
+        outcome.diagnostic.message,
+      );
+}
+
 async function execute(
   invocation: CliInvocation,
   context: HostSurfaceContext,
   reader: CliInputReader,
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
+  webReady?: (url: string) => void,
 ): Promise<CliCommandResult> {
   const command = invocation.command;
   if (command.kind === "overview") return overview(command, context, terminal);
+  if (command.kind === "web") return serveWeb(command, context, webReady);
   if (command.kind === "init") {
     const initialized = await context.initialization.initialize(Object.freeze({}));
     if (!initialized.ok) return applicationResult(command, initialized);
@@ -606,21 +645,24 @@ export function createCliSurfaceController(
   invocation: CliInvocation,
   reader: CliInputReader,
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
+  webReady?: (url: string) => void,
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
   let completion: Promise<void> | undefined;
   let started = false;
   let stopped = false;
+  /** Long-running commands finish their own result after a stop signal. */
+  const longRunning = invocation.command.kind === "scan" || invocation.command.kind === "web";
   const surface: HostSurface = Object.freeze({
     start(context: HostSurfaceContext) {
       if (started) throw new Error("CLI surface can start only once");
       started = true;
-      completion = execute(invocation, context, reader, terminal).then(
+      completion = execute(invocation, context, reader, terminal, webReady).then(
         (value) => {
-          if (!stopped || invocation.command.kind === "scan") captured = value;
+          if (!stopped || longRunning) captured = value;
         },
         () => {
-          if (!stopped || invocation.command.kind === "scan") {
+          if (!stopped || longRunning) {
             captured = failedResult(
               invocation.command,
               CLI_EXIT.infrastructure,
@@ -634,7 +676,7 @@ export function createCliSurfaceController(
         completion,
         stop: async () => {
           stopped = true;
-          if (invocation.command.kind === "scan") await completion;
+          if (longRunning) await completion;
         },
       });
     },

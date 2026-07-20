@@ -11,6 +11,7 @@ const layerNames = [
   "application",
   "host",
   "cli",
+  "web",
 ] as const;
 
 type LayerName = (typeof layerNames)[number];
@@ -23,8 +24,17 @@ const allowedLayerDependencies: Readonly<Record<LayerName, ReadonlySet<LayerName
   "standard-model": new Set(["core", "standard-model"]),
   persistence: new Set(["core", "standard-model", "persistence"]),
   application: new Set(["core", "standard-model", "application"]),
-  host: new Set(layerNames),
-  cli: new Set(["application", "host", "cli"]),
+  host: new Set([
+    "core",
+    "plugin-sdk",
+    "standard-model",
+    "persistence",
+    "application",
+    "host",
+    "cli",
+  ]),
+  cli: new Set(["application", "host", "cli", "web"]),
+  web: new Set(["application", "host", "web"]),
 };
 
 const packageSelfReferenceLayers: ReadonlyMap<string, LayerName> = new Map([

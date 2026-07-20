@@ -37,23 +37,27 @@ export interface ProgramOptions {
   readonly createRegistry?: (surface: HostSurface) => HostBootstrapRegistry;
   readonly inputReader?: CliInputReader;
   readonly presentBlueprint?: (html: string) => Promise<string>;
+  readonly presentWebUrl?: (url: string) => void;
   readonly signalSource?: HostSignalSource;
   readonly terminal?: { readonly stdin: boolean; readonly stdout: boolean };
   readonly userDataRoot?: string;
   readonly workspaceRoot?: string;
 }
 
+function systemOpenCommand(target: string): readonly string[] {
+  return process.platform === "darwin"
+    ? ["/usr/bin/open", target]
+    : process.platform === "win32"
+      ? ["C:\\Windows\\System32\\cmd.exe", "/c", "start", "", target]
+      : ["/usr/bin/xdg-open", target];
+}
+
 async function presentBlueprint(html: string): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), "groma-blueprint-"));
   const artifact = path.join(directory, "blueprint.html");
   await writeFile(artifact, html, { encoding: "utf8", mode: 0o600 });
-  const command =
-    process.platform === "darwin"
-      ? ["/usr/bin/open", artifact]
-      : process.platform === "win32"
-        ? ["C:\\Windows\\System32\\cmd.exe", "/c", "start", "", artifact]
-        : ["/usr/bin/xdg-open", artifact];
-  const opened = Bun.spawn({ cmd: command, stderr: "ignore", stdout: "ignore" });
+  const command = systemOpenCommand(artifact);
+  const opened = Bun.spawn({ cmd: [...command], stderr: "ignore", stdout: "ignore" });
   const exitCode = await new Promise<number | undefined>((resolve) => {
     let complete = false;
     const timeout = setTimeout(() => {
@@ -257,13 +261,25 @@ export async function runProgram(
   }
 
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
+  const terminal = options.terminal ?? {
+    stdin: process.stdin.isTTY === true,
+    stdout: process.stdout.isTTY === true,
+  };
+  const webReady =
+    options.presentWebUrl ??
+    ((url: string) => {
+      if (invocation.format === "plain") {
+        output.writeOutput(`Serving the current blueprint at ${url}\nPress Ctrl+C to stop.\n`);
+      }
+      if (terminal.stdin && terminal.stdout) {
+        Bun.spawn({ cmd: [...systemOpenCommand(url)], stderr: "ignore", stdout: "ignore" });
+      }
+    });
   const controller = createCliSurfaceController(
     invocation,
     options.inputReader ?? defaultInputReader(workspaceRoot),
-    options.terminal ?? {
-      stdin: process.stdin.isTTY === true,
-      stdout: process.stdout.isTTY === true,
-    },
+    terminal,
+    webReady,
   );
   const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =
@@ -277,7 +293,10 @@ export async function runProgram(
   });
   const command = commandName(invocation.command);
   if (hostOutcome.status === "cancelled") {
-    const scanResult = invocation.command.kind === "scan" ? controller.result() : undefined;
+    const scanResult =
+      invocation.command.kind === "scan" || invocation.command.kind === "web"
+        ? controller.result()
+        : undefined;
     if (scanResult !== undefined) return emit(scanResult, invocation.format, output);
     const exitCode = hostOutcome.signal === "SIGTERM" ? 143 : CLI_EXIT.cancelled;
     return emit(

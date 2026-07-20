@@ -44,6 +44,8 @@ exactly what is real now.
   records bounded evidence, and reconciles it without overwriting curated intent.
 - Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current
   hierarchy, with recursive folding, focus, and component detail.
+- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine
+  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.
 - `project add` registers additional codebases and scanner coverage explicitly.
 - Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
   whole tool ships as one compiled executable.
