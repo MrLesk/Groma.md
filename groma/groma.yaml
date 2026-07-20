@@ -1,4 +1,19 @@
 schema: groma/v0.1
+scaleProposal:
+  derivation: "groma/structural-scale/v1"
+  thresholds:
+    exportCount:
+      part: 8
+      domain: 40
+      system: 160
+    fileCount:
+      part: 8
+      domain: 40
+      system: 160
+    reuseBreadth:
+      part: 2
+      domain: 8
+      system: 24
 projects:
   - id: "project_198bde57c817528c9d08d0ebdf630196"
     name: "groma"

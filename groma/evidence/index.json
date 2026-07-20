@@ -1,0 +1,10 @@
+{
+  "schema": "groma/evidence-index/v0.2",
+  "sources": [
+    {
+      "file": "9080456d7c02f714535c79e12ec95bf94300adecfd94940588720b677f9a96a4.json",
+      "key": "[\"project_198bde57c817528c9d08d0ebdf630196\",\"official.typescript\",\"default\"]"
+    }
+  ],
+  "version": 1
+}

@@ -5,6 +5,13 @@ import { isAlias, parseDocument, visit } from "yaml";
 import { failure, success, type Diagnostic, type Result } from "../core/index.ts";
 import { copyCanonicalGraphData, type GraphData } from "../core/payload.ts";
 import {
+  DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
+  STRUCTURAL_SCALE_COUNT_SIGNALS,
+  STRUCTURAL_SCALE_DERIVATION_V1,
+  validateStructuralScaleProposalConfigurationV1,
+  type StructuralScaleProposalConfigurationV1,
+} from "../application/scale-proposal.ts";
+import {
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
   type LocalResourceProvider,
@@ -65,6 +72,7 @@ export interface BootstrapBaseConfiguration {
   readonly requestedRuntimePlugins: readonly RequestedRuntimePlugin[];
   readonly retiredProjectIds?: readonly string[];
   readonly schema: "groma/v0.1";
+  readonly structuralScaleProposal?: StructuralScaleProposalConfigurationV1;
 }
 
 export interface WorkspaceConfigurationCandidate {
@@ -370,6 +378,62 @@ function parseConfiguredProjects(
   return success(Object.freeze(projects));
 }
 
+function parseStructuralScaleProposal(
+  value: unknown,
+): Result<StructuralScaleProposalConfigurationV1> {
+  if (value === undefined) {
+    return success(DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1);
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return malformed();
+  const proposal = value as Readonly<Record<string, unknown>>;
+  if (
+    Object.keys(proposal).sort().join(",") !== "derivation,thresholds" ||
+    proposal.derivation !== STRUCTURAL_SCALE_DERIVATION_V1 ||
+    typeof proposal.thresholds !== "object" ||
+    proposal.thresholds === null ||
+    Array.isArray(proposal.thresholds)
+  ) {
+    return malformed();
+  }
+  const thresholds = proposal.thresholds as Readonly<Record<string, unknown>>;
+  if (
+    Object.keys(thresholds).sort().join(",") !==
+    [...STRUCTURAL_SCALE_COUNT_SIGNALS].sort(compareCodeUnits).join(",")
+  ) {
+    return malformed();
+  }
+  const copied: Record<string, { domain: number; part: number; system: number }> = {};
+  for (const signal of STRUCTURAL_SCALE_COUNT_SIGNALS) {
+    const value = thresholds[signal];
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      Array.isArray(value) ||
+      Object.keys(value).sort().join(",") !== "domain,part,system"
+    ) {
+      return malformed();
+    }
+    const cutoffs = value as Readonly<Record<string, unknown>>;
+    if (
+      typeof cutoffs.part !== "number" ||
+      typeof cutoffs.domain !== "number" ||
+      typeof cutoffs.system !== "number"
+    ) {
+      return malformed();
+    }
+    copied[signal] = {
+      domain: cutoffs.domain,
+      part: cutoffs.part,
+      system: cutoffs.system,
+    };
+  }
+  const validated = validateStructuralScaleProposalConfigurationV1({
+    derivation: STRUCTURAL_SCALE_DERIVATION_V1,
+    thresholds: copied as unknown as StructuralScaleProposalConfigurationV1["thresholds"],
+  });
+  return validated.ok ? validated : malformed();
+}
+
 /** Strict Host boundary used by configuration parsing and project-management requests. */
 export function canonicalizeProjectRegistration(
   value: unknown,
@@ -382,6 +446,21 @@ export function canonicalizeProjectRegistration(
 
 export function serializeBootstrapConfiguration(configuration: BootstrapBaseConfiguration): string {
   const lines = [`schema: ${configuration.schema}`];
+  const scaleProposal =
+    configuration.structuralScaleProposal ?? DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1;
+  const validatedScaleProposal = validateStructuralScaleProposalConfigurationV1(scaleProposal);
+  if (!validatedScaleProposal.ok)
+    throw new TypeError("Structural scale proposal configuration is malformed");
+  lines.push("scaleProposal:");
+  lines.push(`  derivation: ${JSON.stringify(validatedScaleProposal.value.derivation)}`);
+  lines.push("  thresholds:");
+  for (const signal of STRUCTURAL_SCALE_COUNT_SIGNALS) {
+    const thresholds = validatedScaleProposal.value.thresholds[signal];
+    lines.push(`    ${signal}:`);
+    lines.push(`      part: ${thresholds.part}`);
+    lines.push(`      domain: ${thresholds.domain}`);
+    lines.push(`      system: ${thresholds.system}`);
+  }
   const projectRegistrations = configuration.projectRegistrations ?? Object.freeze([]);
   const retiredProjectIds = configuration.retiredProjectIds ?? Object.freeze([]);
   if (configuration.requestedRuntimePlugins.length > 0) {
@@ -665,13 +744,14 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
       }
       if (
         keys.length < 1 ||
-        keys.length > 4 ||
+        keys.length > 5 ||
         !keys.includes("schema") ||
         keys.some(
           (key) =>
             key !== "plugins" &&
             key !== "projects" &&
             key !== "retiredProjectIds" &&
+            key !== "scaleProposal" &&
             key !== "schema",
         ) ||
         !schemaAccepted
@@ -708,6 +788,8 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
         ? parseConfiguredProjects(record.projects)
         : success(Object.freeze([]));
       if (!projectRegistrations.ok) return projectRegistrations;
+      const structuralScaleProposal = parseStructuralScaleProposal(record.scaleProposal);
+      if (!structuralScaleProposal.ok) return structuralScaleProposal;
       const retired = Object.hasOwn(record, "retiredProjectIds")
         ? inspectHostDenseArray(
             record.retiredProjectIds,
@@ -734,6 +816,7 @@ export function createYamlConfigurationParser(): ConfigurationParserProvider {
           requestedRuntimePlugins: Object.freeze(requested),
           retiredProjectIds: Object.freeze(retiredProjectIds),
           schema: "groma/v0.1" as const,
+          structuralScaleProposal: structuralScaleProposal.value,
         }),
       );
     },
@@ -794,6 +877,16 @@ export function parseBootstrapConfiguration(
       ["projectRegistrations", "requestedRuntimePlugins", "schema"],
       ["requestedRuntimePlugins", "retiredProjectIds", "schema"],
       ["projectRegistrations", "requestedRuntimePlugins", "retiredProjectIds", "schema"],
+      ["requestedRuntimePlugins", "schema", "structuralScaleProposal"],
+      ["projectRegistrations", "requestedRuntimePlugins", "schema", "structuralScaleProposal"],
+      ["requestedRuntimePlugins", "retiredProjectIds", "schema", "structuralScaleProposal"],
+      [
+        "projectRegistrations",
+        "requestedRuntimePlugins",
+        "retiredProjectIds",
+        "schema",
+        "structuralScaleProposal",
+      ],
     ],
     "workspace-configuration-parser-failed",
     "Bootstrap base configuration",
@@ -854,6 +947,14 @@ export function parseBootstrapConfiguration(
       diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
     );
   }
+  const structuralScaleProposal = parseStructuralScaleProposal(
+    configuration.value.structuralScaleProposal,
+  );
+  if (!structuralScaleProposal.ok) {
+    return failure(
+      diagnostic("workspace-configuration-parser-failed", "Workspace configuration parsing failed"),
+    );
+  }
   const retired = Object.hasOwn(configuration.value, "retiredProjectIds")
     ? inspectHostDenseArray(
         configuration.value.retiredProjectIds,
@@ -889,6 +990,7 @@ export function parseBootstrapConfiguration(
       requestedRuntimePlugins: Object.freeze(canonicalRequested),
       retiredProjectIds: Object.freeze(retiredProjectIds),
       schema: "groma/v0.1" as const,
+      structuralScaleProposal: structuralScaleProposal.value,
     }),
   );
 }
@@ -918,8 +1020,24 @@ export function bootstrapConfigurationStillUsable(
   const actualProjects = actual.configuration.projectRegistrations ?? Object.freeze([]);
   const expectedRetiredProjectIds = expected.configuration.retiredProjectIds ?? Object.freeze([]);
   const actualRetiredProjectIds = actual.configuration.retiredProjectIds ?? Object.freeze([]);
+  const expectedScaleProposal =
+    expected.configuration.structuralScaleProposal ??
+    DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1;
+  const actualScaleProposal =
+    actual.configuration.structuralScaleProposal ??
+    DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1;
   return (
     expected.configuration.schema === actual.configuration.schema &&
+    expectedScaleProposal.derivation === actualScaleProposal.derivation &&
+    STRUCTURAL_SCALE_COUNT_SIGNALS.every((signal) => {
+      const expectedThresholds = expectedScaleProposal.thresholds[signal];
+      const actualThresholds = actualScaleProposal.thresholds[signal];
+      return (
+        expectedThresholds.part === actualThresholds.part &&
+        expectedThresholds.domain === actualThresholds.domain &&
+        expectedThresholds.system === actualThresholds.system
+      );
+    }) &&
     expectedPlugins.length === actualPlugins.length &&
     expectedPlugins.every(
       (plugin, index) =>

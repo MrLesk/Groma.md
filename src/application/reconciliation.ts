@@ -26,11 +26,21 @@ import type {
   StandardComponent,
   StandardComponentInput,
   StandardComponentPatch,
+  StandardComponentScale,
   StandardRelationship,
 } from "../standard-model/index.ts";
+import { isStandardComponentScale, STANDARD_COMPONENT_SCALES } from "../standard-model/index.ts";
 import type { ComponentResourceMapper, TransactionExecutionCapability } from "./contracts.ts";
 import type { ApplicationSnapshotStateDecoder } from "./snapshot-state.ts";
 import { copyGraphPayload } from "../core/payload.ts";
+import {
+  DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
+  deriveStructuralScaleProposalV1,
+  STRUCTURAL_SCALE_DERIVATION_V1,
+  validateStructuralScaleProposalConfigurationV1,
+  type StructuralScaleAssessmentV1,
+  type StructuralScaleProposalConfigurationV1,
+} from "./scale-proposal.ts";
 
 export interface EvidenceResourceMapper {
   resourceForEvidence(): Result<ResourceKey>;
@@ -55,6 +65,7 @@ export interface ReconciliationOptions {
   readonly graph: Pick<GraphKernel, "resolveEntityIdentity">;
   readonly resourceMapper: ComponentResourceMapper;
   readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
+  readonly structuralScaleProposal?: StructuralScaleProposalConfigurationV1;
   readonly transactionExecution: TransactionExecutionCapability;
   readonly transactionProvider: Pick<TransactionProvider, "snapshot">;
 }
@@ -94,6 +105,7 @@ export interface ComponentBinding {
   readonly key: string;
   readonly present: boolean;
   readonly projection: ComponentProjection;
+  readonly scaleAssessment?: StructuralScaleAssessmentV1;
   readonly scope: string;
 }
 
@@ -304,6 +316,74 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
   return success(record as unknown as ComponentProjection);
 }
 
+function scaleAssessmentValue(value: unknown): Result<StructuralScaleAssessmentV1> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return failure(
+      diagnostic("invalid-evidence-state", "Stored structural scale assessment is malformed"),
+    );
+  }
+  const assessment = value as Readonly<Record<string, unknown>>;
+  if (assessment.derivation !== STRUCTURAL_SCALE_DERIVATION_V1) {
+    return failure(
+      diagnostic("invalid-evidence-state", "Stored structural scale assessment is malformed"),
+    );
+  }
+  if (
+    assessment.status === "insufficient" &&
+    Object.keys(assessment).sort().join(",") === "derivation,status"
+  ) {
+    return success(
+      Object.freeze({
+        derivation: STRUCTURAL_SCALE_DERIVATION_V1,
+        status: "insufficient" as const,
+      }),
+    );
+  }
+  if (
+    assessment.status === "proposed" &&
+    Object.keys(assessment).sort().join(",") === "derivation,proposal,status" &&
+    typeof assessment.proposal === "string" &&
+    isStandardComponentScale(assessment.proposal)
+  ) {
+    return success(
+      Object.freeze({
+        derivation: STRUCTURAL_SCALE_DERIVATION_V1,
+        proposal: assessment.proposal,
+        status: "proposed" as const,
+      }),
+    );
+  }
+  if (
+    assessment.status === "ambiguous" &&
+    Object.keys(assessment).sort().join(",") === "candidates,derivation,status" &&
+    Array.isArray(assessment.candidates) &&
+    assessment.candidates.length >= 2 &&
+    assessment.candidates.length <= STANDARD_COMPONENT_SCALES.length &&
+    assessment.candidates.every(
+      (candidate, index) =>
+        typeof candidate === "string" &&
+        isStandardComponentScale(candidate) &&
+        candidate ===
+          STANDARD_COMPONENT_SCALES.filter((scale) =>
+            (assessment.candidates as readonly unknown[]).includes(scale),
+          )[index],
+    )
+  ) {
+    return success(
+      Object.freeze({
+        candidates: Object.freeze(
+          (assessment.candidates as readonly StandardComponentScale[]).slice(),
+        ),
+        derivation: STRUCTURAL_SCALE_DERIVATION_V1,
+        status: "ambiguous" as const,
+      }),
+    );
+  }
+  return failure(
+    diagnostic("invalid-evidence-state", "Stored structural scale assessment is malformed"),
+  );
+}
+
 export function parseEvidenceState(
   value: unknown,
   bounds: Pick<
@@ -370,7 +450,10 @@ export function parseEvidenceState(
         typeof inputBinding !== "object" ||
         inputBinding === null ||
         Array.isArray(inputBinding) ||
-        Object.keys(inputBinding).sort().join(",") !== "componentId,key,present,projection,scope"
+        ![
+          "componentId,key,present,projection,scope",
+          "componentId,key,present,projection,scaleAssessment,scope",
+        ].includes(Object.keys(inputBinding).sort().join(","))
       ) {
         return failure(
           diagnostic("invalid-evidence-state", "Canonical component binding is malformed"),
@@ -382,10 +465,14 @@ export function parseEvidenceState(
           ? parseEntityId(binding.componentId)
           : failure(diagnostic("invalid", "invalid"));
       const projection = projectionValue(binding.projection);
+      const scaleAssessment = Object.hasOwn(binding, "scaleAssessment")
+        ? scaleAssessmentValue(binding.scaleAssessment)
+        : success(undefined);
       const identity = `${binding.scope}\u0000${binding.key}`;
       if (
         !id.ok ||
         !projection.ok ||
+        !scaleAssessment.ok ||
         typeof binding.scope !== "string" ||
         typeof binding.key !== "string" ||
         typeof binding.present !== "boolean" ||
@@ -405,6 +492,9 @@ export function parseEvidenceState(
           key: binding.key,
           present: binding.present,
           projection: projection.value,
+          ...(scaleAssessment.value === undefined
+            ? {}
+            : { scaleAssessment: scaleAssessment.value }),
           scope: binding.scope,
         }),
       );
@@ -692,6 +782,12 @@ export function createReconciliationOperations(
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new RangeError(`${name} must be a positive safe integer`);
   }
+  const structuralScaleProposal = validateStructuralScaleProposalConfigurationV1(
+    options.structuralScaleProposal ?? DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
+  );
+  if (!structuralScaleProposal.ok) {
+    throw new RangeError("structuralScaleProposal must contain valid ordered v1 thresholds");
+  }
   const ids = createOpaqueIdSource(options.entropy);
 
   const reconcile = async (
@@ -811,6 +907,11 @@ export function createReconciliationOperations(
       const touchedComponents = new Set<string>();
       for (const record of componentRecords) {
         const identity = qualified(record.scope, record.key);
+        const scaleAssessment =
+          record.signals === undefined
+            ? success(undefined)
+            : deriveStructuralScaleProposalV1(record.signals, structuralScaleProposal.value);
+        if (!scaleAssessment.ok) return scaleAssessment;
         let binding = componentBindings.get(identity);
         if (binding === undefined) {
           const projection = componentProjection(record, snapshot.value);
@@ -834,6 +935,9 @@ export function createReconciliationOperations(
             key: record.key,
             present: true,
             projection,
+            ...(scaleAssessment.value === undefined
+              ? {}
+              : { scaleAssessment: scaleAssessment.value }),
             scope: record.scope,
           });
           componentBindings.set(identity, binding);
@@ -876,7 +980,16 @@ export function createReconciliationOperations(
         }
         componentBindings.set(
           identity,
-          Object.freeze({ ...binding, present: true, projection: update.projection }),
+          Object.freeze({
+            componentId: binding.componentId,
+            key: binding.key,
+            present: true,
+            projection: update.projection,
+            ...(scaleAssessment.value === undefined
+              ? {}
+              : { scaleAssessment: scaleAssessment.value }),
+            scope: binding.scope,
+          }),
         );
       }
       for (const [identity, binding] of componentBindings) {

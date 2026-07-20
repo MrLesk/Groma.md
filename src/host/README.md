@@ -24,6 +24,10 @@ The default consumer is the Application reconciliation operation. It records sou
 maintains stable opaque component bindings, and publishes all resulting canonical and projection
 changes atomically. The public `scan` command is the thin adapter over this same composition.
 
+`groma/groma.yaml` pins the version and numeric thresholds used for structural scale proposals.
+The Host validates and passes that data to reconciliation; scanners receive no scale-classification
+policy and continue to report only defensible structural counts and markers.
+
 The TypeScript/Bun scanner applies root `.gitignore` rules in file order, including negated rules,
 at most two `*` wildcards per path segment, `**` path segments, and bounded alphanumeric and
 underscore character classes such as `[0-9]`. Malformed rules and syntax outside that supported
