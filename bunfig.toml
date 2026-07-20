@@ -1,0 +1,5 @@
+# Development-harness configuration only. The compiled executable is built with
+# bunfig autoloading disabled and never reads this file at runtime.
+
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

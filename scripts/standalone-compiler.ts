@@ -1,6 +1,4 @@
-import { fileURLToPath } from "node:url";
-
-import { generateWebStylesheet } from "./web-stylesheet.ts";
+import tailwind from "bun-plugin-tailwind";
 
 export interface StandaloneCompileOptions {
   readonly cwd: string;
@@ -9,35 +7,44 @@ export interface StandaloneCompileOptions {
   readonly target?: string;
 }
 
-const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-
+/**
+ * One Bun.build call bundles the CLI, the embedded web client with its Tailwind
+ * source, and compiles the standalone executable. `allowUnresolved: [""]` permits
+ * exactly the audited fully opaque plugin import to stay unresolved for runtime
+ * loading while every other dynamic specifier must resolve at build time; literal
+ * imports remain covered by type-checking and the source-boundary checker. The
+ * compiled executable autoloads no .env, bunfig.toml, tsconfig.json, or
+ * package.json at runtime.
+ */
 export async function compileStandalone(options: StandaloneCompileOptions): Promise<number> {
-  const stylesheet = await generateWebStylesheet(projectRoot);
-  if (stylesheet !== 0) return stylesheet;
-  const command = [
-    process.execPath,
-    "build",
-    "--compile",
-    "--minify",
-    // Keep exactly the audited opaque plugin import unresolved for runtime loading. The empty
-    // value is deliberate Bun argv syntax equivalent to --allow-unresolved=; it prevents the
-    // following flag from becoming an allowlist value while literal imports remain covered by
-    // type-checking and the repository's source-boundary checker.
-    "--allow-unresolved",
-    "",
-    "--no-compile-autoload-dotenv",
-    "--no-compile-autoload-bunfig",
-    "--no-compile-autoload-tsconfig",
-    "--no-compile-autoload-package-json",
-    ...(options.target === undefined ? [] : [`--target=${options.target}`]),
-    `--outfile=${options.outputFile}`,
-    options.entrypoint,
-  ];
-  const build = Bun.spawn({
-    cmd: command,
-    cwd: options.cwd,
-    stderr: "inherit",
-    stdout: "inherit",
-  });
-  return build.exited;
+  const previousDirectory = process.cwd();
+  process.chdir(options.cwd);
+  try {
+    const result = await Bun.build({
+      allowUnresolved: [""],
+      compile: {
+        autoloadBunfig: false,
+        autoloadDotenv: false,
+        autoloadPackageJson: false,
+        autoloadTsconfig: false,
+        outfile: options.outputFile,
+        ...(options.target === undefined
+          ? {}
+          : { target: options.target as Bun.Build.CompileTarget }),
+      },
+      entrypoints: [options.entrypoint],
+      minify: true,
+      plugins: [tailwind],
+      throw: false,
+    });
+    if (!result.success) {
+      for (const log of result.logs) {
+        console.error(log);
+      }
+      return 1;
+    }
+    return 0;
+  } finally {
+    process.chdir(previousDirectory);
+  }
 }

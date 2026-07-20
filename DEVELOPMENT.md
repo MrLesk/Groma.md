@@ -29,7 +29,6 @@ bun ci
 bun run dev           # run the TypeScript CLI entry point
 bun run typecheck     # strict TypeScript validation (CLI and web client configs)
 bun run test          # Bun tests
-bun run web:css       # generate the embedded web stylesheet from the Tailwind source
 bun run format        # format source, scripts, and configuration
 bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
@@ -40,11 +39,12 @@ bun run verify:1a     # build and black-box verify the complete native 1A workfl
 bun run check         # run every required local verification gate
 ```
 
-The embedded web surface is compiled into the executable: `src/web/client/index.html` and its
-React modules are bundled by Bun's full-stack compile, and `bun run web:css` turns the Tailwind
-source `src/web/client/styles.css` into the gitignored `styles.generated.css` the page links.
-Run `bun run web:css` once before `bun run dev web` or the web typecheck; `bun run build` and
-`bun run check` run it automatically.
+The embedded web surface is compiled into the executable in the same single `Bun.build` call
+that produces the standalone binary: `src/web/client/index.html`, its React modules, and the
+Tailwind source `src/web/client/styles.css` are bundled together, with `bun-plugin-tailwind`
+processing the stylesheet during the build. For uncompiled development (`bun run dev web`),
+`bunfig.toml` registers the same plugin under `[serve.static]`; the compiled executable is
+built with bunfig autoloading disabled and never reads that file at runtime.
 
 The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
