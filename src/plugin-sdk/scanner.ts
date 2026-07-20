@@ -21,6 +21,7 @@ import { inspectIntrinsicArrayLength } from "../core/runtime.ts";
 
 export {
   observationSessionApiVersion,
+  observedContainmentRelationshipType,
   type ComponentActionObservation,
   type ComponentCandidateObservation,
   type ComponentCandidateStructuralSignals,

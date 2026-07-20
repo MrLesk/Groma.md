@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { parse } from "@babel/parser";
 
 import {
+  observedContainmentRelationshipType,
   pluginRuntimeApiVersion,
   scannerApiVersion,
   scannerCapabilityId,
@@ -3568,7 +3569,7 @@ async function scanScope(
           key: observationKey("relationship", scope, "workspace-member", fromKey, toKey),
           kind: "relationship",
           provenance: Object.freeze([declaration.owner.provenance, member.provenance]),
-          relationshipType: "workspace-member",
+          relationshipType: observedContainmentRelationshipType,
           scope,
           to: reference(scope, toKey),
         }),
@@ -3608,7 +3609,7 @@ async function scanScope(
           ),
           kind: "relationship",
           provenance: Object.freeze([boundary.provenance]),
-          relationshipType: "source-boundary",
+          relationshipType: observedContainmentRelationshipType,
           scope,
           to: reference(scope, boundary.key),
         }),
@@ -4066,6 +4067,13 @@ async function scanScope(
   const boundaryFileCounts = new Map(
     boundaries.map((boundary) => [boundary.key, boundary.files.length] as const),
   );
+  // An observed action is an externally reachable way in: a served route or a
+  // declared public export. Having one is a direct observation, not a judgement.
+  const entryPointCandidates = new Set<string>();
+  for (const record of records) {
+    chargeExtractionWork(budget);
+    if (record.kind === "action") entryPointCandidates.add(record.component.key);
+  }
   for (let index = 0; index < records.length; index += 1) {
     chargeExtractionWork(budget);
     const record = records[index]!;
@@ -4074,13 +4082,20 @@ async function scanScope(
     const reuseBreadth = importingCandidates.get(record.key)?.size;
     const declaredBoundary =
       packageByKey.has(record.key) || boundaryFileCounts.has(record.key) ? true : undefined;
-    if (fileCount === undefined && reuseBreadth === undefined && declaredBoundary === undefined) {
+    const entryPoint = entryPointCandidates.has(record.key) ? true : undefined;
+    if (
+      fileCount === undefined &&
+      reuseBreadth === undefined &&
+      declaredBoundary === undefined &&
+      entryPoint === undefined
+    ) {
       continue;
     }
     const enlarged = Object.freeze({
       ...record,
       signals: Object.freeze({
         ...(declaredBoundary === undefined ? {} : { declaredBoundary }),
+        ...(entryPoint === undefined ? {} : { entryPoint }),
         ...(fileCount === undefined ? {} : { fileCount }),
         ...(reuseBreadth === undefined ? {} : { reuseBreadth }),
       }),

@@ -2,6 +2,8 @@
 schema: groma/component/v0.2
 id: ent_83702a52aa46b605c22cc1be63bf939a
 name: cli
+scale: domain
+parent: ent_a754d5c9106660a7c4f25673e53bc015
 ---
 
 # Relationships

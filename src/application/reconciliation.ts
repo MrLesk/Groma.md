@@ -1,4 +1,5 @@
 import {
+  observedContainmentRelationshipType,
   createObservationSession,
   createOpaqueIdSource,
   failure,
@@ -41,6 +42,11 @@ import {
   type StructuralScaleAssessmentV1,
   type StructuralScaleProposalConfigurationV1,
 } from "./scale-proposal.ts";
+import {
+  observedScaleForDepth,
+  observedSharedFromSignals,
+  resolveObservedStructure,
+} from "./observed-structure.ts";
 
 export interface EvidenceResourceMapper {
   resourceForEvidence(): Result<ResourceKey>;
@@ -96,6 +102,9 @@ interface ComponentProjection {
   readonly label?: string;
   readonly name?: string;
   readonly outputs?: readonly AutomaticItem[];
+  readonly parent?: string;
+  readonly scale?: string;
+  readonly shared?: boolean;
   readonly summary?: string;
   readonly type?: string;
 }
@@ -269,6 +278,9 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
     "label",
     "name",
     "outputs",
+    "parent",
+    "scale",
+    "shared",
     "summary",
     "type",
   ]);
@@ -277,7 +289,20 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
       diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
     );
   }
-  for (const field of ["iconDomain", "label", "name", "summary", "type"] as const) {
+  if (record.shared !== undefined && typeof record.shared !== "boolean") {
+    return failure(
+      diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
+    );
+  }
+  for (const field of [
+    "iconDomain",
+    "label",
+    "name",
+    "parent",
+    "scale",
+    "summary",
+    "type",
+  ] as const) {
     if (record[field] !== undefined && typeof record[field] !== "string") {
       return failure(
         diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
@@ -688,6 +713,13 @@ function ownedUpdate(
     }
     if (value !== undefined) projection[field] = value;
   }
+  // Structural values are carried forward untouched: the structural pass owns
+  // them, and it needs the previous projection to tell evidence-owned values
+  // apart from ones a person has since changed.
+  for (const field of ["parent", "scale", "shared"] as const) {
+    const value = previous[field];
+    if (value !== undefined) projection[field] = value;
+  }
   return Object.freeze({
     patch: Object.freeze(patch) as StandardComponentPatch,
     projection: Object.freeze(projection) as ComponentProjection,
@@ -1013,6 +1045,124 @@ export function createReconciliationOperations(
       const currentComponentIdentities = new Set(
         componentRecords.map((record) => qualified(record.scope, record.key)),
       );
+      const containmentRecords = snapshot.value.records.filter(
+        (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
+          record.kind === "relationship" &&
+          record.relationshipType === observedContainmentRelationshipType,
+      );
+      const structure = resolveObservedStructure(
+        containmentRecords.map((record) =>
+          Object.freeze({
+            contained: qualified(record.to.scope, record.to.key),
+            container: qualified(record.from.scope, record.from.key),
+          }),
+        ),
+      );
+      if (!structure.ok) return structure;
+      for (const record of containmentRecords) {
+        const container = qualified(record.from.scope, record.from.key);
+        const contained = qualified(record.to.scope, record.to.key);
+        if (
+          !componentIds.has(container) ||
+          !componentIds.has(contained) ||
+          !currentComponentIdentities.has(container) ||
+          !currentComponentIdentities.has(contained)
+        ) {
+          return failure(
+            diagnostic(
+              "unresolved-observation-reference",
+              "An observed containment endpoint is not exactly bound in this snapshot",
+            ),
+          );
+        }
+      }
+      const structuralProjections = new Map<string, ComponentProjection>();
+      for (const record of componentRecords) {
+        const identity = qualified(record.scope, record.key);
+        const containerIdentity = structure.value.parentOf.get(identity);
+        const parent =
+          containerIdentity === undefined ? undefined : componentIds.get(containerIdentity);
+        // Scale follows position in the observed structure. A component nobody
+        // observed containing and that contains nothing has no observed position,
+        // so it stays unscaled rather than being sized by how much we depend on it.
+        const positioned =
+          parent !== undefined || structure.value.depthOf.has(identity)
+            ? observedScaleForDepth(structure.value.depthOf.get(identity) ?? 0)
+            : undefined;
+        const shared = observedSharedFromSignals(record.signals);
+        structuralProjections.set(
+          identity,
+          Object.freeze({
+            ...(parent === undefined ? {} : { parent }),
+            ...(positioned === undefined ? {} : { scale: positioned }),
+            ...(shared === undefined ? {} : { shared }),
+          }),
+        );
+      }
+      const structuralFields = ["parent", "scale", "shared"] as const;
+      for (const [identity, binding] of componentBindings) {
+        const next = structuralProjections.get(identity);
+        if (next === undefined || !currentComponentIdentities.has(identity)) continue;
+        const existing = existingComponents.get(binding.componentId);
+        const patch: Record<string, unknown> = {};
+        const projected: Record<string, unknown> = {};
+        for (const field of structuralFields) {
+          const previous = binding.projection[field];
+          // Evidence may only move a value it still owns: one a person has not
+          // changed since the last scan projected it.
+          const owned = existing === undefined || existing[field] === previous;
+          const value = owned ? next[field] : previous;
+          if (owned && existing !== undefined && existing[field] !== next[field]) {
+            patch[field] = next[field] ?? null;
+          }
+          if (value !== undefined) projected[field] = value;
+        }
+        componentBindings.set(
+          identity,
+          Object.freeze({
+            ...binding,
+            projection: Object.freeze({ ...binding.projection, ...projected }),
+          }),
+        );
+        const creating = existing === undefined;
+        if (!creating && Object.keys(patch).length === 0) continue;
+        if (creating && Object.keys(projected).length === 0) continue;
+        const planned = componentMutations.findIndex((mutation) => {
+          const record = mutation as Readonly<Record<string, unknown>>;
+          if (record.type === "patch") return record.id === binding.componentId;
+          const created = record.component as Readonly<Record<string, unknown>> | undefined;
+          return created?.id === binding.componentId;
+        });
+        if (planned === -1) {
+          componentMutations.push(
+            Object.freeze({
+              id: binding.componentId,
+              patch: patch as unknown as GraphData,
+              type: "patch",
+            }),
+          );
+        } else {
+          const record = componentMutations[planned]! as Readonly<Record<string, unknown>>;
+          componentMutations[planned] =
+            record.type === "patch"
+              ? Object.freeze({
+                  ...record,
+                  patch: Object.freeze({
+                    ...(record.patch as Readonly<Record<string, unknown>>),
+                    ...patch,
+                  }) as unknown as GraphData,
+                })
+              : Object.freeze({
+                  ...record,
+                  component: Object.freeze({
+                    ...(record.component as Readonly<Record<string, unknown>>),
+                    ...projected,
+                  }) as unknown as GraphData,
+                });
+        }
+        touchedComponents.add(binding.componentId);
+      }
+
       for (const record of snapshot.value.records) {
         if (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") {
           continue;
@@ -1029,7 +1179,8 @@ export function createReconciliationOperations(
       }
       const relationshipRecords = snapshot.value.records.filter(
         (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
-          record.kind === "relationship",
+          record.kind === "relationship" &&
+          record.relationshipType !== observedContainmentRelationshipType,
       );
       if (relationshipRecords.length > options.bounds.maxRelationships) {
         return failure(

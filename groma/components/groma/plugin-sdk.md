@@ -2,6 +2,9 @@
 schema: groma/component/v0.2
 id: ent_d67a54e7b5161786d1344fded42f9176
 name: plugin-sdk
+scale: domain
+shared: false
+parent: ent_a754d5c9106660a7c4f25673e53bc015
 ---
 
 # Relationships

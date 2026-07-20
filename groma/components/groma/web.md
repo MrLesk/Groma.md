@@ -2,6 +2,9 @@
 schema: groma/component/v0.2
 id: ent_df026a00c094f2c586ac953ff361783e
 name: web
+scale: domain
+shared: false
+parent: ent_a754d5c9106660a7c4f25673e53bc015
 ---
 
 # Actions

@@ -324,9 +324,7 @@ describe("built-in TypeScript and Bun scanner", () => {
 
     const relationships = snapshot.records.filter((record) => record.kind === "relationship");
     expect(relationships.filter((record) => record.relationshipType === "imports").length).toBe(3);
-    expect(
-      relationships.filter((record) => record.relationshipType === "source-boundary").length,
-    ).toBe(3);
+    expect(relationships.filter((record) => record.relationshipType === "contains").length).toBe(3);
 
     const documentation = snapshot.records.filter((record) => record.kind === "documentation");
     expect(documentation.map((record) => record.content)).toContain(
@@ -722,9 +720,13 @@ export function api() { return model; }
         ]),
       );
       const namesByKey = new Map(candidates?.map((record) => [record.key, record.candidate.name]));
+      // Containment is one generic token, so member packages are the containment
+      // targets whose container is the workspace package itself.
       const workspaceMembers = result.snapshot?.records.filter(
         (record) =>
-          record.kind === "relationship" && record.relationshipType === "workspace-member",
+          record.kind === "relationship" &&
+          record.relationshipType === "contains" &&
+          namesByKey.get(record.from.key) === "@fixture/workspace",
       );
       expect(
         workspaceMembers
@@ -754,8 +756,7 @@ export function api() { return model; }
     expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       ambiguous.snapshot?.records.some(
-        (record) =>
-          record.kind === "relationship" && record.relationshipType === "workspace-member",
+        (record) => record.kind === "relationship" && record.relationshipType === "contains",
       ),
     ).toBeFalse();
 
@@ -3499,8 +3500,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records.some(
-        (record) =>
-          record.kind === "relationship" && record.relationshipType === "workspace-member",
+        (record) => record.kind === "relationship" && record.relationshipType === "contains",
       ),
     ).toBeTrue();
   });

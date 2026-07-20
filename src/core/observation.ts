@@ -4,6 +4,17 @@ import { inspectExactRecord, inspectIntrinsicArrayLength } from "./runtime.ts";
 
 export const observationSessionApiVersion = "groma.observation/v1" as const;
 
+/**
+ * The one reserved relationship token that means structural containment: the
+ * source candidate physically contains the target candidate. It is deliberately
+ * free of packaging, language, and framework vocabulary so every scanner reports
+ * structure the same way — a Go scanner relates module to package to file, a Java
+ * scanner artifact to package to class, a Node scanner package to source boundary.
+ * Scanners state only that containment was observed; deciding what a containment
+ * level means is reconciliation and curation, never observation.
+ */
+export const observedContainmentRelationshipType = "contains" as const;
+
 export type ObservationSessionState = "active" | "cancelled" | "completed" | "expired" | "failed";
 
 export type ObservationRecordKind =
