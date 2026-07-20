@@ -85,10 +85,14 @@ These are the promises that keep the map trustworthy after the first scan:
 ## Build it yourself
 
 ```sh
-bun ci          # install dependencies
-bun run build   # compile the single-file executable to dist/groma
-./dist/groma    # open the bounded local visual blueprint
+bun ci                # install dependencies
+bun run build         # compile the single-file executable to dist/groma
+./dist/groma          # open the bounded local visual blueprint
+bun run install:local # put the compiled groma command on your PATH
 ```
+
+After `bun run install:local`, `groma`, `groma scan`, and `groma web` work from any
+directory, exactly like the compiled binary in `dist/`.
 
 To create the unpublished four-target preview package, run `bun run package`. It writes
 target-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching
