@@ -100,6 +100,8 @@ function overviewPlain(result: CliOverviewResult, color: boolean): string | unde
       `id=${jsonString(node.id)}`,
       `revision=${jsonString(node.revision)}`,
       ...(node.type === undefined ? [] : [`type=${jsonString(node.type)}`]),
+      ...(node.scale === undefined ? [] : [`scale=${node.scale}`]),
+      ...(node.shared === true ? ["shared"] : []),
       `display=${jsonString(node.displayText)}`,
       ...(node.name === undefined ? [] : [`name=${jsonString(node.name)}`]),
     ];

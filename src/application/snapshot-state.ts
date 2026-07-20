@@ -23,6 +23,8 @@ import {
   createStandardModelInvariant,
   isStandardComponentIconDomain,
   isStandardComponentLabel,
+  isStandardComponentScale,
+  type StandardComponentScale,
   isStandardComponentSummary,
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
@@ -201,6 +203,8 @@ const componentFields = new Set([
   "name",
   "outputs",
   "parent",
+  "scale",
+  "shared",
   "summary",
   "type",
 ]);
@@ -784,6 +788,8 @@ function modelComponentPayload(
     ...(value.summary === undefined ? {} : { summary: value.summary }),
     ...(value.iconDomain === undefined ? {} : { iconDomain: value.iconDomain }),
     ...(value.type === undefined ? {} : { type: value.type }),
+    ...(value.scale === undefined ? {} : { scale: value.scale }),
+    ...(value.shared === undefined ? {} : { shared: value.shared }),
     ...(value.parent === undefined ? {} : { parent: value.parent }),
     ...(value.intent === undefined ? {} : { intent: value.intent }),
     ...(inputs === undefined ? {} : { inputs }),
@@ -868,6 +874,11 @@ function modelComponent(
     isStandardComponentIconDomain,
   );
   const type = optionalModelString(record.value, "type", openTokenPattern);
+  const scale = optionalModelString(record.value, "scale", undefined, isStandardComponentScale);
+  if (Object.hasOwn(record.value, "shared") && typeof record.value.shared !== "boolean") {
+    return decoderFailure();
+  }
+  const shared = record.value.shared as boolean | undefined;
   const intent = optionalModelString(record.value, "intent");
   const lifecycle = optionalModelString(record.value, "lifecycle", openTokenPattern);
   const desired = optionalModelString(record.value, "desired", openTokenPattern);
@@ -877,6 +888,7 @@ function modelComponent(
     !summary.ok ||
     !iconDomain.ok ||
     !type.ok ||
+    !scale.ok ||
     !intent.ok ||
     !lifecycle.ok ||
     !desired.ok
@@ -906,6 +918,8 @@ function modelComponent(
     ...(summary.value === undefined ? {} : { summary: summary.value }),
     ...(iconDomain.value === undefined ? {} : { iconDomain: iconDomain.value }),
     ...(type.value === undefined ? {} : { type: type.value }),
+    ...(scale.value === undefined ? {} : { scale: scale.value as StandardComponentScale }),
+    ...(shared === undefined ? {} : { shared }),
     ...(parent === undefined ? {} : { parent }),
     ...(intent.value === undefined ? {} : { intent: intent.value }),
     ...(inputs.value === undefined ? {} : { inputs: inputs.value }),

@@ -10,8 +10,10 @@ import {
 } from "../../core/index.ts";
 import {
   createStandardModelCapability,
+  isCoarserStandardScale,
   STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS,
   STANDARD_COMPONENT_KIND,
+  STANDARD_COMPONENT_SCALES,
   STANDARD_MODEL_CAPABILITY_ID,
   STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS,
   standardComponentDisplayText,
@@ -640,5 +642,47 @@ describe("standard v0.1 model", () => {
       ok: false,
       diagnostics: [{ code: "wrong-standard-model-kind" }],
     });
+  });
+});
+
+describe("component scale and shared", () => {
+  const capability = createStandardModelCapability();
+
+  test("accepts every closed scale together with the shared flag", () => {
+    for (const scale of STANDARD_COMPONENT_SCALES) {
+      const draft = capability.normalize({ id: componentId(1), scale, shared: true });
+      expect(draft.ok).toBe(true);
+    }
+  });
+
+  test("rejects scale values outside the closed set and never defaults one", () => {
+    const rejected = capability.normalize({ id: componentId(1), scale: "molecule" });
+    expect(rejected).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: "invalid-component-scale" }],
+    });
+    const unscaled = capability.normalize({ id: componentId(1), name: "Unscaled" });
+    expect(unscaled.ok).toBe(true);
+    if (unscaled.ok) {
+      expect(Object.hasOwn(unscaled.value.payload as object, "scale")).toBe(false);
+    }
+  });
+
+  test("rejects a non-boolean shared flag", () => {
+    const rejected = capability.normalize({
+      id: componentId(1),
+      shared: "yes" as unknown as boolean,
+    });
+    expect(rejected).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: "invalid-component-shared" }],
+    });
+  });
+
+  test("orders the closed ladder from coarsest to finest", () => {
+    expect(isCoarserStandardScale("system", "element")).toBe(true);
+    expect(isCoarserStandardScale("domain", "part")).toBe(true);
+    expect(isCoarserStandardScale("part", "part")).toBe(false);
+    expect(isCoarserStandardScale("element", "system")).toBe(false);
   });
 });

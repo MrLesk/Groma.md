@@ -15,6 +15,14 @@ import { copyGraphPayload } from "../core/payload.ts";
 
 export const STANDARD_COMPONENT_KIND = "component";
 export const STANDARD_MODEL_CAPABILITY_ID = "groma.standard-model/v0.1";
+/** The closed curated scale ladder, ordered from coarsest to finest. */
+export const STANDARD_COMPONENT_SCALES = Object.freeze([
+  "system",
+  "domain",
+  "part",
+  "element",
+] as const);
+export type StandardComponentScale = (typeof STANDARD_COMPONENT_SCALES)[number];
 export const STANDARD_COMPONENT_LABEL_MAX_CODE_POINTS = 80;
 export const STANDARD_COMPONENT_SUMMARY_MAX_CODE_POINTS = 280;
 export const STANDARD_COMPONENT_ICON_DOMAIN_MAX_CHARACTERS = 253;
@@ -30,6 +38,8 @@ const knownComponentFields = new Set([
   "name",
   "outputs",
   "parent",
+  "scale",
+  "shared",
   "summary",
   "type",
 ]);
@@ -59,6 +69,8 @@ export interface StandardComponent {
   readonly summary?: string;
   readonly iconDomain?: string;
   readonly type?: string;
+  readonly scale?: StandardComponentScale;
+  readonly shared?: boolean;
   readonly parent?: EntityId;
   readonly intent?: string;
   readonly inputs?: readonly StandardItem[];
@@ -92,6 +104,8 @@ export interface StandardComponentInput {
   readonly summary?: string;
   readonly iconDomain?: string;
   readonly type?: string;
+  readonly scale?: string;
+  readonly shared?: boolean;
   readonly parent?: string;
   readonly intent?: string;
   readonly inputs?: readonly StandardItemInput[];
@@ -108,6 +122,8 @@ export interface StandardComponentPatch {
   readonly summary?: string | null;
   readonly iconDomain?: string | null;
   readonly type?: string | null;
+  readonly scale?: string | null;
+  readonly shared?: boolean | null;
   readonly parent?: string | null;
   readonly intent?: string | null;
   readonly inputs?: readonly StandardItemInput[] | null;
@@ -244,6 +260,21 @@ function recognitionString(
     `${path}.${field} must be ${expectation}`,
     `${path}.${field}`,
   );
+}
+
+export function isStandardComponentScale(value: string): value is StandardComponentScale {
+  return (STANDARD_COMPONENT_SCALES as readonly string[]).includes(value);
+}
+
+/**
+ * True when `left` is coarser than `right` on the closed ladder. Only defined
+ * scales compare; an unscaled side never participates in containment checks.
+ */
+export function isCoarserStandardScale(
+  left: StandardComponentScale,
+  right: StandardComponentScale,
+): boolean {
+  return STANDARD_COMPONENT_SCALES.indexOf(left) < STANDARD_COMPONENT_SCALES.indexOf(right);
 }
 
 export function standardComponentDisplayText(
@@ -437,6 +468,8 @@ function componentPayload(component: Omit<StandardComponent, "id" | "kind">): Gr
     ...(component.summary === undefined ? {} : { summary: component.summary }),
     ...(component.iconDomain === undefined ? {} : { iconDomain: component.iconDomain }),
     ...(component.type === undefined ? {} : { type: component.type }),
+    ...(component.scale === undefined ? {} : { scale: component.scale }),
+    ...(component.shared === undefined ? {} : { shared: component.shared }),
     ...(component.parent === undefined ? {} : { parent: component.parent }),
     ...(component.intent === undefined ? {} : { intent: component.intent }),
     ...(component.inputs === undefined ? {} : { inputs: component.inputs.map(itemRecord) }),
@@ -461,6 +494,25 @@ function parsePayload(value: unknown): Result<Omit<StandardComponent, "id" | "ki
   if (!iconDomain.ok) return iconDomain;
   const type = openToken(record.value, "type", "component");
   if (!type.ok) return type;
+  const scaleText = optionalString(record.value, "scale", "component");
+  if (!scaleText.ok) return scaleText;
+  if (scaleText.value !== undefined && !isStandardComponentScale(scaleText.value)) {
+    return diagnostic(
+      "invalid-component-scale",
+      `component.scale must be one of the closed set: ${STANDARD_COMPONENT_SCALES.join(", ")}`,
+      "component.scale",
+      scaleText.value,
+    );
+  }
+  const scale = scaleText.value as StandardComponentScale | undefined;
+  if (record.value.shared !== undefined && typeof record.value.shared !== "boolean") {
+    return diagnostic(
+      "invalid-component-shared",
+      "component.shared must be a boolean when present",
+      "component.shared",
+    );
+  }
+  const shared = record.value.shared as boolean | undefined;
   const intent = optionalString(record.value, "intent", "component");
   if (!intent.ok) return intent;
   const lifecycle = openToken(record.value, "lifecycle", "component");
@@ -498,6 +550,8 @@ function parsePayload(value: unknown): Result<Omit<StandardComponent, "id" | "ki
       ...(summary.value === undefined ? {} : { summary: summary.value }),
       ...(iconDomain.value === undefined ? {} : { iconDomain: iconDomain.value }),
       ...(type.value === undefined ? {} : { type: type.value }),
+      ...(scale === undefined ? {} : { scale }),
+      ...(shared === undefined ? {} : { shared }),
       ...(parent === undefined ? {} : { parent }),
       ...(intent.value === undefined ? {} : { intent: intent.value }),
       ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
