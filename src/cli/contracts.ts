@@ -126,6 +126,8 @@ export interface CliOverviewNode {
   readonly id: string;
   readonly name?: string;
   readonly revision: string;
+  readonly scale?: string;
+  readonly shared?: boolean;
   readonly type?: string;
 }
 

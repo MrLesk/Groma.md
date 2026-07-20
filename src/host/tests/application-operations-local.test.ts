@@ -531,4 +531,47 @@ describe("official local application operations composition", () => {
     expect(finalRead.value.item.component.inputs).toBeUndefined();
     expect(finalRead.value.item.component.outputs).toHaveLength(100);
   });
+
+  test("fails closed when a component scale would be coarser than its parent", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const parent = await host.operations.createComponent({
+      component: { id: conformanceIds.rootA, name: "Persistence", scale: "part", type: "service" },
+    });
+    expect(parent).toMatchObject({ status: "committed" });
+
+    const coarser = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceA, parent: conformanceIds.rootA, scale: "domain" },
+    });
+    expect(coarser).toMatchObject({
+      diagnostics: [{ code: "component-scale-coarser-than-parent" }],
+      status: "validation-rejected",
+    });
+
+    const nested = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceA, parent: conformanceIds.rootA, scale: "part" },
+    });
+    expect(nested).toMatchObject({ status: "committed" });
+
+    const unscaled = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceB, parent: conformanceIds.rootA },
+    });
+    expect(unscaled).toMatchObject({ status: "committed" });
+
+    const parentRevision = (
+      parent as { revisions: readonly { componentId: string; revision: string | null }[] }
+    ).revisions.find((entry) => entry.componentId === conformanceIds.rootA)?.revision;
+    if (parentRevision == null) throw new Error("expected a committed parent revision");
+    const finer = await host.operations.updateComponent({
+      expectedRevision: parentRevision,
+      id: conformanceIds.rootA,
+      patch: { scale: "element" },
+    });
+    expect(finer).toMatchObject({
+      diagnostics: [{ code: "component-scale-coarser-than-parent" }],
+      status: "validation-rejected",
+    });
+  });
 });

@@ -38,6 +38,7 @@ import {
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
+  isCoarserStandardScale,
   type StandardComponent,
   type StandardComponentPatch,
   type StandardRelationship,
@@ -1697,6 +1698,8 @@ const semanticMessages: Readonly<Record<string, string>> = Object.freeze({
   "query-context-too-large": "The query context exceeds the configured size budget",
   "query-page-overflow": "The query page exceeds the validated item limit",
   "relationship-id-hijack": "The relationship identity belongs to another component",
+  "component-scale-coarser-than-parent":
+    "A component scale can never be coarser than its parent scale",
   "self-component-parent": "A component cannot be its own structural parent",
   "self-component-alias": "A component identity cannot supersede itself",
   "stale-cursor": "The continuation cursor belongs to a different graph generation",
@@ -3889,6 +3892,19 @@ export function createApplicationOperations(
         );
       }
       component = Object.freeze({ ...component, parent: parent.value.resolved });
+      const parentComponent = componentById(current, component.parent as string);
+      if (
+        component.scale !== undefined &&
+        parentComponent?.scale !== undefined &&
+        isCoarserStandardScale(component.scale, parentComponent.scale)
+      ) {
+        return rejected(
+          diagnostic(
+            "component-scale-coarser-than-parent",
+            `A ${component.scale}-scale component cannot live inside its ${parentComponent.scale}-scale parent`,
+          ),
+        );
+      }
     }
     const relationshipMutations: GraphDataRecord[] = [];
     const affectedRelationships = new Set<string>();
@@ -4035,6 +4051,38 @@ export function createApplicationOperations(
       id.value,
     );
     if (!computed.ok) return rejected(...computed.diagnostics);
+    const resultingScale = computed.value.component.scale;
+    const resultingParent = computed.value.component.parent;
+    if (resultingScale !== undefined && resultingParent !== undefined) {
+      const parentComponent = componentById(current.value, resultingParent);
+      if (
+        parentComponent?.scale !== undefined &&
+        isCoarserStandardScale(resultingScale, parentComponent.scale)
+      ) {
+        return rejected(
+          diagnostic(
+            "component-scale-coarser-than-parent",
+            `A ${resultingScale}-scale component cannot live inside its ${parentComponent.scale}-scale parent`,
+          ),
+        );
+      }
+    }
+    if (resultingScale !== undefined) {
+      const coarserChild = current.value.components.find(
+        (candidate) =>
+          candidate.parent === id.value &&
+          candidate.scale !== undefined &&
+          isCoarserStandardScale(candidate.scale, resultingScale),
+      );
+      if (coarserChild !== undefined) {
+        return rejected(
+          diagnostic(
+            "component-scale-coarser-than-parent",
+            `The ${coarserChild.scale}-scale child ${coarserChild.id} cannot live inside a ${resultingScale}-scale parent`,
+          ),
+        );
+      }
+    }
     const finalEmbedded = preflightEmbeddedItems(
       computed.value.entity.payload,
       options.bounds.maxEmbeddedItems,

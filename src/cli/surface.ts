@@ -279,6 +279,8 @@ async function overview(
         id,
         ...(item.component.name === undefined ? {} : { name: item.component.name }),
         revision: item.revision,
+        ...(item.component.scale === undefined ? {} : { scale: item.component.scale }),
+        ...(item.component.shared === undefined ? {} : { shared: item.component.shared }),
         ...(item.component.type === undefined ? {} : { type: item.component.type }),
       }),
     );
