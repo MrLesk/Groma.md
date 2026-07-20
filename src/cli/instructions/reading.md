@@ -9,7 +9,9 @@ Nothing follows a cursor implicitly.
 - **Tree** — bare `groma` in an interactive terminal opens the visual blueprint;
   `groma --format json` returns the same bounded hierarchy as data.
 - **Web** — `groma web` serves the interactive blueprint on 127.0.0.1 only, with
-  bounded reads behind it. It is read-only and makes no other network requests.
+  bounded reads behind it. Its technical-sheet canvas starts with one root page and
+  descends by component scale only when you explicitly open a component or request
+  the next bounded page. It is read-only and makes no other network requests.
 - **List** — `groma component list|roots|children <parent-id> --limit <1-100>` pages
   through components.
 - **Detail** — `groma component get <id> --relationships-limit <1-100>` returns one

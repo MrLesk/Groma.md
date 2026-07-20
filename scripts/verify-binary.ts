@@ -120,6 +120,30 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
     if (!document.ok || !documentText.includes('<div id="root">')) {
       throw new Error("Compiled web server did not serve the embedded shell");
     }
+    const scriptPath = /<script[^>]+src="([^"]+)"/.exec(documentText)?.[1];
+    const stylesheetPath = /<link[^>]+href="([^"]+\.css)"/.exec(documentText)?.[1];
+    if (scriptPath === undefined || stylesheetPath === undefined) {
+      throw new Error("Compiled web shell did not reference its bundled client assets");
+    }
+    const [script, stylesheet] = await Promise.all([
+      fetch(new URL(scriptPath, url)),
+      fetch(new URL(stylesheetPath, url)),
+    ]);
+    const [scriptText, stylesheetText] = await Promise.all([script.text(), stylesheet.text()]);
+    if (
+      !script.ok ||
+      !scriptText.includes("react-flow-dagre") ||
+      !scriptText.includes("Component scale notation")
+    ) {
+      throw new Error("Compiled web client did not contain the React Flow blueprint renderer");
+    }
+    if (
+      !stylesheet.ok ||
+      !stylesheetText.includes("groma-node--system") ||
+      !stylesheetText.includes("groma-title-block")
+    ) {
+      throw new Error("Compiled web client did not contain scale notation styles");
+    }
     const roots = await fetch(`${url}api/roots?limit=5`);
     const rootsBody = (await roots.json()) as { readonly ok?: unknown };
     if (!roots.ok || rootsBody.ok !== true) {

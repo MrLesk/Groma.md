@@ -200,8 +200,9 @@ in the production entry point or production executable.
 
 In an interactive terminal, bare `groma` opens the disposable local visual artifact without an
 HTTP server or React. `groma web` serves the embedded interactive web surface from the compiled
-binary — Bun's embedded HTTP server with a bundled React and Tailwind client — bound to the
-loopback interface, exposing only bounded reads through shared application operations.
+binary — Bun's embedded HTTP server with a bundled React, React Flow, dagre, and Tailwind client —
+bound to the loopback interface. The initial canvas lays out only its bounded root page; every
+deeper scale enters the deterministic layout through an explicit bounded child-page action.
 
 The bounded scan, reconciliation, and local visual loop is implemented. Plans, Git history views,
 browser editing, and replacing bare `groma` with the web surface remain later work.

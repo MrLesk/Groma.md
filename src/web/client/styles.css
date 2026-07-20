@@ -1,3 +1,4 @@
+@import "@xyflow/react/dist/style.css";
 @import "tailwindcss";
 @source "./";
 
@@ -20,4 +21,404 @@ body {
   background: var(--color-desk);
   color: var(--color-ink);
   font-family: var(--font-sheet);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.groma-flow {
+  width: 100%;
+  height: 100%;
+  border-right: 1px solid var(--color-line);
+  background: var(--color-paper);
+}
+
+.groma-flow .react-flow {
+  --xy-background-color: var(--color-paper);
+  --xy-controls-button-background-color: var(--color-paper);
+  --xy-controls-button-background-color-hover: #f2f2ee;
+  --xy-controls-button-color: var(--color-ink);
+  --xy-controls-button-color-hover: var(--color-ink);
+  --xy-controls-button-border-color: var(--color-line);
+  background: var(--color-paper);
+}
+
+.groma-flow .react-flow__node-component {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.groma-flow .react-flow__node-component:focus-visible {
+  outline: 2px solid var(--color-survey);
+  outline-offset: 5px;
+}
+
+.groma-flow .react-flow__controls {
+  overflow: hidden;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.groma-flow .react-flow__controls-button {
+  width: 31px;
+  height: 29px;
+  border-right: 1px solid var(--color-line);
+  border-bottom: 0;
+}
+
+.groma-flow .react-flow__controls-button:last-child {
+  border-right: 0;
+}
+
+.groma-flow .react-flow__controls-button:focus-visible,
+.groma-flow button:focus-visible {
+  outline: 2px solid var(--color-survey);
+  outline-offset: -2px;
+}
+
+.groma-flow .react-flow__edge-path {
+  stroke: var(--color-ink-muted);
+  stroke-width: 1.25;
+}
+
+.groma-flow .react-flow__edge.groma-containment-edge .react-flow__edge-path {
+  stroke-dasharray: 14 5 2 5;
+}
+
+.groma-node {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: rgba(251, 250, 246, 0.98);
+  box-shadow: 0 7px 18px rgba(32, 36, 34, 0.07);
+}
+
+.groma-node--system {
+  border: 4px double var(--color-ink);
+  padding: 12px 16px;
+}
+
+.groma-node--domain {
+  border: 2px solid var(--color-ink);
+  padding: 11px 14px;
+  box-shadow: 0 10px 24px rgba(32, 36, 34, 0.09);
+}
+
+.groma-node--part {
+  border: 1.5px solid var(--color-ink);
+  padding: 9px 12px;
+}
+
+.groma-node--element {
+  border-top: 1.5px solid var(--color-ink);
+  border-bottom: 1.5px solid var(--color-ink);
+  padding: 7px 10px;
+  box-shadow: none;
+}
+
+.groma-node--unscaled {
+  border: 1.5px dashed var(--color-ink-muted);
+  padding: 8px 11px;
+  box-shadow: none;
+}
+
+.groma-node.is-selected {
+  outline: 3px double var(--color-ink);
+  outline-offset: 3px;
+}
+
+.groma-node__rule {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 100%;
+  background: var(--color-survey);
+}
+
+.groma-node.is-selected .groma-node__rule {
+  width: 4px;
+}
+
+.groma-node__heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+}
+
+.groma-node__heading span:last-child {
+  margin-left: auto;
+}
+
+.groma-node__notation {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 13px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+.groma-node--system .groma-node__notation {
+  border: 3px double var(--color-ink);
+}
+
+.groma-node--domain .groma-node__notation {
+  border: 2px solid var(--color-ink);
+}
+
+.groma-node--part .groma-node__notation {
+  border: 1px solid var(--color-ink);
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.groma-node--element .groma-node__notation {
+  height: 6px;
+  border-top: 1px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-ink);
+}
+
+.groma-node--unscaled .groma-node__notation {
+  border: 1px dashed var(--color-ink-muted);
+  border-radius: 50%;
+}
+
+.groma-node__select {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  margin: 7px 0 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groma-node--system .groma-node__select {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.groma-node--domain .groma-node__select {
+  font-size: 16px;
+}
+
+.groma-node--element .groma-node__select {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.groma-node__select:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.groma-node__disclosure {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 17px;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  color: var(--color-ink-muted);
+}
+
+.groma-node__disclosure button {
+  padding: 1px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.groma-node__disclosure button:hover {
+  border-color: var(--color-survey);
+  color: var(--color-ink);
+}
+
+.groma-node__terminal {
+  letter-spacing: 0.03em;
+}
+
+.groma-flow .groma-handle {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  background: var(--color-paper);
+}
+
+.groma-title-block {
+  width: min(660px, calc(100vw - 340px));
+  min-width: 420px;
+  margin: 15px;
+  border: 1.5px solid var(--color-ink);
+  background: rgba(251, 250, 246, 0.96);
+  box-shadow: 0 8px 22px rgba(32, 36, 34, 0.06);
+}
+
+.groma-title-block__heading {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  border-bottom: 1px solid var(--color-ink);
+}
+
+.groma-title-block__heading > * {
+  margin: 0;
+  padding: 5px 9px;
+  border-right: 1px solid var(--color-line);
+}
+
+.groma-title-block__heading > *:last-child {
+  border-right: 0;
+}
+
+.groma-title-block__heading p {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.groma-title-block__heading span,
+.groma-title-block__hint {
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+}
+
+.groma-title-block ol {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groma-title-block li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-right: 1px solid var(--color-fine);
+  font-family: var(--font-plan);
+  font-size: 8px;
+  color: var(--color-ink-muted);
+}
+
+.groma-title-block li:last-child {
+  border-right: 0;
+}
+
+.groma-title-block li strong {
+  color: var(--color-ink);
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.groma-legend-mark {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.groma-legend-mark--system {
+  border: 3px double var(--color-ink);
+}
+
+.groma-legend-mark--domain {
+  border: 2px solid var(--color-ink);
+}
+
+.groma-legend-mark--part {
+  border-right: 1px solid var(--color-ink);
+  border-left: 1px solid var(--color-ink);
+}
+
+.groma-legend-mark--element {
+  height: 5px;
+  border-top: 1px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-ink);
+}
+
+.groma-legend-mark--unscaled {
+  border: 1px dashed var(--color-ink-muted);
+  border-radius: 50%;
+}
+
+.groma-title-block__hint {
+  margin: 0;
+  padding: 5px 8px;
+  border-top: 1px solid var(--color-fine);
+}
+
+.groma-bounded-notice,
+.groma-empty-sheet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px solid var(--color-amber);
+  background: var(--color-paper);
+  color: var(--color-amber);
+  font-family: var(--font-plan);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.groma-bounded-notice {
+  margin-bottom: 15px;
+  padding: 6px 8px;
+}
+
+.groma-bounded-notice button {
+  padding: 3px 6px;
+  border: 1px solid var(--color-amber);
+  background: var(--color-paper);
+  color: var(--color-amber);
+  cursor: pointer;
+}
+
+.groma-empty-sheet {
+  margin-top: 180px;
+  padding: 12px 16px;
+  border-color: var(--color-line);
+  color: var(--color-ink-muted);
+}
+
+@media (max-width: 800px) {
+  .groma-title-block {
+    width: calc(100vw - 32px);
+    min-width: 0;
+  }
+
+  .groma-title-block ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
