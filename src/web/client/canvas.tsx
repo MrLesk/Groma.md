@@ -197,6 +197,9 @@ export function Canvas({
           minZoom={0.12}
           maxZoom={2.5}
           nodesConnectable={false}
+          panOnScroll
+          zoomOnScroll={false}
+          zoomOnPinch
           nodesDraggable={false}
           nodesFocusable={false}
           elementsSelectable

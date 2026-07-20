@@ -74,11 +74,12 @@ function scaleAssessmentText(
 }
 
 export interface SpecPanelProps {
+  readonly onClose: () => void;
   readonly resolveDisplay: (id: string) => string | undefined;
   readonly selectedId?: string | undefined;
 }
 
-export function SpecPanel({ resolveDisplay, selectedId }: SpecPanelProps) {
+export function SpecPanel({ onClose, resolveDisplay, selectedId }: SpecPanelProps) {
   const [detail, setDetail] = useState<DetailState>(IDLE);
 
   useEffect(() => {
@@ -133,20 +134,27 @@ export function SpecPanel({ resolveDisplay, selectedId }: SpecPanelProps) {
   const scaleAssessments = (detail.read?.evidence ?? []).flatMap((entry) =>
     entry.scale === undefined ? [] : [{ projectId: entry.projectId, scale: entry.scale }],
   );
+  if (selectedId === undefined) return null;
+
   return (
     <aside
+      aria-label="Component detail"
       aria-live="polite"
       data-canvas-keys="skip"
       className="absolute top-4 right-4 z-10 max-h-[calc(100vh-104px)] w-72 overflow-auto border-[1.5px] border-ink bg-paper"
     >
-      <h2 className="m-0 border-b border-ink px-3 py-2 text-[11px] tracking-[.12em] uppercase">
+      <h2 className="m-0 flex items-center justify-between gap-2 border-b border-ink px-3 py-2 text-[11px] tracking-[.12em] uppercase">
         Component detail
+        <button
+          type="button"
+          aria-label="Close component detail"
+          onClick={onClose}
+          className="cursor-pointer border-0 bg-transparent p-0 font-plan text-sm leading-none text-ink-muted hover:text-ink"
+        >
+          ×
+        </button>
       </h2>
-      {detail.status === "idle" ? (
-        <p className="px-3 py-3 font-plan text-xs text-ink-muted">
-          Select a component on the sheet or search the blueprint.
-        </p>
-      ) : detail.status === "loading" ? (
+      {detail.status === "loading" ? (
         <p className="px-3 py-3 font-plan text-xs text-ink-muted">Reading the detail…</p>
       ) : detail.status === "failed" ? (
         <div className="border-l-2 border-amber px-3 py-3 font-plan text-xs text-amber">

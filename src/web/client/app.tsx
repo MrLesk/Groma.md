@@ -75,6 +75,16 @@ export function App() {
     };
   }, []);
 
+  // Escape closes the detail panel, matching the search field's dismissal.
+  useEffect(() => {
+    if (selectedId === undefined) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedId(undefined);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
+
   const loadChildren = (parentId: string, cursor?: string) => {
     if (pending.current.has(parentId)) return;
     pending.current.add(parentId);
@@ -219,7 +229,7 @@ export function App() {
             </div>
           </div>
         ) : (
-          <div className="h-full pr-0 md:pr-72">
+          <div className={selectedId === undefined ? "h-full" : "h-full pr-0 md:pr-72"}>
             <Canvas
               dependencies={dependencies}
               folded={folded}
@@ -235,7 +245,11 @@ export function App() {
             />
           </div>
         )}
-        <SpecPanel resolveDisplay={resolveDisplay} selectedId={selectedId} />
+        <SpecPanel
+          onClose={() => setSelectedId(undefined)}
+          resolveDisplay={resolveDisplay}
+          selectedId={selectedId}
+        />
       </div>
     </div>
   );
