@@ -17,6 +17,11 @@ bindings, and prepares evidence plus Standard Model mutations as one transaction
 curated fields by changing a scanner-derived value only while the canonical value still matches the
 previous observation. Partial coverage never turns an omission into deletion.
 
+The versioned structural-scale derivation belongs to reconciliation, not scanners. Each observed
+numeric count independently maps through workspace-pinned thresholds; only unanimous counts produce
+a proposal. Straddling counts remain ambiguous. Proposals stay in evidence, exact component reads
+compare them with curated scale to report alignment or drift, and rescans never write intent scale.
+
 When a supported component merge supersedes an observed identity with a curated component,
 reconciliation follows the canonical alias and migrates the source-owned binding and relationship
 projections to the survivor. Later scans continue to refresh evidence without replacing curated

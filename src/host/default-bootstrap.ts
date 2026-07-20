@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import {
+  DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
   createApplicationOperations,
   createApplicationSnapshotStateDecoder,
   createReconciliationOperations,
@@ -342,6 +343,7 @@ export function createDefaultBootstrapRegistry(
       requestedRuntimePlugins: Object.freeze([]),
       retiredProjectIds: Object.freeze([]),
       schema: "groma/v0.1" as const,
+      structuralScaleProposal: DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
     });
     const initialConfigurationSource = serializeBootstrapConfiguration(initialConfiguration);
     let plugins: RunningPluginGraph | undefined;
@@ -795,6 +797,11 @@ export function createDefaultBootstrapRegistry(
               graph,
               resourceMapper,
               snapshotStateDecoder,
+              structuralScaleProposal:
+                bootstrap.state === "configured"
+                  ? (bootstrap.configuration.structuralScaleProposal ??
+                    DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1)
+                  : DEFAULT_STRUCTURAL_SCALE_PROPOSAL_CONFIGURATION_V1,
               transactionExecution: transactionEngine,
               transactionProvider,
             });

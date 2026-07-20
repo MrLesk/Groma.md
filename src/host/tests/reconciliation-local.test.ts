@@ -8,6 +8,7 @@ import {
   observationSessionApiVersion,
   parseResourceKey,
   type CompletedObservationSnapshot,
+  type ComponentCandidateStructuralSignals,
   type ObservationRecord,
   type Result,
   type TransactionOutcome,
@@ -64,13 +65,18 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
   return composed.value;
 }
 
-function candidate(key: string, name: string): ObservationRecord {
+function candidate(
+  key: string,
+  name: string,
+  signals?: ComponentCandidateStructuralSignals,
+): ObservationRecord {
   return Object.freeze({
     candidate: Object.freeze({ name, type: "service" }),
     key,
     kind: "component-candidate",
     provenance,
     scope: "workspace",
+    ...(signals === undefined ? {} : { signals: Object.freeze({ ...signals }) }),
   });
 }
 
@@ -371,6 +377,125 @@ describe("local completed-snapshot reconciliation", () => {
       ok: false,
     });
     expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+  });
+
+  test("keeps structural scale proposals in evidence and reports curation drift without mutating intent", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const partSignals = Object.freeze({ exportCount: 12, fileCount: 20, reuseBreadth: 3 });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-scale-proposal", [candidate("api", "API", partSignals)]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const listed = await host.operations.listComponents({ limit: 10 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    const automatic = listed.value.items[0]!;
+    expect(automatic.component.scale).toBeUndefined();
+    expect(
+      await host.operations.getComponent({
+        id: automatic.component.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [
+          {
+            scale: {
+              derivation: "groma/structural-scale/v1",
+              proposal: "part",
+              status: "proposed",
+            },
+          },
+        ],
+        item: { component: { id: automatic.component.id } },
+      },
+    });
+
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: automatic.revision,
+        id: automatic.component.id,
+        patch: { scale: "part" },
+      }),
+    ).toMatchObject({ status: "committed", value: { scale: "part" } });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-scale-aligned", [candidate("api", "API", partSignals)]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+    expect(
+      await host.operations.getComponent({
+        id: automatic.component.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [{ scale: { curated: "part", proposal: "part", status: "aligned" } }],
+        item: { component: { scale: "part" } },
+      },
+    });
+
+    const domainSignals = Object.freeze({ exportCount: 80, fileCount: 80, reuseBreadth: 10 });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-scale-drift", [candidate("api", "API", domainSignals)]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    expect(
+      await host.operations.getComponent({
+        id: automatic.component.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [{ scale: { curated: "part", proposal: "domain", status: "drift" } }],
+        item: { component: { scale: "part" } },
+      },
+    });
+  });
+
+  test("leaves a threshold-straddling automatic component unscaled", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-scale-ambiguous", [
+          candidate("api", "API", { fileCount: 80, reuseBreadth: 1 }),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const listed = await host.operations.listComponents({ limit: 10 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    const automatic = listed.value.items[0]!;
+    expect(automatic.component.scale).toBeUndefined();
+    expect(
+      await host.operations.getComponent({
+        id: automatic.component.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [
+          {
+            scale: {
+              candidates: ["domain", "element"],
+              status: "ambiguous",
+            },
+          },
+        ],
+        item: { component: { id: automatic.component.id } },
+      },
+    });
   });
 
   test("keeps curated detail empty and resolves automatic evidence through an alias", async () => {

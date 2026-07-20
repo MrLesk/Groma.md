@@ -19,10 +19,12 @@ import type {
   StandardComponent,
   StandardComponentInput,
   StandardComponentPatch,
+  StandardComponentScale,
   StandardModelCapability,
   StandardRelationship,
 } from "../standard-model/index.ts";
 import type { ApplicationSnapshotStateDecoder } from "./snapshot-state.ts";
+import type { StructuralScaleAssessmentV1 } from "./scale-proposal.ts";
 
 export type WorkspaceInitializationOutcome =
   | { readonly generation: GraphGeneration; readonly status: "initialized" }
@@ -227,8 +229,31 @@ export interface ComponentEvidenceView {
   readonly coverage: readonly ObservationCoverage[];
   readonly projectId: string;
   readonly records: readonly ObservationRecord[];
+  readonly scale?: ComponentScaleEvidenceView;
   readonly scanner: ObservationSourceIdentity;
 }
+
+export type ComponentScaleEvidenceView =
+  | {
+      readonly derivation: StructuralScaleAssessmentV1["derivation"];
+      readonly status: "insufficient";
+    }
+  | {
+      readonly candidates: readonly StandardComponentScale[];
+      readonly derivation: StructuralScaleAssessmentV1["derivation"];
+      readonly status: "ambiguous";
+    }
+  | {
+      readonly derivation: StructuralScaleAssessmentV1["derivation"];
+      readonly proposal: StandardComponentScale;
+      readonly status: "proposed";
+    }
+  | {
+      readonly curated: StandardComponentScale;
+      readonly derivation: StructuralScaleAssessmentV1["derivation"];
+      readonly proposal: StandardComponentScale;
+      readonly status: "aligned" | "drift";
+    };
 
 export interface ComponentPage {
   readonly generation: GraphGeneration;

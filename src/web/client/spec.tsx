@@ -2,9 +2,11 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import {
   fetchComponent,
+  type ApiComponentScale,
   type ApiComponentRead,
   type ApiFailure,
   type ApiRelationshipView,
+  type ApiScaleEvidence,
 } from "./api.ts";
 import { displayText } from "./model.ts";
 
@@ -49,6 +51,26 @@ function ItemList({
       </ul>
     </Field>
   );
+}
+
+function scaleAssessmentText(
+  assessment: ApiScaleEvidence,
+  canonicalScale: ApiComponentScale | undefined,
+): string {
+  switch (assessment.status) {
+    case "ambiguous":
+      return `Unscaled — evidence spans ${assessment.candidates.join(" and ")}`;
+    case "proposed":
+      return `Proposed ${assessment.proposal} — curate explicitly to accept`;
+    case "aligned":
+      return `${assessment.curated} — aligned with scan evidence`;
+    case "drift":
+      return `Drift — curated ${assessment.curated}, evidence proposes ${assessment.proposal}`;
+    case "insufficient":
+      return canonicalScale === undefined
+        ? "Unscaled — insufficient structural counts"
+        : `${canonicalScale} — insufficient structural counts to compare`;
+  }
 }
 
 export interface SpecPanelProps {
@@ -108,6 +130,9 @@ export function SpecPanel({ resolveDisplay, selectedId }: SpecPanelProps) {
   };
 
   const component = detail.read?.item.component;
+  const scaleAssessments = (detail.read?.evidence ?? []).flatMap((entry) =>
+    entry.scale === undefined ? [] : [{ projectId: entry.projectId, scale: entry.scale }],
+  );
   return (
     <aside
       aria-live="polite"
@@ -143,6 +168,23 @@ export function SpecPanel({ resolveDisplay, selectedId }: SpecPanelProps) {
             <Field label="Summary">{component.summary}</Field>
           )}
           {component.intent === undefined ? null : <Field label="Intent">{component.intent}</Field>}
+          <Field label="Scale">
+            {scaleAssessments.length === 0 ? (
+              (component.scale ?? "Unscaled")
+            ) : scaleAssessments.length === 1 ? (
+              scaleAssessmentText(scaleAssessments[0]!.scale, component.scale)
+            ) : (
+              <ul className="m-0 list-none p-0">
+                {scaleAssessments.map(({ projectId, scale }) => (
+                  <li key={projectId} className="border-b border-fine py-0.5 last:border-b-0">
+                    <span className="font-plan text-[9px] text-ink-muted">{projectId}</span>
+                    <br />
+                    {scaleAssessmentText(scale, component.scale)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
           <ItemList label="Inputs" items={component.inputs} />
           <ItemList label="Outputs" items={component.outputs} />
           <ItemList label="Actions" items={component.actions} />

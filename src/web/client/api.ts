@@ -12,7 +12,32 @@ export interface ApiComponent {
   readonly inputs?: readonly { readonly id: string; readonly name: string }[];
   readonly outputs?: readonly { readonly id: string; readonly name: string }[];
   readonly actions?: readonly { readonly id: string; readonly name: string }[];
+  readonly scale?: ApiComponentScale;
 }
+
+export type ApiComponentScale = "system" | "domain" | "part" | "element";
+
+export type ApiScaleEvidence =
+  | {
+      readonly derivation: string;
+      readonly status: "insufficient";
+    }
+  | {
+      readonly candidates: readonly ApiComponentScale[];
+      readonly derivation: string;
+      readonly status: "ambiguous";
+    }
+  | {
+      readonly derivation: string;
+      readonly proposal: ApiComponentScale;
+      readonly status: "proposed";
+    }
+  | {
+      readonly curated: ApiComponentScale;
+      readonly derivation: string;
+      readonly proposal: ApiComponentScale;
+      readonly status: "aligned" | "drift";
+    };
 
 export interface ApiComponentView {
   readonly component: ApiComponent;
@@ -38,7 +63,10 @@ export interface ApiRelationshipView {
 }
 
 export interface ApiComponentRead {
-  readonly evidence: readonly { readonly projectId: string }[];
+  readonly evidence: readonly {
+    readonly projectId: string;
+    readonly scale?: ApiScaleEvidence;
+  }[];
   readonly generation: number;
   readonly item: ApiComponentView;
   readonly relationships: {

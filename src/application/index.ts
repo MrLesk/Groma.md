@@ -9,4 +9,5 @@ export type {
   ReconciliationOutcome,
 } from "./reconciliation.ts";
 export * from "./snapshot-state.ts";
+export * from "./scale-proposal.ts";
 export { standardComponentDisplayText } from "../standard-model/index.ts";

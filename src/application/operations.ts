@@ -56,6 +56,7 @@ import type {
   BlueprintTraversalHit,
   BlueprintTraversalPage,
   ComponentEvidenceView,
+  ComponentScaleEvidenceView,
   ComponentPage,
   ComponentRelationshipChanges,
   ComponentRelationshipInput,
@@ -1216,7 +1217,7 @@ function evidenceRecordMatches(record: ObservationRecord, binding: ComponentBind
 
 function componentEvidence(
   snapshot: ReadSnapshot,
-  componentId: EntityId,
+  component: StandardComponent,
   options: ApplicationOperationsContext,
 ): Result<readonly ComponentEvidenceView[]> {
   if (snapshot.evidence === undefined) return success(Object.freeze([]));
@@ -1234,7 +1235,7 @@ function componentEvidence(
       // Removal can leave a durable observation binding behind until reconciliation
       // refreshes that source. It cannot support any currently readable component.
       if (!resolved.ok) continue;
-      if (resolved.value.resolved !== componentId) continue;
+      if (resolved.value.resolved !== component.id) continue;
       const records = Object.freeze(
         source.snapshot.records.filter((record) => evidenceRecordMatches(record, binding)),
       );
@@ -1251,12 +1252,30 @@ function componentEvidence(
           ),
           projectId: source.snapshot.projectId,
           records,
+          ...(binding.scaleAssessment === undefined
+            ? {}
+            : { scale: componentScaleEvidence(binding.scaleAssessment, component.scale) }),
           scanner: source.snapshot.source,
         }),
       );
     }
   }
   return success(Object.freeze(views));
+}
+
+function componentScaleEvidence(
+  assessment: NonNullable<ComponentBinding["scaleAssessment"]>,
+  curated: StandardComponent["scale"],
+): ComponentScaleEvidenceView {
+  if (assessment.status === "insufficient") return assessment;
+  if (assessment.status === "ambiguous") return assessment;
+  if (curated === undefined) return assessment;
+  return Object.freeze({
+    curated,
+    derivation: assessment.derivation,
+    proposal: assessment.proposal,
+    status: curated === assessment.proposal ? "aligned" : "drift",
+  });
 }
 
 const boundedQueryDiagnosticCodes = new Set([
@@ -3758,7 +3777,7 @@ export function createApplicationOperations(
         options,
       );
       if (!relationships.ok) return relationships;
-      const evidence = componentEvidence(read.value, confirmed.value.resolved, options);
+      const evidence = componentEvidence(read.value, component, options);
       if (!evidence.ok) return evidence;
       const exact = exactQuery(
         read.value.generation,
