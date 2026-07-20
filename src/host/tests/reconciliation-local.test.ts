@@ -92,6 +92,18 @@ function relationship(key: string, from: string, to: string): ObservationRecord 
   });
 }
 
+function contains(key: string, from: string, to: string): ObservationRecord {
+  return Object.freeze({
+    from: Object.freeze({ key: from, scope: "workspace" }),
+    key,
+    kind: "relationship",
+    provenance,
+    relationshipType: "contains",
+    scope: "workspace",
+    to: Object.freeze({ key: to, scope: "workspace" }),
+  });
+}
+
 function action(key: string, component: string): ObservationRecord {
   return Object.freeze({
     component: Object.freeze({ key: component, scope: "workspace" }),
@@ -377,6 +389,101 @@ describe("local completed-snapshot reconciliation", () => {
       ok: false,
     });
     expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+  });
+
+  test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const reconciled = await host.reconciliation.reconcile(
+      snapshot("epoch-structure", [
+        candidate("root", "Product"),
+        candidate("area", "Area"),
+        candidate("leaf", "Leaf"),
+        candidate("lib", "Library", { reuseBreadth: 4 }),
+        contains("c1", "root", "area"),
+        contains("c2", "area", "leaf"),
+      ]),
+    );
+    expect(reconciled).toMatchObject({ ok: true, value: { status: "committed" } });
+
+    const listed = await host.operations.listComponents({ limit: 20 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    const byName = new Map(
+      listed.value.items.map((item) => [item.component.name, item.component] as const),
+    );
+    const root = byName.get("Product")!;
+    const area = byName.get("Area")!;
+    const leaf = byName.get("Leaf")!;
+    const library = byName.get("Library")!;
+
+    // Depth in the observed structure places every component on the ladder.
+    expect(root).toMatchObject({ scale: "system" });
+    expect(area).toMatchObject({ parent: root.id, scale: "domain" });
+    expect(leaf).toMatchObject({ parent: area.id, scale: "part" });
+    // Breadth of use is coupling, so it marks sharing and never a scale.
+    expect(library.scale).toBeUndefined();
+    expect(library).toMatchObject({ shared: true });
+    expect(library.parent).toBeUndefined();
+
+    // Containment observations are structure, not ordinary relationships.
+    const detail = await host.operations.getComponent({
+      id: root.id,
+      relationships: { limit: 10 },
+    });
+    expect(detail.ok).toBeTrue();
+    if (!detail.ok) return;
+    expect(detail.value.relationships.items).toHaveLength(0);
+
+    // Curated structure wins and a rescan never fights it.
+    const moved = await host.operations.updateComponent({
+      expectedRevision: listed.value.items.find((item) => item.component.id === leaf.id)!.revision,
+      id: leaf.id,
+      patch: { scale: "element" },
+    });
+    expect(moved).toMatchObject({ status: "committed" });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-structure-again", [
+          candidate("root", "Product"),
+          candidate("area", "Area"),
+          candidate("leaf", "Leaf"),
+          candidate("lib", "Library", { reuseBreadth: 4 }),
+          contains("c1", "root", "area"),
+          contains("c2", "area", "leaf"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+    const after = await host.operations.getComponent({ id: leaf.id, relationships: { limit: 1 } });
+    expect(after.ok).toBeTrue();
+    if (!after.ok) return;
+    expect(after.value.item.component).toMatchObject({ scale: "element" });
+  });
+
+  test("fails closed when observed containment claims one component for two containers", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-ambiguous", [
+          candidate("a", "A"),
+          candidate("b", "B"),
+          candidate("shared", "Shared"),
+          contains("c1", "a", "shared"),
+          contains("c2", "b", "shared"),
+        ]),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "observed-containment-ambiguous" }],
+      ok: false,
+    });
+    expect(await host.operations.listComponents({ limit: 10 })).toMatchObject({
+      ok: true,
+      value: { items: [] },
+    });
   });
 
   test("keeps structural scale proposals in evidence and reports curation drift without mutating intent", async () => {

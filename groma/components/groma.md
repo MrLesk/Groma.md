@@ -3,6 +3,7 @@ schema: groma/component/v0.2
 id: ent_a754d5c9106660a7c4f25673e53bc015
 name: groma
 type: package
+scale: system
 ---
 
 # Actions

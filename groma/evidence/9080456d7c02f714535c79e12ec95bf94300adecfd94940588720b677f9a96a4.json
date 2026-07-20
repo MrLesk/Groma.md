@@ -7,7 +7,10 @@
         "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
         "present": true,
         "projection": {
-          "name": "persistence"
+          "name": "persistence",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": false
         },
         "scaleAssessment": {
           "candidates": [
@@ -25,6 +28,7 @@
         "present": true,
         "projection": {
           "name": "node:crypto",
+          "shared": true,
           "type": "external"
         },
         "scaleAssessment": {
@@ -39,7 +43,10 @@
         "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
         "present": true,
         "projection": {
-          "name": "plugin-sdk"
+          "name": "plugin-sdk",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": false
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -53,7 +60,10 @@
         "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
         "present": true,
         "projection": {
-          "name": "core"
+          "name": "core",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": true
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -67,7 +77,9 @@
         "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
         "present": true,
         "projection": {
-          "name": "cli"
+          "name": "cli",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain"
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -82,6 +94,7 @@
         "present": true,
         "projection": {
           "name": "node:async_hooks",
+          "shared": false,
           "type": "external"
         },
         "scaleAssessment": {
@@ -97,6 +110,7 @@
         "present": true,
         "projection": {
           "name": "node:fs",
+          "shared": true,
           "type": "external"
         },
         "scaleAssessment": {
@@ -111,7 +125,10 @@
         "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
         "present": true,
         "projection": {
-          "name": "host"
+          "name": "host",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": false
         },
         "scaleAssessment": {
           "candidates": [
@@ -129,6 +146,7 @@
         "present": true,
         "projection": {
           "name": "@babel/parser",
+          "shared": false,
           "type": "external"
         },
         "scaleAssessment": {
@@ -156,6 +174,7 @@
             }
           ],
           "name": "groma",
+          "scale": "system",
           "type": "package"
         },
         "scaleAssessment": {
@@ -179,7 +198,10 @@
               "name": "ROUTE /"
             }
           ],
-          "name": "web"
+          "name": "web",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": false
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -194,6 +216,7 @@
         "present": true,
         "projection": {
           "name": "@dagrejs/dagre",
+          "shared": false,
           "type": "external"
         },
         "scaleAssessment": {
@@ -209,6 +232,7 @@
         "present": true,
         "projection": {
           "name": "node:path",
+          "shared": true,
           "type": "external"
         },
         "scaleAssessment": {
@@ -224,6 +248,7 @@
         "present": true,
         "projection": {
           "name": "node:os",
+          "shared": true,
           "type": "external"
         },
         "scaleAssessment": {
@@ -238,7 +263,10 @@
         "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
         "present": true,
         "projection": {
-          "name": "standard-model"
+          "name": "standard-model",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": true
         },
         "scaleAssessment": {
           "candidates": [
@@ -256,6 +284,7 @@
         "present": true,
         "projection": {
           "name": "node:timers",
+          "shared": false,
           "type": "external"
         },
         "scaleAssessment": {
@@ -270,7 +299,10 @@
         "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
         "present": true,
         "projection": {
-          "name": "application"
+          "name": "application",
+          "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
+          "scale": "domain",
+          "shared": true
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -285,6 +317,7 @@
         "present": true,
         "projection": {
           "name": "@xyflow/react",
+          "shared": false,
           "type": "external"
         },
         "scaleAssessment": {
@@ -300,6 +333,7 @@
         "present": true,
         "projection": {
           "name": "yaml",
+          "shared": true,
           "type": "external"
         },
         "scaleAssessment": {
@@ -806,7 +840,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_ae6fdd30f1dd93ffceadb796a2564e40",
+      "epoch": "epoch_3bc21a92406e8fbe7e60d283e25add00",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -830,15 +864,15 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
-                "endByteExclusive": 34372,
-                "startByte": 34273
+                "endByteExclusive": 34411,
+                "startByte": 34312
               },
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
@@ -867,15 +901,15 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
-                "endByteExclusive": 34177,
-                "startByte": 24699
+                "endByteExclusive": 34216,
+                "startByte": 24738
               },
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
@@ -1102,7 +1136,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
+              "fingerprint": "sha256:e5deaa0a9960de08066376160471301d81c9b92c10c3a59c4851f54eb6e398f2",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -1132,7 +1166,8 @@
           ],
           "scope": "workspace",
           "signals": {
-            "declaredBoundary": true
+            "declaredBoundary": true,
+            "entryPoint": true
           }
         },
         {
@@ -1151,6 +1186,7 @@
           "scope": "workspace",
           "signals": {
             "declaredBoundary": true,
+            "entryPoint": true,
             "fileCount": 6,
             "reuseBreadth": 1
           }
@@ -1283,7 +1319,7 @@
           "scope": "workspace",
           "signals": {
             "declaredBoundary": true,
-            "fileCount": 9,
+            "fileCount": 10,
             "reuseBreadth": 3
           }
         },
@@ -1412,10 +1448,10 @@
           "kind": "documentation",
           "provenance": [
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
-                "endByteExclusive": 34265,
-                "startByte": 34179
+                "endByteExclusive": 34304,
+                "startByte": 34218
               },
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
@@ -1542,10 +1578,10 @@
           "kind": "documentation",
           "provenance": [
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
-                "endByteExclusive": 24691,
-                "startByte": 24444
+                "endByteExclusive": 24730,
+                "startByte": 24483
               },
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
@@ -1666,7 +1702,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
@@ -1806,6 +1842,15 @@
               "scope": "workspace"
             },
             {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "range": {
+                "endByteExclusive": 235,
+                "startByte": 207
+              },
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            },
+            {
               "fingerprint": "sha256:625eca4d96ee80691a9cc16841939304a5916565cc5ef350e6cb85624c38f3b9",
               "range": {
                 "endByteExclusive": 1205,
@@ -1815,19 +1860,19 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:1dc6b162d031f90663c910e21a426442b3d70de90a9b7f699561a6876f1a9545",
+              "fingerprint": "sha256:a2f766c00af212014b08af6f8e3ab573cb13b1cba68b1dd6d2c588870b7b91a3",
               "range": {
-                "endByteExclusive": 706,
-                "startByte": 678
+                "endByteExclusive": 745,
+                "startByte": 717
               },
               "resource": "src/application/reconciliation.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:1dc6b162d031f90663c910e21a426442b3d70de90a9b7f699561a6876f1a9545",
+              "fingerprint": "sha256:a2f766c00af212014b08af6f8e3ab573cb13b1cba68b1dd6d2c588870b7b91a3",
               "range": {
-                "endByteExclusive": 804,
-                "startByte": 776
+                "endByteExclusive": 843,
+                "startByte": 815
               },
               "resource": "src/application/reconciliation.ts",
               "scope": "workspace"
@@ -1867,7 +1912,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
+              "fingerprint": "sha256:e5deaa0a9960de08066376160471301d81c9b92c10c3a59c4851f54eb6e398f2",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -2104,6 +2149,15 @@
               "scope": "workspace"
             },
             {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "range": {
+                "endByteExclusive": 134,
+                "startByte": 116
+              },
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            },
+            {
               "fingerprint": "sha256:625eca4d96ee80691a9cc16841939304a5916565cc5ef350e6cb85624c38f3b9",
               "range": {
                 "endByteExclusive": 1020,
@@ -2149,19 +2203,19 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:1dc6b162d031f90663c910e21a426442b3d70de90a9b7f699561a6876f1a9545",
+              "fingerprint": "sha256:a2f766c00af212014b08af6f8e3ab573cb13b1cba68b1dd6d2c588870b7b91a3",
               "range": {
-                "endByteExclusive": 1030,
-                "startByte": 1010
+                "endByteExclusive": 1069,
+                "startByte": 1049
               },
               "resource": "src/application/reconciliation.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:1dc6b162d031f90663c910e21a426442b3d70de90a9b7f699561a6876f1a9545",
+              "fingerprint": "sha256:a2f766c00af212014b08af6f8e3ab573cb13b1cba68b1dd6d2c588870b7b91a3",
               "range": {
-                "endByteExclusive": 532,
-                "startByte": 514
+                "endByteExclusive": 571,
+                "startByte": 553
               },
               "resource": "src/application/reconciliation.ts",
               "scope": "workspace"
@@ -2246,7 +2300,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
+              "fingerprint": "sha256:e5deaa0a9960de08066376160471301d81c9b92c10c3a59c4851f54eb6e398f2",
               "range": {
                 "endByteExclusive": 40,
                 "startByte": 27
@@ -2276,7 +2330,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
@@ -2322,7 +2376,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
@@ -2365,10 +2419,10 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
+              "fingerprint": "sha256:e5deaa0a9960de08066376160471301d81c9b92c10c3a59c4851f54eb6e398f2",
               "range": {
-                "endByteExclusive": 499,
-                "startByte": 475
+                "endByteExclusive": 538,
+                "startByte": 514
               },
               "resource": "src/host/typescript-bun-scanner.ts",
               "scope": "workspace"
@@ -2553,16 +2607,16 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
-                "endByteExclusive": 1407,
-                "startByte": 1389
+                "endByteExclusive": 1446,
+                "startByte": 1428
               },
               "resource": "src/plugin-sdk/scanner.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
                 "endByteExclusive": 453,
                 "startByte": 435
@@ -2571,7 +2625,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
                 "endByteExclusive": 530,
                 "startByte": 510
@@ -2580,7 +2634,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
               "range": {
                 "endByteExclusive": 596,
                 "startByte": 576
@@ -2653,7 +2707,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
@@ -2989,7 +3043,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
@@ -3010,7 +3064,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
@@ -3031,7 +3085,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
@@ -3152,7 +3206,7 @@
               "scope": "workspace"
             }
           ],
-          "relationshipType": "source-boundary",
+          "relationshipType": "contains",
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",

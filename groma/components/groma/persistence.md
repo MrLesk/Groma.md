@@ -2,6 +2,9 @@
 schema: groma/component/v0.2
 id: ent_d874ec5e618605ce1e0248310a7a628b
 name: persistence
+scale: domain
+shared: false
+parent: ent_a754d5c9106660a7c4f25673e53bc015
 ---
 
 # Relationships
