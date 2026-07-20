@@ -95,8 +95,11 @@ After `bun run install:local`, `groma`, `groma scan`, and `groma web` work from 
 directory, exactly like the compiled binary in `dist/`.
 
 To create the unpublished four-target preview package, run `bun run package`. It writes
-target-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching
-host artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging
+target-specific executables and a sorted `dist/SHA256SUMS` manifest, exercises the matching
+host artifact through Groma's compiled black-box workflow, and assembles the future
+`groma.md` npm packages (a shim plus one binary package per platform, the same shape
+backlog.md installs from) under `dist/npm`, verified by a local global install from the
+packed tarballs. The `groma.md` package is not published yet. Cross-compiled artifacts are packaging
 proofs only; native runtime behavior is claimed only on a matching host.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.

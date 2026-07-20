@@ -139,6 +139,16 @@ bun run build -- --target=bun-windows-x64-baseline
 bun run build -- --target=bun-windows-arm64
 ```
 
+`bun run package` also assembles the npm distribution under `dist/npm`, shaped exactly like
+backlog.md's: a `groma.md` main package whose Node shim (`scripts/npm/cli.cjs` published as
+`cli.js`) resolves one os/cpu-constrained platform package (`groma.md-<platform>-<arch>`)
+carrying the compiled executable, all version-pinned together and packed into tarballs. When
+npm and a host-matching artifact are available, packaging installs the packed main and host
+platform tarballs globally into a temporary prefix and verifies the installed `groma` answers
+`--version` and prints an instructions guide — proving the `npm install -g groma.md` flow
+without touching the registry. Publishing the tarballs is a separate explicit step
+(`npm publish` per package, platform packages first), not run by any script.
+
 Intel macOS, Linux arm64, and musl targets are not packaging baselines. Adding a
 target requires cross-compiled artifact verification. Runtime behavior is recorded separately
 and only for a compatible CI or local host.
