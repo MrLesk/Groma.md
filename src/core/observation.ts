@@ -54,6 +54,25 @@ interface ObservationRecordBase {
   readonly scope: string;
 }
 
+/**
+ * Deterministic structural measurements about a candidate's subtree. Signals are
+ * countable facts a blind scanner can defend from direct observation; they never
+ * classify what the candidate means. Every field is optional: a scanner reports
+ * only what it measured.
+ */
+export interface ComponentCandidateStructuralSignals {
+  /** The subtree carries an observed package, workspace, or project boundary marker. */
+  readonly declaredBoundary?: boolean;
+  /** The subtree contains an executable or served entry point. */
+  readonly entryPoint?: boolean;
+  /** Exported declarations observed inside the subtree. */
+  readonly exportCount?: number;
+  /** Files observed inside the candidate's subtree. */
+  readonly fileCount?: number;
+  /** Distinct sibling candidates observed importing into this one. */
+  readonly reuseBreadth?: number;
+}
+
 export interface ComponentCandidateObservation extends ObservationRecordBase {
   readonly kind: "component-candidate";
   readonly candidate: Readonly<{
@@ -63,6 +82,7 @@ export interface ComponentCandidateObservation extends ObservationRecordBase {
     readonly summary?: string;
     readonly type?: string;
   }>;
+  readonly signals?: ComponentCandidateStructuralSignals;
 }
 
 export interface ComponentInputObservation extends ObservationRecordBase {
@@ -784,6 +804,42 @@ function inspectCandidate(
   return success(Object.freeze(copied));
 }
 
+const signalCountFields = ["exportCount", "fileCount", "reuseBreadth"] as const;
+const signalMarkerFields = ["declaredBoundary", "entryPoint"] as const;
+
+function inspectSignals(
+  value: unknown,
+  index: number,
+): Result<ComponentCandidateStructuralSignals> {
+  const inspected = inspectRecord(
+    value,
+    [],
+    [...signalCountFields, ...signalMarkerFields],
+    "invalid-observation-record",
+    "Component candidate signals",
+  );
+  if (!inspected.ok)
+    return invalidRecord("component candidate signals have an invalid shape", index);
+  const copied: Record<string, number | boolean> = {};
+  for (const key of signalCountFields) {
+    if (!Object.hasOwn(inspected.value, key)) continue;
+    const count = inspected.value[key];
+    if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) {
+      return invalidRecord(`component candidate signal ${key} must be a non-negative count`, index);
+    }
+    copied[key] = count;
+  }
+  for (const key of signalMarkerFields) {
+    if (!Object.hasOwn(inspected.value, key)) continue;
+    const marker = inspected.value[key];
+    if (typeof marker !== "boolean") {
+      return invalidRecord(`component candidate signal ${key} must be a boolean`, index);
+    }
+    copied[key] = marker;
+  }
+  return success(Object.freeze(copied));
+}
+
 function inspectRecordValue(
   value: unknown,
   scopeIds: ReadonlySet<string>,
@@ -803,6 +859,7 @@ function inspectRecordValue(
       "from",
       "name",
       "relationshipType",
+      "signals",
       "subject",
       "to",
     ],
@@ -830,19 +887,26 @@ function inspectRecordValue(
     const shape = inspectRecord(
       value,
       ["candidate", "key", "kind", "provenance", "scope"],
-      [],
+      ["signals"],
       "invalid-observation-record",
       "Component candidate observation",
     );
     if (!shape.ok) return invalidRecord("component candidate has an invalid shape", index);
     const candidate = inspectCandidate(shape.value.candidate, bounds, index);
     if (!candidate.ok) return candidate;
+    let signals: ComponentCandidateStructuralSignals | undefined;
+    if ("signals" in shape.value) {
+      const inspectedSignals = inspectSignals(shape.value.signals, index);
+      if (!inspectedSignals.ok) return inspectedSignals;
+      if (Object.keys(inspectedSignals.value).length > 0) signals = inspectedSignals.value;
+    }
     record = Object.freeze({
       candidate: candidate.value,
       key: key.value,
       kind,
       provenance: provenance.value,
       scope: scope.value,
+      ...(signals === undefined ? {} : { signals }),
     });
   } else if (kind === "input" || kind === "output" || kind === "action") {
     const shape = inspectRecord(

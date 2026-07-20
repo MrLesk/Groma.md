@@ -302,8 +302,15 @@ describe("built-in TypeScript and Bun scanner", () => {
       .filter((record) => record.kind === "component-candidate")
       .map((record) => record.candidate);
     expect(candidates).toContainEqual({ name: "@fixture/service", type: "package" });
-    expect(candidates).toContainEqual({ name: "api", type: "source-boundary" });
-    expect(candidates).toContainEqual({ name: "domain", type: "source-boundary" });
+    expect(candidates).toContainEqual({ name: "api" });
+    expect(candidates).toContainEqual({ name: "domain" });
+    const boundarySignals = snapshot.records.filter(
+      (record) => record.kind === "component-candidate" && record.candidate.name === "api",
+    );
+    expect(boundarySignals).toHaveLength(1);
+    expect(boundarySignals[0]).toMatchObject({
+      signals: { declaredBoundary: true, fileCount: 1 },
+    });
     expect(candidates).toContainEqual({ name: "@acme/db", type: "external" });
     expect(candidates).not.toContainEqual(expect.objectContaining({ name: "generated" }));
 
@@ -582,7 +589,8 @@ export function publicApi() {}
         (record) =>
           record.kind === "component-candidate" &&
           record.candidate.name === "public" &&
-          record.candidate.type === "source-boundary",
+          record.candidate.type === undefined &&
+          record.signals?.declaredBoundary === true,
       ),
     ).toBeTrue();
     expect(
@@ -647,9 +655,9 @@ export function publicApi() {}
         .map((record) => record.candidate),
     ).toEqual(
       expect.arrayContaining([
-        { name: "api", type: "source-boundary" },
+        { name: "api" },
         { name: "bun:sqlite", type: "external" },
-        { name: "domain", type: "source-boundary" },
+        { name: "domain" },
         { name: "node:domain", type: "external" },
         { name: "node:fs", type: "external" },
       ]),
@@ -865,7 +873,8 @@ export function start() {}
         (record) =>
           record.kind === "component-candidate" &&
           record.candidate.name === "source" &&
-          record.candidate.type === "source-boundary",
+          record.candidate.type === undefined &&
+          record.signals?.declaredBoundary === true,
       ),
     ).toBeTrue();
     expect(

@@ -3588,7 +3588,7 @@ async function scanScope(
     chargeExtractionWork(budget);
     append(
       Object.freeze({
-        candidate: Object.freeze({ name: boundary.name, type: "source-boundary" }),
+        candidate: Object.freeze({ name: boundary.name }),
         key: boundary.key,
         kind: "component-candidate",
         provenance: Object.freeze([boundary.provenance]),
@@ -4054,6 +4054,46 @@ async function scanScope(
       }),
       true,
     );
+  }
+  const importingCandidates = new Map<string, Set<string>>();
+  for (const aggregate of relationships.values()) {
+    chargeExtractionWork(budget);
+    if (aggregate.from === aggregate.to) continue;
+    const importers = importingCandidates.get(aggregate.to) ?? new Set<string>();
+    importers.add(aggregate.from);
+    importingCandidates.set(aggregate.to, importers);
+  }
+  const boundaryFileCounts = new Map(
+    boundaries.map((boundary) => [boundary.key, boundary.files.length] as const),
+  );
+  for (let index = 0; index < records.length; index += 1) {
+    chargeExtractionWork(budget);
+    const record = records[index]!;
+    if (record.kind !== "component-candidate") continue;
+    const fileCount = boundaryFileCounts.get(record.key);
+    const reuseBreadth = importingCandidates.get(record.key)?.size;
+    const declaredBoundary =
+      packageByKey.has(record.key) || boundaryFileCounts.has(record.key) ? true : undefined;
+    if (fileCount === undefined && reuseBreadth === undefined && declaredBoundary === undefined) {
+      continue;
+    }
+    const enlarged = Object.freeze({
+      ...record,
+      signals: Object.freeze({
+        ...(declaredBoundary === undefined ? {} : { declaredBoundary }),
+        ...(fileCount === undefined ? {} : { fileCount }),
+        ...(reuseBreadth === undefined ? {} : { reuseBreadth }),
+      }),
+    });
+    budget.canonicalCharacters +=
+      boundedStructuralCharacters(enlarged) - boundedStructuralCharacters(record);
+    if (budget.canonicalCharacters > maxCanonicalCharacters) {
+      throw new ScannerStop(
+        "typescript-scanner-budget-exceeded",
+        "TypeScript scanner observation character budget was exceeded",
+      );
+    }
+    records[index] = enlarged;
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),
