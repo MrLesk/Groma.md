@@ -2,7 +2,7 @@
 
 > Product decision input, 2026-07-19. Prompted by the "Periodic Table of Software" (115 elements for any SaaS product): Groma deliberately keeps only the few elements an architecture map needs — roughly 19 of 115 — and gives each one a plain surface word. Expert vocabulary (projection, reconciliation, binding, observation session, ...) stays in ARCHITECTURE.md, JSON envelopes, and diagnostics, but never in first-run UI prose.
 
-## Nouns (8)
+## Nouns (10)
 
 | Surface word     | Canonical term                                                          | Periodic element | Meaning                                                                                          |
 | ---------------- | ----------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
@@ -14,6 +14,8 @@
 | **plan**         | plan (desired-state overlay)                                            | Plan (24)        | A page that says what the map should look like later.                                            |
 | **project**      | project (registered project: name, source, scanners, coverage)          | Project (13)     | One codebase Groma is allowed to look at.                                                        |
 | **scanner**      | scanner (blind scanner plugin)                                          | none             | A helper that reads your code and reports what it sees, without ever seeing your map.            |
+| **scale**        | scale (closed curated axis: system, domain, part, element)              | none             | How big a part is: the whole system, a domain, a part, or an element. Unset means undecided.     |
+| **shared**       | shared (explicit flag, orthogonal to scale and type)                    | none             | A badge for a part that more than one domain uses.                                               |
 
 ## Verbs (7)
 
@@ -70,6 +72,9 @@ first-run prose and narration.)
 | parent / child             | the part it lives in / the parts inside it                      |
 | inputs / outputs / actions | what goes in / what comes out / what it can do                  |
 | cursor / hasMore           | there is more - ask again                                       |
+| scale                      | how big a part is (system, domain, part, or element)            |
+| unscaled                   | we have not said how big it is yet                              |
+| shared                     | used by more than one domain                                    |
 | bounded                    | never too big                                                   |
 | fail closed                | when unsure, stop and ask                                       |
 | revision                   | the version number you saw                                      |
@@ -103,15 +108,23 @@ The decisions behind the counts:
    Plan 24, Status 36, ID 50, Create 61, Update 62, Delete 64, Search 66, Import 70, Export 71,
    Approve 76, Reject 77 as 'ignore', List 87, Map 91, Timeline 92, Detail 96, Tree 100, Audit
    115), repurposes four (Plan from pricing to desired future, Import as scan, Approve as
-   accept, Audit as evidence), drops the other ~96 with reasons, and adds only four of its own:
-   component, blueprint, relationship, scanner — the periodic table reduced to what an
+   accept, Audit as evidence), drops the other ~96 with reasons, and adds six of its own:
+   component, blueprint, relationship, scanner, scale, shared — the periodic table reduced to what an
    architecture map needs.
 6. **Resolved and open product flags.** The [Manifesto](../MANIFESTO.md) promise now has a
    working local loop: `groma init -> groma scan -> groma` in an interactive terminal. 'project'
    stays, but UI prose should always say 'scanned project'. The blueprint-vs-component CLI split
    should converge so whole-map reads live under blueprint and single-part reads under component,
    matching the noun glossary.
-7. **Node has exactly one name (decided 2026-07-19).** The drawn element keeps the single name
+7. **Scale is closed; provenance words stay off surfaces (decided 2026-07-20).** The document
+   pivot adds exactly two surface words: _scale_ (a closed curated axis — system, domain, part,
+   element — with unscaled as the honest undecided state) and _shared_ (a badge for parts used
+   by more than one domain). The type token stays open flavor and never carries size.
+   _source-boundary_ is not a surface word or a component type: it is evidence vocabulary, a
+   declared-boundary measurement a scanner reports. _external_ is not a type either: ownership
+   is an explicit flag. Scanners measure and never classify, so no scanner vocabulary ever
+   names a scale.
+8. **Node has exactly one name (decided 2026-07-19).** The drawn element keeps the single name
    _node_, and it is expert vocabulary only. The visual uses it once in compact technical count
    metadata; its primary labels remain component names and, for a folded node, a count (for
    example "Payments +37"). The earlier "box" narration word is retired. "group" was considered

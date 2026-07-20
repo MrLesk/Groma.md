@@ -85,19 +85,32 @@ Every canonical architectural entity in the standard model is a **component**. A
 **node** is something drawn in a picture; it may show one component or a folded,
 derived view of several. Node is a drawing concept, not a second kind of entity.
 
-A component has an open type token (any short word, such as `service` or `domain`)
-and zero or one structural parent. Components without a parent are the roots of the
-blueprint; every other component belongs to exactly one parent. Parents may contain
-any number of components of the same or different types, recursively. Containment
-can never form a cycle, and it is separate from the component's other many-to-many
-relationships. The blueprint itself is simply the workspace around these roots, not
-another required entity. A domain is an ordinary root component with a `domain`
-type, not a special container.
+A component has an open type token (any short word, such as `service` or
+`library`), a closed structural **scale**, and zero or one structural parent.
+Scale places a component on a small closed ladder — **system, domain, part,
+element** — read from the whole product down to its finest curated units. A child
+is never coarser than its parent, components of the same scale may nest, and a
+component whose scale has not been decided is simply *unscaled*: legal, visible,
+and never guessed. Scale is curated intent; evidence may propose a scale, never
+assign one. An explicit **shared** flag marks a component used by more than one
+domain, orthogonal to both scale and type.
 
-Type stays open, but the official vocabulary may recommend small, legible tokens.
-`external` is the conventional type for a system the blueprint depends on but does
-not own. An external system is still an ordinary component with intent and
-relationships; it needs no special graph primitive.
+Components without a parent are the roots of the blueprint; root is purely
+structural and implies nothing about size, though a typical blueprint has one
+system-scale root. Parents may contain any number of components of the same or
+different types, recursively. Containment can never form a cycle, and it is
+separate from the component's other many-to-many relationships. The blueprint
+itself is simply the workspace around these roots, not another required entity. A
+domain is an ordinary component at the domain scale, not a special container. A
+registered project is different from a system: the project is a codebase Groma may
+look at, the system is the curated component describing the product, and several
+projects can serve one system.
+
+Type stays open for flavor, and the official vocabulary may recommend small,
+legible tokens; scale stays closed, and the two axes never mix. Whether the
+blueprint owns a component is a third, explicit ownership flag rather than a
+reserved type token. An external system is still an ordinary component with
+intent, scale, and relationships; it needs no special graph primitive.
 
 A component's structured meaning is deliberately limited to **intent, inputs, outputs,
 actions, and relationships**. Name, type, and parent are small identity and structural
@@ -136,12 +149,17 @@ Scanner contributions are always partial. A scanner reports only the component
 candidates, inputs, outputs, actions, or relationships it can defend as direct
 observations. It is never required to fill in every part of the component model or
 to infer state, guarantees, business requirements, or architectural prose.
+Scanners measure, they never classify: structural measurements — sizes, declared
+boundaries, entry points, reuse breadth — are evidence, while deciding what those
+measurements mean, including a component's scale, is reconciliation and curation.
 
 ## The Source of Truth
 
-The official distribution stores canonical state as deterministic, human-readable
-Markdown under `groma/`. "Canonical" means: this is the real copy — everything else
-can be rebuilt from it.
+The official distribution stores canonical state under `groma/` in two honest
+formats: deterministic, human-readable Markdown for meaning — intent and plans,
+kept as readable named documents — and deterministic JSON for machine evidence.
+Markdown is for what people write and review; JSON is for what scanners report.
+"Canonical" means: this is the real copy — everything else can be rebuilt from it.
 
 - Intent, evidence, bindings, aliases, and plans are durable canonical records.
 - Disposable projections (indexes and caches) may speed up search and traversal,
