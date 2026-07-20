@@ -46,6 +46,8 @@ exactly what is real now.
   hierarchy, with recursive folding, focus, and component detail.
 - `groma web` serves an interactive web blueprint embedded in the same binary, on your machine
   only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.
+- `groma instructions` prints built-in working guides for humans and AI agents, before any
+  workspace exists.
 - `project add` registers additional codebases and scanner coverage explicitly.
 - Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
   whole tool ships as one compiled executable.

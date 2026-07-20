@@ -298,6 +298,16 @@ function projectCommand(args: readonly string[]): CliCommand | undefined {
     : Object.freeze({ expectedRevision, id, input, kind: "project-update" });
 }
 
+function instructionsCommand(args: readonly string[]): CliCommand | undefined {
+  if (args.length === 0) return Object.freeze({ kind: "instructions" as const });
+  if (args.length !== 1) return undefined;
+  const guide = args[0];
+  if (guide === undefined || guide.length === 0 || guide.length > 64 || guide.startsWith("--")) {
+    return undefined;
+  }
+  return Object.freeze({ guide, kind: "instructions" as const });
+}
+
 function webCommand(args: readonly string[]): CliCommand | undefined {
   let port: number | undefined;
   for (let index = 0; index < args.length; index += 2) {
@@ -398,15 +408,17 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
   const command =
     commandArgs[0] === "scan"
       ? scanCommand(commandArgs.slice(1))
-      : commandArgs[0] === "web"
-        ? webCommand(commandArgs.slice(1))
-        : commandArgs[0] === "blueprint"
-          ? blueprintCommand(commandArgs.slice(1))
-          : commandArgs[0] === "component"
-            ? componentCommand(commandArgs.slice(1))
-            : commandArgs[0] === "project"
-              ? projectCommand(commandArgs.slice(1))
-              : undefined;
+      : commandArgs[0] === "instructions"
+        ? instructionsCommand(commandArgs.slice(1))
+        : commandArgs[0] === "web"
+          ? webCommand(commandArgs.slice(1))
+          : commandArgs[0] === "blueprint"
+            ? blueprintCommand(commandArgs.slice(1))
+            : commandArgs[0] === "component"
+              ? componentCommand(commandArgs.slice(1))
+              : commandArgs[0] === "project"
+                ? projectCommand(commandArgs.slice(1))
+                : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

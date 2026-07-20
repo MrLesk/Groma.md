@@ -21,6 +21,12 @@ import {
   type CliOverviewResult,
 } from "./contracts.ts";
 import { GROMA_VERSION, HELP_TEXT } from "./help.ts";
+import {
+  INSTRUCTION_GUIDES,
+  INSTRUCTION_GUIDE_KEYS,
+  instructionGuide,
+  instructionIndexText,
+} from "./instructions/index.ts";
 import { parseInvocation } from "./parser.ts";
 import { renderCommandResult } from "./render.ts";
 import { createCliSurfaceController, type CliInputReader } from "./surface.ts";
@@ -254,6 +260,56 @@ export async function runProgram(
         exitCode: CLI_EXIT.success,
         ok: true,
         result: Object.freeze({ version: GROMA_VERSION }),
+      }),
+      invocation.format,
+      output,
+    );
+  }
+  if (invocation.command.kind === "instructions") {
+    const requested = invocation.command.guide;
+    const guide = requested === undefined ? undefined : instructionGuide(requested);
+    if (requested !== undefined && guide === undefined) {
+      return emit(
+        diagnosticResult(
+          "instructions",
+          CLI_EXIT.usage,
+          "cli-unknown-instruction-guide",
+          `Unknown instruction guide; valid guides: ${INSTRUCTION_GUIDE_KEYS.join(", ")}`,
+        ),
+        invocation.format,
+        output,
+      );
+    }
+    if (invocation.format === "plain") {
+      output.writeOutput(guide === undefined ? instructionIndexText() : `${guide.markdown}\n`);
+      return CLI_EXIT.success;
+    }
+    return emit(
+      Object.freeze({
+        command: "instructions",
+        exitCode: CLI_EXIT.success,
+        ok: true,
+        result:
+          guide === undefined
+            ? Object.freeze({
+                guides: INSTRUCTION_GUIDES.map((entry) =>
+                  Object.freeze({
+                    description: entry.description,
+                    key: entry.key,
+                    title: entry.title,
+                  }),
+                ),
+                kind: "instructions-index",
+              })
+            : Object.freeze({
+                guide: Object.freeze({
+                  description: guide.description,
+                  key: guide.key,
+                  markdown: guide.markdown,
+                  title: guide.title,
+                }),
+                kind: "instructions-guide",
+              }),
       }),
       invocation.format,
       output,

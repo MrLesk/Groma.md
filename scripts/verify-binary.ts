@@ -145,6 +145,18 @@ if (!options.skipRun) {
   await run(options.executable, ["--version"]);
   await run(options.executable, ["--help"]);
   const root = await mkdtemp(path.join(tmpdir(), "groma-smoke-"));
+  {
+    const child = Bun.spawn({
+      cmd: [options.executable, "instructions", "overview"],
+      cwd: root,
+      stderr: "inherit",
+      stdout: "pipe",
+    });
+    const text = await new Response(child.stdout).text();
+    if ((await child.exited) !== 0 || !text.includes("Intent")) {
+      throw new Error("Compiled instructions guide was not served from the binary");
+    }
+  }
   const workspace = path.join(root, "workspace");
   await mkdir(path.join(workspace, "src"), { recursive: true });
   await writeFile(path.join(workspace, "package.json"), JSON.stringify({ name: "groma-smoke" }));
