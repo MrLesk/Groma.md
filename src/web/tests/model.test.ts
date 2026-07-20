@@ -70,10 +70,10 @@ describe("interactive map view-model", () => {
     expect(unchanged.nodes.get("ent_x")?.view.component.id).toBe("ent_x");
   });
 
-  test("projects only loaded bounded containment into deterministic dagre positions", () => {
+  test("nests loaded containment inside container plates instead of a flat grid", () => {
     const roots = mergeRootsPage(
       emptyModel(),
-      page([view("ent_system", { name: "Platform", scale: "system" })], true, "roots-2"),
+      page([view("ent_system", { name: "Product", scale: "system" })]),
     );
     const domains = mergeChildrenPage(
       roots,
@@ -85,17 +85,82 @@ describe("interactive map view-model", () => {
       "ent_domain",
       page([view("ent_part", { name: "Sessions", scale: "part" })]),
     );
-    const graph = buildBlueprintFlowGraph(parts, new Set());
-    expect(graph).toEqual(buildBlueprintFlowGraph(parts, new Set()));
-    expect(graph.nodes.map((node) => node.id)).toEqual(["ent_system", "ent_domain", "ent_part"]);
-    expect(graph.edges.map((edge) => edge.id)).toEqual([
-      "contains:ent_system:ent_domain",
-      "contains:ent_domain:ent_part",
+    const options = {
+      dependencies: [],
+      folded: new Set<string>(),
+      model: parts,
+      visibleScale: undefined,
+    };
+    const graph = buildBlueprintFlowGraph(options);
+    expect(graph).toEqual(buildBlueprintFlowGraph(options));
+    // Every container becomes a plate its contents are nested inside.
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      "group:ent_system",
+      "group:ent_domain",
+      "ent_part",
     ]);
-    expect(graph.nodes.map((node) => node.width)).toEqual([340, 300, 260]);
-    expect(graph.nodes[0]?.data.hasMoreChildren).toBeTrue();
+    expect(graph.nodes.find((node) => node.id === "group:ent_domain")?.parentId).toBe(
+      "group:ent_system",
+    );
+    expect(graph.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
+    // Nesting carries containment, so no containment edges are drawn.
+    expect(graph.edges).toHaveLength(0);
+    expect(graph.notations).toEqual(["system", "domain", "part"]);
     expect(graph.nodes.every((node) => Number.isInteger(node.position.x))).toBeTrue();
     expect(graph.nodes.every((node) => Number.isInteger(node.position.y))).toBeTrue();
+  });
+
+  test("draws observed dependencies and keeps externals in their own band", () => {
+    const model = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_owned", { name: "Core", scale: "domain" }),
+        view("ent_lib", { name: "yaml", shared: true, type: "external" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
+      folded: new Set<string>(),
+      model,
+      visibleScale: undefined,
+    });
+    const band = graph.nodes.find((node) => node.id === "band:external");
+    expect(band?.data.label).toBe("Depends on 1 external");
+    expect(graph.nodes.find((node) => node.id === "ent_lib")?.parentId).toBe("band:external");
+    expect(graph.nodes.find((node) => node.id === "ent_owned")?.parentId).toBeUndefined();
+    const edge = graph.edges[0];
+    expect(edge?.id).toBe("depends:ent_owned:ent_lib");
+    expect(edge?.className).toContain("groma-edge--external");
+    const owned = graph.nodes.find((node) => node.id === "ent_owned");
+    expect(owned?.data).toMatchObject({ dependencyCount: 1, external: false, shared: false });
+    expect(graph.nodes.find((node) => node.id === "ent_lib")?.data).toMatchObject({
+      external: true,
+      shared: true,
+    });
+  });
+
+  test("the visible scale bounds how deep the sheet draws without unloading the model", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const domains = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([view("ent_domain", { scale: "domain" })]),
+    );
+    const model = mergeChildrenPage(
+      domains,
+      "ent_domain",
+      page([view("ent_part", { scale: "part" })]),
+    );
+    const shallow = buildBlueprintFlowGraph({
+      dependencies: [],
+      folded: new Set<string>(),
+      model,
+      visibleScale: "domain",
+    });
+    expect(shallow.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
+    expect(shallow.notations).toEqual(["system", "domain"]);
+    // The finer rung is only hidden, never discarded.
+    expect(model.nodes.has("ent_part")).toBeTrue();
   });
 
   test("folding removes descendants from layout without discarding loaded model state", () => {
@@ -105,7 +170,12 @@ describe("interactive map view-model", () => {
       "ent_domain",
       page([view("ent_part", { scale: "part" })]),
     );
-    const graph = buildBlueprintFlowGraph(children, new Set(["ent_domain"]));
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [],
+      folded: new Set(["ent_domain"]),
+      model: children,
+      visibleScale: undefined,
+    });
     expect(graph.nodes.map((node) => node.id)).toEqual(["ent_domain"]);
     expect(graph.nodes[0]?.data.childState).toBe("collapsed");
     expect(children.nodes.has("ent_part")).toBeTrue();
@@ -122,7 +192,12 @@ describe("interactive map view-model", () => {
         view("ent_unscaled"),
       ]),
     );
-    const graph = buildBlueprintFlowGraph(model, new Set());
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [],
+      folded: new Set<string>(),
+      model,
+      visibleScale: undefined,
+    });
     expect(graph.nodes.map((node) => node.data.notation)).toEqual([
       "system",
       "domain",
@@ -130,13 +205,9 @@ describe("interactive map view-model", () => {
       "element",
       "unscaled",
     ]);
-    expect(graph.nodes.map((node) => [node.width, node.height])).toEqual([
-      [340, 132],
-      [300, 112],
-      [260, 92],
-      [220, 76],
-      [244, 88],
-    ]);
+    expect(new Set(graph.nodes.map((node) => node.width)).size).toBe(5);
+    // Only a scan-derived scale is provisional; an unscaled component is not.
+    expect(graph.nodes.find((node) => node.id === "ent_unscaled")?.data.provisional).toBeTrue();
   });
 
   test("names the next semantic disclosure stratum", () => {

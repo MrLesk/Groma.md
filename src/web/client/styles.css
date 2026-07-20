@@ -87,8 +87,125 @@ input {
   stroke-width: 1.25;
 }
 
-.groma-flow .react-flow__edge.groma-containment-edge .react-flow__edge-path {
-  stroke-dasharray: 14 5 2 5;
+/* Dependency edges carry the architecture; containment is carried by nesting. */
+.groma-flow .react-flow__edge.groma-edge .react-flow__edge-path {
+  stroke: var(--color-line);
+  stroke-width: 1.4;
+}
+
+.groma-flow .react-flow__edge.groma-edge--external .react-flow__edge-path {
+  stroke: var(--color-fine);
+  stroke-dasharray: 3 6;
+}
+
+/* A container plate: its contents sit inside it, the way a grouped drawing reads. */
+.groma-group {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--color-line);
+  border-radius: 2px;
+  background: rgba(237, 238, 234, 0.42);
+}
+
+.groma-group--system {
+  border-style: solid;
+  border-color: var(--color-ink);
+  background: rgba(237, 238, 234, 0.3);
+}
+
+.groma-group--band {
+  border-style: dotted;
+  background: rgba(237, 238, 234, 0.55);
+}
+
+.groma-group__title {
+  display: inline-block;
+  margin: 10px 0 0 14px;
+  padding: 3px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-plan);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.groma-group--system .groma-group__title {
+  border-color: var(--color-ink);
+  font-weight: 700;
+}
+
+/* Observed facts, stated compactly on the card that carries them. */
+.groma-node__evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0 16px;
+  list-style: none;
+}
+
+.groma-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--color-fine);
+  border-radius: 999px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.groma-chip--shared {
+  border-color: var(--color-survey);
+  color: var(--color-survey);
+}
+
+.groma-chip--entry {
+  border-color: var(--color-amber);
+  color: var(--color-amber);
+}
+
+/* Scale selects what the sheet shows; zoom only changes how large it looks. */
+.groma-scale-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--color-fine);
+  font-family: var(--font-plan);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.groma-scale-selector > div {
+  display: flex;
+  gap: 4px;
+}
+
+.groma-scale-selector button {
+  padding: 3px 10px;
+  border: 1px solid var(--color-fine);
+  border-radius: 999px;
+  background: var(--color-paper);
+  color: var(--color-ink-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.groma-scale-selector button[aria-pressed="true"] {
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.groma-scale-selector button:focus-visible {
+  outline: 2px solid var(--color-survey);
+  outline-offset: 2px;
 }
 
 .groma-node {

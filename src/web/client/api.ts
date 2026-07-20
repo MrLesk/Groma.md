@@ -7,6 +7,7 @@ export interface ApiComponent {
   readonly label?: string;
   readonly name?: string;
   readonly parent?: string;
+  readonly shared?: boolean;
   readonly summary?: string;
   readonly type?: string;
   readonly inputs?: readonly { readonly id: string; readonly name: string }[];
@@ -135,6 +136,31 @@ export function fetchComponent(
       relationshipsCursor,
     ),
   );
+}
+
+export interface ApiConnectionItem {
+  readonly component: ApiComponent;
+  readonly relationships: readonly {
+    readonly id: string;
+    readonly source: string;
+    readonly target: string;
+    readonly type: string;
+  }[];
+}
+
+export interface ApiConnectionPage {
+  readonly generation: number;
+  readonly hasMore: boolean;
+  readonly items: readonly ApiConnectionItem[];
+  readonly nextCursor?: string;
+}
+
+/** One bounded page of components with the relationships the canvas draws. */
+export function fetchConnections(
+  limit: number,
+  cursor?: string,
+): Promise<ApiResult<ApiConnectionPage>> {
+  return read(withCursor(`/api/connections?limit=${limit}`, cursor));
 }
 
 export function fetchSearch(
