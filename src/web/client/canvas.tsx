@@ -161,6 +161,7 @@ function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
       {data.contains === undefined ? null : (
         <span className="groma-group__contains">{data.contains}</span>
       )}
+      {data.axis === undefined ? null : <span className="groma-group__axis">{data.axis}</span>}
       {data.summary === undefined ? null : <p className="groma-group__summary">{data.summary}</p>}
     </div>
   );

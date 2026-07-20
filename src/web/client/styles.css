@@ -110,6 +110,7 @@ input {
 
 /* A container plate: its contents sit inside it, the way a grouped drawing reads. */
 .groma-group {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -171,6 +172,22 @@ input {
 .groma-group--system .groma-group__contains {
   margin-left: 14px;
   font-size: 11px;
+}
+
+/*
+ * Names the reading order the layout already produces. Shown only where the
+ * contents form a dependency order at all, so it never captions a direction the
+ * code does not have.
+ */
+.groma-group__axis {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 /*

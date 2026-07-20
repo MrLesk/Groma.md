@@ -28,6 +28,11 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
 }
 
 export interface BlueprintGroupNodeData extends Record<string, unknown> {
+  /**
+   * Stated only where the contents genuinely read in one direction, so the
+   * caption never promises an order the dependencies do not have.
+   */
+  readonly axis?: string;
   /** What the container holds, counted, so the heading states a fact. */
   readonly contains?: string;
   readonly kind: "band" | "container";
@@ -217,17 +222,45 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
 
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
   const notations = new Set<BlueprintNotation>();
+
+  /**
+   * A component that holds visible contents is drawn as the plate around them
+   * rather than as a card of its own, so only the rest can carry a count or an
+   * arrow endpoint.
+   */
+  const carded = new Set(
+    [...visible].filter((id) => childrenOf(id).length === 0 || folded.has(id)),
+  );
+
+  /**
+   * The dependencies this sheet can actually show: both ends drawn, no self
+   * references, each pair once.
+   *
+   * Counting anything wider breaks the sheet's most checkable promise. A card
+   * reading "uses 5" beside five arrows can be verified by eye; one that also
+   * counts edges reaching components at a finer rung than the reader chose to
+   * see is a number nothing on the page adds up to, and a reader who catches it
+   * once has no reason to trust any other figure here.
+   */
+  const drawnDependencies: { readonly source: string; readonly target: string }[] = [];
+  const pairs = new Set<string>();
+  for (const dependency of dependencies) {
+    if (dependency.source === dependency.target) continue;
+    if (!carded.has(dependency.source) || !carded.has(dependency.target)) continue;
+    const pair = `${dependency.source} ${dependency.target}`;
+    if (pairs.has(pair)) continue;
+    pairs.add(pair);
+    drawnDependencies.push(Object.freeze({ source: dependency.source, target: dependency.target }));
+  }
+
   // Counted in both directions, because "used by many" and "uses many" describe
   // opposite kinds of component and a single total tells the two apart from
-  // neither. Distinct partners, so one busy file cannot inflate a count.
-  // Borrowed code is counted separately from the system's own parts. Merging the
-  // two produces a total a reader cannot reconcile against anything drawn: a
-  // card reading "uses 12" beside seven visible siblings looks simply wrong.
+  // neither. Borrowed code is counted separately from the system's own parts,
+  // so "uses" can always be reconciled against the siblings drawn alongside.
   const dependsOn = new Map<string, Set<string>>();
   const borrows = new Map<string, Set<string>>();
   const dependents = new Map<string, Set<string>>();
-  for (const dependency of dependencies) {
-    if (dependency.source === dependency.target) continue;
+  for (const dependency of drawnDependencies) {
     const bucket = isExternal(dependency.target) ? borrows : dependsOn;
     const out = bucket.get(dependency.source) ?? new Set<string>();
     out.add(dependency.target);
@@ -272,6 +305,36 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     return { height: inner.height, width: inner.width };
   };
 
+  /**
+   * Whether a container's contents really do read in one direction. The layout
+   * ranks children by their dependencies, so left-to-right already means "uses"
+   * — but only while that order exists. A cycle has no first member, so where
+   * one is present the sheet says nothing about direction rather than captioning
+   * an order it had to break arbitrarily to draw.
+   */
+  const readsInOneDirection = (ids: readonly string[]): boolean => {
+    const among = edgesAmong(ids);
+    if (among.length === 0) return false;
+    const outgoing = new Map<string, string[]>();
+    for (const edge of among) {
+      outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
+    }
+    const settled = new Set<string>();
+    const onPath = new Set<string>();
+    const acyclic = (id: string): boolean => {
+      if (onPath.has(id)) return false;
+      if (settled.has(id)) return true;
+      onPath.add(id);
+      for (const next of outgoing.get(id) ?? []) {
+        if (!acyclic(next)) return false;
+      }
+      onPath.delete(id);
+      settled.add(id);
+      return true;
+    };
+    return ids.every((id) => acyclic(id));
+  };
+
   // A container's footprint is its own laid-out contents plus title and padding.
   const groupHead = (id: string): number =>
     GROUP_TITLE + ((componentOf(id)?.summary ?? "").length > 0 ? GROUP_SUMMARY_HEIGHT : 0);
@@ -313,6 +376,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       nodes.push(
         Object.freeze({
           data: Object.freeze({
+            ...(readsInOneDirection(nested) ? { axis: "uses →" } : {}),
             contains: `${nested.length} ${nextScaleLabel(notation === "unscaled" ? undefined : notation)}`,
             kind: "container" as const,
             label: displayText(component),
@@ -444,15 +508,11 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     });
   }
 
-  const drawn = new Set(nodes.map((node) => node.id));
+  // The same set the counts were taken from, so a card's figures and the lines
+  // leaving it can never disagree.
   const edges: BlueprintFlowEdge[] = [];
-  const seen = new Set<string>();
-  for (const dependency of dependencies) {
-    if (dependency.source === dependency.target) continue;
-    if (!drawn.has(dependency.source) || !drawn.has(dependency.target)) continue;
+  for (const dependency of drawnDependencies) {
     const id = `depends:${dependency.source}:${dependency.target}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
     const toExternal = isExternal(dependency.target);
     edges.push(
       Object.freeze({
