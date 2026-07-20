@@ -615,7 +615,7 @@
               "state": "complete"
             }
           ],
-          "epoch": "epoch_b5d1c832c4ffef942bf8d347de2b3ad3",
+          "epoch": "epoch_3bc8b1e63c85b73e8556d5ee9906b2a3",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -769,7 +769,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:559926f32f3268ff9b56c22123106f20fba467b228162eda4e4bf3090b041c16",
+                  "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
                   "resource": "src/cli/blueprint-html.ts",
                   "scope": "workspace"
                 }
@@ -2637,7 +2637,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:559926f32f3268ff9b56c22123106f20fba467b228162eda4e4bf3090b041c16",
+                  "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
                   "resource": "src/cli/blueprint-html.ts",
                   "scope": "workspace"
                 }

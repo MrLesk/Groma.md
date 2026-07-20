@@ -68,4 +68,30 @@ describe("local blueprint HTML", () => {
     expect(rendered.html).not.toContain("document.cookie");
     expect(rendered.html).not.toContain("fetch(");
   });
+
+  test("draws the branded technical sheet with byte-exact canonical brand marks", async () => {
+    const rendered = renderBlueprintHtml(fixture);
+    expect(rendered.ok).toBeTrue();
+    if (!rendered.ok) return;
+    const canonicalMark = (
+      await readFile(new URL("../../../brand/mark-frontal.svg", import.meta.url), "utf8")
+    ).trim();
+    expect(rendered.html).toContain(
+      `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(canonicalMark)}">`,
+    );
+    expect(rendered.html).toContain("ARCHITECTURAL BLUEPRINT");
+    expect(rendered.html).toContain("<th>DIAGRAM</th><td>CURRENT BLUEPRINT</td>");
+    expect(rendered.html).toContain("<th>GENERATION</th><td>7</td>");
+    expect(rendered.html).toContain("<th>NODES</th><td>2</td>");
+    expect(rendered.html).toContain("<span>01</span>");
+    expect(rendered.html).toContain("<span>12</span>");
+    expect(rendered.html).toContain("<span>A</span>");
+    expect(rendered.html).toContain("<span>H</span>");
+    expect(rendered.html).toContain('class="reg reg-tl"');
+    expect(rendered.html).toContain('class="reg reg-br"');
+    expect(rendered.html).toContain("<th>CONVENTION</th><td>GROMA ARCHITECTURE BLUEPRINT</td>");
+    expect(rendered.html).toContain("<th>SCALE</th><td>LOGICAL</td>");
+    expect(rendered.html).toContain("<th>UNITS</th><td>LOGICAL</td>");
+    expect(rendered.html).toContain("surveyed root point");
+  });
 });
