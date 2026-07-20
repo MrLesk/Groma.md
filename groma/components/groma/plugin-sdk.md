@@ -2,6 +2,7 @@
 schema: groma/component/v0.2
 id: ent_d67a54e7b5161786d1344fded42f9176
 name: plugin-sdk
+summary: The public SDK is a narrow facade for implementing Groma's blind scanner contract.
 scale: domain
 shared: false
 parent: ent_a754d5c9106660a7c4f25673e53bc015

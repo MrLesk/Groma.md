@@ -3626,6 +3626,20 @@ async function scanScope(
       partial = true;
       continue;
     }
+    // Documentation describes the smallest thing that contains it. A README beside
+    // a source boundary is about that boundary, not about the package the boundary
+    // happens to live in, so the nearest enclosing boundary wins over the package.
+    let boundaryOwner: BoundaryEvidence | undefined;
+    for (const candidate of boundaries) {
+      chargeExtractionWork(budget);
+      if (!resource.startsWith(`${candidate.resource}/`)) continue;
+      if (
+        boundaryOwner === undefined ||
+        candidate.resource.length > boundaryOwner.resource.length
+      ) {
+        boundaryOwner = candidate;
+      }
+    }
     let owner: PackageEvidence | undefined;
     for (const candidate of packages) {
       chargeExtractionWork(budget);
@@ -3633,12 +3647,14 @@ async function scanScope(
       if (owner === undefined || candidate.root.length > owner.root.length) owner = candidate;
     }
     const subject =
-      owner === undefined
-        ? undefined
-        : reference(
-            scope,
-            observationKey("component-candidate", scope, "package", owner.root, owner.name),
-          );
+      boundaryOwner !== undefined
+        ? reference(scope, boundaryOwner.key)
+        : owner === undefined
+          ? undefined
+          : reference(
+              scope,
+              observationKey("component-candidate", scope, "package", owner.root, owner.name),
+            );
     append(
       documentationRecord(
         scope,

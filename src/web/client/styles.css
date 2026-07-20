@@ -133,9 +133,55 @@ input {
   text-transform: uppercase;
 }
 
+/*
+ * A system is the subject of the whole sheet, so it is named at title scale
+ * rather than tagged like the plates nested inside it.
+ */
 .groma-group--system .groma-group__title {
-  border-color: var(--color-ink);
+  margin-left: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-plan);
+  font-size: 22px;
   font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.groma-group__contains {
+  margin-left: 10px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.groma-group--system .groma-group__contains {
+  margin-left: 14px;
+  font-size: 11px;
+}
+
+/*
+ * What the project says about itself, given the room a first sentence deserves:
+ * on the system plate this is the only line on the sheet that answers "what is
+ * this?", so nothing nested may out-shout it.
+ */
+.groma-group__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 74ch;
+  margin: 6px 0 0 20px;
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.groma-group--system .groma-group__summary {
+  font-size: 15px;
 }
 
 /* Observed facts, stated compactly on the card that carries them. */
@@ -351,6 +397,57 @@ input {
   text-underline-offset: 3px;
 }
 
+/*
+ * A sentence transcribed from the component's own documentation. It is set as
+ * prose rather than in the plan face used for measurements, because it is the
+ * one thing on the card the project said about itself rather than something the
+ * scanner counted.
+ */
+/* A borrowed dependency: named, counted, and given no more room than that. */
+.groma-node--borrowed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-style: dashed;
+  background: var(--color-paper);
+}
+
+.groma-node--borrowed .groma-node__select {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.groma-node--borrowed .groma-node__evidence {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* Nothing connects to a listed dependency, so it carries no visible terminals. */
+.groma-node--borrowed .groma-handle {
+  opacity: 0;
+}
+
+.groma-node__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0 0 6px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.groma-node--system .groma-node__summary {
+  font-size: 12.5px;
+  -webkit-line-clamp: 3;
+}
+
 .groma-node__disclosure {
   display: flex;
   align-items: center;
@@ -488,6 +585,29 @@ input {
 .groma-legend-mark--unscaled {
   border: 1px dashed var(--color-ink-muted);
   border-radius: 50%;
+}
+
+.groma-legend-mark--edge {
+  border: 0;
+  border-top: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  height: 0;
+  align-self: center;
+}
+
+/*
+ * The key explains the sheet's notation, not the project, so it stays folded
+ * until asked for: a reader's first look belongs to the architecture.
+ */
+.groma-title-block__key > summary {
+  padding: 5px 8px;
+  border-top: 1px solid var(--color-fine);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .groma-title-block__hint {

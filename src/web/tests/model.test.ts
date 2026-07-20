@@ -131,9 +131,18 @@ describe("interactive map view-model", () => {
     const edge = graph.edges[0];
     expect(edge?.id).toBe("depends:ent_owned:ent_lib");
     expect(edge?.className).toContain("groma-edge--external");
+    // Direction is kept on both endpoints: the component that reaches out and the
+    // one reached for are opposite kinds of thing, and one total would hide that.
     const owned = graph.nodes.find((node) => node.id === "ent_owned");
-    expect(owned?.data).toMatchObject({ dependencyCount: 1, external: false, shared: false });
+    expect(owned?.data).toMatchObject({
+      dependents: 0,
+      dependsOn: 1,
+      external: false,
+      shared: false,
+    });
     expect(graph.nodes.find((node) => node.id === "ent_lib")?.data).toMatchObject({
+      dependents: 1,
+      dependsOn: 0,
       external: true,
       shared: true,
     });

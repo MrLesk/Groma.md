@@ -1,5 +1,5 @@
 import dagre from "@dagrejs/dagre";
-import { Position, type Edge, type Node } from "@xyflow/react";
+import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import type { ApiComponentScale } from "./api.ts";
 import { displayText, type BlueprintModel } from "./model.ts";
@@ -9,7 +9,10 @@ export type BlueprintNotation = ApiComponentScale | "unscaled";
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly childCount: number;
   readonly childState: "collapsed" | "empty" | "expanded" | "unread";
-  readonly dependencyCount: number;
+  /** Components this one draws on. */
+  readonly dependsOn: number;
+  /** Components that draw on this one. */
+  readonly dependents: number;
   readonly entryPoint: boolean;
   readonly external: boolean;
   readonly hasMoreChildren: boolean;
@@ -17,13 +20,19 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly notation: BlueprintNotation;
   readonly provisional: boolean;
   readonly shared: boolean;
+  /** A sentence the source itself states about this component, when it states one. */
+  readonly summary?: string;
   readonly type: string;
 }
 
 export interface BlueprintGroupNodeData extends Record<string, unknown> {
+  /** What the container holds, counted, so the heading states a fact. */
+  readonly contains?: string;
   readonly kind: "band" | "container";
   readonly label: string;
   readonly notation: BlueprintNotation;
+  /** A container is still a component, and still says what the source says. */
+  readonly summary?: string;
 }
 
 export type BlueprintFlowNode = Node<BlueprintFlowNodeData, "component">;
@@ -52,12 +61,33 @@ const NODE_DIMENSIONS: Readonly<Record<BlueprintNotation, { height: number; widt
     unscaled: Object.freeze({ height: 92, width: 252 }),
   });
 
+/**
+ * Room for the description a component's own source states about it, clamped to
+ * three lines on the card. Reserved only when there is a sentence to show, so a
+ * project that documents nothing gets compact cards rather than empty gaps.
+ */
+const SUMMARY_HEIGHT = 52;
+
 /** Reserved for a group's title rule, so a heading never sits on a child. */
 const GROUP_TITLE = 44;
+
+/**
+ * Extra head room a container needs when it carries its own description. A
+ * container is the largest thing on the sheet, so the sentence describing it is
+ * the one a reader meets first and is given room to be read.
+ */
+const GROUP_SUMMARY_HEIGHT = 46;
 const GROUP_PAD = 26;
 const GROUP_GAP = 88;
 const SHEET_ROW_WIDTH = 1_640;
-const EXTERNAL_COLUMNS = 3;
+
+/**
+ * Borrowed code is inventory, not architecture: it is listed densely, in more
+ * columns and smaller cells than anything built here, so it can be consulted
+ * without competing with the system for the reader's first look.
+ */
+const EXTERNAL_COLUMNS = 5;
+const EXTERNAL_CELL = Object.freeze({ height: 44, width: 236 });
 
 export const SCALE_ORDER: readonly ApiComponentScale[] = Object.freeze([
   "system",
@@ -185,10 +215,19 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
 
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
   const notations = new Set<BlueprintNotation>();
-  const dependencyCounts = new Map<string, number>();
+  // Counted in both directions, because "used by many" and "uses many" describe
+  // opposite kinds of component and a single total tells the two apart from
+  // neither. Distinct partners, so one busy file cannot inflate a count.
+  const dependsOn = new Map<string, Set<string>>();
+  const dependents = new Map<string, Set<string>>();
   for (const dependency of dependencies) {
-    dependencyCounts.set(dependency.source, (dependencyCounts.get(dependency.source) ?? 0) + 1);
-    dependencyCounts.set(dependency.target, (dependencyCounts.get(dependency.target) ?? 0) + 1);
+    if (dependency.source === dependency.target) continue;
+    const out = dependsOn.get(dependency.source) ?? new Set<string>();
+    out.add(dependency.target);
+    dependsOn.set(dependency.source, out);
+    const into = dependents.get(dependency.target) ?? new Set<string>();
+    into.add(dependency.source);
+    dependents.set(dependency.target, into);
   }
 
   // Contents are arranged by how they depend on each other, so a group reads
@@ -210,16 +249,26 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     return among;
   };
 
-  const sizeOf = (id: string): { height: number; width: number } => {
+  /** A leaf card's footprint, grown only when the source describes it. */
+  const cardSize = (id: string): { height: number; width: number } => {
     const component = componentOf(id);
-    const notation = notationOf(component?.scale);
+    if (isExternal(id)) return { ...EXTERNAL_CELL };
+    const base = NODE_DIMENSIONS[notationOf(component?.scale)];
+    const described = (component?.summary ?? "").length > 0;
+    return { height: base.height + (described ? SUMMARY_HEIGHT : 0), width: base.width };
+  };
+
+  const sizeOf = (id: string): { height: number; width: number } => {
     const nested = childrenOf(id);
-    if (nested.length === 0) return { ...NODE_DIMENSIONS[notation] };
+    if (nested.length === 0) return cardSize(id);
     const inner = groupSize(id);
     return { height: inner.height, width: inner.width };
   };
 
   // A container's footprint is its own laid-out contents plus title and padding.
+  const groupHead = (id: string): number =>
+    GROUP_TITLE + ((componentOf(id)?.summary ?? "").length > 0 ? GROUP_SUMMARY_HEIGHT : 0);
+
   const groupSizes = new Map<string, { height: number; width: number }>();
   function groupSize(id: string): { height: number; width: number } {
     const known = groupSizes.get(id);
@@ -227,7 +276,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     const nested = childrenOf(id);
     const laid = layoutSubgraph(nested, edgesAmong(nested), sizeOf);
     const size = {
-      height: Math.round(laid.height + GROUP_PAD * 2 + GROUP_TITLE),
+      height: Math.round(laid.height + GROUP_PAD * 2 + groupHead(id)),
       width: Math.round(Math.max(laid.width + GROUP_PAD * 2, 280)),
     };
     groupSizes.set(id, size);
@@ -249,7 +298,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
           : folded.has(id) || nested.length === 0
             ? "collapsed"
             : "expanded";
-    const size = nested.length === 0 ? NODE_DIMENSIONS[notation] : groupSize(id);
+    const size = nested.length === 0 ? cardSize(id) : groupSize(id);
 
     if (nested.length > 0) {
       // Containers render as a plate their contents sit inside, the way a
@@ -257,9 +306,13 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       nodes.push(
         Object.freeze({
           data: Object.freeze({
+            contains: `${nested.length} ${nextScaleLabel(notation === "unscaled" ? undefined : notation)}`,
             kind: "container" as const,
             label: displayText(component),
             notation,
+            ...(component.summary === undefined || component.summary.length === 0
+              ? {}
+              : { summary: component.summary }),
           }),
           draggable: false,
           height: size.height,
@@ -274,11 +327,12 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         }),
       );
       const laid = layoutSubgraph(nested, edgesAmong(nested), sizeOf);
+      const head = groupHead(id);
       for (const childId of nested) {
         const childPosition = laid.positions.get(childId)!;
         emitComponent(
           childId,
-          { x: childPosition.x + GROUP_PAD, y: childPosition.y + GROUP_PAD + GROUP_TITLE },
+          { x: childPosition.x + GROUP_PAD, y: childPosition.y + GROUP_PAD + head },
           `group:${id}`,
         );
       }
@@ -290,7 +344,8 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         data: Object.freeze({
           childCount: childIds?.length ?? 0,
           childState,
-          dependencyCount: dependencyCounts.get(id) ?? 0,
+          dependsOn: dependsOn.get(id)?.size ?? 0,
+          dependents: dependents.get(id)?.size ?? 0,
           entryPoint: (component.actions?.length ?? 0) > 0,
           external: component.type === "external",
           hasMoreChildren: node.hasMoreChildren,
@@ -298,6 +353,9 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
           notation,
           provisional: component.scale === undefined,
           shared: component.shared === true,
+          ...(component.summary === undefined || component.summary.length === 0
+            ? {}
+            : { summary: component.summary }),
           type: component.type ?? "component",
         }),
         height: size.height,
@@ -338,11 +396,11 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   // never peers of the parts that were actually built here.
   if (externals.length > 0) {
     const bandTop = sheetBottom + GROUP_GAP * 1.5;
-    const cell = NODE_DIMENSIONS.unscaled;
+    const cell = EXTERNAL_CELL;
     const columns = Math.min(EXTERNAL_COLUMNS, externals.length);
     const rows = Math.ceil(externals.length / columns);
-    const bandWidth = columns * (cell.width + 24) + GROUP_PAD * 2 - 24;
-    const bandHeight = rows * (cell.height + 20) + GROUP_PAD * 2 + GROUP_TITLE - 20;
+    const bandWidth = columns * (cell.width + 14) + GROUP_PAD * 2 - 14;
+    const bandHeight = rows * (cell.height + 12) + GROUP_PAD * 2 + GROUP_TITLE - 12;
     nodes.push(
       Object.freeze({
         data: Object.freeze({
@@ -367,8 +425,8 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       emitComponent(
         id,
         {
-          x: GROUP_PAD + column * (cell.width + 24),
-          y: GROUP_PAD + GROUP_TITLE + row * (cell.height + 20),
+          x: GROUP_PAD + column * (cell.width + 14),
+          y: GROUP_PAD + GROUP_TITLE + row * (cell.height + 12),
         },
         "band:external",
       );
@@ -390,6 +448,14 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         className: toExternal ? "groma-edge groma-edge--external" : "groma-edge",
         id,
         interactionWidth: 12,
+        // The scanner observed a direction; drawing the line without it discards
+        // the only thing that distinguishes "uses" from "is used by".
+        markerEnd: Object.freeze({
+          color: toExternal ? "#9aa39b" : "#5c665e",
+          height: 14,
+          type: MarkerType.ArrowClosed,
+          width: 14,
+        }),
         source: dependency.source,
         target: dependency.target,
         type: "smoothstep" as const,

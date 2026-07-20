@@ -2,6 +2,7 @@
 schema: groma/component/v0.2
 id: ent_dc27dd8b576c2950cd5b445248045584
 name: standard-model
+summary: The official minimal blueprint model is an explicit capability over Core.
 scale: domain
 shared: true
 parent: ent_a754d5c9106660a7c4f25673e53bc015

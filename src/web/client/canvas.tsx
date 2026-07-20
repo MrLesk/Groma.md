@@ -57,6 +57,31 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   };
   const toggleChildren = () =>
     data.childState === "unread" ? actions.onExpand(id) : actions.onToggleFold(id);
+
+  // Borrowed code is listed, not drawn: a name and how widely it is relied on is
+  // everything the scan can honestly say about a dependency whose insides it
+  // never looked at.
+  if (data.external) {
+    return (
+      <article className="groma-node groma-node--borrowed" data-scale={data.notation}>
+        <Handle type="target" position={Position.Left} className="groma-handle" />
+        <button
+          type="button"
+          className="nodrag nopan groma-node__select"
+          aria-label={`Inspect ${data.label}`}
+          onClick={() => actions.onSelect(id)}
+          onKeyDown={(event) => activateNodeControl(event, () => actions.onSelect(id))}
+        >
+          {data.label}
+        </button>
+        <ul className="groma-node__evidence" aria-label={`Observed facts about ${data.label}`}>
+          {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
+        </ul>
+        <Handle type="source" position={Position.Right} className="groma-handle" />
+      </article>
+    );
+  }
+
   return (
     <article
       className={`groma-node groma-node--${data.notation}${selected ? " is-selected" : ""}`}
@@ -67,7 +92,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
       <div className="groma-node__heading">
         <span className="groma-node__notation" aria-hidden="true" />
         <span>{data.notation}</span>
-        <span>{data.type}</span>
+        {data.external ? <span>borrowed</span> : null}
       </div>
       <button
         type="button"
@@ -78,20 +103,20 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
       >
         {data.label}
       </button>
+      {data.summary === undefined ? null : (
+        <p className="groma-node__summary" title={data.summary}>
+          {data.summary}
+        </p>
+      )}
       <ul className="groma-node__evidence" aria-label={`Observed facts about ${data.label}`}>
         {data.shared ? <li className="groma-chip groma-chip--shared">shared</li> : null}
         {data.entryPoint ? <li className="groma-chip groma-chip--entry">entry</li> : null}
-        {data.dependencyCount > 0 ? (
-          <li className="groma-chip">
-            {data.dependencyCount} link{data.dependencyCount === 1 ? "" : "s"}
-          </li>
-        ) : null}
+        {data.dependsOn > 0 ? <li className="groma-chip">uses {data.dependsOn}</li> : null}
+        {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
-        {data.childState === "empty" ? (
-          <span className="groma-node__terminal">No contained components</span>
-        ) : (
+        {data.childState === "empty" ? null : (
           <button
             type="button"
             aria-expanded={hasLoadedChildren ? data.childState === "expanded" : undefined}
@@ -132,6 +157,10 @@ function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
       data-scale={data.notation}
     >
       <span className="groma-group__title">{data.label}</span>
+      {data.contains === undefined ? null : (
+        <span className="groma-group__contains">{data.contains}</span>
+      )}
+      {data.summary === undefined ? null : <p className="groma-group__summary">{data.summary}</p>}
     </div>
   );
 }
@@ -246,16 +275,28 @@ export function Canvas({
               </div>
             </div>
             {graph.notations.length > 0 ? (
-              <ol aria-label="Component scale notation">
-                {graph.notations.map((notation) => (
-                  <LegendItem key={notation} notation={notation} />
-                ))}
-              </ol>
+              <details className="groma-title-block__key">
+                <summary>Notation</summary>
+                <ol aria-label="Component scale notation">
+                  {graph.notations.map((notation) => (
+                    <LegendItem key={notation} notation={notation} />
+                  ))}
+                  <li>
+                    <span
+                      className="groma-legend-mark groma-legend-mark--edge"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      <strong>arrow</strong> · depends on
+                    </span>
+                  </li>
+                </ol>
+                <p className="groma-title-block__hint">
+                  Scale sets what the sheet shows; zoom only changes how large it looks. Tab reaches
+                  every component and view control. Descriptions are quoted from the source.
+                </p>
+              </details>
             ) : null}
-            <p className="groma-title-block__hint">
-              Scale sets what the sheet shows; zoom only changes how large it looks. Tab reaches
-              every component and view control.
-            </p>
           </Panel>
           {model.hasMoreRoots ? (
             <Panel position="bottom-center" className="groma-bounded-notice">
