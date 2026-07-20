@@ -667,12 +667,11 @@ describe("local completed-snapshot reconciliation", () => {
     expect(components.ok).toBeTrue();
     if (!components.ok) return;
     const id = components.value.items[0]!.component.id;
+    const intentDocument = await host.store.read(id);
+    if (!intentDocument.ok) throw new Error(intentDocument.diagnostics[0]?.message);
     const intentPath = path.join(
       workspace.workspaceRoot,
-      "groma",
-      "intent",
-      id.slice(4, 6),
-      `${id}.md`,
+      ...String(intentDocument.value.locator).split("/"),
     );
     const providerSnapshot = host.transactionProvider.snapshot.bind(host.transactionProvider);
     let snapshotCalls = 0;

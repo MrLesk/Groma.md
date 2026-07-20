@@ -20,7 +20,7 @@ import {
   type ResourceKey,
   type Result,
 } from "../core/index.ts";
-import { copyGraphPayload } from "../core/payload.ts";
+import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
 import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
 import {
   STANDARD_COMPONENT_KIND,
@@ -38,11 +38,9 @@ import {
   type WorkspaceResourceLocator,
 } from "./contracts.ts";
 
-const schema = "groma/v0.1";
-const intentRootSegments = ["groma", "intent"] as const;
-const shardPattern = /^[0-9a-f]{2}$/;
-const maximumCanonicalShardCount = 256;
-const documentPattern = /^ent_[0-9a-f]{32}\.md$/;
+const schema = "groma/component/v0.2";
+const intentRootSegments = ["groma", "components"] as const;
+const documentPattern = /\.md$/u;
 const extensionPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
 const textEncoder = new TextEncoder();
 const strictTextDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -63,6 +61,7 @@ export interface MarkdownIntentStoreBounds {
   readonly maxDocumentBytes: number;
   readonly maxDocuments: number;
   readonly maxEntriesPerDirectory: number;
+  readonly maxHierarchyDepth: number;
   readonly maxTotalDocumentBytes: number;
   readonly pageSize: number;
 }
@@ -88,13 +87,23 @@ export interface MarkdownIntentSnapshot {
   readonly relations: readonly GraphRelation[];
 }
 
+export interface MarkdownIntentLocation {
+  readonly id: EntityId;
+  readonly locator: WorkspaceResourceLocator;
+}
+
 export interface MarkdownIntentStore {
   decode(locator: WorkspaceResourceLocator, bytes: Uint8Array): Result<MarkdownIntentDocument>;
   load(aliases?: readonly EntityAliasInput[]): Promise<Result<MarkdownIntentSnapshot>>;
   read(id: EntityId): Promise<Result<MarkdownIntentDocument>>;
+  locations(
+    entities: readonly GraphEntity[],
+    aliases?: readonly EntityAliasInput[],
+  ): Result<readonly MarkdownIntentLocation[]>;
   serialize(
     entity: GraphEntity,
     relations: readonly GraphRelation[],
+    locator?: WorkspaceResourceLocator,
   ): Result<MarkdownIntentDocument>;
 }
 
@@ -102,6 +111,7 @@ const defaultBounds: MarkdownIntentStoreBounds = Object.freeze({
   maxDocumentBytes: 1024 * 1024,
   maxDocuments: 100_000,
   maxEntriesPerDirectory: 10_000,
+  maxHierarchyDepth: 64,
   maxTotalDocumentBytes: 128 * 1024 * 1024,
   pageSize: 1_000,
 });
@@ -109,6 +119,7 @@ const absoluteBounds: MarkdownIntentStoreBounds = Object.freeze({
   maxDocumentBytes: 64 * 1024 * 1024,
   maxDocuments: 1_000_000,
   maxEntriesPerDirectory: 100_000,
+  maxHierarchyDepth: 256,
   maxTotalDocumentBytes: 1024 * 1024 * 1024,
   pageSize: 10_000,
 });
@@ -211,6 +222,7 @@ function parseBounds(
     "maxDocumentBytes",
     "maxDocuments",
     "maxEntriesPerDirectory",
+    "maxHierarchyDepth",
     "maxTotalDocumentBytes",
     "pageSize",
   ] as const) {
@@ -276,19 +288,42 @@ function intentRoot(): WorkspaceResourceLocator {
   return parsed.value;
 }
 
-export function markdownIntentLocator(id: EntityId): Result<WorkspaceResourceLocator> {
+export function markdownIntentResource(id: EntityId): Result<ResourceKey> {
   const parsed = parseEntityId(id);
   if (!parsed.ok) return parsed;
-  const shard = parsed.value.slice(4, 6);
-  return workspaceResourceLocator(...intentRootSegments, shard, `${parsed.value}.md`);
+  return parseResourceKey(`component:${parsed.value}`);
 }
 
 function revision(bytes: Uint8Array): Result<ContentRevision> {
   return parseContentRevision(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
 }
 
-function resource(locator: WorkspaceResourceLocator): Result<ResourceKey> {
-  return parseResourceKey(String(locator));
+function portableName(value: string, id: EntityId): Result<string> {
+  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
+  let name = normalized
+    .replace(/[\u0000-\u001f\u007f-\u009f\\/:*?"<>|]/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/[ .]+$/gu, "")
+    .trim();
+  if (name.length === 0) name = id;
+  if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(name)) name = `_${name}`;
+  const filename = `${name}.md`;
+  const encoded = textEncoder.encode(filename);
+  if (encoded.byteLength > 255) {
+    return failure(
+      diagnostic(
+        "component-filename-too-long",
+        "Component name produces a filename longer than the portable 255-byte limit; shorten the name",
+        { id, maximumBytes: 255 },
+      ),
+    );
+  }
+  return success(name);
+}
+
+function defaultDocumentLocator(component: StandardComponent): Result<WorkspaceResourceLocator> {
+  const name = portableName(component.name ?? component.id, component.id);
+  return name.ok ? workspaceResourceLocator(...intentRootSegments, `${name.value}.md`) : name;
 }
 
 function canonicalExtensions(
@@ -302,25 +337,6 @@ function canonicalExtensions(
     });
   }
   return output;
-}
-
-function itemRecord(item: StandardItem): Record<string, unknown> {
-  return {
-    id: item.id,
-    ...(item.name === undefined ? {} : { name: item.name }),
-    ...(item.description === undefined ? {} : { description: item.description }),
-    ...canonicalExtensions(item.extensions),
-  };
-}
-
-function relationshipRecord(relationship: StandardRelationship): Record<string, unknown> {
-  return {
-    id: relationship.id,
-    type: relationship.type,
-    target: relationship.target,
-    ...(relationship.description === undefined ? {} : { description: relationship.description }),
-    ...canonicalExtensions(relationship.extensions),
-  };
 }
 
 function graphRelations(
@@ -362,14 +378,10 @@ function graphRelations(
   return success(Object.freeze(relations));
 }
 
-function frontmatter(
-  component: StandardComponent,
-  relationships: readonly StandardRelationship[],
-): Record<string, unknown> {
+function frontmatter(component: StandardComponent): Record<string, unknown> {
   return {
     schema,
     id: component.id,
-    kind: STANDARD_COMPONENT_KIND,
     ...(component.name === undefined ? {} : { name: component.name }),
     ...(component.label === undefined ? {} : { label: component.label }),
     ...(component.summary === undefined ? {} : { summary: component.summary }),
@@ -380,22 +392,159 @@ function frontmatter(
     ...(component.parent === undefined ? {} : { parent: component.parent }),
     ...(component.desired === undefined ? {} : { desired: component.desired }),
     ...(component.lifecycle === undefined ? {} : { lifecycle: component.lifecycle }),
-    ...(component.inputs === undefined ? {} : { inputs: component.inputs.map(itemRecord) }),
-    ...(component.outputs === undefined ? {} : { outputs: component.outputs.map(itemRecord) }),
-    ...(component.actions === undefined ? {} : { actions: component.actions.map(itemRecord) }),
-    ...(relationships.length === 0 ? {} : { relationships: relationships.map(relationshipRecord) }),
     ...canonicalExtensions(component.extensions),
   };
 }
 
+function encodeInline(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\r", "\\r")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\t", "\\t")
+    .replaceAll("—", "\\—")
+    .replaceAll("<", "\\<")
+    .replace(
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu,
+      (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+}
+
+function decodeInline(value: string, path: string): Result<string> {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!;
+    if (character !== "\\") {
+      decoded += character;
+      continue;
+    }
+    const escaped = value[index + 1];
+    if (escaped === undefined) {
+      return failure(
+        diagnostic("invalid-intent-markdown", `${path} ends with an incomplete escape`),
+      );
+    }
+    if (escaped === "\\" || escaped === "—" || escaped === "<") decoded += escaped;
+    else if (escaped === "n") decoded += "\n";
+    else if (escaped === "r") decoded += "\r";
+    else if (escaped === "t") decoded += "\t";
+    else if (escaped === "u") {
+      const digits = value.slice(index + 2, index + 6);
+      if (!/^[0-9a-f]{4}$/u.test(digits)) {
+        return failure(
+          diagnostic("invalid-intent-markdown", `${path} has an invalid Unicode escape`),
+        );
+      }
+      decoded += String.fromCharCode(Number.parseInt(digits, 16));
+      index += 4;
+    } else {
+      return failure(diagnostic("invalid-intent-markdown", `${path} has an unsupported escape`));
+    }
+    index += 1;
+  }
+  return success(decoded);
+}
+
+function encodeCommentId(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*~.-]/gu,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function decodeCommentId(value: string, path: string): Result<string> {
+  try {
+    const decoded = decodeURIComponent(value);
+    return encodeCommentId(decoded) === value
+      ? success(decoded)
+      : failure(diagnostic("invalid-intent-markdown", `${path} uses a noncanonical stable id`));
+  } catch {
+    return failure(diagnostic("invalid-intent-markdown", `${path} has an invalid stable id`));
+  }
+}
+
+function encodeExtensions(value: Readonly<Record<string, GraphData>>): Result<string | undefined> {
+  if (Object.keys(value).length === 0) return success(undefined);
+  const canonical = copyCanonicalGraphData(canonicalExtensions(value), "entity");
+  return canonical.ok
+    ? success(Buffer.from(canonical.value.canonicalJson, "utf8").toString("base64url"))
+    : canonical;
+}
+
+function decodeExtensions(
+  value: string | undefined,
+  path: string,
+): Result<Record<string, GraphData>> {
+  if (value === undefined) return success({});
+  try {
+    const bytes = Buffer.from(value, "base64url");
+    if (bytes.toString("base64url") !== value) throw new Error();
+    const decoded = JSON.parse(strictTextDecoder.decode(bytes)) as unknown;
+    if (!exactRecord(decoded)) throw new Error();
+    const parsed = extensions(decoded, new Set(), path);
+    if (!parsed.ok) return parsed;
+    const canonical = copyCanonicalGraphData(parsed.value, "entity");
+    if (
+      !canonical.ok ||
+      Buffer.from(canonical.value.canonicalJson).toString("base64url") !== value
+    ) {
+      throw new Error();
+    }
+    return success(parsed.value);
+  } catch {
+    return failure(
+      diagnostic("invalid-intent-markdown", `${path} contains malformed extension metadata`),
+    );
+  }
+}
+
+function itemLine(item: StandardItem): Result<string> {
+  const fields = [
+    ...(item.name === undefined ? [] : ["name"]),
+    ...(item.description === undefined ? [] : ["description"]),
+  ];
+  const text =
+    item.name === undefined
+      ? item.description === undefined
+        ? ""
+        : encodeInline(item.description)
+      : item.description === undefined
+        ? encodeInline(item.name)
+        : `${encodeInline(item.name)} — ${encodeInline(item.description)}`;
+  const extra = encodeExtensions(item.extensions);
+  if (!extra.ok) return extra;
+  const metadata = `<!-- groma:item id=${encodeCommentId(item.id)} fields=${fields.join(",") || "none"}${extra.value === undefined ? "" : ` extensions=${extra.value}`} -->`;
+  return success(`- ${text}${text.length === 0 ? "" : " "}${metadata}`);
+}
+
+function relationshipLine(relationship: StandardRelationship): Result<string> {
+  const extra = encodeExtensions(relationship.extensions);
+  if (!extra.ok) return extra;
+  const description =
+    relationship.description === undefined ? "" : ` — ${encodeInline(relationship.description)}`;
+  const metadata = `<!-- groma:relationship id=${encodeCommentId(relationship.id)} target=${encodeCommentId(relationship.target)} description=${relationship.description === undefined ? "false" : "true"}${extra.value === undefined ? "" : ` extensions=${extra.value}`} -->`;
+  return success(`- ${relationship.type} → ${relationship.target}${description} ${metadata}`);
+}
+
+function itemSection(title: string, items: readonly StandardItem[]): Result<string> {
+  const lines: string[] = [];
+  for (const item of items) {
+    const line = itemLine(item);
+    if (!line.ok) return line;
+    lines.push(line.value);
+  }
+  return success(`# ${title}${lines.length === 0 ? "" : `\n\n${lines.join("\n")}`}`);
+}
+
 function encodeDocument(
   front: Record<string, unknown>,
-  intent: string | undefined,
+  component: StandardComponent,
+  relationships: readonly StandardRelationship[],
 ): Result<Uint8Array> {
   const frontUnicode = validateUnicode(front, "frontmatter");
   if (!frontUnicode.ok) return frontUnicode;
-  const intentUnicode = validateUnicode(intent, "intent");
-  if (!intentUnicode.ok) return intentUnicode;
+  const bodyUnicode = validateUnicode({ component, relationships }, "body");
+  if (!bodyUnicode.ok) return bodyUnicode;
   try {
     const yaml = stringify(
       front,
@@ -419,7 +568,28 @@ function encodeDocument(
         minContentWidth: 0,
       },
     );
-    const body = intent === undefined ? "" : `\n# Intent\n\n${intent}\n`;
+    const sections: string[] = [];
+    for (const [title, items] of [
+      ["Inputs", component.inputs],
+      ["Outputs", component.outputs],
+      ["Actions", component.actions],
+    ] as const) {
+      if (items === undefined) continue;
+      const section = itemSection(title, items);
+      if (!section.ok) return section;
+      sections.push(section.value);
+    }
+    if (relationships.length > 0) {
+      const lines: string[] = [];
+      for (const relationship of relationships) {
+        const line = relationshipLine(relationship);
+        if (!line.ok) return line;
+        lines.push(line.value);
+      }
+      sections.push(`# Relationships\n\n${lines.join("\n")}`);
+    }
+    if (component.intent !== undefined) sections.push(`# Intent\n\n${component.intent}`);
+    const body = sections.length === 0 ? "" : `\n${sections.join("\n\n")}\n`;
     const markdown = `---\n${yaml}---\n${body}`;
     if (containsGitConflictBlock(markdown)) {
       return failure(
@@ -460,16 +630,15 @@ function parseFraming(text: string): Result<{ readonly body?: string; readonly y
   }
   const suffix = text.slice(closing + 5);
   if (suffix.length === 0) return success({ yaml: text.slice(4, closing + 1) });
-  const heading = "\n# Intent\n\n";
-  if (!suffix.startsWith(heading) || !suffix.endsWith("\n")) {
+  if (!suffix.startsWith("\n# ") || !suffix.endsWith("\n")) {
     return failure(
       diagnostic(
         "intent-malformed-body",
-        "Intent Markdown body must be exactly a blank line, '# Intent', a blank line, prose, and one framing newline",
+        "Intent Markdown body must contain LF-delimited canonical component sections",
       ),
     );
   }
-  return success({ body: suffix.slice(heading.length, -1), yaml: text.slice(4, closing + 1) });
+  return success({ body: suffix.slice(1, -1), yaml: text.slice(4, closing + 1) });
 }
 
 function validateYamlNumbers(document: ReturnType<typeof parseDocument>): Result<void> {
@@ -612,26 +781,19 @@ function yamlRecord(source: string): Result<Readonly<Record<string, unknown>>> {
 }
 
 const knownFrontmatterFields = new Set([
-  "actions",
   "desired",
   "id",
-  "inputs",
   "iconDomain",
-  "kind",
   "label",
   "lifecycle",
   "name",
-  "outputs",
   "parent",
-  "relationships",
   "scale",
   "schema",
   "shared",
   "summary",
   "type",
 ]);
-const knownItemFields = new Set(["description", "id", "name"]);
-const knownRelationshipFields = new Set(["description", "id", "target", "type"]);
 
 function extensions(
   record: Readonly<Record<string, unknown>>,
@@ -655,40 +817,226 @@ function extensions(
   return success(output);
 }
 
-function embeddedItems(
-  value: unknown,
-  path: string,
-): Result<readonly Record<string, unknown>[] | undefined> {
-  if (value === undefined) return success(undefined);
-  if (!Array.isArray(value)) {
+interface ParsedMarkdownBody {
+  readonly actions?: readonly Record<string, unknown>[];
+  readonly inputs?: readonly Record<string, unknown>[];
+  readonly intent?: string;
+  readonly outputs?: readonly Record<string, unknown>[];
+  readonly relationships: readonly Record<string, unknown>[];
+}
+
+function parseItemLine(line: string, path: string): Result<Record<string, unknown>> {
+  if (!line.startsWith("- ")) {
+    return failure(diagnostic("invalid-intent-markdown", `${path} must be a Markdown bullet`));
+  }
+  const marker = "<!-- groma:item ";
+  const markerIndex = line.lastIndexOf(marker);
+  if (markerIndex < 2 || !line.endsWith(" -->")) {
     return failure(
-      diagnostic("invalid-intent-item-list", `${path} must be a YAML sequence`, { path }),
+      diagnostic("invalid-intent-markdown", `${path} must carry its stable id in an HTML comment`),
     );
   }
-  const output: Record<string, unknown>[] = [];
-  for (const [index, item] of value.entries()) {
-    if (!exactRecord(item)) {
+  let text = line.slice(2, markerIndex);
+  if (text.endsWith(" ")) text = text.slice(0, -1);
+  const metadata = line.slice(markerIndex);
+  const matched =
+    /^<!-- groma:item id=([^ ]+) fields=(none|name|description|name,description)(?: extensions=([A-Za-z0-9_-]+))? -->$/u.exec(
+      metadata,
+    );
+  if (matched === null) {
+    return failure(diagnostic("invalid-intent-markdown", `${path} has malformed item metadata`));
+  }
+  const id = decodeCommentId(matched[1]!, `${path}.id`);
+  if (!id.ok || id.value.length === 0)
+    return id.ok
+      ? failure(diagnostic("invalid-intent-markdown", `${path}.id must not be empty`))
+      : id;
+  const extra = decodeExtensions(matched[3], `${path}.extensions`);
+  if (!extra.ok) return extra;
+  const fields = matched[2]!;
+  let name: string | undefined;
+  let description: string | undefined;
+  if (fields === "none") {
+    if (text.length !== 0) {
       return failure(
-        diagnostic("invalid-intent-item", `${path}[${index}] must be a YAML mapping`, {
-          path: `${path}[${index}]`,
-        }),
+        diagnostic(
+          "invalid-intent-markdown",
+          `${path} declares no readable fields but contains text`,
+        ),
       );
     }
-    const extra = extensions(item, knownItemFields, `${path}[${index}]`);
-    if (!extra.ok) return extra;
-    output.push({
-      ...(item.id === undefined ? {} : { id: item.id }),
-      ...(item.name === undefined ? {} : { name: item.name }),
-      ...(item.description === undefined ? {} : { description: item.description }),
-      ...extra.value,
-    });
+  } else if (fields === "name") {
+    const parsed = decodeInline(text, `${path}.name`);
+    if (!parsed.ok) return parsed;
+    name = parsed.value;
+  } else if (fields === "description") {
+    const parsed = decodeInline(text, `${path}.description`);
+    if (!parsed.ok) return parsed;
+    description = parsed.value;
+  } else {
+    const separator = text.indexOf(" — ");
+    if (separator < 0 || text.indexOf(" — ", separator + 3) >= 0) {
+      return failure(
+        diagnostic(
+          "invalid-intent-markdown",
+          `${path} must separate its name and description with one em dash`,
+        ),
+      );
+    }
+    const parsedName = decodeInline(text.slice(0, separator), `${path}.name`);
+    const parsedDescription = decodeInline(text.slice(separator + 3), `${path}.description`);
+    if (!parsedName.ok) return parsedName;
+    if (!parsedDescription.ok) return parsedDescription;
+    name = parsedName.value;
+    description = parsedDescription.value;
   }
-  return success(output);
+  return success({
+    id: id.value,
+    ...(name === undefined ? {} : { name }),
+    ...(description === undefined ? {} : { description }),
+    ...extra.value,
+  });
+}
+
+function parseRelationshipLine(line: string, path: string): Result<Record<string, unknown>> {
+  if (!line.startsWith("- ")) {
+    return failure(diagnostic("invalid-intent-markdown", `${path} must be a Markdown bullet`));
+  }
+  const marker = "<!-- groma:relationship ";
+  const markerIndex = line.lastIndexOf(marker);
+  if (markerIndex < 2 || !line.endsWith(" -->")) {
+    return failure(
+      diagnostic("invalid-intent-markdown", `${path} must carry its stable id in an HTML comment`),
+    );
+  }
+  let text = line.slice(2, markerIndex);
+  if (text.endsWith(" ")) text = text.slice(0, -1);
+  const metadata = line.slice(markerIndex);
+  const matched =
+    /^<!-- groma:relationship id=([^ ]+) target=([^ ]+) description=(false|true)(?: extensions=([A-Za-z0-9_-]+))? -->$/u.exec(
+      metadata,
+    );
+  if (matched === null) {
+    return failure(
+      diagnostic("invalid-intent-markdown", `${path} has malformed relationship metadata`),
+    );
+  }
+  const id = decodeCommentId(matched[1]!, `${path}.id`);
+  if (!id.ok) return id;
+  const target = decodeCommentId(matched[2]!, `${path}.target`);
+  if (!target.ok) return target;
+  const parsedTarget = parseEntityId(target.value);
+  if (!parsedTarget.ok) return parsedTarget;
+  const extra = decodeExtensions(matched[4], `${path}.extensions`);
+  if (!extra.ok) return extra;
+  const relationship =
+    /^([a-z][a-z0-9]*(?:[.-][a-z0-9]+)*) → (ent_[0-9a-f]{32})(?: — (.*))?$/u.exec(text);
+  if (
+    relationship === null ||
+    relationship[2] !== parsedTarget.value ||
+    (matched[3] === "true") !== (relationship[3] !== undefined)
+  ) {
+    return failure(
+      diagnostic(
+        "invalid-intent-markdown",
+        `${path} must be 'type → stable-target' with matching hidden identity and optional description`,
+      ),
+    );
+  }
+  let description: string | undefined;
+  if (relationship[3] !== undefined) {
+    const parsed = decodeInline(relationship[3], `${path}.description`);
+    if (!parsed.ok) return parsed;
+    description = parsed.value;
+  }
+  return success({
+    id: id.value,
+    type: relationship[1]!,
+    target: parsedTarget.value,
+    ...(description === undefined ? {} : { description }),
+    ...extra.value,
+  });
+}
+
+function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody> {
+  if (body === undefined) return success({ relationships: Object.freeze([]) });
+  const lines = body.split("\n");
+  const order = ["Inputs", "Outputs", "Actions", "Relationships", "Intent"] as const;
+  const seen = new Set<string>();
+  const parsed: {
+    actions?: readonly Record<string, unknown>[];
+    inputs?: readonly Record<string, unknown>[];
+    intent?: string;
+    outputs?: readonly Record<string, unknown>[];
+    relationships: readonly Record<string, unknown>[];
+  } = { relationships: Object.freeze([]) };
+  let previous = -1;
+  let index = 0;
+  while (index < lines.length) {
+    const heading = /^# (Inputs|Outputs|Actions|Relationships|Intent)$/u.exec(lines[index]!);
+    if (heading === null) {
+      return failure(
+        diagnostic(
+          "invalid-intent-markdown",
+          `body line ${index + 1} must be a known section heading`,
+        ),
+      );
+    }
+    const title = heading[1] as (typeof order)[number];
+    const position = order.indexOf(title);
+    if (seen.has(title) || position <= previous) {
+      return failure(
+        diagnostic("invalid-intent-markdown", `# ${title} is duplicated or out of canonical order`),
+      );
+    }
+    seen.add(title);
+    previous = position;
+    index += 1;
+    if (index < lines.length) {
+      if (lines[index] !== "") {
+        return failure(
+          diagnostic("invalid-intent-markdown", `# ${title} must be followed by one blank line`),
+        );
+      }
+      index += 1;
+    }
+    if (title === "Intent") {
+      parsed.intent = lines.slice(index).join("\n");
+      index = lines.length;
+      continue;
+    }
+    const content: string[] = [];
+    while (index < lines.length) {
+      if (
+        lines[index] === "" &&
+        /^# (?:Inputs|Outputs|Actions|Relationships|Intent)$/u.test(lines[index + 1] ?? "")
+      ) {
+        index += 1;
+        break;
+      }
+      content.push(lines[index]!);
+      index += 1;
+    }
+    const records: Record<string, unknown>[] = [];
+    for (let itemIndex = 0; itemIndex < content.length; itemIndex += 1) {
+      const item =
+        title === "Relationships"
+          ? parseRelationshipLine(content[itemIndex]!, `body.${title}[${itemIndex}]`)
+          : parseItemLine(content[itemIndex]!, `body.${title}[${itemIndex}]`);
+      if (!item.ok) return item;
+      records.push(item.value);
+    }
+    if (title === "Inputs") parsed.inputs = Object.freeze(records);
+    else if (title === "Outputs") parsed.outputs = Object.freeze(records);
+    else if (title === "Actions") parsed.actions = Object.freeze(records);
+    else parsed.relationships = Object.freeze(records);
+  }
+  return success(Object.freeze(parsed));
 }
 
 function decodedEntity(
   record: Readonly<Record<string, unknown>>,
-  body: string | undefined,
+  body: ParsedMarkdownBody,
   model: StandardModelCapability,
 ): Result<GraphEntity> {
   if (record.schema !== schema) {
@@ -699,24 +1047,10 @@ function decodedEntity(
       }),
     );
   }
-  if (record.kind !== STANDARD_COMPONENT_KIND) {
-    return failure(
-      diagnostic("intent-wrong-kind", "Intent store only accepts component documents", {
-        actual: typeof record.kind === "string" ? record.kind : typeof record.kind,
-        expected: STANDARD_COMPONENT_KIND,
-      }),
-    );
-  }
   const id = typeof record.id === "string" ? parseEntityId(record.id) : parseEntityId("");
   if (!id.ok) return id;
   const extra = extensions(record, knownFrontmatterFields, "frontmatter");
   if (!extra.ok) return extra;
-  const inputs = embeddedItems(record.inputs, "frontmatter.inputs");
-  if (!inputs.ok) return inputs;
-  const outputs = embeddedItems(record.outputs, "frontmatter.outputs");
-  if (!outputs.ok) return outputs;
-  const actions = embeddedItems(record.actions, "frontmatter.actions");
-  if (!actions.ok) return actions;
   const input: Record<string, unknown> = {
     id: id.value,
     ...(record.name === undefined ? {} : { name: record.name }),
@@ -727,10 +1061,10 @@ function decodedEntity(
     ...(record.scale === undefined ? {} : { scale: record.scale }),
     ...(record.shared === undefined ? {} : { shared: record.shared }),
     ...(record.parent === undefined ? {} : { parent: record.parent }),
-    ...(body === undefined ? {} : { intent: body }),
-    ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
-    ...(outputs.value === undefined ? {} : { outputs: outputs.value }),
-    ...(actions.value === undefined ? {} : { actions: actions.value }),
+    ...(body.intent === undefined ? {} : { intent: body.intent }),
+    ...(body.inputs === undefined ? {} : { inputs: body.inputs }),
+    ...(body.outputs === undefined ? {} : { outputs: body.outputs }),
+    ...(body.actions === undefined ? {} : { actions: body.actions }),
     ...(record.lifecycle === undefined ? {} : { lifecycle: record.lifecycle }),
     ...(record.desired === undefined ? {} : { desired: record.desired }),
     ...extra.value,
@@ -750,29 +1084,12 @@ function decodedEntity(
 }
 
 function decodedRelations(
-  value: unknown,
+  value: readonly Record<string, unknown>[],
   source: EntityId,
   model: StandardModelCapability,
 ): Result<readonly GraphRelation[]> {
-  if (value === undefined) return success(Object.freeze([]));
-  if (!Array.isArray(value)) {
-    return failure(
-      diagnostic(
-        "invalid-intent-relationships",
-        "frontmatter.relationships must be a YAML sequence",
-      ),
-    );
-  }
   const relations: GraphRelation[] = [];
   for (const [index, candidate] of value.entries()) {
-    if (!exactRecord(candidate)) {
-      return failure(
-        diagnostic(
-          "invalid-intent-relationship",
-          `frontmatter.relationships[${index}] must be a YAML mapping`,
-        ),
-      );
-    }
     const id =
       typeof candidate.id === "string" ? parseRelationId(candidate.id) : parseRelationId("");
     if (!id.ok) return id;
@@ -783,21 +1100,21 @@ function decodedRelations(
       return failure(
         diagnostic(
           "invalid-intent-relationship-type",
-          `frontmatter.relationships[${index}].type must be a relation type token`,
+          `body.relationships[${index}].type must be a relation type token`,
         ),
       );
     }
     const extra = extensions(
       candidate,
-      knownRelationshipFields,
-      `frontmatter.relationships[${index}]`,
+      new Set(["description", "id", "target", "type"]),
+      `body.relationships[${index}]`,
     );
     if (!extra.ok) return extra;
     if (!relationTypePattern.test(candidate.type)) {
       return failure(
         diagnostic(
           "invalid-intent-relationship-type",
-          `frontmatter.relationships[${index}].type must be a lowercase dotted or dashed token`,
+          `body.relationships[${index}].type must be a lowercase dotted or dashed token`,
         ),
       );
     }
@@ -819,49 +1136,144 @@ function decodedRelations(
   return graphRelations(viewed.value);
 }
 
-function expectedLayout(locator: WorkspaceResourceLocator, id: EntityId): boolean {
-  const expected = markdownIntentLocator(id);
-  return expected.ok && expected.value === locator;
-}
-
 function unexpectedLayout(entry: ResourceEntry): Result<never> {
   return failure(
     diagnostic(
       "unexpected-intent-resource",
-      "Intent root must contain only two-hex shard directories and stable-ID Markdown files",
+      "Component folders may contain only nested folders and Markdown component files",
       { kind: entry.kind, locator: String(entry.locator) },
     ),
   );
 }
 
-function validateEntry(entry: ResourceEntry): Result<"document" | "shard"> {
+function validateEntry(entry: ResourceEntry): Result<"directory" | "document"> {
   const parts = String(entry.locator).split("/");
-  if (
-    parts.length === 3 &&
-    parts[0] === "groma" &&
-    parts[1] === "intent" &&
-    shardPattern.test(parts[2]!) &&
-    entry.kind === "directory"
-  ) {
-    return success("shard");
+  if (parts.length < 3 || parts[0] !== "groma" || parts[1] !== "components") {
+    return unexpectedLayout(entry);
   }
-  if (
-    parts.length === 4 &&
-    parts[0] === "groma" &&
-    parts[1] === "intent" &&
-    shardPattern.test(parts[2]!) &&
-    documentPattern.test(parts[3]!) &&
-    entry.kind === "file"
-  ) {
-    return success("document");
-  }
+  if (entry.kind === "directory") return success("directory");
+  if (entry.kind === "file" && documentPattern.test(parts.at(-1)!)) return success("document");
   return unexpectedLayout(entry);
+}
+
+function computeLocations(
+  entities: readonly GraphEntity[],
+  aliases: readonly EntityAliasInput[],
+  maximumAliases: number,
+  maximumDepth: number,
+  model: StandardModelCapability,
+): Result<readonly MarkdownIntentLocation[]> {
+  const components = new Map<EntityId, StandardComponent>();
+  for (const entity of entities) {
+    const component = model.parse(entity);
+    if (!component.ok) return component;
+    if (components.has(component.value.id)) {
+      return failure(
+        diagnostic(
+          "duplicate-intent-entity",
+          "The same stable component identity occurs more than once",
+          {
+            id: component.value.id,
+          },
+        ),
+      );
+    }
+    components.set(component.value.id, component.value);
+  }
+  const resolver = createEntityAliasResolver(
+    aliases,
+    new Set(components.keys()),
+    Math.max(1, maximumAliases),
+  );
+  if (!resolver.ok) return resolver;
+  const parents = new Map<EntityId, EntityId | undefined>();
+  const names = new Map<EntityId, string>();
+  const siblingNames = new Map<string, EntityId>();
+  for (const component of components.values()) {
+    let parent: EntityId | undefined;
+    if (component.parent !== undefined) {
+      const resolved = resolver.value.resolve(component.parent);
+      if (!resolved.ok) return resolved;
+      parent = resolved.value.resolved;
+    }
+    parents.set(component.id, parent);
+    const name = portableName(component.name ?? component.id, component.id);
+    if (!name.ok) return name;
+    names.set(component.id, name.value);
+    const collisionKey = `${parent ?? "root"}\u0000${name.value.normalize("NFC").toLowerCase()}`;
+    const sibling = siblingNames.get(collisionKey);
+    if (sibling !== undefined) {
+      return failure(
+        diagnostic(
+          "component-filename-collision",
+          "Sibling component names resolve to the same portable filename; rename one component before saving",
+          {
+            firstId: sibling,
+            filename: `${name.value}.md`,
+            parent: parent ?? "root",
+            secondId: component.id,
+          },
+        ),
+      );
+    }
+    siblingNames.set(collisionKey, component.id);
+  }
+  const paths = new Map<EntityId, readonly string[]>();
+  const visiting = new Set<EntityId>();
+  const pathFor = (id: EntityId): Result<readonly string[]> => {
+    const cached = paths.get(id);
+    if (cached !== undefined) return success(cached);
+    if (visiting.has(id)) {
+      return failure(
+        diagnostic(
+          "intent-containment-cycle",
+          "Intent component containment contains a structural parent cycle",
+          { id },
+        ),
+      );
+    }
+    visiting.add(id);
+    const parent = parents.get(id);
+    const prefix =
+      parent === undefined ? success(Object.freeze([]) as readonly string[]) : pathFor(parent);
+    if (!prefix.ok) return prefix;
+    if (prefix.value.length >= maximumDepth) {
+      return failure(
+        diagnostic(
+          "intent-hierarchy-too-deep",
+          "Component hierarchy exceeds the configured folder depth",
+          {
+            id,
+            maximum: maximumDepth,
+          },
+        ),
+      );
+    }
+    const path = Object.freeze([...prefix.value, names.get(id)!]);
+    paths.set(id, path);
+    visiting.delete(id);
+    return success(path);
+  };
+  const locations: MarkdownIntentLocation[] = [];
+  for (const id of [...components.keys()].sort(compareText)) {
+    const path = pathFor(id);
+    if (!path.ok) return path;
+    const locator = workspaceResourceLocator(
+      ...intentRootSegments,
+      ...path.value.slice(0, -1),
+      `${path.value.at(-1)!}.md`,
+    );
+    if (!locator.ok) return locator;
+    locations.push(Object.freeze({ id, locator: locator.value }));
+  }
+  return success(Object.freeze(locations));
 }
 
 function validateWholeGraph(
   documents: readonly MarkdownIntentDocument[],
   aliases: readonly EntityAliasInput[],
-  maximumAliases: number,
+  bounds: MarkdownIntentStoreBounds,
+  model: StandardModelCapability,
 ): Result<MarkdownIntentSnapshot> {
   const entities = new Map<EntityId, GraphEntity>();
   for (const document of documents) {
@@ -880,7 +1292,7 @@ function validateWholeGraph(
     aliases,
     new Set(entities.keys()),
     // The store permits a zero-document bound; Core still requires a positive resolver bound.
-    Math.max(1, maximumAliases),
+    Math.max(1, bounds.maxDocuments),
   );
   if (!aliasResolver.ok) return aliasResolver;
 
@@ -897,23 +1309,6 @@ function validateWholeGraph(
         );
       }
       relations.set(relation.id, relation);
-    }
-  }
-
-  for (const document of documents) {
-    if (!expectedLayout(document.locator, document.entity.id)) {
-      const expected = markdownIntentLocator(document.entity.id);
-      return failure(
-        diagnostic(
-          "intent-wrong-location",
-          "Intent component is not stored at the shard derived from its stable identity",
-          {
-            actual: String(document.locator),
-            expected: expected.ok ? String(expected.value) : "invalid identity",
-            id: document.entity.id,
-          },
-        ),
-      );
     }
   }
 
@@ -972,6 +1367,15 @@ function validateWholeGraph(
     for (const member of path) containmentState.set(member, "visited");
   }
 
+  const locations = computeLocations(
+    [...entities.values()],
+    aliases,
+    bounds.maxDocuments,
+    bounds.maxHierarchyDepth,
+    model,
+  );
+  if (!locations.ok) return locations;
+
   return success(
     Object.freeze({
       documents: Object.freeze(
@@ -1004,7 +1408,7 @@ export function createMarkdownIntentStore(
     const exactBytes = snapshot.value;
     const contentRevision = revision(exactBytes);
     if (!contentRevision.ok) return contentRevision;
-    const key = resource(locator);
+    const key = markdownIntentResource(entity.id);
     if (!key.ok) return key;
     const document = {
       get bytes(): Uint8Array {
@@ -1099,6 +1503,7 @@ export function createMarkdownIntentStore(
   const serialize = (
     entity: GraphEntity,
     relations: readonly GraphRelation[],
+    requestedLocator?: WorkspaceResourceLocator,
   ): Result<MarkdownIntentDocument> => {
     const inspected = inspectExactRecord(
       entity,
@@ -1143,11 +1548,15 @@ export function createMarkdownIntentStore(
         );
       }
     }
-    const locator = markdownIntentLocator(component.value.id);
+    const locator =
+      requestedLocator === undefined
+        ? defaultDocumentLocator(component.value)
+        : parseWorkspaceResourceLocator(requestedLocator);
     if (!locator.ok) return locator;
     const encoded = encodeDocument(
-      frontmatter(component.value, relationships.value),
-      component.value.intent,
+      frontmatter(component.value),
+      component.value,
+      relationships.value,
     );
     if (!encoded.ok) return encoded;
     const bytes = encoded.value;
@@ -1212,41 +1621,42 @@ export function createMarkdownIntentStore(
         ),
       );
     }
-    const entity = decodedEntity(parsed.value, framed.value.body, model);
+    const body = parseMarkdownBody(framed.value.body);
+    if (!body.ok) return body;
+    const entity = decodedEntity(parsed.value, body.value, model);
     if (!entity.ok) return entity;
-    const relations = decodedRelations(parsed.value.relationships, entity.value.id, model);
+    const relations = decodedRelations(body.value.relationships, entity.value.id, model);
     if (!relations.ok) return relations;
     return makeDocument(exactBytes, entity.value, parsedLocator.value, relations.value);
   };
 
   const read = async (id: EntityId): Promise<Result<MarkdownIntentDocument>> => {
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) return locator;
-    const loaded = await resources.read({
-      locator: locator.value,
-      maxBytes: bounds.maxDocumentBytes,
-    });
+    const parsed = parseEntityId(id);
+    if (!parsed.ok) return parsed;
+    const loaded = await load();
     if (!loaded.ok) return loaded;
-    const document = decode(locator.value, loaded.value.bytes);
-    if (!document.ok) return document;
-    if (!expectedLayout(document.value.locator, document.value.entity.id)) {
-      return failure(
-        diagnostic(
-          "intent-wrong-location",
-          "Intent component is not stored at the shard derived from its stable identity",
-          { actual: String(locator.value), id: document.value.entity.id },
-        ),
-      );
-    }
-    return document;
+    const document = loaded.value.documents.find(
+      (candidate) => candidate.entity.id === parsed.value,
+    );
+    return document === undefined
+      ? failure(
+          diagnostic("resource-missing", "Component document is missing", { id: parsed.value }),
+        )
+      : success(document);
   };
+
+  const locations = (
+    entities: readonly GraphEntity[],
+    aliases: readonly EntityAliasInput[] = Object.freeze([]),
+  ): Result<readonly MarkdownIntentLocation[]> =>
+    computeLocations(entities, aliases, bounds.maxDocuments, bounds.maxHierarchyDepth, model);
 
   const load = async (
     aliases: readonly EntityAliasInput[] = Object.freeze([]),
   ): Promise<Result<MarkdownIntentSnapshot>> => {
     const root = intentRoot();
     const documentEntries: ResourceEntry[] = [];
-    const maximumPages = bounds.maxDocuments + maximumCanonicalShardCount + 1;
+    const maximumPages = bounds.maxDocuments + 1;
     let pageCount = 0;
     let receivedPage = false;
     let cursor: Parameters<LocalResourceProvider["enumerate"]>[0]["cursor"];
@@ -1265,7 +1675,7 @@ export function createMarkdownIntentStore(
         ...(cursor === undefined ? {} : { cursor }),
         limit: bounds.pageSize,
         locator: root,
-        maxDepth: 2,
+        maxDepth: bounds.maxHierarchyDepth,
         maxEntriesPerDirectory: bounds.maxEntriesPerDirectory,
       });
       if (!page.ok) {
@@ -1301,7 +1711,7 @@ export function createMarkdownIntentStore(
         return failure(
           diagnostic(
             "unexpected-intent-resource",
-            "Intent root contains resources deeper than the canonical shard/file layout",
+            "Component folders exceed the configured hierarchy depth",
           ),
         );
       }
@@ -1350,8 +1760,8 @@ export function createMarkdownIntentStore(
       if (!document.ok) return document;
       documents.push(document.value);
     }
-    return validateWholeGraph(documents, aliases, bounds.maxDocuments);
+    return validateWholeGraph(documents, aliases, bounds, model);
   };
 
-  return Object.freeze({ decode, load, read, serialize });
+  return Object.freeze({ decode, load, locations, read, serialize });
 }

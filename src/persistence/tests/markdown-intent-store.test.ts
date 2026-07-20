@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,12 +14,13 @@ import { createStandardModelCapability } from "../../standard-model/index.ts";
 import {
   createLocalResourceProvider,
   createMarkdownIntentStore,
-  markdownIntentLocator,
+  markdownIntentResource,
   workspaceResourceLocator,
 } from "../index.ts";
 
 const roots: string[] = [];
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -51,114 +51,126 @@ async function resources() {
 async function publish(
   provider: Awaited<ReturnType<typeof resources>>,
   locator: string,
-  text: string,
+  bytes: Uint8Array,
 ) {
   const parsed = workspaceResourceLocator(...locator.split("/"));
   if (!parsed.ok) throw new Error("invalid test locator");
-  const staged = await provider.stageReplacement(parsed.value, new TextEncoder().encode(text));
+  const staged = await provider.stageReplacement(parsed.value, bytes);
   if (!staged.ok) throw new Error(staged.diagnostics[0]?.message);
   const committed = await provider.commitReplacement(staged.value);
   expect(committed.state).toBe("committed");
 }
 
-describe("Markdown intent codec", () => {
-  test("derives the canonical stable-identity shard and resource key", () => {
+describe("readable Markdown component codec", () => {
+  test("keeps stable logical identity separate from readable locations", () => {
     const id = entityId("ab12");
-    const locator = markdownIntentLocator(id);
-    expect(locator).toMatchObject({ ok: true });
-    if (!locator.ok) throw new Error("expected locator");
-    expect(String(locator.value)).toBe(`groma/intent/00/${id}.md`);
+    const resource = markdownIntentResource(id);
+    if (!resource.ok) throw new Error("expected stable resource mapping");
+    expect(String(resource.value)).toBe(`component:${id}`);
   });
 
-  test("round-trips nested components, items, relations, Unicode prose, and extensions", () => {
+  test("maps component names and parent chains directly to readable document paths", () => {
     const model = createStandardModelCapability();
-    const source = entityId("10");
-    const target = entityId("20");
+    const store = createMarkdownIntentStore({ model, resources: {} as never });
+    const system = component(entityId("10"), { name: "Commerce Platform" });
+    const domain = component(entityId("20"), { name: "Orders", parent: system.id });
+    const worker = component(entityId("30"), { name: "Fulfilment: Worker", parent: domain.id });
+    const locations = store.locations([worker, domain, system]);
+    if (!locations.ok) throw new Error(locations.diagnostics[0]?.message);
+    expect(
+      locations.value.map((entry) => ({ id: entry.id, locator: String(entry.locator) })),
+    ).toEqual([
+      { id: system.id, locator: "groma/components/Commerce Platform.md" },
+      { id: domain.id, locator: "groma/components/Commerce Platform/Orders.md" },
+      {
+        id: worker.id,
+        locator: "groma/components/Commerce Platform/Orders/Fulfilment- Worker.md",
+      },
+    ]);
+  });
+
+  test("fails closed when sibling names collide on portable filesystems", () => {
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const first = component(entityId("40"), { name: "Orders" });
+    const second = component(entityId("41"), { name: "orders" });
+    expect(store.locations([first, second])).toMatchObject({
+      diagnostics: [
+        {
+          code: "component-filename-collision",
+          details: { filename: "orders.md", firstId: first.id, secondId: second.id },
+        },
+      ],
+      ok: false,
+    });
+  });
+
+  test("round-trips prose-first intent, item bullets, relationships, and extensions", () => {
+    const model = createStandardModelCapability();
+    const source = entityId("50");
+    const target = entityId("51");
     const store = createMarkdownIntentStore({ model, resources: {} as never });
     const entity = component(source, {
       actions: [
-        { description: "Second", id: "z-action", "vendor.io/item": { z: 2, a: 1 } },
-        { id: "a-action", name: "First" },
+        { description: "Create an order", id: "create-order", name: "Create" },
+        { id: "archive", "vendor.io/item": { confidence: 0.9 } },
       ],
       "acme.io/owner": "Architecture",
-      iconDomain: "orders.example.com",
-      intent: "Café architecture\n\nPreserve **meaning**.\n",
-      label: "Orders",
-      name: "Renamable name",
+      inputs: [{ description: "Incoming\nrequest", id: "request", name: "Order — request" }],
+      intent: "Own the durable order lifecycle.\n\nKeep **business meaning** local.\n",
+      name: "Orders",
       parent: target,
-      summary: "Owns the durable order lifecycle.",
-      type: "service.worker",
+      scale: "domain",
+      type: "service",
     });
     const relations: GraphRelation[] = [
       {
-        id: relationId("30"),
-        payload: { description: "Calls", "vendor.io/confidence": 0.9 },
+        id: relationId("52"),
+        payload: { description: "Publishes events", "vendor.io/confidence": 1 },
         source,
         target,
         type: "depends-on",
       },
     ];
-
     const encoded = store.serialize(entity, relations);
-    expect(encoded).toMatchObject({ ok: true });
-    if (!encoded.ok) throw new Error("expected serialized resource");
-    expect(String(encoded.value.locator)).toBe(`groma/intent/00/${source}.md`);
-    expect(String(encoded.value.resource)).toBe(String(encoded.value.locator));
-    expect(String(encoded.value.revision)).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(decoder.decode(encoded.value.bytes)).toBe(`---
-schema: groma/v0.1
-id: ${source}
-kind: component
-name: Renamable name
-label: Orders
-summary: Owns the durable order lifecycle.
-iconDomain: orders.example.com
-type: service.worker
-parent: ${target}
-actions:
-  - id: a-action
-    name: First
-  - id: z-action
-    description: Second
-    vendor.io/item:
-      a: 1
-      z: 2
-relationships:
-  - id: ${relationId("30")}
-    type: depends-on
-    target: ${target}
-    description: Calls
-    vendor.io/confidence: 0.9
-acme.io/owner: Architecture
----
-
-# Intent
-
-Café architecture
-
-Preserve **meaning**.
-
-`);
-
+    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+    expect(String(encoded.value.locator)).toBe("groma/components/Orders.md");
+    expect(String(encoded.value.resource)).toBe(`component:${source}`);
+    const text = decoder.decode(encoded.value.bytes);
+    expect(text).toStartWith(
+      `---\nschema: groma/component/v0.2\nid: ${source}\nname: Orders\ntype: service\nscale: domain\nparent: ${target}\nacme.io/owner: Architecture\n---\n`,
+    );
+    expect(text).toContain(
+      "- Order \\— request — Incoming\\nrequest <!-- groma:item id=request fields=name,description -->",
+    );
+    expect(text).toContain(
+      "- Create — Create an order <!-- groma:item id=create%2Dorder fields=name,description -->",
+    );
+    expect(text).toContain(
+      `- depends-on → ${target} — Publishes events <!-- groma:relationship id=${relationId("52")} target=${target} description=true extensions=`,
+    );
+    expect(text).toEndWith(
+      "# Intent\n\nOwn the durable order lifecycle.\n\nKeep **business meaning** local.\n\n",
+    );
     const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-    expect(decoded).toMatchObject({ ok: true });
-    if (!decoded.ok) throw new Error("expected decoded resource");
+    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
     const canonical = model.parse(entity);
     if (!canonical.ok) throw new Error("expected canonical component");
-    const canonicalDraft = model.serialize(canonical.value);
-    if (!canonicalDraft.ok) throw new Error("expected canonical entity draft");
+    const draft = model.serialize(canonical.value);
+    if (!draft.ok) throw new Error("expected canonical draft");
     expect(decoded.value.entity).toEqual({
-      id: entity.id,
-      kind: canonicalDraft.value.kind,
-      payload: canonicalDraft.value.payload as GraphEntity["payload"],
+      id: source,
+      kind: "component",
+      payload: draft.value.payload as GraphEntity["payload"],
     });
     expect(decoded.value.relations).toEqual(relations);
-    expect(decoded.value.revision).toBe(encoded.value.revision);
   });
 
-  test("canonicalizes equivalent semantic ordering to byte-identical Markdown", () => {
-    const source = entityId("40");
-    const target = entityId("50");
+  test("canonicalizes semantic ordering to byte-identical Markdown", () => {
+    const source = entityId("60");
+    const target = entityId("61");
     const store = createMarkdownIntentStore({
       model: createStandardModelCapability(),
       resources: {} as never,
@@ -171,10 +183,8 @@ Preserve **meaning**.
       "z.io/value": { z: true, a: false },
       "a.io/value": 1,
       name: "Stable",
-      type: "service",
     });
     const second = component(source, {
-      type: "service",
       name: "Stable",
       "a.io/value": 1,
       "z.io/value": { a: false, z: true },
@@ -184,14 +194,14 @@ Preserve **meaning**.
       ],
     });
     const relationA: GraphRelation = {
-      id: relationId("60"),
+      id: relationId("62"),
       payload: {},
       source,
       target,
       type: "uses",
     };
     const relationB: GraphRelation = {
-      id: relationId("61"),
+      id: relationId("63"),
       payload: {},
       source,
       target,
@@ -203,1099 +213,215 @@ Preserve **meaning**.
     expect(left.value.bytes).toEqual(right.value.bytes);
   });
 
-  test("uses readable known-field order and round-trips arbitrary nested extension keys", () => {
-    const id = entityId("65");
-    const nested = JSON.parse(
-      '{"__proto__":"data, not a prototype","line\\nkey":{"z":2,"a":1}}',
-    ) as GraphEntity["payload"];
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const encoded = store.serialize(
-      component(id, {
-        actions: [{ id: "act" }],
-        desired: "present",
-        iconDomain: "ordered.example.com",
-        inputs: [{ id: "in" }],
-        label: "Ordered",
-        lifecycle: "active",
-        name: "Ordered",
-        outputs: [{ id: "out" }],
-        parent: entityId("66"),
-        summary: "Exercises canonical frontmatter ordering.",
-        type: "service",
-        "vendor.io/nested": nested,
-      }),
-      [],
-    );
-    if (!encoded.ok) throw new Error("expected serialization");
-    const text = decoder.decode(encoded.value.bytes);
-    const fields = [
-      "schema:",
-      "id:",
-      "kind:",
-      "name:",
-      "label:",
-      "summary:",
-      "iconDomain:",
-      "type:",
-      "parent:",
-      "desired:",
-      "lifecycle:",
-      "inputs:",
-      "outputs:",
-      "actions:",
-      "vendor.io/nested:",
-    ];
-    expect(fields.map((field) => text.indexOf(`\n${field}`))).toEqual(
-      [...fields.map((field) => text.indexOf(`\n${field}`))].sort((left, right) => left - right),
-    );
-    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    const decodedPayload = decoded.value.entity.payload as Readonly<Record<string, unknown>>;
-    const decodedNested = decodedPayload["vendor.io/nested"] as Readonly<Record<string, unknown>>;
-    expect(Object.hasOwn(decodedNested, "__proto__")).toBeTrue();
-    expect(decodedNested["__proto__"]).toBe("data, not a prototype");
-    expect(decodedNested["line\nkey"]).toEqual({ a: 1, z: 2 });
-    const exposed = encoded.value.bytes;
-    exposed[0] = 0;
-    expect(store.decode(encoded.value.locator, encoded.value.bytes)).toMatchObject({ ok: true });
-  });
-
-  test("distinguishes omitted, empty, and trailing-newline intent", () => {
+  test("distinguishes omitted, empty, and trailing-newline prose", () => {
     const id = entityId("70");
     const store = createMarkdownIntentStore({
       model: createStandardModelCapability(),
       resources: {} as never,
     });
-    for (const intent of [undefined, "", "line", "line\n", "line\n\n", "=======\n"] as const) {
+    for (const intent of [
+      undefined,
+      "",
+      "line",
+      "line\n",
+      "line\n\n",
+      "# Inputs\n\nprose",
+    ] as const) {
       const encoded = store.serialize(component(id, intent === undefined ? {} : { intent }), []);
       if (!encoded.ok) throw new Error("expected serialization");
       const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-      if (!decoded.ok) throw new Error("expected decoding");
+      if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
       expect((decoded.value.entity.payload as { readonly intent?: string }).intent).toBe(intent);
     }
   });
 
-  test("round-trips recognition metadata byte-stably and rejects malformed frontmatter", () => {
-    const id = entityId("701");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const encoded = store.serialize(
-      component(id, {
-        iconDomain: "xn--bcher-kva.example",
-        label: "Catalog",
-        name: "Product Catalog",
-        summary: "Owns searchable product recognition data.",
-        type: "external",
-      }),
-      [],
-    );
-    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
-    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect(decoded.value.entity.payload).toMatchObject({
-      iconDomain: "xn--bcher-kva.example",
-      label: "Catalog",
-      name: "Product Catalog",
-      summary: "Owns searchable product recognition data.",
-      type: "external",
-    });
-    const rewritten = store.serialize(decoded.value.entity, decoded.value.relations);
-    if (!rewritten.ok) throw new Error(rewritten.diagnostics[0]?.message);
-    expect(rewritten.value.bytes).toEqual(encoded.value.bytes);
-
-    for (const [field, value, code] of [
-      ["label", '" padded"', "invalid-component-label"],
-      ["summary", '"two\\nlines"', "invalid-component-summary"],
-      ["iconDomain", "https://example.com", "invalid-component-icon-domain"],
-      ["iconDomain", "127.0x1", "invalid-component-icon-domain"],
-    ] as const) {
-      const malformed = store.decode(
-        encoded.value.locator,
-        new TextEncoder().encode(
-          `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n${field}: ${value}\n---\n`,
-        ),
-      );
-      expect(malformed).toMatchObject({ diagnostics: [{ code }], ok: false });
-    }
-  });
-
-  test("hashes exact loaded bytes while canonical rewrites normalize formatting", () => {
+  test("derives identity only from frontmatter when a file is hand-renamed", () => {
     const id = entityId("80");
     const store = createMarkdownIntentStore({
       model: createStandardModelCapability(),
       resources: {} as never,
     });
-    const handFormatted = `---\nkind: component\nschema: groma/v0.1\nname: 'Hand formatted'\nid: ${id}\n---\n`;
-    const locator = markdownIntentLocator(id);
+    const locator = workspaceResourceLocator("groma", "components", "Hand moved.md");
     if (!locator.ok) throw new Error("expected locator");
-    const bytes = new TextEncoder().encode(handFormatted);
-    const loaded = store.decode(locator.value, bytes);
-    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
-    expect(String(loaded.value.revision)).toBe(
-      `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
-    );
-    const canonical = store.serialize(loaded.value.entity, loaded.value.relations);
-    if (!canonical.ok) throw new Error("expected serialization");
-    expect(canonical.value.revision).not.toBe(loaded.value.revision);
-  });
-
-  test("decodes the architecture-style blank line before the Intent heading", () => {
-    const id = entityId("801");
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
     const decoded = store.decode(
       locator.value,
-      new TextEncoder().encode(
-        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n---\n\n# Intent\n\nArchitecture prose.\n`,
+      encoder.encode(
+        `---\nname: Hand formatted\nschema: groma/component/v0.2\nid: ${id}\n---\n\n# Intent\n\nArchitecture prose.\n`,
       ),
     );
     if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect((decoded.value.entity.payload as { readonly intent?: string }).intent).toBe(
-      "Architecture prose.",
-    );
+    expect(decoded.value.entity.id).toBe(id);
+    expect(String(decoded.value.locator)).toBe("groma/components/Hand moved.md");
+    expect(String(decoded.value.resource)).toBe(`component:${id}`);
   });
 
-  test("fails closed on unpaired surrogates anywhere canonical UTF-8 would be lossy", () => {
-    const id = entityId("802");
-    const target = entityId("803");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const nestedKey: Record<string, string> = {};
-    Object.defineProperty(nestedKey, `bad${String.fromCharCode(0xd800)}key`, {
-      enumerable: true,
-      value: "value",
-    });
-    const entities = [
-      component(id, { intent: `before${String.fromCharCode(0xd800)}after` }),
-      component(id, {
-        actions: [{ id: "act", name: `bad${String.fromCharCode(0xdc00)}` }],
-      }),
-      component(id, { "vendor.io/nested": nestedKey }),
-      component(id, {
-        "vendor.io/nested": { value: `bad${String.fromCharCode(0xd800)}` },
-      }),
-    ];
-    for (const entity of entities) {
-      expect(store.serialize(entity, [])).toMatchObject({
-        diagnostics: [{ code: "invalid-intent-unicode" }],
-        ok: false,
-      });
-    }
-    expect(
-      store.serialize(component(id, {}), [
-        {
-          id: relationId("802"),
-          payload: { description: `bad${String.fromCharCode(0xd800)}` },
-          source: id,
-          target,
-          type: "uses",
-        },
-      ]),
-    ).toMatchObject({ diagnostics: [{ code: "invalid-intent-unicode" }], ok: false });
-  });
-
-  test("preserves safe YAML integers across nested component, item, and relation extensions", () => {
-    const id = entityId("804");
-    const target = entityId("805");
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const decoded = store.decode(
-      locator.value,
-      new TextEncoder().encode(`---
-schema: groma/v0.1
-id: ${id}
-kind: component
-actions:
-  - id: act
-    vendor.io/nested:
-      count: 7
-relationships:
-  - id: ${relationId("804")}
-    type: uses
-    target: ${target}
-    vendor.io/nested:
-      count: 9
-vendor.io/nested:
-  count: 42
----
-`),
-    );
-    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect(decoded.value.entity.payload).toMatchObject({
-      actions: [{ id: "act", "vendor.io/nested": { count: 7 } }],
-      "vendor.io/nested": { count: 42 },
-    });
-    expect(decoded.value.relations).toMatchObject([
-      { payload: { "vendor.io/nested": { count: 9 } } },
-    ]);
-    const canonical = store.serialize(decoded.value.entity, decoded.value.relations);
-    if (!canonical.ok) throw new Error(canonical.diagnostics[0]?.message);
-    const reloaded = store.decode(canonical.value.locator, canonical.value.bytes);
-    if (!reloaded.ok) throw new Error(reloaded.diagnostics[0]?.message);
-    expect(reloaded.value.entity).toEqual(decoded.value.entity);
-    expect(reloaded.value.relations).toEqual(decoded.value.relations);
-  });
-
-  test("round-trips finite GraphData numbers beyond the safe-integer range", () => {
-    const id = entityId("8051");
-    const target = entityId("8052");
-    const reportedInteger = 1_000_000_000_000_000_100;
-    const reportedExponent = 1.2345678901234568e20;
-    const values = {
-      exactNegativeInteger: -9_007_199_254_740_992,
-      exactPositiveInteger: 9_007_199_254_740_992,
-      largeNegativeExponent: -1e100,
-      largePositiveExponent: 1e100,
-      reportedInteger,
-    };
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const relation: GraphRelation = {
-      id: relationId("8051"),
-      payload: { "vendor.io/numbers": { negativeReportedInteger: -reportedInteger } },
-      source: id,
-      target,
-      type: "uses",
-    };
-    const encoded = store.serialize(
-      component(id, {
-        actions: [{ id: "act", "vendor.io/numbers": { reportedExponent } }],
-        "vendor.io/numbers": values,
-      }),
-      [relation],
-    );
-    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
-    const text = decoder.decode(encoded.value.bytes);
-    expect(text).toContain("reportedInteger: 1.0000000000000001e+18");
-    expect(text).toContain("reportedExponent: 1.2345678901234568e+20");
-    expect(text).toContain("negativeReportedInteger: -1.0000000000000001e+18");
-    expect(text).not.toContain("!!float");
-    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-    if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-    expect(decoded.value.entity.payload).toMatchObject({
-      actions: [{ id: "act", "vendor.io/numbers": { reportedExponent } }],
-      "vendor.io/numbers": values,
-    });
-    expect(decoded.value.relations).toEqual([relation]);
-    const rewritten = store.serialize(decoded.value.entity, decoded.value.relations);
-    if (!rewritten.ok) throw new Error(rewritten.diagnostics[0]?.message);
-    expect(rewritten.value.bytes).toEqual(encoded.value.bytes);
-  });
-
-  test("rejects unsafe, non-finite, and underflowed YAML numbers before model use", () => {
-    const id = entityId("806");
-    const target = entityId("807");
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const cases = [
-      ["intent-unsafe-integer", "vendor.io/value: 9007199254740993"],
-      [
-        "intent-unsafe-integer",
-        "actions:\n  - id: act\n    vendor.io/nested:\n      value: 9007199254740993",
-      ],
-      [
-        "intent-unsafe-integer",
-        `relationships:\n  - id: ${relationId("806")}\n    type: uses\n    target: ${target}\n    vendor.io/nested:\n      value: 9007199254740993`,
-      ],
-      ["intent-unsafe-integer", `vendor.io/value: 1${"0".repeat(400)}`],
-      ["intent-non-finite-number", "vendor.io/value: 1e999"],
-      ["intent-non-finite-number", "vendor.io/value: .nan"],
-      ["intent-number-underflow", "vendor.io/value: 1e-999"],
-    ] as const;
-    for (const [code, fields] of cases) {
-      expect(
-        store.decode(
-          locator.value,
-          new TextEncoder().encode(
-            `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n${fields}\n---\n`,
-          ),
-        ),
-      ).toMatchObject({ diagnostics: [{ code }], ok: false });
-    }
-  });
-
-  test("keeps stable locators across rename and reparent operations", () => {
-    const id = entityId("81");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const before = store.serialize(component(id, { name: "Before", type: "service" }), []);
-    const after = store.serialize(
-      component(id, { name: "After", parent: entityId("82"), type: "worker" }),
-      [],
-    );
-    if (!before.ok || !after.ok) throw new Error("expected serialization");
-    expect(after.value.locator).toBe(before.value.locator);
-    expect(after.value.resource).toBe(before.value.resource);
-  });
-
-  test("preserves namespaced extensions through unrelated mutation and rewrite", () => {
-    const id = entityId("83");
-    const model = createStandardModelCapability();
-    const store = createMarkdownIntentStore({ model, resources: {} as never });
-    const original = component(id, {
-      actions: [{ id: "act", "vendor.io/item": { z: 2, a: 1 } }],
-      "vendor.io/component": { enabled: true },
-      name: "Before",
-    });
-    const relation: GraphRelation = {
-      id: relationId("83"),
-      payload: { "vendor.io/relation": ["kept"] },
-      source: id,
-      target: entityId("84"),
-      type: "uses",
-    };
-    const encoded = store.serialize(original, [relation]);
-    if (!encoded.ok) throw new Error("expected serialization");
-    const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-    if (!decoded.ok) throw new Error("expected decoding");
-    const patched = model.patch(decoded.value.entity, { name: "After" });
-    if (!patched.ok || patched.value.id === undefined) throw new Error("expected patch");
-    const rewritten = store.serialize(
-      component(id, patched.value.payload as GraphEntity["payload"]),
-      decoded.value.relations,
-    );
-    if (!rewritten.ok) throw new Error("expected rewrite");
-    const reloaded = store.decode(rewritten.value.locator, rewritten.value.bytes);
-    if (!reloaded.ok) throw new Error("expected reload");
-    expect(reloaded.value.entity.payload).toMatchObject({
-      actions: [{ id: "act", "vendor.io/item": { a: 1, z: 2 } }],
-      "vendor.io/component": { enabled: true },
-      name: "After",
-    });
-    expect(reloaded.value.relations).toEqual(decoded.value.relations);
-  });
-
-  test("diagnoses schema mismatch and malformed UTF-8 before semantic use", () => {
-    const id = entityId("85");
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    expect(
-      store.decode(
-        locator.value,
-        new TextEncoder().encode(`---\nschema: groma/v9\nkind: component\nid: ${id}\n---\n`),
-      ),
-    ).toMatchObject({ diagnostics: [{ code: "intent-schema-mismatch" }], ok: false });
-    expect(store.decode(locator.value, new Uint8Array([0xff, 0xfe]))).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-utf8" }],
-      ok: false,
-    });
-  });
-
-  test("snapshots genuine Uint8Array bytes without species or mutable Buffer views", () => {
-    const id = entityId("851");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    const encoded = store.serialize(component(id, { name: "Stable bytes" }), []);
-    if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
-
-    const bufferInput = Buffer.from(encoded.value.bytes);
-    const decodedBuffer = store.decode(encoded.value.locator, bufferInput);
-    if (!decodedBuffer.ok) throw new Error(decodedBuffer.diagnostics[0]?.message);
-    const revision = decodedBuffer.value.revision;
-    const entity = decodedBuffer.value.entity;
-    const exposed = decodedBuffer.value.bytes;
-    expect(Buffer.isBuffer(exposed)).toBeFalse();
-    exposed[0] = 0;
-    expect(decodedBuffer.value.bytes[0]).toBe("-".charCodeAt(0));
-    expect(decodedBuffer.value.revision).toBe(revision);
-    expect(decodedBuffer.value.entity).toBe(entity);
-    expect(bufferInput[0]).toBe("-".charCodeAt(0));
-
-    let constructorCalls = 0;
-    let speciesReads = 0;
-    class HostileBytes extends Uint8Array {
-      constructor(value: Uint8Array) {
-        super(value);
-        constructorCalls += 1;
-      }
-
-      static get [Symbol.species](): Uint8ArrayConstructor {
-        speciesReads += 1;
-        throw new Error("species must not be read");
-      }
-    }
-    const hostile = new HostileBytes(encoded.value.bytes);
-    constructorCalls = 0;
-    const decodedHostile = store.decode(encoded.value.locator, hostile);
-    expect(decodedHostile).toMatchObject({ ok: true });
-    expect(constructorCalls).toBe(0);
-    expect(speciesReads).toBe(0);
-
-    expect(store.decode(encoded.value.locator, new Float64Array([1]) as never)).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-bytes" }],
-      ok: false,
-    });
-    const proxy = new Proxy(encoded.value.bytes, {
-      get: () => {
-        throw new Error("proxy must not be read");
-      },
-    });
-    expect(store.decode(encoded.value.locator, proxy)).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-bytes" }],
-      ok: false,
-    });
-  });
-
-  test("rejects non-outgoing relations and scanner-shaped direct inputs", () => {
-    const id = entityId("86");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    expect(
-      store.serialize(component(id, {}), [
-        {
-          id: relationId("86"),
-          payload: {},
-          source: entityId("87"),
-          target: id,
-          type: "uses",
-        },
-      ]),
-    ).toMatchObject({ diagnostics: [{ code: "non-outgoing-intent-relation" }], ok: false });
-    expect(store.serialize({ stableKey: "scanner-candidate" } as never, [])).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-entity" }],
-      ok: false,
-    });
-    expect(
-      store.serialize(component(id, {}), [
-        { stableKey: "scanner-relationship", targetStableKey: "other" } as never,
-      ]),
-    ).toMatchObject({ diagnostics: [{ code: "invalid-intent-relation" }], ok: false });
-  });
-
-  test("rejects accessor and proxy entity or relation records without reading getters", () => {
-    const id = entityId("808");
-    const target = entityId("809");
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    let getterReads = 0;
-    const accessorEntity = { kind: "component", payload: {} } as Record<string, unknown>;
-    Object.defineProperty(accessorEntity, "id", {
-      enumerable: true,
-      get: () => {
-        getterReads += 1;
-        return getterReads % 2 === 0 ? id : target;
-      },
-    });
-    expect(store.serialize(accessorEntity as never, [])).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-entity" }],
-      ok: false,
-    });
-    expect(getterReads).toBe(0);
-
-    const accessorEntityPayload: Record<string, unknown> = {};
-    Object.defineProperty(accessorEntityPayload, "name", {
-      enumerable: true,
-      get: () => {
-        getterReads += 1;
-        return getterReads % 2 === 0 ? "Second" : "First";
-      },
-    });
-    expect(store.serialize(component(id, accessorEntityPayload as never), [])).toMatchObject({
-      diagnostics: [{ code: "unsupported-payload" }],
-      ok: false,
-    });
-    expect(getterReads).toBe(0);
-
-    const accessorRelation = {
-      payload: {},
-      source: id,
-      target,
-      type: "uses",
-    } as Record<string, unknown>;
-    Object.defineProperty(accessorRelation, "id", {
-      enumerable: true,
-      get: () => {
-        getterReads += 1;
-        throw new Error("must not run");
-      },
-    });
-    expect(store.serialize(component(id, {}), [accessorRelation as never])).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-relation" }],
-      ok: false,
-    });
-    expect(getterReads).toBe(0);
-
-    const accessorRelationPayload: Record<string, unknown> = {};
-    Object.defineProperty(accessorRelationPayload, "description", {
-      enumerable: true,
-      get: () => {
-        getterReads += 1;
-        throw new Error("must not run");
-      },
-    });
-    expect(
-      store.serialize(component(id, {}), [
-        {
-          id: relationId("808"),
-          payload: accessorRelationPayload as never,
-          source: id,
-          target,
-          type: "uses",
-        },
-      ]),
-    ).toMatchObject({ diagnostics: [{ code: "unsupported-payload" }], ok: false });
-    expect(getterReads).toBe(0);
-
-    const accessorArray: GraphRelation[] = [];
-    Object.defineProperty(accessorArray, "0", {
-      enumerable: true,
-      get: () => {
-        getterReads += 1;
-        throw new Error("must not run");
-      },
-    });
-    expect(store.serialize(component(id, {}), accessorArray)).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-relations" }],
-      ok: false,
-    });
-    expect(getterReads).toBe(0);
-
-    const throwingProxy = new Proxy(
-      {},
-      {
-        getPrototypeOf: () => {
-          throw new Error("proxy trap");
-        },
-      },
-    );
-    expect(store.serialize(throwingProxy as never, [])).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-entity" }],
-      ok: false,
-    });
-    expect(store.serialize(component(id, {}), [throwingProxy as never])).toMatchObject({
-      diagnostics: [{ code: "invalid-intent-relation" }],
-      ok: false,
-    });
-  });
-
-  test("rejects duplicate relationship identities in direct serialize and decode calls", () => {
-    const id = entityId("88");
-    const target = entityId("89");
-    const duplicate: GraphRelation = {
-      id: relationId("88"),
-      payload: {},
-      source: id,
-      target,
-      type: "uses",
-    };
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: {} as never,
-    });
-    expect(store.serialize(component(id, {}), [duplicate, duplicate])).toMatchObject({
-      diagnostics: [{ code: "duplicate-intent-relation" }],
-      ok: false,
-    });
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
-    const relationship = `  - id: ${duplicate.id}\n    type: uses\n    target: ${target}\n`;
-    expect(
-      store.decode(
-        locator.value,
-        new TextEncoder().encode(
-          `---\nschema: groma/v0.1\nid: ${id}\nkind: component\nrelationships:\n${relationship}${relationship}---\n`,
-        ),
-      ),
-    ).toMatchObject({ diagnostics: [{ code: "duplicate-intent-relation" }], ok: false });
-  });
-
-  test("rejects conflicts, duplicate YAML keys, aliases, anchors, tags, wrong kinds, and malformed bodies", () => {
+  test("fails closed on old schemas, malformed body metadata, conflicts, and lossy Unicode", () => {
     const id = entityId("90");
-    const locator = markdownIntentLocator(id);
-    if (!locator.ok) throw new Error("expected locator");
     const store = createMarkdownIntentStore({
       model: createStandardModelCapability(),
       resources: {} as never,
     });
-    const conflict = "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch";
-    expect(store.serialize(component(id, { intent: conflict }), [])).toMatchObject({
-      diagnostics: [{ code: "intent-conflict-marker" }],
-      ok: false,
-    });
-    const separator = store.serialize(component(id, { intent: "=======\n" }), []);
-    if (!separator.ok) throw new Error(separator.diagnostics[0]?.message);
-    expect(store.decode(separator.value.locator, separator.value.bytes)).toMatchObject({
-      ok: true,
-    });
+    const locator = workspaceResourceLocator("groma", "components", `${id}.md`);
+    if (!locator.ok) throw new Error("expected locator");
     const cases = [
+      ["intent-schema-mismatch", `---\nschema: groma/v0.1\nid: ${id}\n---\n`],
+      [
+        "invalid-intent-markdown",
+        `---\nschema: groma/component/v0.2\nid: ${id}\n---\n\n# Inputs\n\n- Missing id\n`,
+      ],
       [
         "intent-conflict-marker",
-        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\n---\n\n# Intent\n\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n`,
-      ],
-      [
-        "intent-malformed-yaml",
-        `---\nschema: groma/v0.1\nid: ${id}\nkind: component\nname: [unterminated\n---\n`,
-      ],
-      [
-        "intent-duplicate-yaml-key",
-        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nid: ${id}\n---\n`,
-      ],
-      [
-        "intent-unsupported-yaml",
-        `---\nschema: groma/v0.1\nkind: component\nid: &id ${id}\nname: *id\n---\n`,
-      ],
-      [
-        "intent-unsupported-yaml",
-        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nname: &name Ordering\n---\n`,
-      ],
-      [
-        "intent-unsupported-yaml",
-        `---\nschema: groma/v0.1\nkind: component\nid: !custom ${id}\n---\n`,
-      ],
-      [
-        "invalid-intent-unicode",
-        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nname: "\\uD800"\n---\n`,
-      ],
-      ["intent-wrong-kind", `---\nschema: groma/v0.1\nkind: evidence\nid: ${id}\n---\n`],
-      [
-        "intent-malformed-body",
-        `---\nschema: groma/v0.1\nkind: component\nid: ${id}\nintent: true\n---\n`,
+        `---\nschema: groma/component/v0.2\nid: ${id}\n---\n\n# Intent\n\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n`,
       ],
     ] as const;
-    for (const [code, text] of cases) {
-      expect(store.decode(locator.value, new TextEncoder().encode(text))).toMatchObject({
+    for (const [code, source] of cases) {
+      expect(store.decode(locator.value, encoder.encode(source))).toMatchObject({
         diagnostics: [{ code }],
         ok: false,
       });
     }
+    expect(store.serialize(component(id, { intent: "broken\ud800" }), [])).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-unicode" }],
+      ok: false,
+    });
   });
 });
 
-describe("provider-backed Markdown intent store", () => {
-  test("loads the exact two-level layout and validates the whole graph", async () => {
+describe("provider-backed readable component store", () => {
+  test("loads recursive folders and keeps hand-moved files bound to their embedded ids", async () => {
     const provider = await resources();
     const model = createStandardModelCapability();
     const store = createMarkdownIntentStore({ model, resources: provider });
-    const rootId = entityId("a0");
-    const childId = entityId("b0");
-    const root = store.serialize(component(rootId, { intent: "Root", type: "domain" }), [
-      {
-        id: relationId("c0"),
-        payload: { description: "Contains intent-level dependency" },
-        source: rootId,
-        target: childId,
-        type: "uses",
-      },
-    ]);
-    const child = store.serialize(
-      component(childId, { intent: "Child", parent: rootId, type: "service" }),
-      [],
-    );
-    if (!root.ok || !child.ok) throw new Error("expected serialization");
-    await publish(provider, String(root.value.locator), decoder.decode(root.value.bytes));
-    await publish(provider, String(child.value.locator), decoder.decode(child.value.bytes));
-
-    const loaded = await store.load();
-    expect(loaded).toMatchObject({ ok: true });
-    if (!loaded.ok) throw new Error("expected load");
-    expect(loaded.value.entities.map((entity) => entity.id)).toEqual([rootId, childId]);
-    expect(loaded.value.relations.map((relation) => relation.id)).toEqual([relationId("c0")]);
-    expect(loaded.value.documents.map((document) => String(document.resource))).toEqual([
-      `groma/intent/00/${rootId}.md`,
-      `groma/intent/00/${childId}.md`,
-    ]);
-
-    const read = await store.read(childId);
-    expect(read).toMatchObject({ ok: true, value: { entity: { id: childId } } });
-  });
-
-  test("round-trips multi-level same-type and mixed-type recursive containment", async () => {
-    const provider = await resources();
-    const store = createMarkdownIntentStore({
-      bounds: { pageSize: 1 },
-      model: createStandardModelCapability(),
-      resources: provider,
-    });
-    const root = entityId("a1");
-    const sameTypeChild = entityId("a2");
-    const mixedTypeGrandchild = entityId("a3");
-    const sameTypeGreatGrandchild = entityId("a4");
-    const hierarchy = [
-      component(root, { name: "Root", type: "service" }),
-      component(sameTypeChild, { name: "Same", parent: root, type: "service" }),
-      component(mixedTypeGrandchild, {
-        name: "Mixed",
-        parent: sameTypeChild,
-        type: "worker",
-      }),
-      component(sameTypeGreatGrandchild, {
-        name: "Same again",
-        parent: mixedTypeGrandchild,
-        type: "worker",
-      }),
-    ];
-    for (const entity of hierarchy) {
-      const encoded = store.serialize(entity, []);
+    const root = component(entityId("a0"), { name: "Platform" });
+    const child = component(entityId("a1"), { name: "Orders", parent: root.id });
+    const locations = store.locations([root, child]);
+    if (!locations.ok) throw new Error(locations.diagnostics[0]?.message);
+    for (const entity of [root, child]) {
+      const locator = locations.value.find((entry) => entry.id === entity.id)!.locator;
+      const encoded = store.serialize(entity, [], locator);
       if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
-      const decoded = store.decode(encoded.value.locator, encoded.value.bytes);
-      if (!decoded.ok) throw new Error(decoded.diagnostics[0]?.message);
-      expect(decoded.value.entity.id).toBe(entity.id);
-      await publish(provider, String(encoded.value.locator), decoder.decode(encoded.value.bytes));
+      await publish(provider, String(locator), encoded.value.bytes);
     }
     const loaded = await store.load();
     if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
-    expect(
-      loaded.value.entities.map((entity) => ({
-        id: entity.id,
-        parent: (entity.payload as { readonly parent?: string }).parent,
-        type: (entity.payload as { readonly type?: string }).type,
-      })),
-    ).toEqual([
-      { id: root, parent: undefined, type: "service" },
-      { id: sameTypeChild, parent: root, type: "service" },
-      { id: mixedTypeGrandchild, parent: sameTypeChild, type: "worker" },
-      { id: sameTypeGreatGrandchild, parent: mixedTypeGrandchild, type: "worker" },
+    expect(loaded.value.documents.map((document) => String(document.locator))).toEqual([
+      "groma/components/Platform.md",
+      "groma/components/Platform/Orders.md",
     ]);
+    expect(loaded.value.documents.map((document) => String(document.resource))).toEqual([
+      `component:${root.id}`,
+      `component:${child.id}`,
+    ]);
+    const movedLocator = workspaceResourceLocator("groma", "components", "Moved.md");
+    if (!movedLocator.ok) throw new Error("expected moved locator");
+    const moved = store.serialize(child, [], movedLocator.value);
+    if (!moved.ok) throw new Error(moved.diagnostics[0]?.message);
+    await publish(provider, "groma/components/Moved.md", moved.value.bytes);
+    const original = workspaceResourceLocator("groma", "components", "Platform", "Orders.md");
+    if (!original.ok) throw new Error("expected locator");
+    expect((await provider.removeResource(original.value)).state).toBe("committed");
+    const reloaded = await store.load();
+    if (!reloaded.ok) throw new Error(reloaded.diagnostics[0]?.message);
+    expect(
+      String(reloaded.value.documents.find((document) => document.entity.id === child.id)?.locator),
+    ).toBe("groma/components/Moved.md");
+    const read = await store.read(child.id);
+    if (!read.ok) throw new Error(read.diagnostics[0]?.message);
+    expect(read.value.entity.id).toBe(child.id);
   });
 
-  test("treats a missing intent root as empty", async () => {
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: await resources(),
-    });
-    expect(await store.load()).toMatchObject({
-      ok: true,
-      value: { documents: [], entities: [], relations: [] },
-    });
-  });
-
-  test("fails closed if the intent root disappears after a successful enumeration page", async () => {
-    let calls = 0;
-    const shard = workspaceResourceLocator("groma", "intent", "00");
-    if (!shard.ok) throw new Error("expected shard locator");
-    const scriptedProvider = {
-      enumerate: async () => {
-        calls += 1;
-        return calls === 1
-          ? {
-              ok: true as const,
-              value: {
-                entries: [{ kind: "directory" as const, locator: shard.value }],
-                nextCursor: "scripted-cursor" as never,
-                truncatedByDepth: false,
-              },
-            }
-          : {
-              diagnostics: [{ code: "resource-missing", message: "Intent root disappeared" }],
-              ok: false as const,
-            };
-      },
-    };
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: scriptedProvider as never,
-    });
-    expect(await store.load()).toMatchObject({
-      diagnostics: [{ code: "intent-load-inconsistent" }],
-      ok: false,
-    });
-    expect(calls).toBe(2);
-  });
-
-  test("rejects repeated or fresh continuation cursors on empty non-final pages", async () => {
-    const shard = workspaceResourceLocator("groma", "intent", "00");
-    if (!shard.ok) throw new Error("expected shard locator");
-    for (const secondCursor of ["cursor-1", "cursor-2"]) {
-      let calls = 0;
-      const scriptedProvider = {
-        enumerate: async () => {
-          calls += 1;
-          return {
-            ok: true as const,
-            value:
-              calls === 1
-                ? {
-                    entries: [{ kind: "directory" as const, locator: shard.value }],
-                    nextCursor: "cursor-1" as never,
-                    truncatedByDepth: false,
-                  }
-                : {
-                    entries: [],
-                    nextCursor: secondCursor as never,
-                    truncatedByDepth: false,
-                  },
-          };
-        },
-      };
-      const store = createMarkdownIntentStore({
-        model: createStandardModelCapability(),
-        resources: scriptedProvider as never,
-      });
-      expect(await store.load()).toMatchObject({
-        diagnostics: [{ code: "intent-load-inconsistent" }],
-        ok: false,
-      });
-      expect(calls).toBe(2);
-    }
-  });
-
-  test("caps progressing enumeration pages by document and canonical shard bounds", async () => {
-    let calls = 0;
-    const scriptedProvider = {
-      enumerate: async () => {
-        const shard = (calls % 256).toString(16).padStart(2, "0");
-        const locator = workspaceResourceLocator("groma", "intent", shard);
-        if (!locator.ok) throw new Error("expected shard locator");
-        calls += 1;
-        return {
-          ok: true as const,
-          value: {
-            entries: [{ kind: "directory" as const, locator: locator.value }],
-            nextCursor: `cursor-${calls}` as never,
-            truncatedByDepth: false,
-          },
-        };
-      },
-    };
-    const store = createMarkdownIntentStore({
-      bounds: { maxDocuments: 0 },
-      model: createStandardModelCapability(),
-      resources: scriptedProvider as never,
-    });
-    expect(await store.load()).toMatchObject({
-      diagnostics: [{ code: "intent-page-limit-exceeded" }],
-      ok: false,
-    });
-    expect(calls).toBe(257);
-  });
-
-  test("diagnoses duplicate identities before wrong locations", async () => {
+  test("rejects duplicate embedded identities regardless of filenames", async () => {
     const provider = await resources();
     const store = createMarkdownIntentStore({
-      bounds: { pageSize: 1 },
       model: createStandardModelCapability(),
       resources: provider,
     });
-    const id = entityId("d0");
+    const id = entityId("b0");
     const encoded = store.serialize(component(id, { name: "Duplicate" }), []);
     if (!encoded.ok) throw new Error("expected serialization");
-    const text = decoder.decode(encoded.value.bytes);
-    await publish(provider, String(encoded.value.locator), text);
-    await publish(provider, `groma/intent/ff/${id}.md`, text);
+    await publish(provider, "groma/components/First.md", encoded.value.bytes);
+    await publish(provider, "groma/components/Second.md", encoded.value.bytes);
     expect(await store.load()).toMatchObject({
-      diagnostics: [{ code: "duplicate-intent-entity" }],
+      diagnostics: [{ code: "duplicate-intent-entity", details: { id } }],
       ok: false,
     });
   });
 
-  test("diagnoses a single valid document stored at the wrong stable-ID location", async () => {
-    const provider = await resources();
-    const store = createMarkdownIntentStore({
-      model: createStandardModelCapability(),
-      resources: provider,
-    });
-    const id = entityId("d1");
-    const encoded = store.serialize(component(id, { name: "Misplaced" }), []);
-    if (!encoded.ok) throw new Error("expected serialization");
-    await publish(provider, `groma/intent/ff/${id}.md`, decoder.decode(encoded.value.bytes));
-    expect(await store.load()).toMatchObject({
-      diagnostics: [{ code: "intent-wrong-location" }],
-      ok: false,
-    });
-  });
-
-  test("orders documents by canonical locator across shards and excludes other planes", async () => {
-    const provider = await resources();
-    const store = createMarkdownIntentStore({
-      bounds: { pageSize: 1 },
-      model: createStandardModelCapability(),
-      resources: provider,
-    });
-    const high = entityId(`aa${"0".repeat(30)}`);
-    const low = entityId(`01${"0".repeat(30)}`);
-    for (const id of [high, low]) {
-      const encoded = store.serialize(component(id, { name: String(id) }), []);
-      if (!encoded.ok) throw new Error("expected serialization");
-      await publish(provider, String(encoded.value.locator), decoder.decode(encoded.value.bytes));
-    }
-    await publish(provider, "groma/evidence/ignored.md", "not intent");
-    const loaded = await store.load();
-    if (!loaded.ok) throw new Error("expected load");
-    expect(loaded.value.documents.map((document) => document.entity.id)).toEqual([low, high]);
-  });
-
-  test("diagnoses unknown parents, cycles, endpoints, duplicate relations, and unexpected layout", async () => {
-    const scenarios: readonly [
-      string,
-      (provider: Awaited<ReturnType<typeof resources>>) => Promise<void>,
-    ][] = [
-      [
-        "unknown-intent-parent",
-        async (provider) => {
-          const id = entityId("e0");
-          const store = createMarkdownIntentStore({
-            model: createStandardModelCapability(),
-            resources: provider,
-          });
-          const encoded = store.serialize(component(id, { parent: entityId("eeee") }), []);
-          if (!encoded.ok) throw new Error("expected serialization");
-          await publish(
-            provider,
-            String(encoded.value.locator),
-            decoder.decode(encoded.value.bytes),
-          );
-        },
-      ],
-      [
-        "intent-containment-cycle",
-        async (provider) => {
-          const a = entityId("e1");
-          const b = entityId("e2");
-          const store = createMarkdownIntentStore({
-            model: createStandardModelCapability(),
-            resources: provider,
-          });
-          for (const [id, parent] of [
-            [a, b],
-            [b, a],
-          ] as const) {
-            const encoded = store.serialize(component(id, { parent }), []);
-            if (!encoded.ok) throw new Error("expected serialization");
-            await publish(
-              provider,
-              String(encoded.value.locator),
-              decoder.decode(encoded.value.bytes),
-            );
-          }
-        },
-      ],
-      [
-        "unknown-intent-relation-target",
-        async (provider) => {
-          const source = entityId("e3");
-          const store = createMarkdownIntentStore({
-            model: createStandardModelCapability(),
-            resources: provider,
-          });
-          const encoded = store.serialize(component(source, {}), [
-            { id: relationId("e3"), payload: {}, source, target: entityId("eeee"), type: "uses" },
-          ]);
-          if (!encoded.ok) throw new Error("expected serialization");
-          await publish(
-            provider,
-            String(encoded.value.locator),
-            decoder.decode(encoded.value.bytes),
-          );
-        },
-      ],
-      [
-        "duplicate-intent-relation",
-        async (provider) => {
-          const a = entityId("e4");
-          const b = entityId("e5");
-          const relation = relationId("e4");
-          const store = createMarkdownIntentStore({
-            model: createStandardModelCapability(),
-            resources: provider,
-          });
-          for (const id of [a, b]) {
-            const encoded = store.serialize(component(id, {}), [
-              { id: relation, payload: {}, source: id, target: id, type: "uses" },
-            ]);
-            if (!encoded.ok) throw new Error("expected serialization");
-            await publish(
-              provider,
-              String(encoded.value.locator),
-              decoder.decode(encoded.value.bytes),
-            );
-          }
-        },
-      ],
-      [
-        "unexpected-intent-resource",
-        async (provider) => publish(provider, "groma/intent/readme.md", "unexpected"),
-      ],
+  test("validates parents, containment cycles, relationship targets, and sibling collisions", async () => {
+    const scenarios: readonly {
+      code: string;
+      entities: readonly GraphEntity[];
+      relations?: ReadonlyMap<string, readonly GraphRelation[]>;
+    }[] = [
+      {
+        code: "unknown-intent-parent",
+        entities: [component(entityId("c0"), { name: "Orphan", parent: entityId("cf") })],
+      },
+      {
+        code: "intent-containment-cycle",
+        entities: [
+          component(entityId("c1"), { name: "One", parent: entityId("c2") }),
+          component(entityId("c2"), { name: "Two", parent: entityId("c1") }),
+        ],
+      },
+      {
+        code: "unknown-intent-relation-target",
+        entities: [component(entityId("c3"), { name: "Source" })],
+        relations: new Map([
+          [
+            entityId("c3"),
+            [
+              {
+                id: relationId("c4"),
+                payload: {},
+                source: entityId("c3"),
+                target: entityId("cf"),
+                type: "uses",
+              },
+            ],
+          ],
+        ]),
+      },
     ];
-    for (const [code, arrange] of scenarios) {
+    for (const scenario of scenarios) {
       const provider = await resources();
-      await arrange(provider);
       const store = createMarkdownIntentStore({
         model: createStandardModelCapability(),
         resources: provider,
       });
-      expect(await store.load()).toMatchObject({ diagnostics: [{ code }], ok: false });
+      for (const entity of scenario.entities) {
+        const encoded = store.serialize(entity, scenario.relations?.get(entity.id) ?? []);
+        if (!encoded.ok) throw new Error(encoded.diagnostics[0]?.message);
+        await publish(provider, String(encoded.value.locator), encoded.value.bytes);
+      }
+      expect(await store.load()).toMatchObject({
+        diagnostics: [{ code: scenario.code }],
+        ok: false,
+      });
     }
   });
 
-  test("enforces configured document count and byte bounds", async () => {
+  test("rejects non-Markdown files and enforces document bounds", async () => {
     const provider = await resources();
-    const model = createStandardModelCapability();
-    const writer = createMarkdownIntentStore({ model, resources: provider });
-    const encoded = writer.serialize(component(entityId("f0"), { intent: "too large" }), []);
-    const second = writer.serialize(component(entityId("f1"), { intent: "also retained" }), []);
-    if (!encoded.ok || !second.ok) throw new Error("expected serialization");
-    await publish(provider, String(encoded.value.locator), decoder.decode(encoded.value.bytes));
-    await publish(provider, String(second.value.locator), decoder.decode(second.value.bytes));
-    const byteBounded = createMarkdownIntentStore({
-      bounds: { maxDocumentBytes: 32 },
-      model,
+    await publish(provider, "groma/components/readme.json", encoder.encode("{}\n"));
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
       resources: provider,
     });
-    expect(await byteBounded.load()).toMatchObject({
+    expect(await store.load()).toMatchObject({
+      diagnostics: [{ code: "unexpected-intent-resource" }],
+      ok: false,
+    });
+
+    const boundedProvider = await resources();
+    const bounded = createMarkdownIntentStore({
+      bounds: { maxDocumentBytes: 16 },
+      model: createStandardModelCapability(),
+      resources: boundedProvider,
+    });
+    expect(bounded.serialize(component(entityId("d0"), { name: "Too large" }), [])).toMatchObject({
       diagnostics: [{ code: "resource-too-large" }],
       ok: false,
     });
-    const countBounded = createMarkdownIntentStore({
-      bounds: { maxDocuments: 0 },
-      model,
-      resources: provider,
-    });
-    expect(await countBounded.load()).toMatchObject({
-      diagnostics: [{ code: "intent-document-limit-exceeded" }],
-      ok: false,
-    });
-    const totalBounded = createMarkdownIntentStore({
-      bounds: {
-        maxTotalDocumentBytes: encoded.value.bytes.byteLength + second.value.bytes.byteLength - 1,
-      },
-      model,
-      resources: provider,
-    });
-    expect(await totalBounded.load()).toMatchObject({
-      diagnostics: [{ code: "intent-total-byte-limit-exceeded" }],
-      ok: false,
-    });
-    for (const maxTotalDocumentBytes of [0, Number.MAX_SAFE_INTEGER]) {
-      expect(() =>
-        createMarkdownIntentStore({
-          bounds: { maxTotalDocumentBytes },
-          model,
-          resources: provider,
-        }),
-      ).toThrow("maxTotalDocumentBytes must be a safe integer");
-    }
   });
 });

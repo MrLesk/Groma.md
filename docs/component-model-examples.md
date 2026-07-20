@@ -66,108 +66,49 @@ The component boundaries express ownership:
 - **Fulfillment** owns delivery of accepted orders.
 - **Notifications** owns delivery of customer communications.
 
-The following is an illustrative v0.1 Ordering component nested beneath a Commerce root
-component of type `domain`. The path, schema text, and IDs are examples only; this is not
-a file in the canonical self-blueprint and must not be copied there by hand.
+The following is an illustrative v0.2 `groma/components/Commerce/Ordering.md` document.
+Its parent folder mirrors the component hierarchy, while the stable ID inside the file—not
+the filename—remains its identity. The IDs are examples only; this is not a file in the
+canonical self-blueprint and must not be copied there by hand.
 
 ```md
 ---
-schema: groma/v0.1
+schema: groma/component/v0.2
 id: ent_00000000000000000000000000000010
-kind: component
 name: Ordering
 type: service
+scale: domain
 parent: ent_00000000000000000000000000000001
-
 desired: present
 lifecycle: active
-
-inputs:
-  - id: inp_example_place_order
-    name: Place order request
-    description: >
-      A customer's confirmed intent to purchase a priced collection of products.
-
-  - id: inp_example_cancel_order
-    name: Cancel order request
-    description: >
-      A request to cancel an order while its lifecycle still permits it.
-
-  - id: inp_example_fulfillment_status
-    name: Fulfillment status
-    description: >
-      A meaningful change in the progress of fulfilling an order.
-
-  - id: inp_example_payment_status
-    name: Payment status
-    description: >
-      A meaningful change in the payment associated with an order.
-
-outputs:
-  - id: out_example_order_placed
-    name: Order placed
-    description: >
-      A durable order accepted for downstream fulfillment.
-
-  - id: out_example_order_rejected
-    name: Order rejected
-    description: >
-      An order that could not be accepted, together with a business reason.
-
-  - id: out_example_order_cancelled
-    name: Order cancelled
-    description: >
-      Confirmation that the order lifecycle reached cancellation.
-
-  - id: out_example_order_status
-    name: Order status changed
-    description: >
-      A customer- or downstream-relevant lifecycle change.
-
-actions:
-  - id: act_example_place_order
-    name: Place order
-    description: >
-      Establish a durable order after its price, inventory, and payment conditions
-      are satisfied.
-
-  - id: act_example_cancel_order
-    name: Cancel order
-    description: >
-      Cancel an eligible order and coordinate the release of commitments made on
-      its behalf.
-
-  - id: act_example_update_progress
-    name: Update order progress
-    description: >
-      Incorporate relevant payment and fulfillment changes into the order lifecycle.
-
-relationships:
-  - id: rel_00000000000000000000000000000101
-    type: requires
-    target: ent_00000000000000000000000000000020
-    description: Uses an authoritative price for the purchase.
-
-  - id: rel_00000000000000000000000000000102
-    type: requires
-    target: ent_00000000000000000000000000000021
-    description: Requires products to be reserved before acceptance.
-
-  - id: rel_00000000000000000000000000000103
-    type: requires
-    target: ent_00000000000000000000000000000022
-    description: Requires an acceptable payment state before acceptance.
-
-  - id: rel_00000000000000000000000000000104
-    type: informs
-    target: ent_00000000000000000000000000000023
-    description: Provides accepted orders for fulfillment.
-
-  - id: rel_00000000000000000000000000000105
-    type: informs
-    target: ent_00000000000000000000000000000024
-    description: Provides customer-relevant order lifecycle changes.
 ---
+
+# Inputs
+
+- Place order request — A customer's confirmed intent to purchase. <!-- groma:item id=inp_example_place_order fields=name,description -->
+- Cancel order request — A request to cancel while the lifecycle permits it. <!-- groma:item id=inp_example_cancel_order fields=name,description -->
+- Fulfillment status — A meaningful fulfillment progress change. <!-- groma:item id=inp_example_fulfillment_status fields=name,description -->
+- Payment status — A meaningful payment state change. <!-- groma:item id=inp_example_payment_status fields=name,description -->
+
+# Outputs
+
+- Order placed — A durable order accepted for fulfillment. <!-- groma:item id=out_example_order_placed fields=name,description -->
+- Order rejected — An order that could not be accepted. <!-- groma:item id=out_example_order_rejected fields=name,description -->
+- Order cancelled — Confirmation that cancellation completed. <!-- groma:item id=out_example_order_cancelled fields=name,description -->
+- Order status changed — A downstream-relevant lifecycle change. <!-- groma:item id=out_example_order_status fields=name,description -->
+
+# Actions
+
+- Place order — Establish a durable order after its conditions are satisfied. <!-- groma:item id=act_example_place_order fields=name,description -->
+- Cancel order — Cancel an eligible order and release its commitments. <!-- groma:item id=act_example_cancel_order fields=name,description -->
+- Update order progress — Incorporate payment and fulfillment changes. <!-- groma:item id=act_example_update_progress fields=name,description -->
+
+# Relationships
+
+- requires → ent_00000000000000000000000000000020 — Uses an authoritative purchase price. <!-- groma:relationship id=rel_00000000000000000000000000000101 target=ent_00000000000000000000000000000020 description=true -->
+- requires → ent_00000000000000000000000000000021 — Requires inventory reservation. <!-- groma:relationship id=rel_00000000000000000000000000000102 target=ent_00000000000000000000000000000021 description=true -->
+- requires → ent_00000000000000000000000000000022 — Requires an acceptable payment state. <!-- groma:relationship id=rel_00000000000000000000000000000103 target=ent_00000000000000000000000000000022 description=true -->
+- informs → ent_00000000000000000000000000000023 — Provides accepted orders for fulfillment. <!-- groma:relationship id=rel_00000000000000000000000000000104 target=ent_00000000000000000000000000000023 description=true -->
 
 # Intent
 
@@ -197,14 +138,13 @@ commitments permit it.
 - Meaningful lifecycle changes are available to downstream components.
 ```
 
-The relationship source is implicit in the owning component file. Everything after the
-exact `# Intent` heading and blank line is the component's reversible intent string. The
-behavioral notes and guarantees above are therefore intent prose, not additional
-frontmatter fields or new schema.
+The relationship source is implicit in the owning component file. Stable item and relationship
+IDs live in unobtrusive HTML comments, so ordinary Markdown readers see names, descriptions,
+and connections rather than storage machinery. Everything after the exact `# Intent` heading
+is the component's reversible prose; its internal headings remain prose rather than schema.
 
-The structured frontmatter remains limited to intent-adjacent identity, inputs, outputs,
-actions, and relationships. Richer concepts remain readable without making them mandatory
-schema:
+Frontmatter contains identity and the structural fields that are actually present. Inputs,
+outputs, actions, relationships, and intent map directly to readable Markdown sections:
 
 | Ordering concept                             | Representation                       |
 | -------------------------------------------- | ------------------------------------ |

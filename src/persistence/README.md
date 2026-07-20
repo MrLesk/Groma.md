@@ -9,9 +9,11 @@ Persistence implements Groma's local adapters:
 - an atomic local canonical transaction provider and recovery journal;
 - an in-memory disposable projection read model.
 
-Canonical Markdown meaning and canonical JSON evidence are the user-owned source of truth. Stable
-IDs determine durable intent locations while names, paths, containment, and renderer layout may
-change. Scanner observations never write directly to canonical intent; Application reconciliation
+Canonical Markdown meaning and canonical JSON evidence are the user-owned source of truth. Each
+component is a prose-first Markdown document under `groma/components/`; its filename comes from its
+name and its folders mirror the parent chain. The stable ID inside the document is the only component
+identity. A rename or reparent atomically moves the affected document subtree without turning paths
+into identity. Scanner observations never write directly to canonical intent; Application reconciliation
 publishes their evidence and automatic component effects together through the transaction provider.
 The evidence index names deterministic source shards; rescanning one project/scanner source rewrites
 only that shard while the index and unrelated evidence remain byte-stable.
@@ -24,6 +26,6 @@ The projection index rebuilds from one bounded canonical snapshot. It derives de
 catalog, search, relation, and adjacency reads plus a content fingerprint. It has no persistent
 chunks, Merkle proofs, repair mode, adoption protocol, or canonical authority.
 
-The v0.2 evidence layout is bounded and source-sharded. Explicit migration of v0.1 workspaces remains
-a separate host workflow. Unsupported schemas and ambiguous state fail closed rather than being
-guessed.
+The v0.2 component layout is readable and hierarchy-shaped; the v0.2 evidence layout is bounded and
+source-sharded. Explicit migration of v0.1 workspaces remains a separate host workflow. Unsupported
+schemas, sibling filename collisions, and ambiguous state fail closed rather than being guessed.

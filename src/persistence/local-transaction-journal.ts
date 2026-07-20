@@ -34,7 +34,7 @@ import {
   type StandardModelTransactionState,
 } from "../standard-model/index.ts";
 import {
-  markdownIntentLocator,
+  markdownIntentResource,
   type MarkdownIntentStore,
   type MarkdownIntentSnapshot,
 } from "./markdown-intent-store.ts";
@@ -64,6 +64,7 @@ export type LocalTransactionFaultInjector = (
 ) => void | Promise<void>;
 
 export interface CanonicalResourceState {
+  readonly bytes?: Uint8Array;
   readonly locator: WorkspaceResourceLocator;
   readonly resource: ResourceKey;
   readonly revision: ContentRevision;
@@ -83,8 +84,15 @@ export interface CanonicalTransactionTarget {
 }
 
 export interface CanonicalTransactionMaterialization {
+  readonly revisions: readonly CanonicalTransactionRevision[];
   readonly state: GraphData;
   readonly targets: readonly CanonicalTransactionTarget[];
+}
+
+export interface CanonicalTransactionRevision {
+  readonly expected: ContentRevision | null;
+  readonly resource: ResourceKey;
+  readonly result: ContentRevision | null;
 }
 
 /** Persistence-local bridge from a semantic model to exact canonical resources. */
@@ -153,6 +161,7 @@ interface PendingState {
   readonly baseGeneration: number;
   readonly generation: number;
   readonly phase: "committing" | "prepared";
+  readonly revisions?: readonly CanonicalTransactionRevision[];
   readonly targets: readonly StoredTarget[];
   readonly token: string;
   readonly version: 1;
@@ -669,37 +678,35 @@ export function createMarkdownIntentTransactionAdapter(
     if (evidenceSnapshot !== undefined && !evidenceSnapshot.ok) return evidenceSnapshot;
     const loaded = await options.store.load(aliasSnapshot?.value.aliases);
     if (!loaded.ok) return loaded;
-    const resources = loaded.value.documents
-      .map((document) =>
+    const resources: CanonicalResourceState[] = loaded.value.documents.map((document) =>
+      Object.freeze({
+        bytes: document.bytes,
+        locator: document.locator,
+        resource: document.resource,
+        revision: document.revision,
+      }),
+    );
+    if (aliasSnapshot !== undefined && aliasSnapshot.value.revision !== null) {
+      resources.push(
         Object.freeze({
-          locator: document.locator,
-          resource: document.resource,
-          revision: document.revision,
+          locator: aliasSnapshot.value.locator,
+          resource: aliasSnapshot.value.resource,
+          revision: aliasSnapshot.value.revision,
         }),
-      )
-      .concat(
-        aliasSnapshot?.value.revision === null || aliasSnapshot === undefined
-          ? []
-          : [
-              Object.freeze({
-                locator: aliasSnapshot.value.locator,
-                resource: aliasSnapshot.value.resource,
-                revision: aliasSnapshot.value.revision,
-              }),
-            ],
-      )
-      .concat(
-        evidenceSnapshot === undefined
-          ? []
-          : evidenceSnapshot.value.documents.map((document) =>
-              Object.freeze({
-                locator: document.locator,
-                resource: document.resource,
-                revision: document.revision,
-              }),
-            ),
-      )
-      .sort((left, right) => compareText(left.resource, right.resource));
+      );
+    }
+    if (evidenceSnapshot !== undefined) {
+      resources.push(
+        ...evidenceSnapshot.value.documents.map((document) =>
+          Object.freeze({
+            locator: document.locator,
+            resource: document.resource,
+            revision: document.revision,
+          }),
+        ),
+      );
+    }
+    resources.sort((left, right) => compareText(left.resource, right.resource));
     return success(
       Object.freeze({
         resources: Object.freeze(resources),
@@ -710,52 +717,158 @@ export function createMarkdownIntentTransactionAdapter(
 
   const materialize = (
     proposal: ProposedTransaction,
+    currentSnapshot: CanonicalTransactionSnapshot,
   ): Result<CanonicalTransactionMaterialization> => {
+    const prior = graphFromPriorState(proposal.priorState, options.model);
+    if (!prior.ok) return prior;
     const applied = applyStandardMutation(proposal, options.model, maximumAliases);
     if (!applied.ok) return applied;
     const expected = new Map<string, ContentRevision | null>();
     for (const entry of proposal.expectedRevisions) expected.set(entry.resource, entry.expected);
-    const targets: CanonicalTransactionTarget[] = [];
-    const touched = Array.from(applied.value.touchedComponents).sort(compareText);
-    for (const idText of touched) {
-      const id = parseEntityId(idText);
-      if (!id.ok) return id;
-      const locator = markdownIntentLocator(id.value);
-      if (!locator.ok) return locator;
-      const resource = resourceFromLocator(locator.value);
-      if (!expected.has(resource)) {
+    const targets = new Map<string, CanonicalTransactionTarget>();
+    const revisions: CanonicalTransactionRevision[] = [];
+    const currentByResource = new Map(
+      currentSnapshot.resources.map((entry) => [String(entry.resource), entry]),
+    );
+    const currentByLocator = new Map(
+      currentSnapshot.resources.map((entry) => [String(entry.locator), entry]),
+    );
+    const priorAliases = Object.freeze(Array.from(prior.value.aliases.values()));
+    const nextAliases = Object.freeze(Array.from(applied.value.aliases.values()));
+    const priorLocations = options.store.locations(
+      Object.freeze(Array.from(prior.value.components.values())),
+      priorAliases,
+    );
+    if (!priorLocations.ok) return priorLocations;
+    const nextLocations = options.store.locations(
+      Object.freeze(Array.from(applied.value.components.values())),
+      nextAliases,
+    );
+    if (!nextLocations.ok) return nextLocations;
+    const priorLocationById = new Map(
+      priorLocations.value.map((entry) => [entry.id, entry.locator]),
+    );
+    const nextLocationById = new Map(nextLocations.value.map((entry) => [entry.id, entry.locator]));
+    const currentComponentById = new Map<EntityId, CanonicalResourceState>();
+    const currentOwnerByLocator = new Map<string, EntityId>();
+    for (const id of prior.value.components.keys()) {
+      const logical = markdownIntentResource(id);
+      if (!logical.ok) return logical;
+      const state = currentByResource.get(logical.value);
+      if (state === undefined || state.bytes === undefined) {
         return failure(
           diagnostic(
-            "transaction-resource-set-mismatch",
-            "Every changed canonical document must have an expected revision",
-            { resource },
+            "component-resource-missing",
+            "Canonical component state is missing its readable Markdown document",
+            { id },
           ),
         );
       }
-      const entity = applied.value.components.get(id.value);
-      if (entity === undefined) {
-        targets.push(
-          Object.freeze({
-            expected: expected.get(resource)!,
-            locator: locator.value,
-            resource,
-            result: null,
-          }),
+      currentComponentById.set(id, state);
+      currentOwnerByLocator.set(String(state.locator), id);
+    }
+    const changed = new Set<EntityId>();
+    for (const idText of applied.value.touchedComponents) {
+      const id = parseEntityId(idText);
+      if (!id.ok) return id;
+      changed.add(id.value);
+    }
+    for (const [id, priorLocator] of priorLocationById) {
+      const nextLocator = nextLocationById.get(id);
+      if (nextLocator !== undefined && nextLocator !== priorLocator) changed.add(id);
+    }
+    const desiredByLocator = new Map<
+      string,
+      { readonly bytes: Uint8Array; readonly id: EntityId; readonly revision: ContentRevision }
+    >();
+    const resultById = new Map<EntityId, ContentRevision>();
+    const physicalLocators = new Map<string, WorkspaceResourceLocator>();
+    for (const id of changed) {
+      const current = currentComponentById.get(id);
+      if (current !== undefined) physicalLocators.set(String(current.locator), current.locator);
+      const entity = applied.value.components.get(id);
+      if (entity === undefined) continue;
+      const nextLocator = nextLocationById.get(id);
+      if (nextLocator === undefined) {
+        return failure(
+          diagnostic(
+            "component-location-missing",
+            "Changed component has no readable document location",
+            { id },
+          ),
         );
-        continue;
       }
-      const ownedRelations = Array.from(applied.value.relationships.values())
-        .filter((relation) => relation.source === id.value)
-        .sort((left, right) => compareText(left.id, right.id));
-      const document = options.store.serialize(entity, ownedRelations);
-      if (!document.ok) return document;
-      targets.push(
+      let bytes: Uint8Array;
+      let result: ContentRevision;
+      if (applied.value.touchedComponents.has(id)) {
+        const ownedRelations = Array.from(applied.value.relationships.values())
+          .filter((relation) => relation.source === id)
+          .sort((left, right) => compareText(left.id, right.id));
+        const document = options.store.serialize(entity, ownedRelations, nextLocator);
+        if (!document.ok) return document;
+        bytes = document.value.bytes;
+        result = document.value.revision;
+      } else {
+        if (current?.bytes === undefined) {
+          return failure(
+            diagnostic(
+              "component-resource-missing",
+              "Moved descendant has no readable Markdown bytes",
+              { id },
+            ),
+          );
+        }
+        bytes = current.bytes;
+        result = current.revision;
+      }
+      const occupied = currentOwnerByLocator.get(String(nextLocator));
+      if (occupied !== undefined && occupied !== id && !changed.has(occupied)) {
+        return failure(
+          diagnostic(
+            "component-location-occupied",
+            "Readable component location is occupied by a hand-moved component; restore or rename it before saving",
+            { id, locator: String(nextLocator), occupiedBy: occupied },
+          ),
+        );
+      }
+      desiredByLocator.set(String(nextLocator), { bytes, id, revision: result });
+      resultById.set(id, result);
+      physicalLocators.set(String(nextLocator), nextLocator);
+    }
+    for (const locator of [...physicalLocators.values()].sort(compareText)) {
+      const existing = currentByLocator.get(String(locator));
+      const desired = desiredByLocator.get(String(locator));
+      const physicalResource = resourceFromLocator(locator);
+      targets.set(
+        String(locator),
         Object.freeze({
-          expected: expected.get(resource)!,
-          locator: locator.value,
-          replacement: document.value.bytes,
-          resource,
-          result: document.value.revision,
+          expected: existing?.revision ?? null,
+          locator,
+          ...(desired === undefined ? {} : { replacement: desired.bytes }),
+          resource: physicalResource,
+          result: desired?.revision ?? null,
+        }),
+      );
+    }
+    for (const idText of [...applied.value.touchedComponents].sort(compareText)) {
+      const id = parseEntityId(idText);
+      if (!id.ok) return id;
+      const logical = markdownIntentResource(id.value);
+      if (!logical.ok) return logical;
+      if (!expected.has(logical.value)) {
+        return failure(
+          diagnostic(
+            "transaction-resource-set-mismatch",
+            "Every changed component must have an expected logical revision",
+            { resource: logical.value },
+          ),
+        );
+      }
+      revisions.push(
+        Object.freeze({
+          expected: expected.get(logical.value)!,
+          resource: logical.value,
+          result: applied.value.components.has(id.value) ? resultById.get(id.value)! : null,
         }),
       );
     }
@@ -781,11 +894,19 @@ export function createMarkdownIntentTransactionAdapter(
           ),
         );
       }
-      targets.push(
+      targets.set(
+        String(current.value.locator),
         Object.freeze({
           expected: expected.get(current.value.resource)!,
           locator: current.value.locator,
           replacement: current.value.bytes!,
+          resource: resourceFromLocator(current.value.locator),
+          result: current.value.revision,
+        }),
+      );
+      revisions.push(
+        Object.freeze({
+          expected: expected.get(current.value.resource)!,
           resource: current.value.resource,
           result: current.value.revision,
         }),
@@ -809,11 +930,19 @@ export function createMarkdownIntentTransactionAdapter(
       for (const document of current.value.documents) {
         if (!expected.has(document.resource)) continue;
         matched += 1;
-        targets.push(
+        targets.set(
+          String(document.locator),
           Object.freeze({
             expected: expected.get(document.resource)!,
             locator: document.locator,
             replacement: document.bytes,
+            resource: resourceFromLocator(document.locator),
+            result: document.revision,
+          }),
+        );
+        revisions.push(
+          Object.freeze({
+            expected: expected.get(document.resource)!,
             resource: document.resource,
             result: document.revision,
           }),
@@ -828,11 +957,11 @@ export function createMarkdownIntentTransactionAdapter(
         );
       }
     }
-    if (targets.length !== expected.size) {
+    if (revisions.length !== expected.size) {
       return failure(
         diagnostic(
           "transaction-resource-set-mismatch",
-          "Expected revisions must identify exactly the canonical documents changed by the mutation",
+          "Expected revisions must identify exactly the logical resources changed by the mutation",
         ),
       );
     }
@@ -854,6 +983,9 @@ export function createMarkdownIntentTransactionAdapter(
       );
     return success(
       Object.freeze({
+        revisions: Object.freeze(
+          revisions.sort((left, right) => compareText(left.resource, right.resource)),
+        ),
         state: Object.freeze({
           ...(options.aliases === undefined
             ? {}
@@ -877,7 +1009,9 @@ export function createMarkdownIntentTransactionAdapter(
               : {}),
           relationships: Object.freeze(relationships),
         }),
-        targets: Object.freeze(targets),
+        targets: Object.freeze(
+          [...targets.values()].sort((left, right) => compareText(left.locator, right.locator)),
+        ),
       }),
     );
   };
@@ -981,6 +1115,38 @@ function parseStoredTargets(
   return Object.freeze(targets);
 }
 
+function parseCanonicalRevisions(
+  value: unknown,
+  limits: LocalTransactionJournalBounds,
+): readonly CanonicalTransactionRevision[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > limits.maxTargets) {
+    return undefined;
+  }
+  const revisions: CanonicalTransactionRevision[] = [];
+  for (const candidate of value) {
+    if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+      return undefined;
+    }
+    const record = candidate as Readonly<Record<string, unknown>>;
+    if (Object.keys(record).sort().join(",") !== "expected,resource,result") return undefined;
+    const resource = parseResourceKey(record.resource);
+    const expected = record.expected === null ? null : parseContentRevision(record.expected);
+    const result = record.result === null ? null : parseContentRevision(record.result);
+    if (!resource.ok || (expected !== null && !expected.ok) || (result !== null && !result.ok)) {
+      return undefined;
+    }
+    if (revisions.length > 0 && revisions.at(-1)!.resource >= resource.value) return undefined;
+    revisions.push(
+      Object.freeze({
+        expected: expected === null ? null : expected.value,
+        resource: resource.value,
+        result: result === null ? null : result.value,
+      }),
+    );
+  }
+  return Object.freeze(revisions);
+}
+
 function parseSettlement(
   value: unknown,
   limits: LocalTransactionJournalBounds,
@@ -1079,7 +1245,7 @@ function parseState(
       !tokenPattern.test(value.token)
     )
       throw new Error();
-    const expectedKeys = [
+    const legacyKeys = [
       "affected",
       "baseGeneration",
       "generation",
@@ -1088,11 +1254,18 @@ function parseState(
       "token",
       "version",
     ];
-    if (Object.keys(value).sort().join(",") !== expectedKeys.sort().join(",")) throw new Error();
+    const currentKeys = [...legacyKeys, "revisions"];
+    const actualKeys = Object.keys(value).sort().join(",");
+    const legacy = actualKeys === legacyKeys.sort().join(",");
+    if (!legacy && actualKeys !== currentKeys.sort().join(",")) throw new Error();
     const affected = parseAffected(value.affected);
     const targets = parseStoredTargets(value.targets, limits);
-    if (affected === undefined || targets === undefined) throw new Error();
-    if (tokenFor(value.baseGeneration, value.generation, affected, targets) !== value.token) {
+    const revisions = legacy ? undefined : parseCanonicalRevisions(value.revisions, limits);
+    if (affected === undefined || targets === undefined || (!legacy && revisions === undefined))
+      throw new Error();
+    if (
+      tokenFor(value.baseGeneration, value.generation, affected, targets, revisions) !== value.token
+    ) {
       throw new Error();
     }
     const state: PendingState = Object.freeze({
@@ -1100,6 +1273,7 @@ function parseState(
       baseGeneration: value.baseGeneration,
       generation: value.generation,
       phase: value.phase,
+      ...(revisions === undefined ? {} : { revisions }),
       targets,
       token: value.token,
       version: 1,
@@ -1145,28 +1319,28 @@ function storedTargets(materialized: CanonicalTransactionMaterialization): reado
   return Object.freeze(sorted);
 }
 
-function verifyExpectedTargets(
+function verifyExpectedRevisions(
   proposal: ProposedTransaction,
-  targets: readonly StoredTarget[],
+  revisions: readonly CanonicalTransactionRevision[],
 ): void {
   const expected = Array.from(proposal.expectedRevisions).sort((left, right) =>
     compareText(left.resource, right.resource),
   );
-  if (expected.length !== targets.length) {
+  if (expected.length !== revisions.length) {
     throw new Error(
-      "Canonical transaction targets must exactly match the proposed expected revisions",
+      "Canonical transaction revisions must exactly match the proposed expected revisions",
     );
   }
   for (let index = 0; index < expected.length; index += 1) {
     const proposalEntry = expected[index]!;
-    const target = targets[index]!;
+    const revision = revisions[index]!;
     if (
       (index > 0 && expected[index - 1]!.resource === proposalEntry.resource) ||
-      proposalEntry.resource !== target.resource ||
-      proposalEntry.expected !== target.expected
+      proposalEntry.resource !== revision.resource ||
+      proposalEntry.expected !== revision.expected
     ) {
       throw new Error(
-        "Canonical transaction targets must exactly match the proposed expected revisions",
+        "Canonical transaction revisions must exactly match the proposed expected revisions",
       );
     }
   }
@@ -1177,11 +1351,13 @@ function tokenFor(
   generation: number,
   affected: AffectedGraphIdentities,
   targets: readonly StoredTarget[],
+  revisions?: readonly CanonicalTransactionRevision[],
 ): string {
   const evidence = JSON.stringify({
     affected,
     baseGeneration,
     generation,
+    ...(revisions === undefined ? {} : { revisions }),
     targets,
     version: 1,
   });
@@ -1477,8 +1653,11 @@ export function createLocalTransactionJournal(
     }
     await discardLiveStages(state.token, state);
     const revisions = Object.freeze(
-      state.targets.map((target) =>
-        Object.freeze({ resource: target.resource, revision: target.result }),
+      (state.revisions ?? state.targets).map((entry) =>
+        Object.freeze({
+          resource: entry.resource,
+          revision: "result" in entry ? entry.result : null,
+        }),
       ),
     );
     const settlement: StoredCommittedSettlement = Object.freeze({
@@ -1687,7 +1866,7 @@ export function createLocalTransactionJournal(
           throw new Error("transaction replacement bytes exceed bound");
       }
       const targets = storedTargets(materialized.value);
-      verifyExpectedTargets(proposal, targets);
+      verifyExpectedRevisions(proposal, materialized.value.revisions);
       if (
         targets.some(
           (target) => conservativeLocatorAlias(target.locator) === localTransactionStateAlias,
@@ -1704,12 +1883,19 @@ export function createLocalTransactionJournal(
           return Object.freeze({ reason: "revision", status: "conflict" });
         }
       }
-      token = tokenFor(proposal.baseGeneration, proposal.generation, proposal.affected, targets);
+      token = tokenFor(
+        proposal.baseGeneration,
+        proposal.generation,
+        proposal.affected,
+        targets,
+        materialized.value.revisions,
+      );
       const pending: PendingState = Object.freeze({
         affected: proposal.affected,
         baseGeneration: proposal.baseGeneration,
         generation: proposal.generation,
         phase: "prepared",
+        revisions: materialized.value.revisions,
         targets,
         token,
         version: 1,
