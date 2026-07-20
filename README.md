@@ -5,8 +5,8 @@
 
 # Groma
 
-Groma keeps a living map of your system's architecture inside your repo, as plain
-Markdown files you can read and review.
+Groma keeps a living map of your system's architecture inside your repo: meaning in plain
+Markdown files you can read and review, and scanner evidence in deterministic JSON.
 
 The map records two kinds of truth side by side and never confuses them:
 
@@ -49,8 +49,8 @@ exactly what is real now.
 - `groma instructions` prints built-in working guides for humans and AI agents, before any
   workspace exists.
 - `project add` registers additional codebases and scanner coverage explicitly.
-- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the
-  whole tool ships as one compiled executable.
+- Meaning is stored as deterministic, reviewable Markdown and scanner evidence as bounded,
+  deterministic JSON under `groma/`; the whole tool ships as one compiled executable.
 
 ## The rules Groma refuses to break
 

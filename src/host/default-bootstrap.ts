@@ -39,13 +39,14 @@ import {
   createLocalProjectionIndex,
   createProjectionQueryEngine,
   createMarkdownIntentStore,
-  createMarkdownEvidenceStore,
+  createJsonEvidenceStore,
   createTransactionProjectionCanonicalSource,
   createMarkdownIntentTransactionAdapter,
   DEFAULT_PROJECTION_QUERY_CONTEXT_CHARACTERS,
   DEFAULT_PROJECTION_QUERY_CURSOR_CHARACTERS,
   markdownIntentLocator,
-  markdownEvidenceLocator,
+  jsonEvidenceIndexLocator,
+  jsonEvidenceSourceLocator,
 } from "../persistence/index.ts";
 import {
   createStandardModelCapability,
@@ -484,10 +485,13 @@ export function createDefaultBootstrapRegistry(
               },
               resources,
             });
-            const evidence = createMarkdownEvidenceStore({
+            const evidence = createJsonEvidenceStore({
               bounds: {
-                maxBytes: 4 * 1024 * 1024,
                 maxDepth: defaultHostBounds.maxSnapshotStateDepth,
+                maxIndexBytes: 512 * 1024,
+                maxShardBytes: 4 * 1024 * 1024,
+                maxSources: defaultHostBounds.maxComponents,
+                maxTotalBytes: 4 * 1024 * 1024,
                 maxValues: Math.floor(defaultHostBounds.maxSnapshotStateValues / 2),
               },
               resources,
@@ -767,7 +771,11 @@ export function createDefaultBootstrapRegistry(
             });
             const evidenceResourceMapper = Object.freeze({
               resourceForEvidence: () => {
-                const locator = markdownEvidenceLocator();
+                const locator = jsonEvidenceIndexLocator();
+                return locator.ok ? parseResourceKey(locator.value) : locator;
+              },
+              resourceForEvidenceSource: (sourceKey: string) => {
+                const locator = jsonEvidenceSourceLocator(sourceKey);
                 return locator.ok ? parseResourceKey(locator.value) : locator;
               },
             });

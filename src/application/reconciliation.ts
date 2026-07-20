@@ -34,6 +34,7 @@ import { copyGraphPayload } from "../core/payload.ts";
 
 export interface EvidenceResourceMapper {
   resourceForEvidence(): Result<ResourceKey>;
+  resourceForEvidenceSource(sourceKey: string): Result<ResourceKey>;
 }
 
 export interface ReconciliationBounds {
@@ -1164,10 +1165,16 @@ export function createReconciliationOperations(
         sources: Object.freeze(sources),
         version: 1,
       });
+      const evidenceSourceResource = options.evidenceResourceMapper.resourceForEvidenceSource(key);
+      if (!evidenceSourceResource.ok) return evidenceSourceResource;
       const expectedRevisions: Array<{ expected: string | null; resource: string }> = [
         {
           expected: initialRevisions.value.get(evidenceResource.value) ?? null,
           resource: evidenceResource.value,
+        },
+        {
+          expected: null,
+          resource: evidenceSourceResource.value,
         },
       ];
       for (const id of touchedComponents) {
@@ -1190,7 +1197,7 @@ export function createReconciliationOperations(
           diagnostic("reconciliation-resource-conflict", "Reconciliation resources are ambiguous"),
         );
       }
-      if (touchedComponents.size > 0) {
+      {
         try {
           const confirmed = await options.transactionProvider.snapshot(
             requestedResources as ResourceKey[],

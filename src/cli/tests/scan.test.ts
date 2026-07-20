@@ -99,7 +99,7 @@ function scannerReport(status: "cancelled" | "failed" | "indeterminate"): Scanne
           recovery: Object.freeze({
             baseGeneration: 1,
             generation: 2,
-            resources: Object.freeze(["groma/evidence.md"]),
+            resources: Object.freeze(["groma/evidence/index.json"]),
             token: "fixture-recovery",
           }),
         }

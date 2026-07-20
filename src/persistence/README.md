@@ -4,15 +4,17 @@ Persistence implements Groma's local adapters:
 
 - portable bounded workspace resources with path containment and atomic replacement;
 - readable deterministic Markdown intent documents;
-- one readable deterministic Markdown evidence and binding document;
+- a deterministic JSON evidence index with one bounded shard per observation source;
 - stable-ID alias records;
 - an atomic local canonical transaction provider and recovery journal;
 - an in-memory disposable projection read model.
 
-Canonical Markdown is the user-owned source of truth. Stable IDs determine durable locations while
-names, paths, containment, and renderer layout may change. Scanner observations never write directly
-to canonical intent; Application reconciliation publishes their evidence and automatic component
-effects together through the transaction provider.
+Canonical Markdown meaning and canonical JSON evidence are the user-owned source of truth. Stable
+IDs determine durable intent locations while names, paths, containment, and renderer layout may
+change. Scanner observations never write directly to canonical intent; Application reconciliation
+publishes their evidence and automatic component effects together through the transaction provider.
+The evidence index names deterministic source shards; rescanning one project/scanner source rewrites
+only that shard while the index and unrelated evidence remain byte-stable.
 
 The transaction journal exists narrowly to make a prepared multi-resource canonical mutation atomic
 and recoverable. It does not provide durable scanner sessions, projection checkpoints, or generalized
@@ -22,5 +24,6 @@ The projection index rebuilds from one bounded canonical snapshot. It derives de
 catalog, search, relation, and adjacency reads plus a content fingerprint. It has no persistent
 chunks, Merkle proofs, repair mode, adoption protocol, or canonical authority.
 
-Schema migrations and evidence sharding are absent until real incompatible data or measured scale
-requires them. Unsupported schemas and ambiguous state fail closed rather than being guessed.
+The v0.2 evidence layout is bounded and source-sharded. Explicit migration of v0.1 workspaces remains
+a separate host workflow. Unsupported schemas and ambiguous state fail closed rather than being
+guessed.
