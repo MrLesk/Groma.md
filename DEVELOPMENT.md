@@ -34,6 +34,7 @@ bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
 bun run build         # compile the native standalone executable to dist/groma
 bun run package       # package every baseline target with a checksum manifest
+bun run install:local # build and install the groma executable onto your PATH
 bun run smoke         # verify one native artifact and the public init -> scan -> read workflow
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
 bun run check         # run every required local verification gate
