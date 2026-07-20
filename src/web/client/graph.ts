@@ -375,7 +375,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         targetPosition: Position.Left,
         type: "component" as const,
         width: size.width,
-        zIndex: 1,
+        // Clear of the edge layer. React Flow lifts edges that run inside a
+        // container above their plate, so a card has to sit above that in turn
+        // or every line crossing it reads as a box drawn around the card.
+        zIndex: 10,
       }),
     );
   };
@@ -466,8 +469,15 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         }),
         source: dependency.source,
         target: dependency.target,
-        type: "smoothstep" as const,
-        zIndex: 2,
+        // Curved rather than orthogonal: right-angled routes bundle into parallel
+        // tracks that hug a busy component until they read as a second rectangle
+        // drawn around it. A curve separates from its neighbours and can be
+        // followed by eye from one end to the other.
+        type: "default" as const,
+        // Above the container plates so a line is never lost inside one, but
+        // below the cards: a route that crosses a card's face reads as a box
+        // drawn around it, which is how these lines became unfollowable.
+        zIndex: 1,
       }),
     );
   }

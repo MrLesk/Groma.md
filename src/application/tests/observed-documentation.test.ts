@@ -81,3 +81,40 @@ describe("observed documentation", () => {
     expect(summary).not.toContain("alph…");
   });
 });
+
+describe("observed documentation refuses program text", () => {
+  test("never presents source code as a description", () => {
+    expect(
+      observedSummaryFromDocumentation(
+        'import { join } from "node:path";\nimport { board } from "./board.ts";\n',
+        "markdown",
+        "src",
+      ),
+    ).toBeUndefined();
+  });
+
+  test("refuses an indented code block", () => {
+    expect(
+      observedSummaryFromDocumentation("    const value = compute(input, options);\n", "markdown"),
+    ).toBeUndefined();
+  });
+
+  test("refuses declarations in other languages", () => {
+    expect(observedSummaryFromDocumentation("package main\n", "markdown")).toBeUndefined();
+    expect(
+      observedSummaryFromDocumentation("func Handle(w http.ResponseWriter) error {\n", "markdown"),
+    ).toBeUndefined();
+    expect(
+      observedSummaryFromDocumentation("public class Widget extends Thing {\n", "markdown"),
+    ).toBeUndefined();
+  });
+
+  test("still accepts prose that merely mentions code-ish words", () => {
+    expect(
+      observedSummaryFromDocumentation(
+        "The exporter writes a board file that other tools can import later.\n",
+        "markdown",
+      ),
+    ).toBe("The exporter writes a board file that other tools can import later.");
+  });
+});

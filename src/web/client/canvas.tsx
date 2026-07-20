@@ -113,7 +113,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.entryPoint ? <li className="groma-chip groma-chip--entry">entry</li> : null}
         {data.dependsOn > 0 ? <li className="groma-chip">uses {data.dependsOn}</li> : null}
         {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
-        {data.borrows > 0 ? <li className="groma-chip">borrows {data.borrows}</li> : null}
+        {data.borrows > 0 ? <li className="groma-chip">{data.borrows} external</li> : null}
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">

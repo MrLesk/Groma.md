@@ -42,6 +42,30 @@ function withoutCommentSyntax(value: string): string {
 }
 
 /**
+ * Program text, in any of the languages a scanner might hand over. Scanners are
+ * third-party and a description slot is a place a reader trusts, so code is
+ * refused here as well as at the scanner that should not have sent it: showing
+ * a reader an import statement where a purpose belongs is worse than silence.
+ */
+function isCode(block: string): boolean {
+  const trimmed = block.trim();
+  if (
+    /^(?:import|export|package|using|#include|from|const|let|var|func|def|class|fn|pub|module|require|public|private|protected|internal|static|type|interface|struct|impl|trait|namespace)\b/.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  if (/^[@#]\w+[({]/.test(trimmed)) return true;
+  // Prose does not end in a brace or a statement terminator.
+  if (/[{};]$/.test(trimmed)) return true;
+  // Indented blocks are code by markdown's own rule.
+  if (/^ {4}|^\t/.test(block)) return true;
+  const codePunctuation = (trimmed.match(/[;{}()=<>[\]]/g) ?? []).length;
+  return codePunctuation > 0 && codePunctuation / trimmed.length > 0.06;
+}
+
+/**
  * A block that names, decorates, or lists rather than describes. Headings
  * restate the component's own name, markup and badges carry no prose, and a
  * list item is a detail rather than the thing a reader needs first.
@@ -58,6 +82,7 @@ function isProse(block: string): boolean {
   if (/^\d+[.)]\s/.test(trimmed)) return false;
   if (/^!?\[[^\]]*\]\([^)]*\)\s*$/.test(trimmed)) return false;
   if (/^_[^_]*_$/.test(trimmed)) return false;
+  if (isCode(block)) return false;
   return true;
 }
 

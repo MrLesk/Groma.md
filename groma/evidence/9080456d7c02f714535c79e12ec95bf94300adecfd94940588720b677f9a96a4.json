@@ -848,7 +848,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_c13fddb00b46324402794c484a525fe8",
+      "epoch": "epoch_b028f0d267bc5466977e2683548202a2",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -1144,7 +1144,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:c63ce32ccd03a7a0613a403e3812281941c55a4e381e086cf5675ac6d8dfe54a",
+              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -1208,7 +1208,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:5e7f9656f8a866e6d4067c8b2459f1546c3ff20e849e657a2df26cef7be5d1fa",
+              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -1340,10 +1340,10 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:5e7f9656f8a866e6d4067c8b2459f1546c3ff20e849e657a2df26cef7be5d1fa",
+              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
               "range": {
-                "endByteExclusive": 98,
-                "startByte": 83
+                "endByteExclusive": 110,
+                "startByte": 95
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -1868,7 +1868,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b04e3295d1d34a773d2d69acbe293b3d253c98a7c6d53eca6c68ca8fc45f080d",
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
               "range": {
                 "endByteExclusive": 745,
                 "startByte": 717
@@ -1877,7 +1877,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b04e3295d1d34a773d2d69acbe293b3d253c98a7c6d53eca6c68ca8fc45f080d",
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
               "range": {
                 "endByteExclusive": 843,
                 "startByte": 815
@@ -1920,7 +1920,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:c63ce32ccd03a7a0613a403e3812281941c55a4e381e086cf5675ac6d8dfe54a",
+              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -2211,7 +2211,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b04e3295d1d34a773d2d69acbe293b3d253c98a7c6d53eca6c68ca8fc45f080d",
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
               "range": {
                 "endByteExclusive": 1069,
                 "startByte": 1049
@@ -2220,7 +2220,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b04e3295d1d34a773d2d69acbe293b3d253c98a7c6d53eca6c68ca8fc45f080d",
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
               "range": {
                 "endByteExclusive": 571,
                 "startByte": 553
@@ -2308,7 +2308,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:c63ce32ccd03a7a0613a403e3812281941c55a4e381e086cf5675ac6d8dfe54a",
+              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
               "range": {
                 "endByteExclusive": 40,
                 "startByte": 27
@@ -2354,10 +2354,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:5e7f9656f8a866e6d4067c8b2459f1546c3ff20e849e657a2df26cef7be5d1fa",
+              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
               "range": {
-                "endByteExclusive": 98,
-                "startByte": 83
+                "endByteExclusive": 110,
+                "startByte": 95
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -2427,7 +2427,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:c63ce32ccd03a7a0613a403e3812281941c55a4e381e086cf5675ac6d8dfe54a",
+              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
               "range": {
                 "endByteExclusive": 538,
                 "startByte": 514
@@ -2817,7 +2817,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:5e7f9656f8a866e6d4067c8b2459f1546c3ff20e849e657a2df26cef7be5d1fa",
+              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
