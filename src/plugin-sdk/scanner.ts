@@ -23,6 +23,7 @@ export {
   observationSessionApiVersion,
   type ComponentActionObservation,
   type ComponentCandidateObservation,
+  type ComponentCandidateStructuralSignals,
   type ComponentInputObservation,
   type ComponentOutputObservation,
   type CompletedObservationSnapshot,

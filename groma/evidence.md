@@ -133,8 +133,7 @@
                   "name": "ROUTE /"
                 }
               ],
-              "name": "web",
-              "type": "source-boundary"
+              "name": "web"
             },
             "scope": "workspace"
           },
@@ -671,7 +670,7 @@
               "state": "partial"
             }
           ],
-          "epoch": "epoch_4e0770abe22c9e8f3a3e4879078662cb",
+          "epoch": "epoch_51cf54d8104717500bb989261e1ac5f4",
           "projectId": "project_198bde57c817528c9d08d0ebdf630196",
           "records": [
             {
@@ -685,7 +684,7 @@
               "name": "defineScanner",
               "provenance": [
                 {
-                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
+                  "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -695,15 +694,15 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
-                    "endByteExclusive": 34328,
-                    "startByte": 34229
+                    "endByteExclusive": 34372,
+                    "startByte": 34273
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
@@ -722,7 +721,7 @@
               "name": "createScannerRequest",
               "provenance": [
                 {
-                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
+                  "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
                   "resource": "package.json",
                   "scope": "workspace"
                 },
@@ -732,15 +731,15 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
-                    "endByteExclusive": 34133,
-                    "startByte": 24655
+                    "endByteExclusive": 34177,
+                    "startByte": 24699
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
@@ -792,8 +791,7 @@
             },
             {
               "candidate": {
-                "name": "persistence",
-                "type": "source-boundary"
+                "name": "persistence"
               },
               "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
               "kind": "component-candidate",
@@ -804,7 +802,12 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 9,
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
@@ -824,12 +827,14 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 2
+              }
             },
             {
               "candidate": {
-                "name": "plugin-sdk",
-                "type": "source-boundary"
+                "name": "plugin-sdk"
               },
               "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
               "kind": "component-candidate",
@@ -840,12 +845,16 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 2,
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
-                "name": "core",
-                "type": "source-boundary"
+                "name": "core"
               },
               "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
               "kind": "component-candidate",
@@ -856,12 +865,16 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 16,
+                "reuseBreadth": 5
+              }
             },
             {
               "candidate": {
-                "name": "cli",
-                "type": "source-boundary"
+                "name": "cli"
               },
               "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
               "kind": "component-candidate",
@@ -872,7 +885,11 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 12
+              }
             },
             {
               "candidate": {
@@ -892,7 +909,10 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
@@ -912,12 +932,14 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 3
+              }
             },
             {
               "candidate": {
-                "name": "host",
-                "type": "source-boundary"
+                "name": "host"
               },
               "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
               "kind": "component-candidate",
@@ -928,7 +950,12 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 14,
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
@@ -939,7 +966,7 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:408cab494c3416d0aca08657cbe95d71028b8586c40faff2133a5cddcc7c2429",
+                  "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
                   "range": {
                     "endByteExclusive": 80,
                     "startByte": 65
@@ -948,7 +975,10 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
@@ -959,17 +989,19 @@
               "kind": "component-candidate",
               "provenance": [
                 {
-                  "fingerprint": "sha256:de5bb3d6592fa2132171111ac7beda0b5f09c325392f15c71edaef0e1520f715",
+                  "fingerprint": "sha256:12ffd4b812e18ab69722e5bdfe238a70998653dbe30d15650b356b22b326e54c",
                   "resource": "package.json",
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true
+              }
             },
             {
               "candidate": {
-                "name": "web",
-                "type": "source-boundary"
+                "name": "web"
               },
               "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
               "kind": "component-candidate",
@@ -980,7 +1012,12 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 5,
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
@@ -1000,7 +1037,10 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 3
+              }
             },
             {
               "candidate": {
@@ -1020,12 +1060,14 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 2
+              }
             },
             {
               "candidate": {
-                "name": "standard-model",
-                "type": "source-boundary"
+                "name": "standard-model"
               },
               "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
               "kind": "component-candidate",
@@ -1036,7 +1078,12 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 3,
+                "reuseBreadth": 3
+              }
             },
             {
               "candidate": {
@@ -1056,12 +1103,14 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 1
+              }
             },
             {
               "candidate": {
-                "name": "application",
-                "type": "source-boundary"
+                "name": "application"
               },
               "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
               "kind": "component-candidate",
@@ -1072,7 +1121,12 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "declaredBoundary": true,
+                "fileCount": 8,
+                "reuseBreadth": 3
+              }
             },
             {
               "candidate": {
@@ -1092,7 +1146,10 @@
                   "scope": "workspace"
                 }
               ],
-              "scope": "workspace"
+              "scope": "workspace",
+              "signals": {
+                "reuseBreadth": 2
+              }
             },
             {
               "content": "# Groma brand\n\nGroma is named after the Roman surveyor's cross-staff — the instrument that transferred architectural intent onto the ground. Every Roman city, road, and camp was laid out behind one. The people who used it were the *gromatici*; Groma's community name, **the Gromatics**, honors them.\n\n## Assets\n\n| File | What it is | Use it for |\n|---|---|---|\n| `mark-frontal.svg` | The primary glyph: staff, crossbar, two plumb lines, ground line | Avatars, favicons, app icons, anywhere small |\n| `mark-topdown.svg` | The groma seen from above: a surveyor's cross over the sighted point | Alternative glyph; watermarks, stickers, loading marks |\n| `mark-sightline.svg` | Frontal glyph plus one accent sight line hitting a surveyed point | Hero contexts, splash screens, docs headers |\n| `lockup.svg` | Glyph + `groma` wordmark + `.md` suffix in the accent color | README header, website header, social banners |\n\nThe illustrated blueprint-style drawing (full instrument with four plumb lines, construction lines, and the sighted point) is the hero illustration for the website and launch material. It is an illustration, not a mark — never scale it below roughly 200 px.\n\n## Rules\n\n1. **Reduction system, not one logo.** The illustrated version is for hero surfaces only. Everything at or below 64 px uses `mark-frontal.svg`. The glyph must stay legible at 16 px — if a proposed variant fails at 16 px, it is not a mark.\n2. **Match stroke weights.** The glyph's stroke weight and the wordmark's weight must read as one voice. Never pair a hairline mark with a heavy wordmark or vice versa.\n3. **One accent color.** The accent is the sight line: teal `#1D9E75`. It marks the surveyed point — intent projected onto reality. Nothing else in the identity gets color. Structural strokes are `currentColor` (black on light, white on dark).\n4. **The wordmark is lowercase.** The product is a CLI: `groma`. Prefer engineering-drawing faces (DIN-derived: DIN, Overpass, Archivo) over techno or sci-fi faces. The lockup in this folder uses a system-font placeholder — outline the final type before print or social use.\n5. **`.md` is part of the brand.** The full name is `groma.md` — domain, npm package, and lockup. In the lockup the `.md` suffix is set in the accent teal. Use the bare glyph when space demands, but never set the wordmark as \"Groma\" title-case in product surfaces.\n6. **Clear space.** Keep at least the width of the crossbar's plumb-line drop (roughly 25% of the glyph height) free around the mark.\n\n## Don't\n\n- Don't add gradients, shadows, or 3D effects to the marks.\n- Don't recolor the structural strokes; only the sight line and surveyed point carry the accent.\n- Don't use the illustrated hero version as an avatar or favicon.\n- Don't rotate the frontal mark; the plumb lines hang — gravity is part of the meaning.\n- Don't set the wordmark in title case or add spacing between `groma` and `.md`.\n\n## Dark backgrounds\n\nThe marks use `currentColor`, so they invert cleanly when inlined in HTML/CSS. When embedding as `<img>` on GitHub, use a `<picture>` element with `prefers-color-scheme` and the `*-dark.svg` variants in this folder (same geometry, strokes fixed to `#F0EFEA`). The dark variants are generated from the sources — edit the source, then regenerate.\n",
@@ -1173,10 +1230,10 @@
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
-                    "endByteExclusive": 34221,
-                    "startByte": 34135
+                    "endByteExclusive": 34265,
+                    "startByte": 34179
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
@@ -1279,13 +1336,13 @@
               }
             },
             {
-              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine\n  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.\n- `groma instructions` prints built-in working guides for humans and AI agents, before any\n  workspace exists.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci          # install dependencies\nbun run build   # compile the single-file executable to dist/groma\n./dist/groma    # open the bounded local visual blueprint\n```\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, then exercises the matching\nhost artifact through Groma's compiled black-box workflow. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
+              "content": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"brand/lockup-dark.svg\">\n  <img src=\"brand/lockup.svg\" alt=\"groma.md\" width=\"300\">\n</picture>\n\n# Groma\n\nGroma keeps a living map of your system's architecture inside your repo, as plain\nMarkdown files you can read and review.\n\nThe map records two kinds of truth side by side and never confuses them:\n\n- **Intent** — what a person or AI agent said each part of the system is _for_.\n- **Evidence** — what a scanner actually found in the code.\n\nScans refresh the evidence. Your intent is never overwritten by a scan, a rename, or a\nfailure. Humans and AI agents use the same commands and see the same model. Everything\nstays local: no server, no account, no upload.\n\n_(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool\nfor projecting a plan onto the ground.)_\n\n## The goal\n\nThe target three-command loop takes you from an unfamiliar codebase to a map you can understand:\n\n```sh\ngroma init   # create the groma/ workspace inside your repo\ngroma scan   # take one careful look at the code and record what is really there\ngroma        # open a bounded visual blueprint\n```\n\nThe three commands now work as one local loop. Groma is built in public, and the list below says\nexactly what is real now.\n\n## What works today\n\n- `groma init` creates the workspace in any project.\n- You build the map by hand (or an agent does): `component create`, `update`, `merge`,\n  `reparent`, `remove`, plus relationships between components.\n- You explore the map from the terminal: `component roots`, `component children`,\n  `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.\n- `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,\n  records bounded evidence, and reconciles it without overwriting curated intent.\n- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current\n  hierarchy, with recursive folding, focus, and component detail.\n- `groma web` serves an interactive web blueprint embedded in the same binary, on your machine\n  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.\n- `groma instructions` prints built-in working guides for humans and AI agents, before any\n  workspace exists.\n- `project add` registers additional codebases and scanner coverage explicitly.\n- Everything is stored as deterministic, reviewable Markdown under `groma/`, and the\n  whole tool ships as one compiled executable.\n\n## The rules Groma refuses to break\n\nThese are the promises that keep the map trustworthy after the first scan:\n\n- **Scanners are blind.** A scanner reads code and reports what it sees. It never sees\n  the existing map, so it can never \"helpfully\" reorganize your architecture.\n- **Meaning survives evidence.** A failed or partial scan can never erase what people\n  wrote. Missing evidence is not proof that a part is gone.\n- **When unsure, stop.** Groma never guesses identity. If it cannot tell whether two\n  things are the same component, it asks instead of merging them.\n- **Stable IDs, not names.** Components keep their identity through renames, moves, and\n  refactors. Paths and names are labels, not identity.\n- **One semantic path.** CLI, web, and plugins all go through the same operations and\n  validation. There are no secret side doors for agents.\n- **Local first.** Your architecture lives in your repo, readable without Groma, with\n  Git as its history.\n\n## Where to read more\n\n| Document                                                             | What it answers                                            |\n| -------------------------------------------------------------------- | ---------------------------------------------------------- |\n| [MANIFESTO.md](MANIFESTO.md)                                         | Why Groma exists, and the principles that govern decisions |\n| [ARCHITECTURE.md](ARCHITECTURE.md)                                   | How the pieces fit together, and where work stands         |\n| [DEVELOPMENT.md](DEVELOPMENT.md)                                     | How to build, test, and contribute                         |\n| [docs/component-model-examples.md](docs/component-model-examples.md) | A worked example of modeling a real system                 |\n| [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |\n| [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |\n| [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |\n| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |\n\n## Build it yourself\n\n```sh\nbun ci                # install dependencies\nbun run build         # compile the single-file executable to dist/groma\n./dist/groma          # open the bounded local visual blueprint\nbun run install:local # put the compiled groma command on your PATH\n```\n\nAfter `bun run install:local`, `groma`, `groma scan`, and `groma web` work from any\ndirectory, exactly like the compiled binary in `dist/`.\n\nTo create the unpublished four-target preview package, run `bun run package`. It writes\ntarget-specific executables and a sorted `dist/SHA256SUMS` manifest, exercises the matching\nhost artifact through Groma's compiled black-box workflow, and assembles the future\n`groma.md` npm packages (a shim plus one binary package per platform, the same shape\nbacklog.md installs from) under `dist/npm`, verified by a local global install from the\npacked tarballs. The `groma.md` package is not published yet. Cross-compiled artifacts are packaging\nproofs only; native runtime behavior is claimed only on a matching host.\n\nSee [DEVELOPMENT.md](DEVELOPMENT.md) for the full toolchain and verification gates.\n",
               "format": "markdown",
               "key": "candidate.documentation.edca51985031745711780a11350fae55d14c75f03cb88b03b679ab7f93d0c74b",
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:c22609ffa718b89c8d836c0a93c594a7f9534fa7a20c665cc0dd82d5ea79011f",
+                  "fingerprint": "sha256:e71d8e15da385ece9910bb9ac6dbe058990ce7e0aaf16042465ff883fafd425a",
                   "resource": "README.md",
                   "scope": "workspace"
                 }
@@ -1303,10 +1360,10 @@
               "kind": "documentation",
               "provenance": [
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
-                    "endByteExclusive": 24647,
-                    "startByte": 24400
+                    "endByteExclusive": 24691,
+                    "startByte": 24444
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
@@ -1397,7 +1454,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:c152ea43d6e76d0eb92ffebcf4e2684aef409b222b15747c3e86cc350fd61c02",
+                  "fingerprint": "sha256:a91db8eed645ca8103d262fc30b5723f8b962b139c251e43a1bdd72b86625066",
                   "range": {
                     "endByteExclusive": 222,
                     "startByte": 197
@@ -1558,10 +1615,10 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:28942f3f633334feed2d17aa25ccc099bba7c4866b7f4563bf66a8db2ee3a2bb",
+                  "fingerprint": "sha256:57d20d8f063f7788906e2d2a45c853219f2cd44154d0637eb19e5b1461240745",
                   "range": {
-                    "endByteExclusive": 1179,
-                    "startByte": 1151
+                    "endByteExclusive": 1205,
+                    "startByte": 1177
                   },
                   "resource": "src/application/operations.ts",
                   "scope": "workspace"
@@ -1576,10 +1633,10 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:18e47223b95a5b6a96b29492672182b2011370f4158bc7023848496cd409722a",
+                  "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
                   "range": {
-                    "endByteExclusive": 890,
-                    "startByte": 862
+                    "endByteExclusive": 949,
+                    "startByte": 921
                   },
                   "resource": "src/application/snapshot-state.ts",
                   "scope": "workspace"
@@ -1601,7 +1658,7 @@
               "kind": "relationship",
               "provenance": [
                 {
-                  "fingerprint": "sha256:408cab494c3416d0aca08657cbe95d71028b8586c40faff2133a5cddcc7c2429",
+                  "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
                   "range": {
                     "endByteExclusive": 80,
                     "startByte": 65
@@ -1707,7 +1764,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 462,
                     "startByte": 444
@@ -1716,7 +1773,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 517,
                     "startByte": 497
@@ -1725,7 +1782,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 603,
                     "startByte": 583
@@ -1838,7 +1895,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:28942f3f633334feed2d17aa25ccc099bba7c4866b7f4563bf66a8db2ee3a2bb",
+                  "fingerprint": "sha256:57d20d8f063f7788906e2d2a45c853219f2cd44154d0637eb19e5b1461240745",
                   "range": {
                     "endByteExclusive": 1020,
                     "startByte": 1000
@@ -1847,7 +1904,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:28942f3f633334feed2d17aa25ccc099bba7c4866b7f4563bf66a8db2ee3a2bb",
+                  "fingerprint": "sha256:57d20d8f063f7788906e2d2a45c853219f2cd44154d0637eb19e5b1461240745",
                   "range": {
                     "endByteExclusive": 683,
                     "startByte": 665
@@ -1856,7 +1913,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:28942f3f633334feed2d17aa25ccc099bba7c4866b7f4563bf66a8db2ee3a2bb",
+                  "fingerprint": "sha256:57d20d8f063f7788906e2d2a45c853219f2cd44154d0637eb19e5b1461240745",
                   "range": {
                     "endByteExclusive": 762,
                     "startByte": 742
@@ -1865,7 +1922,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:28942f3f633334feed2d17aa25ccc099bba7c4866b7f4563bf66a8db2ee3a2bb",
+                  "fingerprint": "sha256:57d20d8f063f7788906e2d2a45c853219f2cd44154d0637eb19e5b1461240745",
                   "range": {
                     "endByteExclusive": 934,
                     "startByte": 916
@@ -1901,7 +1958,16 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:18e47223b95a5b6a96b29492672182b2011370f4158bc7023848496cd409722a",
+                  "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+                  "range": {
+                    "endByteExclusive": 1068,
+                    "startByte": 1050
+                  },
+                  "resource": "src/application/snapshot-state.ts",
+                  "scope": "workspace"
+                },
+                {
+                  "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
                   "range": {
                     "endByteExclusive": 380,
                     "startByte": 362
@@ -1910,7 +1976,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:18e47223b95a5b6a96b29492672182b2011370f4158bc7023848496cd409722a",
+                  "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
                   "range": {
                     "endByteExclusive": 459,
                     "startByte": 439
@@ -1919,19 +1985,10 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:18e47223b95a5b6a96b29492672182b2011370f4158bc7023848496cd409722a",
+                  "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
                   "range": {
                     "endByteExclusive": 545,
                     "startByte": 525
-                  },
-                  "resource": "src/application/snapshot-state.ts",
-                  "scope": "workspace"
-                },
-                {
-                  "fingerprint": "sha256:18e47223b95a5b6a96b29492672182b2011370f4158bc7023848496cd409722a",
-                  "range": {
-                    "endByteExclusive": 1009,
-                    "startByte": 991
                   },
                   "resource": "src/application/snapshot-state.ts",
                   "scope": "workspace"
@@ -1971,7 +2028,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:408cab494c3416d0aca08657cbe95d71028b8586c40faff2133a5cddcc7c2429",
+                  "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
                   "range": {
                     "endByteExclusive": 40,
                     "startByte": 27
@@ -2065,7 +2122,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:408cab494c3416d0aca08657cbe95d71028b8586c40faff2133a5cddcc7c2429",
+                  "fingerprint": "sha256:076c4823419475ac9ec277023fde1588f9e64f12cdea8b6e333827e79ac5ff35",
                   "range": {
                     "endByteExclusive": 499,
                     "startByte": 475
@@ -2201,7 +2258,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 40,
                     "startByte": 27
@@ -2253,16 +2310,16 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
-                    "endByteExclusive": 1363,
-                    "startByte": 1345
+                    "endByteExclusive": 1407,
+                    "startByte": 1389
                   },
                   "resource": "src/plugin-sdk/scanner.ts",
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
                     "endByteExclusive": 453,
                     "startByte": 435
@@ -2271,7 +2328,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
                     "endByteExclusive": 530,
                     "startByte": 510
@@ -2280,7 +2337,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:43e3d6ca88bbfaa376e732dc60cf6891c8b4682931c5619c779de7f1be3102ae",
+                  "fingerprint": "sha256:3a71daefb47548181e97f3deb951bee2c2b4bb2d60902d4b1f2d278dcc6ff083",
                   "range": {
                     "endByteExclusive": 596,
                     "startByte": 576
@@ -2314,7 +2371,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 815,
                     "startByte": 787
@@ -2396,7 +2453,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:482a3563ea27ae6a9156cfbb161b4167c22d5d0228dcae803c9112d180c2f05d",
+                  "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
                   "range": {
                     "endByteExclusive": 228,
                     "startByte": 210
@@ -2405,7 +2462,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:482a3563ea27ae6a9156cfbb161b4167c22d5d0228dcae803c9112d180c2f05d",
+                  "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
                   "range": {
                     "endByteExclusive": 283,
                     "startByte": 263
@@ -2464,7 +2521,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:c152ea43d6e76d0eb92ffebcf4e2684aef409b222b15747c3e86cc350fd61c02",
+                  "fingerprint": "sha256:a91db8eed645ca8103d262fc30b5723f8b962b139c251e43a1bdd72b86625066",
                   "range": {
                     "endByteExclusive": 370,
                     "startByte": 352
@@ -2634,7 +2691,7 @@
                   "scope": "workspace"
                 },
                 {
-                  "fingerprint": "sha256:4d2d534fc5528396d630ca0672225410e420ae0ed767ce6a40169a3321325f3c",
+                  "fingerprint": "sha256:c7e99103bc89436dcbdb0b9f501e32c77c2bdb02bce68960a376d0450037affd",
                   "range": {
                     "endByteExclusive": 114,
                     "startByte": 108
