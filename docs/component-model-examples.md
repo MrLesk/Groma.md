@@ -66,51 +66,54 @@ The component boundaries express ownership:
 - **Fulfillment** owns delivery of accepted orders.
 - **Notifications** owns delivery of customer communications.
 
-The following is an illustrative v0.2 `groma/components/Commerce/Ordering.md` document.
+The following is an illustrative `groma/components/Commerce/Ordering.md` document.
 Its parent folder mirrors the component hierarchy, while the stable ID inside the file—not
 the filename—remains its identity. The IDs are examples only; this is not a file in the
 canonical self-blueprint and must not be copied there by hand.
 
 ```md
 ---
-schema: groma/component/v0.2
 id: ent_00000000000000000000000000000010
-name: Ordering
 type: service
 scale: domain
-parent: ent_00000000000000000000000000000001
 desired: present
 lifecycle: active
 ---
 
-# Inputs
+# Ordering
 
-- Place order request — A customer's confirmed intent to purchase. <!-- groma:item id=inp_example_place_order fields=name,description -->
-- Cancel order request — A request to cancel while the lifecycle permits it. <!-- groma:item id=inp_example_cancel_order fields=name,description -->
-- Fulfillment status — A meaningful fulfillment progress change. <!-- groma:item id=inp_example_fulfillment_status fields=name,description -->
-- Payment status — A meaningful payment state change. <!-- groma:item id=inp_example_payment_status fields=name,description -->
+## Inputs
 
-# Outputs
+- `place-order`: Place order request — A customer's confirmed intent to purchase.
+- `cancel-order`: Cancel order request — A request to cancel while the lifecycle permits it.
+- `fulfillment-status`: Fulfillment status — A meaningful fulfillment progress change.
+- `payment-status`: Payment status — A meaningful payment state change.
 
-- Order placed — A durable order accepted for fulfillment. <!-- groma:item id=out_example_order_placed fields=name,description -->
-- Order rejected — An order that could not be accepted. <!-- groma:item id=out_example_order_rejected fields=name,description -->
-- Order cancelled — Confirmation that cancellation completed. <!-- groma:item id=out_example_order_cancelled fields=name,description -->
-- Order status changed — A downstream-relevant lifecycle change. <!-- groma:item id=out_example_order_status fields=name,description -->
+## Outputs
 
-# Actions
+- `order-placed`: Order placed — A durable order accepted for fulfillment.
+- `order-rejected`: Order rejected — An order that could not be accepted.
+- `order-cancelled`: Order cancelled — Confirmation that cancellation completed.
+- `order-status`: Order status changed — A downstream-relevant lifecycle change.
 
-- Place order — Establish a durable order after its conditions are satisfied. <!-- groma:item id=act_example_place_order fields=name,description -->
-- Cancel order — Cancel an eligible order and release its commitments. <!-- groma:item id=act_example_cancel_order fields=name,description -->
-- Update order progress — Incorporate payment and fulfillment changes. <!-- groma:item id=act_example_update_progress fields=name,description -->
+## Actions
 
-# Relationships
+- `place-order`: Place order — Establish a durable order after its conditions are satisfied.
+- `cancel-order`: Cancel order — Cancel an eligible order and release its commitments.
+- `update-progress`: Update order progress — Incorporate payment and fulfillment changes.
 
-- requires → ent_00000000000000000000000000000020 — Uses an authoritative purchase price. <!-- groma:relationship id=rel_00000000000000000000000000000101 target=ent_00000000000000000000000000000020 description=true -->
-- requires → ent_00000000000000000000000000000021 — Requires inventory reservation. <!-- groma:relationship id=rel_00000000000000000000000000000102 target=ent_00000000000000000000000000000021 description=true -->
-- requires → ent_00000000000000000000000000000022 — Requires an acceptable payment state. <!-- groma:relationship id=rel_00000000000000000000000000000103 target=ent_00000000000000000000000000000022 description=true -->
-- informs → ent_00000000000000000000000000000023 — Provides accepted orders for fulfillment. <!-- groma:relationship id=rel_00000000000000000000000000000104 target=ent_00000000000000000000000000000023 description=true -->
+## Contained by
 
-# Intent
+[Commerce](groma:component/ent_00000000000000000000000000000001)
+
+## Relationships
+
+- requires [Pricing](groma:component/ent_00000000000000000000000000000020?relationship=rel_00000000000000000000000000000101) — Uses an authoritative purchase price.
+- requires [Inventory](groma:component/ent_00000000000000000000000000000021?relationship=rel_00000000000000000000000000000102) — Requires inventory reservation.
+- requires [Payments](groma:component/ent_00000000000000000000000000000022?relationship=rel_00000000000000000000000000000103) — Requires an acceptable payment state.
+- informs [Fulfillment](groma:component/ent_00000000000000000000000000000023?relationship=rel_00000000000000000000000000000104) — Provides accepted orders for fulfillment.
+
+## Purpose
 
 Ordering owns the durable business record of a customer's purchase and its lifecycle
 from acceptance through cancellation or completion.
@@ -138,13 +141,15 @@ commitments permit it.
 - Meaningful lifecycle changes are available to downstream components.
 ```
 
-The relationship source is implicit in the owning component file. Stable item and relationship
-IDs live in unobtrusive HTML comments, so ordinary Markdown readers see names, descriptions,
-and connections rather than storage machinery. Everything after the exact `# Intent` heading
-is the component's reversible prose; its internal headings remain prose rather than schema.
+The relationship source is implicit in the owning component file. Component and relationship
+identities stay in frontmatter and link destinations, while item markers are short and local to
+the file. Ordinary Markdown readers therefore see names, descriptions, and connections rather
+than storage machinery. Everything after the exact `## Purpose` heading is the component's
+reversible prose; its internal headings remain prose rather than schema.
 
-Frontmatter contains identity and the structural fields that are actually present. Inputs,
-outputs, actions, relationships, and intent map directly to readable Markdown sections:
+Frontmatter contains stable identity and only the domain facts that have no clearer Markdown
+form. Name, parent, inputs, outputs, actions, relationships, and purpose map directly to readable
+Markdown structure:
 
 | Ordering concept                             | Representation                       |
 | -------------------------------------------- | ------------------------------------ |

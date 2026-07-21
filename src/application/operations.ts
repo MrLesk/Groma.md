@@ -668,7 +668,7 @@ function componentMatchesFilters(
 ): boolean {
   return (
     (filters.scale === undefined || component.scale === filters.scale) &&
-    (filters.shared === undefined || component.shared === filters.shared)
+    (filters.shared === undefined || (component.shared ?? false) === filters.shared)
   );
 }
 

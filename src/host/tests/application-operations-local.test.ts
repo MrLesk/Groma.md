@@ -395,13 +395,15 @@ describe("official local application operations composition", () => {
       path.join(workspace.workspaceRoot, ...String(laterDocument.locator).split("/")),
       "utf8",
     );
-    expect(laterIntent).toContain(`parent: ${conformanceIds.serviceB}`);
-    expect(laterIntent).toContain(`target=${conformanceIds.serviceB}`);
+    expect(laterIntent).toContain(`[Final survivor](groma:component/${conformanceIds.serviceB})`);
+    expect(laterIntent).toContain(
+      `groma:component/${conformanceIds.serviceB}?relationship=rel_000000000000000000000000000000cb`,
+    );
     const survivorIntent = await readFile(
       path.join(workspace.workspaceRoot, ...String(survivorDocument.locator).split("/")),
       "utf8",
     );
-    expect(survivorIntent).toContain(`target=${conformanceIds.serviceB}`);
+    expect(survivorIntent).toContain(`groma:component/${conformanceIds.serviceB}?relationship=`);
 
     expect(await readFile(path.join(workspace.workspaceRoot, "groma", "aliases.md"), "utf8")).toBe(
       `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${conformanceIds.rootA}\n    target: ${conformanceIds.rootB}\n  - source: ${conformanceIds.rootB}\n    target: ${conformanceIds.serviceB}\n---\n`,

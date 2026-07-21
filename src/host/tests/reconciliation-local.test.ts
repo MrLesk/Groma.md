@@ -943,7 +943,7 @@ describe("local completed-snapshot reconciliation", () => {
           snapshotCalls += 1;
           if (snapshotCalls === 2) {
             const before = await readFile(intentPath, "utf8");
-            const after = before.replace("name: API", "name: Curated directly");
+            const after = before.replace("# API", "# Curated directly");
             expect(after).not.toBe(before);
             await writeFile(intentPath, after);
           }

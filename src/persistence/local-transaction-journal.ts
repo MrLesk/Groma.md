@@ -806,6 +806,23 @@ export function createMarkdownIntentTransactionAdapter(
       priorLocations.value.map((entry) => [entry.id, entry.locator]),
     );
     const nextLocationById = new Map(nextLocations.value.map((entry) => [entry.id, entry.locator]));
+    const nextLabels = new Map<EntityId, string>();
+    for (const entity of applied.value.components.values()) {
+      const component = options.model.parse(entity);
+      if (!component.ok) return component;
+      nextLabels.set(component.value.id, component.value.name ?? component.value.id);
+    }
+    const nextResolver = createEntityAliasResolver(
+      nextAliases,
+      new Set(nextLabels.keys()),
+      Math.max(1, maximumAliases),
+    );
+    if (!nextResolver.ok) return nextResolver;
+    for (const alias of nextAliases) {
+      const resolved = nextResolver.value.resolve(alias.source);
+      if (!resolved.ok) return resolved;
+      nextLabels.set(alias.source, nextLabels.get(resolved.value.resolved)!);
+    }
     const currentComponentById = new Map<EntityId, CanonicalResourceState>();
     const currentOwnerByLocator = new Map<string, EntityId>();
     for (const id of prior.value.components.keys()) {
@@ -861,8 +878,9 @@ export function createMarkdownIntentTransactionAdapter(
         const ownedRelations = Array.from(applied.value.relationships.values())
           .filter((relation) => relation.source === id)
           .sort((left, right) => compareText(left.id, right.id));
-        const document = options.store.serialize(entity, ownedRelations, nextLocator);
+        const document = options.store.serialize(entity, ownedRelations, nextLocator, nextLabels);
         if (!document.ok) return document;
+        applied.value.components.set(id, document.value.entity);
         bytes = document.value.bytes;
         result = document.value.revision;
       } else {

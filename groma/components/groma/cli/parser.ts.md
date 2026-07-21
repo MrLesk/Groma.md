@@ -1,16 +1,22 @@
 ---
-schema: groma/component/v0.2
 id: ent_9ed496744c2d4e3cefe6eaeb1ec6b9b3
-name: parser.ts
 scale: part
-parent: ent_83702a52aa46b605c22cc1be63bf939a
+itemIds:
+  actions:
+    parse-invocation-e3248d820423c7b9: observation:workspace:candidate.action.49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d
 ---
 
-# Actions
+# parser.ts
 
-- parseInvocation — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d fields=name,description -->
+## Actions
 
-# Relationships
+- `parse-invocation-e3248d820423c7b9`: parseInvocation — Exported function
 
-- imports → ent_246df04e4b4fd1bfb06e9b1dc155f7a3 <!-- groma:relationship id=rel_101fbfd807d3c5e1a00b58b836e78682 target=ent_246df04e4b4fd1bfb06e9b1dc155f7a3 description=false -->
-- imports → ent_ede7b95d488b53f6271e00b5f03658a4 <!-- groma:relationship id=rel_fcb7f2f3b0efb6e7bcbc90ec1015c257 target=ent_ede7b95d488b53f6271e00b5f03658a4 description=false -->
+## Contained by
+
+[cli](groma:component/ent_83702a52aa46b605c22cc1be63bf939a)
+
+## Relationships
+
+- imports [contracts.ts](groma:component/ent_246df04e4b4fd1bfb06e9b1dc155f7a3?relationship=rel_101fbfd807d3c5e1a00b58b836e78682)
+- imports [server.ts](groma:component/ent_ede7b95d488b53f6271e00b5f03658a4?relationship=rel_fcb7f2f3b0efb6e7bcbc90ec1015c257)
