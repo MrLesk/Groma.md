@@ -25,6 +25,7 @@ import {
   type ScannerResourceReadRequest,
 } from "../../plugin-sdk/index.ts";
 import {
+  cognitiveComplexityOfSource,
   fileExportDescription,
   typescriptBunScanner,
   typescriptBunScannerIdentity,
@@ -3661,5 +3662,165 @@ export function shared() {}
       requires: [],
       version: "1.0.0",
     });
+  });
+});
+
+describe("cognitive complexity", () => {
+  // Expected scores are SonarSource's own, matched against the reference
+  // implementation (eslint-plugin-sonarjs S3776) and the white paper's worked
+  // examples, so groma's number is the one a reader sees in the usual tooling.
+  const cases: ReadonlyArray<readonly [string, string, number]> = [
+    // The white paper's canonical example: a loop, a nested loop, a nested if,
+    // and a labeled continue — 1 + 2 + 3 + 1.
+    [
+      "sumOfPrimes",
+      `function sumOfPrimes(max: number): number {
+         let total = 0;
+         outer: for (let i = 1; i <= max; ++i) {
+           for (let j = 2; j < i; ++j) {
+             if (i % j === 0) {
+               continue outer;
+             }
+           }
+           total += i;
+         }
+         return total;
+       }`,
+      7,
+    ],
+    // Runs of like logical operators: one increment per run, a new run on each
+    // change of operator.
+    ["one operator run", "const x = a && b && c && d;", 1],
+    ["alternating operators", "const x = a && b || c && d;", 3],
+    ["a separate negated sequence", "const x = a && b && !(c && d);", 2],
+    ["nullish coalescing counts", "const x = a ?? b;", 1],
+    // switch counts once, however many cases; a nested if inside a case pays the
+    // depth it sits at.
+    [
+      "switch counts once",
+      `function words(n: number): string {
+         switch (n) {
+           case 1: return "one";
+           case 2: return "a couple";
+           default: return "lots";
+         }
+       }`,
+      1,
+    ],
+    [
+      "nested switch and if",
+      `function f(n: number, c: boolean) {
+         if (c) {
+           switch (n) {
+             case 1:
+               if (c) {}
+           }
+         }
+       }`,
+      6,
+    ],
+    // Depth surcharge stacks as nesting deepens.
+    [
+      "nested ifs stack the surcharge",
+      `function f(c: boolean) {
+         if (c)
+           if (c)
+             if (c) {}
+       }`,
+      6,
+    ],
+    // else / else if are flat increments — no depth surcharge.
+    [
+      "if / else if / else chain",
+      `function f(c: boolean) {
+         if (c) {
+         } else if (c) {
+         } else {
+         }
+       }`,
+      3,
+    ],
+    // catch pays; try and finally do not.
+    [
+      "try / catch / finally",
+      `function f(c: boolean) {
+         try {
+           if (c) {}
+         } catch {
+           if (c) {}
+         } finally {
+           if (c) {}
+         }
+       }`,
+      5,
+    ],
+    [
+      "try / finally, no catch",
+      `function f(c: boolean) {
+         try {
+           if (c) {}
+         } finally {
+           if (c) {}
+         }
+       }`,
+      2,
+    ],
+    // A nested ternary sits one level deeper.
+    ["nested ternary", "const x = a ? (b ? c : d) : e;", 3],
+    // Labeled jumps break the flow; unlabeled jumps and early returns do not.
+    [
+      "labeled jumps count",
+      `function f() {
+         outer: while (true) {
+           continue outer;
+         }
+       }`,
+      2,
+    ],
+    [
+      "unlabeled jumps and returns are free",
+      `function f(items: number[]) {
+         for (const i of items) {
+           if (!i) continue;
+           return i;
+         }
+       }`,
+      3,
+    ],
+    // A nested function is its own scope back at nesting zero, not a deeper level
+    // of its parent — so both ifs cost one, never one and three.
+    [
+      "a nested function resets nesting",
+      `function outer(c: boolean) {
+         if (c) {}
+         function nested() {
+           if (c) {}
+         }
+       }`,
+      2,
+    ],
+    // Flat straight-line code, however long, is free.
+    [
+      "straight-line code is zero",
+      `function f() {
+         const a = 1;
+         const b = 2;
+         const c = a + b;
+         return c;
+       }`,
+      0,
+    ],
+  ];
+
+  for (const [name, source, expected] of cases) {
+    test(`scores ${name} as ${expected}`, () => {
+      expect(cognitiveComplexityOfSource(source)).toBe(expected);
+    });
+  }
+
+  test("is deterministic and unparseable input scores zero", () => {
+    const source = "function f(c: boolean) { if (c) { for (;;) {} } }";
+    expect(cognitiveComplexityOfSource(source)).toBe(cognitiveComplexityOfSource(source));
+    expect(cognitiveComplexityOfSource("const = = = broken")).toBe(0);
   });
 });
