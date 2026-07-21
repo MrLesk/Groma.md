@@ -51,6 +51,11 @@ The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
 application and host capabilities, never through ambient build-tool files.
 
+Independent scanner processes can write the public SDK's completed observation snapshot as one
+bounded JSON document and submit it with `groma scan --input <file|->` or `groma scan --stdin`.
+See [`src/plugin-sdk/README.md`](src/plugin-sdk/README.md) for the minimal shape and registration
+boundary. Submission is a local atomic handoff, not a streaming protocol.
+
 ## Change Review
 
 Before a pull request is opened, two independent `gpt-5.6-terra` agents at `xhigh` and one

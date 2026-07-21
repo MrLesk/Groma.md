@@ -437,6 +437,107 @@ describe("CLI scan workflow", () => {
     });
   });
 
+  test("submits a completed external scan through registered reconciliation", async () => {
+    const root = await workspace();
+    expect((await run(root, ["--format=json", "init"])).exitCode).toBe(CLI_EXIT.success);
+    expect((await run(root, ["--format=json", "scan"])).exitCode).toBe(CLI_EXIT.success);
+
+    const projectRead = await run(root, ["--format=json", "project", "get", "project.default"]);
+    const project = JSON.parse(projectRead.output).result.value as ProjectRegistrationSnapshot;
+    const registrationFile = path.join(root, "external-project.json");
+    await writeFile(
+      registrationFile,
+      JSON.stringify({
+        coverage: project.coverage,
+        name: project.name,
+        scanners: [...project.scanners, { configuration: {}, id: "example.external" }],
+        source: project.source,
+      }),
+    );
+    expect(
+      (
+        await run(root, [
+          "--format=json",
+          "project",
+          "update",
+          project.id,
+          "--revision",
+          project.revision,
+          "--input",
+          registrationFile,
+        ])
+      ).exitCode,
+    ).toBe(CLI_EXIT.success);
+
+    const externalFile = path.join(root, "external-observations.json");
+    const snapshot = {
+      apiVersion: "groma.observation/v1",
+      coverage: [{ kinds: ["component-candidate"], scope: "workspace", state: "complete" }],
+      epoch: "epoch_external_000000000000000000000000",
+      projectId: project.id,
+      records: [
+        {
+          candidate: { name: "External worker", type: "service" },
+          key: "component.external-worker",
+          kind: "component-candidate",
+          provenance: [
+            {
+              fingerprint: `sha256:${"a".repeat(64)}`,
+              resource: "external.ts",
+              scope: "workspace",
+            },
+          ],
+          scope: "workspace",
+        },
+      ],
+      scopes: project.coverage,
+      source: { id: "example.external", instance: "default", version: "1.0.0" },
+    };
+    await writeFile(externalFile, JSON.stringify({ ...snapshot, trailing: true }));
+    const beforeInvalid = await canonicalFiles(root);
+    expect((await run(root, ["--format=json", "scan", "--input", externalFile])).exitCode).toBe(
+      CLI_EXIT.semantic,
+    );
+    expect(await canonicalFiles(root)).toEqual(beforeInvalid);
+
+    await writeFile(externalFile, JSON.stringify(snapshot));
+    const submitted = await run(root, ["--format=json", "scan", "--input", externalFile]);
+    expect(submitted.exitCode).toBe(CLI_EXIT.success);
+    expect(JSON.parse(submitted.output)).toMatchObject({
+      result: {
+        observations: { records: 1 },
+        project: { id: project.id },
+        scanner: "example.external",
+        status: "completed",
+      },
+    });
+    const afterFirst = await canonicalFiles(root);
+    const stdinSubmission = await run(root, ["scan", "--input", "-"], {
+      inputReader: Object.freeze({ read: async () => JSON.stringify(snapshot) }),
+    });
+    expect(stdinSubmission.exitCode).toBe(CLI_EXIT.success);
+    expect(stdinSubmission.output).toContain("command: scan\nexit-code: 0\nok: true\n");
+    expect(await canonicalFiles(root)).toEqual(afterFirst);
+
+    const listed = await run(root, ["--format=json", "component", "list", "--limit", "100"]);
+    const items = JSON.parse(listed.output).result.value.items as Array<{
+      component: { id: string; name?: string };
+    }>;
+    const external = items.find((item) => item.component.name === "External worker");
+    expect(external).toBeDefined();
+    const detail = await run(root, [
+      "--format=json",
+      "component",
+      "get",
+      external!.component.id,
+      "--relationships-limit",
+      "10",
+    ]);
+    expect(JSON.parse(detail.output).result.value.evidence).toMatchObject([
+      { scanner: { id: "example.external", version: "1.0.0" } },
+    ]);
+  });
+
   test("maps every non-completed terminal report at the public surface", async () => {
     expect(await surfaceResult(scannerReport("cancelled"))).toMatchObject({
       command: "scan",

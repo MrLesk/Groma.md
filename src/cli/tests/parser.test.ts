@@ -20,6 +20,8 @@ describe("CLI provisional grammar", () => {
         ["scan", "--scanner", "official.typescript", "--project", projectId],
         { kind: "scan", projectId, scannerId: "official.typescript" },
       ],
+      [["scan", "--input", "observations.json"], { input: { kind: "file" }, kind: "scan" }],
+      [["scan", "--stdin"], { input: { kind: "stdin" }, kind: "scan" }],
       [["blueprint", "export", "--limit", "5"], { kind: "blueprint-export", limit: 5 }],
       [
         ["blueprint", "search", "order lifecycle", "--limit", "5"],
@@ -120,6 +122,8 @@ describe("CLI provisional grammar", () => {
       ["scan", "--project", "project_bad"],
       ["scan", "--scanner", "Bad Scanner"],
       ["scan", "--scanner", "official.typescript", "--scanner", "official.typescript"],
+      ["scan", "--input", "observations.json", "--project", id],
+      ["scan", "--stdin", "--input", "observations.json"],
       ["scan", "extra"],
     ]) {
       expect(parseInvocation(args)).toMatchObject({
