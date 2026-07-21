@@ -1,9 +1,17 @@
-import type { ApplicationOperations } from "../application/index.ts";
+import type {
+  ApplicationOperations,
+  CreateComponentRequest,
+  MergeComponentRequest,
+  RemoveComponentRequest,
+  ReparentComponentRequest,
+  UpdateComponentRequest,
+} from "../application/index.ts";
 
 export const WEB_DEFAULT_PORT = 4766;
 export const WEB_MIN_PAGE_LIMIT = 1;
 export const WEB_MAX_PAGE_LIMIT = 100;
 export const WEB_MAX_SEARCH_TEXT = 256;
+export const WEB_MAX_MUTATION_BODY_BYTES = 256 * 1_024;
 
 /** A compiled HTML bundle route value or a test-injected responder. */
 export type WebFrontend = Bun.HTMLBundle | ((request: Request) => Response | Promise<Response>);
@@ -54,9 +62,10 @@ function pageRequest(url: URL): { readonly cursor?: string; readonly limit: numb
   return cursor === null ? { limit } : { cursor, limit };
 }
 
-type ApiHandler = (url: URL, operations: ApplicationOperations) => Promise<Response>;
+type ApiReadHandler = (url: URL, operations: ApplicationOperations) => Promise<Response>;
+type ApiMutationHandler = (body: unknown, operations: ApplicationOperations) => Promise<unknown>;
 
-const apiRoutes: ReadonlyMap<string, ApiHandler> = new Map<string, ApiHandler>([
+const apiReadRoutes: ReadonlyMap<string, ApiReadHandler> = new Map<string, ApiReadHandler>([
   [
     "/api/roots",
     async (url, operations) => {
@@ -131,38 +140,142 @@ const apiRoutes: ReadonlyMap<string, ApiHandler> = new Map<string, ApiHandler>([
   ],
 ]);
 
-async function handleApi(request: Request, operations: ApplicationOperations): Promise<Response> {
-  const url = new URL(request.url);
-  const handler = apiRoutes.get(url.pathname);
-  if (handler === undefined) {
-    return apiFailure(404, "web-unknown-route", "The requested route does not exist");
+const apiMutationRoutes: ReadonlyMap<string, ApiMutationHandler> = new Map<
+  string,
+  ApiMutationHandler
+>([
+  [
+    "/api/component/create",
+    (body, operations) => operations.createComponent(body as CreateComponentRequest),
+  ],
+  [
+    "/api/component/update",
+    (body, operations) => operations.updateComponent(body as UpdateComponentRequest),
+  ],
+  [
+    "/api/component/move",
+    (body, operations) => operations.reparentComponent(body as ReparentComponentRequest),
+  ],
+  [
+    "/api/component/merge",
+    (body, operations) => operations.mergeComponent(body as MergeComponentRequest),
+  ],
+  [
+    "/api/component/remove",
+    (body, operations) => operations.removeComponent(body as RemoveComponentRequest),
+  ],
+]);
+
+function requestProtection(
+  request: Request,
+  listenerAuthority: string,
+  mutation: boolean,
+): Response | undefined {
+  if (request.headers.get("host") !== listenerAuthority) {
+    return apiFailure(
+      403,
+      "web-invalid-host",
+      "The request Host does not match the loopback listener",
+    );
   }
-  if (request.method !== "GET") {
-    return apiFailure(405, "web-method-not-allowed", "The blueprint API is read-only; use GET");
+  const origin = request.headers.get("origin");
+  const listenerOrigin = `http://${listenerAuthority}`;
+  if (origin !== null && origin !== listenerOrigin) {
+    return apiFailure(
+      403,
+      "web-invalid-origin",
+      "The request Origin does not match the loopback listener",
+    );
+  }
+  if (mutation && origin === null) {
+    return apiFailure(403, "web-origin-required", "Blueprint mutations require a browser Origin");
+  }
+  return undefined;
+}
+
+async function mutationBody(request: Request): Promise<unknown | Response> {
+  const length = request.headers.get("content-length");
+  if (length !== null && (!/^\d+$/.test(length) || Number(length) > WEB_MAX_MUTATION_BODY_BYTES)) {
+    return apiFailure(
+      413,
+      "web-request-too-large",
+      `Mutation bodies must not exceed ${WEB_MAX_MUTATION_BODY_BYTES} bytes`,
+    );
   }
   try {
-    return await handler(url, operations);
+    const bytes = await request.arrayBuffer();
+    if (bytes.byteLength > WEB_MAX_MUTATION_BODY_BYTES) {
+      return apiFailure(
+        413,
+        "web-request-too-large",
+        `Mutation bodies must not exceed ${WEB_MAX_MUTATION_BODY_BYTES} bytes`,
+      );
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   } catch {
-    return apiFailure(500, "web-read-failed", "The bounded read could not be completed");
+    return apiFailure(400, "web-invalid-json", "Mutation requests require one JSON value");
+  }
+}
+
+async function handleApi(
+  request: Request,
+  operations: ApplicationOperations,
+  listenerAuthority: string,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const readHandler = apiReadRoutes.get(url.pathname);
+  const mutationHandler = apiMutationRoutes.get(url.pathname);
+  const protection = requestProtection(request, listenerAuthority, mutationHandler !== undefined);
+  if (protection !== undefined) return protection;
+  if (readHandler === undefined && mutationHandler === undefined) {
+    return apiFailure(404, "web-unknown-route", "The requested route does not exist");
+  }
+  if (readHandler !== undefined) {
+    if (request.method !== "GET") {
+      return apiFailure(405, "web-method-not-allowed", "This blueprint route requires GET");
+    }
+    try {
+      return await readHandler(url, operations);
+    } catch {
+      return apiFailure(500, "web-read-failed", "The bounded read could not be completed");
+    }
+  }
+  if (mutationHandler === undefined) {
+    return apiFailure(404, "web-unknown-route", "The requested route does not exist");
+  }
+  if (request.method !== "POST") {
+    return apiFailure(405, "web-method-not-allowed", "This blueprint route requires POST");
+  }
+  const body = await mutationBody(request);
+  if (body instanceof Response) return body;
+  try {
+    return apiJson(await mutationHandler(body, operations), 200);
+  } catch {
+    return apiFailure(500, "web-mutation-failed", "The blueprint mutation could not be completed");
   }
 }
 
 /**
  * Serve the embedded web blueprint on the loopback interface until the cancellation
- * signal aborts. The server exposes only bounded GET reads through the shared
- * application operations; it is not a mutation surface.
+ * signal aborts. Reads and mutations use the shared application operations; browser
+ * writes require the exact Origin and every API request requires the listener Host.
  */
 export async function serveWebBlueprint(options: WebServeOptions): Promise<WebServeOutcome> {
   let server: ReturnType<typeof Bun.serve>;
+  let listenerAuthority: string | undefined;
   try {
     server = Bun.serve({
       development: false,
       hostname: "127.0.0.1",
+      maxRequestBodySize: WEB_MAX_MUTATION_BODY_BYTES,
       port: options.port,
       reusePort: false,
       routes: {
         "/": options.frontend,
-        "/api/*": (request: Request) => handleApi(request, options.operations),
+        "/api/*": (request: Request) =>
+          listenerAuthority === undefined
+            ? apiFailure(503, "web-server-starting", "The loopback listener is starting")
+            : handleApi(request, options.operations, listenerAuthority),
       },
       fetch(request: Request): Response {
         const url = new URL(request.url);
@@ -181,6 +294,7 @@ export async function serveWebBlueprint(options: WebServeOptions): Promise<WebSe
     });
   }
   const port = server.port ?? options.port;
+  listenerAuthority = `127.0.0.1:${port}`;
   const url = `http://127.0.0.1:${port}/`;
   options.onReady?.(url);
   await new Promise<void>((resolve) => {

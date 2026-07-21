@@ -209,5 +209,6 @@ binary — Bun's embedded HTTP server with a bundled React, React Flow, dagre, a
 bound to the loopback interface. The initial canvas lays out only its bounded root page; every
 deeper scale enters the deterministic layout through an explicit bounded child-page action.
 
-The bounded scan, reconciliation, and local visual loop is implemented. Plans, Git history views,
-browser editing, and replacing bare `groma` with the web surface remain later work.
+The bounded scan, reconciliation, local visual loop, and protected loopback mutation API are
+implemented. Plans, Git history views, browser editing UI, and replacing bare `groma` with the web
+surface remain later work.

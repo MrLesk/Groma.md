@@ -30,10 +30,11 @@ relationships) while later scans keep checking it against the code.
   cursors are opaque. Nothing follows a cursor implicitly.
 - When identity is uncertain, Groma stops instead of guessing. Expect diagnostics,
   not silent merges.
-- Canonical state lives in `groma/` as deterministic Markdown. Change it through the
-  CLI only; never edit those files directly.
-- The local artifact and the web surface make no network requests and are never a
-  mutation surface.
+- Canonical state lives in `groma/` as deterministic Markdown. Change it through
+  shared operations via the CLI or loopback web API; never edit those files directly.
+- The local artifact is never a mutation surface. The web server accepts
+  revision-checked semantic mutations but makes no request beyond its loopback
+  listener.
 - Add `--format json` to any command for one structured, machine-readable result.
 
 ## Where to go next
