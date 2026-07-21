@@ -68,11 +68,20 @@ const ids = Object.freeze({
   r4: relation("4"),
 });
 
-function graphEntity(id: ReturnType<typeof entity>, name: string, kind = "component"): GraphEntity {
+function graphEntity(
+  id: ReturnType<typeof entity>,
+  name: string,
+  kind = "component",
+  structure: Readonly<{ scale?: string; shared?: boolean }> = Object.freeze({}),
+): GraphEntity {
   return Object.freeze({
     id,
     kind,
-    payload: Object.freeze({ name, type: kind === "component" ? "service" : "evidence" }),
+    payload: Object.freeze({
+      name,
+      ...structure,
+      type: kind === "component" ? "service" : "evidence",
+    }),
   });
 }
 
@@ -90,10 +99,10 @@ function projectionSnapshot(
   fingerprintValue = "fixture:query-engine",
 ): ProjectionSnapshot {
   const entities = Object.freeze([
-    graphEntity(ids.a, "Order API"),
-    graphEntity(ids.b, "Payment Service"),
-    graphEntity(ids.c, "Invoice Worker"),
-    graphEntity(ids.d, "Order evidence", "evidence"),
+    graphEntity(ids.a, "Order API", "component", { scale: "domain", shared: false }),
+    graphEntity(ids.b, "Payment Service", "component", { scale: "part", shared: true }),
+    graphEntity(ids.c, "Invoice Worker", "component", { scale: "part", shared: false }),
+    graphEntity(ids.d, "Order evidence", "evidence", { scale: "element" }),
   ]);
   const relations = Object.freeze([
     graphRelation(ids.r1, ids.a, ids.b, "requires"),
@@ -1082,6 +1091,37 @@ describe("projection query engine", () => {
         { cursor: replaceCursorAnchor(paged.value.nextCursor, ids.d), limit: 1 },
       ),
     ).toMatchObject({ diagnostics: [{ code: "cursor-anchor-mismatch" }], ok: false });
+  });
+
+  test("filters entity and search pages by exact scalar payload criteria bound into cursors", async () => {
+    const { engine: query } = engine();
+    const first = await query.pageEntities(
+      { kind: "component", payload: { scale: "part" } },
+      { limit: 1 },
+    );
+    expect(first).toMatchObject({
+      ok: true,
+      value: { hasMore: true, items: [{ id: ids.b }] },
+    });
+    if (!first.ok || first.value.nextCursor === undefined) throw new Error("expected cursor");
+    expect(
+      await query.pageEntities(
+        { kind: "component", payload: { scale: "part" } },
+        { cursor: first.value.nextCursor, limit: 1 },
+      ),
+    ).toMatchObject({ ok: true, value: { hasMore: false, items: [{ id: ids.c }] } });
+    expect(
+      await query.pageEntities(
+        { kind: "component", payload: { scale: "part", shared: true } },
+        { cursor: first.value.nextCursor, limit: 1 },
+      ),
+    ).toMatchObject({ diagnostics: [{ code: "cursor-query-mismatch" }], ok: false });
+    expect(
+      await query.searchEntities(
+        { payload: { scale: "part", shared: true }, text: "component" },
+        { limit: 2 },
+      ),
+    ).toMatchObject({ ok: true, value: { hasMore: false, items: [{ id: ids.b }] } });
   });
 
   test("returns typed search limits before projection catalog reads", async () => {

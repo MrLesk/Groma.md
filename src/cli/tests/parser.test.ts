@@ -7,6 +7,7 @@ import {
   CLI_MAX_TRAVERSAL_DEPTH,
 } from "../contracts.ts";
 import { parseInvocation } from "../parser.ts";
+import { HELP_TEXT } from "../help.ts";
 
 describe("CLI provisional grammar", () => {
   test("parses every operation and both structured input forms", () => {
@@ -25,10 +26,28 @@ describe("CLI provisional grammar", () => {
         ["scan", "--scanner", "official.typescript", "--project", projectId],
         { kind: "scan", projectId, scannerId: "official.typescript" },
       ],
+      [["scan", "--input", "observations.json"], { input: { kind: "file" }, kind: "scan" }],
+      [["scan", "--stdin"], { input: { kind: "stdin" }, kind: "scan" }],
       [["blueprint", "export", "--limit", "5"], { kind: "blueprint-export", limit: 5 }],
       [
-        ["blueprint", "search", "order lifecycle", "--limit", "5"],
-        { kind: "blueprint-search", limit: 5, text: "order lifecycle" },
+        [
+          "blueprint",
+          "search",
+          "order lifecycle",
+          "--limit",
+          "5",
+          "--scale",
+          "part",
+          "--shared",
+          "true",
+        ],
+        {
+          kind: "blueprint-search",
+          limit: 5,
+          scale: "part",
+          shared: true,
+          text: "order lifecycle",
+        },
       ],
       [
         ["blueprint", "search", "--legacy", "--limit", "1"],
@@ -75,11 +94,17 @@ describe("CLI provisional grammar", () => {
         ["component", "get", "ent_01", "--relationships-limit", "5"],
         { id: "ent_01", kind: "component-get", relationships: { limit: 5 } },
       ],
-      [["component", "list", "--limit", "5"], { kind: "component-list", limit: 5 }],
-      [["component", "roots", "--limit", "5"], { kind: "component-roots", limit: 5 }],
       [
-        ["component", "children", "ent_01", "--limit", "5"],
-        { kind: "component-children", limit: 5, parent: "ent_01" },
+        ["component", "list", "--shared", "false", "--limit", "5", "--scale", "element"],
+        { kind: "component-list", limit: 5, scale: "element", shared: false },
+      ],
+      [
+        ["component", "roots", "--limit", "5", "--scale", "system"],
+        { kind: "component-roots", limit: 5, scale: "system" },
+      ],
+      [
+        ["component", "children", "ent_01", "--limit", "5", "--shared", "true"],
+        { kind: "component-children", limit: 5, parent: "ent_01", shared: true },
       ],
       [["component", "update", "--input", "-"], { kind: "component-update" }],
       [
@@ -125,6 +150,8 @@ describe("CLI provisional grammar", () => {
       ["scan", "--project", "project_bad"],
       ["scan", "--scanner", "Bad Scanner"],
       ["scan", "--scanner", "official.typescript", "--scanner", "official.typescript"],
+      ["scan", "--input", "observations.json", "--project", id],
+      ["scan", "--stdin", "--input", "observations.json"],
       ["scan", "extra"],
       ["export", "--output"],
       ["export", "--output", ""],
@@ -252,6 +279,10 @@ describe("CLI provisional grammar", () => {
       ["component", "list", "--limit", "0"],
       ["component", "list", "--limit", "101"],
       ["component", "list", "--limit", "1", "--limit", "1"],
+      ["component", "list", "--limit", "1", "--scale", "team"],
+      ["component", "list", "--limit", "1", "--shared", "yes"],
+      ["component", "list", "--limit", "1", "--shared", "true", "--shared", "false"],
+      ["blueprint", "search", "orders", "--limit", "1", "--scale", "team"],
       ["component", "get", "ent_01", "--relationships-limit", "1", "extra"],
       ["component", "create", "--stdin", "--input", "request.json"],
       ["component", "reparent", "ent_01", "--revision", "rev_01"],
@@ -302,6 +333,19 @@ describe("CLI provisional grammar", () => {
       ["--format", "yaml", "init"],
     ]) {
       expect(parseInvocation(args)).toMatchObject({ ok: false });
+    }
+  });
+
+  test("documents matching scale and shared filters on every filtered list surface", () => {
+    for (const command of [
+      "blueprint search",
+      "component list",
+      "component roots",
+      "component children",
+    ]) {
+      const usage = HELP_TEXT.split("\n").find((line) => line.includes(command));
+      expect(usage).toContain("[--scale system|domain|part|element]");
+      expect(usage).toContain("[--shared true|false]");
     }
   });
 

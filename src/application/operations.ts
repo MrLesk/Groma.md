@@ -14,10 +14,12 @@ import {
   type GraphData,
   type GraphDataRecord,
   type GraphEntity,
+  type GraphEntityQuery,
   type GraphGeneration,
   type GraphQueryEngineCapability,
   type GraphRelation,
   type GraphSnapshot,
+  type GraphSearchQuery,
   type GraphTraversalQuery,
   type ObservationRecord,
   type ObservationReference,
@@ -39,8 +41,10 @@ import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime
 import {
   STANDARD_COMPONENT_KIND,
   isCoarserStandardScale,
+  isStandardComponentScale,
   type StandardComponent,
   type StandardComponentPatch,
+  type StandardComponentScale,
   type StandardRelationship,
 } from "../standard-model/index.ts";
 import type {
@@ -105,6 +109,11 @@ interface SelectedPage<T> {
 }
 
 type ComponentFilter = (state: ReadSnapshot) => (component: StandardComponent) => boolean;
+
+interface ValidatedComponentReadFilters extends BoundedPageRequest {
+  readonly scale?: StandardComponentScale;
+  readonly shared?: boolean;
+}
 
 interface ApplicationCapabilityCalls {
   readonly aliasResourceMapper?: NonNullable<ApplicationOperationsOptions["aliasResourceMapper"]>;
@@ -596,6 +605,85 @@ function boundedRequest(value: unknown, subject: string): Result<BoundedPageRequ
       limit: inspected.value.limit as number,
     }),
   );
+}
+
+const filteredPageShapes = Object.freeze([
+  Object.freeze(["limit"]),
+  Object.freeze(["cursor", "limit"]),
+  Object.freeze(["limit", "scale"]),
+  Object.freeze(["limit", "shared"]),
+  Object.freeze(["cursor", "limit", "scale"]),
+  Object.freeze(["cursor", "limit", "shared"]),
+  Object.freeze(["limit", "scale", "shared"]),
+  Object.freeze(["cursor", "limit", "scale", "shared"]),
+]);
+
+function filteredBoundedRequest(
+  value: unknown,
+  subject: string,
+): Result<ValidatedComponentReadFilters> {
+  const inspected = exactRequest(value, filteredPageShapes, subject);
+  if (!inspected.ok) return inspected;
+  const hasScale = Object.hasOwn(inspected.value, "scale");
+  const hasShared = Object.hasOwn(inspected.value, "shared");
+  if (
+    hasScale &&
+    (typeof inspected.value.scale !== "string" || !isStandardComponentScale(inspected.value.scale))
+  ) {
+    return failure(
+      diagnostic(
+        "invalid-component-scale",
+        "Component scale filter must be system, domain, part, or element",
+      ),
+    );
+  }
+  if (hasShared && typeof inspected.value.shared !== "boolean") {
+    return failure(
+      diagnostic("invalid-component-shared", "Component shared filter must be a boolean"),
+    );
+  }
+  const page = boundedRequest(
+    Object.freeze({
+      ...(Object.hasOwn(inspected.value, "cursor")
+        ? { cursor: inspected.value.cursor as string }
+        : {}),
+      limit: inspected.value.limit as number,
+    }),
+    subject,
+  );
+  return page.ok
+    ? success(
+        Object.freeze({
+          ...page.value,
+          ...(hasScale ? { scale: inspected.value.scale as StandardComponentScale } : {}),
+          ...(hasShared ? { shared: inspected.value.shared as boolean } : {}),
+        }),
+      )
+    : page;
+}
+
+function componentMatchesFilters(
+  component: StandardComponent,
+  filters: ValidatedComponentReadFilters,
+): boolean {
+  return (
+    (filters.scale === undefined || component.scale === filters.scale) &&
+    (filters.shared === undefined || component.shared === filters.shared)
+  );
+}
+
+function componentFilterQuery(filters: ValidatedComponentReadFilters) {
+  return Object.freeze({
+    ...(filters.scale === undefined ? {} : { scale: filters.scale }),
+    ...(filters.shared === undefined ? {} : { shared: filters.shared }),
+  });
+}
+
+function componentPayloadQuery(filters: ValidatedComponentReadFilters) {
+  return Object.freeze({
+    ...(filters.scale === undefined ? {} : { scale: filters.scale }),
+    ...(filters.shared === undefined ? {} : { shared: filters.shared }),
+  });
 }
 
 function denseArray(
@@ -1605,14 +1693,18 @@ function relationshipPage(
 
 async function componentPage(
   request: BoundedPageRequest,
-  query: Readonly<Record<string, string>>,
+  query: GraphDataRecord,
   filter: ComponentFilter,
   options: ApplicationOperationsContext,
 ): Promise<Result<ComponentPage>> {
+  const pageRequest = Object.freeze({
+    ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+    limit: request.limit,
+  });
   for (let attempt = 0; attempt < options.maxSnapshotAttempts; attempt += 1) {
     const initial = await snapshot(Object.freeze([]), options);
     if (!initial.ok) return readProviderFailure(initial.diagnostics);
-    const prepared = prepareQuery(initial.value.generation, query, request, options);
+    const prepared = prepareQuery(initial.value.generation, query, pageRequest, options);
     if (!prepared.ok) return prepared;
     const initialItems = initial.value.components.filter(filter(initial.value));
     const initialPage = selectPage(initialItems, prepared.value);
@@ -3173,7 +3265,7 @@ async function projectedComponentPage(
   method:
     | ApplicationOperationsOptions["graphQueries"]["pageEntities"]
     | ApplicationOperationsOptions["graphQueries"]["searchEntities"],
-  query: Readonly<Record<string, string>>,
+  query: GraphEntityQuery | GraphSearchQuery,
   request: BoundedPageRequest,
   operation: "export" | "search",
   options: ApplicationOperationsContext,
@@ -3599,6 +3691,12 @@ export function createApplicationOperations(
       [
         ["limit", "text"],
         ["cursor", "limit", "text"],
+        ["limit", "scale", "text"],
+        ["limit", "shared", "text"],
+        ["cursor", "limit", "scale", "text"],
+        ["cursor", "limit", "shared", "text"],
+        ["limit", "scale", "shared", "text"],
+        ["cursor", "limit", "scale", "shared", "text"],
       ],
       "Blueprint search request",
     );
@@ -3610,12 +3708,26 @@ export function createApplicationOperations(
     ) {
       return failure(diagnostic("invalid-search-text", "Blueprint search text is malformed"));
     }
-    const page = graphPageRequest(
+    const filters = filteredBoundedRequest(
       Object.freeze({
         ...(Object.hasOwn(inspected.value, "cursor")
           ? { cursor: inspected.value.cursor as string }
           : {}),
         limit: inspected.value.limit as number,
+        ...(Object.hasOwn(inspected.value, "scale")
+          ? { scale: inspected.value.scale as string }
+          : {}),
+        ...(Object.hasOwn(inspected.value, "shared")
+          ? { shared: inspected.value.shared as boolean }
+          : {}),
+      }),
+      "Blueprint search request",
+    );
+    if (!filters.ok) return filters;
+    const page = graphPageRequest(
+      Object.freeze({
+        ...(filters.value.cursor === undefined ? {} : { cursor: filters.value.cursor }),
+        limit: filters.value.limit,
       }),
       "Blueprint search page request",
       options.bounds.maxComponents,
@@ -3627,7 +3739,13 @@ export function createApplicationOperations(
     const projected = await projectedComponentPage(
       identity.value,
       options.calls.searchGraphEntities,
-      Object.freeze({ kind: STANDARD_COMPONENT_KIND, text: inspected.value.text }),
+      Object.freeze({
+        kind: STANDARD_COMPONENT_KIND,
+        ...(filters.value.scale === undefined && filters.value.shared === undefined
+          ? {}
+          : { payload: componentPayloadQuery(filters.value) }),
+        text: inspected.value.text,
+      }),
       page.value,
       "search",
       options,
@@ -4436,24 +4554,31 @@ export function createApplicationOperations(
   };
 
   const listComponents = async (request: ListComponentsRequest): Promise<Result<ComponentPage>> => {
-    const validated = boundedRequest(request, "List components request");
+    const validated = filteredBoundedRequest(request, "List components request");
     return validated.ok
       ? componentPage(
           validated.value,
-          Object.freeze({ operation: "list-components" }),
-          () => () => true,
+          Object.freeze({
+            operation: "list-components",
+            ...componentFilterQuery(validated.value),
+          }),
+          () => (component) => componentMatchesFilters(component, validated.value),
           options,
         )
       : validated;
   };
 
   const listRoots = async (request: ListRootComponentsRequest): Promise<Result<ComponentPage>> => {
-    const validated = boundedRequest(request, "List root components request");
+    const validated = filteredBoundedRequest(request, "List root components request");
     return validated.ok
       ? componentPage(
           validated.value,
-          Object.freeze({ operation: "list-root-components" }),
-          () => (component) => component.parent === undefined,
+          Object.freeze({
+            operation: "list-root-components",
+            ...componentFilterQuery(validated.value),
+          }),
+          () => (component) =>
+            component.parent === undefined && componentMatchesFilters(component, validated.value),
           options,
         )
       : validated;
@@ -4467,6 +4592,12 @@ export function createApplicationOperations(
       [
         ["limit", "parent"],
         ["cursor", "limit", "parent"],
+        ["limit", "parent", "scale"],
+        ["limit", "parent", "shared"],
+        ["cursor", "limit", "parent", "scale"],
+        ["cursor", "limit", "parent", "shared"],
+        ["limit", "parent", "scale", "shared"],
+        ["cursor", "limit", "parent", "scale", "shared"],
       ],
       "List child components request",
     );
@@ -4476,23 +4607,35 @@ export function createApplicationOperations(
     }
     const parent = parseEntityId(validated.value.parent);
     if (!parent.ok) return parent;
-    const pageRequest = boundedRequest(
+    const pageRequest = filteredBoundedRequest(
       Object.freeze({
         ...(Object.hasOwn(validated.value, "cursor")
           ? { cursor: validated.value.cursor as string }
           : {}),
         limit: validated.value.limit as number,
+        ...(Object.hasOwn(validated.value, "scale")
+          ? { scale: validated.value.scale as string }
+          : {}),
+        ...(Object.hasOwn(validated.value, "shared")
+          ? { shared: validated.value.shared as boolean }
+          : {}),
       }),
       "List child components page request",
     );
     return pageRequest.ok
       ? componentPage(
           pageRequest.value,
-          Object.freeze({ operation: "list-child-components", parent: parent.value }),
+          Object.freeze({
+            operation: "list-child-components",
+            parent: parent.value,
+            ...componentFilterQuery(pageRequest.value),
+          }),
           (state) => {
             const resolved = options.graph.resolveEntityIdentity(state.graph, parent.value);
             return resolved.ok
-              ? (component) => component.parent === resolved.value.resolved
+              ? (component) =>
+                  component.parent === resolved.value.resolved &&
+                  componentMatchesFilters(component, pageRequest.value)
               : () => false;
           },
           options,

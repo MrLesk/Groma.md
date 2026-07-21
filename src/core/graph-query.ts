@@ -1,5 +1,6 @@
 import type { GraphEntity, GraphRelation } from "./graph.ts";
 import type { EntityId } from "./identity.ts";
+import type { GraphDataScalar } from "./payload.ts";
 import type { ProjectionReadIdentity } from "./projection.ts";
 import type { BoundedQueryRequest, ExactGraphRead, GraphQueryPage } from "./query.ts";
 import type { Result } from "./result.ts";
@@ -8,6 +9,8 @@ import type { Result } from "./result.ts";
 export interface GraphEntityQuery {
   /** Open graph kind token. `component` selects Standard Model components. */
   readonly kind?: string;
+  /** Exact top-level scalar payload criteria, interpreted without model-specific field knowledge. */
+  readonly payload?: Readonly<Record<string, GraphDataScalar>>;
 }
 
 /** Full-text query over provider-derived searchable projection text. */

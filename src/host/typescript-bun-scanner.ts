@@ -41,6 +41,11 @@ const maxCanonicalCharacters = 1_500_000;
 // component count could exceed what reconciliation will accept, so a very large
 // repository still yields its upper levels with partial coverage.
 const maxComponentCandidates = 1_000;
+// Kept in step with the reconciliation relationship ceiling (defaultHostBounds
+// maxRelationships): aggregated and file-level imports share this count, so a
+// dense repository publishes bounded partial evidence instead of asking
+// reconciliation to reject the completed observation.
+const maxRelationshipObservations = 1_000;
 // The most exported functions surfaced on a single file, so a rare barrel that
 // re-exports hundreds of names lists a bounded, reproducible sample rather than
 // swamping the file's detail or the per-component embedded-item ceiling.
@@ -4243,6 +4248,10 @@ async function scanScope(
       const aggregate = relationships.get(relationshipIdentity);
       const provenance = rangeProvenance(file, imported.start, imported.end);
       if (aggregate === undefined) {
+        if (relationships.size >= maxRelationshipObservations) {
+          partial = true;
+          continue;
+        }
         reserveRecordSlot(budget);
         relationships.set(relationshipIdentity, {
           from: from.key,
@@ -4305,7 +4314,9 @@ async function scanScope(
       }),
     );
   }
-  for (const aggregate of relationships.values()) {
+  const topographyCharacterCeiling = maxCanonicalCharacters - 32_768;
+  const emittedRelationshipIdentities = new Set<string>();
+  for (const [identity, aggregate] of relationships) {
     chargeExtractionWork(budget);
     aggregate.provenance.sort((left, right) =>
       compareCodeUnits(
@@ -4313,22 +4324,29 @@ async function scanScope(
         `${right.resource}\u0000${right.range?.startByte ?? 0}`,
       ),
     );
-    append(
-      Object.freeze({
-        from: reference(scope, aggregate.from),
-        key: observationKey("relationship", scope, "imports", aggregate.from, aggregate.to),
-        kind: "relationship",
-        provenance: Object.freeze(aggregate.provenance),
-        relationshipType: "imports",
-        scope,
-        to: reference(scope, aggregate.to),
-      }),
-      true,
-    );
+    const record = Object.freeze({
+      from: reference(scope, aggregate.from),
+      key: observationKey("relationship", scope, "imports", aggregate.from, aggregate.to),
+      kind: "relationship" as const,
+      provenance: Object.freeze(aggregate.provenance),
+      relationshipType: "imports",
+      scope,
+      to: reference(scope, aggregate.to),
+    });
+    if (
+      budget.canonicalCharacters + boundedStructuralCharacters(record) >
+      topographyCharacterCeiling
+    ) {
+      partial = true;
+      continue;
+    }
+    append(record, true);
+    emittedRelationshipIdentities.add(identity);
   }
   const importingCandidates = new Map<string, Set<string>>();
-  for (const aggregate of relationships.values()) {
+  for (const [identity, aggregate] of relationships) {
     chargeExtractionWork(budget);
+    if (!emittedRelationshipIdentities.has(identity)) continue;
     if (aggregate.from === aggregate.to) continue;
     const importers = importingCandidates.get(aggregate.to) ?? new Set<string>();
     importers.add(aggregate.from);
@@ -4395,7 +4413,6 @@ async function scanScope(
   // Enrichment stops well short of every ceiling — record count, distinct
   // components, and canonical characters alike — so a large repository yields as
   // much topography as fits and reports the rest as partial, never overflowing.
-  const topographyCharacterCeiling = maxCanonicalCharacters - 32_768;
   const roomForTopography = () =>
     budget.records + 8 < maxRecords &&
     componentCandidateCount < maxComponentCandidates &&
@@ -4537,11 +4554,13 @@ async function scanScope(
   // The file-to-file wiring, drawn only between files that were actually emitted,
   // so a drilled-in domain shows how its own files depend on one another. Sorted
   // for a reproducible snapshot and bounded like the rest of the topography.
+  let emittedRelationshipCount = emittedRelationshipIdentities.size;
   for (const [, edge] of [...fileImportEdges].sort((left, right) =>
     compareCodeUnits(left[0], right[0]),
   )) {
     if (!emittedFileKeys.has(edge.from) || !emittedFileKeys.has(edge.to)) continue;
     if (
+      emittedRelationshipCount >= maxRelationshipObservations ||
       budget.records + 4 >= maxRecords ||
       budget.canonicalCharacters >= topographyCharacterCeiling
     ) {
@@ -4554,17 +4573,24 @@ async function scanScope(
         `${right.resource}:${right.range?.startByte ?? 0}`,
       ),
     );
-    append(
-      Object.freeze({
-        from: reference(scope, edge.from),
-        key: observationKey("relationship", scope, "file-imports", edge.from, edge.to),
-        kind: "relationship" as const,
-        provenance: Object.freeze(edge.provenance),
-        relationshipType: "imports",
-        scope,
-        to: reference(scope, edge.to),
-      }),
-    );
+    const record = Object.freeze({
+      from: reference(scope, edge.from),
+      key: observationKey("relationship", scope, "file-imports", edge.from, edge.to),
+      kind: "relationship" as const,
+      provenance: Object.freeze(edge.provenance),
+      relationshipType: "imports",
+      scope,
+      to: reference(scope, edge.to),
+    });
+    if (
+      budget.canonicalCharacters + boundedStructuralCharacters(record) >
+      topographyCharacterCeiling
+    ) {
+      partial = true;
+      break;
+    }
+    append(record);
+    emittedRelationshipCount += 1;
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),

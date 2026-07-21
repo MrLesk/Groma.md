@@ -12,6 +12,7 @@ import {
   type CliInvocationResult,
 } from "./contracts.ts";
 import { WEB_DEFAULT_PORT } from "../web/server.ts";
+import { isStandardComponentScale, type StandardComponentScale } from "../standard-model/index.ts";
 
 function diagnostic(message: string): CliDiagnostic {
   return Object.freeze({ code: "cli-invalid-invocation", message });
@@ -76,6 +77,51 @@ function page(
   return Object.freeze({ ...(cursor === undefined ? {} : { cursor }), limit });
 }
 
+function filteredPage(args: readonly string[]):
+  | {
+      readonly cursor?: string;
+      readonly limit: number;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
+    }
+  | undefined {
+  let cursor: string | undefined;
+  let limit: number | undefined;
+  let scale: StandardComponentScale | undefined;
+  let shared: boolean | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    const value = args[index + 1];
+    if (argument === "--limit" && value !== undefined && limit === undefined) {
+      if (!/^[1-9][0-9]*$/.test(value)) return undefined;
+      limit = Number(value);
+      if (!Number.isSafeInteger(limit) || limit > CLI_MAX_PAGE_SIZE) return undefined;
+      index += 1;
+    } else if (argument === "--cursor" && value !== undefined && cursor === undefined) {
+      if (value.length === 0 || value.length > CLI_MAX_CURSOR_CHARACTERS) return undefined;
+      cursor = value;
+      index += 1;
+    } else if (argument === "--scale" && value !== undefined && scale === undefined) {
+      if (!isStandardComponentScale(value)) return undefined;
+      scale = value;
+      index += 1;
+    } else if (argument === "--shared" && value !== undefined && shared === undefined) {
+      if (value !== "true" && value !== "false") return undefined;
+      shared = value === "true";
+      index += 1;
+    } else {
+      return undefined;
+    }
+  }
+  if (limit === undefined) return undefined;
+  return Object.freeze({
+    ...(cursor === undefined ? {} : { cursor }),
+    limit,
+    ...(scale === undefined ? {} : { scale }),
+    ...(shared === undefined ? {} : { shared }),
+  });
+}
+
 function positiveInteger(value: string | undefined, maximum?: number): number | undefined {
   if (value === undefined || !/^[1-9][0-9]*$/.test(value)) return undefined;
   const parsed = Number(value);
@@ -98,7 +144,7 @@ function blueprintCommand(args: readonly string[]): CliCommand | undefined {
     if (text === undefined || text.length === 0 || text.length > CLI_MAX_SEARCH_CHARACTERS) {
       return undefined;
     }
-    const request = page(rest.slice(1), "--limit", "--cursor");
+    const request = filteredPage(rest.slice(1));
     return request === undefined
       ? undefined
       : Object.freeze({ ...request, kind: "blueprint-search", text });
@@ -228,7 +274,7 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
       : Object.freeze({ id, kind: "component-get", relationships });
   }
   if (action === "list" || action === "roots") {
-    const request = page(rest, "--limit", "--cursor");
+    const request = filteredPage(rest);
     return request === undefined
       ? undefined
       : Object.freeze({ ...request, kind: `component-${action}` as const });
@@ -236,7 +282,7 @@ function componentCommand(args: readonly string[]): CliCommand | undefined {
   if (action === "children") {
     const parent = rest[0];
     if (!identifier(parent)) return undefined;
-    const request = page(rest.slice(1), "--limit", "--cursor");
+    const request = filteredPage(rest.slice(1));
     return request === undefined
       ? undefined
       : Object.freeze({ ...request, kind: "component-children", parent });
@@ -340,20 +386,39 @@ function exportCommand(args: readonly string[]): CliCommand | undefined {
 }
 
 function scanCommand(args: readonly string[]): CliCommand | undefined {
+  let input: CliInputSource | undefined;
   let projectId: string | undefined;
   let scannerId: string | undefined;
-  for (let index = 0; index < args.length; index += 2) {
+  for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     const value = args[index + 1];
     if (option === "--project" && projectId === undefined && projectIdentifier(value)) {
       projectId = value;
+      index += 1;
     } else if (option === "--scanner" && scannerId === undefined && scannerIdentifier(value)) {
       scannerId = value;
+      index += 1;
+    } else if (option === "--stdin" && input === undefined) {
+      input = Object.freeze({ kind: "stdin" });
+    } else if (
+      option === "--input" &&
+      input === undefined &&
+      value !== undefined &&
+      value.length > 0 &&
+      value.length <= 4_096
+    ) {
+      input =
+        value === "-"
+          ? Object.freeze({ kind: "stdin" })
+          : Object.freeze({ kind: "file", path: value });
+      index += 1;
     } else {
       return undefined;
     }
   }
+  if (input !== undefined && (projectId !== undefined || scannerId !== undefined)) return undefined;
   return Object.freeze({
+    ...(input === undefined ? {} : { input }),
     kind: "scan" as const,
     ...(projectId === undefined ? {} : { projectId }),
     ...(scannerId === undefined ? {} : { scannerId }),

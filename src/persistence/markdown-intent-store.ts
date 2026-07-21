@@ -41,6 +41,7 @@ import {
 const schema = "groma/component/v0.2";
 const intentRootSegments = ["groma", "components"] as const;
 const documentPattern = /\.md$/u;
+const incidentalOperatingSystemFiles = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 const extensionPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
 const textEncoder = new TextEncoder();
 const strictTextDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -1137,21 +1138,25 @@ function decodedRelations(
 }
 
 function unexpectedLayout(entry: ResourceEntry): Result<never> {
+  const locator = String(entry.locator);
   return failure(
     diagnostic(
       "unexpected-intent-resource",
-      "Component folders may contain only nested folders and Markdown component files",
-      { kind: entry.kind, locator: String(entry.locator) },
+      `Component folders contain an unexpected ${entry.kind} at ${locator}; remove it or move it outside groma/components`,
+      { kind: entry.kind, locator },
     ),
   );
 }
 
-function validateEntry(entry: ResourceEntry): Result<"directory" | "document"> {
+function validateEntry(entry: ResourceEntry): Result<"directory" | "document" | "ignored"> {
   const parts = String(entry.locator).split("/");
   if (parts.length < 3 || parts[0] !== "groma" || parts[1] !== "components") {
     return unexpectedLayout(entry);
   }
   if (entry.kind === "directory") return success("directory");
+  if (entry.kind === "file" && incidentalOperatingSystemFiles.has(parts.at(-1)!)) {
+    return success("ignored");
+  }
   if (entry.kind === "file" && documentPattern.test(parts.at(-1)!)) return success("document");
   return unexpectedLayout(entry);
 }
