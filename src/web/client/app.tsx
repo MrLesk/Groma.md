@@ -36,6 +36,7 @@ export function App() {
   const [model, setModel] = useState<BlueprintModel>(emptyModel);
   const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState<SearchState>({ open: false, text: "" });
   const [dependencies, setDependencies] = useState<
     readonly { source: string; target: string; type: string }[]
@@ -162,10 +163,12 @@ export function App() {
   };
 
   const onFocus = (id: string) => {
+    setCreateOpen(false);
     setSelectedId(undefined);
     setFocusStack((stack) => (stack.at(-1) === id ? stack : [...stack, id]));
   };
   const onFocusTo = (depth: number) => {
+    setCreateOpen(false);
     setSelectedId(undefined);
     setFocusStack((stack) => stack.slice(0, depth));
   };
@@ -220,7 +223,19 @@ export function App() {
           {exported ? "Read-only export" : "Current blueprint"}
           {model.generation > 0 ? ` · generation ${model.generation}` : ""}
         </p>
-        <div className="relative">
+        <div className="relative flex gap-1.5">
+          {exported ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedId(undefined);
+                setCreateOpen(true);
+              }}
+              className="border border-ink bg-paper px-2.5 py-1.5 font-plan text-xs hover:border-survey focus-visible:outline-2 focus-visible:outline-survey"
+            >
+              New component
+            </button>
+          )}
           <form onSubmit={submitSearch} className="flex gap-1.5">
             <input
               type="search"
@@ -252,6 +267,7 @@ export function App() {
                     key={component.id}
                     type="button"
                     onClick={() => {
+                      setCreateOpen(false);
                       setSelectedId(component.id);
                       setSearch((current) => ({ ...current, open: false }));
                     }}
@@ -301,13 +317,21 @@ export function App() {
               onFocus={onFocus}
               onFocusTo={onFocusTo}
               onLoadMoreRoots={onLoadMoreRoots}
-              onSelect={setSelectedId}
+              onSelect={(id) => {
+                setCreateOpen(false);
+                setSelectedId(id);
+              }}
               selectedId={selectedId}
             />
           </div>
         )}
         <SpecPanel
-          onClose={() => setSelectedId(undefined)}
+          createOpen={createOpen}
+          onClose={() => {
+            setCreateOpen(false);
+            setSelectedId(undefined);
+          }}
+          onCommitted={() => window.location.reload()}
           resolveDisplay={resolveDisplay}
           selectedId={selectedId}
         />

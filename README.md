@@ -45,7 +45,8 @@ exactly what is real now.
 - Bare `groma` opens the same deterministic self-contained read-only bundle as `groma export`,
   built from bounded shared reads with recursive folding, focus, and component detail.
 - `groma web` serves an interactive web blueprint embedded in the same binary, on your machine
-  only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.
+  only (127.0.0.1). Its side panel creates and curates components through the same protected
+  operations as the CLI; stale revisions and semantic blockers are shown before anything changes.
 - `groma export` writes the same embedded client and a finite blueprint snapshot to one
   deterministic `blueprint.html`. The exported map is read-only, opens directly from disk without
   Groma or a server, and makes no network requests. Use `--output <file>` to choose another path.
@@ -83,7 +84,7 @@ These are the promises that keep the map trustworthy after the first scan:
 | [docs/interface-glossary.md](docs/interface-glossary.md)             | The plain words Groma uses on its surfaces                 |
 | [AGENTS.md](AGENTS.md)                                               | Ground rules for AI agents working in this repo            |
 | [SUCCESS.md](SUCCESS.md)                                             | The product north star                                     |
-| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via the CLI only)    |
+| [`groma/`](groma/)                                                   | Groma's own canonical blueprint (edit via CLI or web)      |
 
 ## Build it yourself
 
