@@ -44,13 +44,13 @@ export function App() {
   const [dependencies, setDependencies] = useState<
     readonly { source: string; target: string; type: string }[]
   >([]);
-  const [focusStack, setFocusStack] = useState<readonly { id: string; label: string }[]>([]);
+  const [expandedIds, setExpandedIds] = useState<readonly string[]>([]);
   const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
   const pendingRoots = useRef(false);
   const mounted = useRef(true);
   const autoExpanded = useRef(new Set<string>());
-  const focusId = focusStack.at(-1)?.id;
+  const activeExpandedId = expandedIds.at(-1);
   // The component the sheet is framed on: the one walked into, or the single
   // owned system at the top. Its whole content is what the level draws, so it is
   // the node whose children must be paged to completion — matching how the canvas
@@ -59,7 +59,7 @@ export function App() {
     (id) => model.nodes.get(id)?.view.component.type !== "external",
   );
   const soleOwnedRootId = ownedRootIds.length === 1 ? ownedRootIds[0] : undefined;
-  const frameId = focusId ?? soleOwnedRootId;
+  const frameId = activeExpandedId ?? soleOwnedRootId;
 
   const loadRoots = (cursor?: string) => {
     if (pendingRoots.current) return;
@@ -149,21 +149,20 @@ export function App() {
     };
   }, []);
 
-  // Escape steps back out: first it closes an open detail, then it walks up the
-  // focus path one level, so a reader can always retreat the way they came in.
+  // Escape first closes detail, then collapses the most recently expanded plate.
   useEffect(() => {
-    if (selectedId === undefined && focusStack.length === 0) return;
+    if (selectedId === undefined && expandedIds.length === 0) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (selectedId !== undefined) setSelectedId(undefined);
-      else setFocusStack((stack) => stack.slice(0, -1));
+      else setExpandedIds((current) => current.slice(0, -1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, focusStack.length]);
+  }, [expandedIds.length, selectedId]);
 
-  // A focus gathers bounded pages internally, then the disposable projection
-  // selects one readable semantic level. Page mechanics never enter the UI.
+  // An expansion gathers bounded pages internally, then the disposable projection
+  // selects readable semantic levels. Page mechanics never enter the UI.
   useEffect(() => {
     if (frameId === undefined) return;
     const node = model.nodes.get(frameId);
@@ -193,15 +192,15 @@ export function App() {
     });
   };
 
-  const onFocus = (id: string, label: string) => {
+  const onExpand = (id: string) => {
     setCreateOpen(false);
     setSelectedId(undefined);
-    setFocusStack((stack) => (stack.at(-1)?.id === id ? stack : [...stack, { id, label }]));
+    setExpandedIds((current) => (current.includes(id) ? current : [...current, id]));
   };
-  const onFocusTo = (depth: number) => {
+  const onCollapse = (ids: ReadonlySet<string>) => {
     setCreateOpen(false);
-    setSelectedId(undefined);
-    setFocusStack((stack) => stack.slice(0, depth));
+    setExpandedIds((current) => current.filter((expandedId) => !ids.has(expandedId)));
+    setSelectedId((current) => (current !== undefined && ids.has(current) ? undefined : current));
   };
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -215,8 +214,6 @@ export function App() {
     const node = model.nodes.get(id);
     return node === undefined ? undefined : displayText(node.view.component);
   };
-
-  const focusPath = focusStack;
 
   return (
     <div className="flex h-screen flex-col">
@@ -331,10 +328,10 @@ export function App() {
             <Canvas
               childCounts={childCounts}
               dependencies={dependencies}
-              focusPath={focusPath}
+              expandedIds={expandedIds}
               model={model}
-              onFocus={onFocus}
-              onFocusTo={onFocusTo}
+              onCollapse={onCollapse}
+              onExpand={onExpand}
               onSelect={(id) => {
                 setCreateOpen(false);
                 setSelectedId(id);

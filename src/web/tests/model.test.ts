@@ -6,6 +6,7 @@ import {
   LEVEL_COMPONENT_BUDGET,
   LEVEL_RELATIONSHIP_BUDGET,
   nextScaleLabel,
+  projectionBranchIds,
 } from "../client/graph.ts";
 import { displayText, emptyModel, mergeChildrenPage, mergeRootsPage } from "../client/model.ts";
 
@@ -83,7 +84,7 @@ describe("interactive map view-model", () => {
     expect(top.nodes.map((node) => node.id)).toEqual(["ent_system", "ent_domain"]);
     const focused = buildBlueprintFlowGraph({
       dependencies: [],
-      focusPath: ["ent_domain"],
+      expandedIds: ["ent_domain"],
       model: parts,
     });
     expect(focused.nodes.map((node) => node.id)).toEqual(["ent_system", "ent_domain", "ent_part"]);
@@ -129,7 +130,7 @@ describe("interactive map view-model", () => {
     );
     const focused = buildBlueprintFlowGraph({
       dependencies: [],
-      focusPath: ["ent_alpha"],
+      expandedIds: ["ent_alpha"],
       model,
     });
     expect(focused.nodes.map((node) => node.id)).toEqual([
@@ -141,6 +142,44 @@ describe("interactive map view-model", () => {
     expect(focused.nodes.find((node) => node.id === "ent_beta")?.type).toBe("component");
     expect(focused.visibleComponents).toBe(1);
     expect(focused.levelComponents).toBe(1);
+  });
+
+  test("expands multiple sibling components independently", () => {
+    const roots = mergeRootsPage(
+      emptyModel(),
+      page([view("ent_system", { name: "Product", scale: "system" })]),
+    );
+    const domains = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_alpha", { name: "Alpha", scale: "domain" }),
+        view("ent_beta", { name: "Beta", scale: "domain" }),
+      ]),
+    );
+    const alpha = mergeChildrenPage(
+      domains,
+      "ent_alpha",
+      page([view("ent_alpha_part", { name: "Alpha part", scale: "part" })]),
+    );
+    const model = mergeChildrenPage(
+      alpha,
+      "ent_beta",
+      page([view("ent_beta_part", { name: "Beta part", scale: "part" })]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [],
+      expandedIds: ["ent_alpha", "ent_beta"],
+      model,
+    });
+    expect(graph.nodes.find((node) => node.id === "ent_alpha")?.type).toBe("group");
+    expect(graph.nodes.find((node) => node.id === "ent_beta")?.type).toBe("group");
+    expect(graph.nodes.some((node) => node.id === "ent_alpha_part")).toBeTrue();
+    expect(graph.nodes.some((node) => node.id === "ent_beta_part")).toBeTrue();
+    expect(graph.focusTargetId).toBe("ent_beta");
+    expect(projectionBranchIds(graph.nodes, "ent_alpha")).toEqual(
+      new Set(["ent_alpha", "ent_alpha_part"]),
+    );
   });
 
   test("reports an ungroupable over-budget level without omitting components", () => {
@@ -207,10 +246,16 @@ describe("interactive map view-model", () => {
     const visibleCards = graph.nodes.filter((node) => node.type === "component");
     expect(visibleCards).toHaveLength(4);
     expect(visibleCards.map((node) => node.data.label)).toEqual([
-      "extensions",
-      "packages",
-      "src",
-      "ui",
+      "Extensions",
+      "Packages",
+      "Source modules",
+      "User interface",
+    ]);
+    expect(visibleCards.map((node) => node.data.type)).toEqual([
+      "extensions/",
+      "packages/",
+      "src/",
+      "ui/",
     ]);
     expect(visibleCards.map((node) => node.data.childCount)).toEqual([33, 2, 49, 1]);
     expect(visibleCards.every((node) => node.data.projection === "observed-group")).toBeTrue();
@@ -218,17 +263,17 @@ describe("interactive map view-model", () => {
     expect(graph.levelComponents).toBe(85);
     expect(graph.omittedComponents).toBe(0);
 
-    const extensions = visibleCards.find((node) => node.data.label === "extensions")!;
+    const extensions = visibleCards.find((node) => node.data.label === "Extensions")!;
     const focused = buildBlueprintFlowGraph({
       childCounts: new Map([["ent_openclaw", 85]]),
       dependencies: [],
-      focusPath: [extensions.id],
+      expandedIds: [extensions.id],
       model,
     });
     expect(focused.nodes.find((node) => node.id === extensions.id)?.type).toBe("group");
     expect(focused.nodes.some((node) => node.data.label === "Structure not mapped")).toBeTrue();
     expect(
-      focused.nodes.some((node) => node.type === "component" && node.data.label === "packages"),
+      focused.nodes.some((node) => node.type === "component" && node.data.label === "Packages"),
     ).toBeTrue();
   });
 
@@ -265,7 +310,7 @@ describe("interactive map view-model", () => {
     const graph = buildBlueprintFlowGraph({
       childCounts: new Map([["ent_app", evidence.length + 1]]),
       dependencies: [],
-      focusPath: ["ent_app"],
+      expandedIds: ["ent_app"],
       model,
     });
     expect(graph.nodes.map((node) => node.id)).toEqual([
@@ -320,7 +365,7 @@ describe("interactive map view-model", () => {
     });
     expect(
       graph.nodes.filter((node) => node.type === "component").map((node) => node.data.label),
-    ).toEqual(["areas"]);
+    ).toEqual(["Areas"]);
     expect(graph.visibleComponents).toBe(1);
     expect(graph.levelComponents).toBe(24);
     expect(graph.omittedComponents).toBe(0);

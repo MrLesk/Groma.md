@@ -1,5 +1,6 @@
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
+import { recognizeObservedArea } from "../../application/observed-area-recognition.ts";
 import type {
   ApiCognitiveComplexityEvidence,
   ApiComponentScale,
@@ -27,6 +28,7 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
 }
 
 export interface BlueprintGroupNodeData extends Record<string, unknown> {
+  readonly collapsible: boolean;
   readonly contains: string;
   readonly kind: "container";
   readonly label: string;
@@ -57,8 +59,31 @@ export interface BlueprintDependency {
 export interface BlueprintGraphOptions {
   readonly childCounts?: ReadonlyMap<string, number>;
   readonly dependencies: readonly BlueprintDependency[];
-  readonly focusPath?: readonly string[];
+  readonly expandedIds?: readonly string[];
   readonly model: BlueprintModel;
+}
+
+export function projectionBranchIds(
+  nodes: readonly (BlueprintFlowNode | BlueprintGroupNode)[],
+  rootId: string,
+): ReadonlySet<string> {
+  const children = new Map<string, string[]>();
+  for (const node of nodes) {
+    if (node.parentId === undefined) continue;
+    const ids = children.get(node.parentId) ?? [];
+    ids.push(node.id);
+    children.set(node.parentId, ids);
+  }
+  const branch = new Set([rootId]);
+  const pending = [rootId];
+  for (let index = 0; index < pending.length; index += 1) {
+    for (const childId of children.get(pending[index]!) ?? []) {
+      if (branch.has(childId)) continue;
+      branch.add(childId);
+      pending.push(childId);
+    }
+  }
+  return branch;
 }
 
 const CARD = Object.freeze({ height: 152, width: 240 });
@@ -259,6 +284,7 @@ function projectedChildren(
       const nextPrefix = Object.freeze([...prefix, segment]);
       const id = projectionId(scopeId, nextPrefix);
       const children = projectedChildren(scopeId, members, nextPrefix, paths, nodes);
+      const recognition = recognizeObservedArea(nextPrefix, members.length);
       nodes.set(
         id,
         Object.freeze({
@@ -267,9 +293,9 @@ function projectedChildren(
           projection: Object.freeze({ kind: "observed-group", memberCount: members.length }),
           view: projectionView(
             id,
-            segment,
-            `${componentCount(members.length, "observed")} share this source area.`,
-            "observed area",
+            recognition.label,
+            recognition.summary,
+            recognition.evidencePath,
           ),
         }),
       );
@@ -279,6 +305,7 @@ function projectedChildren(
   }
 
   const id = projectionId(scopeId, prefix, ":unresolved");
+  const recognition = recognizeObservedArea(prefix, memberIds.length);
   nodes.set(
     id,
     Object.freeze({
@@ -287,7 +314,7 @@ function projectedChildren(
       view: projectionView(
         id,
         "Structure not mapped",
-        `${memberIds.length} components are accounted for, but current evidence does not support a smaller meaningful grouping.`,
+        `${memberIds.length} components are accounted for within ${recognition.evidencePath}, but current evidence does not support a smaller meaningful grouping.`,
         "mapping gap",
       ),
     }),
@@ -344,8 +371,7 @@ interface LevelLayout {
 
 function layoutLevel(
   id: string,
-  pathIndex: number,
-  focusPath: readonly string[],
+  expandedIds: ReadonlySet<string>,
   model: BlueprintModel,
   childCounts: ReadonlyMap<string, number>,
   incident: ReadonlyMap<string, number>,
@@ -353,13 +379,12 @@ function layoutLevel(
 ): LevelLayout {
   const node = model.nodes.get(id);
   const childIds = node?.childIds ?? [];
-  const required = focusPath[pathIndex];
   const visibleIds = orderedLevel(childIds, model.nodes);
   const nextAncestors = new Set(ancestors).add(id);
   const prepared = visibleIds.map((childId) => {
-    const expanded = childId === required && !nextAncestors.has(childId);
+    const expanded = expandedIds.has(childId) && !nextAncestors.has(childId);
     const group = expanded
-      ? layoutLevel(childId, pathIndex + 1, focusPath, model, childCounts, incident, nextAncestors)
+      ? layoutLevel(childId, expandedIds, model, childCounts, incident, nextAncestors)
       : undefined;
     return Object.freeze({
       ...(group === undefined ? {} : { group }),
@@ -419,12 +444,16 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     (id) => options.model.nodes.get(id)?.view.component.type !== "external",
   ).length;
   const model = visualProjectionModel(options.model);
-  const focusPath = options.focusPath ?? [];
+  const expandedIdList = options.expandedIds ?? [];
+  const expandedIds = new Set(expandedIdList);
+  const activeExpandedId = expandedIdList.at(-1);
   const childCounts = options.childCounts ?? new Map<string, number>();
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
   const ownedRootIds = model.rootIds.filter(
     (id) => componentOf(id) !== undefined && componentOf(id)?.type !== "external",
   );
+  const currentLevelId =
+    activeExpandedId ?? (ownedRootIds.length === 1 ? ownedRootIds[0] : undefined);
   const incident = new Map<string, number>();
   for (const relationship of dependencies) {
     incident.set(relationship.source, (incident.get(relationship.source) ?? 0) + 1);
@@ -492,7 +521,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       blueprintNode.visualChildCount ??
       Math.max(layout.visibleIds.length, childCounts.get(layout.id) ?? 0);
     visibleIds.add(layout.id);
-    if (depth === focusPath.length) {
+    if (layout.id === currentLevelId) {
       currentLevelCount = layout.visibleIds.length;
       currentLevelTotal = total;
     }
@@ -500,6 +529,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     nodes.push(
       Object.freeze({
         data: Object.freeze({
+          collapsible: expandedIds.has(layout.id),
           contains: componentCount(total),
           kind: "container" as const,
           label: displayText(component),
@@ -512,7 +542,13 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         ...(parentId === undefined ? {} : { extent: "parent" as const, parentId }),
         position: Object.freeze({ x, y }),
         selectable: false,
-        style: Object.freeze({ height: layout.height, width: layout.width }),
+        // React Flow disables pointer events on non-selectable nodes by default.
+        // Keep the group semantic-only while allowing its collapse control to work.
+        style: Object.freeze({
+          height: layout.height,
+          pointerEvents: "all" as const,
+          width: layout.width,
+        }),
         type: "group" as const,
         width: layout.width,
         zIndex: depth,
@@ -527,7 +563,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   if (ownedRootIds.length === 1) {
     const rootId = ownedRootIds[0]!;
     emitGroup(
-      layoutLevel(rootId, 0, focusPath, model, childCounts, incident, new Set()),
+      layoutLevel(rootId, expandedIds, model, childCounts, incident, new Set()),
       undefined,
       0,
       0,
@@ -535,7 +571,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     );
   } else {
     const roots = orderedLevel(ownedRootIds, model.nodes);
-    if (focusPath.length === 0) {
+    if (expandedIdList.length === 0) {
       currentLevelCount = roots.length;
       currentLevelTotal = originalOwnedRootCount;
     }
@@ -543,10 +579,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     let y = 0;
     let rowHeight = 0;
     for (const id of roots) {
-      const expanded = id === focusPath[0];
+      const expanded = expandedIds.has(id);
       const x = column * (CARD.width + GAP.x);
       if (expanded) {
-        const layout = layoutLevel(id, 1, focusPath, model, childCounts, incident, new Set());
+        const layout = layoutLevel(id, expandedIds, model, childCounts, incident, new Set());
         emitGroup(layout, undefined, x, y, 1);
         rowHeight = Math.max(rowHeight, layout.height);
         y += rowHeight + GAP.y;
@@ -681,11 +717,11 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
 
   return Object.freeze({
     edges: Object.freeze(edges),
-    ...(ownedRootIds.length === 1
-      ? { focusTargetId: focusPath.at(-1) ?? ownedRootIds[0] }
-      : focusPath.length === 0
-        ? {}
-        : { focusTargetId: focusPath.at(-1) }),
+    ...(activeExpandedId === undefined
+      ? ownedRootIds.length === 1
+        ? { focusTargetId: ownedRootIds[0] }
+        : {}
+      : { focusTargetId: activeExpandedId }),
     levelComponents: currentLevelTotal,
     nodes: Object.freeze(nodes),
     omittedComponents,
