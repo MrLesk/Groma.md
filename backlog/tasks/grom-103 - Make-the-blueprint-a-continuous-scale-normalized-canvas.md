@@ -1,11 +1,11 @@
 ---
 id: GROM-103
 title: Make the blueprint a continuous scale-normalized canvas
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 20:33'
-updated_date: '2026-07-21 21:02'
+updated_date: '2026-07-21 21:05'
 labels:
   - frontend
   - ux
