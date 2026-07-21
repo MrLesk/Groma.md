@@ -214,6 +214,84 @@ describe("interactive map view-model", () => {
     expect(graph.terms).not.toContain("quoted");
   });
 
+  test("measures what stands out at a level, as figures a reader can count", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+        view("ent_c", { name: "c", scale: "domain" }),
+        view("ent_d", { name: "d", scale: "domain" }),
+      ]),
+    );
+    // a reaches every other; b is reached from every other. Both figures equal the
+    // count of the "others here", so each line reconciles against the arrows drawn.
+    const graph = buildBlueprintFlowGraph({
+      childCounts: new Map([
+        ["ent_a", 5],
+        ["ent_b", 2],
+        ["ent_c", 2],
+        ["ent_d", 2],
+      ]),
+      dependencies: [
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        { source: "ent_a", target: "ent_c", type: "imports" },
+        { source: "ent_a", target: "ent_d", type: "imports" },
+        { source: "ent_c", target: "ent_b", type: "imports" },
+        { source: "ent_d", target: "ent_b", type: "imports" },
+      ],
+      model,
+    });
+    expect(graph.readout).toEqual([
+      "Most depended on: b — 3 of the 3 others here import it.",
+      "Reaches the most: a — imports 3 of the 3 others.",
+      "Largest here: a (5 inside).",
+    ]);
+  });
+
+  test("states a cycle as a measured relation, never a defect", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+        view("ent_c", { name: "c", scale: "domain" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        { source: "ent_b", target: "ent_a", type: "imports" },
+      ],
+      model,
+    });
+    expect(graph.readout).toContain("a and b import each other.");
+  });
+
+  test("stays silent when a level is too small or its frame is still loading", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    // Only two siblings loaded, and the frame still has more to page: no honest
+    // "of the N others" figure exists yet, so the readout says nothing.
+    const partial = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page(
+        [view("ent_a", { name: "a", scale: "domain" }), view("ent_b", { name: "b", scale: "domain" })],
+        true,
+        "more",
+      ),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_a", target: "ent_b", type: "imports" }],
+      model: partial,
+    });
+    expect(graph.readout).toEqual([]);
+  });
+
   test("names the reading order only where the contents form one", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const model = mergeChildrenPage(

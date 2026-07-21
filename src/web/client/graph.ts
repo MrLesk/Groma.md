@@ -57,6 +57,14 @@ export interface BlueprintFlowGraph {
   /** Notations actually drawn, so the legend can describe only what is present. */
   readonly notations: readonly BlueprintNotation[];
   /**
+   * What the current level measures out to, in plain language — the most
+   * depended-on part, the one that reaches the most, entry points, an import
+   * cycle, the largest. Each line is a measured relation plus a count plus a
+   * verbatim name plus its scope; never a role word, never a judgement, so it
+   * stays on the "measure" side of the line the scanner must not cross.
+   */
+  readonly readout: readonly string[];
+  /**
    * Vocabulary marks actually drawn, so the key defines only the words a reader
    * can see on the sheet and never introduces one that is not there.
    */
@@ -227,6 +235,57 @@ export interface BlueprintGraphOptions {
   /** When set, the sheet is re-rooted onto this component's contents. */
   readonly focusId?: string | undefined;
   readonly model: BlueprintModel;
+}
+
+/**
+ * The groups of components that reference one another in a cycle (Tarjan's
+ * strongly-connected components of size two or more). Deterministic: the input
+ * order fixes the traversal, and each returned group is sorted by id so the same
+ * observation always yields the same cycle report.
+ */
+function importCycles(
+  ids: readonly string[],
+  edges: readonly { readonly source: string; readonly target: string }[],
+): string[][] {
+  const outgoing = new Map<string, string[]>(ids.map((id) => [id, []]));
+  for (const edge of edges) {
+    if (edge.source !== edge.target && outgoing.has(edge.source) && outgoing.has(edge.target)) {
+      outgoing.get(edge.source)!.push(edge.target);
+    }
+  }
+  let counter = 0;
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const groups: string[][] = [];
+  const connect = (v: string): void => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter += 1;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of outgoing.get(v)!) {
+      if (!index.has(w)) {
+        connect(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const group: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        group.push(w);
+      } while (w !== v);
+      if (group.length > 1) groups.push(group.sort());
+    }
+  };
+  for (const id of ids) if (!index.has(id)) connect(id);
+  return groups.sort((left, right) => right.length - left.length || left[0]!.localeCompare(right[0]!));
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
@@ -624,6 +683,66 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     );
   }
 
+  // What the current level measures out to. Computed from the SAME drawn
+  // dependency set the card counts use, so every figure here equals a figure on
+  // a card and the arrows a reader can count. Every line states a measured
+  // relation and a count against a named part; none assigns a role or a verdict.
+  const readout: string[] = [];
+  const levelCards = owned.filter((id) => carded.has(id) && componentOf(id)?.name !== undefined);
+  const siblings = levelCards.length;
+  const drawnAmongLevel = drawnDependencies.filter(
+    (dependency) => carded.has(dependency.source) && carded.has(dependency.target),
+  );
+  const framePartial = frameId !== undefined && model.nodes.get(frameId)?.hasMoreChildren === true;
+  if (siblings >= 3 && !framePartial) {
+    const nameOf = (id: string) => displayText(componentOf(id)!);
+    const byId = (left: string, right: string) => left.localeCompare(right);
+    const inDeg = (id: string) => dependents.get(id)?.size ?? 0;
+    const outDeg = (id: string) => dependsOn.get(id)?.size ?? 0;
+    const others = siblings - 1;
+
+    const maxIn = Math.max(...levelCards.map(inDeg));
+    if (maxIn > 0) {
+      const tops = levelCards.filter((id) => inDeg(id) === maxIn).sort(byId);
+      readout.push(
+        tops.length === 1
+          ? `Most depended on: ${nameOf(tops[0]!)} — ${maxIn} of the ${others} others here import it.`
+          : `Most depended on: ${tops.slice(0, 3).map(nameOf).join(", ")} — each imported by ${maxIn}.`,
+      );
+    }
+
+    const maxOut = Math.max(...levelCards.map(outDeg));
+    if (maxOut > 0) {
+      const top = levelCards.filter((id) => outDeg(id) === maxOut).sort(byId)[0]!;
+      readout.push(`Reaches the most: ${nameOf(top)} — imports ${maxOut} of the ${others} others.`);
+    }
+
+    const entries = levelCards
+      .filter((id) => (componentOf(id)?.actions?.length ?? 0) > 0)
+      .sort(byId);
+    if (entries.length > 0 && entries.length < siblings) {
+      readout.push(
+        `Ways in: ${entries.slice(0, 4).map(nameOf).join(", ")}${entries.length > 4 ? ", …" : ""} — each exposes a public entry.`,
+      );
+    }
+
+    const cycle = importCycles(levelCards, drawnAmongLevel)[0];
+    if (cycle !== undefined) {
+      readout.push(
+        cycle.length === 2
+          ? `${nameOf(cycle[0]!)} and ${nameOf(cycle[1]!)} import each other.`
+          : `${cycle.length} here form an import cycle: ${cycle.slice(0, 5).map(nameOf).join(", ")}${cycle.length > 5 ? ", …" : ""}.`,
+      );
+    }
+
+    const sizeOf = (id: string) => childCounts.get(id) ?? 0;
+    const maxSize = Math.max(...levelCards.map(sizeOf));
+    if (maxSize > 0 && drawnAmongLevel.length > 0) {
+      const largest = levelCards.filter((id) => sizeOf(id) === maxSize).sort(byId)[0]!;
+      readout.push(`Largest here: ${nameOf(largest)} (${maxSize} inside).`);
+    }
+  }
+
   const TERM_ORDER: readonly BlueprintTerm[] = [
     "entry",
     "shared",
@@ -635,6 +754,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     edges: Object.freeze(edges),
     nodes: Object.freeze(nodes),
     notations: Object.freeze(SCALE_ORDER.filter((scale) => notations.has(scale))),
+    readout: Object.freeze(drawnAmongLevel.length > 0 ? readout : []),
     terms: Object.freeze(TERM_ORDER.filter((term) => terms.has(term))),
   });
 }

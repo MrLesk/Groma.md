@@ -621,6 +621,43 @@ input {
 }
 
 /*
+ * What the level in view measures out to, in plain sentences. Each line is a
+ * counted relation against a named part — never a role word, never a verdict —
+ * so a reader learns what stands out here without the drawing asserting it for
+ * them. Set as prose, not stencil micro-type: these are the takeaways.
+ */
+.groma-readout {
+  margin: 0;
+  padding: 7px 9px 8px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.groma-readout dt {
+  margin: 0 0 3px;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+}
+
+.groma-readout dd {
+  margin: 0;
+  padding: 2px 0 2px 11px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-ink);
+  text-indent: -11px;
+}
+
+.groma-readout dd::before {
+  content: "—";
+  padding-right: 5px;
+  color: var(--color-ink-muted);
+}
+
+/*
  * The one place on the sheet that states the sheet's own discipline, so it is
  * set as readable prose rather than stencil micro-type: this is what a reader
  * takes away about what they are looking at.

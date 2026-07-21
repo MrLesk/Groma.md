@@ -319,6 +319,14 @@ export function Canvas({
               <span>Scan {model.generation}</span>
               <span>{model.nodes.size} components drawn</span>
             </div>
+            {graph.readout.length > 0 ? (
+              <dl className="groma-readout" aria-label="What this level measures out to">
+                <dt>At this level</dt>
+                {graph.readout.map((line) => (
+                  <dd key={line}>{line}</dd>
+                ))}
+              </dl>
+            ) : null}
             {graph.notations.length > 0 ? (
               <details
                 className="groma-title-block__key"
