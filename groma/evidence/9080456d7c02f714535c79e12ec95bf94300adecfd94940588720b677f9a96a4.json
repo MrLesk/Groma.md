@@ -7,6 +7,13 @@
         "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.cd76906781419c47ea1a48ac1b5a4015389986b38c258a5c840e64ab21329300",
+              "name": "createStandardModelInvariant"
+            }
+          ],
           "name": "invariants.ts",
           "parent": "ent_dc27dd8b576c2950cd5b445248045584",
           "scale": "part"
@@ -18,6 +25,13 @@
         "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.09d7cb7f750504d60a6074dacb14936cda739861eb7006f344fb7d1878c3674d",
+              "name": "validatePluginRegistration"
+            }
+          ],
           "name": "plugin-runtime.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -29,6 +43,23 @@
         "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0fbf27d3847356916a1a22f027e92aa1897a4c95d122d92f6809588167294439",
+              "name": "parseWorkspaceResourceLocator"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.538914bf602195400f2ad46fbae1d3ffe0c8c02d73a1363bb27839ae4c6a1566",
+              "name": "workspaceResourceLocator"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e422b5ed92186b3d897ef97185f561222d9a8e02fcfbd27de9c2e269f755d477",
+              "name": "isReservedWorkspaceResourceSegment"
+            }
+          ],
           "name": "contracts.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -40,6 +71,23 @@
         "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.712afadde9e640aa37c8d4e001acfb5ed2e9a29e0f98bae4b2bfc902d518023a",
+              "name": "invokeCapturedBoundedQueryExact"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.b10b5c597fdb65e34dc6720be1fbfd2b2e40fdb54e22f5c2cecb504cad7c42f6",
+              "name": "invokeCapturedBoundedQueryPrepare"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.f8a547cb243c855d7ce99560c25d120398142e9070c963bbad1f119ade1b3217",
+              "name": "invokeCapturedBoundedQueryPage"
+            }
+          ],
           "name": "query.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -51,6 +99,18 @@
         "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0ffc52e7190f8789463be9eb450ce10582b2840f7f63bda74c3461201e339c48",
+              "name": "success"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a67a19d2a493131c649987129d3af964ba844cae3f41370543dbb34e595aad07",
+              "name": "failure"
+            }
+          ],
           "name": "result.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -62,6 +122,18 @@
         "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.76313bccca60870ee23ef34ebff6d82d4aa708fa50c32fc21d130a8db3454be8",
+              "name": "runHost"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.80184cd0d78c91d83fc701b858c0269626f3830edd53f62b938d128eaecf658d",
+              "name": "createProcessSignalSource"
+            }
+          ],
           "name": "lifecycle.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -94,6 +166,13 @@
         "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.ec93b631b325426d7890ab052381458679a330220d34b2dce17631253c2cb601",
+              "name": "runProgram"
+            }
+          ],
           "name": "program.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -105,6 +184,18 @@
         "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.56ee3c4a1d7cd8b5214472d273f32367ef27a5a4261f770ed5f2743171bf44b8",
+              "name": "validateStructuralScaleProposalConfigurationV1"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.aec93307cbe8cc15b972ccff0ae5007e6c455cd96a7cd87073a0d9fef333c31c",
+              "name": "deriveStructuralScaleProposalV1"
+            }
+          ],
           "name": "scale-proposal.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -127,6 +218,18 @@
         "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.808c97b2c9a72a02087507d4ae0c77810737aa71458274e39904c0d830c74321",
+              "name": "nextScaleLabel"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d254f25d8bd01f75925337aab864e9c7102651eec25eba1c5a8184a34df19b41",
+              "name": "buildBlueprintFlowGraph"
+            }
+          ],
           "name": "graph.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -138,6 +241,18 @@
         "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.1a7f4d98c4943cfaf8bc3f4c0336495498fcf01ee57cc91e998d50dfa00976cb",
+              "name": "containNativePromise"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.804fd03f889539b4aec7f77991c7b3e89170b40a426b517bae3e2cb5cad386c1",
+              "name": "observeNativePromise"
+            }
+          ],
           "name": "promise-observation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -149,6 +264,23 @@
         "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.7f8dae475c40e72cba830be685ea06eedaf14bd81f499b3ae667fd5678c5e540",
+              "name": "observedSharedFromSignals"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.8b15993a2c2b2e8b273cb3eb9fccec8b2227cb0ba0603bd6d8ed0d4f460dc088",
+              "name": "resolveObservedStructure"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.dccc0558390decc1ad118ef52c0fb46297eb30e771a49ab907ef1449ccb0eed5",
+              "name": "observedScaleForDepth"
+            }
+          ],
           "name": "observed-structure.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -160,6 +292,28 @@
         "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3dea5e26267c1141ddd372b8c6e4eaa9bff0c09b0e4e4891c69a040770a91325",
+              "name": "shouldSyncLocalReplacementDirectory"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.90cc19f9f9e146aece0574b076c2c766db7e754edeab6bdcff42e68ab586d587",
+              "name": "allowsCustomLocalCoordinationRoot"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e077705eff51e461d1e4c59b1d1e617ba1f89faed6507ee07c3c1c4c51ca7ec0",
+              "name": "createLocalResourceProvider"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e3756145e962e03469b07a2393f49a5f51ed8524bd2cbaffa9cb3b86e37b0dda",
+              "name": "shouldSyncLocalCoordinationDirectory"
+            }
+          ],
           "name": "local-resource-provider.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -198,6 +352,18 @@
         "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0",
+              "name": "createMarkdownIntentTransactionAdapter"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.f6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589",
+              "name": "createLocalTransactionJournal"
+            }
+          ],
           "name": "local-transaction-journal.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -256,6 +422,13 @@
         "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.ea7b87e7bb484180bdd320c2332c5dc0d6a6775951f8d75f7e16228f44546856",
+              "name": "observedSummaryFromDocumentation"
+            }
+          ],
           "name": "observed-documentation.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -284,6 +457,23 @@
         "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0aba7e653de427bf4e13717f2f06e141a3507d60a926e2af16cc8e5dc9c46415",
+              "name": "createJsonEvidenceStore"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.309580c14693e20adcd0d1e09d03b1f036625902840bbfab1c119ab7e88e8f59",
+              "name": "jsonEvidenceSourceLocator"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.ec8337275632680b5a6531db8df2f1e9b901030e559f81d85cf5b3ddf414d0c4",
+              "name": "jsonEvidenceIndexLocator"
+            }
+          ],
           "name": "json-evidence-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -295,6 +485,13 @@
         "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d872e35f5c07b57ed52fde73ced7846877e19ddc25743c749485e485c4ce2cf5",
+              "name": "createLocalScannerProjectResources"
+            }
+          ],
           "name": "scanner-project-resources.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -317,6 +514,43 @@
         "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0be9c04c8a2e5f6247a14972b838714eca7386b01171fbf31ac3648f996c1605",
+              "name": "createStandardModelCapability"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.2d81c514bab0eb984551240ba7b25aa8abf37a9809ed42241d4655615b8ffd7e",
+              "name": "isStandardComponentIconDomain"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a6d08b672b14005c617e36b8d1ce7f0534593178821286ada353ea3cbdc17923",
+              "name": "standardComponentDisplayText"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d5f73113ff27f9bc5a4eb880f52145558eb2407e3d3b25c0ab6576b903aa2483",
+              "name": "isStandardComponentSummary"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d7c2e18b860fb4481a718ec20b407aa50555a212f6aedf4f9ca9b228ddd9c1b2",
+              "name": "isStandardComponentScale"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e78109961296b3131202e298f8a104bee25f0eb6c76acb66cd2a11b4bc122aa4",
+              "name": "isCoarserStandardScale"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.ecebb6665926ec0478caafad55473824df098bbe092619b859948e564acf784a",
+              "name": "isStandardComponentLabel"
+            }
+          ],
           "name": "model.ts",
           "parent": "ent_dc27dd8b576c2950cd5b445248045584",
           "scale": "part"
@@ -350,6 +584,23 @@
         "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.8244335d8887c7d3d26833cc6ef545e6b6d2a616499d8df4cc03ad6e7c3bef4c",
+              "name": "parseGraphCommittedEvent"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.fb06cc666ddbd5443c4d04b53a92e8a9180524e25dba6c32fdae3c3ce49eb39b",
+              "name": "createGraphCommittedEvent"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.fd167b41507ec1cc04e37692416e3f91434848bc882b4c92d065b5c835bd6963",
+              "name": "sequenceGraphCommittedEvent"
+            }
+          ],
           "name": "events.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -372,6 +623,18 @@
         "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.c20a5e5e17831cfe2b03a1dcf8f9ce95196da265f6a896c9a3f63e638606fd06",
+              "name": "parseResourceKey"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.efd3ab875becaaba5f01c7e6559a96ca44c52fd3f88bbf88fad2e63f1f4b0d12",
+              "name": "parseContentRevision"
+            }
+          ],
           "name": "transaction.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -383,6 +646,33 @@
         "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.34f780a89eb5afc4b4f4e782ec7e891d4de6fcc76b9c36eee22d4bc12472bbd3",
+              "name": "fetchRoots"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.48249d6edadf819eb5e50257a2f18075c5c251cad5d28479dfd154f606667acb",
+              "name": "fetchSearch"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.be0042dfaa8795208d6242695f82e5544ae7a4bc3696479f4e0228c5252fd3e1",
+              "name": "fetchConnections"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.efe5e5ee866ed118e419cac7d1b54f08bdda6fa31c1513b453607f60e09207e6",
+              "name": "fetchComponent"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.f7c9ed7cc0d494162374df373bc056fc569082da7acc1fbc14714307805556e2",
+              "name": "fetchChildren"
+            }
+          ],
           "name": "api.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -410,6 +700,13 @@
         "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0d8196a0155a66a87d3e36b816c2aee40d753fcdd684f557d42e491b952be2e7",
+              "name": "measureCanonicalJsonUtf8Bytes"
+            }
+          ],
           "name": "canonical-json-utf8.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -432,6 +729,53 @@
         "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.1746f7ed6113208cbf8ae5e4679a5ee5a17662186dbc2d11ab5e5ae5efa5ed67",
+              "name": "parseBootstrapConfiguration"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.2a128a8537d06297d6263dd4ca729cd2c4b8ef610b01d25bf8fb2bb294f4f719",
+              "name": "loadBootstrapConfiguration"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.2b71b800293bc308b0e5fb3b00eddae1b11148f69b483ae52a4497aa4297cf9e",
+              "name": "localBootstrapConvention"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.35faf0ec6c8b84d5cf64d5c2c182d6d47005c38e7490efe16dd83b481f8f03cc",
+              "name": "createYamlConfigurationParser"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.36c328734a6eb01156810d1b480b33d841eb1495c5aa3356a52fbe2fe61cfc1c",
+              "name": "bootstrapConfigurationStillUsable"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a1dd2704dfd8a4c34887c69db92c1d93f920293402989a7f5336ed5a3e61c8d1",
+              "name": "canonicalizeProjectRegistration"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.b8d43c245e8eeb20af08cf7852dfb575ce9385f5b8ec54b47387823c02460827",
+              "name": "serializeBootstrapConfiguration"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d19cf6261e2e4203d61950e536f958b1a726cc196c210dc435b1fb37e740fa81",
+              "name": "isProjectRegistrationId"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.da802c09d2fe72d3ac5c239df12859f445bdd23ad8438bba95d0cad89c89ffc3",
+              "name": "createLocalConfigurationDiscovery"
+            }
+          ],
           "name": "bootstrap-configuration.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -443,6 +787,18 @@
         "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3d133ab26d48c7812d2ae300f5e1321116fc73fdd28ae97952e3a020a42c0668",
+              "name": "canonicalizeObservationSessionBegin"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d0e12bc18dc67b1f9fdff6f8eb64b87918f3656276a1a88c3c403bfc581a1960",
+              "name": "createObservationSession"
+            }
+          ],
           "name": "observation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -465,6 +821,13 @@
         "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.7e3153a59900689a4af0c2fb09185b3203c066cdd96f8c3ce5d79d458b187076",
+              "name": "createEntityAliasResolver"
+            }
+          ],
           "name": "aliases.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -476,6 +839,13 @@
         "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.9135d5e34bbdd3d5c68ef31b07e79ae62079d95bf415d92a64113d98d4532ce6",
+              "name": "createApplicationOperations"
+            }
+          ],
           "name": "operations.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -531,6 +901,13 @@
         "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a877eb87aa6b9b943ca15d4b0d0958ad7c6b6d0ee0a6c816d6f8994bc64be2ea",
+              "name": "serveWebBlueprint"
+            }
+          ],
           "name": "server.ts",
           "parent": "ent_df026a00c094f2c586ac953ff361783e",
           "scale": "part"
@@ -542,6 +919,18 @@
         "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.b96b8e2dfec9071f0c753cca9fe5e55ed22e61f49b549130a0257baebbeba234",
+              "name": "instructionIndexText"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.fe718dd2887f6b73b131cb743e95b2f3f8199e4703eb6587c251b0a75c2dabc6",
+              "name": "instructionGuide"
+            }
+          ],
           "name": "index.ts",
           "parent": "ent_31ab80b320231b92cd81e5efd97c5cee",
           "scale": "element"
@@ -553,6 +942,13 @@
         "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.cf0c8216572881fc78a10f053d044391af5773e8d273c8855cfb5ab8d3a0ccb2",
+              "name": "parseProjectionCanonicalFingerprint"
+            }
+          ],
           "name": "projection.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -564,6 +960,18 @@
         "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0458f683128b2aa386a66f59aec4b63a9fc6c5b1c5073a45a5bb4aff28dece65",
+              "name": "createReconciliationOperations"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.da5711f2a710f2621605626c0854514fe37e5b7dc43d5f631a7807c3a6aa9a89",
+              "name": "parseEvidenceState"
+            }
+          ],
           "name": "reconciliation.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -591,6 +999,18 @@
         "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.046ddebe70476d587c17d941771f0586fa683b8ec5fa4fc918fc6bf210fba323",
+              "name": "createAliasStore"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.fb6b048b1a79c4e39f5b59ecac54320a284fa362a379f9151125b1883e4e6e79",
+              "name": "aliasStoreLocator"
+            }
+          ],
           "name": "alias-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -602,6 +1022,28 @@
         "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.38e2814853bc96fe63177893b932d5c0fece3691d4ac5bc5173c8f8fde23ca45",
+              "name": "applicationSnapshotStateDecoderMetadata"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a8d60f308b8c3a3b012db2da86609b89405c131e434ad7fb1faab7169ee9c160",
+              "name": "isCanonicalApplicationSnapshotComponent"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.dd42c80dd38a8f4569a9230a7b3188ee5e8e0853fb3386321a26f7fd70f497f0",
+              "name": "isCanonicalApplicationSnapshotRelationship"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.f8fe45d9f740dca5925abb467af2b2d379074ae3f33509fe9f4192ea0a8f1081",
+              "name": "createApplicationSnapshotStateDecoder"
+            }
+          ],
           "name": "snapshot-state.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -613,6 +1055,13 @@
         "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3194143c23eddd4573815f13b14f2f10be69f499d88a97b06e34b3b87044c740",
+              "name": "isPathWithin"
+            }
+          ],
           "name": "path-containment.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -624,6 +1073,18 @@
         "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3b5cd01e75c1bd23cedd7484173f8cbfac7ad89c751a9cb59159a50e9c3ebccb",
+              "name": "createLocalProjectionIndex"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3f32b1c8e9cae20f862ab7d23e4ade30c53f0194486d9c7003d1114a2211329c",
+              "name": "createTransactionProjectionCanonicalSource"
+            }
+          ],
           "name": "projection-index.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -667,6 +1128,18 @@
         "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a8a56cd3945669223f077c046a9fa7b2e6985d889f84882fa20ff1362523de24",
+              "name": "defineScanner"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.b720f83814a5768cef36a9d7e3943bf767d69884014cf4e25cec4bac47168f4a",
+              "name": "createScannerRequest"
+            }
+          ],
           "name": "scanner.ts",
           "parent": "ent_d67a54e7b5161786d1344fded42f9176",
           "scale": "part"
@@ -705,6 +1178,18 @@
         "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.5b077fbae5995afc702be3c88ea21dc221331fdb8864e38bc1e4a5190c769f0e",
+              "name": "createDefaultBootstrapRegistry"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.66339e07ba6c4e55c68105a25467f43745cf5892d19b80495527fde9cf07f0f0",
+              "name": "initialProjectDisplayName"
+            }
+          ],
           "name": "default-bootstrap.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -716,6 +1201,13 @@
         "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.79f3477b458f9c376115668ec9a18043620c21cb7dc63f31737dd7c7ccb8f025",
+              "name": "createCliSurfaceController"
+            }
+          ],
           "name": "surface.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -738,6 +1230,28 @@
         "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.06a721744a0609ae9e19e5ae8fd072f4944faa9a73e14fcc74b7f4b2ba47aa37",
+              "name": "copyCanonicalGraphData"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.730d444fd3a265f66eab419433cfd14eb59bdb806d5394b8d19a0f613f82bf8c",
+              "name": "createCanonicalGraphDataCapturer"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.9f93e343e4c6b3639549a1a5a9c267d7da8c3b4e66ccefff0e6afe7b9256e473",
+              "name": "copyGraphPayload"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d53c3b5797f339fa8097298b801190cd3f81e12c5caf7a4175bff5cc564ff929",
+              "name": "copyGraphPayloadPair"
+            }
+          ],
           "name": "payload.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -820,6 +1334,13 @@
         "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.52f3d388a59e904f4bc17882d8c8e8c574e0cfa2425b32a9063b28a3070587b1",
+              "name": "renderCommandResult"
+            }
+          ],
           "name": "render.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -831,6 +1352,13 @@
         "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.bf086439c76a256fe481eab5a201069d4eea29144cce6e9c5df891a0733e4617",
+              "name": "createProjectionQueryEngine"
+            }
+          ],
           "name": "projection-query-engine.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -842,6 +1370,13 @@
         "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.1ca75f18db587853382b82375d79d8158e28e27c8ec99a71993f0aa57a35bf6c",
+              "name": "decodeStructuredInput"
+            }
+          ],
           "name": "input.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -853,6 +1388,13 @@
         "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.9eeadcbe369457a414c826abeedec5f74ce77da671d0e3b3dafac6ec8f22f03f",
+              "name": "formatSplash"
+            }
+          ],
           "name": "splash.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -864,6 +1406,23 @@
         "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.2caaa280fb09203b64302daf76181a364f8a1cfee7707598f5c630ff5fc4824a",
+              "name": "createLocalProjectRegistry"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.a2d27e4da6c5d0b2d94d68a544d710d85893afe3bc1820f0a939df0cbe9d8fdd",
+              "name": "resolveProjectSourcePath"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.c801f6e712ba07284b02f021a8e7016de287aa0a37c1bac8418be4752eb144a0",
+              "name": "projectObservationBoundary"
+            }
+          ],
           "name": "local-project-registry.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -875,6 +1434,13 @@
         "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.41ad1e67f911589b5649ee943fba2930c9856ab9c8842d70c780a41d3305493b",
+              "name": "renderBlueprintHtml"
+            }
+          ],
           "name": "blueprint-html.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -897,6 +1463,18 @@
         "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3a329d638c27d65ab5c37690d12ee4371d6493bd79e6aca02d022f40cf7eeca7",
+              "name": "createMarkdownIntentStore"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.cd57831be389119d8fcdcfe8a4425da7583a5ee495818b6db02e0654f7ba7565",
+              "name": "markdownIntentResource"
+            }
+          ],
           "name": "markdown-intent-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -924,6 +1502,13 @@
         "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.ceb7606626a6b9d1d7ae50b783b37aa3b6a900de07eee82233f87a75e5967db7",
+              "name": "containCapabilityValue"
+            }
+          ],
           "name": "capability-value.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -946,6 +1531,13 @@
         "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e3e8327e40e39ffefa415c0587e37fa625d7b0821f3d5c961b82800013638681",
+              "name": "createLocalWorkspaceCapability"
+            }
+          ],
           "name": "local-workspace.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -984,6 +1576,28 @@
         "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.4e92b2bfb3a9118630ef1f556c96c54eeebcaacfc680a69617222cadf0b616ad",
+              "name": "copyHostDiagnostics"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.70a92e279424e61304a71c3267db583bfc6e3e33a780ab2f9f3d955a798eddf7",
+              "name": "isHostProxy"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.74ff2878a9d0735c30566fed5c0156122f2693c4075223cf0d2eec6cae5ff60c",
+              "name": "inspectHostRecord"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.d61503fabd65516d7eb756cd7b431c087579c8246c062a44068c366a8beb812c",
+              "name": "inspectHostDenseArray"
+            }
+          ],
           "name": "runtime-validation.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -995,6 +1609,13 @@
         "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.775297bec95236bac2d005aa63311e15a513ab434c0c101b9ca286c73a74e4ab",
+              "name": "commandName"
+            }
+          ],
           "name": "contracts.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1115,6 +1736,18 @@
         "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.abab8caf73bc597f303fc4fa0a75bfdb0143465691736443ab45c45952cd27da",
+              "name": "parseGraphGeneration"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.b129f7367a45b4172ec30f67d82b9c159f69c631df24332fc97ad3c650be4773",
+              "name": "nextGraphGeneration"
+            }
+          ],
           "name": "generation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -1126,6 +1759,13 @@
         "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.1517700bd41a31ab0ce45ff6f50d4d4e61aabe63dc515cdd68b3ae6d2024d178",
+              "name": "createScannerExecutionRuntime"
+            }
+          ],
           "name": "scanner-runtime.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1137,6 +1777,13 @@
         "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d",
+              "name": "parseInvocation"
+            }
+          ],
           "name": "parser.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1148,6 +1795,28 @@
         "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.009fbd0eca14e56c9b263812b11b316fa4d08cd2d949acc2f81c3bc58f092545",
+              "name": "emptyModel"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.3548fd8e18f5ca1d0ca301752518464bfadd9f7fd5920f7cd762e70693c16fbf",
+              "name": "displayText"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.8d56d81b3df4e74ea8f8d5392b223c48bb32366a876aaaaabafd86b6f780d44a",
+              "name": "mergeRootsPage"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.bedd08c5fe46e43811d2eb4ba64b6684fd28fab03049f072300d30381b4cb331",
+              "name": "mergeChildrenPage"
+            }
+          ],
           "name": "model.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -1159,6 +1828,18 @@
         "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.4ac4ffdbbd492c17f75aaa80c5f2a29ee865d7e2816763f99e882d022c079167",
+              "name": "inspectExactRecord"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.e11ca2b3359683534715bce80fed9917349503c6156221980c0efb0644f7e64b",
+              "name": "inspectIntrinsicArrayLength"
+            }
+          ],
           "name": "runtime.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -1170,6 +1851,23 @@
         "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
         "present": true,
         "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.0a57b6a0ce530c61f6e6bfbd47df8cd2cb93ac66d4f56575315bd3f694a7cf27",
+              "name": "parseEntityId"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.2590f33445c81544ae8858dfdaf04f5f945b0ecb16174b753a8cc849e890af75",
+              "name": "parseRelationId"
+            },
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.5c25dd994fce4aa369e2400638e963e6910ed5df3742fc29e01b08173e33414b",
+              "name": "createOpaqueIdSource"
+            }
+          ],
           "name": "identity.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -4553,9 +5251,2077 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_4f491159b5bca47e3cc00d09b060ae3a",
+      "epoch": "epoch_77ae0e87d037c6cf29cdb89f2cd0cfa1",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
+        {
+          "component": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.009fbd0eca14e56c9b263812b11b316fa4d08cd2d949acc2f81c3bc58f092545",
+          "kind": "action",
+          "name": "emptyModel",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "range": {
+                "endByteExclusive": 961,
+                "startByte": 840
+              },
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0458f683128b2aa386a66f59aec4b63a9fc6c5b1c5073a45a5bb4aff28dece65",
+          "kind": "action",
+          "name": "createReconciliationOperations",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
+              "range": {
+                "endByteExclusive": 59002,
+                "startByte": 29986
+              },
+              "resource": "src/application/reconciliation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.046ddebe70476d587c17d941771f0586fa683b8ec5fa4fc918fc6bf210fba323",
+          "kind": "action",
+          "name": "createAliasStore",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03faae518426c81bb34191151566ea768c7df547127cb3eae9b5794654b05cc4",
+              "range": {
+                "endByteExclusive": 13744,
+                "startByte": 10582
+              },
+              "resource": "src/persistence/alias-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.06a721744a0609ae9e19e5ae8fd072f4944faa9a73e14fcc74b7f4b2ba47aa37",
+          "kind": "action",
+          "name": "copyCanonicalGraphData",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "range": {
+                "endByteExclusive": 15544,
+                "startByte": 15274
+              },
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.09d7cb7f750504d60a6074dacb14936cda739861eb7006f344fb7d1878c3674d",
+          "kind": "action",
+          "name": "validatePluginRegistration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12de6906258229535f677aaa2a24b1f81981f0200fe82bf9f911b74421331507",
+              "range": {
+                "endByteExclusive": 13811,
+                "startByte": 13021
+              },
+              "resource": "src/core/plugin-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0a57b6a0ce530c61f6e6bfbd47df8cd2cb93ac66d4f56575315bd3f694a7cf27",
+          "kind": "action",
+          "name": "parseEntityId",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9eb0bd87ebc64eab5460252a331eec7ea8cd207420c2cfa642bf556feca2215c",
+              "range": {
+                "endByteExclusive": 1347,
+                "startByte": 1031
+              },
+              "resource": "src/core/identity.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0aba7e653de427bf4e13717f2f06e141a3507d60a926e2af16cc8e5dc9c46415",
+          "kind": "action",
+          "name": "createJsonEvidenceStore",
+          "provenance": [
+            {
+              "fingerprint": "sha256:2c5d3bdb8372050026b432ce8520a0e1c9200919c7e65721a77b463fc88cd977",
+              "range": {
+                "endByteExclusive": 18029,
+                "startByte": 8828
+              },
+              "resource": "src/persistence/json-evidence-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0be9c04c8a2e5f6247a14972b838714eca7386b01171fbf31ac3648f996c1605",
+          "kind": "action",
+          "name": "createStandardModelCapability",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 26973,
+                "startByte": 26750
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0d8196a0155a66a87d3e36b816c2aee40d753fcdd684f557d42e491b952be2e7",
+          "kind": "action",
+          "name": "measureCanonicalJsonUtf8Bytes",
+          "provenance": [
+            {
+              "fingerprint": "sha256:3ad5157049692f6aee941bf8040f63053f8ad192c7fb0f03a81e8d4b41c0811c",
+              "range": {
+                "endByteExclusive": 8479,
+                "startByte": 3575
+              },
+              "resource": "src/application/canonical-json-utf8.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0fbf27d3847356916a1a22f027e92aa1897a4c95d122d92f6809588167294439",
+          "kind": "action",
+          "name": "parseWorkspaceResourceLocator",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12c0b750aa23889d5684dc90119365284f6109d07846cf871ee8e07ed0697749",
+              "range": {
+                "endByteExclusive": 7597,
+                "startByte": 6462
+              },
+              "resource": "src/persistence/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.0ffc52e7190f8789463be9eb450ce10582b2840f7f63bda74c3461201e339c48",
+          "kind": "action",
+          "name": "success",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5ff98bee21f2d57afd85409be022361f6def958ffe34041c3b11c58e583f3c82",
+              "range": {
+                "endByteExclusive": 384,
+                "startByte": 310
+              },
+              "resource": "src/core/result.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.1517700bd41a31ab0ce45ff6f50d4d4e61aabe63dc515cdd68b3ae6d2024d178",
+          "kind": "action",
+          "name": "createScannerExecutionRuntime",
+          "provenance": [
+            {
+              "fingerprint": "sha256:8b1403f4f6d071bcc2ab72f4b0b417bc78130273f7b501c6e229e1af67a17dbe",
+              "range": {
+                "endByteExclusive": 16742,
+                "startByte": 6085
+              },
+              "resource": "src/host/scanner-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.1746f7ed6113208cbf8ae5e4679a5ee5a17662186dbc2d11ab5e5ae5efa5ed67",
+          "kind": "action",
+          "name": "parseBootstrapConfiguration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 35336,
+                "startByte": 29207
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.1a7f4d98c4943cfaf8bc3f4c0336495498fcf01ee57cc91e998d50dfa00976cb",
+          "kind": "action",
+          "name": "containNativePromise",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d65495c2ba794d1286403bbefdde8ce26ce45c7d87714259745904e79b0a194e",
+              "range": {
+                "endByteExclusive": 673,
+                "startByte": 517
+              },
+              "resource": "src/core/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.1ca75f18db587853382b82375d79d8158e28e27c8ec99a71993f0aa57a35bf6c",
+          "kind": "action",
+          "name": "decodeStructuredInput",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d9a2278cd198cf39fad6e2556e7590e6287768cfeac3fae4c0245627a27449bd",
+              "range": {
+                "endByteExclusive": 3299,
+                "startByte": 2539
+              },
+              "resource": "src/cli/input.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.2590f33445c81544ae8858dfdaf04f5f945b0ecb16174b753a8cc849e890af75",
+          "kind": "action",
+          "name": "parseRelationId",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9eb0bd87ebc64eab5460252a331eec7ea8cd207420c2cfa642bf556feca2215c",
+              "range": {
+                "endByteExclusive": 1684,
+                "startByte": 1356
+              },
+              "resource": "src/core/identity.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.2a128a8537d06297d6263dd4ca729cd2c4b8ef610b01d25bf8fb2bb294f4f719",
+          "kind": "action",
+          "name": "loadBootstrapConfiguration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 42472,
+                "startByte": 39195
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.2b71b800293bc308b0e5fb3b00eddae1b11148f69b483ae52a4497aa4297cf9e",
+          "kind": "action",
+          "name": "localBootstrapConvention",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 22062,
+                "startByte": 20503
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.2caaa280fb09203b64302daf76181a364f8a1cfee7707598f5c630ff5fc4824a",
+          "kind": "action",
+          "name": "createLocalProjectRegistry",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4456d715058a2a0e8d364932879dfa8fb4fbba3424aee5608f216fb762c18fe0",
+              "range": {
+                "endByteExclusive": 37192,
+                "startByte": 17740
+              },
+              "resource": "src/host/local-project-registry.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.2d81c514bab0eb984551240ba7b25aa8abf37a9809ed42241d4655615b8ffd7e",
+          "kind": "action",
+          "name": "isStandardComponentIconDomain",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 7503,
+                "startByte": 6822
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.309580c14693e20adcd0d1e09d03b1f036625902840bbfab1c119ab7e88e8f59",
+          "kind": "action",
+          "name": "jsonEvidenceSourceLocator",
+          "provenance": [
+            {
+              "fingerprint": "sha256:2c5d3bdb8372050026b432ce8520a0e1c9200919c7e65721a77b463fc88cd977",
+              "range": {
+                "endByteExclusive": 3893,
+                "startByte": 3727
+              },
+              "resource": "src/persistence/json-evidence-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3194143c23eddd4573815f13b14f2f10be69f499d88a97b06e34b3b87044c740",
+          "kind": "action",
+          "name": "isPathWithin",
+          "provenance": [
+            {
+              "fingerprint": "sha256:dfe08f12df194c0745ddf0d4ca0c690a7459f54dc30cb1dee2ff566dba4e7e78",
+              "range": {
+                "endByteExclusive": 666,
+                "startByte": 313
+              },
+              "resource": "src/host/path-containment.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.34f780a89eb5afc4b4f4e782ec7e891d4de6fcc76b9c36eee22d4bc12472bbd3",
+          "kind": "action",
+          "name": "fetchRoots",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "range": {
+                "endByteExclusive": 3305,
+                "startByte": 3148
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3548fd8e18f5ca1d0ca301752518464bfadd9f7fd5920f7cd762e70693c16fbf",
+          "kind": "action",
+          "name": "displayText",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "range": {
+                "endByteExclusive": 1087,
+                "startByte": 970
+              },
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.35faf0ec6c8b84d5cf64d5c2c182d6d47005c38e7490efe16dd83b481f8f03cc",
+          "kind": "action",
+          "name": "createYamlConfigurationParser",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 29198,
+                "startByte": 24706
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.36c328734a6eb01156810d1b480b33d841eb1495c5aa3356a52fbe2fe61cfc1c",
+          "kind": "action",
+          "name": "bootstrapConfigurationStillUsable",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 39186,
+                "startByte": 35345
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.38e2814853bc96fe63177893b932d5c0fece3691d4ac5bc5173c8f8fde23ca45",
+          "kind": "action",
+          "name": "applicationSnapshotStateDecoderMetadata",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "range": {
+                "endByteExclusive": 4914,
+                "startByte": 4693
+              },
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3a329d638c27d65ab5c37690d12ee4371d6493bd79e6aca02d022f40cf7eeca7",
+          "kind": "action",
+          "name": "createMarkdownIntentStore",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4901fd7e2b1281f063fa20351e8c1a2f152e80f7af54888d00a6cbd85d189a0d",
+              "range": {
+                "endByteExclusive": 60729,
+                "startByte": 47619
+              },
+              "resource": "src/persistence/markdown-intent-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3b5cd01e75c1bd23cedd7484173f8cbfac7ad89c751a9cb59159a50e9c3ebccb",
+          "kind": "action",
+          "name": "createLocalProjectionIndex",
+          "provenance": [
+            {
+              "fingerprint": "sha256:becc56a6cc7027574614c6965aa8c44c3272721ceb5411e8aed9f396d727531e",
+              "range": {
+                "endByteExclusive": 18775,
+                "startByte": 11847
+              },
+              "resource": "src/persistence/projection-index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3d133ab26d48c7812d2ae300f5e1321116fc73fdd28ae97952e3a020a42c0668",
+          "kind": "action",
+          "name": "canonicalizeObservationSessionBegin",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7fc4461a82ebdbe0b5fcd90421beee2521e42056946460171ba66e0b08314df7",
+              "range": {
+                "endByteExclusive": 39773,
+                "startByte": 39501
+              },
+              "resource": "src/core/observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3dea5e26267c1141ddd372b8c6e4eaa9bff0c09b0e4e4891c69a040770a91325",
+          "kind": "action",
+          "name": "shouldSyncLocalReplacementDirectory",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "range": {
+                "endByteExclusive": 4961,
+                "startByte": 4846
+              },
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.3f32b1c8e9cae20f862ab7d23e4ade30c53f0194486d9c7003d1114a2211329c",
+          "kind": "action",
+          "name": "createTransactionProjectionCanonicalSource",
+          "provenance": [
+            {
+              "fingerprint": "sha256:becc56a6cc7027574614c6965aa8c44c3272721ceb5411e8aed9f396d727531e",
+              "range": {
+                "endByteExclusive": 9122,
+                "startByte": 7954
+              },
+              "resource": "src/persistence/projection-index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.41ad1e67f911589b5649ee943fba2930c9856ab9c8842d70c780a41d3305493b",
+          "kind": "action",
+          "name": "renderBlueprintHtml",
+          "provenance": [
+            {
+              "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
+              "range": {
+                "endByteExclusive": 18774,
+                "startByte": 4970
+              },
+              "resource": "src/cli/blueprint-html.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.48249d6edadf819eb5e50257a2f18075c5c251cad5d28479dfd154f606667acb",
+          "kind": "action",
+          "name": "fetchSearch",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "range": {
+                "endByteExclusive": 4748,
+                "startByte": 4536
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d",
+          "kind": "action",
+          "name": "parseInvocation",
+          "provenance": [
+            {
+              "fingerprint": "sha256:16bacf9561770bcfa3c8b18c2c53229d88ab18f415f05e729b84681bb5859a67",
+              "range": {
+                "endByteExclusive": 15754,
+                "startByte": 12974
+              },
+              "resource": "src/cli/parser.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.4ac4ffdbbd492c17f75aaa80c5f2a29ee865d7e2816763f99e882d022c079167",
+          "kind": "action",
+          "name": "inspectExactRecord",
+          "provenance": [
+            {
+              "fingerprint": "sha256:38f2d2f0b275db70830f915f7660433fa04c41212966c2653263538a6e77a7c2",
+              "range": {
+                "endByteExclusive": 2644,
+                "startByte": 351
+              },
+              "resource": "src/core/runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.4e92b2bfb3a9118630ef1f556c96c54eeebcaacfc680a69617222cadf0b616ad",
+          "kind": "action",
+          "name": "copyHostDiagnostics",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "range": {
+                "endByteExclusive": 3134,
+                "startByte": 1937
+              },
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.52f3d388a59e904f4bc17882d8c8e8c574e0cfa2425b32a9063b28a3070587b1",
+          "kind": "action",
+          "name": "renderCommandResult",
+          "provenance": [
+            {
+              "fingerprint": "sha256:693ae5ab6c1f3dd3036286461d4fd2f0d3a0aa641c19c74620d4c9afd01fec3b",
+              "range": {
+                "endByteExclusive": 6292,
+                "startByte": 5201
+              },
+              "resource": "src/cli/render.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.538914bf602195400f2ad46fbae1d3ffe0c8c02d73a1363bb27839ae4c6a1566",
+          "kind": "action",
+          "name": "workspaceResourceLocator",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12c0b750aa23889d5684dc90119365284f6109d07846cf871ee8e07ed0697749",
+              "range": {
+                "endByteExclusive": 8846,
+                "startByte": 7606
+              },
+              "resource": "src/persistence/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.56ee3c4a1d7cd8b5214472d273f32367ef27a5a4261f770ed5f2743171bf44b8",
+          "kind": "action",
+          "name": "validateStructuralScaleProposalConfigurationV1",
+          "provenance": [
+            {
+              "fingerprint": "sha256:859df2a594e6314c2d990c7fac0e8c5642dfb77b3c26f008d503615f8b7b19eb",
+              "range": {
+                "endByteExclusive": 3307,
+                "startByte": 2408
+              },
+              "resource": "src/application/scale-proposal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.5b077fbae5995afc702be3c88ea21dc221331fdb8864e38bc1e4a5190c769f0e",
+          "kind": "action",
+          "name": "createDefaultBootstrapRegistry",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6440ff9ae552fa76a68eb52a9483389bc9a2a8d9a7a5b4d5f28c400119222c3f",
+              "range": {
+                "endByteExclusive": 49571,
+                "startByte": 8610
+              },
+              "resource": "src/host/default-bootstrap.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.5c25dd994fce4aa369e2400638e963e6910ed5df3742fc29e01b08173e33414b",
+          "kind": "action",
+          "name": "createOpaqueIdSource",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9eb0bd87ebc64eab5460252a331eec7ea8cd207420c2cfa642bf556feca2215c",
+              "range": {
+                "endByteExclusive": 1022,
+                "startByte": 815
+              },
+              "resource": "src/core/identity.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.66339e07ba6c4e55c68105a25467f43745cf5892d19b80495527fde9cf07f0f0",
+          "kind": "action",
+          "name": "initialProjectDisplayName",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6440ff9ae552fa76a68eb52a9483389bc9a2a8d9a7a5b4d5f28c400119222c3f",
+              "range": {
+                "endByteExclusive": 4034,
+                "startByte": 2934
+              },
+              "resource": "src/host/default-bootstrap.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.70a92e279424e61304a71c3267db583bfc6e3e33a780ab2f9f3d955a798eddf7",
+          "kind": "action",
+          "name": "isHostProxy",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "range": {
+                "endByteExclusive": 426,
+                "startByte": 360
+              },
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.712afadde9e640aa37c8d4e001acfb5ed2e9a29e0f98bae4b2bfc902d518023a",
+          "kind": "action",
+          "name": "invokeCapturedBoundedQueryExact",
+          "provenance": [
+            {
+              "fingerprint": "sha256:72a34029531853476c6ce891bbcdefdd1c2cf67bab13e422c8edc1abd0808947",
+              "range": {
+                "endByteExclusive": 18945,
+                "startByte": 18673
+              },
+              "resource": "src/core/query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.730d444fd3a265f66eab419433cfd14eb59bdb806d5394b8d19a0f613f82bf8c",
+          "kind": "action",
+          "name": "createCanonicalGraphDataCapturer",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "range": {
+                "endByteExclusive": 16334,
+                "startByte": 15651
+              },
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.74ff2878a9d0735c30566fed5c0156122f2693c4075223cf0d2eec6cae5ff60c",
+          "kind": "action",
+          "name": "inspectHostRecord",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "range": {
+                "endByteExclusive": 665,
+                "startByte": 435
+              },
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.76313bccca60870ee23ef34ebff6d82d4aa708fa50c32fc21d130a8db3454be8",
+          "kind": "action",
+          "name": "runHost",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1d7afc4ddd7e592fb3712fbba7ae3bef51e7c22eab3bc804f0d015fdf391104f",
+              "range": {
+                "endByteExclusive": 61021,
+                "startByte": 46838
+              },
+              "resource": "src/host/lifecycle.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.775297bec95236bac2d005aa63311e15a513ab434c0c101b9ca286c73a74e4ab",
+          "kind": "action",
+          "name": "commandName",
+          "provenance": [
+            {
+              "fingerprint": "sha256:794d78617ed3b9e5b185a8aa0dbf24b4cd282c85dce2fe9a37ed5f2dceceb6d3",
+              "range": {
+                "endByteExclusive": 5673,
+                "startByte": 4496
+              },
+              "resource": "src/cli/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.79f3477b458f9c376115668ec9a18043620c21cb7dc63f31737dd7c7ccb8f025",
+          "kind": "action",
+          "name": "createCliSurfaceController",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a91db8eed645ca8103d262fc30b5723f8b962b139c251e43a1bdd72b86625066",
+              "range": {
+                "endByteExclusive": 23918,
+                "startByte": 22422
+              },
+              "resource": "src/cli/surface.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.7e3153a59900689a4af0c2fb09185b3203c066cdd96f8c3ce5d79d458b187076",
+          "kind": "action",
+          "name": "createEntityAliasResolver",
+          "provenance": [
+            {
+              "fingerprint": "sha256:fb94eb92804aa9cbcb8f371b87b4b70b68e7a1dc648716ec56f96cd99fe19e6c",
+              "range": {
+                "endByteExclusive": 5960,
+                "startByte": 961
+              },
+              "resource": "src/core/aliases.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.7f8dae475c40e72cba830be685ea06eedaf14bd81f499b3ae667fd5678c5e540",
+          "kind": "action",
+          "name": "observedSharedFromSignals",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "range": {
+                "endByteExclusive": 4532,
+                "startByte": 4222
+              },
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.80184cd0d78c91d83fc701b858c0269626f3830edd53f62b938d128eaecf658d",
+          "kind": "action",
+          "name": "createProcessSignalSource",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1d7afc4ddd7e592fb3712fbba7ae3bef51e7c22eab3bc804f0d015fdf391104f",
+              "range": {
+                "endByteExclusive": 46829,
+                "startByte": 45113
+              },
+              "resource": "src/host/lifecycle.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.804fd03f889539b4aec7f77991c7b3e89170b40a426b517bae3e2cb5cad386c1",
+          "kind": "action",
+          "name": "observeNativePromise",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d65495c2ba794d1286403bbefdde8ce26ce45c7d87714259745904e79b0a194e",
+              "range": {
+                "endByteExclusive": 508,
+                "startByte": 183
+              },
+              "resource": "src/core/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.808c97b2c9a72a02087507d4ae0c77810737aa71458274e39904c0d830c74321",
+          "kind": "action",
+          "name": "nextScaleLabel",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
+              "range": {
+                "endByteExclusive": 5067,
+                "startByte": 4755
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.8244335d8887c7d3d26833cc6ef545e6b6d2a616499d8df4cc03ad6e7c3bef4c",
+          "kind": "action",
+          "name": "parseGraphCommittedEvent",
+          "provenance": [
+            {
+              "fingerprint": "sha256:07fd734a41af09ab8f31f0b6b84f2eeced66acae19ce2c4afc87588a43008ad7",
+              "range": {
+                "endByteExclusive": 9495,
+                "startByte": 7761
+              },
+              "resource": "src/core/events.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.8b15993a2c2b2e8b273cb3eb9fccec8b2227cb0ba0603bd6d8ed0d4f460dc088",
+          "kind": "action",
+          "name": "resolveObservedStructure",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "range": {
+                "endByteExclusive": 3384,
+                "startByte": 1394
+              },
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.8d56d81b3df4e74ea8f8d5392b223c48bb32366a876aaaaabafd86b6f780d44a",
+          "kind": "action",
+          "name": "mergeRootsPage",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "range": {
+                "endByteExclusive": 2106,
+                "startByte": 1700
+              },
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.90cc19f9f9e146aece0574b076c2c766db7e754edeab6bdcff42e68ab586d587",
+          "kind": "action",
+          "name": "allowsCustomLocalCoordinationRoot",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "range": {
+                "endByteExclusive": 4712,
+                "startByte": 4599
+              },
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.9135d5e34bbdd3d5c68ef31b07e79ae62079d95bf415d92a64113d98d4532ce6",
+          "kind": "action",
+          "name": "createApplicationOperations",
+          "provenance": [
+            {
+              "fingerprint": "sha256:625eca4d96ee80691a9cc16841939304a5916565cc5ef350e6cb85624c38f3b9",
+              "range": {
+                "endByteExclusive": 162061,
+                "startByte": 119226
+              },
+              "resource": "src/application/operations.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0",
+          "kind": "action",
+          "name": "createMarkdownIntentTransactionAdapter",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9cea477dec132f1d7acb6b0785e6cbf966b5c14d380ef4db27b1a5269a4dd68d",
+              "range": {
+                "endByteExclusive": 36207,
+                "startByte": 22357
+              },
+              "resource": "src/persistence/local-transaction-journal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.9eeadcbe369457a414c826abeedec5f74ce77da671d0e3b3dafac6ec8f22f03f",
+          "kind": "action",
+          "name": "formatSplash",
+          "provenance": [
+            {
+              "fingerprint": "sha256:00170b919993e3d8bf06115aa7f505a2af9fc057458d33a7d82257be8b4a7d70",
+              "range": {
+                "endByteExclusive": 3006,
+                "startByte": 863
+              },
+              "resource": "src/cli/splash.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.9f93e343e4c6b3639549a1a5a9c267d7da8c3b4e66ccefff0e6afe7b9256e473",
+          "kind": "action",
+          "name": "copyGraphPayload",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "range": {
+                "endByteExclusive": 16628,
+                "startByte": 16343
+              },
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a1dd2704dfd8a4c34887c69db92c1d93f920293402989a7f5336ed5a3e61c8d1",
+          "kind": "action",
+          "name": "canonicalizeProjectRegistration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 15462,
+                "startByte": 15135
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a2d27e4da6c5d0b2d94d68a544d710d85893afe3bc1820f0a939df0cbe9d8fdd",
+          "kind": "action",
+          "name": "resolveProjectSourcePath",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4456d715058a2a0e8d364932879dfa8fb4fbba3424aee5608f216fb762c18fe0",
+              "range": {
+                "endByteExclusive": 14570,
+                "startByte": 13815
+              },
+              "resource": "src/host/local-project-registry.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a67a19d2a493131c649987129d3af964ba844cae3f41370543dbb34e595aad07",
+          "kind": "action",
+          "name": "failure",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5ff98bee21f2d57afd85409be022361f6def958ffe34041c3b11c58e583f3c82",
+              "range": {
+                "endByteExclusive": 511,
+                "startByte": 393
+              },
+              "resource": "src/core/result.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a6d08b672b14005c617e36b8d1ce7f0534593178821286ada353ea3cbdc17923",
+          "kind": "action",
+          "name": "standardComponentDisplayText",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 9395,
+                "startByte": 9210
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a877eb87aa6b9b943ca15d4b0d0958ad7c6b6d0ee0a6c816d6f8994bc64be2ea",
+          "kind": "action",
+          "name": "serveWebBlueprint",
+          "provenance": [
+            {
+              "fingerprint": "sha256:de769364c840cd3f3484f2ece61fa19df6acb06f8c97ecc7d9034117b4afdea6",
+              "range": {
+                "endByteExclusive": 6667,
+                "startByte": 5221
+              },
+              "resource": "src/web/server.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a8a56cd3945669223f077c046a9fa7b2e6985d889f84882fa20ff1362523de24",
+          "kind": "action",
+          "name": "defineScanner",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
+              "range": {
+                "endByteExclusive": 34411,
+                "startByte": 34312
+              },
+              "resource": "src/plugin-sdk/scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.a8d60f308b8c3a3b012db2da86609b89405c131e434ad7fb1faab7169ee9c160",
+          "kind": "action",
+          "name": "isCanonicalApplicationSnapshotComponent",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "range": {
+                "endByteExclusive": 5088,
+                "startByte": 4923
+              },
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.abab8caf73bc597f303fc4fa0a75bfdb0143465691736443ab45c45952cd27da",
+          "kind": "action",
+          "name": "parseGraphGeneration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f74a9c3e5b3e575a2a82774eae914c60ef4614277f67e5b6fea35ab5a5b67914",
+              "range": {
+                "endByteExclusive": 616,
+                "startByte": 204
+              },
+              "resource": "src/core/generation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.aec93307cbe8cc15b972ccff0ae5007e6c455cd96a7cd87073a0d9fef333c31c",
+          "kind": "action",
+          "name": "deriveStructuralScaleProposalV1",
+          "provenance": [
+            {
+              "fingerprint": "sha256:859df2a594e6314c2d990c7fac0e8c5642dfb77b3c26f008d503615f8b7b19eb",
+              "range": {
+                "endByteExclusive": 5053,
+                "startByte": 3571
+              },
+              "resource": "src/application/scale-proposal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.b10b5c597fdb65e34dc6720be1fbfd2b2e40fdb54e22f5c2cecb504cad7c42f6",
+          "kind": "action",
+          "name": "invokeCapturedBoundedQueryPrepare",
+          "provenance": [
+            {
+              "fingerprint": "sha256:72a34029531853476c6ce891bbcdefdd1c2cf67bab13e422c8edc1abd0808947",
+              "range": {
+                "endByteExclusive": 19835,
+                "startByte": 19498
+              },
+              "resource": "src/core/query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.b129f7367a45b4172ec30f67d82b9c159f69c631df24332fc97ad3c650be4773",
+          "kind": "action",
+          "name": "nextGraphGeneration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f74a9c3e5b3e575a2a82774eae914c60ef4614277f67e5b6fea35ab5a5b67914",
+              "range": {
+                "endByteExclusive": 1090,
+                "startByte": 625
+              },
+              "resource": "src/core/generation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.b720f83814a5768cef36a9d7e3943bf767d69884014cf4e25cec4bac47168f4a",
+          "kind": "action",
+          "name": "createScannerRequest",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
+              "range": {
+                "endByteExclusive": 34216,
+                "startByte": 24738
+              },
+              "resource": "src/plugin-sdk/scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.b8d43c245e8eeb20af08cf7852dfb575ce9385f5b8ec54b47387823c02460827",
+          "kind": "action",
+          "name": "serializeBootstrapConfiguration",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 18085,
+                "startByte": 15471
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.b96b8e2dfec9071f0c753cca9fe5e55ed22e61f49b549130a0257baebbeba234",
+          "kind": "action",
+          "name": "instructionIndexText",
+          "provenance": [
+            {
+              "fingerprint": "sha256:310e442fa1e68cf8d0cb52f532b36e6fa248234556929c9c7805a1ab8dfd035d",
+              "range": {
+                "endByteExclusive": 2065,
+                "startByte": 1565
+              },
+              "resource": "src/cli/instructions/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.be0042dfaa8795208d6242695f82e5544ae7a4bc3696479f4e0228c5252fd3e1",
+          "kind": "action",
+          "name": "fetchConnections",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "range": {
+                "endByteExclusive": 4527,
+                "startByte": 4350
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.bedd08c5fe46e43811d2eb4ba64b6684fd28fab03049f072300d30381b4cb331",
+          "kind": "action",
+          "name": "mergeChildrenPage",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "range": {
+                "endByteExclusive": 3085,
+                "startByte": 2115
+              },
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.bf086439c76a256fe481eab5a201069d4eea29144cce6e9c5df891a0733e4617",
+          "kind": "action",
+          "name": "createProjectionQueryEngine",
+          "provenance": [
+            {
+              "fingerprint": "sha256:ea2e3e97f309ee453897adfeb7c0e5a64a6f1e65e335741d9fb2f134d5086266",
+              "range": {
+                "endByteExclusive": 58003,
+                "startByte": 32555
+              },
+              "resource": "src/persistence/projection-query-engine.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.c20a5e5e17831cfe2b03a1dcf8f9ce95196da265f6a896c9a3f63e638606fd06",
+          "kind": "action",
+          "name": "parseResourceKey",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1cb3d16294139d9d4cb6899dcffa922e650e703c397b164dea64b443f7fb27fb",
+              "range": {
+                "endByteExclusive": 9838,
+                "startByte": 9684
+              },
+              "resource": "src/core/transaction.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.c801f6e712ba07284b02f021a8e7016de287aa0a37c1bac8418be4752eb144a0",
+          "kind": "action",
+          "name": "projectObservationBoundary",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4456d715058a2a0e8d364932879dfa8fb4fbba3424aee5608f216fb762c18fe0",
+              "range": {
+                "endByteExclusive": 14940,
+                "startByte": 14579
+              },
+              "resource": "src/host/local-project-registry.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.cd57831be389119d8fcdcfe8a4425da7583a5ee495818b6db02e0654f7ba7565",
+          "kind": "action",
+          "name": "markdownIntentResource",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4901fd7e2b1281f063fa20351e8c1a2f152e80f7af54888d00a6cbd85d189a0d",
+              "range": {
+                "endByteExclusive": 9859,
+                "startByte": 9664
+              },
+              "resource": "src/persistence/markdown-intent-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.cd76906781419c47ea1a48ac1b5a4015389986b38c258a5c840e64ab21329300",
+          "kind": "action",
+          "name": "createStandardModelInvariant",
+          "provenance": [
+            {
+              "fingerprint": "sha256:63e8e370db59fc2f2e62f9f62d5e03c8e772120437bfdb23d539a194b3c6b5a5",
+              "range": {
+                "endByteExclusive": 37608,
+                "startByte": 36562
+              },
+              "resource": "src/standard-model/invariants.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.ceb7606626a6b9d1d7ae50b783b37aa3b6a900de07eee82233f87a75e5967db7",
+          "kind": "action",
+          "name": "containCapabilityValue",
+          "provenance": [
+            {
+              "fingerprint": "sha256:df2af7c9e39f54ca42647d81b7cbf4a56072e03a6d5152d5891f4a9a0a2ba8b7",
+              "range": {
+                "endByteExclusive": 2303,
+                "startByte": 513
+              },
+              "resource": "src/application/capability-value.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.cf0c8216572881fc78a10f053d044391af5773e8d273c8855cfb5ab8d3a0ccb2",
+          "kind": "action",
+          "name": "parseProjectionCanonicalFingerprint",
+          "provenance": [
+            {
+              "fingerprint": "sha256:79c94ca4654d8fe8d8b0301ab14e7d5b25a8da9e13f3f5c2927bb906130f2d0b",
+              "range": {
+                "endByteExclusive": 1281,
+                "startByte": 703
+              },
+              "resource": "src/core/projection.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d0e12bc18dc67b1f9fdff6f8eb64b87918f3656276a1a88c3c403bfc581a1960",
+          "kind": "action",
+          "name": "createObservationSession",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7fc4461a82ebdbe0b5fcd90421beee2521e42056946460171ba66e0b08314df7",
+              "range": {
+                "endByteExclusive": 49276,
+                "startByte": 39782
+              },
+              "resource": "src/core/observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d19cf6261e2e4203d61950e536f958b1a726cc196c210dc435b1fb37e740fa81",
+          "kind": "action",
+          "name": "isProjectRegistrationId",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 6773,
+                "startByte": 6636
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d254f25d8bd01f75925337aab864e9c7102651eec25eba1c5a8184a34df19b41",
+          "kind": "action",
+          "name": "buildBlueprintFlowGraph",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
+              "range": {
+                "endByteExclusive": 31177,
+                "startByte": 10936
+              },
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d53c3b5797f339fa8097298b801190cd3f81e12c5caf7a4175bff5cc564ff929",
+          "kind": "action",
+          "name": "copyGraphPayloadPair",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "range": {
+                "endByteExclusive": 17402,
+                "startByte": 16637
+              },
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d5f73113ff27f9bc5a4eb880f52145558eb2407e3d3b25c0ab6576b903aa2483",
+          "kind": "action",
+          "name": "isStandardComponentSummary",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 6813,
+                "startByte": 6666
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d61503fabd65516d7eb756cd7b431c087579c8246c062a44068c366a8beb812c",
+          "kind": "action",
+          "name": "inspectHostDenseArray",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "range": {
+                "endByteExclusive": 984,
+                "startByte": 674
+              },
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d7c2e18b860fb4481a718ec20b407aa50555a212f6aedf4f9ca9b228ddd9c1b2",
+          "kind": "action",
+          "name": "isStandardComponentScale",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 8822,
+                "startByte": 8662
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.d872e35f5c07b57ed52fde73ced7846877e19ddc25743c749485e485c4ce2cf5",
+          "kind": "action",
+          "name": "createLocalScannerProjectResources",
+          "provenance": [
+            {
+              "fingerprint": "sha256:abdbce65b9498f484f8553341f84741bb6b6086704bf43ec463c00981d3e9635",
+              "range": {
+                "endByteExclusive": 8945,
+                "startByte": 4610
+              },
+              "resource": "src/host/scanner-project-resources.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
         {
           "component": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
@@ -4588,6 +7354,204 @@
                 "startByte": 34312
               },
               "resource": "src/plugin-sdk/scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.da5711f2a710f2621605626c0854514fe37e5b7dc43d5f631a7807c3a6aa9a89",
+          "kind": "action",
+          "name": "parseEvidenceState",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
+              "range": {
+                "endByteExclusive": 20576,
+                "startByte": 13582
+              },
+              "resource": "src/application/reconciliation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.da802c09d2fe72d3ac5c239df12859f445bdd23ad8438bba95d0cad89c89ffc3",
+          "kind": "action",
+          "name": "createLocalConfigurationDiscovery",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "range": {
+                "endByteExclusive": 24697,
+                "startByte": 22071
+              },
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.dccc0558390decc1ad118ef52c0fb46297eb30e771a49ab907ef1449ccb0eed5",
+          "kind": "action",
+          "name": "observedScaleForDepth",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "range": {
+                "endByteExclusive": 4081,
+                "startByte": 3880
+              },
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.dd42c80dd38a8f4569a9230a7b3188ee5e8e0853fb3386321a26f7fd70f497f0",
+          "kind": "action",
+          "name": "isCanonicalApplicationSnapshotRelationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "range": {
+                "endByteExclusive": 5268,
+                "startByte": 5097
+              },
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e077705eff51e461d1e4c59b1d1e617ba1f89faed6507ee07c3c1c4c51ca7ec0",
+          "kind": "action",
+          "name": "createLocalResourceProvider",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "range": {
+                "endByteExclusive": 21764,
+                "startByte": 16654
+              },
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e11ca2b3359683534715bce80fed9917349503c6156221980c0efb0644f7e64b",
+          "kind": "action",
+          "name": "inspectIntrinsicArrayLength",
+          "provenance": [
+            {
+              "fingerprint": "sha256:38f2d2f0b275db70830f915f7660433fa04c41212966c2653263538a6e77a7c2",
+              "range": {
+                "endByteExclusive": 3428,
+                "startByte": 2653
+              },
+              "resource": "src/core/runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e3756145e962e03469b07a2393f49a5f51ed8524bd2cbaffa9cb3b86e37b0dda",
+          "kind": "action",
+          "name": "shouldSyncLocalCoordinationDirectory",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "range": {
+                "endByteExclusive": 4837,
+                "startByte": 4721
+              },
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e3e8327e40e39ffefa415c0587e37fa625d7b0821f3d5c961b82800013638681",
+          "kind": "action",
+          "name": "createLocalWorkspaceCapability",
+          "provenance": [
+            {
+              "fingerprint": "sha256:003b3d327dde2f9f10bc844165bef3b469259a2ecb1ade2bdf378f506c6861be",
+              "range": {
+                "endByteExclusive": 46104,
+                "startByte": 33897
+              },
+              "resource": "src/host/local-workspace.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e422b5ed92186b3d897ef97185f561222d9a8e02fcfbd27de9c2e269f755d477",
+          "kind": "action",
+          "name": "isReservedWorkspaceResourceSegment",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12c0b750aa23889d5684dc90119365284f6109d07846cf871ee8e07ed0697749",
+              "range": {
+                "endByteExclusive": 4195,
+                "startByte": 3934
+              },
+              "resource": "src/persistence/contracts.ts",
               "scope": "workspace"
             }
           ],
@@ -4653,6 +7617,160 @@
         },
         {
           "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.e78109961296b3131202e298f8a104bee25f0eb6c76acb66cd2a11b4bc122aa4",
+          "kind": "action",
+          "name": "isCoarserStandardScale",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 9201,
+                "startByte": 8996
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.ea7b87e7bb484180bdd320c2332c5dc0d6a6775951f8d75f7e16228f44546856",
+          "kind": "action",
+          "name": "observedSummaryFromDocumentation",
+          "provenance": [
+            {
+              "fingerprint": "sha256:425faf8d3f6bf1ddc987161db795b9cb5c944c0906f7aeeb3d69dbe2c4923188",
+              "range": {
+                "endByteExclusive": 6710,
+                "startByte": 6016
+              },
+              "resource": "src/application/observed-documentation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.ec8337275632680b5a6531db8df2f1e9b901030e559f81d85cf5b3ddf414d0c4",
+          "kind": "action",
+          "name": "jsonEvidenceIndexLocator",
+          "provenance": [
+            {
+              "fingerprint": "sha256:2c5d3bdb8372050026b432ce8520a0e1c9200919c7e65721a77b463fc88cd977",
+              "range": {
+                "endByteExclusive": 3718,
+                "startByte": 3579
+              },
+              "resource": "src/persistence/json-evidence-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.ec93b631b325426d7890ab052381458679a330220d34b2dce17631253c2cb601",
+          "kind": "action",
+          "name": "runProgram",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
+              "range": {
+                "endByteExclusive": 14031,
+                "startByte": 6975
+              },
+              "resource": "src/cli/program.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.ecebb6665926ec0478caafad55473824df098bbe092619b859948e564acf784a",
+          "kind": "action",
+          "name": "isStandardComponentLabel",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "range": {
+                "endByteExclusive": 6657,
+                "startByte": 6514
+              },
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.efd3ab875becaaba5f01c7e6559a96ca44c52fd3f88bbf88fad2e63f1f4b0d12",
+          "kind": "action",
+          "name": "parseContentRevision",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1cb3d16294139d9d4cb6899dcffa922e650e703c397b164dea64b443f7fb27fb",
+              "range": {
+                "endByteExclusive": 9675,
+                "startByte": 9501
+              },
+              "resource": "src/core/transaction.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.efe5e5ee866ed118e419cac7d1b54f08bdda6fa31c1513b453607f60e09207e6",
+          "kind": "action",
+          "name": "fetchComponent",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "range": {
+                "endByteExclusive": 3852,
+                "startByte": 3557
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
             "scope": "workspace"
           },
@@ -4667,6 +7785,182 @@
                 "startByte": 5373
               },
               "resource": "src/web/server.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.f6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589",
+          "kind": "action",
+          "name": "createLocalTransactionJournal",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9cea477dec132f1d7acb6b0785e6cbf966b5c14d380ef4db27b1a5269a4dd68d",
+              "range": {
+                "endByteExclusive": 76147,
+                "startByte": 49779
+              },
+              "resource": "src/persistence/local-transaction-journal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.f7c9ed7cc0d494162374df373bc056fc569082da7acc1fbc14714307805556e2",
+          "kind": "action",
+          "name": "fetchChildren",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "range": {
+                "endByteExclusive": 3548,
+                "startByte": 3314
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.f8a547cb243c855d7ce99560c25d120398142e9070c963bbad1f119ade1b3217",
+          "kind": "action",
+          "name": "invokeCapturedBoundedQueryPage",
+          "provenance": [
+            {
+              "fingerprint": "sha256:72a34029531853476c6ce891bbcdefdd1c2cf67bab13e422c8edc1abd0808947",
+              "range": {
+                "endByteExclusive": 19393,
+                "startByte": 19059
+              },
+              "resource": "src/core/query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.f8fe45d9f740dca5925abb467af2b2d379074ae3f33509fe9f4192ea0a8f1081",
+          "kind": "action",
+          "name": "createApplicationSnapshotStateDecoder",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "range": {
+                "endByteExclusive": 62437,
+                "startByte": 59966
+              },
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.fb06cc666ddbd5443c4d04b53a92e8a9180524e25dba6c32fdae3c3ce49eb39b",
+          "kind": "action",
+          "name": "createGraphCommittedEvent",
+          "provenance": [
+            {
+              "fingerprint": "sha256:07fd734a41af09ab8f31f0b6b84f2eeced66acae19ce2c4afc87588a43008ad7",
+              "range": {
+                "endByteExclusive": 4401,
+                "startByte": 2693
+              },
+              "resource": "src/core/events.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.fb6b048b1a79c4e39f5b59ecac54320a284fa362a379f9151125b1883e4e6e79",
+          "kind": "action",
+          "name": "aliasStoreLocator",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03faae518426c81bb34191151566ea768c7df547127cb3eae9b5794654b05cc4",
+              "range": {
+                "endByteExclusive": 2574,
+                "startByte": 2450
+              },
+              "resource": "src/persistence/alias-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.fd167b41507ec1cc04e37692416e3f91434848bc882b4c92d065b5c835bd6963",
+          "kind": "action",
+          "name": "sequenceGraphCommittedEvent",
+          "provenance": [
+            {
+              "fingerprint": "sha256:07fd734a41af09ab8f31f0b6b84f2eeced66acae19ce2c4afc87588a43008ad7",
+              "range": {
+                "endByteExclusive": 11114,
+                "startByte": 9504
+              },
+              "resource": "src/core/events.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
+            "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.fe718dd2887f6b73b131cb743e95b2f3f8199e4703eb6587c251b0a75c2dabc6",
+          "kind": "action",
+          "name": "instructionGuide",
+          "provenance": [
+            {
+              "fingerprint": "sha256:310e442fa1e68cf8d0cb52f532b36e6fa248234556929c9c7805a1ab8dfd035d",
+              "range": {
+                "endByteExclusive": 1556,
+                "startByte": 1420
+              },
+              "resource": "src/cli/instructions/index.ts",
               "scope": "workspace"
             }
           ],
@@ -4835,7 +8129,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
             }
@@ -4895,7 +8189,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "resource": "src/host/typescript-bun-scanner.ts",
               "scope": "workspace"
             }
@@ -5584,7 +8878,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -5708,7 +9002,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -6065,7 +9359,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -7452,7 +10746,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 162,
                 "startByte": 152
@@ -7984,7 +11278,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -9223,7 +12517,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "range": {
                 "endByteExclusive": 538,
                 "startByte": 514
@@ -9650,7 +12944,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "range": {
                 "endByteExclusive": 40,
                 "startByte": 27
@@ -10369,7 +13663,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -10855,7 +14149,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "range": {
                 "endByteExclusive": 538,
                 "startByte": 514
@@ -11573,7 +14867,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 225,
                 "startByte": 213
@@ -11880,7 +15174,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
             }
@@ -12231,7 +15525,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:27df0be091726385952bf29a8cb762dbedfb27baa605530a000a8667da808a09",
+              "fingerprint": "sha256:bb57626cd32d030230399a2f652deae89740d6783c496767258bea268e0b4779",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -13441,7 +16735,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:b278dcf800cab4097e9876f209f66e1e217b7291b25fc7c5a5761c00cb91d865",
+              "fingerprint": "sha256:6e30427242a7cd504759b6c8a8f255f6be31095bbb8f4e02a8373bd69d237c3f",
               "resource": "src/host/typescript-bun-scanner.ts",
               "scope": "workspace"
             }

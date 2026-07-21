@@ -6,6 +6,10 @@ scale: part
 parent: ent_48d50ed37f4863230d8ae1e9c9683984
 ---
 
+# Actions
+
+- parseProjectionCanonicalFingerprint — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ecf0c8216572881fc78a10f053d044391af5773e8d273c8855cfb5ab8d3a0ccb2 fields=name,description -->
+
 # Relationships
 
 - imports → ent_d7a180089821ca2a91617a7977690f52 <!-- groma:relationship id=rel_24e4365f4d8cc10b1bc04d207f229ff8 target=ent_d7a180089821ca2a91617a7977690f52 description=false -->

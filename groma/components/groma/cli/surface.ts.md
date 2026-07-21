@@ -6,6 +6,10 @@ scale: part
 parent: ent_83702a52aa46b605c22cc1be63bf939a
 ---
 
+# Actions
+
+- createCliSurfaceController — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E79f3477b458f9c376115668ec9a18043620c21cb7dc63f31737dd7c7ccb8f025 fields=name,description -->
+
 # Relationships
 
 - imports → ent_246df04e4b4fd1bfb06e9b1dc155f7a3 <!-- groma:relationship id=rel_3a013e214824fe0877661eb16c3453d2 target=ent_246df04e4b4fd1bfb06e9b1dc155f7a3 description=false -->

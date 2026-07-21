@@ -6,6 +6,10 @@ scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
 
+# Actions
+
+- createProjectionQueryEngine — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ebf086439c76a256fe481eab5a201069d4eea29144cce6e9c5df891a0733e4617 fields=name,description -->
+
 # Relationships
 
 - imports → ent_05989e2ed62b0c241bebcaafd13202a5 <!-- groma:relationship id=rel_36b86d342873b5a3b00a9b511ec02c7f target=ent_05989e2ed62b0c241bebcaafd13202a5 description=false -->

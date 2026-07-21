@@ -6,6 +6,10 @@ scale: part
 parent: ent_dc27dd8b576c2950cd5b445248045584
 ---
 
+# Actions
+
+- createStandardModelInvariant — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ecd76906781419c47ea1a48ac1b5a4015389986b38c258a5c840e64ab21329300 fields=name,description -->
+
 # Relationships
 
 - imports → ent_cf5698b9cb2541f5766768fb54a5e855 <!-- groma:relationship id=rel_0d9de7c737ae6cd09e8ac7f92327d03d target=ent_cf5698b9cb2541f5766768fb54a5e855 description=false -->

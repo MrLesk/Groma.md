@@ -6,6 +6,11 @@ scale: part
 parent: ent_fcb48c7a702eac71d138e1eb2803cdc6
 ---
 
+# Actions
+
+- createDefaultBootstrapRegistry — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E5b077fbae5995afc702be3c88ea21dc221331fdb8864e38bc1e4a5190c769f0e fields=name,description -->
+- initialProjectDisplayName — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E66339e07ba6c4e55c68105a25467f43745cf5892d19b80495527fde9cf07f0f0 fields=name,description -->
+
 # Relationships
 
 - imports → ent_e0b4e82e8f7c92c199741a1dd6dda618 <!-- groma:relationship id=rel_19d536444ae31ce35828d68c1b2edf75 target=ent_e0b4e82e8f7c92c199741a1dd6dda618 description=false -->

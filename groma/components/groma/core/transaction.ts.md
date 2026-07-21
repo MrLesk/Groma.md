@@ -6,6 +6,11 @@ scale: part
 parent: ent_48d50ed37f4863230d8ae1e9c9683984
 ---
 
+# Actions
+
+- parseResourceKey — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ec20a5e5e17831cfe2b03a1dcf8f9ce95196da265f6a896c9a3f63e638606fd06 fields=name,description -->
+- parseContentRevision — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Eefd3ab875becaaba5f01c7e6559a96ca44c52fd3f88bbf88fad2e63f1f4b0d12 fields=name,description -->
+
 # Relationships
 
 - imports → ent_b369bf593bc82c53d1a2e5d56783ad21 <!-- groma:relationship id=rel_03516c3c6955ed7c30ae8c2af568b51e target=ent_b369bf593bc82c53d1a2e5d56783ad21 description=false -->

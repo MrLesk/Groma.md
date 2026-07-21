@@ -6,6 +6,11 @@ scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
 
+# Actions
+
+- createMarkdownIntentStore — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E3a329d638c27d65ab5c37690d12ee4371d6493bd79e6aca02d022f40cf7eeca7 fields=name,description -->
+- markdownIntentResource — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ecd57831be389119d8fcdcfe8a4425da7583a5ee495818b6db02e0654f7ba7565 fields=name,description -->
+
 # Relationships
 
 - imports → ent_98f9d76e4fb8098a8682ef38568487b7 <!-- groma:relationship id=rel_44dc2f357ee80b6d7865bf2295251db0 target=ent_98f9d76e4fb8098a8682ef38568487b7 description=false -->

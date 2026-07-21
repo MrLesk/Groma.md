@@ -6,6 +6,11 @@ scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
 
+# Actions
+
+- createMarkdownIntentTransactionAdapter — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0 fields=name,description -->
+- createLocalTransactionJournal — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ef6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589 fields=name,description -->
+
 # Relationships
 
 - imports → ent_98f9d76e4fb8098a8682ef38568487b7 <!-- groma:relationship id=rel_06a8cbfd602d7234a77181823a7374cb target=ent_98f9d76e4fb8098a8682ef38568487b7 description=false -->

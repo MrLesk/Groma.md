@@ -6,6 +6,11 @@ scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
 
+# Actions
+
+- createLocalProjectionIndex — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E3b5cd01e75c1bd23cedd7484173f8cbfac7ad89c751a9cb59159a50e9c3ebccb fields=name,description -->
+- createTransactionProjectionCanonicalSource — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E3f32b1c8e9cae20f862ab7d23e4ade30c53f0194486d9c7003d1114a2211329c fields=name,description -->
+
 # Relationships
 
 - imports → ent_2fbe2aeee68a2a7328214eeaeab2560d <!-- groma:relationship id=rel_1cf7ff425d546f72cc707c141d216f6b target=ent_2fbe2aeee68a2a7328214eeaeab2560d description=false -->

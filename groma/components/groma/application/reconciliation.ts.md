@@ -6,6 +6,11 @@ scale: part
 parent: ent_93b646ce861caf566a130dcd67d2c836
 ---
 
+# Actions
+
+- createReconciliationOperations — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E0458f683128b2aa386a66f59aec4b63a9fc6c5b1c5073a45a5bb4aff28dece65 fields=name,description -->
+- parseEvidenceState — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Eda5711f2a710f2621605626c0854514fe37e5b7dc43d5f631a7807c3a6aa9a89 fields=name,description -->
+
 # Relationships
 
 - imports → ent_b5a32eab1f8e4f7893056f7c0b7d55ca <!-- groma:relationship id=rel_05d5aa9dcf65230eb8c45175a7429efe target=ent_b5a32eab1f8e4f7893056f7c0b7d55ca description=false -->

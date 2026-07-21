@@ -6,6 +6,12 @@ scale: part
 parent: ent_48d50ed37f4863230d8ae1e9c9683984
 ---
 
+# Actions
+
+- parseGraphCommittedEvent — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E8244335d8887c7d3d26833cc6ef545e6b6d2a616499d8df4cc03ad6e7c3bef4c fields=name,description -->
+- createGraphCommittedEvent — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Efb06cc666ddbd5443c4d04b53a92e8a9180524e25dba6c32fdae3c3ce49eb39b fields=name,description -->
+- sequenceGraphCommittedEvent — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Efd167b41507ec1cc04e37692416e3f91434848bc882b4c92d065b5c835bd6963 fields=name,description -->
+
 # Relationships
 
 - imports → ent_9cda15cd1f6d49d151214da56a8887be <!-- groma:relationship id=rel_341a6df1949bf1abdf8635bb1938783e target=ent_9cda15cd1f6d49d151214da56a8887be description=false -->

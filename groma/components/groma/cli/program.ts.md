@@ -6,6 +6,10 @@ scale: part
 parent: ent_83702a52aa46b605c22cc1be63bf939a
 ---
 
+# Actions
+
+- runProgram — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Eec93b631b325426d7890ab052381458679a330220d34b2dce17631253c2cb601 fields=name,description -->
+
 # Relationships
 
 - imports → ent_285e78427fbf837690b7f6133ad2701c <!-- groma:relationship id=rel_01dafc59d279f4c39b68946608a78041 target=ent_285e78427fbf837690b7f6133ad2701c description=false -->

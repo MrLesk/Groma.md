@@ -6,6 +6,10 @@ scale: part
 parent: ent_fcb48c7a702eac71d138e1eb2803cdc6
 ---
 
+# Actions
+
+- createLocalWorkspaceCapability — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ee3e8327e40e39ffefa415c0587e37fa625d7b0821f3d5c961b82800013638681 fields=name,description -->
+
 # Relationships
 
 - imports → ent_3318a42f72c996181ef83fcc697fd5a2 <!-- groma:relationship id=rel_0bb250a8fad7909aeafae980f188394c target=ent_3318a42f72c996181ef83fcc697fd5a2 description=false -->

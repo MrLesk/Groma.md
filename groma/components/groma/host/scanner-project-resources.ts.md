@@ -6,6 +6,10 @@ scale: part
 parent: ent_fcb48c7a702eac71d138e1eb2803cdc6
 ---
 
+# Actions
+
+- createLocalScannerProjectResources — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ed872e35f5c07b57ed52fde73ced7846877e19ddc25743c749485e485c4ce2cf5 fields=name,description -->
+
 # Relationships
 
 - imports → ent_8a9f80920f95a7660e3d4a10a9065a0e <!-- groma:relationship id=rel_356d86d243af41359ef68de93fd16f53 target=ent_8a9f80920f95a7660e3d4a10a9065a0e description=false -->

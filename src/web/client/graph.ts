@@ -238,6 +238,29 @@ export interface BlueprintGraphOptions {
 }
 
 /**
+ * The description the scanner records on a file's own exported functions. Such
+ * an export is not a way into the system — only a served route or a package's
+ * public API is — so it must not light the "entry" mark just because a drilled-in
+ * file lists the functions it defines. Mirrors the scanner's fileExportDescription;
+ * a web test pins the two together so the marker cannot drift unnoticed.
+ */
+export const fileExportActionDescription = "Exported function";
+
+/**
+ * Whether a component exposes a public way in — a served route or a declared
+ * public export — as opposed to merely listing the functions a file exports. The
+ * two arrive on the same channel but never on the same component, so the export
+ * marker alone tells them apart.
+ */
+function hasPublicEntry(component: {
+  readonly actions?: readonly { readonly description?: string }[];
+}): boolean {
+  return (component.actions ?? []).some(
+    (action) => action.description !== fileExportActionDescription,
+  );
+}
+
+/**
  * The groups of components that reference one another in a cycle (Tarjan's
  * strongly-connected components of size two or more). Deterministic: the input
  * order fixes the traversal, and each returned group is sorted by id so the same
@@ -543,7 +566,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       return;
     }
 
-    const entryPoint = (component.actions?.length ?? 0) > 0;
+    const entryPoint = hasPublicEntry(component);
     const external = component.type === "external";
     const shared = component.shared === true;
     if (external) terms.add("external");
@@ -720,7 +743,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     }
 
     const entries = levelCards
-      .filter((id) => (componentOf(id)?.actions?.length ?? 0) > 0)
+      .filter((id) => {
+        const component = componentOf(id);
+        return component !== undefined && hasPublicEntry(component);
+      })
       .sort(byId);
     if (entries.length > 0 && entries.length < siblings) {
       readout.push(

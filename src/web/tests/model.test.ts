@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
+import { fileExportDescription } from "../../host/typescript-bun-scanner.ts";
 import type { ApiComponentPage, ApiComponentView } from "../client/api.ts";
-import { buildBlueprintFlowGraph, nextScaleLabel } from "../client/graph.ts";
+import {
+  buildBlueprintFlowGraph,
+  fileExportActionDescription,
+  nextScaleLabel,
+} from "../client/graph.ts";
 import { displayText, emptyModel, mergeChildrenPage, mergeRootsPage } from "../client/model.ts";
 
 function view(id: string, extra: Record<string, unknown> = {}): ApiComponentView {
@@ -212,6 +217,41 @@ describe("interactive map view-model", () => {
     expect(graph.terms).toContain("borrowed");
     expect(graph.terms).not.toContain("entry");
     expect(graph.terms).not.toContain("quoted");
+  });
+
+  test("a file's own exports are not a way in, but a served route is", () => {
+    const model = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_web", {
+          name: "web",
+          scale: "domain",
+          actions: [{ id: "act_route", name: "GET /health" }],
+        }),
+        view("ent_file", {
+          name: "result.ts",
+          scale: "part",
+          // The same channel carries a file's exported functions, marked apart so
+          // listing them never reads as exposing the system.
+          actions: [
+            { description: fileExportActionDescription, id: "act_success", name: "success" },
+            { description: fileExportActionDescription, id: "act_failure", name: "failure" },
+          ],
+        }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({ dependencies: [], model });
+    const routed = graph.nodes.find((node) => node.id === "ent_web");
+    const file = graph.nodes.find((node) => node.id === "ent_file");
+    expect(routed?.data.entryPoint).toBe(true);
+    expect(file?.data.entryPoint).toBe(false);
+    // The key defines "entry" because the route is present, not because a file
+    // happens to export functions.
+    expect(graph.terms).toContain("entry");
+  });
+
+  test("the web's file-export marker stays pinned to the scanner's", () => {
+    expect(fileExportActionDescription).toBe(fileExportDescription);
   });
 
   test("measures what stands out at a level, as figures a reader can count", () => {

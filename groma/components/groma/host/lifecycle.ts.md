@@ -6,6 +6,11 @@ scale: part
 parent: ent_fcb48c7a702eac71d138e1eb2803cdc6
 ---
 
+# Actions
+
+- runHost — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E76313bccca60870ee23ef34ebff6d82d4aa708fa50c32fc21d130a8db3454be8 fields=name,description -->
+- createProcessSignalSource — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E80184cd0d78c91d83fc701b858c0269626f3830edd53f62b938d128eaecf658d fields=name,description -->
+
 # Relationships
 
 - imports → ent_a1e39baac435c84134d633ebb1e201c4 <!-- groma:relationship id=rel_0af045bdb66f7fc1d2536a8d9d30b0a8 target=ent_a1e39baac435c84134d633ebb1e201c4 description=false -->

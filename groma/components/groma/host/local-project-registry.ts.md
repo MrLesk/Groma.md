@@ -6,6 +6,12 @@ scale: part
 parent: ent_fcb48c7a702eac71d138e1eb2803cdc6
 ---
 
+# Actions
+
+- createLocalProjectRegistry — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E2caaa280fb09203b64302daf76181a364f8a1cfee7707598f5c630ff5fc4824a fields=name,description -->
+- resolveProjectSourcePath — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ea2d27e4da6c5d0b2d94d68a544d710d85893afe3bc1820f0a939df0cbe9d8fdd fields=name,description -->
+- projectObservationBoundary — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ec801f6e712ba07284b02f021a8e7016de287aa0a37c1bac8418be4752eb144a0 fields=name,description -->
+
 # Relationships
 
 - imports → ent_98f9d76e4fb8098a8682ef38568487b7 <!-- groma:relationship id=rel_13687834c93c11b1eee52fc3cfdcb980 target=ent_98f9d76e4fb8098a8682ef38568487b7 description=false -->

@@ -6,6 +6,12 @@ scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
 
+# Actions
+
+- createJsonEvidenceStore — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E0aba7e653de427bf4e13717f2f06e141a3507d60a926e2af16cc8e5dc9c46415 fields=name,description -->
+- jsonEvidenceSourceLocator — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E309580c14693e20adcd0d1e09d03b1f036625902840bbfab1c119ab7e88e8f59 fields=name,description -->
+- jsonEvidenceIndexLocator — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Eec8337275632680b5a6531db8df2f1e9b901030e559f81d85cf5b3ddf414d0c4 fields=name,description -->
+
 # Relationships
 
 - imports → ent_b369bf593bc82c53d1a2e5d56783ad21 <!-- groma:relationship id=rel_4a0a6f623fce140e3876169dd86c94de target=ent_b369bf593bc82c53d1a2e5d56783ad21 description=false -->
