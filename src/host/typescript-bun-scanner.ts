@@ -4189,8 +4189,14 @@ async function scanScope(
     0,
   );
   const emittedFileKeys = new Set<string>();
+  // Enrichment stops well short of every ceiling — record count, distinct
+  // components, and canonical characters alike — so a large repository yields as
+  // much topography as fits and reports the rest as partial, never overflowing.
+  const topographyCharacterCeiling = maxCanonicalCharacters - 32_768;
   const roomForTopography = () =>
-    budget.records + 8 < maxRecords && componentCandidateCount < maxComponentCandidates;
+    budget.records + 8 < maxRecords &&
+    componentCandidateCount < maxComponentCandidates &&
+    budget.canonicalCharacters < topographyCharacterCeiling;
   const containsRelationship = (from: string, to: string, provenance: ObservationProvenance) =>
     Object.freeze({
       from: reference(scope, from),
@@ -4279,7 +4285,10 @@ async function scanScope(
     compareCodeUnits(left[0], right[0]),
   )) {
     if (!emittedFileKeys.has(edge.from) || !emittedFileKeys.has(edge.to)) continue;
-    if (budget.records + 4 >= maxRecords) {
+    if (
+      budget.records + 4 >= maxRecords ||
+      budget.canonicalCharacters >= topographyCharacterCeiling
+    ) {
       partial = true;
       break;
     }
