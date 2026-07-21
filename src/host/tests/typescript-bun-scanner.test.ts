@@ -3570,6 +3570,31 @@ export function shared() {}
     ).toBeTrue();
   });
 
+  test("publishes partial evidence when file imports exceed reconciliation capacity", async () => {
+    const boundaryCount = 33;
+    const project: Record<string, string> = {
+      "package.json": JSON.stringify({ name: "dense-import-graph" }),
+    };
+    for (let index = 0; index < boundaryCount; index += 1) {
+      const boundary = index.toString(36);
+      const imports = Array.from({ length: boundaryCount - 1 }, (_, offset) => offset + 1)
+        .map((offset) => `import "../${((index + offset) % boundaryCount).toString(36)}/a.ts";`)
+        .join("\n");
+      project[`src/${boundary}/a.ts`] = `${imports}\n`;
+    }
+
+    const result = await scan(project);
+    const imports =
+      result.snapshot?.records.filter(
+        (record) => record.kind === "relationship" && record.relationshipType === "imports",
+      ) ?? [];
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(imports.length).toBeGreaterThan(0);
+    expect(imports.length).toBeLessThanOrEqual(1_000);
+  });
+
   test("fails stably before an oversized extraction can accumulate records", async () => {
     const declarations = Array.from(
       { length: 4_100 },

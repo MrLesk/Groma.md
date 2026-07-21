@@ -136,6 +136,11 @@ explicit unambiguous selection. The Host buffers one finite observation session 
 passes only a completed snapshot to reconciliation. Reconciliation maintains stable source-owned
 bindings and publishes evidence plus canonical changes in one atomic transaction.
 
+Independent local producers may instead pass one complete `groma.observation/v1` snapshot through
+`groma scan --input`. Groma validates the entire snapshot and its registered project, scanner, and
+coverage before handing it to the same reconciliation consumer. This handoff adds no streaming
+protocol, heartbeat, replay, provisional journal, remote service, or alternate evidence path.
+
 A failed, cancelled, timed-out, malformed, or ambiguous scan publishes nothing, so curated intent
 and the last complete blueprint remain untouched. An unchanged completed scan is a byte no-op even
 across process restarts.

@@ -1233,6 +1233,72 @@ export function canonicalizeObservationSessionBegin(
   return inspectBegin(beginValue, bounds);
 }
 
+/** Replays one complete transport/storage value through the finite-session contract. */
+export function canonicalizeCompletedObservationSnapshot(
+  snapshotValue: unknown,
+  configuredBounds?: Partial<ObservationSessionBounds>,
+): Result<CompletedObservationSnapshot> {
+  const bounds = resolveBounds(configuredBounds);
+  const snapshot = inspectRecord(
+    snapshotValue,
+    ["apiVersion", "coverage", "epoch", "projectId", "records", "scopes", "source"],
+    [],
+    "invalid-observation-snapshot",
+    "Completed observation snapshot",
+  );
+  if (!snapshot.ok) return snapshot;
+  try {
+    if (Reflect.ownKeys(snapshotValue as object).length !== 7) {
+      return failure(
+        diagnostic(
+          "invalid-observation-snapshot",
+          "Completed observation snapshot keys do not match the public contract",
+        ),
+      );
+    }
+  } catch {
+    return failure(
+      diagnostic(
+        "invalid-observation-snapshot",
+        "Completed observation snapshot could not be inspected safely",
+      ),
+    );
+  }
+  const records = inspectArray(
+    snapshot.value.records,
+    bounds.maxRecords,
+    "observation-session-too-large",
+    "Completed observation records",
+  );
+  if (!records.ok) return records;
+  const session = createObservationSession(
+    {
+      apiVersion: snapshot.value.apiVersion as typeof observationSessionApiVersion,
+      epoch: snapshot.value.epoch as string,
+      projectId: snapshot.value.projectId as string,
+      scopes: snapshot.value.scopes as readonly ObservationScopeDeclaration[],
+      source: snapshot.value.source as ObservationSourceIdentity,
+    },
+    bounds,
+  );
+  if (!session.ok) return session;
+  let sequence = 0;
+  for (let index = 0; index < records.value.length; index += bounds.maxBatchRecords) {
+    sequence += 1;
+    const submitted = session.value.submitBatch({
+      epoch: snapshot.value.epoch as string,
+      records: records.value.slice(index, index + bounds.maxBatchRecords) as ObservationRecord[],
+      sequence,
+    });
+    if (!submitted.ok) return submitted;
+  }
+  return session.value.complete({
+    coverage: snapshot.value.coverage as readonly ObservationCoverage[],
+    epoch: snapshot.value.epoch as string,
+    sequence: sequence + 1,
+  });
+}
+
 export function createObservationSession(
   beginValue: ObservationSessionBegin,
   configuredBounds?: Partial<ObservationSessionBounds>,
