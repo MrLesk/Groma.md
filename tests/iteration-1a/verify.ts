@@ -212,7 +212,10 @@ function blueprintComponentIds(result: JsonResult): string[] {
   return items.map((item) => {
     assert.equal(typeof item, "object");
     assert.notEqual(item, null);
-    const id = (item as { id?: unknown }).id;
+    const component = (item as { component?: unknown }).component;
+    assert.equal(typeof component, "object");
+    assert.notEqual(component, null);
+    const id = (component as { id?: unknown }).id;
     assert(typeof id === "string");
     return id;
   });
@@ -607,7 +610,9 @@ async function verifyWorkflow(executable: string, workspaceRoot: string): Promis
     "10",
   ]);
   assert.deepEqual(blueprintComponentIds(searched), [ids.orders]);
-  const searchedOrders = (valueRecord(searched).items as Array<Record<string, unknown>>)[0]!;
+  const searchedOrders = (
+    valueRecord(searched).items as Array<{ component: Record<string, unknown> }>
+  )[0]!.component;
   assert.equal(searchedOrders.intent, "Own the durable ordering lifecycle.");
   assert.equal(searchedOrders.parent, ids.shop);
   assert.ok(Array.isArray(searchedOrders.actions));

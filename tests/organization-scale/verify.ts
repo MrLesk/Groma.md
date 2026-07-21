@@ -543,7 +543,7 @@ async function projectionFixture(): Promise<ScaleReport["projection"] & ScaleRep
   model = mergeChildrenPage(model, focus.id, apiPage([focusedChild], false));
   const focused = buildBlueprintFlowGraph({
     dependencies: graph.relations,
-    focusId: focus.id,
+    focusPath: [focus.id],
     model,
   });
   assert(

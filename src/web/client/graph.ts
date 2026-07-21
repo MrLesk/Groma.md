@@ -4,16 +4,15 @@ import type { ApiCognitiveComplexityEvidence, ApiComponentScale } from "./api.ts
 import {
   componentPurpose,
   displayText,
-  isImplementationEvidence,
+  hasReadableMeaning,
   type BlueprintModel,
   type BlueprintNode,
 } from "./model.ts";
 
 export type BlueprintNotation = ApiComponentScale | "unscaled";
 
-export const LEVEL_COMPONENT_BUDGET = 8;
-export const LEVEL_EVIDENCE_BUDGET = 5;
-export const LEVEL_RELATIONSHIP_BUDGET = 8;
+export const LEVEL_COMPONENT_BUDGET = 20;
+export const LEVEL_RELATIONSHIP_BUDGET = 20;
 
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly canOpen: boolean;
@@ -36,20 +35,14 @@ export interface BlueprintGroupNodeData extends Record<string, unknown> {
   readonly purpose?: string;
 }
 
-export interface BlueprintEvidenceItem {
-  readonly childCount: number;
-  readonly id: string;
-  readonly label: string;
-  readonly type: string;
-}
-
 export type BlueprintFlowNode = Node<BlueprintFlowNodeData, "component">;
 export type BlueprintGroupNode = Node<BlueprintGroupNodeData, "group">;
 export type BlueprintFlowEdge = Edge;
 
 export interface BlueprintFlowGraph {
   readonly edges: readonly BlueprintFlowEdge[];
-  readonly evidence: readonly BlueprintEvidenceItem[];
+  readonly focusTargetId?: string;
+  readonly levelComponents: number;
   readonly nodes: readonly (BlueprintFlowNode | BlueprintGroupNode)[];
   readonly omittedComponents: number;
   readonly omittedRelationships: number;
@@ -65,13 +58,14 @@ export interface BlueprintDependency {
 export interface BlueprintGraphOptions {
   readonly childCounts?: ReadonlyMap<string, number>;
   readonly dependencies: readonly BlueprintDependency[];
-  readonly focusId?: string | undefined;
+  readonly focusPath?: readonly string[];
   readonly model: BlueprintModel;
 }
 
-const CARD = Object.freeze({ height: 164, width: 260 });
-const GAP = Object.freeze({ x: 38, y: 54 });
-const FRAME = Object.freeze({ head: 96, pad: 32 });
+const CARD = Object.freeze({ height: 132, width: 216 });
+const GAP = Object.freeze({ x: 24, y: 30 });
+const FRAME = Object.freeze({ head: 76, pad: 24 });
+const GRID_COLUMNS = 5;
 
 export function nextScaleLabel(scale: ApiComponentScale | undefined): string {
   switch (scale) {
@@ -88,24 +82,12 @@ export function nextScaleLabel(scale: ApiComponentScale | undefined): string {
   }
 }
 
-function notationOf(scale: ApiComponentScale | undefined): BlueprintNotation {
-  return scale ?? "unscaled";
+function notationOf(node: BlueprintNode): BlueprintNotation {
+  return node.view.component.scale ?? "unscaled";
 }
 
-/**
- * Evidence-bound, meaning-empty fine-grained components are implementation
- * evidence. They remain inspectable, but do not become architecture by being
- * placed on the same graph as purposeful components.
- */
-export function isImplementationOnly(node: BlueprintNode): boolean {
-  return isImplementationEvidence(node.view.component, node.view.evidenceBound);
-}
-
-function gridPosition(index: number, columns: number): { readonly x: number; readonly y: number } {
-  return Object.freeze({
-    x: (index % columns) * (CARD.width + GAP.x),
-    y: Math.floor(index / columns) * (CARD.height + GAP.y),
-  });
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function relationshipLabel(type: string): string {
@@ -151,119 +133,192 @@ function comparableCognitiveComplexity(
     }))
     .filter((source) => source.values.size >= 2)
     .sort(
-      (left, right) => right.values.size - left.values.size || left.key.localeCompare(right.key),
+      (left, right) =>
+        right.values.size - left.values.size || compareCodeUnits(left.key, right.key),
     )[0];
   return chosen === undefined ? undefined : Object.freeze({ values: chosen.values });
 }
 
+function scaleRank(scale: ApiComponentScale | undefined): number {
+  switch (scale) {
+    case "system":
+      return 0;
+    case "domain":
+      return 1;
+    case "part":
+      return 2;
+    case "element":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function rankedLevel(
+  ids: readonly string[],
+  required: string | undefined,
+  model: BlueprintModel,
+  childCounts: ReadonlyMap<string, number>,
+  incident: ReadonlyMap<string, number>,
+): readonly string[] {
+  const ranked = ids
+    .filter((id) => model.nodes.get(id)?.view.component.type !== "external")
+    .toSorted((leftId, rightId) => {
+      const left = model.nodes.get(leftId)!;
+      const right = model.nodes.get(rightId)!;
+      const leftMeaning = hasReadableMeaning(left.view.component) ? 1 : 0;
+      const rightMeaning = hasReadableMeaning(right.view.component) ? 1 : 0;
+      if (leftMeaning !== rightMeaning) return rightMeaning - leftMeaning;
+      const scale = scaleRank(left.view.component.scale) - scaleRank(right.view.component.scale);
+      if (scale !== 0) return scale;
+      const leftChildren = childCounts.get(leftId) ?? left.childIds?.length ?? 0;
+      const rightChildren = childCounts.get(rightId) ?? right.childIds?.length ?? 0;
+      if (leftChildren > 0 !== rightChildren > 0) return rightChildren > 0 ? 1 : -1;
+      if (leftChildren !== rightChildren) return rightChildren - leftChildren;
+      const degree = (incident.get(rightId) ?? 0) - (incident.get(leftId) ?? 0);
+      if (degree !== 0) return degree;
+      const leftPurpose = componentPurpose(left.view.component) === undefined ? 0 : 1;
+      const rightPurpose = componentPurpose(right.view.component) === undefined ? 0 : 1;
+      if (leftPurpose !== rightPurpose) return rightPurpose - leftPurpose;
+      return (
+        compareCodeUnits(displayText(left.view.component), displayText(right.view.component)) ||
+        compareCodeUnits(leftId, rightId)
+      );
+    });
+  const visible = ranked.slice(0, LEVEL_COMPONENT_BUDGET);
+  if (
+    required !== undefined &&
+    ranked.includes(required) &&
+    !visible.includes(required) &&
+    visible.length > 0
+  ) {
+    visible[visible.length - 1] = required;
+  }
+  return Object.freeze(visible);
+}
+
+interface LevelItemLayout {
+  readonly group?: LevelLayout;
+  readonly height: number;
+  readonly id: string;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+interface LevelLayout {
+  readonly height: number;
+  readonly id: string;
+  readonly items: readonly LevelItemLayout[];
+  readonly omitted: number;
+  readonly visibleIds: readonly string[];
+  readonly width: number;
+}
+
+function layoutLevel(
+  id: string,
+  pathIndex: number,
+  focusPath: readonly string[],
+  model: BlueprintModel,
+  childCounts: ReadonlyMap<string, number>,
+  incident: ReadonlyMap<string, number>,
+  ancestors: ReadonlySet<string>,
+): LevelLayout {
+  const node = model.nodes.get(id);
+  const childIds = node?.childIds ?? [];
+  const required = focusPath[pathIndex];
+  const visibleIds = rankedLevel(childIds, required, model, childCounts, incident);
+  const nextAncestors = new Set(ancestors).add(id);
+  const prepared = visibleIds.map((childId) => {
+    const expanded = childId === required && !nextAncestors.has(childId);
+    const group = expanded
+      ? layoutLevel(childId, pathIndex + 1, focusPath, model, childCounts, incident, nextAncestors)
+      : undefined;
+    return Object.freeze({
+      ...(group === undefined ? {} : { group }),
+      height: group?.height ?? CARD.height,
+      id: childId,
+      width: group?.width ?? CARD.width,
+    });
+  });
+
+  const columns = Math.min(GRID_COLUMNS, Math.max(1, visibleIds.length));
+  const gridWidth = columns * CARD.width + (columns - 1) * GAP.x;
+  let column = 0;
+  let y = FRAME.head + FRAME.pad;
+  let rowHeight = 0;
+  let contentWidth = gridWidth;
+  const items: LevelItemLayout[] = [];
+  for (const item of prepared) {
+    if (item.group !== undefined) {
+      // Keep the expanded container anchored where its collapsed card was.
+      // Earlier siblings remain beside it; later siblings move below the larger
+      // boundary, which gives React Flow one stable spatial transition to draw.
+      const x = FRAME.pad + column * (CARD.width + GAP.x);
+      items.push(Object.freeze({ ...item, x, y }));
+      rowHeight = Math.max(rowHeight, item.height);
+      contentWidth = Math.max(contentWidth, x - FRAME.pad + item.width);
+      y += rowHeight + GAP.y;
+      column = 0;
+      rowHeight = 0;
+      continue;
+    }
+    const x = FRAME.pad + column * (CARD.width + GAP.x);
+    items.push(Object.freeze({ ...item, x, y }));
+    rowHeight = Math.max(rowHeight, item.height);
+    column += 1;
+    if (column === columns) {
+      y += rowHeight + GAP.y;
+      column = 0;
+      rowHeight = 0;
+    }
+  }
+  if (column > 0) y += rowHeight + GAP.y;
+  const width = Math.max(720, contentWidth + FRAME.pad * 2);
+  const height = Math.max(320, y + FRAME.pad - GAP.y);
+  return Object.freeze({
+    height,
+    id,
+    items: Object.freeze(items),
+    omitted: Math.max(0, childIds.length - visibleIds.length),
+    visibleIds,
+    width,
+  });
+}
+
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
-  const { dependencies, focusId, model } = options;
+  const { dependencies, model } = options;
+  const focusPath = options.focusPath ?? [];
   const childCounts = options.childCounts ?? new Map<string, number>();
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
   const ownedRootIds = model.rootIds.filter(
     (id) => componentOf(id) !== undefined && componentOf(id)?.type !== "external",
   );
-  const frameId =
-    focusId !== undefined && model.nodes.has(focusId)
-      ? focusId
-      : ownedRootIds.length === 1
-        ? ownedRootIds[0]
-        : undefined;
-  const candidates =
-    frameId === undefined
-      ? ownedRootIds
-      : [...(model.nodes.get(frameId)?.childIds ?? [])].filter((id) => model.nodes.has(id));
-
-  const architectural = candidates.filter((id) => {
-    const node = model.nodes.get(id);
-    return (
-      node !== undefined && node.view.component.type !== "external" && !isImplementationOnly(node)
-    );
-  });
-  const implementation = candidates.filter((id) => {
-    const node = model.nodes.get(id);
-    return node !== undefined && isImplementationOnly(node);
-  });
-  const visibleIds = architectural.slice(0, LEVEL_COMPONENT_BUDGET);
-  const visibleSet = new Set(visibleIds);
-  const evidenceIds = implementation.slice(0, LEVEL_EVIDENCE_BUDGET);
-
-  const relationshipPairs = new Set<string>();
-  const visibleRelationships = dependencies.flatMap((dependency) => {
-    if (
-      dependency.source === dependency.target ||
-      !visibleSet.has(dependency.source) ||
-      !visibleSet.has(dependency.target)
-    )
-      return [];
-    const pair = `${dependency.source}\u0000${dependency.target}`;
-    if (relationshipPairs.has(pair)) return [];
-    relationshipPairs.add(pair);
-    return [dependency];
-  });
-  const drawnRelationships = visibleRelationships.slice(0, LEVEL_RELATIONSHIP_BUDGET);
   const incident = new Map<string, number>();
-  for (const relationship of drawnRelationships) {
+  for (const relationship of dependencies) {
     incident.set(relationship.source, (incident.get(relationship.source) ?? 0) + 1);
     incident.set(relationship.target, (incident.get(relationship.target) ?? 0) + 1);
   }
-
-  const columns = Math.min(4, Math.max(1, visibleIds.length));
-  const rows = Math.max(1, Math.ceil(visibleIds.length / columns));
-  const contentWidth = columns * CARD.width + (columns - 1) * GAP.x;
-  const contentHeight = rows * CARD.height + (rows - 1) * GAP.y;
-  const frameWidth = Math.max(760, contentWidth + FRAME.pad * 2);
-  const frameHeight = Math.max(360, FRAME.head + contentHeight + FRAME.pad * 2);
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
+  const visibleIds = new Set<string>();
+  let omittedComponents = 0;
+  let currentLevelCount = 0;
+  let currentLevelTotal = 0;
 
-  if (frameId !== undefined) {
-    const frame = model.nodes.get(frameId)!;
-    const component = frame.view.component;
-    const purpose = componentPurpose(component);
-    const total = childCounts.get(frameId) ?? candidates.length;
-    nodes.push(
-      Object.freeze({
-        data: Object.freeze({
-          contains: `${total} ${nextScaleLabel(component.scale)}`,
-          kind: "container" as const,
-          label: displayText(component),
-          notation: notationOf(component.scale),
-          ...(purpose === undefined ? {} : { purpose }),
-        }),
-        draggable: false,
-        height: frameHeight,
-        id: `group:${frameId}`,
-        position: Object.freeze({ x: 0, y: 0 }),
-        selectable: false,
-        style: Object.freeze({ height: frameHeight, width: frameWidth }),
-        type: "group" as const,
-        width: frameWidth,
-        zIndex: 0,
-      }),
-    );
-  }
-
-  const cognitive = comparableCognitiveComplexity(visibleIds, model);
-  for (const [index, id] of visibleIds.entries()) {
+  const emitCard = (id: string, parentId: string | undefined, x: number, y: number) => {
     const blueprintNode = model.nodes.get(id)!;
     const component = blueprintNode.view.component;
     const purpose = componentPurpose(component);
     const childCount = childCounts.get(id) ?? blueprintNode.childIds?.length ?? 0;
-    const base = gridPosition(index, columns);
-    const position =
-      frameId === undefined
-        ? base
-        : Object.freeze({ x: base.x + FRAME.pad, y: base.y + FRAME.head + FRAME.pad });
-    const measured = cognitive?.values.get(id);
+    visibleIds.add(id);
     nodes.push(
       Object.freeze({
         data: Object.freeze({
           canOpen: childCount > 0,
           childCount,
-          ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
           evidenceBound: blueprintNode.view.evidenceBound,
           label: displayText(component),
-          notation: notationOf(component.scale),
+          notation: notationOf(blueprintNode),
           ...(purpose === undefined ? {} : { purpose }),
           relationshipCount: incident.get(id) ?? 0,
           shared: component.shared === true,
@@ -271,10 +326,8 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         }),
         height: CARD.height,
         id,
-        ...(frameId === undefined
-          ? {}
-          : { extent: "parent" as const, parentId: `group:${frameId}` }),
-        position,
+        ...(parentId === undefined ? {} : { extent: "parent" as const, parentId }),
+        position: Object.freeze({ x, y }),
         sourcePosition: Position.Bottom,
         style: Object.freeze({ height: CARD.height, width: CARD.width }),
         targetPosition: Position.Top,
@@ -283,8 +336,121 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         zIndex: 10,
       }),
     );
+  };
+
+  const emitGroup = (
+    layout: LevelLayout,
+    parentId: string | undefined,
+    x: number,
+    y: number,
+    depth: number,
+  ) => {
+    const blueprintNode = model.nodes.get(layout.id)!;
+    const component = blueprintNode.view.component;
+    const purpose = componentPurpose(component);
+    const total = Math.max(layout.visibleIds.length, childCounts.get(layout.id) ?? 0);
+    visibleIds.add(layout.id);
+    if (depth === focusPath.length) {
+      currentLevelCount = layout.visibleIds.length;
+      currentLevelTotal = total;
+    }
+    omittedComponents += layout.omitted;
+    nodes.push(
+      Object.freeze({
+        data: Object.freeze({
+          contains: `${total} inside`,
+          kind: "container" as const,
+          label: displayText(component),
+          notation: notationOf(blueprintNode),
+          ...(purpose === undefined ? {} : { purpose }),
+        }),
+        draggable: false,
+        height: layout.height,
+        id: layout.id,
+        ...(parentId === undefined ? {} : { extent: "parent" as const, parentId }),
+        position: Object.freeze({ x, y }),
+        selectable: false,
+        style: Object.freeze({ height: layout.height, width: layout.width }),
+        type: "group" as const,
+        width: layout.width,
+        zIndex: depth,
+      }),
+    );
+    for (const item of layout.items) {
+      if (item.group === undefined) emitCard(item.id, layout.id, item.x, item.y);
+      else emitGroup(item.group, layout.id, item.x, item.y, depth + 1);
+    }
+  };
+
+  if (ownedRootIds.length === 1) {
+    const rootId = ownedRootIds[0]!;
+    emitGroup(
+      layoutLevel(rootId, 0, focusPath, model, childCounts, incident, new Set()),
+      undefined,
+      0,
+      0,
+      0,
+    );
+  } else {
+    const roots = rankedLevel(ownedRootIds, focusPath[0], model, childCounts, incident);
+    omittedComponents = Math.max(0, ownedRootIds.length - roots.length);
+    if (focusPath.length === 0) {
+      currentLevelCount = roots.length;
+      currentLevelTotal = ownedRootIds.length;
+    }
+    let column = 0;
+    let y = 0;
+    let rowHeight = 0;
+    for (const id of roots) {
+      const expanded = id === focusPath[0];
+      const x = column * (CARD.width + GAP.x);
+      if (expanded) {
+        const layout = layoutLevel(id, 1, focusPath, model, childCounts, incident, new Set());
+        emitGroup(layout, undefined, x, y, 1);
+        rowHeight = Math.max(rowHeight, layout.height);
+        y += rowHeight + GAP.y;
+        column = 0;
+        rowHeight = 0;
+        continue;
+      }
+      emitCard(id, undefined, x, y);
+      rowHeight = Math.max(rowHeight, CARD.height);
+      column += 1;
+      if (column === GRID_COLUMNS) {
+        y += rowHeight + GAP.y;
+        column = 0;
+        rowHeight = 0;
+      }
+    }
   }
 
+  const relationshipPairs = new Set<string>();
+  const visibleRelationships = dependencies.flatMap((dependency) => {
+    if (
+      dependency.source === dependency.target ||
+      !visibleIds.has(dependency.source) ||
+      !visibleIds.has(dependency.target)
+    )
+      return [];
+    const pair = `${dependency.source}\u0000${dependency.target}`;
+    if (relationshipPairs.has(pair)) return [];
+    relationshipPairs.add(pair);
+    return [dependency];
+  });
+  const drawnRelationships = visibleRelationships.slice(0, LEVEL_RELATIONSHIP_BUDGET);
+  const cognitive = comparableCognitiveComplexity([...visibleIds], model);
+  if (cognitive !== undefined) {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index]!;
+      if (node.type !== "component") continue;
+      const measured = cognitive.values.get(node.id);
+      if (measured === undefined) continue;
+      nodes[index] = Object.freeze({
+        ...node,
+        data: Object.freeze({ ...node.data, cognitiveComplexity: measured }),
+      });
+    }
+  }
   const edges: BlueprintFlowEdge[] = drawnRelationships.map((relationship) =>
     Object.freeze({
       className: "groma-edge",
@@ -308,27 +474,17 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     }),
   );
 
-  const evidence = evidenceIds.map((id) => {
-    const node = model.nodes.get(id)!;
-    return Object.freeze({
-      childCount: childCounts.get(id) ?? node.childIds?.length ?? 0,
-      id,
-      label: displayText(node.view.component),
-      type: node.view.component.type ?? "observed component",
-    });
-  });
-  const totalCandidates =
-    frameId === undefined
-      ? candidates.length
-      : Math.max(candidates.length, childCounts.get(frameId) ?? 0);
-  const omittedComponents = Math.max(0, totalCandidates - visibleIds.length - evidenceIds.length);
-
   return Object.freeze({
     edges: Object.freeze(edges),
-    evidence: Object.freeze(evidence),
+    ...(ownedRootIds.length === 1
+      ? { focusTargetId: focusPath.at(-1) ?? ownedRootIds[0] }
+      : focusPath.length === 0
+        ? {}
+        : { focusTargetId: focusPath.at(-1) }),
+    levelComponents: currentLevelTotal,
     nodes: Object.freeze(nodes),
     omittedComponents,
     omittedRelationships: Math.max(0, visibleRelationships.length - edges.length),
-    visibleComponents: visibleIds.length,
+    visibleComponents: currentLevelCount,
   });
 }

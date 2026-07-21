@@ -134,8 +134,8 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
     const [scriptText, stylesheetText] = await Promise.all([script.text(), stylesheet.text()]);
     if (
       !script.ok ||
-      !scriptText.includes("react-flow-dagre") ||
-      !scriptText.includes("Component scale notation")
+      !scriptText.includes("react-flow-continuous-zoom") ||
+      !scriptText.includes("How to read this sheet")
     ) {
       throw new Error("Compiled web client did not contain the React Flow blueprint renderer");
     }
@@ -204,7 +204,7 @@ async function verifyStaticExport(executable: string, cwd: string): Promise<void
   if (
     !firstHtml.includes('data-groma-export="read-only"') ||
     !firstHtml.includes("groma-read-only-blueprint-v1") ||
-    !firstHtml.includes("react-flow-dagre") ||
+    !firstHtml.includes("react-flow-continuous-zoom") ||
     !firstHtml.includes("connect-src 'none'") ||
     hasExternalAssets
   ) {

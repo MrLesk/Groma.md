@@ -1452,7 +1452,7 @@ function evidenceBoundComponents(
 ): ReadonlySet<string> {
   if (snapshot.evidence === undefined || components.length === 0) return new Set();
   const parsed = parseEvidenceState(snapshot.evidence, {
-    maxComponents: options.bounds.maxEmbeddedItems,
+    maxComponents: options.bounds.maxComponents,
     maxRecords: options.bounds.maxRequestDataValues,
     maxRelationships: options.bounds.maxRelationshipMutations,
     maxSources: options.bounds.maxComponents,

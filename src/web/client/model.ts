@@ -1,9 +1,9 @@
 import type { ApiComponent, ApiComponentPage, ApiComponentView } from "./api.ts";
 
 /**
- * Pure view-model for the interactive map. Every entry comes from one bounded page;
- * the model records exactly what has been read and which pages have more, so the
- * interface can offer explicit continuation instead of implicit loading.
+ * Pure view-model for the interactive map. Every entry comes from bounded reads;
+ * the model records exactly what has been loaded while page mechanics stay outside
+ * the visual blueprint.
  */
 
 export interface BlueprintNode {
@@ -39,12 +39,7 @@ export function hasReadableMeaning(component: ApiComponent): boolean {
 }
 
 export function isImplementationEvidence(component: ApiComponent, evidenceBound: boolean): boolean {
-  return (
-    evidenceBound &&
-    !hasReadableMeaning(component) &&
-    component.scale !== "system" &&
-    component.scale !== "domain"
-  );
+  return evidenceBound && !hasReadableMeaning(component);
 }
 
 function upsertViews(

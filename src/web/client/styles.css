@@ -47,13 +47,20 @@ textarea {
   background: var(--color-paper);
 }
 
+.groma-flow .react-flow__node {
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms ease;
+}
+
 .groma-flow .react-flow__node-component {
   border: 0;
   padding: 0;
   background: transparent;
   color: var(--color-ink);
   text-align: left;
-  transition: opacity 120ms ease;
 }
 
 .groma-flow .react-flow__node-component:focus-visible {
@@ -123,6 +130,12 @@ textarea {
 .groma-group--system {
   border: 3px double var(--color-ink);
   background: rgba(251, 250, 246, 0.78);
+}
+
+.groma-group--unscaled {
+  border-style: dashed;
+  border-color: var(--color-ink-muted);
+  box-shadow: none;
 }
 
 .groma-group__heading {
@@ -494,66 +507,6 @@ textarea {
   line-height: 1.45;
 }
 
-.groma-evidence-register {
-  width: 290px;
-  margin: 14px;
-  border: 1.5px dashed var(--color-ink-muted);
-  background: rgba(251, 250, 246, 0.97);
-}
-
-.groma-evidence-register__heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 9px;
-  border-bottom: 1px dashed var(--color-line);
-  font-family: var(--font-plan);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.groma-evidence-register__heading span {
-  color: var(--color-ink-muted);
-  font-size: 8px;
-}
-
-.groma-evidence-register ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.groma-evidence-register li + li {
-  border-top: 1px dashed var(--color-fine);
-}
-
-.groma-evidence-register button {
-  display: flex;
-  width: 100%;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 9px;
-  border: 0;
-  background: transparent;
-  color: var(--color-ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.groma-evidence-register button:hover {
-  background: var(--color-fine);
-}
-
-.groma-evidence-register small {
-  color: var(--color-ink-muted);
-  font-family: var(--font-plan);
-  font-size: 8px;
-}
-
-.groma-bounded-notice,
 .groma-empty-sheet {
   display: flex;
   align-items: center;
@@ -565,19 +518,6 @@ textarea {
   font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.groma-bounded-notice {
-  margin-bottom: 14px;
-  padding: 6px 8px;
-}
-
-.groma-bounded-notice button {
-  padding: 3px 6px;
-  border: 1px solid var(--color-ink);
-  background: var(--color-paper);
-  color: var(--color-ink);
-  cursor: pointer;
 }
 
 .groma-empty-sheet {
@@ -705,8 +645,10 @@ textarea {
   .groma-title-block {
     width: min(300px, calc(100vw - 30px));
   }
+}
 
-  .groma-evidence-register {
-    width: min(290px, calc(100vw - 30px));
+@media (prefers-reduced-motion: reduce) {
+  .groma-flow .react-flow__node {
+    transition: opacity 120ms ease;
   }
 }

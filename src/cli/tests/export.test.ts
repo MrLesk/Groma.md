@@ -76,7 +76,7 @@ describe("groma export command", () => {
     expect(html).toContain("groma-read-only-blueprint-v1");
     expect(html).toContain("globalThis.__GROMA_BLUEPRINT_SNAPSHOT__=");
     expect(html).toContain("connect-src 'none'");
-    expect(html).toContain("react-flow-dagre");
+    expect(html).toContain("react-flow-continuous-zoom");
     expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
     expect(html).not.toMatch(/<link\b[^>]*\brel=["']stylesheet["']/i);
   });
