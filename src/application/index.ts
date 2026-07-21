@@ -10,4 +10,8 @@ export type {
 } from "./reconciliation.ts";
 export * from "./snapshot-state.ts";
 export * from "./scale-proposal.ts";
-export { standardComponentDisplayText } from "../standard-model/index.ts";
+export {
+  isStandardComponentScale,
+  standardComponentDisplayText,
+  type StandardComponentScale,
+} from "../standard-model/index.ts";
