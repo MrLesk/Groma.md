@@ -89,19 +89,10 @@ export interface ReconciliationOperations {
   reconcile(snapshot: CompletedObservationSnapshot): Promise<Result<ReconciliationOutcome>>;
 }
 
-interface AutomaticItem {
-  readonly description?: string;
-  readonly id: string;
-  readonly name?: string;
-}
-
 interface ComponentProjection {
-  readonly actions?: readonly AutomaticItem[];
   readonly iconDomain?: string;
-  readonly inputs?: readonly AutomaticItem[];
   readonly label?: string;
   readonly name?: string;
-  readonly outputs?: readonly AutomaticItem[];
   readonly parent?: string;
   readonly scale?: string;
   readonly shared?: boolean;
@@ -163,24 +154,6 @@ function qualified(scope: string, key: string): string {
   return `${scope}\u0000${key}`;
 }
 
-function itemId(scope: string, key: string): string {
-  return `observation:${encodeURIComponent(scope)}:${encodeURIComponent(key)}`;
-}
-
-function itemIdentity(id: string): { readonly key: string; readonly scope: string } | undefined {
-  const prefix = "observation:";
-  if (!id.startsWith(prefix)) return undefined;
-  const separator = id.indexOf(":", prefix.length);
-  if (separator < 0) return undefined;
-  try {
-    const scope = decodeURIComponent(id.slice(prefix.length, separator));
-    const key = decodeURIComponent(id.slice(separator + 1));
-    return itemId(scope, key) === id ? Object.freeze({ key, scope }) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function same(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (
@@ -237,12 +210,9 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
   }
   const record = value as Readonly<Record<string, unknown>>;
   const allowed = new Set([
-    "actions",
     "iconDomain",
-    "inputs",
     "label",
     "name",
-    "outputs",
     "parent",
     "scale",
     "shared",
@@ -272,35 +242,6 @@ function projectionValue(value: unknown): Result<ComponentProjection> {
       return failure(
         diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
       );
-    }
-  }
-  for (const field of ["actions", "inputs", "outputs"] as const) {
-    if (record[field] === undefined) continue;
-    if (!Array.isArray(record[field])) {
-      return failure(
-        diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
-      );
-    }
-    for (const item of record[field]) {
-      if (typeof item !== "object" || item === null || Array.isArray(item)) {
-        return failure(
-          diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
-        );
-      }
-      const entry = item as Readonly<Record<string, unknown>>;
-      if (
-        !["id", "id,name", "description,id", "description,id,name"].includes(
-          Object.keys(entry).sort().join(","),
-        ) ||
-        typeof entry.id !== "string" ||
-        itemIdentity(entry.id) === undefined ||
-        (entry.name !== undefined && typeof entry.name !== "string") ||
-        (entry.description !== undefined && typeof entry.description !== "string")
-      ) {
-        return failure(
-          diagnostic("invalid-evidence-state", "Stored component projection is malformed"),
-        );
-      }
     }
   }
   return success(record as unknown as ComponentProjection);
@@ -563,38 +504,6 @@ export function parseEvidenceState(
   return success(Object.freeze({ sources: Object.freeze(sources), version: 1 }));
 }
 
-function automaticItems(
-  snapshot: CompletedObservationSnapshot,
-  kind: "action" | "input" | "output",
-  componentKey: string,
-  previous?: readonly AutomaticItem[],
-): readonly AutomaticItem[] | undefined {
-  const items = new Map<string, AutomaticItem>();
-  for (const item of previous ?? []) {
-    const identity = itemIdentity(item.id);
-    if (identity !== undefined && !hasCompleteCoverage(snapshot, identity.scope, kind)) {
-      items.set(item.id, item);
-    }
-  }
-  for (const record of snapshot.records) {
-    if (
-      (record.kind !== "action" && record.kind !== "input" && record.kind !== "output") ||
-      record.kind !== kind ||
-      qualified(record.component.scope, record.component.key) !== componentKey
-    ) {
-      continue;
-    }
-    const item = Object.freeze({
-      ...(record.description === undefined ? {} : { description: record.description }),
-      id: itemId(record.scope, record.key),
-      ...(record.name === undefined ? {} : { name: record.name }),
-    });
-    items.set(item.id, item);
-  }
-  const sorted = [...items.values()].sort((left, right) => compareText(left.id, right.id));
-  return sorted.length === 0 ? undefined : Object.freeze(sorted);
-}
-
 function hasCompleteCoverage(
   snapshot: CompletedObservationSnapshot,
   scope: string,
@@ -651,52 +560,19 @@ function observedSummary(
 function componentProjection(
   record: Extract<ObservationRecord, { kind: "component-candidate" }>,
   snapshot: CompletedObservationSnapshot,
-  previous?: ComponentProjection,
 ): ComponentProjection {
   const key = qualified(record.scope, record.key);
-  const inputs = automaticItems(snapshot, "input", key, previous?.inputs);
-  const outputs = automaticItems(snapshot, "output", key, previous?.outputs);
-  const actions = automaticItems(snapshot, "action", key, previous?.actions);
   // A summary the scanner stated itself is already the candidate's own claim;
   // the derived one only fills the gap where the candidate offered none.
   const summary = record.candidate.summary ?? observedSummary(snapshot, key, record.candidate.name);
   return Object.freeze({
     ...record.candidate,
     ...(summary === undefined ? {} : { summary }),
-    ...(inputs === undefined ? {} : { inputs }),
-    ...(outputs === undefined ? {} : { outputs }),
-    ...(actions === undefined ? {} : { actions }),
   });
 }
 
 function componentInput(id: string, projection: ComponentProjection): StandardComponentInput {
   return Object.freeze({ id, ...projection }) as unknown as StandardComponentInput;
-}
-
-function projectionItemCount(projection: ComponentProjection): number {
-  return (
-    (projection.actions?.length ?? 0) +
-    (projection.inputs?.length ?? 0) +
-    (projection.outputs?.length ?? 0)
-  );
-}
-
-function currentItems(
-  value: StandardComponent["actions"],
-): readonly AutomaticItem[] | null | undefined {
-  if (value === undefined) return undefined;
-  const items: AutomaticItem[] = [];
-  for (const item of value) {
-    if (Object.keys(item.extensions).length > 0) return null;
-    items.push(
-      Object.freeze({
-        ...(item.description === undefined ? {} : { description: item.description }),
-        id: item.id,
-        ...(item.name === undefined ? {} : { name: item.name }),
-      }),
-    );
-  }
-  return Object.freeze(items);
 }
 
 function ownedUpdate(
@@ -713,14 +589,6 @@ function ownedUpdate(
     const owned = component[field] === previous[field];
     const value = owned ? next[field] : previous[field];
     if (owned && component[field] !== next[field]) {
-      patch[field] = next[field] ?? null;
-    }
-    if (value !== undefined) projection[field] = value;
-  }
-  for (const field of ["actions", "inputs", "outputs"] as const) {
-    const owned = same(currentItems(component[field]), previous[field]);
-    const value = owned ? next[field] : previous[field];
-    if (owned && !same(previous[field], next[field])) {
       patch[field] = next[field] ?? null;
     }
     if (value !== undefined) projection[field] = value;
@@ -952,6 +820,7 @@ export function createReconciliationOperations(
       ]);
       const componentMutations: GraphDataRecord[] = [];
       const touchedComponents = new Set<string>();
+      const renamedComponents = new Set<string>();
       for (const record of componentRecords) {
         const identity = qualified(record.scope, record.key);
         const scaleAssessment =
@@ -962,14 +831,6 @@ export function createReconciliationOperations(
         let binding = componentBindings.get(identity);
         if (binding === undefined) {
           const projection = componentProjection(record, snapshot.value);
-          if (projectionItemCount(projection) > options.bounds.maxEmbeddedItems) {
-            return failure(
-              diagnostic(
-                "reconciliation-item-limit",
-                "Observed component member capacity is exceeded",
-              ),
-            );
-          }
           const componentId = mintIdentity(
             ids.nextEntityId,
             unavailableComponents,
@@ -1000,21 +861,14 @@ export function createReconciliationOperations(
           touchedComponents.add(componentId.value);
           continue;
         }
-        const nextProjection = componentProjection(record, snapshot.value, binding.projection);
-        if (projectionItemCount(nextProjection) > options.bounds.maxEmbeddedItems) {
-          return failure(
-            diagnostic(
-              "reconciliation-item-limit",
-              "Observed component member capacity is exceeded",
-            ),
-          );
-        }
+        const nextProjection = componentProjection(record, snapshot.value);
         const existing = existingComponents.get(binding.componentId);
         if (existing === undefined)
           return failure(
             diagnostic("reconciliation-binding-missing", "A component binding target is missing"),
           );
         const update = ownedUpdate(existing, binding.projection, nextProjection);
+        if (Object.hasOwn(update.patch, "name")) renamedComponents.add(binding.componentId);
         if (Object.keys(update.patch).length > 0) {
           componentMutations.push(
             Object.freeze({
@@ -1446,6 +1300,22 @@ export function createReconciliationOperations(
         snapshot: snapshot.value,
         sourceKey: key,
       });
+      for (const component of existingComponents.values()) {
+        if (component.parent === undefined) continue;
+        const parent = options.graph.resolveEntityIdentity(decoded.value.graph, component.parent);
+        if (!parent.ok) return parent;
+        if (renamedComponents.has(parent.value.resolved)) touchedComponents.add(component.id);
+      }
+      for (const relationship of existingRelationships.values()) {
+        const target = options.graph.resolveEntityIdentity(
+          decoded.value.graph,
+          relationship.target,
+        );
+        if (!target.ok) return target;
+        if (renamedComponents.has(target.value.resolved)) {
+          touchedComponents.add(relationship.source);
+        }
+      }
       if (
         priorSource !== undefined &&
         sameObservationContent(priorSource.snapshot, snapshot.value) &&

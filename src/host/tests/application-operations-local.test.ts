@@ -284,8 +284,44 @@ describe("official local application operations composition", () => {
       throw new Error("missing survivor revision");
     }
 
-    const secondMerge = await first.operations.mergeComponent({
+    const renamedSurvivor = await first.operations.updateComponent({
       expectedRevision: survivorRevision,
+      id: conformanceIds.rootB,
+      patch: { name: "Renamed survivor" },
+    });
+    expect(renamedSurvivor).toMatchObject({ status: "committed" });
+    if (renamedSurvivor.status !== "committed") return;
+    expect(renamedSurvivor.revisions.map((entry) => entry.componentId)).toEqual([
+      conformanceIds.rootB,
+      conformanceIds.serviceA,
+      conformanceIds.nestedService,
+    ]);
+    const renamedSurvivorRevision = renamedSurvivor.revisions.find(
+      (entry) => entry.componentId === conformanceIds.rootB,
+    )?.revision;
+    if (renamedSurvivorRevision === null || renamedSurvivorRevision === undefined) {
+      throw new Error("missing renamed survivor revision");
+    }
+    const afterAliasRename = await first.store.load();
+    if (!afterAliasRename.ok) throw new Error(afterAliasRename.diagnostics[0]?.message);
+    const childDocument = afterAliasRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.nestedService,
+    );
+    const observerDocument = afterAliasRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (childDocument === undefined || observerDocument === undefined) {
+      throw new Error("missing alias-dependent document");
+    }
+    expect(new TextDecoder().decode(childDocument.bytes)).toContain(
+      `[Renamed survivor](groma:component/${conformanceIds.rootA})`,
+    );
+    expect(new TextDecoder().decode(observerDocument.bytes)).toContain(
+      `[Renamed survivor](groma:component/${conformanceIds.rootB}?relationship=${conformanceIds.sibling})`,
+    );
+
+    const secondMerge = await first.operations.mergeComponent({
+      expectedRevision: renamedSurvivorRevision,
       obsolete: conformanceIds.rootB,
       survivor: conformanceIds.serviceB,
     });
@@ -395,13 +431,15 @@ describe("official local application operations composition", () => {
       path.join(workspace.workspaceRoot, ...String(laterDocument.locator).split("/")),
       "utf8",
     );
-    expect(laterIntent).toContain(`parent: ${conformanceIds.serviceB}`);
-    expect(laterIntent).toContain(`target=${conformanceIds.serviceB}`);
+    expect(laterIntent).toContain(`[Final survivor](groma:component/${conformanceIds.serviceB})`);
+    expect(laterIntent).toContain(
+      `groma:component/${conformanceIds.serviceB}?relationship=rel_000000000000000000000000000000cb`,
+    );
     const survivorIntent = await readFile(
       path.join(workspace.workspaceRoot, ...String(survivorDocument.locator).split("/")),
       "utf8",
     );
-    expect(survivorIntent).toContain(`target=${conformanceIds.serviceB}`);
+    expect(survivorIntent).toContain(`groma:component/${conformanceIds.serviceB}?relationship=`);
 
     expect(await readFile(path.join(workspace.workspaceRoot, "groma", "aliases.md"), "utf8")).toBe(
       `---\nschema: groma/aliases/v0.1\naliases:\n  - source: ${conformanceIds.rootA}\n    target: ${conformanceIds.rootB}\n  - source: ${conformanceIds.rootB}\n    target: ${conformanceIds.serviceB}\n---\n`,
@@ -729,18 +767,19 @@ describe("official local application operations composition", () => {
     const platformRevision = platform.revisions.find(
       (entry) => entry.componentId === conformanceIds.rootA,
     )?.revision;
-    const ordersRevision = orders.revisions.find(
+    if (platformRevision == null) throw new Error("missing revision");
+
+    const renamed = await host.operations.updateComponent({
+      expectedRevision: platformRevision,
+      id: conformanceIds.rootA,
+      patch: { name: "Commerce" },
+    });
+    expect(renamed).toMatchObject({ status: "committed" });
+    if (renamed.status !== "committed") return;
+    const renamedOrdersRevision = renamed.revisions.find(
       (entry) => entry.componentId === conformanceIds.serviceA,
     )?.revision;
-    if (platformRevision == null || ordersRevision == null) throw new Error("missing revision");
-
-    expect(
-      await host.operations.updateComponent({
-        expectedRevision: platformRevision,
-        id: conformanceIds.rootA,
-        patch: { name: "Commerce" },
-      }),
-    ).toMatchObject({ status: "committed" });
+    if (renamedOrdersRevision == null) throw new Error("missing renamed child revision");
     const afterRename = await host.store.load();
     if (!afterRename.ok) throw new Error(afterRename.diagnostics[0]?.message);
     expect(afterRename.value.documents.map((document) => String(document.locator))).toEqual([
@@ -749,10 +788,17 @@ describe("official local application operations composition", () => {
       "groma/components/Commerce/Orders.md",
       "groma/components/Commerce/Orders/Worker.md",
     ]);
+    const ordersDocument = afterRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (ordersDocument === undefined) throw new Error("missing Orders document");
+    expect(new TextDecoder().decode(ordersDocument.bytes)).toContain(
+      `[Commerce](groma:component/${conformanceIds.rootA})`,
+    );
 
     expect(
       await host.operations.reparentComponent({
-        expectedRevision: ordersRevision,
+        expectedRevision: renamedOrdersRevision,
         id: conformanceIds.serviceA,
         parent: conformanceIds.rootB,
       }),
@@ -767,6 +813,54 @@ describe("official local application operations composition", () => {
       "groma/components/Archive/Orders.md",
       "groma/components/Archive/Orders/Worker.md",
     ]);
+  });
+
+  test("refreshes incoming readable relationship labels when a target is renamed", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const payments = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceB, name: "Payments" },
+    });
+    const api = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceA, name: "API" },
+      relationships: [
+        {
+          id: conformanceIds.crossBranch,
+          target: conformanceIds.serviceB,
+          type: "uses",
+        },
+      ],
+    });
+    expect(payments).toMatchObject({ status: "committed" });
+    expect(api).toMatchObject({ status: "committed" });
+    if (payments.status !== "committed") return;
+    const paymentsRevision = payments.revisions.find(
+      (entry) => entry.componentId === conformanceIds.serviceB,
+    )?.revision;
+    if (paymentsRevision == null) throw new Error("missing Payments revision");
+
+    const renamed = await host.operations.updateComponent({
+      expectedRevision: paymentsRevision,
+      id: conformanceIds.serviceB,
+      patch: { name: "Billing" },
+    });
+    expect(renamed).toMatchObject({ status: "committed" });
+    if (renamed.status !== "committed") return;
+    expect(renamed.revisions.map((entry) => entry.componentId)).toEqual([
+      conformanceIds.serviceA,
+      conformanceIds.serviceB,
+    ]);
+    const loaded = await host.store.load();
+    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+    const apiDocument = loaded.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (apiDocument === undefined) throw new Error("missing API document");
+    expect(new TextDecoder().decode(apiDocument.bytes)).toContain(
+      `[Billing](groma:component/${conformanceIds.serviceB}?relationship=${conformanceIds.crossBranch})`,
+    );
   });
 
   test("fails closed when a component scale would be coarser than its parent", async () => {

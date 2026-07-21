@@ -12,6 +12,7 @@ import {
   type ContentRevision,
   type Diagnostic,
   type EntityAlias,
+  type EntityAliasResolver,
   type EntityId,
   type GraphData,
   type GraphEntity,
@@ -720,6 +721,35 @@ function applyStandardMutation(
   });
 }
 
+function readableComponentLabels(
+  components: ReadonlyMap<string, GraphEntity>,
+  aliases: readonly EntityAlias[],
+  model: StandardModelCapability,
+  maximumAliases: number,
+): Result<{
+  readonly labels: ReadonlyMap<EntityId, string>;
+  readonly resolver: EntityAliasResolver;
+}> {
+  const labels = new Map<EntityId, string>();
+  for (const entity of components.values()) {
+    const component = model.parse(entity);
+    if (!component.ok) return component;
+    labels.set(component.value.id, component.value.name ?? component.value.id);
+  }
+  const resolver = createEntityAliasResolver(
+    aliases,
+    new Set(labels.keys()),
+    Math.max(1, maximumAliases),
+  );
+  if (!resolver.ok) return resolver;
+  for (const alias of aliases) {
+    const resolved = resolver.value.resolve(alias.source);
+    if (!resolved.ok) return resolved;
+    labels.set(alias.source, labels.get(resolved.value.resolved)!);
+  }
+  return success(Object.freeze({ labels, resolver: resolver.value }));
+}
+
 export function createMarkdownIntentTransactionAdapter(
   options: MarkdownIntentTransactionAdapterOptions,
 ): CanonicalTransactionAdapter {
@@ -806,6 +836,20 @@ export function createMarkdownIntentTransactionAdapter(
       priorLocations.value.map((entry) => [entry.id, entry.locator]),
     );
     const nextLocationById = new Map(nextLocations.value.map((entry) => [entry.id, entry.locator]));
+    const priorLabels = readableComponentLabels(
+      prior.value.components,
+      priorAliases,
+      options.model,
+      maximumAliases,
+    );
+    if (!priorLabels.ok) return priorLabels;
+    const nextLabels = readableComponentLabels(
+      applied.value.components,
+      nextAliases,
+      options.model,
+      maximumAliases,
+    );
+    if (!nextLabels.ok) return nextLabels;
     const currentComponentById = new Map<EntityId, CanonicalResourceState>();
     const currentOwnerByLocator = new Map<string, EntityId>();
     for (const id of prior.value.components.keys()) {
@@ -824,12 +868,49 @@ export function createMarkdownIntentTransactionAdapter(
       currentComponentById.set(id, state);
       currentOwnerByLocator.set(String(state.locator), id);
     }
-    const changed = new Set<EntityId>();
+    const rewritten = new Set<EntityId>();
     for (const idText of applied.value.touchedComponents) {
       const id = parseEntityId(idText);
       if (!id.ok) return id;
-      changed.add(id.value);
+      rewritten.add(id.value);
     }
+    const changedLabels = new Set<EntityId>();
+    for (const id of new Set([
+      ...priorLabels.value.labels.keys(),
+      ...nextLabels.value.labels.keys(),
+    ])) {
+      if (priorLabels.value.labels.get(id) !== nextLabels.value.labels.get(id)) {
+        changedLabels.add(id);
+      }
+    }
+    for (const entity of applied.value.components.values()) {
+      const component = options.model.parse(entity);
+      if (!component.ok) return component;
+      if (component.value.parent === undefined) continue;
+      const parent = nextLabels.value.resolver.resolve(component.value.parent);
+      if (!parent.ok) return parent;
+      if (changedLabels.has(component.value.parent) || changedLabels.has(parent.value.resolved)) {
+        rewritten.add(component.value.id);
+      }
+    }
+    const priorRelationshipById = new Map(
+      Array.from(prior.value.relationships.values(), (relationship) => [
+        relationship.id,
+        relationship,
+      ]),
+    );
+    for (const relationship of applied.value.relationships.values()) {
+      const target = nextLabels.value.resolver.resolve(relationship.target);
+      if (!target.ok) return target;
+      if (
+        changedLabels.has(relationship.target) ||
+        changedLabels.has(target.value.resolved) ||
+        priorRelationshipById.get(relationship.id)?.target !== relationship.target
+      ) {
+        rewritten.add(relationship.source);
+      }
+    }
+    const changed = new Set(rewritten);
     for (const [id, priorLocator] of priorLocationById) {
       const nextLocator = nextLocationById.get(id);
       if (nextLocator !== undefined && nextLocator !== priorLocator) changed.add(id);
@@ -857,12 +938,18 @@ export function createMarkdownIntentTransactionAdapter(
       }
       let bytes: Uint8Array;
       let result: ContentRevision;
-      if (applied.value.touchedComponents.has(id)) {
+      if (rewritten.has(id)) {
         const ownedRelations = Array.from(applied.value.relationships.values())
           .filter((relation) => relation.source === id)
           .sort((left, right) => compareText(left.id, right.id));
-        const document = options.store.serialize(entity, ownedRelations, nextLocator);
+        const document = options.store.serialize(
+          entity,
+          ownedRelations,
+          nextLocator,
+          nextLabels.value.labels,
+        );
         if (!document.ok) return document;
+        applied.value.components.set(id, document.value.entity);
         bytes = document.value.bytes;
         result = document.value.revision;
       } else {
@@ -907,7 +994,7 @@ export function createMarkdownIntentTransactionAdapter(
         }),
       );
     }
-    for (const idText of [...applied.value.touchedComponents].sort(compareText)) {
+    for (const idText of [...rewritten].sort(compareText)) {
       const id = parseEntityId(idText);
       if (!id.ok) return id;
       const logical = markdownIntentResource(id.value);
@@ -916,7 +1003,7 @@ export function createMarkdownIntentTransactionAdapter(
         return failure(
           diagnostic(
             "transaction-resource-set-mismatch",
-            "Every changed component must have an expected logical revision",
+            "Every rewritten component must have an expected logical revision",
             { resource: logical.value },
           ),
         );

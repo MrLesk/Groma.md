@@ -20,8 +20,7 @@ import {
   type ResourceKey,
   type Result,
 } from "../core/index.ts";
-import { copyCanonicalGraphData, copyGraphPayload } from "../core/payload.ts";
-import { inspectExactRecord, inspectIntrinsicArrayLength } from "../core/runtime.ts";
+import { copyGraphPayload } from "../core/payload.ts";
 import {
   STANDARD_COMPONENT_KIND,
   type StandardComponent,
@@ -38,25 +37,12 @@ import {
   type WorkspaceResourceLocator,
 } from "./contracts.ts";
 
-const schema = "groma/component/v0.2";
 const intentRootSegments = ["groma", "components"] as const;
 const documentPattern = /\.md$/u;
 const incidentalOperatingSystemFiles = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 const extensionPattern = /^[A-Za-z][A-Za-z0-9_.-]*(?::|\/)[A-Za-z][A-Za-z0-9_.-]*$/;
 const textEncoder = new TextEncoder();
 const strictTextDecoder = new TextDecoder("utf-8", { fatal: true });
-const intrinsicUint8Array = Uint8Array;
-const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const typedArrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)?.get;
-const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get;
-const typedArrayByteOffset = Object.getOwnPropertyDescriptor(
-  typedArrayPrototype,
-  "byteOffset",
-)?.get;
-const typedArrayByteLength = Object.getOwnPropertyDescriptor(
-  typedArrayPrototype,
-  "byteLength",
-)?.get;
 
 export interface MarkdownIntentStoreBounds {
   readonly maxDocumentBytes: number;
@@ -105,6 +91,7 @@ export interface MarkdownIntentStore {
     entity: GraphEntity,
     relations: readonly GraphRelation[],
     locator?: WorkspaceResourceLocator,
+    labels?: ReadonlyMap<EntityId, string>,
   ): Result<MarkdownIntentDocument>;
 }
 
@@ -242,45 +229,19 @@ function parseBounds(
 }
 
 function snapshotIntentBytes(value: unknown, maximum: number): Result<Uint8Array> {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typedArrayTag === undefined ||
-    typedArrayBuffer === undefined ||
-    typedArrayByteOffset === undefined ||
-    typedArrayByteLength === undefined
-  ) {
+  if (!(value instanceof Uint8Array)) {
     return failure(
       diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
     );
   }
-  try {
-    if (Reflect.apply(typedArrayTag, value, []) !== "Uint8Array") {
-      return failure(
-        diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
-      );
-    }
-    const buffer = Reflect.apply(typedArrayBuffer, value, []) as ArrayBufferLike;
-    const byteOffset = Reflect.apply(typedArrayByteOffset, value, []) as number;
-    const byteLength = Reflect.apply(typedArrayByteLength, value, []) as number;
-    if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
-      throw new TypeError("invalid byte length");
-    }
-    if (byteLength > maximum) {
-      return failure(
-        diagnostic("resource-too-large", "Intent document exceeds its configured byte bound", {
-          maximum,
-        }),
-      );
-    }
-    return success(
-      new intrinsicUint8Array(new intrinsicUint8Array(buffer, byteOffset, byteLength)),
-    );
-  } catch {
+  if (value.byteLength > maximum) {
     return failure(
-      diagnostic("invalid-intent-bytes", "Intent document bytes must be a genuine Uint8Array"),
+      diagnostic("resource-too-large", "Intent document exceeds its configured byte bound", {
+        maximum,
+      }),
     );
   }
+  return success(value.slice());
 }
 
 function intentRoot(): WorkspaceResourceLocator {
@@ -379,21 +340,94 @@ function graphRelations(
   return success(Object.freeze(relations));
 }
 
-function frontmatter(component: StandardComponent): Record<string, unknown> {
+type ItemSection = "actions" | "inputs" | "outputs";
+type ItemMarkers = Readonly<Record<ItemSection, ReadonlyMap<string, string>>>;
+
+function itemMarkers(component: StandardComponent): Result<ItemMarkers> {
+  const result = {} as Record<ItemSection, ReadonlyMap<string, string>>;
+  for (const section of ["inputs", "outputs", "actions"] as const) {
+    const markers = new Map<string, string>();
+    const used = new Set<string>();
+    for (const item of component[section] ?? []) {
+      const readable = /^[a-z0-9][a-z0-9._-]{0,63}$/u.test(item.id);
+      const source = item.name ?? item.description ?? "item";
+      const base =
+        source
+          .normalize("NFKD")
+          .replace(/([a-z0-9])([A-Z])/gu, "$1-$2")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/gu, "-")
+          .replace(/^-|-$/gu, "")
+          .slice(0, 40) || "item";
+      const marker = readable
+        ? item.id
+        : `${base}-${createHash("sha256").update(item.id).digest("hex").slice(0, 16)}`;
+      if (used.has(marker)) {
+        return failure(
+          diagnostic(
+            "duplicate-intent-item-marker",
+            "Two component items resolve to the same short file-local Markdown marker",
+            { marker, section },
+          ),
+        );
+      }
+      used.add(marker);
+      markers.set(item.id, marker);
+    }
+    result[section] = markers;
+  }
+  return success(Object.freeze(result));
+}
+
+function extensionFrontmatter(
+  component: StandardComponent,
+  relationships: readonly StandardRelationship[],
+  markers: ItemMarkers,
+): Record<string, unknown> {
+  const itemIds: Record<string, unknown> = {};
+  const itemExtensions: Record<string, unknown> = {};
+  for (const section of ["inputs", "outputs", "actions"] as const) {
+    const ids: Record<string, unknown> = {};
+    const entries: Record<string, unknown> = {};
+    for (const item of component[section] ?? []) {
+      const marker = markers[section].get(item.id)!;
+      if (marker !== item.id) ids[marker] = item.id;
+      if (Object.keys(item.extensions).length > 0) {
+        entries[marker] = canonicalExtensions(item.extensions);
+      }
+    }
+    if (Object.keys(ids).length > 0) itemIds[section] = ids;
+    if (Object.keys(entries).length > 0) itemExtensions[section] = entries;
+  }
+  const relationshipExtensions: Record<string, unknown> = {};
+  for (const relationship of relationships) {
+    if (Object.keys(relationship.extensions).length > 0) {
+      relationshipExtensions[relationship.id] = canonicalExtensions(relationship.extensions);
+    }
+  }
   return {
-    schema,
+    ...(Object.keys(itemIds).length === 0 ? {} : { itemIds }),
+    ...(Object.keys(itemExtensions).length === 0 ? {} : { itemExtensions }),
+    ...(Object.keys(relationshipExtensions).length === 0 ? {} : { relationshipExtensions }),
+  };
+}
+
+function frontmatter(
+  component: StandardComponent,
+  relationships: readonly StandardRelationship[],
+  markers: ItemMarkers,
+): Record<string, unknown> {
+  return {
     id: component.id,
-    ...(component.name === undefined ? {} : { name: component.name }),
     ...(component.label === undefined ? {} : { label: component.label }),
-    ...(component.summary === undefined ? {} : { summary: component.summary }),
     ...(component.iconDomain === undefined ? {} : { iconDomain: component.iconDomain }),
     ...(component.type === undefined ? {} : { type: component.type }),
     ...(component.scale === undefined ? {} : { scale: component.scale }),
-    ...(component.shared === undefined ? {} : { shared: component.shared }),
-    ...(component.parent === undefined ? {} : { parent: component.parent }),
+    ...(component.shared === true ? { shared: true } : {}),
     ...(component.desired === undefined ? {} : { desired: component.desired }),
     ...(component.lifecycle === undefined ? {} : { lifecycle: component.lifecycle }),
     ...canonicalExtensions(component.extensions),
+    ...extensionFrontmatter(component, relationships, markers),
   };
 }
 
@@ -405,6 +439,8 @@ function encodeInline(value: string): string {
     .replaceAll("\t", "\\t")
     .replaceAll("—", "\\—")
     .replaceAll("<", "\\<")
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]")
     .replace(
       /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu,
       (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
@@ -425,7 +461,7 @@ function decodeInline(value: string, path: string): Result<string> {
         diagnostic("invalid-intent-markdown", `${path} ends with an incomplete escape`),
       );
     }
-    if (escaped === "\\" || escaped === "—" || escaped === "<") decoded += escaped;
+    if (["\\", "—", "<", "[", "]"].includes(escaped)) decoded += escaped;
     else if (escaped === "n") decoded += "\n";
     else if (escaped === "r") decoded += "\r";
     else if (escaped === "t") decoded += "\t";
@@ -443,105 +479,81 @@ function decodeInline(value: string, path: string): Result<string> {
     }
     index += 1;
   }
-  return success(decoded);
+  const unicode = validateUnicode(decoded, path);
+  return unicode.ok ? success(decoded) : unicode;
 }
 
-function encodeCommentId(value: string): string {
-  return encodeURIComponent(value).replace(
-    /[!'()*~.-]/gu,
-    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+function encodeLocalId(value: string): string {
+  return encodeURIComponent(value);
+}
+
+function decodeLocalId(value: string, path: string): Result<string> {
+  try {
+    const decoded = decodeURIComponent(value);
+    return decoded.length > 0 && encodeLocalId(decoded) === value
+      ? success(decoded)
+      : failure(diagnostic("invalid-intent-markdown", `${path} uses a noncanonical local id`));
+  } catch {
+    return failure(diagnostic("invalid-intent-markdown", `${path} has an invalid local id`));
+  }
+}
+
+function itemLine(item: StandardItem, id: string): string {
+  const marker = `- \`${encodeLocalId(id)}\``;
+  if (item.name === undefined && item.description === undefined) return marker;
+  if (item.name === undefined) return `${marker} — ${encodeInline(item.description!)}`;
+  if (item.description === undefined) return `${marker}: ${encodeInline(item.name)}`;
+  return `${marker}: ${encodeInline(item.name)} — ${encodeInline(item.description)}`;
+}
+
+function referenceLabel(
+  labels: ReadonlyMap<EntityId, string>,
+  id: EntityId,
+  path: string,
+): Result<string> {
+  const label = labels.get(id);
+  return label === undefined
+    ? failure(
+        diagnostic(
+          "intent-reference-label-missing",
+          "Canonical Markdown needs a known component label for every readable reference",
+          { id, path },
+        ),
+      )
+    : success(label);
+}
+
+function relationshipLine(
+  relationship: StandardRelationship,
+  labels: ReadonlyMap<EntityId, string>,
+): Result<string> {
+  const label = referenceLabel(labels, relationship.target, `relationship.${relationship.id}`);
+  if (!label.ok) return label;
+  const destination = `groma:component/${relationship.target}?relationship=${relationship.id}`;
+  const description =
+    relationship.description === undefined ? "" : ` — ${encodeInline(relationship.description)}`;
+  return success(
+    `- ${relationship.type} [${encodeInline(label.value)}](${destination})${description}`,
   );
 }
 
-function decodeCommentId(value: string, path: string): Result<string> {
-  try {
-    const decoded = decodeURIComponent(value);
-    return encodeCommentId(decoded) === value
-      ? success(decoded)
-      : failure(diagnostic("invalid-intent-markdown", `${path} uses a noncanonical stable id`));
-  } catch {
-    return failure(diagnostic("invalid-intent-markdown", `${path} has an invalid stable id`));
-  }
-}
-
-function encodeExtensions(value: Readonly<Record<string, GraphData>>): Result<string | undefined> {
-  if (Object.keys(value).length === 0) return success(undefined);
-  const canonical = copyCanonicalGraphData(canonicalExtensions(value), "entity");
-  return canonical.ok
-    ? success(Buffer.from(canonical.value.canonicalJson, "utf8").toString("base64url"))
-    : canonical;
-}
-
-function decodeExtensions(
-  value: string | undefined,
-  path: string,
-): Result<Record<string, GraphData>> {
-  if (value === undefined) return success({});
-  try {
-    const bytes = Buffer.from(value, "base64url");
-    if (bytes.toString("base64url") !== value) throw new Error();
-    const decoded = JSON.parse(strictTextDecoder.decode(bytes)) as unknown;
-    if (!exactRecord(decoded)) throw new Error();
-    const parsed = extensions(decoded, new Set(), path);
-    if (!parsed.ok) return parsed;
-    const canonical = copyCanonicalGraphData(parsed.value, "entity");
-    if (
-      !canonical.ok ||
-      Buffer.from(canonical.value.canonicalJson).toString("base64url") !== value
-    ) {
-      throw new Error();
-    }
-    return success(parsed.value);
-  } catch {
-    return failure(
-      diagnostic("invalid-intent-markdown", `${path} contains malformed extension metadata`),
-    );
-  }
-}
-
-function itemLine(item: StandardItem): Result<string> {
-  const fields = [
-    ...(item.name === undefined ? [] : ["name"]),
-    ...(item.description === undefined ? [] : ["description"]),
-  ];
-  const text =
-    item.name === undefined
-      ? item.description === undefined
-        ? ""
-        : encodeInline(item.description)
-      : item.description === undefined
-        ? encodeInline(item.name)
-        : `${encodeInline(item.name)} — ${encodeInline(item.description)}`;
-  const extra = encodeExtensions(item.extensions);
-  if (!extra.ok) return extra;
-  const metadata = `<!-- groma:item id=${encodeCommentId(item.id)} fields=${fields.join(",") || "none"}${extra.value === undefined ? "" : ` extensions=${extra.value}`} -->`;
-  return success(`- ${text}${text.length === 0 ? "" : " "}${metadata}`);
-}
-
-function relationshipLine(relationship: StandardRelationship): Result<string> {
-  const extra = encodeExtensions(relationship.extensions);
-  if (!extra.ok) return extra;
-  const description =
-    relationship.description === undefined ? "" : ` — ${encodeInline(relationship.description)}`;
-  const metadata = `<!-- groma:relationship id=${encodeCommentId(relationship.id)} target=${encodeCommentId(relationship.target)} description=${relationship.description === undefined ? "false" : "true"}${extra.value === undefined ? "" : ` extensions=${extra.value}`} -->`;
-  return success(`- ${relationship.type} → ${relationship.target}${description} ${metadata}`);
-}
-
-function itemSection(title: string, items: readonly StandardItem[]): Result<string> {
-  const lines: string[] = [];
-  for (const item of items) {
-    const line = itemLine(item);
-    if (!line.ok) return line;
-    lines.push(line.value);
-  }
-  return success(`# ${title}${lines.length === 0 ? "" : `\n\n${lines.join("\n")}`}`);
+function itemSection(
+  title: string,
+  items: readonly StandardItem[],
+  markers: ReadonlyMap<string, string>,
+): string {
+  const lines = items.map((item) => itemLine(item, markers.get(item.id)!));
+  return `## ${title}${lines.length === 0 ? "" : `\n\n${lines.join("\n")}`}`;
 }
 
 function encodeDocument(
-  front: Record<string, unknown>,
   component: StandardComponent,
   relationships: readonly StandardRelationship[],
+  labels: ReadonlyMap<EntityId, string>,
 ): Result<Uint8Array> {
+  const markers = itemMarkers(component);
+  if (!markers.ok) return markers;
+  const front = frontmatter(component, relationships, markers.value);
   const frontUnicode = validateUnicode(front, "frontmatter");
   if (!frontUnicode.ok) return frontUnicode;
   const bodyUnicode = validateUnicode({ component, relationships }, "body");
@@ -570,26 +582,34 @@ function encodeDocument(
       },
     );
     const sections: string[] = [];
+    if (component.name !== undefined) sections.push(`# ${encodeInline(component.name)}`);
+    if (component.summary !== undefined) sections.push(`> ${encodeInline(component.summary)}`);
     for (const [title, items] of [
       ["Inputs", component.inputs],
       ["Outputs", component.outputs],
       ["Actions", component.actions],
     ] as const) {
-      if (items === undefined) continue;
-      const section = itemSection(title, items);
-      if (!section.ok) return section;
-      sections.push(section.value);
+      if (items !== undefined) {
+        sections.push(itemSection(title, items, markers.value[title.toLowerCase() as ItemSection]));
+      }
+    }
+    if (component.parent !== undefined) {
+      const label = referenceLabel(labels, component.parent, "component.parent");
+      if (!label.ok) return label;
+      sections.push(
+        `## Contained by\n\n[${encodeInline(label.value)}](groma:component/${component.parent})`,
+      );
     }
     if (relationships.length > 0) {
       const lines: string[] = [];
       for (const relationship of relationships) {
-        const line = relationshipLine(relationship);
+        const line = relationshipLine(relationship, labels);
         if (!line.ok) return line;
         lines.push(line.value);
       }
-      sections.push(`# Relationships\n\n${lines.join("\n")}`);
+      sections.push(`## Relationships\n\n${lines.join("\n")}`);
     }
-    if (component.intent !== undefined) sections.push(`# Intent\n\n${component.intent}`);
+    if (component.intent !== undefined) sections.push(`## Purpose\n\n${component.intent}`);
     const body = sections.length === 0 ? "" : `\n${sections.join("\n\n")}\n`;
     const markdown = `---\n${yaml}---\n${body}`;
     if (containsGitConflictBlock(markdown)) {
@@ -631,15 +651,18 @@ function parseFraming(text: string): Result<{ readonly body?: string; readonly y
   }
   const suffix = text.slice(closing + 5);
   if (suffix.length === 0) return success({ yaml: text.slice(4, closing + 1) });
-  if (!suffix.startsWith("\n# ") || !suffix.endsWith("\n")) {
+  if (!suffix.startsWith("\n") || !suffix.endsWith("\n")) {
     return failure(
       diagnostic(
         "intent-malformed-body",
-        "Intent Markdown body must contain LF-delimited canonical component sections",
+        "Intent Markdown body must be LF-delimited ordinary Markdown",
       ),
     );
   }
-  return success({ body: suffix.slice(1, -1), yaml: text.slice(4, closing + 1) });
+  const body = suffix.slice(1, -1);
+  return body.length === 0
+    ? failure(diagnostic("intent-malformed-body", "Intent Markdown body must not be blank"))
+    : success({ body, yaml: text.slice(4, closing + 1) });
 }
 
 function validateYamlNumbers(document: ReturnType<typeof parseDocument>): Result<void> {
@@ -785,14 +808,13 @@ const knownFrontmatterFields = new Set([
   "desired",
   "id",
   "iconDomain",
+  "itemExtensions",
+  "itemIds",
   "label",
   "lifecycle",
-  "name",
-  "parent",
+  "relationshipExtensions",
   "scale",
-  "schema",
   "shared",
-  "summary",
   "type",
 ]);
 
@@ -822,159 +844,210 @@ interface ParsedMarkdownBody {
   readonly actions?: readonly Record<string, unknown>[];
   readonly inputs?: readonly Record<string, unknown>[];
   readonly intent?: string;
+  readonly name?: string;
   readonly outputs?: readonly Record<string, unknown>[];
+  readonly parent?: EntityId;
   readonly relationships: readonly Record<string, unknown>[];
+  readonly summary?: string;
 }
 
 function parseItemLine(line: string, path: string): Result<Record<string, unknown>> {
-  if (!line.startsWith("- ")) {
-    return failure(diagnostic("invalid-intent-markdown", `${path} must be a Markdown bullet`));
-  }
-  const marker = "<!-- groma:item ";
-  const markerIndex = line.lastIndexOf(marker);
-  if (markerIndex < 2 || !line.endsWith(" -->")) {
-    return failure(
-      diagnostic("invalid-intent-markdown", `${path} must carry its stable id in an HTML comment`),
-    );
-  }
-  let text = line.slice(2, markerIndex);
-  if (text.endsWith(" ")) text = text.slice(0, -1);
-  const metadata = line.slice(markerIndex);
-  const matched =
-    /^<!-- groma:item id=([^ ]+) fields=(none|name|description|name,description)(?: extensions=([A-Za-z0-9_-]+))? -->$/u.exec(
-      metadata,
-    );
+  const matched = /^- `([^`]*)`(?:(: | — )(.*))?$/u.exec(line);
   if (matched === null) {
-    return failure(diagnostic("invalid-intent-markdown", `${path} has malformed item metadata`));
+    return failure(
+      diagnostic(
+        "invalid-intent-markdown",
+        `${path} must be a Markdown bullet beginning with a short local id in backticks`,
+      ),
+    );
   }
-  const id = decodeCommentId(matched[1]!, `${path}.id`);
-  if (!id.ok || id.value.length === 0)
-    return id.ok
-      ? failure(diagnostic("invalid-intent-markdown", `${path}.id must not be empty`))
-      : id;
-  const extra = decodeExtensions(matched[3], `${path}.extensions`);
-  if (!extra.ok) return extra;
-  const fields = matched[2]!;
+  const id = decodeLocalId(matched[1]!, `${path}.id`);
+  if (!id.ok) return id;
+  const separator = matched[2];
+  const text = matched[3];
   let name: string | undefined;
   let description: string | undefined;
-  if (fields === "none") {
-    if (text.length !== 0) {
-      return failure(
-        diagnostic(
-          "invalid-intent-markdown",
-          `${path} declares no readable fields but contains text`,
-        ),
-      );
-    }
-  } else if (fields === "name") {
-    const parsed = decodeInline(text, `${path}.name`);
+  if (separator === ": ") {
+    const descriptionSeparator = text!.indexOf(" — ");
+    const parsed = decodeInline(
+      descriptionSeparator < 0 ? text! : text!.slice(0, descriptionSeparator),
+      `${path}.name`,
+    );
     if (!parsed.ok) return parsed;
     name = parsed.value;
-  } else if (fields === "description") {
-    const parsed = decodeInline(text, `${path}.description`);
-    if (!parsed.ok) return parsed;
-    description = parsed.value;
-  } else {
-    const separator = text.indexOf(" — ");
-    if (separator < 0 || text.indexOf(" — ", separator + 3) >= 0) {
-      return failure(
-        diagnostic(
-          "invalid-intent-markdown",
-          `${path} must separate its name and description with one em dash`,
-        ),
+    if (descriptionSeparator >= 0) {
+      const parsedDescription = decodeInline(
+        text!.slice(descriptionSeparator + 3),
+        `${path}.description`,
       );
+      if (!parsedDescription.ok) return parsedDescription;
+      description = parsedDescription.value;
     }
-    const parsedName = decodeInline(text.slice(0, separator), `${path}.name`);
-    const parsedDescription = decodeInline(text.slice(separator + 3), `${path}.description`);
-    if (!parsedName.ok) return parsedName;
+  } else if (separator === " — ") {
+    const parsedDescription = decodeInline(text!, `${path}.description`);
     if (!parsedDescription.ok) return parsedDescription;
-    name = parsedName.value;
     description = parsedDescription.value;
   }
   return success({
     id: id.value,
     ...(name === undefined ? {} : { name }),
     ...(description === undefined ? {} : { description }),
-    ...extra.value,
   });
 }
 
-function parseRelationshipLine(line: string, path: string): Result<Record<string, unknown>> {
-  if (!line.startsWith("- ")) {
-    return failure(diagnostic("invalid-intent-markdown", `${path} must be a Markdown bullet`));
+function splitMarkdownLink(
+  value: string,
+  path: string,
+): Result<{ readonly destination: string; readonly label: string }> {
+  if (!value.startsWith("[") || !value.endsWith(")")) {
+    return failure(diagnostic("invalid-intent-markdown", `${path} must be a Markdown link`));
   }
-  const marker = "<!-- groma:relationship ";
-  const markerIndex = line.lastIndexOf(marker);
-  if (markerIndex < 2 || !line.endsWith(" -->")) {
-    return failure(
-      diagnostic("invalid-intent-markdown", `${path} must carry its stable id in an HTML comment`),
-    );
+  let delimiter = -1;
+  for (let index = 1; index < value.length - 1; index += 1) {
+    if (value[index] !== "]" || value[index + 1] !== "(") continue;
+    let slashes = 0;
+    for (let previous = index - 1; previous >= 0 && value[previous] === "\\"; previous -= 1) {
+      slashes += 1;
+    }
+    if (slashes % 2 === 0) {
+      if (delimiter >= 0) {
+        return failure(
+          diagnostic("invalid-intent-markdown", `${path} contains more than one link target`),
+        );
+      }
+      delimiter = index;
+    }
   }
-  let text = line.slice(2, markerIndex);
-  if (text.endsWith(" ")) text = text.slice(0, -1);
-  const metadata = line.slice(markerIndex);
-  const matched =
-    /^<!-- groma:relationship id=([^ ]+) target=([^ ]+) description=(false|true)(?: extensions=([A-Za-z0-9_-]+))? -->$/u.exec(
-      metadata,
-    );
+  if (delimiter < 0) {
+    return failure(diagnostic("invalid-intent-markdown", `${path} has a malformed Markdown link`));
+  }
+  const label = decodeInline(value.slice(1, delimiter), `${path}.label`);
+  if (!label.ok) return label;
+  return success({
+    destination: value.slice(delimiter + 2, -1),
+    label: label.value,
+  });
+}
+
+function parseParentLine(line: string, path: string): Result<EntityId> {
+  const link = splitMarkdownLink(line, path);
+  if (!link.ok) return link;
+  const matched = /^groma:component\/(ent_[0-9a-f]{32})$/u.exec(link.value.destination);
   if (matched === null) {
-    return failure(
-      diagnostic("invalid-intent-markdown", `${path} has malformed relationship metadata`),
-    );
-  }
-  const id = decodeCommentId(matched[1]!, `${path}.id`);
-  if (!id.ok) return id;
-  const target = decodeCommentId(matched[2]!, `${path}.target`);
-  if (!target.ok) return target;
-  const parsedTarget = parseEntityId(target.value);
-  if (!parsedTarget.ok) return parsedTarget;
-  const extra = decodeExtensions(matched[4], `${path}.extensions`);
-  if (!extra.ok) return extra;
-  const relationship =
-    /^([a-z][a-z0-9]*(?:[.-][a-z0-9]+)*) → (ent_[0-9a-f]{32})(?: — (.*))?$/u.exec(text);
-  if (
-    relationship === null ||
-    relationship[2] !== parsedTarget.value ||
-    (matched[3] === "true") !== (relationship[3] !== undefined)
-  ) {
     return failure(
       diagnostic(
         "invalid-intent-markdown",
-        `${path} must be 'type → stable-target' with matching hidden identity and optional description`,
+        `${path} must link to one stable groma:component identity`,
       ),
     );
   }
+  return parseEntityId(matched[1]!);
+}
+
+function parseRelationshipLine(line: string, path: string): Result<Record<string, unknown>> {
+  const matched = /^- ([a-z][a-z0-9]*(?:[.-][a-z0-9]+)*) (\[.*\]\(.*\))(?: — (.*))?$/u.exec(line);
+  if (matched === null) {
+    return failure(
+      diagnostic(
+        "invalid-intent-markdown",
+        `${path} must be a relationship type followed by a readable Markdown link`,
+      ),
+    );
+  }
+  const link = splitMarkdownLink(matched[2]!, `${path}.target`);
+  if (!link.ok) return link;
+  const destination =
+    /^groma:component\/(ent_[0-9a-f]{32})\?relationship=(rel_[0-9a-f]{32})$/u.exec(
+      link.value.destination,
+    );
+  if (destination === null) {
+    return failure(
+      diagnostic(
+        "invalid-intent-markdown",
+        `${path} link must carry one stable target and relationship identity`,
+      ),
+    );
+  }
+  const parsedTarget = parseEntityId(destination[1]!);
+  if (!parsedTarget.ok) return parsedTarget;
+  const id = parseRelationId(destination[2]!);
+  if (!id.ok) return id;
   let description: string | undefined;
-  if (relationship[3] !== undefined) {
-    const parsed = decodeInline(relationship[3], `${path}.description`);
+  if (matched[3] !== undefined) {
+    const parsed = decodeInline(matched[3], `${path}.description`);
     if (!parsed.ok) return parsed;
     description = parsed.value;
   }
   return success({
     id: id.value,
-    type: relationship[1]!,
+    type: matched[1]!,
     target: parsedTarget.value,
     ...(description === undefined ? {} : { description }),
-    ...extra.value,
   });
 }
 
 function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody> {
   if (body === undefined) return success({ relationships: Object.freeze([]) });
   const lines = body.split("\n");
-  const order = ["Inputs", "Outputs", "Actions", "Relationships", "Intent"] as const;
+  const order = [
+    "Inputs",
+    "Outputs",
+    "Actions",
+    "Contained by",
+    "Relationships",
+    "Purpose",
+  ] as const;
   const seen = new Set<string>();
   const parsed: {
     actions?: readonly Record<string, unknown>[];
     inputs?: readonly Record<string, unknown>[];
     intent?: string;
+    name?: string;
     outputs?: readonly Record<string, unknown>[];
+    parent?: EntityId;
     relationships: readonly Record<string, unknown>[];
+    summary?: string;
   } = { relationships: Object.freeze([]) };
   let previous = -1;
   let index = 0;
+  if (/^# /u.test(lines[index] ?? "")) {
+    const name = decodeInline(lines[index]!.slice(2), "body.name");
+    if (!name.ok) return name;
+    parsed.name = name.value;
+    index += 1;
+    if (index < lines.length) {
+      if (lines[index] !== "") {
+        return failure(
+          diagnostic(
+            "invalid-intent-markdown",
+            "The component heading must be followed by a blank line",
+          ),
+        );
+      }
+      index += 1;
+    }
+  }
+  if (/^> /u.test(lines[index] ?? "")) {
+    const summary = decodeInline(lines[index]!.slice(2), "body.summary");
+    if (!summary.ok) return summary;
+    parsed.summary = summary.value;
+    index += 1;
+    if (index < lines.length) {
+      if (lines[index] !== "") {
+        return failure(
+          diagnostic(
+            "invalid-intent-markdown",
+            "The component summary must be followed by a blank line",
+          ),
+        );
+      }
+      index += 1;
+    }
+  }
   while (index < lines.length) {
-    const heading = /^# (Inputs|Outputs|Actions|Relationships|Intent)$/u.exec(lines[index]!);
+    const heading = /^## (Inputs|Outputs|Actions|Contained by|Relationships|Purpose)$/u.exec(
+      lines[index]!,
+    );
     if (heading === null) {
       return failure(
         diagnostic(
@@ -987,7 +1060,10 @@ function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody>
     const position = order.indexOf(title);
     if (seen.has(title) || position <= previous) {
       return failure(
-        diagnostic("invalid-intent-markdown", `# ${title} is duplicated or out of canonical order`),
+        diagnostic(
+          "invalid-intent-markdown",
+          `## ${title} is duplicated or out of canonical order`,
+        ),
       );
     }
     seen.add(title);
@@ -996,12 +1072,12 @@ function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody>
     if (index < lines.length) {
       if (lines[index] !== "") {
         return failure(
-          diagnostic("invalid-intent-markdown", `# ${title} must be followed by one blank line`),
+          diagnostic("invalid-intent-markdown", `## ${title} must be followed by one blank line`),
         );
       }
       index += 1;
     }
-    if (title === "Intent") {
+    if (title === "Purpose") {
       parsed.intent = lines.slice(index).join("\n");
       index = lines.length;
       continue;
@@ -1010,13 +1086,26 @@ function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody>
     while (index < lines.length) {
       if (
         lines[index] === "" &&
-        /^# (?:Inputs|Outputs|Actions|Relationships|Intent)$/u.test(lines[index + 1] ?? "")
+        /^## (?:Inputs|Outputs|Actions|Contained by|Relationships|Purpose)$/u.test(
+          lines[index + 1] ?? "",
+        )
       ) {
         index += 1;
         break;
       }
       content.push(lines[index]!);
       index += 1;
+    }
+    if (title === "Contained by") {
+      if (content.length !== 1) {
+        return failure(
+          diagnostic("invalid-intent-markdown", "## Contained by must contain exactly one link"),
+        );
+      }
+      const parent = parseParentLine(content[0]!, "body.parent");
+      if (!parent.ok) return parent;
+      parsed.parent = parent.value;
+      continue;
     }
     const records: Record<string, unknown>[] = [];
     for (let itemIndex = 0; itemIndex < content.length; itemIndex += 1) {
@@ -1035,37 +1124,196 @@ function parseMarkdownBody(body: string | undefined): Result<ParsedMarkdownBody>
   return success(Object.freeze(parsed));
 }
 
+function extensionMetadata(
+  value: unknown,
+  path: string,
+): Result<Readonly<Record<string, unknown>>> {
+  return value === undefined
+    ? success({})
+    : exactRecord(value)
+      ? success(value)
+      : failure(diagnostic("invalid-intent-frontmatter", `${path} must be a YAML mapping`));
+}
+
+function applyItemExtensions(
+  items: readonly Record<string, unknown>[] | undefined,
+  section: ItemSection,
+  metadata: Readonly<Record<string, unknown>>,
+): Result<readonly Record<string, unknown>[] | undefined> {
+  const sectionValue = metadata[section];
+  if (sectionValue === undefined) return success(items);
+  if (items === undefined || !exactRecord(sectionValue)) {
+    return failure(
+      diagnostic(
+        "invalid-intent-frontmatter",
+        `frontmatter.itemExtensions.${section} must describe an existing Markdown section`,
+      ),
+    );
+  }
+  const remaining = new Set(Object.keys(sectionValue));
+  const enriched: Record<string, unknown>[] = [];
+  for (const [index, item] of items.entries()) {
+    const id = item.id;
+    if (typeof id !== "string") throw new Error("Parsed item lacks its local id");
+    const raw = sectionValue[id];
+    if (raw === undefined) {
+      enriched.push(item);
+      continue;
+    }
+    if (!exactRecord(raw)) {
+      return failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemExtensions.${section}.${id} must be a YAML mapping`,
+        ),
+      );
+    }
+    const extra = extensions(raw, new Set(), `frontmatter.itemExtensions.${section}.${id}`);
+    if (!extra.ok) return extra;
+    enriched.push({ ...item, ...extra.value });
+    remaining.delete(id);
+  }
+  return remaining.size === 0
+    ? success(Object.freeze(enriched))
+    : failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemExtensions.${section} refers to a missing local item`,
+          { id: [...remaining].sort(compareText)[0]! },
+        ),
+      );
+}
+
+function applyItemIds(
+  items: readonly Record<string, unknown>[] | undefined,
+  section: ItemSection,
+  metadata: Readonly<Record<string, unknown>>,
+): Result<readonly Record<string, unknown>[] | undefined> {
+  const sectionValue = metadata[section];
+  if (sectionValue === undefined) return success(items);
+  if (items === undefined || !exactRecord(sectionValue)) {
+    return failure(
+      diagnostic(
+        "invalid-intent-frontmatter",
+        `frontmatter.itemIds.${section} must describe an existing Markdown section`,
+      ),
+    );
+  }
+  const remaining = new Set(Object.keys(sectionValue));
+  const canonicalIds = new Set<string>();
+  const resolved: Record<string, unknown>[] = [];
+  for (const item of items) {
+    const marker = item.id;
+    if (typeof marker !== "string") throw new Error("Parsed item lacks its local id");
+    const mapped = sectionValue[marker];
+    if (mapped !== undefined && typeof mapped !== "string") {
+      return failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemIds.${section}.${marker} must be a stable item identity`,
+        ),
+      );
+    }
+    const id = mapped ?? marker;
+    if (canonicalIds.has(id)) {
+      return failure(
+        diagnostic(
+          "duplicate-standard-item-id",
+          `frontmatter.itemIds.${section} resolves more than one marker to the same item`,
+          { id },
+        ),
+      );
+    }
+    canonicalIds.add(id);
+    resolved.push({ ...item, id });
+    remaining.delete(marker);
+  }
+  return remaining.size === 0
+    ? success(Object.freeze(resolved))
+    : failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemIds.${section} refers to a missing local item marker`,
+          { id: [...remaining].sort(compareText)[0]! },
+        ),
+      );
+}
+
 function decodedEntity(
   record: Readonly<Record<string, unknown>>,
   body: ParsedMarkdownBody,
   model: StandardModelCapability,
 ): Result<GraphEntity> {
-  if (record.schema !== schema) {
+  if (record.shared !== undefined && record.shared !== true) {
     return failure(
-      diagnostic("intent-schema-mismatch", "Intent document uses an unsupported schema", {
-        actual: typeof record.schema === "string" ? record.schema : typeof record.schema,
-        expected: schema,
-      }),
+      diagnostic(
+        "invalid-intent-frontmatter",
+        "frontmatter.shared is written only when true; false and unset are omitted",
+      ),
     );
   }
   const id = typeof record.id === "string" ? parseEntityId(record.id) : parseEntityId("");
   if (!id.ok) return id;
   const extra = extensions(record, knownFrontmatterFields, "frontmatter");
   if (!extra.ok) return extra;
+  const rawItemExtensions = extensionMetadata(record.itemExtensions, "frontmatter.itemExtensions");
+  if (!rawItemExtensions.ok) return rawItemExtensions;
+  for (const key of Object.keys(rawItemExtensions.value)) {
+    if (key !== "inputs" && key !== "outputs" && key !== "actions") {
+      return failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemExtensions.${key} is not a component item section`,
+        ),
+      );
+    }
+  }
+  const rawItemIds = extensionMetadata(record.itemIds, "frontmatter.itemIds");
+  if (!rawItemIds.ok) return rawItemIds;
+  for (const key of Object.keys(rawItemIds.value)) {
+    if (key !== "inputs" && key !== "outputs" && key !== "actions") {
+      return failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.itemIds.${key} is not a component item section`,
+        ),
+      );
+    }
+  }
+  const inputsWithExtensions = applyItemExtensions(body.inputs, "inputs", rawItemExtensions.value);
+  if (!inputsWithExtensions.ok) return inputsWithExtensions;
+  const outputsWithExtensions = applyItemExtensions(
+    body.outputs,
+    "outputs",
+    rawItemExtensions.value,
+  );
+  if (!outputsWithExtensions.ok) return outputsWithExtensions;
+  const actionsWithExtensions = applyItemExtensions(
+    body.actions,
+    "actions",
+    rawItemExtensions.value,
+  );
+  if (!actionsWithExtensions.ok) return actionsWithExtensions;
+  const inputs = applyItemIds(inputsWithExtensions.value, "inputs", rawItemIds.value);
+  if (!inputs.ok) return inputs;
+  const outputs = applyItemIds(outputsWithExtensions.value, "outputs", rawItemIds.value);
+  if (!outputs.ok) return outputs;
+  const actions = applyItemIds(actionsWithExtensions.value, "actions", rawItemIds.value);
+  if (!actions.ok) return actions;
   const input: Record<string, unknown> = {
     id: id.value,
-    ...(record.name === undefined ? {} : { name: record.name }),
+    ...(body.name === undefined ? {} : { name: body.name }),
     ...(record.label === undefined ? {} : { label: record.label }),
-    ...(record.summary === undefined ? {} : { summary: record.summary }),
+    ...(body.summary === undefined ? {} : { summary: body.summary }),
     ...(record.iconDomain === undefined ? {} : { iconDomain: record.iconDomain }),
     ...(record.type === undefined ? {} : { type: record.type }),
     ...(record.scale === undefined ? {} : { scale: record.scale }),
     ...(record.shared === undefined ? {} : { shared: record.shared }),
-    ...(record.parent === undefined ? {} : { parent: record.parent }),
+    ...(body.parent === undefined ? {} : { parent: body.parent }),
     ...(body.intent === undefined ? {} : { intent: body.intent }),
-    ...(body.inputs === undefined ? {} : { inputs: body.inputs }),
-    ...(body.outputs === undefined ? {} : { outputs: body.outputs }),
-    ...(body.actions === undefined ? {} : { actions: body.actions }),
+    ...(inputs.value === undefined ? {} : { inputs: inputs.value }),
+    ...(outputs.value === undefined ? {} : { outputs: outputs.value }),
+    ...(actions.value === undefined ? {} : { actions: actions.value }),
     ...(record.lifecycle === undefined ? {} : { lifecycle: record.lifecycle }),
     ...(record.desired === undefined ? {} : { desired: record.desired }),
     ...extra.value,
@@ -1086,9 +1334,13 @@ function decodedEntity(
 
 function decodedRelations(
   value: readonly Record<string, unknown>[],
+  extensionValue: unknown,
   source: EntityId,
   model: StandardModelCapability,
 ): Result<readonly GraphRelation[]> {
+  const metadata = extensionMetadata(extensionValue, "frontmatter.relationshipExtensions");
+  if (!metadata.ok) return metadata;
+  const remaining = new Set(Object.keys(metadata.value));
   const relations: GraphRelation[] = [];
   for (const [index, candidate] of value.entries()) {
     const id =
@@ -1105,12 +1357,22 @@ function decodedRelations(
         ),
       );
     }
+    const rawExtra = metadata.value[id.value];
+    if (rawExtra !== undefined && !exactRecord(rawExtra)) {
+      return failure(
+        diagnostic(
+          "invalid-intent-frontmatter",
+          `frontmatter.relationshipExtensions.${id.value} must be a YAML mapping`,
+        ),
+      );
+    }
     const extra = extensions(
-      candidate,
-      new Set(["description", "id", "target", "type"]),
-      `body.relationships[${index}]`,
+      rawExtra ?? {},
+      new Set(),
+      `frontmatter.relationshipExtensions.${id.value}`,
     );
     if (!extra.ok) return extra;
+    remaining.delete(id.value);
     if (!relationTypePattern.test(candidate.type)) {
       return failure(
         diagnostic(
@@ -1131,6 +1393,15 @@ function decodedRelations(
       target: target.value,
       type: candidate.type,
     });
+  }
+  if (remaining.size > 0) {
+    return failure(
+      diagnostic(
+        "invalid-intent-frontmatter",
+        "frontmatter.relationshipExtensions refers to a missing relationship",
+        { id: [...remaining].sort(compareText)[0]! },
+      ),
+    );
   }
   const viewed = model.relationships(relations);
   if (!viewed.ok) return viewed;
@@ -1417,7 +1688,7 @@ export function createMarkdownIntentStore(
     if (!key.ok) return key;
     const document = {
       get bytes(): Uint8Array {
-        return new intrinsicUint8Array(exactBytes);
+        return exactBytes.slice();
       },
       entity,
       locator,
@@ -1429,60 +1700,30 @@ export function createMarkdownIntentStore(
   };
 
   const validateRelations = (input: readonly GraphRelation[]): Result<readonly GraphRelation[]> => {
-    const length = inspectIntrinsicArrayLength(
-      input,
-      "invalid-intent-relations",
-      "Intent serialization relationships",
-    );
-    if (!length.ok) return length;
+    if (!Array.isArray(input)) {
+      return failure(
+        diagnostic("invalid-intent-relations", "Intent relationships must be an array"),
+      );
+    }
     const validated: GraphRelation[] = [];
-    for (let index = 0; index < length.value; index += 1) {
-      let value: unknown;
-      try {
-        const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
-        if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
-          return failure(
-            diagnostic(
-              "invalid-intent-relations",
-              `relations[${index}] must be an enumerable data property`,
-            ),
-          );
-        }
-        value = descriptor.value;
-      } catch {
+    for (const [index, value] of input.entries()) {
+      if (!exactRecord(value)) {
         return failure(
           diagnostic(
-            "invalid-intent-relations",
-            `relations[${index}] could not be inspected safely`,
+            "invalid-intent-relation",
+            `Intent relationship at index ${index} must be a plain record`,
           ),
         );
       }
-      const inspected = inspectExactRecord(
-        value,
-        [["id", "payload", "source", "target", "type"]],
-        "invalid-intent-relation",
-        `Intent relationship at index ${index}`,
-      );
-      if (!inspected.ok) return inspected;
-      const id =
-        typeof inspected.value.id === "string"
-          ? parseRelationId(inspected.value.id)
-          : parseRelationId("");
+      const id = typeof value.id === "string" ? parseRelationId(value.id) : parseRelationId("");
       if (!id.ok) return id;
       const source =
-        typeof inspected.value.source === "string"
-          ? parseEntityId(inspected.value.source)
-          : parseEntityId("");
+        typeof value.source === "string" ? parseEntityId(value.source) : parseEntityId("");
       if (!source.ok) return source;
       const target =
-        typeof inspected.value.target === "string"
-          ? parseEntityId(inspected.value.target)
-          : parseEntityId("");
+        typeof value.target === "string" ? parseEntityId(value.target) : parseEntityId("");
       if (!target.ok) return target;
-      if (
-        typeof inspected.value.type !== "string" ||
-        !relationTypePattern.test(inspected.value.type)
-      ) {
+      if (typeof value.type !== "string" || !relationTypePattern.test(value.type)) {
         return failure(
           diagnostic(
             "invalid-relation-type",
@@ -1490,14 +1731,14 @@ export function createMarkdownIntentStore(
           ),
         );
       }
-      const payload = copyGraphPayload(inspected.value.payload, "relation");
+      const payload = copyGraphPayload(value.payload, "relation");
       if (!payload.ok) return payload;
       validated.push({
         id: id.value,
         payload: payload.value,
         source: source.value,
         target: target.value,
-        type: inspected.value.type,
+        type: value.type,
       });
     }
     const views = model.relationships(validated);
@@ -1509,60 +1750,75 @@ export function createMarkdownIntentStore(
     entity: GraphEntity,
     relations: readonly GraphRelation[],
     requestedLocator?: WorkspaceResourceLocator,
+    labels?: ReadonlyMap<EntityId, string>,
   ): Result<MarkdownIntentDocument> => {
-    const inspected = inspectExactRecord(
-      entity,
-      [["id", "kind", "payload"]],
-      "invalid-intent-entity",
-      "Intent serialization entity",
-    );
-    if (!inspected.ok) return inspected;
-    const entityId =
-      typeof inspected.value.id === "string"
-        ? parseEntityId(inspected.value.id)
-        : parseEntityId("");
+    if (!exactRecord(entity)) {
+      return failure(
+        diagnostic("invalid-intent-entity", "Intent serialization entity must be a plain record"),
+      );
+    }
+    const entityId = typeof entity.id === "string" ? parseEntityId(entity.id) : parseEntityId("");
     if (!entityId.ok) return entityId;
-    if (typeof inspected.value.kind !== "string") {
+    if (typeof entity.kind !== "string") {
       return failure(
         diagnostic("invalid-intent-entity", "Intent GraphEntity kind must be a string"),
       );
     }
-    const payload = copyGraphPayload(inspected.value.payload, "entity");
+    const payload = copyGraphPayload(entity.payload, "entity");
     if (!payload.ok) return payload;
     const sanitizedEntity = Object.freeze({
       id: entityId.value,
-      kind: inspected.value.kind,
+      kind: entity.kind,
       payload: payload.value,
     });
     const component = model.parse(sanitizedEntity);
     if (!component.ok) return component;
-    const componentDraft = model.serialize(component.value);
+    let canonicalComponent = component.value;
+    if (canonicalComponent.shared === false) {
+      const withoutDefault = model.patch(sanitizedEntity, { shared: null });
+      if (!withoutDefault.ok) return withoutDefault;
+      if (withoutDefault.value.id === undefined) {
+        return failure(
+          diagnostic("invalid-intent-entity", "Canonical component lost its stable identity"),
+        );
+      }
+      const canonicalEntity: GraphEntity = {
+        id: entityId.value,
+        kind: withoutDefault.value.kind,
+        payload: withoutDefault.value.payload as GraphData,
+      };
+      const parsed = model.parse(canonicalEntity);
+      if (!parsed.ok) return parsed;
+      canonicalComponent = parsed.value;
+    }
+    const componentDraft = model.serialize(canonicalComponent);
     if (!componentDraft.ok) return componentDraft;
     const canonicalRelations = validateRelations(relations);
     if (!canonicalRelations.ok) return canonicalRelations;
     const relationships = model.relationships(canonicalRelations.value);
     if (!relationships.ok) return relationships;
     for (const relationship of relationships.value) {
-      if (relationship.source !== component.value.id) {
+      if (relationship.source !== canonicalComponent.id) {
         return failure(
           diagnostic(
             "non-outgoing-intent-relation",
             "An intent document may serialize only relationships outgoing from its component",
-            { id: relationship.id, owner: component.value.id, source: relationship.source },
+            { id: relationship.id, owner: canonicalComponent.id, source: relationship.source },
           ),
         );
       }
     }
     const locator =
       requestedLocator === undefined
-        ? defaultDocumentLocator(component.value)
+        ? defaultDocumentLocator(canonicalComponent)
         : parseWorkspaceResourceLocator(requestedLocator);
     if (!locator.ok) return locator;
-    const encoded = encodeDocument(
-      frontmatter(component.value),
-      component.value,
-      relationships.value,
-    );
+    const referenceLabels =
+      labels ??
+      new Map<EntityId, string>([
+        [canonicalComponent.id, canonicalComponent.name ?? canonicalComponent.id],
+      ]);
+    const encoded = encodeDocument(canonicalComponent, relationships.value, referenceLabels);
     if (!encoded.ok) return encoded;
     const bytes = encoded.value;
     if (bytes.byteLength > bounds.maxDocumentBytes) {
@@ -1618,19 +1874,16 @@ export function createMarkdownIntentStore(
     if (!framed.ok) return framed;
     const parsed = yamlRecord(framed.value.yaml);
     if (!parsed.ok) return parsed;
-    if (parsed.value.intent !== undefined) {
-      return failure(
-        diagnostic(
-          "intent-malformed-body",
-          "Intent prose belongs under the Markdown '# Intent' heading, not in frontmatter",
-        ),
-      );
-    }
     const body = parseMarkdownBody(framed.value.body);
     if (!body.ok) return body;
     const entity = decodedEntity(parsed.value, body.value, model);
     if (!entity.ok) return entity;
-    const relations = decodedRelations(body.value.relationships, entity.value.id, model);
+    const relations = decodedRelations(
+      body.value.relationships,
+      parsed.value.relationshipExtensions,
+      entity.value.id,
+      model,
+    );
     if (!relations.ok) return relations;
     return makeDocument(exactBytes, entity.value, parsedLocator.value, relations.value);
   };
