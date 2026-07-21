@@ -41,6 +41,14 @@ export interface CliSurfaceController {
 }
 
 export type CliExportWriter = (output: string, html: string) => Promise<string>;
+export type CliBlueprintPresenter = (html: string) => Promise<string>;
+
+interface RenderedBlueprintBundle {
+  readonly bytes: number;
+  readonly componentCount: number;
+  readonly generation: number;
+  readonly html: string;
+}
 
 function diagnostic(code: string, message: string): CliDiagnostic {
   return Object.freeze({ code, message });
@@ -396,21 +404,8 @@ async function exportBlueprint(
       "No Groma workspace exists here; run groma init first",
     );
   }
-  const operations = workspaceOperations(command, context);
-  if (!("listRoots" in operations)) return operations;
-  const [{ webFrontend }, { renderStaticBlueprintBundle }] = await Promise.all([
-    import("../web/assets.ts"),
-    import("../web/export.ts"),
-  ]);
-  const rendered = await renderStaticBlueprintBundle({ frontend: webFrontend, operations });
-  if (!rendered.ok) {
-    return failedResult(
-      command,
-      CLI_EXIT.infrastructure,
-      rendered.diagnostic.code,
-      rendered.diagnostic.message,
-    );
-  }
+  const rendered = await blueprintBundle(command, context);
+  if (!rendered.ok) return rendered.result;
   let artifact: string;
   try {
     artifact = await writer(command.output, rendered.value.html);
@@ -436,6 +431,65 @@ async function exportBlueprint(
   );
 }
 
+async function blueprintBundle(
+  command: CliCommand,
+  context: HostSurfaceContext,
+): Promise<
+  | { readonly ok: true; readonly value: RenderedBlueprintBundle }
+  | { readonly ok: false; readonly result: CliCommandResult }
+> {
+  const operations = workspaceOperations(command, context);
+  if (!("listRoots" in operations)) return Object.freeze({ ok: false, result: operations });
+  const [{ webFrontend }, { renderStaticBlueprintBundle }] = await Promise.all([
+    import("../web/assets.ts"),
+    import("../web/export.ts"),
+  ]);
+  const rendered = await renderStaticBlueprintBundle({ frontend: webFrontend, operations });
+  return rendered.ok
+    ? Object.freeze({ ok: true as const, value: rendered.value })
+    : Object.freeze({
+        ok: false as const,
+        result: failedResult(
+          command,
+          CLI_EXIT.infrastructure,
+          rendered.diagnostic.code,
+          rendered.diagnostic.message,
+        ),
+      });
+}
+
+async function openBlueprint(
+  command: Extract<CliCommand, { readonly kind: "overview" }>,
+  context: HostSurfaceContext,
+  presenter: CliBlueprintPresenter,
+): Promise<CliCommandResult> {
+  const rendered = await blueprintBundle(command, context);
+  if (!rendered.ok) return rendered.result;
+  let artifact: string;
+  try {
+    artifact = await presenter(rendered.value.html);
+  } catch {
+    return failedResult(
+      command,
+      CLI_EXIT.infrastructure,
+      "cli-blueprint-artifact-unavailable",
+      "The local visual blueprint could not be opened",
+    );
+  }
+  return result(
+    command,
+    CLI_EXIT.success,
+    true,
+    Object.freeze({
+      artifact,
+      bytes: rendered.value.bytes,
+      components: rendered.value.componentCount,
+      generation: rendered.value.generation,
+      status: "opened",
+    }),
+  );
+}
+
 async function execute(
   invocation: CliInvocation,
   context: HostSurfaceContext,
@@ -444,9 +498,27 @@ async function execute(
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
   exportWriter?: CliExportWriter,
+  blueprintPresenter?: CliBlueprintPresenter,
 ): Promise<CliCommandResult> {
   const command = invocation.command;
-  if (command.kind === "overview") return overview(command, context, terminal);
+  if (command.kind === "overview") {
+    if (
+      context.workspace.status().state !== "missing" &&
+      invocation.format === "plain" &&
+      terminal.stdin &&
+      terminal.stdout
+    ) {
+      return blueprintPresenter === undefined
+        ? failedResult(
+            command,
+            CLI_EXIT.infrastructure,
+            "cli-blueprint-artifact-unavailable",
+            "The local visual blueprint presenter is unavailable",
+          )
+        : openBlueprint(command, context, blueprintPresenter);
+    }
+    return overview(command, context, terminal);
+  }
   if (command.kind === "web") return serveWeb(command, context, webReady);
   if (command.kind === "export") {
     if (exportWriter === undefined) {
@@ -778,6 +850,7 @@ export function createCliSurfaceController(
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
   exportWriter?: CliExportWriter,
+  blueprintPresenter?: CliBlueprintPresenter,
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
   let completion: Promise<void> | undefined;
@@ -797,6 +870,7 @@ export function createCliSurfaceController(
         webReady,
         confirmInit,
         exportWriter,
+        blueprintPresenter,
       ).then(
         (value) => {
           if (!stopped || longRunning) captured = value;

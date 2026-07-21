@@ -320,8 +320,13 @@ describe("CLI scan workflow", () => {
     });
     expect(visual).toMatchObject({ exitCode: CLI_EXIT.success });
     expect(visual.output).toContain('"status":"opened"');
-    expect(presented).toContain('aria-label="groma.md lockup"');
+    expect(visual.output).toContain('"components":');
+    expect(presented).toContain('data-groma-export="read-only"');
+    expect(presented).toContain("groma-read-only-blueprint-v1");
+    expect(presented).toContain("connect-src 'none'");
     expect(presented).toContain("scan-fixture");
+    expect(presented).not.toMatch(/<script\b[^>]*\bsrc=/i);
+    expect(presented).not.toMatch(/<link\b[^>]*\brel=["']stylesheet["']/i);
     expect(await canonicalFiles(root)).toEqual(canonicalBeforeVisual);
 
     const presentationFailure = await run(root, [], {
