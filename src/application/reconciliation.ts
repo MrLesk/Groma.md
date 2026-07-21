@@ -235,13 +235,16 @@ function canonicalSnapshot(
   ) {
     return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
   }
-  const session = createObservationSession({
-    apiVersion: observationSessionApiVersion,
-    epoch: record.epoch as string,
-    projectId: record.projectId as string,
-    scopes: record.scopes as CompletedObservationSnapshot["scopes"],
-    source: record.source as CompletedObservationSnapshot["source"],
-  });
+  const session = createObservationSession(
+    {
+      apiVersion: observationSessionApiVersion,
+      epoch: record.epoch as string,
+      projectId: record.projectId as string,
+      scopes: record.scopes as CompletedObservationSnapshot["scopes"],
+      source: record.source as CompletedObservationSnapshot["source"],
+    },
+    { maxRecords: maximumRecords },
+  );
   if (!session.ok)
     return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
   let sequence = 0;
