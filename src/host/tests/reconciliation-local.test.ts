@@ -389,6 +389,137 @@ describe("local completed-snapshot reconciliation", () => {
       ok: false,
     });
     expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+    expect(
+      await restarted.reconciliation.reconcile(
+        snapshot("epoch-5", [candidate("api", "Public API")], undefined, "partial"),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-missing" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(evidenceBeforeRemoval);
+
+    const retired = await restarted.reconciliation.reconcile(
+      snapshot("epoch-6", [], undefined, "partial"),
+    );
+    expect(retired).toMatchObject({ ok: true, value: { status: "committed" } });
+    const afterRetirement = await restarted.operations.listComponents({ limit: 10 });
+    expect(afterRetirement).toMatchObject({ ok: true, value: { items: [] } });
+    const retiredEvidence = await readFile(evidencePath, "utf8");
+    expect(JSON.parse(retiredEvidence)).toMatchObject({
+      source: {
+        componentBindings: [
+          {
+            componentId: firstComponent.component.id,
+            key: "api",
+            present: false,
+            scope: "workspace",
+          },
+        ],
+      },
+    });
+    expect(
+      await restarted.reconciliation.reconcile(snapshot("epoch-7", [], undefined, "partial")),
+    ).toMatchObject({
+      ok: true,
+      value: { status: "unchanged" },
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
+    expect(await restarted.reconciliation.reconcile(snapshot("epoch-8", []))).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+    const completedEvidence = await readFile(evidencePath, "utf8");
+    expect(await restarted.reconciliation.reconcile(snapshot("epoch-9", []))).toMatchObject({
+      ok: true,
+      value: { status: "unchanged" },
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(completedEvidence);
+  });
+
+  test("retires an explicitly removed relationship only when the current scan omits it", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-1", [
+          candidate("api", "API"),
+          candidate("data", "Data"),
+          relationship("api-data", "api", "data"),
+        ]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    const api = components.value.items.find((item) => item.component.name === "API")!;
+    const exact = await host.operations.getComponent({
+      id: api.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(exact.ok).toBeTrue();
+    if (!exact.ok) return;
+    const relation = exact.value.relationships.items[0]!.relationship;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: exact.value.item.revision,
+        id: api.component.id,
+        patch: {},
+        relationships: { remove: [relation.id] },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
+    const beforeRetirement = await readFile(evidencePath, "utf8");
+    const remainingCandidates = [candidate("api", "API"), candidate("data", "Data")];
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "epoch-2",
+          [...remainingCandidates, relationship("api-data", "api", "data")],
+          undefined,
+          "partial",
+        ),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-missing" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(beforeRetirement);
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-3", remainingCandidates, undefined, "partial"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const retiredEvidence = await readFile(evidencePath, "utf8");
+    expect(JSON.parse(retiredEvidence)).toMatchObject({
+      source: {
+        relationshipBindings: [
+          {
+            key: "api-data",
+            present: false,
+            relationId: relation.id,
+            removed: true,
+            scope: "workspace",
+          },
+        ],
+      },
+    });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-4", remainingCandidates, undefined, "partial"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+    expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-5", remainingCandidates)),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const completedEvidence = await readFile(evidencePath, "utf8");
+    expect(
+      await host.reconciliation.reconcile(snapshot("epoch-6", remainingCandidates)),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+    expect(await readFile(evidencePath, "utf8")).toBe(completedEvidence);
   });
 
   test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
