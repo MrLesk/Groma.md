@@ -24,7 +24,7 @@ Usage:
   groma [--format plain|json] scan [--project <project-id>] [--scanner <scanner-id>]
   groma [--format plain|json] scan (--input <file|-> | --stdin)
   groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
-  groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
+  groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>] [--scale system|domain|part|element] [--shared true|false]
   groma [--format plain|json] blueprint traverse <id> --direction incoming|outgoing|both --depth <1-${CLI_MAX_TRAVERSAL_DEPTH}> [--relation-type <type>] --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] project add (--input <file|-> | --stdin)
   groma [--format plain|json] project get <project-id>
@@ -33,9 +33,9 @@ Usage:
   groma [--format plain|json] project remove <project-id> --revision <revision>
   groma [--format plain|json] component create (--input <file|-> | --stdin)
   groma [--format plain|json] component get <id> --relationships-limit <1-${CLI_MAX_PAGE_SIZE}> [--relationships-cursor <cursor>]
-  groma [--format plain|json] component list --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
-  groma [--format plain|json] component roots --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
-  groma [--format plain|json] component children <parent-id> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
+  groma [--format plain|json] component list --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>] [--scale system|domain|part|element] [--shared true|false]
+  groma [--format plain|json] component roots --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>] [--scale system|domain|part|element] [--shared true|false]
+  groma [--format plain|json] component children <parent-id> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>] [--scale system|domain|part|element] [--shared true|false]
   groma [--format plain|json] component update (--input <file|-> | --stdin)
   groma [--format plain|json] component merge <obsolete-id> --into <survivor-id> --revision <obsolete-revision>
   groma [--format plain|json] component reparent <id> --revision <revision> (--parent <parent-id> | --root)
@@ -67,6 +67,7 @@ operations. Surface cursors are opaque and never followed implicitly. Every expo
 one component and all of its outgoing depth-1 relationships; a complete export consumes only its
 fingerprint-bound component pages at one generation.
 Blueprint search text accepts 1-${CLI_MAX_SEARCH_CHARACTERS} raw characters before normalization.
+Component list, roots, children, and blueprint search accept the same optional exact scale and shared filters.
 Blueprint traversal depth accepts the official range 1-${CLI_MAX_TRAVERSAL_DEPTH}.
 If an export page exceeds local aggregate bounds, retry with a smaller --limit.
 If --limit 1 still fails, one self-contained item exceeds the local export bounds.

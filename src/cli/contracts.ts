@@ -1,3 +1,5 @@
+import type { StandardComponentScale } from "../standard-model/index.ts";
+
 export const CLI_MAX_ARGUMENTS = 256;
 export const CLI_MAX_ARGUMENT_CHARACTERS = 65_536;
 export const CLI_MAX_CURSOR_CHARACTERS = 4_096;
@@ -25,6 +27,11 @@ export type CliFormat = "json" | "plain";
 export type CliInputSource =
   { readonly kind: "file"; readonly path: string } | { readonly kind: "stdin" };
 
+export interface CliComponentFilters {
+  readonly scale?: StandardComponentScale;
+  readonly shared?: boolean;
+}
+
 export type CliCommand =
   | { readonly kind: "help" }
   | { readonly kind: "version" }
@@ -47,6 +54,8 @@ export type CliCommand =
       readonly cursor?: string;
       readonly kind: "blueprint-search";
       readonly limit: number;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
       readonly text: string;
     }
   | {
@@ -82,12 +91,16 @@ export type CliCommand =
       readonly cursor?: string;
       readonly kind: "component-list" | "component-roots";
       readonly limit: number;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
     }
   | {
       readonly cursor?: string;
       readonly kind: "component-children";
       readonly limit: number;
       readonly parent: string;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
     }
   | { readonly input: CliInputSource; readonly kind: "component-update" }
   | {

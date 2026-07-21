@@ -12,6 +12,7 @@ import {
   type EntityId,
   type GraphEntity,
   type GraphEntityQuery,
+  type GraphDataScalar,
   type GraphQueryEngineCapability,
   type GraphQueryPage,
   type GraphRelation,
@@ -167,6 +168,7 @@ interface PreparedRequest {
 
 interface PreparedSearch {
   readonly kind?: string;
+  readonly payload?: Readonly<Record<string, GraphDataScalar>>;
   readonly terms: readonly string[];
 }
 
@@ -448,7 +450,7 @@ function prepareEntityQuery(
 ): Result<GraphEntityQuery> {
   const inspected = inspectExactRecord(
     value,
-    [[], ["kind"]],
+    [[], ["kind"], ["payload"], ["kind", "payload"]],
     "invalid-graph-entity-query",
     "Graph entity query",
   );
@@ -461,9 +463,57 @@ function prepareEntityQuery(
       ),
     );
   }
+  const payload =
+    "payload" in inspected.value
+      ? preparePayloadCriteria(inspected.value.payload, bounds)
+      : success(undefined);
+  if (!payload.ok) return payload;
   return success(
-    Object.freeze("kind" in inspected.value ? { kind: inspected.value.kind as string } : {}),
+    Object.freeze({
+      ...(inspected.value.kind === undefined ? {} : { kind: inspected.value.kind as string }),
+      ...(payload.value === undefined ? {} : { payload: payload.value }),
+    }),
   );
+}
+
+function preparePayloadCriteria(
+  value: unknown,
+  bounds: ProjectionQueryEngineBounds,
+): Result<Readonly<Record<string, GraphDataScalar>>> {
+  const copied = copyGraphPayload(value, "query", {
+    code: "invalid-graph-payload-query",
+    maximumDepth: 2,
+    maximumValues: bounds.maxProviderDataValues,
+    message: "Graph payload query exceeds its structural bound",
+  });
+  if (
+    !copied.ok ||
+    typeof copied.value !== "object" ||
+    copied.value === null ||
+    Array.isArray(copied.value)
+  ) {
+    return failure(
+      diagnostic(
+        "invalid-graph-payload-query",
+        "Graph payload query must be a plain record of scalar criteria",
+      ),
+    );
+  }
+  const criteria = copied.value as Readonly<Record<string, unknown>>;
+  for (const key of Object.keys(criteria)) {
+    const candidate = criteria[key];
+    if (
+      candidate !== null &&
+      typeof candidate !== "boolean" &&
+      typeof candidate !== "number" &&
+      typeof candidate !== "string"
+    ) {
+      return failure(
+        diagnostic("invalid-graph-payload-query", "Graph payload query values must be scalar"),
+      );
+    }
+  }
+  return success(criteria as Readonly<Record<string, GraphDataScalar>>);
 }
 
 function normalizeText(
@@ -507,7 +557,7 @@ function prepareSearch(
 ): Result<PreparedSearch> {
   const inspected = inspectExactRecord(
     value,
-    [["text"], ["kind", "text"]],
+    [["text"], ["kind", "text"], ["payload", "text"], ["kind", "payload", "text"]],
     "invalid-graph-search-query",
     "Graph search query",
   );
@@ -520,6 +570,11 @@ function prepareSearch(
       ),
     );
   }
+  const payload =
+    "payload" in inspected.value
+      ? preparePayloadCriteria(inspected.value.payload, bounds)
+      : success(undefined);
+  if (!payload.ok) return payload;
   if (typeof inspected.value.text !== "string" || inspected.value.text.length === 0) {
     return failure(
       diagnostic(
@@ -576,6 +631,7 @@ function prepareSearch(
   return success(
     Object.freeze({
       ...(inspected.value.kind === undefined ? {} : { kind: inspected.value.kind as string }),
+      ...(payload.value === undefined ? {} : { payload: payload.value }),
       terms: Object.freeze(sortInPlace(uniqueTerms, compareText)),
     }),
   );
@@ -792,6 +848,31 @@ function copyEntity(value: unknown, bounds: ProjectionQueryEngineBounds): Result
   return id.ok && payload.ok
     ? success(Object.freeze({ id: id.value, kind: inspected.value.kind, payload: payload.value }))
     : unavailable("provider-entity-malformed");
+}
+
+function matchesPayloadCriteria(
+  entity: GraphEntity,
+  criteria: Readonly<Record<string, GraphDataScalar>> | undefined,
+): boolean {
+  if (criteria === undefined) return true;
+  if (
+    typeof entity.payload !== "object" ||
+    entity.payload === null ||
+    Array.isArray(entity.payload)
+  ) {
+    return false;
+  }
+  for (const key of Object.keys(criteria)) {
+    const descriptor = Object.getOwnPropertyDescriptor(entity.payload, key);
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      descriptor.value !== criteria[key]
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function copyRelation(value: unknown, bounds: ProjectionQueryEngineBounds): Result<GraphRelation> {
@@ -1279,6 +1360,7 @@ export function createProjectionQueryEngine(
     expected: ProjectionReadIdentity,
     prepared: PreparedBoundedQuery,
     matches: (entry: ProjectionCatalogEntry) => Result<boolean>,
+    matchesEntity?: (entity: GraphEntity) => boolean,
   ): Promise<Result<GraphQueryPage<GraphEntity>>> => {
     const after =
       prepared.after === undefined || typeof prepared.after !== "string"
@@ -1291,7 +1373,7 @@ export function createProjectionQueryEngine(
       return failure(diagnostic("cursor-anchor-mismatch", "Continuation anchor is not an entity"));
     }
     const wanted = prepared.limit as number;
-    const selected: ProjectionCatalogEntry[] = [];
+    const selected: GraphEntity[] = [];
     let visits = 0;
     let providerAfter = after?.ok ? after.value : undefined;
     let hasProviderMore = true;
@@ -1309,7 +1391,16 @@ export function createProjectionQueryEngine(
       if (!anchor.ok) return anchor;
       const accepted = matches(anchor.value);
       if (!accepted.ok) return accepted;
-      if (!accepted.value) {
+      const anchorEntity =
+        accepted.value && matchesEntity !== undefined
+          ? await exact(expected, after.value)
+          : undefined;
+      if (anchorEntity !== undefined && !anchorEntity.ok) return anchorEntity;
+      if (
+        !accepted.value ||
+        (matchesEntity !== undefined &&
+          (anchorEntity === undefined || !matchesEntity(anchorEntity.value)))
+      ) {
         return failure(
           diagnostic(
             "cursor-anchor-mismatch",
@@ -1336,12 +1427,30 @@ export function createProjectionQueryEngine(
       if (page.value.items.length === 0 && page.value.hasMore) {
         return unavailable("provider-catalog-made-no-progress");
       }
+      const candidates: ProjectionCatalogEntry[] = [];
       for (let index = 0; index < page.value.items.length; index += 1) {
         const item = page.value.items[index]!;
         visits += 1;
         const accepted = matches(item);
         if (!accepted.ok) return accepted;
-        if (accepted.value) pushArray(selected, item);
+        if (accepted.value) pushArray(candidates, item);
+      }
+      const candidateIds: EntityId[] = [];
+      for (let index = 0; index < candidates.length; index += 1) {
+        pushArray(candidateIds, candidates[index]!.id);
+      }
+      const batch =
+        candidateIds.length === 0
+          ? success(Object.freeze([] as GraphEntity[]))
+          : await exactEntityBatch(
+              expected,
+              Object.freeze(candidateIds),
+              Object.freeze(candidates),
+            );
+      if (!batch.ok) return batch;
+      for (let index = 0; index < batch.value.length; index += 1) {
+        const entity = batch.value[index]!;
+        if (matchesEntity === undefined || matchesEntity(entity)) pushArray(selected, entity);
         if (selected.length > wanted) break;
       }
       hasProviderMore = page.value.hasMore;
@@ -1352,18 +1461,7 @@ export function createProjectionQueryEngine(
       }
     }
     const hasMore = selected.length > wanted;
-    const entries = sliceArray(selected, 0, wanted);
-    const requestedIds: EntityId[] = [];
-    for (let index = 0; index < entries.length; index += 1) {
-      pushArray(requestedIds, entries[index]!.id);
-    }
-    const ids = Object.freeze(requestedIds);
-    const batch =
-      ids.length === 0
-        ? success(Object.freeze([] as GraphEntity[]))
-        : await exactEntityBatch(expected, ids, entries);
-    if (!batch.ok) return batch;
-    const entities = batch.value;
+    const entities = Object.freeze(sliceArray(selected, 0, wanted));
     const last = entities[entities.length - 1];
     return boundedQueryPage(
       queries,
@@ -1529,8 +1627,14 @@ export function createProjectionQueryEngine(
       preparedRequest.value,
     );
     if (!prepared.ok) return prepared;
-    return collectCatalog(selected.value, prepared.value, (entry) =>
-      success(preparedQuery.value.kind === undefined || entry.kind === preparedQuery.value.kind),
+    return collectCatalog(
+      selected.value,
+      prepared.value,
+      (entry) =>
+        success(preparedQuery.value.kind === undefined || entry.kind === preparedQuery.value.kind),
+      preparedQuery.value.payload === undefined
+        ? undefined
+        : (entity) => matchesPayloadCriteria(entity, preparedQuery.value.payload),
     );
   };
 
@@ -1558,23 +1662,30 @@ export function createProjectionQueryEngine(
       preparedRequest.value,
     );
     if (!prepared.ok) return prepared;
-    return collectCatalog(selected.value, prepared.value, (entry) => {
-      if (preparedQuery.value.kind !== undefined && entry.kind !== preparedQuery.value.kind) {
-        return success(false);
-      }
-      const normalized = normalizeText(entry.searchableText, bounds.maxSearchableTextCharacters);
-      if (!normalized.ok) return unavailable("provider-search-text-normalization");
-      for (let index = 0; index < preparedQuery.value.terms.length; index += 1) {
-        if (
-          !(Reflect.apply(intrinsicIncludes, normalized.value, [
-            preparedQuery.value.terms[index]!,
-          ]) as boolean)
-        ) {
+    return collectCatalog(
+      selected.value,
+      prepared.value,
+      (entry) => {
+        if (preparedQuery.value.kind !== undefined && entry.kind !== preparedQuery.value.kind) {
           return success(false);
         }
-      }
-      return success(true);
-    });
+        const normalized = normalizeText(entry.searchableText, bounds.maxSearchableTextCharacters);
+        if (!normalized.ok) return unavailable("provider-search-text-normalization");
+        for (let index = 0; index < preparedQuery.value.terms.length; index += 1) {
+          if (
+            !(Reflect.apply(intrinsicIncludes, normalized.value, [
+              preparedQuery.value.terms[index]!,
+            ]) as boolean)
+          ) {
+            return success(false);
+          }
+        }
+        return success(true);
+      },
+      preparedQuery.value.payload === undefined
+        ? undefined
+        : (entity) => matchesPayloadCriteria(entity, preparedQuery.value.payload),
+    );
   };
 
   const traverseRelations = async (
