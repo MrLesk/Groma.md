@@ -189,7 +189,7 @@ textarea {
   overflow: hidden;
   border: 1.5px solid var(--color-ink);
   border-radius: 0;
-  padding: 13px 14px 11px;
+  padding: 13px 14px 30px;
   background: var(--color-paper);
   box-shadow: 0 8px 20px rgba(32, 36, 34, 0.07);
   cursor: pointer;
@@ -334,7 +334,7 @@ textarea {
 
 .groma-node__purpose {
   display: -webkit-box;
-  min-height: 42px;
+  min-height: 35px;
   overflow: hidden;
   margin: 0 0 8px;
   color: var(--color-ink);
@@ -351,7 +351,7 @@ textarea {
 
 .groma-node__evidence {
   display: flex;
-  min-height: 21px;
+  min-height: 17px;
   flex-wrap: wrap;
   gap: 4px;
   margin: 0;
@@ -415,6 +415,10 @@ textarea {
   background: var(--color-paper);
 }
 
+.groma-flow .groma-handle[data-nodeid] {
+  pointer-events: none;
+}
+
 .groma-breadcrumb {
   margin-top: 12px;
   border: 1px solid var(--color-line);
@@ -452,6 +456,15 @@ textarea {
 .groma-breadcrumb strong {
   color: var(--color-ink);
   font-weight: 650;
+}
+
+.groma-breadcrumb .groma-breadcrumb__collapse {
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-line);
+  color: var(--color-survey);
+  font-weight: 650;
+  text-decoration: none;
 }
 
 .groma-title-block {

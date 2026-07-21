@@ -13,15 +13,18 @@ function view(id: string, extra: Record<string, unknown> = {}): ApiComponentView
   const {
     cognitiveComplexity,
     evidenceBound = false,
+    observedPaths,
     ...component
   } = extra as Record<string, unknown> & {
     readonly cognitiveComplexity?: ApiComponentView["cognitiveComplexity"];
     readonly evidenceBound?: boolean;
+    readonly observedPaths?: ApiComponentView["observedPaths"];
   };
   return {
     ...(cognitiveComplexity === undefined ? {} : { cognitiveComplexity }),
     component: { id, kind: "component", ...component },
     evidenceBound,
+    ...(observedPaths === undefined ? {} : { observedPaths }),
     revision: `sha256:${id}`,
   } as ApiComponentView;
 }
@@ -90,6 +93,27 @@ describe("interactive map view-model", () => {
     );
   });
 
+  test("offers focus from a known child count before children are loaded", () => {
+    const roots = mergeRootsPage(
+      emptyModel(),
+      page([view("ent_system", { name: "Product", scale: "system" })]),
+    );
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([view("ent_domain", { name: "Application", scale: "domain" })]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      childCounts: new Map([["ent_domain", 7]]),
+      dependencies: [],
+      model,
+    });
+    expect(graph.nodes.find((node) => node.id === "ent_domain")?.data).toMatchObject({
+      canOpen: true,
+      childCount: 7,
+    });
+  });
+
   test("expands a focused root without discarding its root siblings", () => {
     const roots = mergeRootsPage(
       emptyModel(),
@@ -119,7 +143,7 @@ describe("interactive map view-model", () => {
     expect(focused.levelComponents).toBe(1);
   });
 
-  test("enforces the visual budget without shrinking or discarding loaded components", () => {
+  test("reports an ungroupable over-budget level without omitting components", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const children = Array.from({ length: LEVEL_COMPONENT_BUDGET + 2 }, (_, index) =>
       view(`ent_domain_${index}`, {
@@ -134,42 +158,78 @@ describe("interactive map view-model", () => {
       dependencies: [],
       model,
     });
-    expect(graph.visibleComponents).toBe(LEVEL_COMPONENT_BUDGET);
-    expect(graph.nodes).toHaveLength(LEVEL_COMPONENT_BUDGET + 1);
-    expect(graph.omittedComponents).toBe(2);
+    expect(graph.visibleComponents).toBe(1);
+    expect(graph.levelComponents).toBe(children.length);
+    expect(graph.nodes).toHaveLength(2);
+    expect(graph.omittedComponents).toBe(0);
+    expect(graph.nodes.find((node) => node.type === "component")?.data).toMatchObject({
+      childCount: children.length,
+      label: "Structure not mapped",
+      projection: "unresolved-mapping",
+    });
     expect(model.nodes.has("ent_domain_9")).toBeTrue();
   });
 
-  test("normalizes an OpenClaw-sized observed root to twenty ranked candidates", () => {
+  test("normalizes all OpenClaw candidates into observed source areas", () => {
     const roots = mergeRootsPage(
       emptyModel(),
       page([view("ent_openclaw", { name: "openclaw", scale: "system" })]),
     );
-    const candidates = Array.from({ length: 85 }, (_, index) =>
-      view(`ent_candidate_${index.toString().padStart(2, "0")}`, {
-        evidenceBound: true,
-        name: index < 36 ? `@openclaw/plugin-${index}` : `area-${index}`,
-        parent: "ent_openclaw",
-        ...(index < 36 ? { summary: `OpenClaw plugin ${index}.`, type: "package" } : {}),
-      }),
+    const areas = [
+      { count: 49, name: "src" },
+      { count: 33, name: "extensions" },
+      { count: 2, name: "packages" },
+      { count: 1, name: "ui" },
+    ] as const;
+    const candidates = areas.flatMap((area) =>
+      Array.from({ length: area.count }, (_, index) =>
+        view(`ent_${area.name}_${index.toString().padStart(2, "0")}`, {
+          evidenceBound: true,
+          name: `${area.name}-${index}`,
+          observedPaths: [
+            {
+              projectId: "project.openclaw",
+              resource: `${area.name}/member-${index}/package.json`,
+              scanner: { id: "typescript-bun", instance: "default", version: "1.0.0" },
+            },
+          ],
+          parent: "ent_openclaw",
+          type: "package",
+        }),
+      ),
     );
     const model = mergeChildrenPage(roots, "ent_openclaw", page(candidates));
     const graph = buildBlueprintFlowGraph({
-      childCounts: new Map([
-        ["ent_openclaw", 85],
-        ["ent_candidate_07", 5],
-        ["ent_candidate_61", 2],
-      ]),
+      childCounts: new Map([["ent_openclaw", 85]]),
       dependencies: [],
       model,
     });
     const visibleCards = graph.nodes.filter((node) => node.type === "component");
-    expect(visibleCards).toHaveLength(20);
-    expect(graph.visibleComponents).toBe(20);
+    expect(visibleCards).toHaveLength(4);
+    expect(visibleCards.map((node) => node.data.label)).toEqual([
+      "extensions",
+      "packages",
+      "src",
+      "ui",
+    ]);
+    expect(visibleCards.map((node) => node.data.childCount)).toEqual([33, 2, 49, 1]);
+    expect(visibleCards.every((node) => node.data.projection === "observed-group")).toBeTrue();
+    expect(graph.visibleComponents).toBe(4);
     expect(graph.levelComponents).toBe(85);
-    expect(graph.omittedComponents).toBe(65);
-    expect(visibleCards.map((node) => node.id)).toContain("ent_candidate_61");
-    expect(visibleCards.every((node) => node.data.notation === "unscaled")).toBeTrue();
+    expect(graph.omittedComponents).toBe(0);
+
+    const extensions = visibleCards.find((node) => node.data.label === "extensions")!;
+    const focused = buildBlueprintFlowGraph({
+      childCounts: new Map([["ent_openclaw", 85]]),
+      dependencies: [],
+      focusPath: [extensions.id],
+      model,
+    });
+    expect(focused.nodes.find((node) => node.id === extensions.id)?.type).toBe("group");
+    expect(focused.nodes.some((node) => node.data.label === "Structure not mapped")).toBeTrue();
+    expect(
+      focused.nodes.some((node) => node.type === "component" && node.data.label === "packages"),
+    ).toBeTrue();
   });
 
   test("keeps meaning-empty observed candidates visible with automatic notation", () => {
@@ -240,11 +300,19 @@ describe("interactive map view-model", () => {
     );
   });
 
-  test("uses code-unit ordering at the visual cutoff", () => {
+  test("orders disposable source areas deterministically", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
-    const names = ["I", "i", "İ", "ı", ...Array.from({ length: 18 }, (_, index) => `z${index}`)];
-    const children = names.map((name, index) =>
-      view(`ent_${index.toString().padStart(2, "0")}`, { intent: name, name }),
+    const children = Array.from({ length: 24 }, (_, index) =>
+      view(`ent_${index.toString().padStart(2, "0")}`, {
+        name: `Part ${index}`,
+        observedPaths: [
+          {
+            projectId: "project.local",
+            resource: `areas/area-${index % 12}/part-${index}.ts`,
+            scanner: { id: "typescript-bun", instance: "default", version: "1.0.0" },
+          },
+        ],
+      }),
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [],
@@ -252,7 +320,10 @@ describe("interactive map view-model", () => {
     });
     expect(
       graph.nodes.filter((node) => node.type === "component").map((node) => node.data.label),
-    ).toEqual(names.toSorted().slice(0, 20));
+    ).toEqual(["areas"]);
+    expect(graph.visibleComponents).toBe(1);
+    expect(graph.levelComponents).toBe(24);
+    expect(graph.omittedComponents).toBe(0);
   });
 
   test("draws a bounded directional relationship set with plain labels", () => {
@@ -268,9 +339,63 @@ describe("interactive map view-model", () => {
     }));
     const graph = buildBlueprintFlowGraph({ dependencies, model });
     expect(graph.edges.length).toBeLessThanOrEqual(LEVEL_RELATIONSHIP_BUDGET);
-    expect(graph.edges[0]?.label).toBe("needs");
+    expect(graph.edges[0]?.label).toBeUndefined();
     expect(graph.edges[0]?.markerEnd).toBeDefined();
+    expect(graph.edges[0]?.sourceHandle).toBe("source-right");
+    expect(graph.edges[0]?.targetHandle).toBe("target-left");
     expect(graph.omittedRelationships).toBeGreaterThanOrEqual(0);
+  });
+
+  test("does not restate containment as relationship lines", () => {
+    const roots = mergeRootsPage(
+      emptyModel(),
+      page([view("ent_system", { name: "System", scale: "system" })]),
+    );
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([view("ent_domain", { name: "Domain", scale: "domain" })]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_system", target: "ent_domain", type: "source-boundary" }],
+      model,
+    });
+    expect(graph.edges).toEqual([]);
+  });
+
+  test("routes relationships between card rows through the vertical gutter", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const children = Array.from({ length: 8 }, (_, index) =>
+      view(`ent_${index}`, { name: `Part ${index}`, scale: "domain", summary: `Own ${index}.` }),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_4", target: "ent_0", type: "imports" }],
+      model: mergeChildrenPage(roots, "ent_system", page(children)),
+    });
+    const top = graph.nodes.find((node) => node.id === "ent_0")!;
+    const bottom = graph.nodes.find((node) => node.id === "ent_4")!;
+    expect(bottom.position.y).toBeGreaterThan(top.position.y);
+    expect(graph.edges[0]?.sourceHandle).toBe("source-top");
+    expect(graph.edges[0]?.targetHandle).toBe("target-bottom");
+  });
+
+  test("leaves long relationships in detail instead of crossing another card", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "A", scale: "domain" }),
+        view("ent_b", { name: "B", scale: "domain" }),
+        view("ent_c", { name: "C", scale: "domain" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_a", target: "ent_c", type: "imports" }],
+      model,
+    });
+    expect(graph.edges).toEqual([]);
+    expect(graph.omittedRelationships).toBe(1);
   });
 
   test("keeps cognitive complexity as secondary comparable evidence", () => {

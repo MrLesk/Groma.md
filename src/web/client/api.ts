@@ -41,6 +41,17 @@ export interface ApiCognitiveComplexityEvidence {
   readonly value: number;
 }
 
+/** Scanner-owned resource path used only for disposable visual grouping. */
+export interface ApiObservedPathEvidence {
+  readonly projectId: string;
+  readonly resource: string;
+  readonly scanner: {
+    readonly id: string;
+    readonly instance: string;
+    readonly version: string;
+  };
+}
+
 export function cognitiveComplexitySourceLabel(evidence: ApiCognitiveComplexityEvidence): string {
   return `${evidence.projectId} · ${evidence.scanner.id}/${evidence.scanner.instance}@${evidence.scanner.version}`;
 }
@@ -71,6 +82,7 @@ export interface ApiComponentView {
   readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
   readonly evidenceBound: boolean;
+  readonly observedPaths?: readonly ApiObservedPathEvidence[];
   readonly revision: string;
 }
 
@@ -333,6 +345,7 @@ export interface ApiConnectionItem {
   readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
   readonly evidenceBound?: boolean;
+  readonly observedPaths?: readonly ApiObservedPathEvidence[];
   readonly relationships: readonly {
     readonly description?: string;
     readonly id: string;
@@ -414,6 +427,7 @@ function snapshotViews(items: readonly ApiConnectionItem[]): readonly ApiCompone
       : { cognitiveComplexity: item.cognitiveComplexity }),
     component: item.component,
     evidenceBound: item.evidenceBound ?? false,
+    ...(item.observedPaths === undefined ? {} : { observedPaths: item.observedPaths }),
     revision: "snapshot",
   }));
 }
@@ -493,6 +507,7 @@ function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): Api
             : { cognitiveComplexity: item.cognitiveComplexity }),
           component: item.component,
           evidenceBound: item.evidenceBound ?? false,
+          ...(item.observedPaths === undefined ? {} : { observedPaths: item.observedPaths }),
           revision: "snapshot",
         },
         relationships: page.value,

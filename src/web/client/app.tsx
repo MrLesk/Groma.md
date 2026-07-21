@@ -44,13 +44,13 @@ export function App() {
   const [dependencies, setDependencies] = useState<
     readonly { source: string; target: string; type: string }[]
   >([]);
-  const [focusStack, setFocusStack] = useState<readonly string[]>([]);
+  const [focusStack, setFocusStack] = useState<readonly { id: string; label: string }[]>([]);
   const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
   const pendingRoots = useRef(false);
   const mounted = useRef(true);
   const autoExpanded = useRef(new Set<string>());
-  const focusId = focusStack.at(-1);
+  const focusId = focusStack.at(-1)?.id;
   // The component the sheet is framed on: the one walked into, or the single
   // owned system at the top. Its whole content is what the level draws, so it is
   // the node whose children must be paged to completion — matching how the canvas
@@ -193,10 +193,10 @@ export function App() {
     });
   };
 
-  const onFocus = (id: string) => {
+  const onFocus = (id: string, label: string) => {
     setCreateOpen(false);
     setSelectedId(undefined);
-    setFocusStack((stack) => (stack.at(-1) === id ? stack : [...stack, id]));
+    setFocusStack((stack) => (stack.at(-1)?.id === id ? stack : [...stack, { id, label }]));
   };
   const onFocusTo = (depth: number) => {
     setCreateOpen(false);
@@ -216,7 +216,7 @@ export function App() {
     return node === undefined ? undefined : displayText(node.view.component);
   };
 
-  const focusPath = focusStack.map((id) => ({ id, label: resolveDisplay(id) ?? id }));
+  const focusPath = focusStack;
 
   return (
     <div className="flex h-screen flex-col">

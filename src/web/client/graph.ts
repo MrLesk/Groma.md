@@ -1,13 +1,11 @@
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
-import type { ApiCognitiveComplexityEvidence, ApiComponentScale } from "./api.ts";
-import {
-  componentPurpose,
-  displayText,
-  hasReadableMeaning,
-  type BlueprintModel,
-  type BlueprintNode,
-} from "./model.ts";
+import type {
+  ApiCognitiveComplexityEvidence,
+  ApiComponentScale,
+  ApiObservedPathEvidence,
+} from "./api.ts";
+import { componentPurpose, displayText, type BlueprintModel, type BlueprintNode } from "./model.ts";
 
 export type BlueprintNotation = ApiComponentScale | "unscaled";
 
@@ -22,6 +20,7 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly label: string;
   readonly notation: BlueprintNotation;
   readonly purpose?: string;
+  readonly projection?: "observed-group" | "unresolved-mapping";
   readonly relationshipCount: number;
   readonly shared: boolean;
   readonly type: string;
@@ -62,10 +61,15 @@ export interface BlueprintGraphOptions {
   readonly model: BlueprintModel;
 }
 
-const CARD = Object.freeze({ height: 132, width: 216 });
-const GAP = Object.freeze({ x: 24, y: 30 });
-const FRAME = Object.freeze({ head: 76, pad: 24 });
+const CARD = Object.freeze({ height: 152, width: 240 });
+const GAP = Object.freeze({ x: 32, y: 72 });
+const FRAME = Object.freeze({ head: 106, pad: 28 });
 const GRID_COLUMNS = 5;
+
+function gridColumns(itemCount: number): number {
+  if (itemCount <= GRID_COLUMNS) return Math.max(1, itemCount);
+  return itemCount <= 8 ? 4 : GRID_COLUMNS;
+}
 
 export function nextScaleLabel(scale: ApiComponentScale | undefined): string {
   switch (scale) {
@@ -139,62 +143,185 @@ function comparableCognitiveComplexity(
   return chosen === undefined ? undefined : Object.freeze({ values: chosen.values });
 }
 
-function scaleRank(scale: ApiComponentScale | undefined): number {
-  switch (scale) {
-    case "system":
-      return 0;
-    case "domain":
-      return 1;
-    case "part":
-      return 2;
-    case "element":
-      return 3;
-    default:
-      return 4;
-  }
+function orderedLevel(
+  ids: readonly string[],
+  nodes: ReadonlyMap<string, BlueprintNode>,
+): readonly string[] {
+  return Object.freeze(
+    ids
+      .filter((id) => nodes.get(id)?.view.component.type !== "external")
+      .toSorted((leftId, rightId) => {
+        const left = nodes.get(leftId)!;
+        const right = nodes.get(rightId)!;
+        return (
+          compareCodeUnits(displayText(left.view.component), displayText(right.view.component)) ||
+          compareCodeUnits(leftId, rightId)
+        );
+      }),
+  );
 }
 
-function rankedLevel(
+function observedSourceKey(evidence: ApiObservedPathEvidence): string {
+  const { scanner } = evidence;
+  return `${evidence.projectId}\u0000${scanner.id}\u0000${scanner.instance}\u0000${scanner.version}`;
+}
+
+function comparableObservedPaths(
   ids: readonly string[],
-  required: string | undefined,
   model: BlueprintModel,
-  childCounts: ReadonlyMap<string, number>,
-  incident: ReadonlyMap<string, number>,
-): readonly string[] {
-  const ranked = ids
-    .filter((id) => model.nodes.get(id)?.view.component.type !== "external")
-    .toSorted((leftId, rightId) => {
-      const left = model.nodes.get(leftId)!;
-      const right = model.nodes.get(rightId)!;
-      const leftMeaning = hasReadableMeaning(left.view.component) ? 1 : 0;
-      const rightMeaning = hasReadableMeaning(right.view.component) ? 1 : 0;
-      if (leftMeaning !== rightMeaning) return rightMeaning - leftMeaning;
-      const scale = scaleRank(left.view.component.scale) - scaleRank(right.view.component.scale);
-      if (scale !== 0) return scale;
-      const leftChildren = childCounts.get(leftId) ?? left.childIds?.length ?? 0;
-      const rightChildren = childCounts.get(rightId) ?? right.childIds?.length ?? 0;
-      if (leftChildren > 0 !== rightChildren > 0) return rightChildren > 0 ? 1 : -1;
-      if (leftChildren !== rightChildren) return rightChildren - leftChildren;
-      const degree = (incident.get(rightId) ?? 0) - (incident.get(leftId) ?? 0);
-      if (degree !== 0) return degree;
-      const leftPurpose = componentPurpose(left.view.component) === undefined ? 0 : 1;
-      const rightPurpose = componentPurpose(right.view.component) === undefined ? 0 : 1;
-      if (leftPurpose !== rightPurpose) return rightPurpose - leftPurpose;
-      return (
-        compareCodeUnits(displayText(left.view.component), displayText(right.view.component)) ||
-        compareCodeUnits(leftId, rightId)
-      );
-    });
-  const visible = ranked.slice(0, LEVEL_COMPONENT_BUDGET);
-  if (
-    required !== undefined &&
-    ranked.includes(required) &&
-    !visible.includes(required) &&
-    visible.length > 0
-  ) {
-    visible[visible.length - 1] = required;
+): ReadonlyMap<string, string> {
+  const sources = new Map<string, Map<string, Set<string>>>();
+  for (const id of ids) {
+    for (const evidence of model.nodes.get(id)?.view.observedPaths ?? []) {
+      const key = observedSourceKey(evidence);
+      const paths = sources.get(key) ?? new Map<string, Set<string>>();
+      const componentPaths = paths.get(id) ?? new Set<string>();
+      componentPaths.add(evidence.resource);
+      paths.set(id, componentPaths);
+      sources.set(key, paths);
+    }
   }
-  return Object.freeze(visible);
+  const chosen = [...sources.entries()]
+    .map(([key, paths]) => ({
+      key,
+      paths: new Map(
+        [...paths].flatMap(([id, resources]) =>
+          resources.size === 1 ? [[id, [...resources][0]!] as const] : [],
+        ),
+      ),
+    }))
+    .sort(
+      (left, right) => right.paths.size - left.paths.size || compareCodeUnits(left.key, right.key),
+    )[0];
+  return chosen?.paths ?? new Map();
+}
+
+function pathSegments(resource: string): readonly string[] {
+  return Object.freeze(
+    resource.split("/").filter((segment) => segment.length > 0 && segment !== "."),
+  );
+}
+
+function projectionId(scopeId: string, prefix: readonly string[], suffix = ""): string {
+  const path = prefix.map((segment) => encodeURIComponent(segment)).join("/");
+  return `projection:${scopeId}:${path}${suffix}`;
+}
+
+function projectionView(
+  id: string,
+  label: string,
+  summary: string,
+  type: string,
+): BlueprintNode["view"] {
+  return Object.freeze({
+    component: Object.freeze({ id, kind: "component" as const, name: label, summary, type }),
+    evidenceBound: true,
+    revision: "projection",
+  });
+}
+
+function componentCount(count: number, adjective = ""): string {
+  const prefix = adjective.length === 0 ? "" : `${adjective} `;
+  return `${count} ${prefix}component${count === 1 ? "" : "s"}`;
+}
+
+function projectedChildren(
+  scopeId: string,
+  memberIds: readonly string[],
+  prefix: readonly string[],
+  paths: ReadonlyMap<string, string>,
+  nodes: Map<string, BlueprintNode>,
+): readonly string[] {
+  if (memberIds.length <= LEVEL_COMPONENT_BUDGET) return orderedLevel(memberIds, nodes);
+
+  const groups = new Map<string, string[]>();
+  const ungrouped: string[] = [];
+  for (const id of memberIds) {
+    const segments = pathSegments(paths.get(id) ?? "");
+    const matchesPrefix = prefix.every((segment, index) => segments[index] === segment);
+    const next = matchesPrefix ? segments[prefix.length] : undefined;
+    if (next === undefined) ungrouped.push(id);
+    else {
+      const members = groups.get(next) ?? [];
+      members.push(id);
+      groups.set(next, members);
+    }
+  }
+  if (
+    groups.size > 0 &&
+    groups.size + ungrouped.length <= LEVEL_COMPONENT_BUDGET &&
+    groups.size + ungrouped.length < memberIds.length
+  ) {
+    const ids: string[] = [];
+    for (const [segment, members] of [...groups].sort(([left], [right]) =>
+      compareCodeUnits(left, right),
+    )) {
+      const nextPrefix = Object.freeze([...prefix, segment]);
+      const id = projectionId(scopeId, nextPrefix);
+      const children = projectedChildren(scopeId, members, nextPrefix, paths, nodes);
+      nodes.set(
+        id,
+        Object.freeze({
+          childIds: children,
+          hasMoreChildren: false,
+          projection: Object.freeze({ kind: "observed-group", memberCount: members.length }),
+          view: projectionView(
+            id,
+            segment,
+            `${componentCount(members.length, "observed")} share this source area.`,
+            "observed area",
+          ),
+        }),
+      );
+      ids.push(id);
+    }
+    return Object.freeze([...ids, ...orderedLevel(ungrouped, nodes)]);
+  }
+
+  const id = projectionId(scopeId, prefix, ":unresolved");
+  nodes.set(
+    id,
+    Object.freeze({
+      hasMoreChildren: false,
+      projection: Object.freeze({ kind: "unresolved-mapping", memberCount: memberIds.length }),
+      view: projectionView(
+        id,
+        "Structure not mapped",
+        `${memberIds.length} components are accounted for, but current evidence does not support a smaller meaningful grouping.`,
+        "mapping gap",
+      ),
+    }),
+  );
+  return Object.freeze([id]);
+}
+
+function visualProjectionModel(model: BlueprintModel): BlueprintModel {
+  const nodes = new Map(model.nodes);
+  for (const [parentId, node] of model.nodes) {
+    if (node.childIds === undefined || node.childIds.length <= LEVEL_COMPONENT_BUDGET) continue;
+    const paths = comparableObservedPaths(node.childIds, model);
+    const projected = projectedChildren(parentId, node.childIds, [], paths, nodes);
+    nodes.set(
+      parentId,
+      Object.freeze({ ...node, childIds: projected, visualChildCount: node.childIds.length }),
+    );
+  }
+  const ownedRootIds = model.rootIds.filter(
+    (id) => model.nodes.get(id)?.view.component.type !== "external",
+  );
+  if (ownedRootIds.length <= LEVEL_COMPONENT_BUDGET) return Object.freeze({ ...model, nodes });
+  const externalRootIds = model.rootIds.filter(
+    (id) => model.nodes.get(id)?.view.component.type === "external",
+  );
+  const paths = comparableObservedPaths(ownedRootIds, model);
+  return Object.freeze({
+    ...model,
+    nodes,
+    rootIds: Object.freeze([
+      ...projectedChildren("roots", ownedRootIds, [], paths, nodes),
+      ...externalRootIds,
+    ]),
+  });
 }
 
 interface LevelItemLayout {
@@ -227,7 +354,7 @@ function layoutLevel(
   const node = model.nodes.get(id);
   const childIds = node?.childIds ?? [];
   const required = focusPath[pathIndex];
-  const visibleIds = rankedLevel(childIds, required, model, childCounts, incident);
+  const visibleIds = orderedLevel(childIds, model.nodes);
   const nextAncestors = new Set(ancestors).add(id);
   const prepared = visibleIds.map((childId) => {
     const expanded = childId === required && !nextAncestors.has(childId);
@@ -242,7 +369,7 @@ function layoutLevel(
     });
   });
 
-  const columns = Math.min(GRID_COLUMNS, Math.max(1, visibleIds.length));
+  const columns = gridColumns(visibleIds.length);
   const gridWidth = columns * CARD.width + (columns - 1) * GAP.x;
   let column = 0;
   let y = FRAME.head + FRAME.pad;
@@ -287,7 +414,11 @@ function layoutLevel(
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
-  const { dependencies, model } = options;
+  const { dependencies } = options;
+  const originalOwnedRootCount = options.model.rootIds.filter(
+    (id) => options.model.nodes.get(id)?.view.component.type !== "external",
+  ).length;
+  const model = visualProjectionModel(options.model);
   const focusPath = options.focusPath ?? [];
   const childCounts = options.childCounts ?? new Map<string, number>();
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
@@ -309,17 +440,25 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     const blueprintNode = model.nodes.get(id)!;
     const component = blueprintNode.view.component;
     const purpose = componentPurpose(component);
-    const childCount = childCounts.get(id) ?? blueprintNode.childIds?.length ?? 0;
+    const childCount =
+      blueprintNode.projection?.memberCount ??
+      blueprintNode.visualChildCount ??
+      childCounts.get(id) ??
+      blueprintNode.childIds?.length ??
+      0;
     visibleIds.add(id);
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          canOpen: childCount > 0,
+          canOpen: blueprintNode.projection?.kind !== "unresolved-mapping" && childCount > 0,
           childCount,
           evidenceBound: blueprintNode.view.evidenceBound,
           label: displayText(component),
           notation: notationOf(blueprintNode),
           ...(purpose === undefined ? {} : { purpose }),
+          ...(blueprintNode.projection === undefined
+            ? {}
+            : { projection: blueprintNode.projection.kind }),
           relationshipCount: incident.get(id) ?? 0,
           shared: component.shared === true,
           type: component.type ?? "component",
@@ -348,7 +487,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     const blueprintNode = model.nodes.get(layout.id)!;
     const component = blueprintNode.view.component;
     const purpose = componentPurpose(component);
-    const total = Math.max(layout.visibleIds.length, childCounts.get(layout.id) ?? 0);
+    const total =
+      blueprintNode.projection?.memberCount ??
+      blueprintNode.visualChildCount ??
+      Math.max(layout.visibleIds.length, childCounts.get(layout.id) ?? 0);
     visibleIds.add(layout.id);
     if (depth === focusPath.length) {
       currentLevelCount = layout.visibleIds.length;
@@ -358,7 +500,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          contains: `${total} inside`,
+          contains: componentCount(total),
           kind: "container" as const,
           label: displayText(component),
           notation: notationOf(blueprintNode),
@@ -392,11 +534,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       0,
     );
   } else {
-    const roots = rankedLevel(ownedRootIds, focusPath[0], model, childCounts, incident);
-    omittedComponents = Math.max(0, ownedRootIds.length - roots.length);
+    const roots = orderedLevel(ownedRootIds, model.nodes);
     if (focusPath.length === 0) {
       currentLevelCount = roots.length;
-      currentLevelTotal = ownedRootIds.length;
+      currentLevelTotal = originalOwnedRootCount;
     }
     let column = 0;
     let y = 0;
@@ -424,12 +565,26 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     }
   }
 
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const containsNode = (containerId: string, nodeId: string): boolean => {
+    let parentId = nodeById.get(nodeId)?.parentId;
+    while (parentId !== undefined) {
+      if (parentId === containerId) return true;
+      parentId = nodeById.get(parentId)?.parentId;
+    }
+    return false;
+  };
   const relationshipPairs = new Set<string>();
   const visibleRelationships = dependencies.flatMap((dependency) => {
     if (
       dependency.source === dependency.target ||
       !visibleIds.has(dependency.source) ||
-      !visibleIds.has(dependency.target)
+      !visibleIds.has(dependency.target) ||
+      containsNode(dependency.source, dependency.target) ||
+      containsNode(dependency.target, dependency.source) ||
+      nodeById.get(dependency.source)?.type !== "component" ||
+      nodeById.get(dependency.target)?.type !== "component" ||
+      nodeById.get(dependency.source)?.parentId !== nodeById.get(dependency.target)?.parentId
     )
       return [];
     const pair = `${dependency.source}\u0000${dependency.target}`;
@@ -437,7 +592,6 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     relationshipPairs.add(pair);
     return [dependency];
   });
-  const drawnRelationships = visibleRelationships.slice(0, LEVEL_RELATIONSHIP_BUDGET);
   const cognitive = comparableCognitiveComplexity([...visibleIds], model);
   if (cognitive !== undefined) {
     for (let index = 0; index < nodes.length; index += 1) {
@@ -451,12 +605,62 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       });
     }
   }
-  const edges: BlueprintFlowEdge[] = drawnRelationships.map((relationship) =>
+  const centers = new Map<string, { x: number; y: number }>();
+  const centerOf = (id: string): { x: number; y: number } => {
+    const known = centers.get(id);
+    if (known !== undefined) return known;
+    const node = nodeById.get(id);
+    if (node === undefined) return { x: 0, y: 0 };
+    const parent = node.parentId === undefined ? { x: 0, y: 0 } : centerOf(node.parentId);
+    const parentNode = node.parentId === undefined ? undefined : nodeById.get(node.parentId);
+    const parentOrigin =
+      parentNode === undefined
+        ? parent
+        : {
+            x: parent.x - (parentNode.width ?? 0) / 2,
+            y: parent.y - (parentNode.height ?? 0) / 2,
+          };
+    const center = {
+      x: parentOrigin.x + node.position.x + (node.width ?? 0) / 2,
+      y: parentOrigin.y + node.position.y + (node.height ?? 0) / 2,
+    };
+    centers.set(id, center);
+    return center;
+  };
+  const handlesFor = (source: string, target: string) => {
+    const sourceNode = nodeById.get(source);
+    const targetNode = nodeById.get(target);
+    if (sourceNode?.type !== "component" || targetNode?.type !== "component") return undefined;
+    const from = centerOf(source);
+    const to = centerOf(target);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.abs(dy) < 1 && Math.abs(dx) <= CARD.width + GAP.x + 1) {
+      return dx >= 0
+        ? { sourceHandle: "source-right", targetHandle: "target-left" }
+        : { sourceHandle: "source-left", targetHandle: "target-right" };
+    }
+    if (Math.abs(dx) < 1 && Math.abs(dy) <= CARD.height + GAP.y + 1) {
+      return dy >= 0
+        ? { sourceHandle: "source-bottom", targetHandle: "target-top" }
+        : { sourceHandle: "source-top", targetHandle: "target-bottom" };
+    }
+    return undefined;
+  };
+  const drawnRelationships = visibleRelationships
+    .flatMap((relationship) => {
+      const handles = handlesFor(relationship.source, relationship.target);
+      return handles === undefined ? [] : [{ handles, relationship }];
+    })
+    .slice(0, LEVEL_RELATIONSHIP_BUDGET);
+  const edges: BlueprintFlowEdge[] = drawnRelationships.map(({ handles, relationship }) =>
     Object.freeze({
       className: "groma-edge",
       id: `relationship:${relationship.source}:${relationship.target}`,
       interactionWidth: 14,
-      label: relationshipLabel(relationship.type),
+      ...(relationshipLabel(relationship.type) === "needs"
+        ? {}
+        : { label: relationshipLabel(relationship.type) }),
       labelBgBorderRadius: 0,
       labelBgPadding: [5, 2] as [number, number],
       labelBgStyle: Object.freeze({ fill: "#fbfaf6", fillOpacity: 0.94 }),
@@ -468,6 +672,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         width: 14,
       }),
       source: relationship.source,
+      ...handles,
       target: relationship.target,
       type: "smoothstep" as const,
       zIndex: 1,
