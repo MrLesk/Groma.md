@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-21 18:19'
-updated_date: '2026-07-21 18:38'
+updated_date: '2026-07-21 19:02'
 labels:
   - web
   - topology
@@ -23,11 +23,11 @@ Give readers an evidence-grounded cue for where a TypeScript/Bun codebase is har
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Bounded web reads expose cognitive-complexity evidence with its scanner provenance without adding it to canonical component intent or the mutation model.
-- [ ] #2 At a level containing comparable TypeScript/Bun file components, the blueprint makes the strongest cognitive-complexity evidence easy to find and shows the exact measured score in plain language.
-- [ ] #3 Components with absent, ambiguous, or non-comparable scanner evidence remain unranked; the interface never combine scores from different scanners or invent a complexity score.
-- [ ] #4 Focused web-model and API coverage proves the comparable, unavailable, and mixed-provenance cases, and the self-blueprint demonstrates the signal on a scanned Groma file.
-- [ ] #5 On first load, the web client consumes at most five existing root pages until it finds an owned root, then retains the existing explicit continuation for any remaining roots so external packages cannot hide the system plate.
+- [x] #1 Bounded web reads expose cognitive-complexity evidence with its scanner provenance without adding it to canonical component intent or the mutation model.
+- [x] #2 At a level containing comparable TypeScript/Bun file components, the blueprint makes the strongest cognitive-complexity evidence easy to find and shows the exact measured score in plain language.
+- [x] #3 Components with absent, ambiguous, or non-comparable scanner evidence remain unranked; the interface never combine scores from different scanners or invent a complexity score.
+- [x] #4 Focused web-model and API coverage proves the comparable, unavailable, and mixed-provenance cases, and the self-blueprint demonstrates the signal on a scanned Groma file.
+- [x] #5 On first load, the web client consumes at most five existing root pages until it finds an owned root, then retains the existing explicit continuation for any remaining roots so external packages cannot hide the system plate.
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,5 +53,11 @@ author: @codex
 created: 2026-07-21 18:38
 ---
 Verification note: the feature passes a fresh isolated self-scan (599 records) and static export, but the checked-in self-blueprint cannot currently be refreshed. Main's existing evidence retains a binding for removed src/cli/blueprint-html.ts (ent_285e78427fbf837690b7f6133ad2701c) and two deleted relationships, so scan correctly fails closed with reconciliation-binding-missing. A separate bounded repair is being handled; this task will not rewrite evidence or weaken reconciliation.
+---
+
+author: @codex
+created: 2026-07-21 19:02
+---
+Post-repair verification: after GROM-100, two consecutive self-scans completed at generation 19 (603 records); the second made no changes. Bounded component and blueprint-export reads report official.typescript/default@1.0.0 evidence for root-discovery.ts (1) and api.ts (37). A static 95-component export contains the cognitive evidence and the highest-score readout. This completes the previously blocked self-blueprint criterion.
 ---
 <!-- COMMENTS:END -->
