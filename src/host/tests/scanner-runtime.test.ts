@@ -5,6 +5,7 @@ import {
   parseGraphGeneration,
   parseResourceKey,
   pluginRuntimeApiVersion,
+  failure,
   success,
   type CompletedObservationSnapshot,
   type Result,
@@ -228,6 +229,31 @@ describe("scanner execution runtime", () => {
       }),
     ).toMatchObject({ diagnostics: [{ code: "scanner-execution-cancelled" }], ok: false });
     expect(calls).toBe(0);
+  });
+
+  test("preserves bounded scanner failure diagnostics", async () => {
+    const scannerFailure = failure(
+      Object.freeze({
+        code: "example-scanner-budget-exceeded",
+        message: "Example scanner reached its bounded inventory",
+      }),
+    );
+    const execution = runtime(
+      Object.freeze({
+        scan: async () => scannerFailure,
+      }),
+    );
+    const session = valueOf(await execution.start({ projectId: project.id, scannerId }));
+
+    expect(await session.completion).toMatchObject({
+      diagnostics: [
+        {
+          code: "example-scanner-budget-exceeded",
+          message: "Example scanner reached its bounded inventory",
+        },
+      ],
+      status: "failed",
+    });
   });
 
   test("shutdown prevents a scanner suspended in resource setup from starting", async () => {
