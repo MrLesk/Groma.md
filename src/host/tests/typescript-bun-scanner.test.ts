@@ -818,7 +818,11 @@ export function api() { return model; }
           name: "@fixture/conflicting-root",
           workspaces: ["packages/a"],
         }),
-        "packages/a/package.json": JSON.stringify({ name: "@fixture/a" }),
+        "packages/a/package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: "@fixture/a",
+        }),
+        "packages/a/src/index.ts": 'import "@fixture/conflicting-root";\n',
         "packages/b/package.json": JSON.stringify({ name: "@fixture/b" }),
         "pnpm-workspace.yaml": pnpmWorkspace,
       });
@@ -838,7 +842,55 @@ export function api() { return model; }
             ["@fixture/a", "@fixture/b"].includes(refusedNamesByKey.get(record.to.key) ?? ""),
         ),
       ).toBeFalse();
+      expect(
+        refused.snapshot?.records.some(
+          (record) =>
+            record.kind === "component-candidate" &&
+            record.candidate.name === "@fixture/conflicting-root" &&
+            record.candidate.type === "external",
+        ),
+      ).toBeTrue();
     }
+
+    const emptyWorkspace = await scan({
+      "nested/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/nested",
+      }),
+      "nested/src/index.ts": 'import "@fixture/empty-root";\n',
+      "package.json": JSON.stringify({ name: "@fixture/empty-root", workspaces: [] }),
+    });
+    expect(emptyWorkspace.result.ok).toBeTrue();
+    expect(
+      emptyWorkspace.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.name === "@fixture/empty-root" &&
+          record.candidate.type === "external",
+      ),
+    ).toBeTrue();
+
+    const excludedPnpmMember = await scan({
+      "package.json": JSON.stringify({ name: "@fixture/exclusion-root" }),
+      "packages/included/package.json": JSON.stringify({ name: "@fixture/included" }),
+      "packages/legacy/package.json": JSON.stringify({ name: "@fixture/legacy" }),
+      "pnpm-workspace.yaml": "packages:\n  - packages/*\n  - '!packages/legacy'\n",
+    });
+    expect(excludedPnpmMember.result.ok).toBeTrue();
+    expect(excludedPnpmMember.snapshot?.coverage[0]?.state).toBe("complete");
+    const excludedNamesByKey = new Map(
+      excludedPnpmMember.snapshot?.records.flatMap((record) =>
+        record.kind === "component-candidate" ? [[record.key, record.candidate.name]] : [],
+      ),
+    );
+    const excludedContainmentNames = excludedPnpmMember.snapshot?.records.flatMap((record) =>
+      record.kind === "relationship" &&
+      record.relationshipType === "contains" &&
+      excludedNamesByKey.get(record.from.key) === "@fixture/exclusion-root"
+        ? [excludedNamesByKey.get(record.to.key)]
+        : [],
+    );
+    expect(excludedContainmentNames).toEqual(["@fixture/included"]);
 
     const ambiguous = await scan({
       "package.json": JSON.stringify({

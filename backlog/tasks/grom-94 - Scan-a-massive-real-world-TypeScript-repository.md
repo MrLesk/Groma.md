@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 18:18'
-updated_date: '2026-07-21 18:46'
+updated_date: '2026-07-21 19:01'
 labels:
   - scanner
   - dogfood
@@ -50,6 +50,8 @@ Make the shortest Groma loop work on a genuinely large TypeScript codebase, usin
 
 <!-- SECTION:NOTES:BEGIN -->
 Baseline: OpenClaw commit 635c78a1778 contains 4,844 JS and TypeScript files and about 913,565 lines. The original scan failed in 2.02 seconds at 275,316,736-byte maximum resident set size with zero observations after exhausting the 2,000,000 extraction-work budget, while the runtime exposed only scanner-execution-failed. Implementation: preserve bounded validated scanner diagnostics; sample detailed AST evidence across package entries and source boundaries up to 256 files; yield optional details before existing record and character ceilings; recognize safe explicit pnpm workspace membership; and discard workspace containment claims when pnpm declarations are invalid or conflict with package.json. Dogfood: fresh init and scan completed with 782 observations, 212 components, 347 relationships, partial coverage, and one owned system root named openclaw whose bounded children expose workspace packages and core source boundaries. Reviews: two independent Terra xhigh passes found the same workspace ambiguity, which was fixed with conflict and malformed fixtures. Claude judged the bounded partial-scan direction ship-worthy and verified partial coverage prevents false reconciliation removals; its small budget-legibility suggestion was applied. Final verification after rebasing onto GROM-97: bun run check passed formatting, typecheck, architecture boundaries, 504 tests with 3,149 expectations, build, smoke, and the compiled Iteration 1A workflow. A pinned OpenClaw scan completed in 1.48 seconds at 375,193,600-byte maximum resident set size with 782 observations. A bounded root read returned 50 roots including exactly one owned system root. An unchanged rescan again produced 782 observations and the complete groma directory content hash remained 00a04f5a1d3072bbb8e64b7cf2322edc47ac260a40edc948deb11f4d0e91cd70. Per-kind retirement refinement and arbitrary pathological AST samples remain outside this task's explicitly pinned OpenClaw boundary.
+
+First automatic Codex review resolution: invalid or cleared workspace declarations no longer influence internal import ownership, empty workspace lists do not create workspace owners, and pnpm exclusion patterns are applied before membership. Added regressions for malformed and conflicting pnpm imports, empty package.json workspaces, and excluded pnpm members. Final verification passed bun run check with 504 tests and 3,156 expectations; the pinned OpenClaw rescan remained at 782 observations with the same complete groma content hash.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

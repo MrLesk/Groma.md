@@ -233,7 +233,6 @@ interface PackageEvidence {
   readonly resource: string;
   readonly root: string;
   readonly scope: string;
-  readonly workspacePatterns: readonly string[];
 }
 
 interface PackageEntryEvidence {
@@ -242,6 +241,7 @@ interface PackageEntryEvidence {
 }
 
 interface WorkspaceEvidence {
+  readonly excludedPatterns?: readonly string[];
   readonly owner?: PackageEvidence;
   readonly patterns: readonly string[];
   readonly root: string;
@@ -1872,14 +1872,19 @@ function workspacePatterns(
   });
 }
 
-function pnpmWorkspacePatterns(
-  text: string,
-): Readonly<{ readonly partial: boolean; readonly patterns: readonly string[] }> {
+function pnpmWorkspacePatterns(text: string): Readonly<{
+  readonly excludedPatterns: readonly string[];
+  readonly partial: boolean;
+  readonly patterns: readonly string[];
+}> {
+  const refused = Object.freeze({
+    excludedPatterns: Object.freeze([]),
+    partial: true,
+    patterns: Object.freeze([]),
+  });
   try {
     const document = parseDocument(text, { schema: "core", uniqueKeys: true });
-    if (document.errors.length > 0 || document.warnings.length > 0) {
-      return Object.freeze({ partial: true, patterns: Object.freeze([]) });
-    }
+    if (document.errors.length > 0 || document.warnings.length > 0) return refused;
     let unsupported = false;
     visit(document, {
       Alias: () => {
@@ -1893,14 +1898,25 @@ function pnpmWorkspacePatterns(
         }
       },
     });
-    if (unsupported) return Object.freeze({ partial: true, patterns: Object.freeze([]) });
+    if (unsupported) return refused;
     const value: unknown = document.toJS({ maxAliasCount: 0 });
-    if (!hasOwnDataRecord(value) || !Object.hasOwn(value, "packages")) {
-      return Object.freeze({ partial: true, patterns: Object.freeze([]) });
+    if (!hasOwnDataRecord(value) || !Array.isArray(value.packages)) return refused;
+    const included: unknown[] = [];
+    const excluded: unknown[] = [];
+    for (const pattern of value.packages) {
+      if (typeof pattern === "string" && pattern.startsWith("!")) excluded.push(pattern.slice(1));
+      else included.push(pattern);
     }
-    return workspacePatterns(value.packages, true);
+    const includes = workspacePatterns(included, true);
+    const exclusions = workspacePatterns(excluded);
+    if (includes.partial || exclusions.partial) return refused;
+    return Object.freeze({
+      excludedPatterns: exclusions.patterns,
+      partial: false,
+      patterns: includes.patterns,
+    });
   } catch {
-    return Object.freeze({ partial: true, patterns: Object.freeze([]) });
+    return refused;
   }
 }
 
@@ -1969,7 +1985,10 @@ function parsePackage(
         ? workspacePatterns(parsed.workspaces)
         : Object.freeze({ partial: false, patterns: Object.freeze([]) });
     const workspace =
-      root === scopeRoot && parsed.workspaces !== undefined
+      root === scopeRoot &&
+      parsed.workspaces !== undefined &&
+      !workspaces.partial &&
+      workspaces.patterns.length > 0
         ? Object.freeze({ patterns: workspaces.patterns, root })
         : undefined;
     const name = parsed.name;
@@ -1994,7 +2013,6 @@ function parsePackage(
       resource: file.resource,
       root,
       scope: file.scope,
-      workspacePatterns: workspaces.patterns,
     });
     return Object.freeze({
       ...(typeof parsed.description === "string" && parsed.description.length > 0
@@ -3743,7 +3761,8 @@ async function scanScope(
         const declared = workspaceDeclarations.find((item) => item.root === root);
         if (
           declared !== undefined &&
-          (declared.patterns.length !== pnpm.patterns.length ||
+          (pnpm.excludedPatterns.length > 0 ||
+            declared.patterns.length !== pnpm.patterns.length ||
             declared.patterns.some((pattern, index) => pattern !== pnpm.patterns[index]))
         ) {
           partial = true;
@@ -3752,6 +3771,9 @@ async function scanScope(
           const owner = packages.find((item) => item.root === root);
           workspaceDeclarations.push(
             Object.freeze({
+              ...(pnpm.excludedPatterns.length === 0
+                ? {}
+                : { excludedPatterns: pnpm.excludedPatterns }),
               ...(owner === undefined ? {} : { owner }),
               patterns: pnpm.patterns,
               root,
@@ -3912,6 +3934,13 @@ async function scanScope(
       if (member.root === declaration.root) continue;
       const relativeMember = relativeResource(member.root, declaration.root);
       if (relativeMember === undefined || relativeMember === ".") continue;
+      if (
+        declaration.excludedPatterns?.some((pattern) => {
+          chargeExtractionWork(budget);
+          return workspacePatternMatches(relativeMember, pattern);
+        }) === true
+      )
+        continue;
       const matches = declaration.patterns.filter((pattern) => {
         chargeExtractionWork(budget);
         return workspacePatternMatches(relativeMember, pattern);
@@ -3956,10 +3985,7 @@ async function scanScope(
     workspaceDeclarations.flatMap((item) => (item.owner === undefined ? [] : [item.owner])),
   );
   for (const member of packages.filter(
-    (item) =>
-      workspaceMemberPackages.has(item) ||
-      workspaceOwners.has(item) ||
-      item.workspacePatterns.length > 0,
+    (item) => workspaceMemberPackages.has(item) || workspaceOwners.has(item),
   )) {
     chargeExtractionWork(budget);
     if (workspaceByName.has(member.name)) ambiguousWorkspaceNames.add(member.name);
