@@ -23,6 +23,7 @@ import {
   type TransactionProvider,
 } from "../core/index.ts";
 import {
+  localTransactionUnexpectedIntentResource,
   parseWorkspaceResourceLocator,
   workspaceResourceLocator,
   type LocalCoordinationLease,
@@ -525,19 +526,24 @@ async function settleLocalCapabilityValue(
   decoderProxyPolicy: (value: unknown) => boolean,
 ): Promise<
   | typeof rejectedLocalCapabilitySettlement
+  | { readonly diagnostic: Diagnostic; readonly status: "rejected" }
   | { readonly status: "fulfilled"; readonly value: unknown }
 > {
   if (typeof value === "object" && value !== null && recognizedProxy(value, decoderProxyPolicy)) {
     return Object.freeze({ status: "fulfilled" as const, value });
   }
   let fulfilledValue: unknown;
+  let rejectionDiagnostic: Diagnostic | undefined;
   const observed = observeNativePromise(
     value,
     (settled) => {
       fulfilledValue = settled;
       return true;
     },
-    () => false,
+    (reason) => {
+      rejectionDiagnostic = localTransactionUnexpectedIntentResource(reason);
+      return false;
+    },
   );
   if (observed.status !== "observed") {
     return observed.status === "not-native"
@@ -545,9 +551,12 @@ async function settleLocalCapabilityValue(
       : rejectedLocalCapabilitySettlement;
   }
   try {
-    return (await observed.promise)
-      ? Object.freeze({ status: "fulfilled" as const, value: fulfilledValue })
-      : rejectedLocalCapabilitySettlement;
+    if (await observed.promise) {
+      return Object.freeze({ status: "fulfilled" as const, value: fulfilledValue });
+    }
+    return rejectionDiagnostic === undefined
+      ? rejectedLocalCapabilitySettlement
+      : Object.freeze({ diagnostic: rejectionDiagnostic, status: "rejected" as const });
   } catch {
     return rejectedLocalCapabilitySettlement;
   }
@@ -1110,8 +1119,10 @@ export async function createLocalWorkspaceCapability(
       const invoked = captured.transactionProvider.snapshot(Object.freeze([]));
       const settled = await settleLocalCapabilityValue(invoked, decoderProxyPolicy);
       if (settled.status !== "fulfilled") {
+        const actionable = "diagnostic" in settled ? settled.diagnostic : undefined;
         return recoveryFailure(
-          diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
+          actionable ??
+            diagnostic("workspace-recovery-failed", "Workspace transaction recovery failed"),
         );
       }
       const snapshot = canonicalSnapshot(

@@ -39,6 +39,7 @@ import {
   isHostProxy,
 } from "./runtime-validation.ts";
 import { containCapabilityValue } from "../application/capability-value.ts";
+import { parseWorkspaceResourceLocator } from "../persistence/index.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -172,7 +173,7 @@ function cancelled(signal?: HostSignal): HostRunOutcome {
 }
 
 type ValidatedRecoveryOutcome =
-  | { readonly state: "failed" }
+  | { readonly diagnostics?: readonly Diagnostic[]; readonly state: "failed" }
   | { readonly report: WorkspaceRecoveryReport; readonly state: "completed" };
 
 type ObservedBootstrapOutcome =
@@ -304,7 +305,31 @@ function validatedRecoveryOutcome(value: unknown): Result<ValidatedRecoveryOutco
       100,
       "invalid-host-recovery-result",
     );
-    return diagnostics.ok ? success(Object.freeze({ state: "failed" })) : diagnostics;
+    if (!diagnostics.ok) return diagnostics;
+    const source = diagnostics.value.length === 1 ? diagnostics.value[0] : undefined;
+    const locator = source?.details?.locator;
+    const kind = source?.details?.kind;
+    const parsedLocator =
+      typeof locator === "string" ? parseWorkspaceResourceLocator(locator) : undefined;
+    const actionable =
+      source?.code === "unexpected-intent-resource" &&
+      parsedLocator?.ok === true &&
+      String(parsedLocator.value).startsWith("groma/components/") &&
+      (kind === "file" || kind === "directory" || kind === "link" || kind === "other")
+        ? Object.freeze([
+            Object.freeze({
+              code: "unexpected-intent-resource",
+              details: Object.freeze({ kind, locator: String(parsedLocator.value) }),
+              message: `Component folders contain an unexpected ${kind} at ${parsedLocator.value}; remove it or move it outside groma/components`,
+            }),
+          ])
+        : undefined;
+    return success(
+      Object.freeze({
+        ...(actionable === undefined ? {} : { diagnostics: actionable }),
+        state: "failed",
+      }),
+    );
   }
   if (result.value.ok !== true) {
     return failure(
@@ -1529,10 +1554,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                       "Workspace recovery failed",
                     );
                   } else if (recovered.recovered.state === "failed") {
-                    outcome = startupFailure(
-                      "workspace-recovery-failed",
-                      "Workspace recovery failed",
-                    );
+                    outcome =
+                      recovered.recovered.diagnostics === undefined
+                        ? startupFailure("workspace-recovery-failed", "Workspace recovery failed")
+                        : startupFailures(recovered.recovered.diagnostics);
                   } else {
                     recovery = "completed";
                   }
