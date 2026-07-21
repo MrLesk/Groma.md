@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canonicalizeCompletedObservationSnapshot,
   createObservationSession,
   observationSessionApiVersion,
   type ObservationCoverage,
@@ -113,5 +114,26 @@ describe("finite observation sessions", () => {
     expect(completed.records.map((item) => item.key)).toEqual(["component.api", "component.zed"]);
     expect(completed.projectId).toBe("project.local");
     expect(completed.source.id).toBe("example.typescript");
+  });
+
+  test("canonicalizes one complete snapshot through the same finite-session rules", () => {
+    const completed = valueOf(
+      canonicalizeCompletedObservationSnapshot({
+        ...begin,
+        coverage,
+        records: [record],
+      }),
+    );
+    expect(completed.records).toEqual([record]);
+    expect(Object.isFrozen(completed)).toBeTrue();
+    expect(
+      canonicalizeCompletedObservationSnapshot({
+        ...completed,
+        records: [{ ...record, scope: "other" }],
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "undeclared-observation-scope" }], ok: false });
+    expect(
+      canonicalizeCompletedObservationSnapshot({ ...completed, trailing: true }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-observation-snapshot" }], ok: false });
   });
 });

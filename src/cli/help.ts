@@ -22,6 +22,7 @@ Usage:
   groma [--format plain|json] instructions [overview|scanning|curation|reading]
   groma [--format plain|json] web [--port <0-65535>]
   groma [--format plain|json] scan [--project <project-id>] [--scanner <scanner-id>]
+  groma [--format plain|json] scan (--input <file|-> | --stdin)
   groma [--format plain|json] blueprint export --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint search <text:1-${CLI_MAX_SEARCH_CHARACTERS} raw characters> --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
   groma [--format plain|json] blueprint traverse <id> --direction incoming|outgoing|both --depth <1-${CLI_MAX_TRAVERSAL_DEPTH}> [--relation-type <type>] --limit <1-${CLI_MAX_PAGE_SIZE}> [--cursor <cursor>]
@@ -48,6 +49,8 @@ Component create/update and project add/update input is one bounded UTF-8 JSON r
 Scan uses the only registered project and scanner when selection is unambiguous. In an
 interactive terminal, scan offers to run groma init first when no workspace exists yet. The initialized
 default project is configured for the built-in TypeScript/Bun scanner before its first scan.
+Scan input accepts one complete groma.observation/v1 JSON snapshot whose project, scanner, and
+coverage exactly match local registration, then uses the same atomic reconciliation path.
 Project input contains name, a portable aggregate-workspace-relative source, sorted enabled scanner
 records with canonical data-only configuration, and project-source-relative coverage roots. Project
 updates and removal require the exact current registration revision. Availability is derived locally;

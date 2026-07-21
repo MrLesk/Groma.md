@@ -33,6 +33,7 @@ export type CliCommand =
   | { readonly guide?: string; readonly kind: "instructions" }
   | { readonly kind: "web"; readonly port: number }
   | {
+      readonly input?: CliInputSource;
       readonly kind: "scan";
       readonly projectId?: string;
       readonly scannerId?: string;
