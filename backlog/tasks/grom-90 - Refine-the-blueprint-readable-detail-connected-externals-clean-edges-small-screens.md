@@ -3,10 +3,10 @@ id: GROM-90
 title: >-
   Refine the blueprint: readable detail, connected externals, clean edges, small
   screens
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 07:09'
-updated_date: '2026-07-21 07:09'
+updated_date: '2026-07-21 07:11'
 labels:
   - pivot
   - web
