@@ -8,6 +8,7 @@ parent: ent_48d50ed37f4863230d8ae1e9c9683984
 
 # Actions
 
+- canonicalizeCompletedObservationSnapshot — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E13115938db0760e2125b37e7ac173cd706567a5b759ddbc6dff50e6922e40e40 fields=name,description -->
 - canonicalizeObservationSessionBegin — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E3d133ab26d48c7812d2ae300f5e1321116fc73fdd28ae97952e3a020a42c0668 fields=name,description -->
 - createObservationSession — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ed0e12bc18dc67b1f9fdff6f8eb64b87918f3656276a1a88c3c403bfc581a1960 fields=name,description -->
 

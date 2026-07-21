@@ -8,6 +8,7 @@ parent: ent_d874ec5e618605ce1e0248310a7a628b
 
 # Actions
 
+- localTransactionUnexpectedIntentResource — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E58ce016869d893c448b0ff0e5317bbffbc0b19b3b3fab76fb45fa4fba0ac124d fields=name,description -->
 - createMarkdownIntentTransactionAdapter — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0 fields=name,description -->
 - createLocalTransactionJournal — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2Ef6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589 fields=name,description -->
 
