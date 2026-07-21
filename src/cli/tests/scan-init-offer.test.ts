@@ -51,7 +51,7 @@ describe("scan offers initialization", () => {
       workspaceRoot: root,
     });
     expect(questions).toEqual([
-      "No groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
+      "No Groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
     ]);
     expect(exitCode).toBe(0);
     expect(collected.text()).toContain('"status":"completed"');

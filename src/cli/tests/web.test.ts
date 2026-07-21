@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -36,6 +36,17 @@ function manualSignalSource(): {
   };
 }
 
+async function workspaceExists(root: string): Promise<boolean> {
+  try {
+    await access(path.join(root, "groma", "groma.yaml"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const interactive = { stdin: true, stdout: true };
+
 describe("groma web command", () => {
   test("parses the default and explicit ports", () => {
     const bare = parseInvocation(["web"]);
@@ -57,11 +68,103 @@ describe("groma web command", () => {
       presentWebUrl: () => {
         throw new Error("The web server must not start without a workspace");
       },
+      confirm: async () => {
+        throw new Error("JSON output must not prompt");
+      },
+      terminal: interactive,
       workspaceRoot: root,
     });
     expect(exitCode).toBe(3);
     expect(collected.text()).toContain("web-workspace-missing");
     expect(collected.text()).toContain("groma init");
+    expect(await workspaceExists(root)).toBeFalse();
+  });
+
+  test("declining the interactive offer keeps the diagnostic and creates nothing", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "groma-web-offer-decline-"));
+    const collected = collectOutput();
+    const exitCode = await runProgram(["web", "--port", "0"], collected.output, {
+      confirm: async () => false,
+      presentWebUrl: () => {
+        throw new Error("The web server must not start after a declined offer");
+      },
+      terminal: interactive,
+      workspaceRoot: root,
+    });
+    expect(exitCode).toBe(3);
+    expect(collected.text()).toContain("web-workspace-missing");
+    expect(await workspaceExists(root)).toBeFalse();
+  });
+
+  test("non-interactive terminals never offer initialization", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "groma-web-offer-noninteractive-"));
+    const collected = collectOutput();
+    let asked = 0;
+    const exitCode = await runProgram(["web", "--port", "0"], collected.output, {
+      confirm: async () => {
+        asked += 1;
+        return true;
+      },
+      terminal: { stdin: false, stdout: false },
+      workspaceRoot: root,
+    });
+    expect(asked).toBe(0);
+    expect(exitCode).toBe(3);
+    expect(collected.text()).toContain("web-workspace-missing");
+    expect(await workspaceExists(root)).toBeFalse();
+  });
+
+  test("accepting initializes and starts the same web invocation", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "groma-web-offer-accept-"));
+    const collected = collectOutput();
+    const signals = manualSignalSource();
+    const questions: string[] = [];
+    let presented = false;
+    const exitCode = await runProgram(["web", "--port", "0"], collected.output, {
+      confirm: async (question) => {
+        questions.push(question);
+        return true;
+      },
+      presentWebUrl: () => {
+        presented = true;
+        signals.fire("SIGINT");
+      },
+      signalSource: signals.source,
+      terminal: interactive,
+      workspaceRoot: root,
+    });
+    expect(exitCode).toBe(0);
+    expect(presented).toBeTrue();
+    expect(questions).toEqual([
+      "No Groma workspace exists here. Create it with groma init and start the web interface? [y/N] ",
+    ]);
+    expect(await workspaceExists(root)).toBeTrue();
+  });
+
+  test("accepting continues when another process initializes before this invocation", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "groma-web-offer-race-"));
+    const collected = collectOutput();
+    const signals = manualSignalSource();
+    let presented = false;
+    const exitCode = await runProgram(["web", "--port", "0"], collected.output, {
+      confirm: async () => {
+        expect(
+          await runProgram(["--format=json", "init"], collectOutput().output, {
+            workspaceRoot: root,
+          }),
+        ).toBe(0);
+        return true;
+      },
+      presentWebUrl: () => {
+        presented = true;
+        signals.fire("SIGINT");
+      },
+      signalSource: signals.source,
+      terminal: interactive,
+      workspaceRoot: root,
+    });
+    expect(exitCode).toBe(0);
+    expect(presented).toBeTrue();
   });
 
   test("serves the embedded shell and bounded reads until a stop signal", async () => {

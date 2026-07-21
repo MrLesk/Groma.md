@@ -390,6 +390,35 @@ async function serveWeb(
       );
 }
 
+async function offerWorkspaceInitialization(
+  command: Extract<CliCommand, { readonly kind: "scan" | "web" }>,
+  context: HostSurfaceContext,
+  confirmInit: (question: string) => Promise<boolean>,
+  question: string,
+): Promise<CliCommandResult | undefined> {
+  if (context.workspace.status().state !== "missing") return undefined;
+  if (!(await confirmInit(question))) return undefined;
+  const initialized = await context.initialization.initialize(Object.freeze({}));
+  if (!initialized.ok) return applicationResult(command, initialized);
+  if (initialized.value.status === "already-initialized" && command.kind === "web") {
+    return undefined;
+  }
+  if (initialized.value.status !== "initialized") {
+    return result(
+      command,
+      initialized.value.status === "already-initialized"
+        ? CLI_EXIT.success
+        : initialized.value.status === "conflict"
+          ? CLI_EXIT.workspace
+          : CLI_EXIT.infrastructure,
+      false,
+      initialized,
+    );
+  }
+  const recovered = await context.workspace.recover();
+  return recovered.ok ? undefined : applicationResult(command, recovered);
+}
+
 async function exportBlueprint(
   command: Extract<CliCommand, { readonly kind: "export" }>,
   context: HostSurfaceContext,
@@ -519,7 +548,19 @@ async function execute(
     }
     return overview(command, context, terminal);
   }
-  if (command.kind === "web") return serveWeb(command, context, webReady);
+  if (command.kind === "web") {
+    if (confirmInit !== undefined) {
+      const initialization = await offerWorkspaceInitialization(
+        command,
+        context,
+        confirmInit,
+        "No Groma workspace exists here. Create it with groma init and start the web interface? [y/N] ",
+      );
+      if (initialization !== undefined) return initialization;
+    }
+    // A declined offer falls through to the unchanged missing-workspace diagnostic.
+    return serveWeb(command, context, webReady);
+  }
   if (command.kind === "export") {
     if (exportWriter === undefined) {
       return failedResult(
@@ -563,30 +604,16 @@ async function execute(
       const exitCode = report.status === "completed" ? CLI_EXIT.success : CLI_EXIT.indeterminate;
       return result(command, exitCode, exitCode === CLI_EXIT.success, value);
     }
-    if (confirmInit !== undefined && context.workspace.status().state === "missing") {
-      const accepted = await confirmInit(
-        "No groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
+    if (confirmInit !== undefined) {
+      const initialization = await offerWorkspaceInitialization(
+        command,
+        context,
+        confirmInit,
+        "No Groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
       );
-      if (accepted) {
-        const initialized = await context.initialization.initialize(Object.freeze({}));
-        if (!initialized.ok) return applicationResult(command, initialized);
-        if (initialized.value.status !== "initialized") {
-          return result(
-            command,
-            initialized.value.status === "already-initialized"
-              ? CLI_EXIT.success
-              : initialized.value.status === "conflict"
-                ? CLI_EXIT.workspace
-                : CLI_EXIT.infrastructure,
-            false,
-            initialized,
-          );
-        }
-        const recovered = await context.workspace.recover();
-        if (!recovered.ok) return applicationResult(command, recovered);
-      }
-      // A declined offer falls through to the unchanged missing-workspace diagnostic.
+      if (initialization !== undefined) return initialization;
     }
+    // A declined offer falls through to the unchanged missing-workspace diagnostic.
     const listed = await context.projects.list();
     if (!listed.ok) return applicationResult(command, listed);
     let project;
