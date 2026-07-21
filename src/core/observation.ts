@@ -72,6 +72,13 @@ interface ObservationRecordBase {
  * only what it measured.
  */
 export interface ComponentCandidateStructuralSignals {
+  /**
+   * Cognitive Complexity measured by the scanner over the candidate's own source:
+   * how hard it is to follow, not how much it branches. It is language-specific by
+   * construction, so it is comparable only among candidates from the same scanner
+   * until normalized.
+   */
+  readonly cognitiveComplexity?: number;
   /** The subtree carries an observed package, workspace, or project boundary marker. */
   readonly declaredBoundary?: boolean;
   /** The subtree contains an executable or served entry point. */
@@ -815,7 +822,12 @@ function inspectCandidate(
   return success(Object.freeze(copied));
 }
 
-const signalCountFields = ["exportCount", "fileCount", "reuseBreadth"] as const;
+const signalCountFields = [
+  "cognitiveComplexity",
+  "exportCount",
+  "fileCount",
+  "reuseBreadth",
+] as const;
 const signalMarkerFields = ["declaredBoundary", "entryPoint"] as const;
 
 function inspectSignals(

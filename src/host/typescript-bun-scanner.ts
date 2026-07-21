@@ -311,6 +311,13 @@ interface RouteEvidence {
 
 interface ParsedSource {
   readonly callables: ReadonlyMap<string, CallableEvidence>;
+  /**
+   * Cognitive Complexity (Campbell / SonarSource) for the whole file: a count of
+   * how hard it is to follow, not how much it branches. It is computed from this
+   * scanner's own AST and is therefore language-specific — emitted as raw scanner
+   * evidence and only ever compared across scanners after per-scanner normalization.
+   */
+  readonly cognitiveComplexity: number;
   readonly imports: readonly ImportEvidence[];
   readonly partial: boolean;
   readonly reexports: readonly ReexportEvidence[];
@@ -2374,6 +2381,185 @@ function walkAst(root: AstNode, visit: (node: AstNode) => void, consume: () => v
   return true;
 }
 
+// The logical operators whose runs each cost one increment. A run of one operator
+// (`a && b && c`) costs once; a change of operator (`a && b || c`) starts a new
+// run. Nullish coalescing is included because the AST models `??` as a logical
+// expression and SonarJS counts it alongside the two boolean connectives.
+const cognitiveLogicalOperators = new Set(["&&", "||", "??"]);
+
+/**
+ * Cognitive Complexity (Campbell / SonarSource, "A new way of measuring
+ * understandability") for a parsed program: how hard the code is to follow, as a
+ * deterministic count over the AST. There is a fundamental increment for each
+ * break in linear flow — `if`/`else`/`else if`/ternary, `switch`, every loop,
+ * `catch`, a labeled jump, and each run of like logical operators — and, for the
+ * structures that introduce nesting (`if`/ternary/`switch`/loop/`catch`), a
+ * further increment equal to the depth at which they sit, so tangled nesting
+ * costs more than a flat sequence. `else`/`else if` take the flat increment but
+ * no nesting penalty.
+ *
+ * This follows SonarSource's shipped JS/TS rule (eslint-plugin-sonarjs S3776),
+ * not the language-neutral paper, so it matches the numbers a reader sees in the
+ * usual tooling: every function is its own scope whose body starts back at
+ * nesting zero (a nested function does not deepen the count of its parent), `??`
+ * counts, and recursion is not counted. The one documented simplification is
+ * that the default-value carve-out (`a ?? literal`, `a || literal`) is not
+ * applied, so those patterns each cost one where SonarJS would forgive them.
+ *
+ * The tree has already passed the bounded {@link walkAst}, so it is finite; the
+ * depth guard is defensive and, if it ever trips, the file is reported partial
+ * with the count accumulated so far rather than throwing.
+ */
+function computeCognitiveComplexity(
+  program: AstNode,
+  consume: () => void,
+): { readonly partial: boolean; readonly value: number } {
+  let total = 0;
+  let exceeded = false;
+  const childNodes = (node: AstNode): AstNode[] => {
+    const output: AstNode[] = [];
+    for (const value of Object.values(node)) {
+      if (isAstNode(value)) output.push(value);
+      else if (Array.isArray(value)) {
+        for (const item of value) if (isAstNode(item)) output.push(item);
+      }
+    }
+    return output;
+  };
+  const visitChild = (child: unknown, nesting: number, depth: number): void => {
+    if (isAstNode(child)) visit(child, nesting, depth);
+  };
+  // Count runs of like logical operators, recursing into non-logical operands so
+  // a `&&` sequence and a lambda inside one of its operands are both accounted for.
+  const countLogical = (
+    node: unknown,
+    parentOperator: string | undefined,
+    nesting: number,
+    depth: number,
+  ): void => {
+    if (isAstNode(node) && node.type === "LogicalExpression" && typeof node.operator === "string") {
+      if (cognitiveLogicalOperators.has(node.operator)) {
+        if (node.operator !== parentOperator) total += 1;
+        countLogical(node.left, node.operator, nesting, depth);
+        countLogical(node.right, node.operator, nesting, depth);
+      } else {
+        countLogical(node.left, undefined, nesting, depth);
+        countLogical(node.right, undefined, nesting, depth);
+      }
+    } else if (isAstNode(node)) {
+      visit(node, nesting, depth);
+    }
+  };
+  function visit(node: AstNode, nesting: number, depth: number): void {
+    if (depth > maxAstDepth) {
+      exceeded = true;
+      return;
+    }
+    consume();
+    switch (node.type) {
+      case "IfStatement": {
+        total += 1 + nesting;
+        visitChild(node.test, nesting, depth + 1);
+        visitChild(node.consequent, nesting + 1, depth + 1);
+        let alternate: unknown = node.alternate;
+        while (isAstNode(alternate) && alternate.type === "IfStatement") {
+          total += 1; // else if: the flat increment, but no nesting penalty
+          visitChild(alternate.test, nesting, depth + 1);
+          visitChild(alternate.consequent, nesting + 1, depth + 1);
+          alternate = alternate.alternate;
+        }
+        if (isAstNode(alternate)) {
+          total += 1; // else
+          visit(alternate, nesting + 1, depth + 1);
+        }
+        return;
+      }
+      case "ConditionalExpression": {
+        total += 1 + nesting;
+        visitChild(node.test, nesting, depth + 1);
+        visitChild(node.consequent, nesting + 1, depth + 1);
+        visitChild(node.alternate, nesting + 1, depth + 1);
+        return;
+      }
+      case "SwitchStatement": {
+        total += 1 + nesting; // once, whatever the number of cases
+        visitChild(node.discriminant, nesting, depth + 1);
+        if (Array.isArray(node.cases)) {
+          for (const clause of node.cases) {
+            if (!isAstNode(clause)) continue;
+            visitChild(clause.test, nesting, depth + 1);
+            if (Array.isArray(clause.consequent)) {
+              for (const statement of clause.consequent) {
+                visitChild(statement, nesting + 1, depth + 1);
+              }
+            }
+          }
+        }
+        return;
+      }
+      case "ForStatement":
+      case "ForInStatement":
+      case "ForOfStatement":
+      case "WhileStatement":
+      case "DoWhileStatement":
+      case "CatchClause": {
+        total += 1 + nesting;
+        for (const child of childNodes(node)) {
+          visit(child, child === node.body ? nesting + 1 : nesting, depth + 1);
+        }
+        return;
+      }
+      case "LogicalExpression": {
+        countLogical(node, undefined, nesting, depth + 1);
+        return;
+      }
+      case "BreakStatement":
+      case "ContinueStatement": {
+        if (isAstNode(node.label)) total += 1; // a jump to a label breaks the flow
+        return;
+      }
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+      case "ObjectMethod":
+      case "ClassMethod":
+      case "ClassPrivateMethod": {
+        // Each function is its own scope: its body starts back at nesting zero,
+        // so a nested function never deepens its parent's count (the SonarJS
+        // model). The whole-file score is the sum of every scope's own count.
+        for (const child of childNodes(node)) visit(child, 0, depth + 1);
+        return;
+      }
+      default: {
+        for (const child of childNodes(node)) visit(child, nesting, depth + 1);
+        return;
+      }
+    }
+  }
+  visit(program, 0, 0);
+  return { partial: exceeded, value: total };
+}
+
+/**
+ * The Cognitive Complexity of a single source string, exposed so tests and
+ * tooling can measure a snippet directly. Unparseable input scores zero.
+ */
+export function cognitiveComplexityOfSource(text: string, resource = "snippet.ts"): number {
+  let tree: unknown;
+  try {
+    tree = parse(text, {
+      allowAwaitOutsideFunction: true,
+      errorRecovery: false,
+      plugins: bunParserPlugins(resource),
+      sourceType: "unambiguous",
+    });
+  } catch {
+    return 0;
+  }
+  if (!isAstNode(tree) || !isAstNode(tree.program)) return 0;
+  return computeCognitiveComplexity(tree.program, () => {}).value;
+}
+
 function extractStaticRoutes(
   call: AstNode,
 ): Readonly<{ readonly partial: boolean; readonly routes: readonly RouteEvidence[] }> {
@@ -2514,6 +2700,7 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   } catch {
     return Object.freeze({
       callables: new Map(),
+      cognitiveComplexity: 0,
       imports: Object.freeze([]),
       partial: true,
       reexports: Object.freeze([]),
@@ -2523,6 +2710,7 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   if (!isAstNode(tree) || !isAstNode(tree.program) || !Array.isArray(tree.program.body)) {
     return Object.freeze({
       callables: new Map(),
+      cognitiveComplexity: 0,
       imports: [],
       partial: true,
       reexports: [],
@@ -2570,6 +2758,7 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   if (!boundedAst) {
     return Object.freeze({
       callables: new Map(),
+      cognitiveComplexity: 0,
       imports: Object.freeze([]),
       partial: true,
       reexports: Object.freeze([]),
@@ -2770,20 +2959,23 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   if (!cacheByteOffsets(file, offsets)) {
     return Object.freeze({
       callables: new Map(),
+      cognitiveComplexity: 0,
       imports: Object.freeze([]),
       partial: true,
       reexports: Object.freeze([]),
       routes: Object.freeze([]),
     });
   }
+  const complexity = computeCognitiveComplexity(tree.program, () => chargeExtractionWork(budget));
   return Object.freeze({
     callables,
+    cognitiveComplexity: complexity.value,
     imports: Object.freeze(
       imports.sort(
         (left, right) => compareCodeUnits(left.source, right.source) || left.start - right.start,
       ),
     ),
-    partial,
+    partial: partial || complexity.partial,
     reexports: Object.freeze(reexports),
     routes: Object.freeze(
       routes.sort(
@@ -4275,6 +4467,11 @@ async function scanScope(
         boundary.key,
         relative,
       );
+      // A parsed file carries its Cognitive Complexity — how hard it is to
+      // follow — as a structural signal on its own component. It is measured with
+      // this scanner's rules, so it travels as raw evidence and is only ever
+      // compared across scanners once normalized per scanner.
+      const fileParsed = parsedSources.get(resource);
       append(
         Object.freeze({
           candidate: Object.freeze({ name: segments[segments.length - 1]! }),
@@ -4282,6 +4479,11 @@ async function scanScope(
           kind: "component-candidate",
           provenance: Object.freeze([fullProvenance(file)]),
           scope,
+          ...(fileParsed === undefined || fileParsed.cognitiveComplexity === 0
+            ? {}
+            : {
+                signals: Object.freeze({ cognitiveComplexity: fileParsed.cognitiveComplexity }),
+              }),
         }),
       );
       componentCandidateCount += 1;
@@ -4294,7 +4496,6 @@ async function scanScope(
       // read for the import graph. This runs after the entry-point pass above,
       // so a file's own exports never make the file itself read as a way in;
       // sorted and capped for a reproducible, bounded snapshot.
-      const fileParsed = parsedSources.get(resource);
       if (fileParsed !== undefined) {
         let fileExports = 0;
         for (const callable of [...fileParsed.callables.values()].sort((left, right) =>
