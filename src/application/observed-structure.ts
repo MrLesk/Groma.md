@@ -5,7 +5,6 @@ import {
   type Diagnostic,
   type Result,
 } from "../core/index.ts";
-import { STANDARD_COMPONENT_SCALES, type StandardComponentScale } from "../standard-model/index.ts";
 
 export const OBSERVED_STRUCTURE_DERIVATION_V1 = "groma/observed-structure/v1" as const;
 
@@ -104,20 +103,6 @@ export function resolveObservedStructure(
     if (!depth.ok) return depth;
   }
   return success(Object.freeze({ depthOf, parentOf }));
-}
-
-/**
- * Places a component on the closed ladder by how deeply the observed structure
- * nests it. The whole observed source is the system; every containment level
- * below it descends one rung, and everything past the finest rung stays there,
- * which the model permits because components of one scale may nest. This is
- * deliberately relative: a project with fewer structural levels simply uses
- * fewer rungs instead of being measured against absolute sizes it can never
- * reach.
- */
-export function observedScaleForDepth(depth: number): StandardComponentScale {
-  const index = Math.min(Math.max(depth, 0), STANDARD_COMPONENT_SCALES.length - 1);
-  return STANDARD_COMPONENT_SCALES[index]!;
 }
 
 /**

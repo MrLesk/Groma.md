@@ -41,11 +41,7 @@ import {
   type StructuralScaleAssessmentV1,
   type StructuralScaleProposalConfigurationV1,
 } from "./scale-proposal.ts";
-import {
-  observedScaleForDepth,
-  observedSharedFromSignals,
-  resolveObservedStructure,
-} from "./observed-structure.ts";
+import { observedSharedFromSignals, resolveObservedStructure } from "./observed-structure.ts";
 import { observedSummaryFromDocumentation } from "./observed-documentation.ts";
 
 export interface EvidenceResourceMapper {
@@ -948,23 +944,18 @@ export function createReconciliationOperations(
         const containerIdentity = structure.value.parentOf.get(identity);
         const parent =
           containerIdentity === undefined ? undefined : componentIds.get(containerIdentity);
-        // Scale follows position in the observed structure. A component nobody
-        // observed containing and that contains nothing has no observed position,
-        // so it stays unscaled rather than being sized by how much we depend on it.
-        const positioned =
-          parent !== undefined || structure.value.depthOf.has(identity)
-            ? observedScaleForDepth(structure.value.depthOf.get(identity) ?? 0)
-            : undefined;
         const shared = observedSharedFromSignals(record.signals);
         structuralProjections.set(
           identity,
           Object.freeze({
             ...(parent === undefined ? {} : { parent }),
-            ...(positioned === undefined ? {} : { scale: positioned }),
             ...(shared === undefined ? {} : { shared }),
           }),
         );
       }
+      // Scale is curated intent. Keep the legacy field in this reconciliation
+      // pass only so an evidence-owned depth projection is removed on rescan;
+      // new observations never place a component on the canonical scale ladder.
       const structuralFields = ["parent", "scale", "shared"] as const;
       for (const [identity, binding] of componentBindings) {
         const next = structuralProjections.get(identity);
@@ -985,10 +976,18 @@ export function createReconciliationOperations(
         }
         componentBindings.set(
           identity,
-          Object.freeze({
-            ...binding,
-            projection: Object.freeze({ ...binding.projection, ...projected }),
-          }),
+          (() => {
+            const {
+              parent: _previousParent,
+              scale: _previousScale,
+              shared: _previousShared,
+              ...meaningProjection
+            } = binding.projection;
+            return Object.freeze({
+              ...binding,
+              projection: Object.freeze({ ...meaningProjection, ...projected }),
+            });
+          })(),
         );
         const creating = existing === undefined;
         if (!creating && Object.keys(patch).length === 0) continue;

@@ -712,10 +712,10 @@ describe("local completed-snapshot reconciliation", () => {
     const searched = await host.operations.searchBlueprint({ limit: 10, text: "Evidence target" });
     expect(searched).toMatchObject({
       ok: true,
-      value: { items: [{ name: "Evidence target" }] },
+      value: { items: [{ component: { name: "Evidence target" } }] },
     });
     if (!searched.ok) return;
-    const target = searched.value.items[0]!;
+    const target = searched.value.items[0]!.component;
     expect(
       await host.operations.getComponent({
         id: target.id,
@@ -737,7 +737,7 @@ describe("local completed-snapshot reconciliation", () => {
     });
   });
 
-  test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
+  test("builds hierarchy and sharing without assigning scale from observed containment", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
@@ -765,10 +765,12 @@ describe("local completed-snapshot reconciliation", () => {
     const leaf = byName.get("Leaf")!;
     const library = byName.get("Library")!;
 
-    // Depth in the observed structure places every component on the ladder.
-    expect(root).toMatchObject({ scale: "system" });
-    expect(area).toMatchObject({ parent: root.id, scale: "domain" });
-    expect(leaf).toMatchObject({ parent: area.id, scale: "part" });
+    // Containment is direct evidence; scale remains curated intent.
+    expect(root.scale).toBeUndefined();
+    expect(area).toMatchObject({ parent: root.id });
+    expect(area.scale).toBeUndefined();
+    expect(leaf).toMatchObject({ parent: area.id });
+    expect(leaf.scale).toBeUndefined();
     // Breadth of use is coupling, so it marks sharing and never a scale.
     expect(library.scale).toBeUndefined();
     expect(library).toMatchObject({ shared: true });

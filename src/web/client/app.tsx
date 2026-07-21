@@ -20,13 +20,13 @@ import {
   mergeRootsPage,
   type BlueprintModel,
 } from "./model.ts";
-import { shouldContinueOwnedRootDiscovery } from "./root-discovery.ts";
 import { SpecPanel } from "./spec.tsx";
 
-const ROOT_LIMIT = 20;
-const CHILD_LIMIT = 12;
+const ROOT_LIMIT = 100;
+const CHILD_LIMIT = 100;
 const CONNECTION_LIMIT = 100;
 const SEARCH_LIMIT = 20;
+const MAX_INTERNAL_PAGES = 16;
 
 interface SearchState {
   readonly open: boolean;
@@ -48,7 +48,6 @@ export function App() {
   const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
   const pendingRoots = useRef(false);
-  const rootPagesRead = useRef(0);
   const mounted = useRef(true);
   const autoExpanded = useRef(new Set<string>());
   const focusId = focusStack.at(-1);
@@ -59,18 +58,27 @@ export function App() {
   const ownedRootIds = model.rootIds.filter(
     (id) => model.nodes.get(id)?.view.component.type !== "external",
   );
-  const frameId = focusId ?? (ownedRootIds.length === 1 ? ownedRootIds[0] : undefined);
+  const soleOwnedRootId = ownedRootIds.length === 1 ? ownedRootIds[0] : undefined;
+  const frameId = focusId ?? soleOwnedRootId;
 
   const loadRoots = (cursor?: string) => {
     if (pendingRoots.current) return;
     pendingRoots.current = true;
-    void fetchRoots(ROOT_LIMIT, cursor).then((result) => {
-      pendingRoots.current = false;
-      if (!mounted.current) return;
-      if (result.ok) {
-        rootPagesRead.current += 1;
+    void (async () => {
+      let next = cursor;
+      for (let page = 0; page < MAX_INTERNAL_PAGES; page += 1) {
+        const result = await fetchRoots(ROOT_LIMIT, next);
+        if (!mounted.current) return;
+        if (!result.ok) {
+          setFailure(result);
+          break;
+        }
         setModel((current) => mergeRootsPage(current, result.value));
-      } else setFailure(result);
+        if (!result.value.hasMore || result.value.nextCursor === undefined) break;
+        next = result.value.nextCursor;
+      }
+    })().finally(() => {
+      pendingRoots.current = false;
     });
   };
 
@@ -83,35 +91,23 @@ export function App() {
 
   useEffect(() => {
     loadRoots();
-    // The reader sees one bounded root page immediately. Later pages are chosen
-    // below only when opaque root ordering has not yet reached owned code.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scanner identities deliberately sort opaquely, so a dependency-heavy project
-  // can place many borrowed roots before its own system. Continue a small, explicit
-  // root budget until the drawing has an owned plate; the existing "more roots"
-  // control remains responsible for anything beyond that budget.
-  useEffect(() => {
-    if (!shouldContinueOwnedRootDiscovery(model, rootPagesRead.current)) return;
-    loadRoots(model.rootsCursor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.hasMoreRoots, model.nodes, model.rootIds, model.rootsCursor]);
-
   // Open the system's own parts on arrival, so a reader meets the architecture
   // rather than a single collapsed box they must first know to click. Only
-  // owned roots expand; borrowed code stays a listed dependency.
+  // the sole owned root expands; multi-root blueprints defer child reads until
+  // the reader focuses one root.
   useEffect(() => {
-    for (const rootId of model.rootIds) {
-      const node = model.nodes.get(rootId);
-      if (node === undefined || autoExpanded.current.has(rootId)) continue;
-      if (node.view.component.type === "external") continue;
-      if (node.childIds !== undefined) continue;
-      autoExpanded.current.add(rootId);
-      loadChildren(rootId);
-    }
+    if (soleOwnedRootId === undefined) return;
+    const rootId = soleOwnedRootId;
+    const node = model.nodes.get(rootId);
+    if (node === undefined || autoExpanded.current.has(rootId)) return;
+    if (node.childIds !== undefined) return;
+    autoExpanded.current.add(rootId);
+    loadChildren(rootId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.rootIds]);
+  }, [soleOwnedRootId]);
 
   // Every observed dependency, and — from the same paged read — how many parts
   // each component contains. The child counts tell a container from a leaf
@@ -166,9 +162,8 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedId, focusStack.length]);
 
-  // A focus reads one bounded page. The canvas then applies the stricter visual
-  // budget and sends the reader to focus/search for the rest; it never pages a
-  // level to exhaustion and then shrinks the result below readable scale.
+  // A focus gathers bounded pages internally, then the disposable projection
+  // selects one readable semantic level. Page mechanics never enter the UI.
   useEffect(() => {
     if (frameId === undefined) return;
     const node = model.nodes.get(frameId);
@@ -180,11 +175,21 @@ export function App() {
   const loadChildren = (parentId: string, cursor?: string) => {
     if (pending.current.has(parentId)) return;
     pending.current.add(parentId);
-    void fetchChildren(parentId, CHILD_LIMIT, cursor).then((result) => {
-      pending.current.delete(parentId);
-      if (result.ok) {
+    void (async () => {
+      let next = cursor;
+      for (let page = 0; page < MAX_INTERNAL_PAGES; page += 1) {
+        const result = await fetchChildren(parentId, CHILD_LIMIT, next);
+        if (!mounted.current) return;
+        if (!result.ok) {
+          setFailure(result);
+          break;
+        }
         setModel((current) => mergeChildrenPage(current, parentId, result.value));
-      } else setFailure(result);
+        if (!result.value.hasMore || result.value.nextCursor === undefined) break;
+        next = result.value.nextCursor;
+      }
+    })().finally(() => {
+      pending.current.delete(parentId);
     });
   };
 
@@ -198,10 +203,6 @@ export function App() {
     setSelectedId(undefined);
     setFocusStack((stack) => stack.slice(0, depth));
   };
-  const onLoadMoreRoots = () => {
-    if (model.rootsCursor !== undefined) loadRoots(model.rootsCursor);
-  };
-
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = search.text.trim();
@@ -210,22 +211,6 @@ export function App() {
       if (result.ok) setSearch((current) => ({ ...current, open: true, page: result.value }));
     });
   };
-  const loadMoreMatches = () => {
-    const cursor = search.page?.nextCursor;
-    if (cursor === undefined) return;
-    void fetchSearch(search.text.trim(), SEARCH_LIMIT, cursor).then((result) => {
-      if (!result.ok) return;
-      setSearch((current) =>
-        current.page === undefined
-          ? current
-          : {
-              ...current,
-              page: { ...result.value, items: [...current.page.items, ...result.value.items] },
-            },
-      );
-    });
-  };
-
   const resolveDisplay = (id: string) => {
     const node = model.nodes.get(id);
     return node === undefined ? undefined : displayText(node.view.component);
@@ -326,15 +311,6 @@ export function App() {
                   );
                 })
               )}
-              {search.page.hasMore ? (
-                <button
-                  type="button"
-                  onClick={loadMoreMatches}
-                  className="block w-full border-0 bg-transparent px-3 py-1.5 text-left font-plan text-[10px] text-ink-muted uppercase hover:bg-fine focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-survey"
-                >
-                  More matches · bounded page
-                </button>
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -355,12 +331,10 @@ export function App() {
             <Canvas
               childCounts={childCounts}
               dependencies={dependencies}
-              focusId={focusId}
               focusPath={focusPath}
               model={model}
               onFocus={onFocus}
               onFocusTo={onFocusTo}
-              onLoadMoreRoots={onLoadMoreRoots}
               onSelect={(id) => {
                 setCreateOpen(false);
                 setSelectedId(id);

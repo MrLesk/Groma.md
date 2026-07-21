@@ -2,13 +2,23 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  getViewportForBounds,
   Handle,
   Panel,
   Position,
   ReactFlow,
+  type ReactFlowInstance,
   type NodeProps,
 } from "@xyflow/react";
-import { createContext, useContext, useMemo, type KeyboardEvent } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import type { BlueprintModel } from "./model.ts";
 import {
@@ -20,16 +30,30 @@ import {
 
 interface CanvasActions {
   readonly onFocus: (id: string) => void;
-  readonly onLoadMoreRoots: () => void;
   readonly onSelect: (id: string | undefined) => void;
 }
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
 const FIT_VIEW = Object.freeze({
   maxZoom: 1,
-  minZoom: 0.82,
+  minZoom: 0.55,
   padding: Object.freeze({ bottom: "10%", left: "5%", right: "5%", top: "12%" }),
 });
+const NEARBY_CONTEXT_COUNT = 3;
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+  useEffect(() => {
+    const query = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (query === undefined) return;
+    const update = () => setReduced(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
 
 function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   const actions = useContext(CanvasActionsContext);
@@ -50,7 +74,9 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
       <div className="groma-node__rule" aria-hidden="true" />
       <div className="groma-node__heading">
         <span className="groma-node__notation" aria-hidden="true" />
-        <span>{data.notation}</span>
+        <span>
+          {data.evidenceBound && data.notation === "unscaled" ? "candidate" : data.notation}
+        </span>
         <span>{data.type}</span>
         {data.evidenceBound ? <span className="groma-node__observed">observed</span> : null}
       </div>
@@ -128,7 +154,6 @@ const NODE_TYPES = Object.freeze({ component: ComponentNode, group: GroupNode })
 export interface CanvasProps extends CanvasActions {
   readonly childCounts: ReadonlyMap<string, number>;
   readonly dependencies: readonly { source: string; target: string; type: string }[];
-  readonly focusId?: string | undefined;
   readonly focusPath: readonly { id: string; label: string }[];
   readonly model: BlueprintModel;
   readonly onFocusTo: (depth: number) => void;
@@ -138,19 +163,133 @@ export interface CanvasProps extends CanvasActions {
 export function Canvas({
   childCounts,
   dependencies,
-  focusId,
   focusPath,
   model,
   onFocus,
   onFocusTo,
-  onLoadMoreRoots,
   onSelect,
   selectedId,
 }: CanvasProps) {
+  const focusId = focusPath.at(-1)?.id;
+  const flow = useRef<ReactFlowInstance<BlueprintFlowNode | BlueprintGroupNode> | null>(null);
+  const canvas = useRef<HTMLDivElement | null>(null);
+  const [flowReady, setFlowReady] = useState(0);
+  const reducedMotion = useReducedMotion();
   const graph = useMemo(
-    () => buildBlueprintFlowGraph({ childCounts, dependencies, focusId, model }),
-    [childCounts, dependencies, focusId, model],
+    () =>
+      buildBlueprintFlowGraph({
+        childCounts,
+        dependencies,
+        focusPath: focusPath.map((entry) => entry.id),
+        model,
+      }),
+    [childCounts, dependencies, focusPath, model],
   );
+  const focusTarget = graph.nodes.find((node) => node.id === graph.focusTargetId);
+  const focusContentsLoaded =
+    graph.focusTargetId !== undefined &&
+    model.nodes.get(graph.focusTargetId)?.childIds !== undefined;
+  const cameraNodeIds = useMemo(() => {
+    if (graph.focusTargetId === undefined) return [];
+    if (focusId === undefined || focusTarget === undefined) return [graph.focusTargetId];
+    const siblings = graph.nodes
+      .filter(
+        (node) =>
+          node.id !== focusTarget.id &&
+          node.parentId === focusTarget.parentId &&
+          node.type === "component",
+      )
+      .toSorted((left, right) => {
+        const leftDistance =
+          Math.abs(left.position.x - focusTarget.position.x) +
+          Math.abs(left.position.y - focusTarget.position.y);
+        const rightDistance =
+          Math.abs(right.position.x - focusTarget.position.x) +
+          Math.abs(right.position.y - focusTarget.position.y);
+        return leftDistance - rightDistance || left.id.localeCompare(right.id);
+      })
+      // A small local ring proves where the reader came from without zooming
+      // all the way back out to the complete parent level.
+      .slice(0, NEARBY_CONTEXT_COUNT)
+      .map((node) => node.id);
+    return [graph.focusTargetId, ...siblings];
+  }, [focusId, focusTarget, graph.focusTargetId, graph.nodes]);
+  const cameraBounds = useMemo(() => {
+    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+    const positions = new Map<string, { x: number; y: number }>();
+    const absolutePosition = (id: string): { x: number; y: number } => {
+      const known = positions.get(id);
+      if (known !== undefined) return known;
+      const node = byId.get(id);
+      if (node === undefined) return { x: 0, y: 0 };
+      const parent = node.parentId === undefined ? { x: 0, y: 0 } : absolutePosition(node.parentId);
+      const position = { x: parent.x + node.position.x, y: parent.y + node.position.y };
+      positions.set(id, position);
+      return position;
+    };
+    const framed = cameraNodeIds.flatMap((id) => {
+      const node = byId.get(id);
+      if (node === undefined) return [];
+      const position = absolutePosition(id);
+      return [
+        {
+          bottom: position.y + (node.height ?? 0),
+          left: position.x,
+          right: position.x + (node.width ?? 0),
+          top: position.y,
+        },
+      ];
+    });
+    if (framed.length === 0) return undefined;
+    const x = Math.min(...framed.map((bounds) => bounds.left));
+    const y = Math.min(...framed.map((bounds) => bounds.top));
+    const right = Math.max(...framed.map((bounds) => bounds.right));
+    const bottom = Math.max(...framed.map((bounds) => bounds.bottom));
+    return { height: bottom - y, width: right - x, x, y };
+  }, [cameraNodeIds, graph.nodes]);
+  useEffect(() => {
+    if (
+      graph.focusTargetId === undefined ||
+      !focusContentsLoaded ||
+      flow.current === null ||
+      cameraBounds === undefined
+    )
+      return;
+    let fittedFrame = 0;
+    // React Flow commits controlled nodes, then measures them. Two frames keep
+    // the camera move on the final expanded boundary instead of its old card.
+    const layoutFrame = requestAnimationFrame(() => {
+      fittedFrame = requestAnimationFrame(() => {
+        const instance = flow.current;
+        const boundsElement = canvas.current;
+        if (instance === null || boundsElement === null) return;
+        const rect = boundsElement.getBoundingClientRect();
+        const viewport = getViewportForBounds(
+          cameraBounds,
+          rect.width,
+          rect.height,
+          0.55,
+          focusId === undefined ? 1 : 1.3,
+          focusId === undefined ? 0.08 : 0.14,
+        );
+        void instance.setViewport(viewport, { duration: reducedMotion ? 0 : 520 });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(layoutFrame);
+      cancelAnimationFrame(fittedFrame);
+    };
+  }, [
+    flowReady,
+    focusId,
+    focusContentsLoaded,
+    focusTarget?.height,
+    focusTarget?.width,
+    cameraNodeIds,
+    cameraBounds,
+    graph.focusTargetId,
+    reducedMotion,
+  ]);
   const relatedIds = useMemo(() => {
     if (selectedId === undefined) return new Set<string>();
     const ids = new Set([selectedId]);
@@ -194,24 +333,19 @@ export function Canvas({
       })),
     [graph.edges, selectedId],
   );
-  const actions = useMemo(
-    () => ({ onFocus, onLoadMoreRoots, onSelect }),
-    [onFocus, onLoadMoreRoots, onSelect],
-  );
-  const additional = graph.omittedComponents + (model.hasMoreRoots ? 1 : 0);
+  const actions = useMemo(() => ({ onFocus, onSelect }), [onFocus, onSelect]);
 
   return (
     <CanvasActionsContext.Provider value={actions}>
-      <div className="groma-flow" data-renderer="react-flow-bounded-level">
+      <div ref={canvas} className="groma-flow" data-renderer="react-flow-continuous-zoom">
         <ReactFlow<BlueprintFlowNode | BlueprintGroupNode>
-          key={`${focusId ?? "top"}:${graph.nodes.length}`}
           nodes={[...nodes]}
           edges={[...edges]}
           nodeTypes={NODE_TYPES}
           fitView
           fitViewOptions={FIT_VIEW}
-          minZoom={0.82}
-          maxZoom={1.6}
+          minZoom={0.55}
+          maxZoom={2}
           nodesConnectable={false}
           panOnScroll
           zoomOnScroll={false}
@@ -222,6 +356,10 @@ export function Canvas({
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
           colorMode="light"
+          onInit={(instance) => {
+            flow.current = instance;
+            setFlowReady((ready) => ready + 1);
+          }}
           onPaneClick={() => onSelect(undefined)}
         >
           <Background variant={BackgroundVariant.Lines} gap={24} size={0.7} color="#dfe2de" />
@@ -257,7 +395,9 @@ export function Canvas({
             <div className="groma-title-block__heading">
               <p>{focusId === undefined ? "System overview" : "Focused level"}</p>
               <span>scan {model.generation}</span>
-              <span>{graph.visibleComponents} shown</span>
+              <span>
+                {graph.visibleComponents} / {graph.levelComponents} at this level
+              </span>
             </div>
             <details className="groma-title-block__key">
               <summary>How to read this sheet</summary>
@@ -267,40 +407,6 @@ export function Canvas({
               </p>
             </details>
           </Panel>
-          {graph.evidence.length > 0 ? (
-            <Panel position="bottom-right" className="groma-evidence-register">
-              <div className="groma-evidence-register__heading">
-                <strong>Implementation evidence</strong>
-                <span>observed, not curated</span>
-              </div>
-              <ol>
-                {graph.evidence.map((item) => (
-                  <li key={item.id}>
-                    <button type="button" onClick={() => onSelect(item.id)}>
-                      <span>{item.label}</span>
-                      <small>{item.type}</small>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </Panel>
-          ) : null}
-          {additional > 0 || graph.omittedRelationships > 0 ? (
-            <Panel position="bottom-center" className="groma-bounded-notice">
-              <span>
-                {additional > 0 ? `+${additional} more components · ` : ""}
-                {graph.omittedRelationships > 0
-                  ? `+${graph.omittedRelationships} relationships · `
-                  : ""}
-                use focus or search
-              </span>
-              {model.hasMoreRoots ? (
-                <button type="button" onClick={onLoadMoreRoots}>
-                  Read more roots
-                </button>
-              ) : null}
-            </Panel>
-          ) : null}
           {model.rootIds.length === 0 ? (
             <Panel position="top-center" className="groma-empty-sheet">
               Reading the current bounded blueprint…

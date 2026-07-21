@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { shouldContinueOwnedRootDiscovery } from "../client/root-discovery.ts";
 import type { ApiComponentPage, ApiComponentView } from "../client/api.ts";
 import {
   buildBlueprintFlowGraph,
   LEVEL_COMPONENT_BUDGET,
-  LEVEL_EVIDENCE_BUDGET,
   LEVEL_RELATIONSHIP_BUDGET,
   nextScaleLabel,
 } from "../client/graph.ts";
@@ -63,21 +61,7 @@ describe("interactive map view-model", () => {
     expect(children.nodes.get("ent_a")?.childrenCursor).toBe("children-2");
   });
 
-  test("continues only a small root budget until it reaches owned code", () => {
-    const borrowed = mergeRootsPage(
-      emptyModel(),
-      page([view("ext_a", { type: "external" })], true, "after-borrowed"),
-    );
-    expect(shouldContinueOwnedRootDiscovery(borrowed, 1)).toBeTrue();
-    expect(shouldContinueOwnedRootDiscovery(borrowed, 5)).toBeFalse();
-    const owned = mergeRootsPage(
-      borrowed,
-      page([view("ent_system", { scale: "system" })], true, "after-system"),
-    );
-    expect(shouldContinueOwnedRootDiscovery(owned, 2)).toBeFalse();
-  });
-
-  test("shows one bounded level and drills deeper only through focus", () => {
+  test("keeps nearby context mounted while focus expands inside a component", () => {
     const roots = mergeRootsPage(
       emptyModel(),
       page([view("ent_system", { name: "Product", scale: "system" })]),
@@ -93,16 +77,46 @@ describe("interactive map view-model", () => {
       page([view("ent_part", { intent: "Keep sessions valid.", name: "Sessions", scale: "part" })]),
     );
     const top = buildBlueprintFlowGraph({ dependencies: [], model: parts });
-    expect(top.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
+    expect(top.nodes.map((node) => node.id)).toEqual(["ent_system", "ent_domain"]);
     const focused = buildBlueprintFlowGraph({
       dependencies: [],
-      focusId: "ent_domain",
+      focusPath: ["ent_domain"],
       model: parts,
     });
-    expect(focused.nodes.map((node) => node.id)).toEqual(["group:ent_domain", "ent_part"]);
+    expect(focused.nodes.map((node) => node.id)).toEqual(["ent_system", "ent_domain", "ent_part"]);
+    expect(focused.nodes.find((node) => node.id === "ent_domain")?.type).toBe("group");
     expect(focused.nodes.find((node) => node.id === "ent_part")?.data.purpose).toBe(
       "Keep sessions valid.",
     );
+  });
+
+  test("expands a focused root without discarding its root siblings", () => {
+    const roots = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_alpha", { intent: "Own alpha.", name: "Alpha" }),
+        view("ent_beta", { intent: "Own beta.", name: "Beta" }),
+      ]),
+    );
+    const model = mergeChildrenPage(
+      roots,
+      "ent_alpha",
+      page([view("ent_alpha_part", { intent: "Do alpha work.", name: "Alpha part" })]),
+    );
+    const focused = buildBlueprintFlowGraph({
+      dependencies: [],
+      focusPath: ["ent_alpha"],
+      model,
+    });
+    expect(focused.nodes.map((node) => node.id)).toEqual([
+      "ent_alpha",
+      "ent_alpha_part",
+      "ent_beta",
+    ]);
+    expect(focused.nodes.find((node) => node.id === "ent_alpha")?.type).toBe("group");
+    expect(focused.nodes.find((node) => node.id === "ent_beta")?.type).toBe("component");
+    expect(focused.visibleComponents).toBe(1);
+    expect(focused.levelComponents).toBe(1);
   });
 
   test("enforces the visual budget without shrinking or discarding loaded components", () => {
@@ -126,19 +140,50 @@ describe("interactive map view-model", () => {
     expect(model.nodes.has("ent_domain_9")).toBeTrue();
   });
 
-  test("keeps meaning-empty observed candidates in a bounded evidence register", () => {
+  test("normalizes an OpenClaw-sized observed root to twenty ranked candidates", () => {
+    const roots = mergeRootsPage(
+      emptyModel(),
+      page([view("ent_openclaw", { name: "openclaw", scale: "system" })]),
+    );
+    const candidates = Array.from({ length: 85 }, (_, index) =>
+      view(`ent_candidate_${index.toString().padStart(2, "0")}`, {
+        evidenceBound: true,
+        name: index < 36 ? `@openclaw/plugin-${index}` : `area-${index}`,
+        parent: "ent_openclaw",
+        ...(index < 36 ? { summary: `OpenClaw plugin ${index}.`, type: "package" } : {}),
+      }),
+    );
+    const model = mergeChildrenPage(roots, "ent_openclaw", page(candidates));
+    const graph = buildBlueprintFlowGraph({
+      childCounts: new Map([
+        ["ent_openclaw", 85],
+        ["ent_candidate_07", 5],
+        ["ent_candidate_61", 2],
+      ]),
+      dependencies: [],
+      model,
+    });
+    const visibleCards = graph.nodes.filter((node) => node.type === "component");
+    expect(visibleCards).toHaveLength(20);
+    expect(graph.visibleComponents).toBe(20);
+    expect(graph.levelComponents).toBe(85);
+    expect(graph.omittedComponents).toBe(65);
+    expect(visibleCards.map((node) => node.id)).toContain("ent_candidate_61");
+    expect(visibleCards.every((node) => node.data.notation === "unscaled")).toBeTrue();
+  });
+
+  test("keeps meaning-empty observed candidates visible with automatic notation", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const domains = mergeChildrenPage(
       roots,
       "ent_system",
       page([view("ent_app", { name: "Application", scale: "domain", summary: "Own use cases." })]),
     );
-    const evidence = Array.from({ length: LEVEL_EVIDENCE_BUDGET + 2 }, (_, index) =>
+    const evidence = Array.from({ length: 7 }, (_, index) =>
       view(`ent_observed_${index}`, {
         evidenceBound: true,
         name: `observed-${index}`,
         parent: "ent_app",
-        scale: "part",
         summary: "Scanner-reported file candidate.",
         type: "file",
       }),
@@ -160,13 +205,54 @@ describe("interactive map view-model", () => {
     const graph = buildBlueprintFlowGraph({
       childCounts: new Map([["ent_app", evidence.length + 1]]),
       dependencies: [],
-      focusId: "ent_app",
+      focusPath: ["ent_app"],
       model,
     });
-    expect(graph.nodes.map((node) => node.id)).toEqual(["group:ent_app", "ent_policy"]);
-    expect(graph.evidence).toHaveLength(LEVEL_EVIDENCE_BUDGET);
-    expect(graph.evidence[0]?.label).toBe("observed-0");
-    expect(graph.omittedComponents).toBe(2);
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      "ent_system",
+      "ent_app",
+      "ent_policy",
+      ...evidence.map((item) => item.component.id),
+    ]);
+    expect(graph.nodes.find((node) => node.id === "ent_observed_0")?.data.notation).toBe(
+      "unscaled",
+    );
+    expect(graph.omittedComponents).toBe(0);
+  });
+
+  test("renders an evidence-supported curated scale as canonical notation", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_curated_scale", {
+          evidenceBound: true,
+          name: "Curated scale",
+          parent: "ent_system",
+          scale: "domain",
+        }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({ dependencies: [], model });
+    expect(graph.nodes.find((node) => node.id === "ent_curated_scale")?.data.notation).toBe(
+      "domain",
+    );
+  });
+
+  test("uses code-unit ordering at the visual cutoff", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const names = ["I", "i", "İ", "ı", ...Array.from({ length: 18 }, (_, index) => `z${index}`)];
+    const children = names.map((name, index) =>
+      view(`ent_${index.toString().padStart(2, "0")}`, { intent: name, name }),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [],
+      model: mergeChildrenPage(roots, "ent_system", page(children)),
+    });
+    expect(
+      graph.nodes.filter((node) => node.type === "component").map((node) => node.data.label),
+    ).toEqual(names.toSorted().slice(0, 20));
   });
 
   test("draws a bounded directional relationship set with plain labels", () => {
