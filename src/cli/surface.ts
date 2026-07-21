@@ -571,6 +571,8 @@ async function execute(
         await operations.searchBlueprint({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
           text: command.text,
         }),
       );
@@ -605,6 +607,8 @@ async function execute(
         await operations.listComponents({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-roots":
@@ -613,6 +617,8 @@ async function execute(
         await operations.listRoots({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-children":
@@ -622,6 +628,8 @@ async function execute(
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
           parent: command.parent,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-update": {

@@ -45,6 +45,140 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
 }
 
 describe("official local application operations composition", () => {
+  test("filters every bounded component read before pagination and binds filters into cursors", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const components = [
+      {
+        id: conformanceIds.rootA,
+        name: "Match root A",
+        scale: "domain" as const,
+        shared: true,
+      },
+      {
+        id: conformanceIds.rootB,
+        name: "Match root B",
+        scale: "domain" as const,
+        shared: true,
+      },
+      {
+        id: conformanceIds.serviceA,
+        name: "Match service A",
+        parent: conformanceIds.rootA,
+        scale: "part" as const,
+        shared: true,
+      },
+      {
+        id: conformanceIds.serviceB,
+        name: "Match service B",
+        parent: conformanceIds.rootA,
+        scale: "part" as const,
+        shared: false,
+      },
+      {
+        id: conformanceIds.nestedService,
+        name: "Match nested service",
+        parent: conformanceIds.rootA,
+        scale: "part" as const,
+        shared: true,
+      },
+      {
+        id: conformanceIds.module,
+        name: "Match unscaled module",
+        parent: conformanceIds.rootA,
+      },
+    ];
+    for (const component of components) {
+      expect(await host.operations.createComponent({ component })).toMatchObject({
+        status: "committed",
+      });
+    }
+
+    const first = await host.operations.listComponents({
+      limit: 1,
+      scale: "domain",
+      shared: true,
+    });
+    expect(first).toMatchObject({
+      ok: true,
+      value: { hasMore: true, items: [{ component: { id: conformanceIds.rootA } }] },
+    });
+    if (!first.ok || first.value.nextCursor === undefined) throw new Error("expected cursor");
+    expect(
+      await host.operations.listComponents({
+        cursor: first.value.nextCursor,
+        limit: 1,
+        scale: "domain",
+        shared: true,
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { hasMore: false, items: [{ component: { id: conformanceIds.rootB } }] },
+    });
+    expect(
+      await host.operations.listComponents({
+        cursor: first.value.nextCursor,
+        limit: 1,
+        scale: "domain",
+        shared: false,
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "cursor-query-mismatch" }], ok: false });
+    expect(
+      await host.operations.listRoots({ limit: 10, scale: "domain", shared: true }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          { component: { id: conformanceIds.rootA } },
+          { component: { id: conformanceIds.rootB } },
+        ],
+      },
+    });
+    expect(
+      await host.operations.listChildren({
+        limit: 10,
+        parent: conformanceIds.rootA,
+        scale: "part",
+        shared: false,
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { items: [{ component: { id: conformanceIds.serviceB } }] },
+    });
+
+    const search = await host.operations.searchBlueprint({
+      limit: 1,
+      scale: "part",
+      shared: true,
+      text: "match",
+    });
+    expect(search).toMatchObject({
+      ok: true,
+      value: { hasMore: true, items: [{ id: conformanceIds.serviceA }] },
+    });
+    if (!search.ok || search.value.nextCursor === undefined) throw new Error("expected cursor");
+    expect(
+      await host.operations.searchBlueprint({
+        cursor: search.value.nextCursor,
+        limit: 1,
+        scale: "part",
+        shared: true,
+        text: "match",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { hasMore: false, items: [{ id: conformanceIds.nestedService }] },
+    });
+
+    expect(
+      await host.operations.listComponents({ limit: 1, scale: "team" as never }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-component-scale" }], ok: false });
+    expect(
+      await host.operations.searchBlueprint({ limit: 1, shared: "yes" as never, text: "match" }),
+    ).toMatchObject({ diagnostics: [{ code: "invalid-component-shared" }], ok: false });
+  });
+
   test("atomically persists merge aliases and resolves chained references after restart", async () => {
     const workspace = await temporaryWorkspace();
     const first = await composition(workspace);
