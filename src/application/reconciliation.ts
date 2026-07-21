@@ -47,6 +47,7 @@ import {
   observedSharedFromSignals,
   resolveObservedStructure,
 } from "./observed-structure.ts";
+import { observedSummaryFromDocumentation } from "./observed-documentation.ts";
 
 export interface EvidenceResourceMapper {
   resourceForEvidence(): Result<ResourceKey>;
@@ -640,6 +641,49 @@ function hasCompleteCoverage(
   );
 }
 
+/** How deeply a documented resource is buried, so the nearest one can win. */
+function documentationDepth(record: Extract<ObservationRecord, { kind: "documentation" }>): number {
+  let shallowest = Number.POSITIVE_INFINITY;
+  for (const item of record.provenance ?? []) {
+    const resource = (item as { readonly resource?: unknown }).resource;
+    if (typeof resource !== "string") continue;
+    shallowest = Math.min(shallowest, resource.split("/").length);
+  }
+  return shallowest;
+}
+
+/**
+ * Repeats what the source says about a component, when it says anything.
+ *
+ * Documentation that sits at the component's own level describes the component;
+ * documentation buried deeper inside it describes one of its parts. So the
+ * shallowest record wins, and ties break on key so one snapshot always yields
+ * one sentence. A project that documents nothing simply has no summary: the
+ * blueprint never writes a description on the source's behalf.
+ */
+function observedSummary(
+  snapshot: CompletedObservationSnapshot,
+  componentKey: string,
+  name?: string,
+): string | undefined {
+  const documents = snapshot.records
+    .filter(
+      (record): record is Extract<ObservationRecord, { kind: "documentation" }> =>
+        record.kind === "documentation" &&
+        record.subject !== undefined &&
+        qualified(record.subject.scope, record.subject.key) === componentKey,
+    )
+    .sort(
+      (left, right) =>
+        documentationDepth(left) - documentationDepth(right) || compareText(left.key, right.key),
+    );
+  for (const document of documents) {
+    const summary = observedSummaryFromDocumentation(document.content, document.format, name);
+    if (summary !== undefined) return summary;
+  }
+  return undefined;
+}
+
 function componentProjection(
   record: Extract<ObservationRecord, { kind: "component-candidate" }>,
   snapshot: CompletedObservationSnapshot,
@@ -649,8 +693,12 @@ function componentProjection(
   const inputs = automaticItems(snapshot, "input", key, previous?.inputs);
   const outputs = automaticItems(snapshot, "output", key, previous?.outputs);
   const actions = automaticItems(snapshot, "action", key, previous?.actions);
+  // A summary the scanner stated itself is already the candidate's own claim;
+  // the derived one only fills the gap where the candidate offered none.
+  const summary = record.candidate.summary ?? observedSummary(snapshot, key, record.candidate.name);
   return Object.freeze({
     ...record.candidate,
+    ...(summary === undefined ? {} : { summary }),
     ...(inputs === undefined ? {} : { inputs }),
     ...(outputs === undefined ? {} : { outputs }),
     ...(actions === undefined ? {} : { actions }),

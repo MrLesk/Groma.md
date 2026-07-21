@@ -46,6 +46,14 @@ const maxPackageEntryLiterals = 256;
 const maxNuxtActionsPerBoundary = 64;
 
 const sourceExtensionPattern = /\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/;
+
+/**
+ * A readme is prose, so only prose extensions qualify. Matching any extension
+ * would swallow source files that merely share the name — a `readme.ts` that
+ * generates a readme is code, and reading it as documentation would put program
+ * text where a description belongs.
+ */
+const readmePattern = /^README(?:\.(?:md|markdown|mdown|mkd|rst|txt|adoc|asciidoc))?$/i;
 const testFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:test|spec)\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/i;
 const generatedFilePattern = /(?:^|\/)(?:[^/]+\.)?(?:generated|gen)\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/i;
 const portableResourcePattern =
@@ -1474,11 +1482,11 @@ async function inventoryScope(
         }
         const selectable =
           basename(entry.resource) === "package.json" ||
-          /^README(?:\.[^/]*)?$/i.test(basename(entry.resource)) ||
+          readmePattern.test(basename(entry.resource)) ||
           sourceExtensionPattern.test(entry.resource);
         const projectMetadata =
           basename(entry.resource) === "package.json" ||
-          /^README(?:\.[^/]*)?$/i.test(basename(entry.resource));
+          readmePattern.test(basename(entry.resource));
         if (!selectable || (!projectMetadata && !included(relative, config.include))) continue;
         if (sourceExtensionPattern.test(entry.resource)) {
           const explicit = tsFilesPresent && tsFiles.includes(relative);
@@ -3616,15 +3624,27 @@ async function scanScope(
       );
     }
   }
-  for (const resource of inventory.files.filter((item) =>
-    /^README(?:\.[^/]*)?$/i.test(basename(item)),
-  )) {
+  for (const resource of inventory.files.filter((item) => readmePattern.test(basename(item)))) {
     chargeExtractionWork(budget);
     const file = await getFile(resource);
     if (file === undefined) continue;
     if (!validObservationText(file.text, maxDocumentationCharacters)) {
       partial = true;
       continue;
+    }
+    // Documentation describes the smallest thing that contains it. A README beside
+    // a source boundary is about that boundary, not about the package the boundary
+    // happens to live in, so the nearest enclosing boundary wins over the package.
+    let boundaryOwner: BoundaryEvidence | undefined;
+    for (const candidate of boundaries) {
+      chargeExtractionWork(budget);
+      if (!resource.startsWith(`${candidate.resource}/`)) continue;
+      if (
+        boundaryOwner === undefined ||
+        candidate.resource.length > boundaryOwner.resource.length
+      ) {
+        boundaryOwner = candidate;
+      }
     }
     let owner: PackageEvidence | undefined;
     for (const candidate of packages) {
@@ -3633,12 +3653,14 @@ async function scanScope(
       if (owner === undefined || candidate.root.length > owner.root.length) owner = candidate;
     }
     const subject =
-      owner === undefined
-        ? undefined
-        : reference(
-            scope,
-            observationKey("component-candidate", scope, "package", owner.root, owner.name),
-          );
+      boundaryOwner !== undefined
+        ? reference(scope, boundaryOwner.key)
+        : owner === undefined
+          ? undefined
+          : reference(
+              scope,
+              observationKey("component-candidate", scope, "package", owner.root, owner.name),
+            );
     append(
       documentationRecord(
         scope,

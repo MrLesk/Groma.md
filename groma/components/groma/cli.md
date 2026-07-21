@@ -2,6 +2,7 @@
 schema: groma/component/v0.2
 id: ent_83702a52aa46b605c22cc1be63bf939a
 name: cli
+summary: The CLI is a bounded adapter over shared application operations. It parses commands, reads explicit JSON input, and renders human or JSON envelopes.
 scale: domain
 parent: ent_a754d5c9106660a7c4f25673e53bc015
 ---

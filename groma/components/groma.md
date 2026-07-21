@@ -2,6 +2,7 @@
 schema: groma/component/v0.2
 id: ent_a754d5c9106660a7c4f25673e53bc015
 name: groma
+summary: "Groma keeps a living map of your system's architecture inside your repo: meaning in plain Markdown files you can read and review, and scanner evidence in deterministic JSON."
 type: package
 scale: system
 ---

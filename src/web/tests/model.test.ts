@@ -131,12 +131,121 @@ describe("interactive map view-model", () => {
     const edge = graph.edges[0];
     expect(edge?.id).toBe("depends:ent_owned:ent_lib");
     expect(edge?.className).toContain("groma-edge--external");
+    // Direction is kept on both endpoints: the component that reaches out and the
+    // one reached for are opposite kinds of thing, and one total would hide that.
+    // Borrowed code is counted apart from the system's own parts, so a card's
+    // "uses" can always be reconciled against the siblings drawn beside it.
     const owned = graph.nodes.find((node) => node.id === "ent_owned");
-    expect(owned?.data).toMatchObject({ dependencyCount: 1, external: false, shared: false });
+    expect(owned?.data).toMatchObject({
+      borrows: 1,
+      dependents: 0,
+      dependsOn: 0,
+      external: false,
+      shared: false,
+    });
     expect(graph.nodes.find((node) => node.id === "ent_lib")?.data).toMatchObject({
+      dependents: 1,
+      dependsOn: 0,
       external: true,
       shared: true,
     });
+  });
+
+  test("counts only what the sheet actually draws, so every figure can be checked by eye", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        // An endpoint at a finer rung than the reader asked to see, and one that
+        // was never loaded at all. Counting either would print a figure with no
+        // arrow beside it.
+        { source: "ent_a", target: "ent_unloaded_element", type: "imports" },
+        { source: "ent_unloaded_element", target: "ent_b", type: "imports" },
+        // The container is drawn as a plate, not a card, so it is not an endpoint.
+        { source: "ent_a", target: "ent_system", type: "imports" },
+        // Repeated observations of one pair are one dependency.
+        { source: "ent_a", target: "ent_b", type: "imports" },
+      ],
+      folded: new Set<string>(),
+      model,
+      visibleScale: undefined,
+    });
+    expect(graph.edges).toHaveLength(1);
+    const a = graph.nodes.find((node) => node.id === "ent_a");
+    const b = graph.nodes.find((node) => node.id === "ent_b");
+    expect(a?.data).toMatchObject({ borrows: 0, dependents: 0, dependsOn: 1 });
+    expect(b?.data).toMatchObject({ borrows: 0, dependents: 1, dependsOn: 0 });
+    // The sheet's checkable promise: outgoing counts total exactly the lines drawn.
+    const drawnFrom = graph.nodes
+      .filter((node) => node.type === "component")
+      .reduce((total, node) => total + (node.data as { dependsOn?: number }).dependsOn!, 0);
+    expect(drawnFrom).toBe(graph.edges.length);
+  });
+
+  test("reports only the vocabulary the sheet actually draws", () => {
+    const model = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_owned", { name: "Core", scale: "domain", shared: true }),
+        view("ent_plain", { name: "Cli", scale: "domain" }),
+        view("ent_lib", { name: "yaml", type: "external" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
+      folded: new Set<string>(),
+      model,
+      visibleScale: undefined,
+    });
+    // shared is present, external and borrowed are present; entry and quoted are not,
+    // so the key must not offer to define words the reader cannot see.
+    expect(graph.terms).toContain("shared");
+    expect(graph.terms).toContain("external");
+    expect(graph.terms).toContain("borrowed");
+    expect(graph.terms).not.toContain("entry");
+    expect(graph.terms).not.toContain("quoted");
+  });
+
+  test("names the reading order only where the contents form one", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+      ]),
+    );
+    const plate = (dependencies: readonly { source: string; target: string; type: string }[]) =>
+      buildBlueprintFlowGraph({
+        dependencies,
+        folded: new Set<string>(),
+        model,
+        visibleScale: undefined,
+      }).nodes.find((node) => node.id === "group:ent_system");
+
+    // A dependency order exists, so the sheet may name the direction it drew.
+    expect(plate([{ source: "ent_a", target: "ent_b", type: "imports" }])?.data.axis).toBe(
+      "uses →",
+    );
+    // A cycle has no first member. The layout must still place the cards, but
+    // the caption would assert an order that only exists because a line was cut.
+    expect(
+      plate([
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        { source: "ent_b", target: "ent_a", type: "imports" },
+      ])?.data.axis,
+    ).toBeUndefined();
+    // Nothing depends on anything: there is no order to describe.
+    expect(plate([])?.data.axis).toBeUndefined();
   });
 
   test("the visible scale bounds how deep the sheet draws without unloading the model", () => {
