@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "groma": "dist/groma"
+  },
   "exports": {
     "./plugin-sdk": "./src/plugin-sdk/index.ts"
   },
