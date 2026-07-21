@@ -907,6 +907,7 @@ export function createReconciliationOperations(
       }
       for (const binding of priorSource?.componentBindings ?? []) {
         const identity = qualified(binding.scope, binding.key);
+        const notObserved = !currentComponentIdentities.has(identity);
         const resolved = options.graph.resolveEntityIdentity(
           decoded.value.graph,
           binding.componentId,
@@ -915,7 +916,7 @@ export function createReconciliationOperations(
           // Canonical intent is already absent. A successful snapshot with no
           // matching record can retire only this dangling scanner binding; a
           // present record still needs an exact target and fails below.
-          if (!currentComponentIdentities.has(identity)) {
+          if (notObserved) {
             priorComponents.set(identity, Object.freeze({ ...binding, present: false }));
             continue;
           }
@@ -1224,23 +1225,26 @@ export function createReconciliationOperations(
           !resolvedComponentIds.has(source.value.resolved) ||
           !resolvedComponentIds.has(target.value.resolved)
         ) {
-          // As with components, only an already-missing canonical relation
-          // omitted by this successful snapshot may become an absent binding.
-          if (!notObserved || !missingRelationship) {
-            return failure(
-              diagnostic(
-                "reconciliation-binding-missing",
-                "A relationship binding endpoint is missing or ambiguous",
-              ),
+          // Both the relation and at least one endpoint are already absent. A
+          // successful snapshot that omits the record can retire the dangling
+          // binding without choosing a replacement identity.
+          if (notObserved && missingRelationship) {
+            priorRelationships.set(
+              identity,
+              Object.freeze({ ...binding, present: false, removed: true }),
             );
+            resolvedRelationshipProjections.set(identity, binding.projection);
+            continue;
           }
-          priorRelationships.set(
-            identity,
-            Object.freeze({ ...binding, present: false, removed: true }),
+          return failure(
+            diagnostic(
+              "reconciliation-binding-missing",
+              "A relationship binding endpoint is missing or ambiguous",
+            ),
           );
-          resolvedRelationshipProjections.set(identity, binding.projection);
-          continue;
         }
+        // The endpoints can remain live after an explicit relation removal.
+        // Retire only that missing relation when this snapshot also omits it.
         priorRelationships.set(
           identity,
           missingRelationship && notObserved

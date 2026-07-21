@@ -522,6 +522,135 @@ describe("local completed-snapshot reconciliation", () => {
     expect(await readFile(evidencePath, "utf8")).toBe(completedEvidence);
   });
 
+  test("retires omitted incident bindings after their component is explicitly removed", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const originalRecords = [
+      candidate("program", "Program"),
+      candidate("retired", "Retired renderer"),
+      candidate("dependency", "Dependency"),
+      relationship("program-retired", "program", "retired"),
+      relationship("retired-dependency", "retired", "dependency"),
+    ];
+    expect(await host.reconciliation.reconcile(snapshot("epoch-1", originalRecords))).toMatchObject(
+      { ok: true, value: { status: "committed" } },
+    );
+    const components = await host.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    const program = components.value.items.find((item) => item.component.name === "Program")!;
+    const retired = components.value.items.find(
+      (item) => item.component.name === "Retired renderer",
+    )!;
+    const programDetail = await host.operations.getComponent({
+      id: program.component.id,
+      relationships: { limit: 10 },
+    });
+    const retiredDetail = await host.operations.getComponent({
+      id: retired.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(programDetail.ok).toBeTrue();
+    expect(retiredDetail.ok).toBeTrue();
+    if (!programDetail.ok || !retiredDetail.ok) return;
+    const incomingId = programDetail.value.relationships.items[0]!.relationship.id;
+    const outgoingId = retiredDetail.value.relationships.items[0]!.relationship.id;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: programDetail.value.item.revision,
+        id: program.component.id,
+        patch: {},
+        relationships: { remove: [incomingId] },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: retiredDetail.value.item.revision,
+        id: retired.component.id,
+        patch: {},
+        relationships: { remove: [outgoingId] },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const removable = await host.operations.getComponent({
+      id: retired.component.id,
+      relationships: { limit: 1 },
+    });
+    expect(removable.ok).toBeTrue();
+    if (!removable.ok) return;
+    expect(
+      await host.operations.removeComponent({
+        expectedRevision: removable.value.item.revision,
+        id: retired.component.id,
+      }),
+    ).toMatchObject({ status: "committed" });
+
+    const remainingRecords = [
+      candidate("program", "Program"),
+      candidate("dependency", "Dependency"),
+    ];
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-2", remainingRecords, undefined, "partial"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
+    const retiredEvidence = await readFile(evidencePath, "utf8");
+    const evidence = JSON.parse(retiredEvidence) as {
+      source: {
+        componentBindings: Array<{ componentId: string; key: string; present: boolean }>;
+        relationshipBindings: Array<{
+          key: string;
+          present: boolean;
+          projection: unknown;
+          relationId: string;
+          removed: boolean;
+          scope: string;
+        }>;
+      };
+    };
+    expect(
+      evidence.source.componentBindings.find((binding) => binding.key === "retired"),
+    ).toMatchObject({ componentId: retired.component.id, present: false });
+    expect(
+      evidence.source.relationshipBindings.filter((binding) =>
+        ["program-retired", "retired-dependency"].includes(binding.key),
+      ),
+    ).toEqual([
+      {
+        key: "program-retired",
+        present: false,
+        projection: expect.anything(),
+        relationId: incomingId,
+        removed: true,
+        scope: "workspace",
+      },
+      {
+        key: "retired-dependency",
+        present: false,
+        projection: expect.anything(),
+        relationId: outgoingId,
+        removed: true,
+        scope: "workspace",
+      },
+    ]);
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-3", remainingRecords, undefined, "partial"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+    expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("epoch-4", originalRecords, undefined, "partial"),
+      ),
+    ).toMatchObject({
+      diagnostics: [{ code: "reconciliation-binding-missing" }],
+      ok: false,
+    });
+    expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
+  });
+
   test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
