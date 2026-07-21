@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-21 18:39'
-updated_date: '2026-07-21 18:47'
+updated_date: '2026-07-21 18:48'
 labels: []
 dependencies: []
 priority: high
@@ -36,5 +36,5 @@ Restore Groma's checked-in self-blueprint so the public init -> scan -> groma lo
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Context-hunter L2 trace: pre-repair canonical state had 93 components and 278 relationships. Exactly one retained component binding pointed to the intentionally removed blueprint-html.ts identity ent_285e78427fbf837690b7f6133ad2701c, and exactly two present relationship bindings pointed to its deleted incident relationships. GROM-79 had removed all three canonical targets through public mutations, but reconciliation checked target existence before noticing the current successful snapshot omitted those records. The built-in self scanner truthfully reports partial coverage, so the supported repair is narrower than general partial-absence retirement: only a binding whose canonical target is already missing and whose current successful snapshot has no matching record becomes absent; ordinary missing observations keep live canonical targets, and any present record targeting the missing identity remains fail-closed. The public self-scan now completes with 599 records, marks the retired component binding absent and both deleted relationships absent/removed, refreshes current source evidence at generation 16, repeats at byte-identical canonical digest edf7d4180920a53d9e0a041c832a9a07101b755be300cf0e55f384a0f3e5ba52, and exports a bounded 94-component, 887,912-byte local blueprint.
+Context-hunter L2 trace: pre-repair canonical state had 93 components and 278 relationships. Exactly one retained component binding pointed to the intentionally removed blueprint-html.ts identity ent_285e78427fbf837690b7f6133ad2701c, and exactly two present relationship bindings pointed to its deleted incident relationships. GROM-79 had removed all three canonical targets through public mutations, but reconciliation checked target existence before noticing the current successful snapshot omitted those records. The built-in self scanner truthfully reports partial coverage, so the supported repair is narrower than general partial-absence retirement: only a binding whose canonical target is already missing and whose current successful snapshot has no matching record becomes absent; ordinary missing observations keep live canonical targets, and any present record targeting the missing identity remains fail-closed. Rebased onto GROM-97, the public self-scan completes with 598 records, marks the retired component binding absent and both deleted relationships absent/removed, refreshes current source evidence, and repeats at byte-identical canonical digest 0ee9b0b037d79803959e6154518834ac3e6926c05746f1ae14561e7ea4f28d4d. The existing export writes a bounded 94-component local blueprint. Full bun run check passes formatting, types, boundaries, 503 tests / 3,156 assertions, native build/smoke, and the compiled Iteration 1A workflow.
 <!-- SECTION:NOTES:END -->
