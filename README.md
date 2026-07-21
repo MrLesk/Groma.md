@@ -92,11 +92,14 @@ These are the promises that keep the map trustworthy after the first scan:
 bun ci                # install dependencies
 bun run build         # compile the single-file executable to dist/groma
 ./dist/groma          # open the bounded local visual blueprint
-bun run install:local # put the compiled groma command on your PATH
+bun link              # one-time: link the groma command to this checkout
 ```
 
-After `bun run install:local`, `groma`, `groma scan`, `groma web`, and `groma export` work from any
-directory, exactly like the compiled binary in `dist/`.
+After `bun link`, each `bun run build` immediately updates `groma`, `groma scan`, `groma web`, and
+`groma export` from any directory because the command resolves to this checkout's `dist/groma`.
+Use `bun run install:local` instead when you want a standalone copied executable; rerun that command
+after later builds. When switching an existing checkout from `install:local` to `bun link`, retire
+the older copied command if `which -a groma` shows it before Bun's linked command.
 
 To create the unpublished four-target preview package, run `bun run package`. It writes
 target-specific executables and a sorted `dist/SHA256SUMS` manifest, exercises the matching
