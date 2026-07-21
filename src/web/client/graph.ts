@@ -97,11 +97,10 @@ const GROUP_GAP = 88;
 const SHEET_ROW_WIDTH = 1_640;
 
 /**
- * Borrowed code is inventory, not architecture: it is listed densely, in more
- * columns and smaller cells than anything built here, so it can be consulted
- * without competing with the system for the reader's first look.
+ * Borrowed code is drawn smaller than anything built here and placed in a lane
+ * beside the parts that use it, wired to them, so a reader sees what each
+ * dependency is for without it competing with the system for first attention.
  */
-const EXTERNAL_COLUMNS = 5;
 const EXTERNAL_CELL = Object.freeze({ height: 44, width: 236 });
 
 export const SCALE_ORDER: readonly ApiComponentScale[] = Object.freeze([
@@ -148,7 +147,10 @@ function layoutSubgraph(
   sizeOf: (id: string) => { height: number; width: number },
 ): LaidOutSubgraph {
   const layout = new dagre.graphlib.Graph();
-  layout.setGraph({ marginx: 0, marginy: 0, nodesep: 40, rankdir: "LR", ranksep: 96 });
+  // Generous rank and node separation leaves channels between the cards for the
+  // dependency lines to run in, so a route reaches its target through a gap
+  // instead of being hidden behind an intervening card.
+  layout.setGraph({ marginx: 0, marginy: 0, nodesep: 56, rankdir: "LR", ranksep: 116 });
   layout.setDefaultEdgeLabel(() => ({}));
   for (const id of ids) layout.setNode(id, { ...sizeOf(id) });
   for (const edge of edges) {
@@ -231,6 +233,9 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
   const notations = new Set<BlueprintNotation>();
   const terms = new Set<BlueprintTerm>();
+  // Absolute box of every emitted card, so a borrowed dependency can be placed
+  // beside the parts that actually use it rather than in a distant tray.
+  const boxOf = new Map<string, { height: number; width: number; x: number; y: number }>();
 
   /**
    * A component that holds visible contents is drawn as the plate around them
@@ -362,7 +367,12 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     return size;
   }
 
-  const emitComponent = (id: string, position: { x: number; y: number }, parentId?: string) => {
+  const emitComponent = (
+    id: string,
+    position: { x: number; y: number },
+    parentId?: string,
+    parentOrigin: { x: number; y: number } = { x: 0, y: 0 },
+  ) => {
     const component = componentOf(id)!;
     const node = model.nodes.get(id)!;
     const nested = childrenOf(id);
@@ -378,6 +388,8 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
             ? "collapsed"
             : "expanded";
     const size = nested.length === 0 ? cardSize(id) : groupSize(id);
+    const origin = { x: parentOrigin.x + position.x, y: parentOrigin.y + position.y };
+    boxOf.set(id, { height: size.height, width: size.width, x: origin.x, y: origin.y });
 
     if (nested.length > 0) {
       if ((component.summary ?? "").length > 0) terms.add("quoted");
@@ -415,6 +427,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
           childId,
           { x: childPosition.x + GROUP_PAD, y: childPosition.y + GROUP_PAD + head },
           `group:${id}`,
+          origin,
         );
       }
       return;
@@ -485,45 +498,44 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   }
   void ownedLayout;
 
-  // Dependencies live in their own band: they are what the system rests on,
-  // never peers of the parts that were actually built here.
+  void sheetBottom;
+
+  // Borrowed code is placed beside the parts that use it and wired to them, so a
+  // reader sees what each dependency is for rather than a detached inventory.
+  // Each external sits in a lane to the right of the system, aligned with the
+  // average height of its consumers so its connecting lines stay short, and the
+  // lanes are pushed apart just enough that no two overlap.
   if (externals.length > 0) {
-    const bandTop = sheetBottom + GROUP_GAP * 1.5;
-    const cell = EXTERNAL_CELL;
-    const columns = Math.min(EXTERNAL_COLUMNS, externals.length);
-    const rows = Math.ceil(externals.length / columns);
-    const bandWidth = columns * (cell.width + 14) + GROUP_PAD * 2 - 14;
-    const bandHeight = rows * (cell.height + 12) + GROUP_PAD * 2 + GROUP_TITLE - 12;
-    nodes.push(
-      Object.freeze({
-        data: Object.freeze({
-          kind: "band" as const,
-          label: `Depends on ${externals.length} external${externals.length === 1 ? "" : "s"}`,
-          notation: "unscaled" as const,
-        }),
-        draggable: false,
-        height: bandHeight,
-        id: "band:external",
-        position: Object.freeze({ x: 0, y: Math.round(bandTop) }),
-        selectable: false,
-        style: Object.freeze({ height: bandHeight, width: bandWidth }),
-        type: "group" as const,
-        width: bandWidth,
-        zIndex: 0,
-      }),
-    );
-    externals.forEach((id, index) => {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      emitComponent(
-        id,
-        {
-          x: GROUP_PAD + column * (cell.width + 14),
-          y: GROUP_PAD + GROUP_TITLE + row * (cell.height + 12),
-        },
-        "band:external",
-      );
+    const consumersOf = new Map<string, string[]>();
+    for (const dependency of drawnDependencies) {
+      if (!isExternal(dependency.target)) continue;
+      consumersOf.set(dependency.target, [
+        ...(consumersOf.get(dependency.target) ?? []),
+        dependency.source,
+      ]);
+    }
+    const consumerBoxes = [...boxOf.values()].filter((box, index) => {
+      void index;
+      return box.width > 0;
     });
+    const sheetRight = Math.max(...consumerBoxes.map((box) => box.x + box.width), 0);
+    const cell = EXTERNAL_CELL;
+    const laneX = sheetRight + GROUP_GAP * 1.4;
+    const preferredY = (id: string): number => {
+      const centres = (consumersOf.get(id) ?? [])
+        .map((consumer) => boxOf.get(consumer))
+        .filter((box): box is NonNullable<typeof box> => box !== undefined)
+        .map((box) => box.y + box.height / 2);
+      if (centres.length === 0) return 0;
+      return centres.reduce((sum, y) => sum + y, 0) / centres.length - cell.height / 2;
+    };
+    const ordered = [...externals].sort((left, right) => preferredY(left) - preferredY(right));
+    let cursorY = Number.NEGATIVE_INFINITY;
+    for (const id of ordered) {
+      const y = Math.max(preferredY(id), cursorY + cell.height + 16);
+      cursorY = y;
+      emitComponent(id, { x: laneX, y: Math.round(y) });
+    }
   }
 
   // The same set the counts were taken from, so a card's figures and the lines
@@ -540,18 +552,19 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         // The scanner observed a direction; drawing the line without it discards
         // the only thing that distinguishes "uses" from "is used by".
         markerEnd: Object.freeze({
-          color: toExternal ? "#9aa39b" : "#5c665e",
-          height: 14,
+          color: toExternal ? "#aab2ab" : "#5c665e",
+          height: toExternal ? 11 : 14,
           type: MarkerType.ArrowClosed,
-          width: 14,
+          width: toExternal ? 11 : 14,
         }),
         source: dependency.source,
         target: dependency.target,
-        // Curved rather than orthogonal: right-angled routes bundle into parallel
-        // tracks that hug a busy component until they read as a second rectangle
-        // drawn around it. A curve separates from its neighbours and can be
-        // followed by eye from one end to the other.
-        type: "default" as const,
+        // A line to borrowed code runs orthogonally out to the dependency lane on
+        // the right, so it travels in the margin rather than curving back across
+        // the system; a line between the system's own parts curves, which reads
+        // and separates from its neighbours better where the graph is dense.
+        type: toExternal ? ("smoothstep" as const) : ("default" as const),
+        ...(toExternal ? { pathOptions: Object.freeze({ borderRadius: 8 }) } : {}),
         // Above the container plates so a line is never lost inside one, but
         // below the cards: a route that crosses a card's face reads as a box
         // drawn around it, which is how these lines became unfollowable.

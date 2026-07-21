@@ -8,7 +8,14 @@ import {
   ReactFlow,
   type NodeProps,
 } from "@xyflow/react";
-import { createContext, useContext, useMemo, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import type { BlueprintModel } from "./model.ts";
 import type { ApiComponentScale } from "./api.ts";
@@ -69,7 +76,11 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   // never looked at.
   if (data.external) {
     return (
-      <article className="groma-node groma-node--borrowed" data-scale={data.notation}>
+      <article
+        className={`groma-node groma-node--borrowed${selected ? " is-selected" : ""}`}
+        data-scale={data.notation}
+        onClick={() => actions.onSelect(id)}
+      >
         <Handle type="target" position={Position.Left} className="groma-handle" />
         <button
           type="button"
@@ -92,6 +103,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
     <article
       className={`groma-node groma-node--${data.notation}${selected ? " is-selected" : ""}`}
       data-scale={data.notation}
+      onClick={() => actions.onSelect(id)}
     >
       <Handle type="target" position={Position.Left} className="groma-handle" />
       <div className="groma-node__rule" aria-hidden="true" />
@@ -123,7 +135,19 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
-        {data.childState === "empty" ? null : (
+        {data.childState === "empty" ? (
+          <button
+            type="button"
+            aria-label={`Show the detail of ${data.label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onSelect(id);
+            }}
+            onKeyDown={(event) => activateNodeControl(event, () => actions.onSelect(id))}
+          >
+            Detail →
+          </button>
+        ) : (
           <button
             type="button"
             aria-expanded={hasLoadedChildren ? data.childState === "expanded" : undefined}
@@ -132,7 +156,10 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
                 ? `Show ${nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} inside ${data.label}`
                 : `${data.childState === "collapsed" ? "Unfold" : "Fold"} ${data.label}`
             }
-            onClick={toggleChildren}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleChildren();
+            }}
             onKeyDown={(event) => activateNodeControl(event, toggleChildren)}
           >
             {data.childState === "unread"
@@ -145,7 +172,10 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.hasMoreChildren && data.childState === "expanded" ? (
           <button
             type="button"
-            onClick={() => actions.onLoadMoreChildren(id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onLoadMoreChildren(id);
+            }}
             onKeyDown={(event) => activateNodeControl(event, () => actions.onLoadMoreChildren(id))}
           >
             More · bounded page
@@ -249,6 +279,12 @@ export function Canvas({
     [onExpand, onLoadMoreChildren, onLoadMoreRoots, onSelect, onToggleFold],
   );
 
+  // The notation key is reference, not the subject, so on a small screen where
+  // it would fill the viewport it starts folded and the blueprint keeps the room.
+  const [notationOpen, setNotationOpen] = useState(
+    () => !(typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches),
+  );
+
   return (
     <CanvasActionsContext.Provider value={actions}>
       <div className="groma-flow" data-renderer="react-flow-dagre">
@@ -311,7 +347,11 @@ export function Canvas({
               </div>
             </div>
             {graph.notations.length > 0 ? (
-              <details className="groma-title-block__key" open>
+              <details
+                className="groma-title-block__key"
+                open={notationOpen}
+                onToggle={(event) => setNotationOpen(event.currentTarget.open)}
+              >
                 <summary>Notation</summary>
                 <ol aria-label="Component scale notation">
                   {graph.notations.map((notation) => (

@@ -291,6 +291,7 @@ input {
   overflow: hidden;
   background: rgba(251, 250, 246, 0.98);
   box-shadow: 0 7px 18px rgba(32, 36, 34, 0.07);
+  cursor: pointer;
 }
 
 .groma-node--system {
@@ -741,11 +742,31 @@ input {
 
 @media (max-width: 800px) {
   .groma-title-block {
-    width: calc(100vw - 32px);
+    width: calc(100vw - 30px);
     min-width: 0;
   }
 
   .groma-title-block ol {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/*
+ * On a narrow screen the reference apparatus collapses to a single readable
+ * column and the whole panel folds away behind its heading, so the blueprint
+ * itself keeps the small viewport.
+ */
+@media (max-width: 560px) {
+  .groma-title-block ol,
+  .groma-title-block__glossary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .groma-title-block li {
+    border-right: 0;
+  }
+
+  .groma-scale-selector > div {
+    flex-wrap: wrap;
   }
 }
