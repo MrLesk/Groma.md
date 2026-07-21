@@ -1,10 +1,10 @@
 ---
 id: GROM-91
 title: 'Map and explore the full code topography: drill from system to symbol'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 07:25'
-updated_date: '2026-07-21 10:03'
+updated_date: '2026-07-21 17:28'
 labels:
   - pivot
   - scanner

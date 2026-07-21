@@ -1,10 +1,10 @@
 ---
 id: GROM-92
 title: Measure per-file cognitive complexity in the TypeScript scanner
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-21 17:20'
-updated_date: '2026-07-21 17:21'
+updated_date: '2026-07-21 17:28'
 labels: []
 dependencies: []
 ordinal: 88000
