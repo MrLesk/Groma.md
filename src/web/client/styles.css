@@ -138,11 +138,36 @@ textarea {
   box-shadow: none;
 }
 
+.groma-group__collapse {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-ink);
+  border-radius: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-family: var(--font-plan);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.groma-group__collapse:hover {
+  border-color: var(--color-survey);
+}
+
 .groma-group__heading {
   display: flex;
   align-items: baseline;
   gap: 14px;
   margin: 18px 24px 0;
+  padding-right: 32px;
 }
 
 .groma-group__title {
@@ -417,54 +442,6 @@ textarea {
 
 .groma-flow .groma-handle[data-nodeid] {
   pointer-events: none;
-}
-
-.groma-breadcrumb {
-  margin-top: 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 0;
-  background: rgba(251, 250, 246, 0.96);
-}
-
-.groma-breadcrumb__trail {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  color: var(--color-ink-muted);
-  font-family: var(--font-plan);
-  font-size: 11px;
-}
-
-.groma-breadcrumb__step {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.groma-breadcrumb button {
-  border: 0;
-  background: transparent;
-  color: var(--color-ink);
-  cursor: pointer;
-  font: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--color-survey);
-  text-underline-offset: 3px;
-}
-
-.groma-breadcrumb strong {
-  color: var(--color-ink);
-  font-weight: 650;
-}
-
-.groma-breadcrumb .groma-breadcrumb__collapse {
-  margin-left: 8px;
-  padding-left: 10px;
-  border-left: 1px solid var(--color-line);
-  color: var(--color-survey);
-  font-weight: 650;
-  text-decoration: none;
 }
 
 .groma-title-block {

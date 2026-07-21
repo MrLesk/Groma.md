@@ -24,12 +24,14 @@ import type { BlueprintModel } from "./model.ts";
 import {
   buildBlueprintFlowGraph,
   nextScaleLabel,
+  projectionBranchIds,
   type BlueprintFlowNode,
   type BlueprintGroupNode,
 } from "./graph.ts";
 
 interface CanvasActions {
-  readonly onFocus: (id: string, label: string) => void;
+  readonly onCollapse: (id: string) => void;
+  readonly onExpand: (id: string) => void;
   readonly onSelect: (id: string | undefined) => void;
 }
 
@@ -142,9 +144,9 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
             className="groma-node__open"
             onClick={(event) => {
               event.stopPropagation();
-              actions.onFocus(id, data.label);
+              actions.onExpand(id);
             }}
-            onKeyDown={(event) => activate(event, () => actions.onFocus(id, data.label))}
+            onKeyDown={(event) => activate(event, () => actions.onExpand(id))}
           >
             {data.projection === "observed-group" ? (
               <>
@@ -176,9 +178,25 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   );
 }
 
-function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
+function GroupNode({ data, id }: NodeProps<BlueprintGroupNode>) {
+  const actions = useContext(CanvasActionsContext);
+  if (actions === undefined) throw new Error("Blueprint canvas actions are unavailable");
   return (
     <section className={`groma-group groma-group--${data.notation}`}>
+      {data.collapsible ? (
+        <button
+          type="button"
+          className="nodrag nopan groma-group__collapse"
+          aria-label={`Collapse ${data.label}`}
+          title={`Collapse ${data.label}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onCollapse(id);
+          }}
+        >
+          −
+        </button>
+      ) : null}
       <div className="groma-group__heading">
         <span className="groma-group__title">{data.label}</span>
         <span className="groma-group__contains">{data.contains}</span>
@@ -192,26 +210,26 @@ function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
 
 const NODE_TYPES = Object.freeze({ component: ComponentNode, group: GroupNode });
 
-export interface CanvasProps extends CanvasActions {
+export interface CanvasProps extends Omit<CanvasActions, "onCollapse"> {
   readonly childCounts: ReadonlyMap<string, number>;
   readonly dependencies: readonly { source: string; target: string; type: string }[];
-  readonly focusPath: readonly { id: string; label: string }[];
+  readonly expandedIds: readonly string[];
   readonly model: BlueprintModel;
-  readonly onFocusTo: (depth: number) => void;
+  readonly onCollapse: (ids: ReadonlySet<string>) => void;
   readonly selectedId?: string | undefined;
 }
 
 export function Canvas({
   childCounts,
   dependencies,
-  focusPath,
+  expandedIds,
   model,
-  onFocus,
-  onFocusTo,
+  onCollapse,
+  onExpand,
   onSelect,
   selectedId,
 }: CanvasProps) {
-  const focusId = focusPath.at(-1)?.id;
+  const activeExpandedId = expandedIds.at(-1);
   const flow = useRef<ReactFlowInstance<BlueprintFlowNode | BlueprintGroupNode> | null>(null);
   const canvas = useRef<HTMLDivElement | null>(null);
   const [flowReady, setFlowReady] = useState(0);
@@ -221,21 +239,25 @@ export function Canvas({
       buildBlueprintFlowGraph({
         childCounts,
         dependencies,
-        focusPath: focusPath.map((entry) => entry.id),
+        expandedIds,
         model,
       }),
-    [childCounts, dependencies, focusPath, model],
+    [childCounts, dependencies, expandedIds, model],
   );
-  const focusTarget = graph.nodes.find((node) => node.id === graph.focusTargetId);
-  const focusContentsLoaded =
-    graph.focusTargetId !== undefined &&
-    (model.nodes.get(graph.focusTargetId) === undefined
-      ? focusTarget?.type === "group"
-      : model.nodes.get(graph.focusTargetId)?.childIds !== undefined);
+  const selectionIsVisible =
+    selectedId !== undefined && graph.nodes.some((node) => node.id === selectedId);
+  const cameraTargetId = selectionIsVisible ? selectedId : graph.focusTargetId;
+  const cameraTarget = graph.nodes.find((node) => node.id === cameraTargetId);
+  const cameraContentsLoaded =
+    cameraTargetId !== undefined &&
+    (selectionIsVisible ||
+      (model.nodes.get(cameraTargetId) === undefined
+        ? cameraTarget?.type === "group"
+        : model.nodes.get(cameraTargetId)?.childIds !== undefined));
   const cameraNodeIds = useMemo(() => {
-    if (graph.focusTargetId === undefined) return [];
-    return [graph.focusTargetId];
-  }, [graph.focusTargetId]);
+    if (cameraTargetId === undefined) return [];
+    return [cameraTargetId];
+  }, [cameraTargetId]);
   const cameraBounds = useMemo(() => {
     const byId = new Map(graph.nodes.map((node) => [node.id, node]));
     const positions = new Map<string, { x: number; y: number }>();
@@ -271,9 +293,8 @@ export function Canvas({
   }, [cameraNodeIds, graph.nodes]);
   useEffect(() => {
     if (
-      focusId === undefined ||
-      graph.focusTargetId === undefined ||
-      !focusContentsLoaded ||
+      cameraTargetId === undefined ||
+      !cameraContentsLoaded ||
       flow.current === null ||
       cameraBounds === undefined
     )
@@ -314,18 +335,16 @@ export function Canvas({
     };
   }, [
     flowReady,
-    focusId,
-    focusContentsLoaded,
-    focusTarget?.height,
-    focusTarget?.width,
+    cameraContentsLoaded,
+    cameraTarget?.height,
+    cameraTarget?.width,
     cameraNodeIds,
     cameraBounds,
-    graph.focusTargetId,
+    cameraTargetId,
     reducedMotion,
-    selectedId,
   ]);
   useEffect(() => {
-    if (focusId !== undefined) return;
+    if (cameraTargetId !== undefined) return;
     // React Flow measures newly loaded controlled nodes after React commits
     // them. Fit once those measurements exist, including after the detail rail
     // changes the available canvas width.
@@ -339,7 +358,7 @@ export function Canvas({
       reducedMotion ? 0 : 540,
     );
     return () => window.clearTimeout(timer);
-  }, [flowReady, focusId, graph.nodes, reducedMotion, selectedId]);
+  }, [cameraTargetId, flowReady, graph.nodes, reducedMotion]);
   const relatedIds = useMemo(() => {
     if (selectedId === undefined) return new Set<string>();
     const ids = new Set([selectedId]);
@@ -383,7 +402,14 @@ export function Canvas({
       })),
     [graph.edges, selectedId],
   );
-  const actions = useMemo(() => ({ onFocus, onSelect }), [onFocus, onSelect]);
+  const actions = useMemo(
+    () => ({
+      onCollapse: (id: string) => onCollapse(projectionBranchIds(graph.nodes, id)),
+      onExpand,
+      onSelect,
+    }),
+    [graph.nodes, onCollapse, onExpand, onSelect],
+  );
 
   return (
     <CanvasActionsContext.Provider value={actions}>
@@ -420,37 +446,9 @@ export function Canvas({
             showInteractive={false}
             fitViewOptions={FIT_VIEW}
           />
-          {focusPath.length > 0 ? (
-            <Panel position="top-center" className="groma-breadcrumb" data-canvas-keys="skip">
-              <nav aria-label="Where you are" className="groma-breadcrumb__trail">
-                <button type="button" onClick={() => onFocusTo(0)}>
-                  overview
-                </button>
-                {focusPath.map((crumb, index) => (
-                  <span key={crumb.id} className="groma-breadcrumb__step">
-                    <span aria-hidden="true">/</span>
-                    {index === focusPath.length - 1 ? (
-                      <strong>{crumb.label}</strong>
-                    ) : (
-                      <button type="button" onClick={() => onFocusTo(index + 1)}>
-                        {crumb.label}
-                      </button>
-                    )}
-                  </span>
-                ))}
-                <button
-                  type="button"
-                  className="groma-breadcrumb__collapse"
-                  onClick={() => onFocusTo(focusPath.length - 1)}
-                >
-                  Collapse
-                </button>
-              </nav>
-            </Panel>
-          ) : null}
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
-              <p>{focusId === undefined ? "System overview" : "Exploring component"}</p>
+              <p>{activeExpandedId === undefined ? "System overview" : "Exploring component"}</p>
               <span>scan {model.generation}</span>
               <span>
                 {graph.visibleComponents === graph.levelComponents
