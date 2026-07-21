@@ -43,6 +43,14 @@ export function App() {
   const pending = useRef(new Set<string>());
   const autoExpanded = useRef(new Set<string>());
   const focusId = focusStack.at(-1);
+  // The component the sheet is framed on: the one walked into, or the single
+  // owned system at the top. Its whole content is what the level draws, so it is
+  // the node whose children must be paged to completion — matching how the canvas
+  // chooses the frame, so what is drawn and what is loaded never disagree.
+  const ownedRootIds = model.rootIds.filter(
+    (id) => model.nodes.get(id)?.view.component.type !== "external",
+  );
+  const frameId = focusId ?? (ownedRootIds.length === 1 ? ownedRootIds[0] : undefined);
 
   useEffect(() => {
     let disposed = false;
@@ -124,18 +132,21 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedId, focusStack.length]);
 
-  // The focused component's whole content must be present to draw it, so entering
-  // a component loads every page of its children, not just the first. The effect
-  // re-fires as each page arrives until the parent reports no more, and the
+  // The framed component's whole content must be present to draw it, so the frame
+  // loads every page of its children, not just the first — whether it is a domain
+  // just entered or the system shown on arrival. Without this a system with more
+  // direct parts than one page would silently draw only the first page, and a
+  // level-wide readout would count against a denominator that is not all here. The
+  // effect re-fires as each page arrives until the parent reports no more, and the
   // paging guard keeps it idempotent.
   useEffect(() => {
-    if (focusId === undefined) return;
-    const node = model.nodes.get(focusId);
+    if (frameId === undefined) return;
+    const node = model.nodes.get(frameId);
     if (node === undefined) return;
-    if (node.childIds === undefined) loadChildren(focusId);
-    else if (node.hasMoreChildren) loadChildren(focusId, node.childrenCursor);
+    if (node.childIds === undefined) loadChildren(frameId);
+    else if (node.hasMoreChildren) loadChildren(frameId, node.childrenCursor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusId, model.nodes]);
+  }, [frameId, model.nodes]);
 
   const loadChildren = (parentId: string, cursor?: string) => {
     if (pending.current.has(parentId)) return;
