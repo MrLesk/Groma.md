@@ -202,8 +202,20 @@ export type ApplicationMutationOutcome<T> =
     };
 
 export interface ComponentView {
+  /**
+   * Scanner evidence about how difficult a component's own source is to follow.
+   * It is deliberately separate from canonical component intent and is comparable
+   * only among entries with the same project and scanner identity.
+   */
+  readonly cognitiveComplexity?: readonly ComponentCognitiveComplexityEvidence[];
   readonly component: StandardComponent;
   readonly revision: string;
+}
+
+export interface ComponentCognitiveComplexityEvidence {
+  readonly projectId: string;
+  readonly scanner: ObservationSourceIdentity;
+  readonly value: number;
 }
 
 export interface RelationshipView {
@@ -280,6 +292,7 @@ export interface BlueprintComponentPage {
 
 /** One component and every canonical outgoing depth-1 relationship from that source. */
 export interface BlueprintExportItem {
+  readonly cognitiveComplexity?: readonly ComponentCognitiveComplexityEvidence[];
   readonly component: StandardComponent;
   readonly relationships: readonly StandardRelationship[];
 }

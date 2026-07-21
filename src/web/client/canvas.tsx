@@ -125,6 +125,9 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.dependsOn > 0 ? <li className="groma-chip">uses {data.dependsOn}</li> : null}
         {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
         {data.borrows > 0 ? <li className="groma-chip">{data.borrows} external</li> : null}
+        {data.cognitiveComplexity === undefined ? null : (
+          <li className="groma-chip">cognitive {data.cognitiveComplexity}</li>
+        )}
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
@@ -198,6 +201,10 @@ function LegendItem({ notation }: { notation: BlueprintNotation }) {
 const TERM_GLOSSARY: Readonly<Record<BlueprintTerm, { label: string; gloss: string }>> =
   Object.freeze({
     borrowed: Object.freeze({ label: "N external", gloss: "draws on N packages from outside" }),
+    cognitive: Object.freeze({
+      label: "cognitive N",
+      gloss: "scanner-measured nesting and branching; compare only within that scanner",
+    }),
     entry: Object.freeze({ label: "entry", gloss: "a way in: a command or served route" }),
     external: Object.freeze({ label: "borrowed", gloss: "third-party code, not built here" }),
     quoted: Object.freeze({

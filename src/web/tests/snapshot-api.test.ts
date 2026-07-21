@@ -26,6 +26,13 @@ describe("static snapshot data source", () => {
           ],
         },
         {
+          cognitiveComplexity: [
+            {
+              projectId: "project.local",
+              scanner: { id: "official.typescript", instance: "default", version: "1.0.0" },
+              value: 12,
+            },
+          ],
           component: {
             id: "ent_child",
             kind: "component",
@@ -45,7 +52,7 @@ describe("static snapshot data source", () => {
     });
     expect(await fetchChildren("ent_root", 10)).toMatchObject({
       ok: true,
-      value: { items: [{ component: { id: "ent_child" } }] },
+      value: { items: [{ cognitiveComplexity: [{ value: 12 }], component: { id: "ent_child" } }] },
     });
     expect(await fetchConnections(100)).toMatchObject({
       ok: true,
@@ -59,7 +66,7 @@ describe("static snapshot data source", () => {
       ok: true,
       value: {
         evidence: [],
-        item: { component: { id: "ent_child" } },
+        item: { cognitiveComplexity: [{ value: 12 }], component: { id: "ent_child" } },
         relationships: { items: [{ relationship: { id: "rel_1" } }] },
       },
     });

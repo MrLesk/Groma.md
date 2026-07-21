@@ -764,6 +764,11 @@
           "actions": [
             {
               "description": "Exported function",
+              "id": "observation:workspace:candidate.action.22134be8cdbfddb23a4eea0c5bdeb62793db7cb31363a6d17ddfaad4bf6199fc",
+              "name": "cognitiveComplexitySourceLabel"
+            },
+            {
+              "description": "Exported function",
               "id": "observation:workspace:candidate.action.34f780a89eb5afc4b4f4e782ec7e891d4de6fcc76b9c36eee22d4bc12472bbd3",
               "name": "fetchRoots"
             },
@@ -841,6 +846,28 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "element",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_4f166b912606f54956b67b209b94da1b",
+        "key": "candidate.component-candidate.5ba37f07e0f8bb2a324c3608c92da75d4dfe0502eb4298101a5053f6a7000151",
+        "present": true,
+        "projection": {
+          "actions": [
+            {
+              "description": "Exported function",
+              "id": "observation:workspace:candidate.action.51f292b821de8923b2cc89838212774af0020c37c758461fdb40e8a4c1bfb9d4",
+              "name": "shouldContinueOwnedRootDiscovery"
+            }
+          ],
+          "name": "root-discovery.ts",
+          "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
+          "scale": "element"
+        },
+        "scaleAssessment": {
+          "derivation": "groma/structural-scale/v1",
+          "status": "insufficient"
         },
         "scope": "workspace"
       },
@@ -1533,9 +1560,12 @@
           "shared": false
         },
         "scaleAssessment": {
+          "candidates": [
+            "part",
+            "element"
+          ],
           "derivation": "groma/structural-scale/v1",
-          "proposal": "element",
-          "status": "proposed"
+          "status": "ambiguous"
         },
         "scope": "workspace"
       },
@@ -3619,6 +3649,18 @@
         "scope": "workspace"
       },
       {
+        "key": "candidate.relationship.66022d3d9d876df5dab23f280d8dce873a3ac96bf328031eda8126f4e6e221e3",
+        "present": true,
+        "projection": {
+          "source": "ent_4f166b912606f54956b67b209b94da1b",
+          "target": "ent_f6fcbad7dc994eb22c84c16b7fb8cdc6",
+          "type": "imports"
+        },
+        "relationId": "rel_18e24b1c8fe34baeef25cda4458239ba",
+        "removed": false,
+        "scope": "workspace"
+      },
+      {
         "key": "candidate.relationship.67807747c429277e361383c5e5210c6d019d0518b1812c162e843a5aca5c2918",
         "present": true,
         "projection": {
@@ -5661,7 +5703,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_2778e658a4fcb301e0c4aa91b30648fb",
+      "epoch": "epoch_74af2f26ca286223638d20bca3b036e8",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -6018,6 +6060,28 @@
         },
         {
           "component": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.22134be8cdbfddb23a4eea0c5bdeb62793db7cb31363a6d17ddfaad4bf6199fc",
+          "kind": "action",
+          "name": "cognitiveComplexitySourceLabel",
+          "provenance": [
+            {
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
+              "range": {
+                "endByteExclusive": 1372,
+                "startByte": 1162
+              },
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
             "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
             "scope": "workspace"
           },
@@ -6181,10 +6245,10 @@
           "name": "fetchRoots",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 7885,
-                "startByte": 7728
+                "endByteExclusive": 8469,
+                "startByte": 8312
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -6291,10 +6355,10 @@
           "name": "createComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 6729,
-                "startByte": 6571
+                "endByteExclusive": 7313,
+                "startByte": 7155
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -6423,10 +6487,10 @@
           "name": "isStaticBlueprintSnapshot",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 9461,
-                "startByte": 9371
+                "endByteExclusive": 10121,
+                "startByte": 10031
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -6445,10 +6509,10 @@
           "name": "fetchSearch",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 14198,
-                "startByte": 13986
+                "endByteExclusive": 15152,
+                "startByte": 14940
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -6546,6 +6610,28 @@
         },
         {
           "component": {
+            "key": "candidate.component-candidate.5ba37f07e0f8bb2a324c3608c92da75d4dfe0502eb4298101a5053f6a7000151",
+            "scope": "workspace"
+          },
+          "description": "Exported function",
+          "key": "candidate.action.51f292b821de8923b2cc89838212774af0020c37c758461fdb40e8a4c1bfb9d4",
+          "kind": "action",
+          "name": "shouldContinueOwnedRootDiscovery",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6bde8ad961aaaac315123c6702b71a0a7a2f525a45043245c2c886a60c05e887",
+              "range": {
+                "endByteExclusive": 601,
+                "startByte": 277
+              },
+              "resource": "src/web/client/root-discovery.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "component": {
             "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
             "scope": "workspace"
           },
@@ -6599,10 +6685,10 @@
           "name": "updateComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 6896,
-                "startByte": 6738
+                "endByteExclusive": 7480,
+                "startByte": 7322
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -6995,10 +7081,10 @@
           "name": "nextScaleLabel",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
-                "endByteExclusive": 5067,
-                "startByte": 4755
+                "endByteExclusive": 5278,
+                "startByte": 4966
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -7105,10 +7191,10 @@
           "name": "createApplicationOperations",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 166983,
-                "startByte": 122146
+                "endByteExclusive": 172222,
+                "startByte": 126095
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -7127,10 +7213,10 @@
           "name": "removeComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 7568,
-                "startByte": 7378
+                "endByteExclusive": 8152,
+                "startByte": 7962
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -7391,10 +7477,10 @@
           "name": "moveComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 7131,
-                "startByte": 6905
+                "endByteExclusive": 7715,
+                "startByte": 7489
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -7545,10 +7631,10 @@
           "name": "mergeComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 7369,
-                "startByte": 7140
+                "endByteExclusive": 7953,
+                "startByte": 7724
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -7567,10 +7653,10 @@
           "name": "fetchConnections",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 13977,
-                "startByte": 13800
+                "endByteExclusive": 14931,
+                "startByte": 14754
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -7831,10 +7917,10 @@
           "name": "buildBlueprintFlowGraph",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
-                "endByteExclusive": 32244,
-                "startByte": 11936
+                "endByteExclusive": 35764,
+                "startByte": 14360
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -8388,10 +8474,10 @@
           "name": "fetchComponent",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 8432,
-                "startByte": 8137
+                "endByteExclusive": 9016,
+                "startByte": 8721
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -8453,10 +8539,10 @@
           "name": "fetchChildren",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "range": {
-                "endByteExclusive": 8128,
-                "startByte": 7894
+                "endByteExclusive": 8712,
+                "startByte": 8478
               },
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
@@ -8780,14 +8866,14 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
             }
           ],
           "scope": "workspace",
           "signals": {
-            "cognitiveComplexity": 201
+            "cognitiveComplexity": 225
           }
         },
         {
@@ -9171,14 +9257,14 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
             }
           ],
           "scope": "workspace",
           "signals": {
-            "cognitiveComplexity": 34
+            "cognitiveComplexity": 37
           }
         },
         {
@@ -9202,6 +9288,24 @@
           "scope": "workspace",
           "signals": {
             "reuseBreadth": 1
+          }
+        },
+        {
+          "candidate": {
+            "name": "root-discovery.ts"
+          },
+          "key": "candidate.component-candidate.5ba37f07e0f8bb2a324c3608c92da75d4dfe0502eb4298101a5053f6a7000151",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6bde8ad961aaaac315123c6702b71a0a7a2f525a45043245c2c886a60c05e887",
+              "resource": "src/web/client/root-discovery.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace",
+          "signals": {
+            "cognitiveComplexity": 1
           }
         },
         {
@@ -9314,14 +9418,14 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "resource": "src/application/operations.ts",
               "scope": "workspace"
             }
           ],
           "scope": "workspace",
           "signals": {
-            "cognitiveComplexity": 1091
+            "cognitiveComplexity": 1147
           }
         },
         {
@@ -9380,7 +9484,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "resource": "src/application/contracts.ts",
               "scope": "workspace"
             }
@@ -9751,7 +9855,7 @@
           "signals": {
             "declaredBoundary": true,
             "entryPoint": true,
-            "fileCount": 7,
+            "fileCount": 8,
             "reuseBreadth": 1
           }
         },
@@ -9764,7 +9868,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -10136,7 +10240,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -11593,10 +11697,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
-                "endByteExclusive": 162,
-                "startByte": 152
+                "endByteExclusive": 238,
+                "startByte": 228
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -11618,7 +11722,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:a3745babcb8dc6cd4daafd4cf12f0a355d7220e3aae3756bd8498fb8404efb29",
+              "fingerprint": "sha256:23db2df0bcfbd0624212c7c3c7d69613f1579c9bb0b9c766409137069186c09b",
               "resource": "src/web/client/api.ts",
               "scope": "workspace"
             }
@@ -11903,7 +12007,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 557,
                 "startByte": 529
@@ -11930,10 +12034,10 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 1314,
-                "startByte": 1286
+                "endByteExclusive": 1348,
+                "startByte": 1320
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -12675,7 +12779,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 633,
                 "startByte": 612
@@ -12759,10 +12863,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 812,
-                "startByte": 792
+                "endByteExclusive": 846,
+                "startByte": 826
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -13076,7 +13180,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 356,
                 "startByte": 338
@@ -13151,7 +13255,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 356,
                 "startByte": 338
@@ -13169,37 +13273,37 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 1070,
-                "startByte": 1050
+                "endByteExclusive": 1018,
+                "startByte": 1000
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 733,
-                "startByte": 715
+                "endByteExclusive": 1104,
+                "startByte": 1084
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 812,
-                "startByte": 792
+                "endByteExclusive": 767,
+                "startByte": 749
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 984,
-                "startByte": 966
+                "endByteExclusive": 846,
+                "startByte": 826
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -13610,10 +13714,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2632,
-                "startByte": 2606
+                "endByteExclusive": 2706,
+                "startByte": 2680
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -13968,6 +14072,27 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.4d20bcf5622a881b1926438c69c135acceca12a2136d270574b3ccb5859bd0fb",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6bde8ad961aaaac315123c6702b71a0a7a2f525a45043245c2c886a60c05e887",
+              "resource": "src/web/client/root-discovery.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.5ba37f07e0f8bb2a324c3608c92da75d4dfe0502eb4298101a5053f6a7000151",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
             "scope": "workspace"
           },
@@ -13975,10 +14100,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 733,
-                "startByte": 715
+                "endByteExclusive": 767,
+                "startByte": 749
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -14096,7 +14221,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 705,
                 "startByte": 684
@@ -14217,10 +14342,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 984,
-                "startByte": 966
+                "endByteExclusive": 1018,
+                "startByte": 1000
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -14347,7 +14472,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "range": {
                 "endByteExclusive": 557,
                 "startByte": 529
@@ -14560,7 +14685,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -14723,6 +14848,31 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.5245c6e8fc2b17ea9853a0b72028b40250b85751d6d504d9e7d553cdbe6a4264",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.5ba37f07e0f8bb2a324c3608c92da75d4dfe0502eb4298101a5053f6a7000151",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.66022d3d9d876df5dab23f280d8dce873a3ac96bf328031eda8126f4e6e221e3",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:6bde8ad961aaaac315123c6702b71a0a7a2f525a45043245c2c886a60c05e887",
+              "range": {
+                "endByteExclusive": 48,
+                "startByte": 36
+              },
+              "resource": "src/web/client/root-discovery.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "imports",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
             "scope": "workspace"
           }
         },
@@ -14994,10 +15144,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 1314,
-                "startByte": 1286
+                "endByteExclusive": 1348,
+                "startByte": 1320
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -15798,10 +15948,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
-                "endByteExclusive": 225,
-                "startByte": 213
+                "endByteExclusive": 301,
+                "startByte": 289
               },
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
@@ -16084,7 +16234,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:6c3e568309a4fa3075cabed9e1032447493e92392536d282ce41916304eed461",
+              "fingerprint": "sha256:140f050f970d2327975786fdd370952a9569b7895e6614c92e66f1d04c9cf183",
               "resource": "src/application/contracts.ts",
               "scope": "workspace"
             }
@@ -16105,7 +16255,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "resource": "src/web/client/graph.ts",
               "scope": "workspace"
             }
@@ -16456,7 +16606,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:18d064ef701e5781118b54589b717e063ce4382aca4256de7d81b4ca3e16ea56",
+              "fingerprint": "sha256:1cf4a3abcb08b63cbac88b177d350eff251addb60a0ddcc88cb5fae7ffe1f34b",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -16502,10 +16652,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 1070,
-                "startByte": 1050
+                "endByteExclusive": 1104,
+                "startByte": 1084
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -17177,10 +17327,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2697,
-                "startByte": 2671
+                "endByteExclusive": 2771,
+                "startByte": 2745
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -17758,10 +17908,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2235,
-                "startByte": 2219
+                "endByteExclusive": 2309,
+                "startByte": 2293
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -18142,10 +18292,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2778,
-                "startByte": 2757
+                "endByteExclusive": 2852,
+                "startByte": 2831
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -18484,10 +18634,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2558,
-                "startByte": 2535
+                "endByteExclusive": 2632,
+                "startByte": 2609
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -19411,10 +19561,10 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "range": {
-                "endByteExclusive": 2494,
-                "startByte": 2473
+                "endByteExclusive": 2568,
+                "startByte": 2547
               },
               "resource": "src/application/operations.ts",
               "scope": "workspace"
@@ -19959,7 +20109,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:db2b14ced31f758da01a89ef947d5813f5bf859096a62a3534694b5ace819464",
+              "fingerprint": "sha256:99afce3591e6fbeb52c9641aae1e335fbee4064cc9ace230bb491b5b76b51919",
               "resource": "src/application/operations.ts",
               "scope": "workspace"
             }

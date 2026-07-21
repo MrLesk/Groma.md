@@ -8,6 +8,7 @@ parent: ent_7917653d913c6d5907597ecb4097bd8c
 
 # Actions
 
+- cognitiveComplexitySourceLabel — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E22134be8cdbfddb23a4eea0c5bdeb62793db7cb31363a6d17ddfaad4bf6199fc fields=name,description -->
 - fetchRoots — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E34f780a89eb5afc4b4f4e782ec7e891d4de6fcc76b9c36eee22d4bc12472bbd3 fields=name,description -->
 - createComponent — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E396319bea3bf34105d9ce4dd624d49d69f122a8f0abf627eb6ce674ea1784e66 fields=name,description -->
 - isStaticBlueprintSnapshot — Exported function <!-- groma:item id=observation%3Aworkspace%3Acandidate%2Eaction%2E45373ad89e80cdd50bffb0abc326807508a4fd6adb7d3d7e139a7eeaac30fe9f fields=name,description -->
