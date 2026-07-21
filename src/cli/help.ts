@@ -42,8 +42,10 @@ Usage:
 
 Instructions prints the built-in working guides for humans and agents; it needs no workspace.
 Web serves the embedded interactive blueprint on 127.0.0.1 only (default port 4766, 0 for an
-ephemeral port) until Ctrl+C. It exposes bounded GET reads through the shared application
-operations and is not a mutation surface; it makes no request beyond the local listener.
+ephemeral port) until Ctrl+C. It exposes bounded reads and component create, update, move, merge,
+and remove through the same shared application operations as the CLI. Mutation requests use POST
+under /api/component, require the exact loopback Origin and Host, and remain revision-checked.
+The web surface makes no request beyond the local listener.
 Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
 Scan uses the only registered project and scanner when selection is unambiguous. In an
 interactive terminal, scan offers to run groma init first when no workspace exists yet. The initialized

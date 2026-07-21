@@ -149,6 +149,28 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
     if (!roots.ok || rootsBody.ok !== true) {
       throw new Error("Compiled web server did not answer a bounded read");
     }
+    const componentId = "ent_00000000000000000000000000000001";
+    const created = await fetch(`${url}api/component/create`, {
+      body: JSON.stringify({ component: { id: componentId, name: "HTTP smoke" } }),
+      headers: { "Content-Type": "application/json", Origin: new URL(url).origin },
+      method: "POST",
+    });
+    const createdBody = (await created.json()) as { readonly status?: unknown };
+    if (!created.ok || createdBody.status !== "committed") {
+      throw new Error("Compiled web server did not commit a same-origin mutation");
+    }
+    const reread = await fetch(`${url}api/component?id=${componentId}&limit=5`);
+    const rereadBody = (await reread.json()) as {
+      readonly ok?: unknown;
+      readonly value?: { readonly item?: { readonly component?: { readonly name?: unknown } } };
+    };
+    if (
+      !reread.ok ||
+      rereadBody.ok !== true ||
+      rereadBody.value?.item?.component?.name !== "HTTP smoke"
+    ) {
+      throw new Error("Compiled web server did not reread its committed mutation");
+    }
     child.kill("SIGINT");
     const exitCode = await child.exited;
     // Windows signal emulation terminates without the graceful shutdown path.
