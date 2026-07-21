@@ -155,7 +155,10 @@ describe("official local application operations composition", () => {
     });
     expect(search).toMatchObject({
       ok: true,
-      value: { hasMore: true, items: [{ id: conformanceIds.serviceA }] },
+      value: {
+        hasMore: true,
+        items: [{ component: { id: conformanceIds.serviceA }, evidenceBound: false }],
+      },
     });
     if (!search.ok || search.value.nextCursor === undefined) throw new Error("expected cursor");
     expect(
@@ -168,7 +171,10 @@ describe("official local application operations composition", () => {
       }),
     ).toMatchObject({
       ok: true,
-      value: { hasMore: false, items: [{ id: conformanceIds.nestedService }] },
+      value: {
+        hasMore: false,
+        items: [{ component: { id: conformanceIds.nestedService }, evidenceBound: false }],
+      },
     });
 
     expect(

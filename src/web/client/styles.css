@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @source "./";
 
-/* Groma single white theme: brand tokens from brand/STYLE.md. No dark mode. */
+/* Groma's single white technical-sheet theme. */
 @theme {
   --color-paper: #fbfaf6;
   --color-desk: #edeeea;
@@ -53,11 +53,21 @@ textarea {
   background: transparent;
   color: var(--color-ink);
   text-align: left;
+  transition: opacity 120ms ease;
 }
 
 .groma-flow .react-flow__node-component:focus-visible {
   outline: 2px solid var(--color-survey);
   outline-offset: 5px;
+}
+
+.groma-flow .react-flow__node-component.is-dimmed {
+  opacity: 0.2;
+}
+
+.groma-flow .react-flow__node-component.is-path-endpoint .groma-node {
+  outline: 1.5px solid var(--color-ink);
+  outline-offset: 3px;
 }
 
 .groma-flow .react-flow__controls {
@@ -84,86 +94,53 @@ textarea {
   outline-offset: -2px;
 }
 
-.groma-flow .react-flow__edge-path {
-  stroke: var(--color-ink-muted);
-  stroke-width: 1.25;
-}
-
-/* Dependency edges carry the architecture; containment is carried by nesting. */
-/*
- * Dependency lines carry the only relationship the sheet draws rather than
- * nests, so they are inked to be followed across a crowded plate: a hairline in
- * the paper's own grey reads as background rule, not as an assertion.
- */
 .groma-flow .react-flow__edge.groma-edge .react-flow__edge-path {
-  stroke: var(--color-ink-muted);
-  stroke-width: 1.7;
+  stroke: #69716d;
+  stroke-width: 1.35;
 }
 
-.groma-flow .react-flow__edge.groma-edge:hover .react-flow__edge-path {
+.groma-flow .react-flow__edge.groma-edge:hover .react-flow__edge-path,
+.groma-flow .react-flow__edge.groma-edge.is-related .react-flow__edge-path {
   stroke: var(--color-ink);
-  stroke-width: 2.4;
+  stroke-width: 2.8;
 }
 
-.groma-flow .react-flow__edge.groma-edge--external .react-flow__edge-path {
-  stroke: var(--color-fine);
-  stroke-dasharray: 3 6;
+.groma-flow .react-flow__edge.is-dimmed {
+  opacity: 0.12;
 }
 
-/* A container plate: its contents sit inside it, the way a grouped drawing reads. */
 .groma-group {
   position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  border: 1px dashed var(--color-line);
-  border-radius: 2px;
-  background: rgba(237, 238, 234, 0.42);
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  background: rgba(251, 250, 246, 0.72);
+  box-shadow: 0 18px 38px rgba(32, 36, 34, 0.06);
 }
 
 .groma-group--system {
-  border-style: solid;
-  border-color: var(--color-ink);
-  background: rgba(237, 238, 234, 0.3);
+  border: 3px double var(--color-ink);
+  background: rgba(251, 250, 246, 0.78);
 }
 
-.groma-group--band {
-  border-style: dotted;
-  background: rgba(237, 238, 234, 0.55);
+.groma-group__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 18px 24px 0;
 }
 
 .groma-group__title {
-  display: inline-block;
-  margin: 10px 0 0 14px;
-  padding: 3px 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 999px;
-  background: var(--color-paper);
   color: var(--color-ink);
-  font-family: var(--font-plan);
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-/*
- * A system is the subject of the whole sheet, so it is named at title scale
- * rather than tagged like the plates nested inside it.
- */
-.groma-group--system .groma-group__title {
-  margin-left: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
   font-family: var(--font-plan);
   font-size: 22px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 
 .groma-group__contains {
-  margin-left: 10px;
   color: var(--color-ink-muted);
   font-family: var(--font-plan);
   font-size: 10px;
@@ -171,118 +148,24 @@ textarea {
   text-transform: uppercase;
 }
 
-.groma-group--system .groma-group__contains {
-  margin-left: 14px;
-  font-size: 11px;
-}
-
-/*
- * Names the reading order the layout already produces. Shown only where the
- * contents form a dependency order at all, so it never captions a direction the
- * code does not have.
- */
-.groma-group__axis {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  color: var(--color-ink-muted);
-  font-family: var(--font-plan);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-/*
- * What the project says about itself, given the room a first sentence deserves:
- * on the system plate this is the only line on the sheet that answers "what is
- * this?", so nothing nested may out-shout it.
- */
 .groma-group__summary {
   display: -webkit-box;
+  max-width: 78ch;
   overflow: hidden;
-  max-width: 74ch;
-  padding-left: 9px;
-  border-left: 2px solid var(--color-fine);
-  margin: 6px 0 0 20px;
+  margin: 7px 24px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-survey);
   color: var(--color-ink);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.groma-group--system .groma-group__summary {
-  font-size: 15px;
-}
-
-/* Observed facts, stated compactly on the card that carries them. */
-.groma-node__evidence {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0 16px;
-  list-style: none;
-}
-
-.groma-chip {
-  padding: 1px 7px;
-  border: 1px solid var(--color-fine);
-  border-radius: 999px;
+.groma-group__summary.is-missing {
+  border-left-color: var(--color-line);
   color: var(--color-ink-muted);
-  font-family: var(--font-plan);
-  font-size: 10px;
-  letter-spacing: 0.05em;
-}
-
-.groma-chip--shared {
-  border-color: var(--color-survey);
-  color: var(--color-survey);
-}
-
-.groma-chip--entry {
-  border-color: var(--color-amber);
-  color: var(--color-amber);
-}
-
-/* Scale selects what the sheet shows; zoom only changes how large it looks. */
-.groma-scale-selector {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--color-fine);
-  font-family: var(--font-plan);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-ink-muted);
-}
-
-.groma-scale-selector > div {
-  display: flex;
-  gap: 4px;
-}
-
-.groma-scale-selector button {
-  padding: 3px 10px;
-  border: 1px solid var(--color-fine);
-  border-radius: 999px;
-  background: var(--color-paper);
-  color: var(--color-ink-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.groma-scale-selector button[aria-pressed="true"] {
-  border-color: var(--color-ink);
-  background: var(--color-ink);
-  color: var(--color-paper);
-}
-
-.groma-scale-selector button:focus-visible {
-  outline: 2px solid var(--color-survey);
-  outline-offset: 2px;
+  font-style: italic;
 }
 
 .groma-node {
@@ -291,37 +174,25 @@ textarea {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: rgba(251, 250, 246, 0.98);
-  box-shadow: 0 7px 18px rgba(32, 36, 34, 0.07);
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  padding: 13px 14px 11px;
+  background: var(--color-paper);
+  box-shadow: 0 8px 20px rgba(32, 36, 34, 0.07);
   cursor: pointer;
 }
 
 .groma-node--system {
   border: 4px double var(--color-ink);
-  padding: 12px 16px;
 }
 
 .groma-node--domain {
-  border: 2px solid var(--color-ink);
-  padding: 11px 14px;
-  box-shadow: 0 10px 24px rgba(32, 36, 34, 0.09);
-}
-
-.groma-node--part {
-  border: 1.5px solid var(--color-ink);
-  padding: 9px 12px;
-}
-
-.groma-node--element {
-  border-top: 1.5px solid var(--color-ink);
-  border-bottom: 1.5px solid var(--color-ink);
-  padding: 7px 10px;
-  box-shadow: none;
+  border-width: 2px;
 }
 
 .groma-node--unscaled {
-  border: 1.5px dashed var(--color-ink-muted);
-  padding: 8px 11px;
+  border-style: dashed;
+  border-color: var(--color-ink-muted);
   box-shadow: none;
 }
 
@@ -343,19 +214,54 @@ textarea {
   width: 4px;
 }
 
+.groma-node[data-evidence-bound="true"]::after {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--color-survey);
+  border-radius: 50%;
+  background: var(--color-paper);
+  content: "";
+}
+
+.groma-node[data-evidence-bound="true"]::before {
+  position: absolute;
+  top: 9px;
+  right: 13px;
+  width: 18px;
+  border-top: 1.5px solid var(--color-survey);
+  content: "";
+}
+
 .groma-node__heading {
   display: flex;
   align-items: center;
   gap: 6px;
+  color: var(--color-ink-muted);
   font-family: var(--font-plan);
   font-size: 9px;
   letter-spacing: 0.08em;
-  color: var(--color-ink-muted);
   text-transform: uppercase;
 }
 
 .groma-node__heading span:last-child {
   margin-left: auto;
+  padding-right: 8px;
+}
+
+.groma-node__observed {
+  color: var(--color-ink-muted);
+}
+
+.groma-spec-lead__observed {
+  margin: 0 0 6px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .groma-node__notation {
@@ -375,9 +281,8 @@ textarea {
 }
 
 .groma-node--part .groma-node__notation {
-  border: 1px solid var(--color-ink);
-  border-top-color: transparent;
-  border-bottom-color: transparent;
+  border-right: 1px solid var(--color-ink);
+  border-left: 1px solid var(--color-ink);
 }
 
 .groma-node--element .groma-node__notation {
@@ -395,32 +300,17 @@ textarea {
   display: block;
   width: 100%;
   overflow: hidden;
-  margin: 7px 0 4px;
+  margin: 8px 0 5px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--color-ink);
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 650;
-  line-height: 1.25;
+  line-height: 1.2;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.groma-node--system .groma-node__select {
-  font-size: 18px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.groma-node--domain .groma-node__select {
-  font-size: 16px;
-}
-
-.groma-node--element .groma-node__select {
-  margin-top: 5px;
-  font-size: 12px;
 }
 
 .groma-node__select:hover {
@@ -429,67 +319,59 @@ textarea {
   text-underline-offset: 3px;
 }
 
-/*
- * A sentence transcribed from the component's own documentation. It is set as
- * prose rather than in the plan face used for measurements, because it is the
- * one thing on the card the project said about itself rather than something the
- * scanner counted.
- */
-/* A borrowed dependency: named, counted, and given no more room than that. */
-.groma-node--borrowed {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 10px;
-  border-style: dashed;
-  background: var(--color-paper);
-}
-
-.groma-node--borrowed .groma-node__select {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 11.5px;
-  font-weight: 550;
-}
-
-.groma-node--borrowed .groma-node__evidence {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
-/* Nothing connects to a listed dependency, so it carries no visible terminals. */
-.groma-node--borrowed .groma-handle {
-  opacity: 0;
-}
-
-.groma-node__summary {
+.groma-node__purpose {
   display: -webkit-box;
+  min-height: 42px;
   overflow: hidden;
-  margin: 0 0 6px;
-  padding-left: 7px;
-  border-left: 2px solid var(--color-fine);
-  color: var(--color-ink-muted);
-  font-size: 11px;
+  margin: 0 0 8px;
+  color: var(--color-ink);
+  font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 
-.groma-node--system .groma-node__summary {
-  font-size: 12.5px;
-  -webkit-line-clamp: 3;
+.groma-node__purpose.is-missing {
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+
+.groma-node__evidence {
+  display: flex;
+  min-height: 21px;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groma-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--color-fine);
+  border-radius: 0;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.groma-chip--shared {
+  border-color: var(--color-survey);
+  color: var(--color-ink);
 }
 
 .groma-node__disclosure {
+  position: absolute;
+  right: 14px;
+  bottom: 9px;
+  left: 14px;
   display: flex;
-  align-items: center;
-  gap: 7px;
   min-height: 17px;
+  align-items: center;
+  justify-content: flex-end;
   font-family: var(--font-plan);
   font-size: 9px;
-  color: var(--color-ink-muted);
 }
 
 .groma-node__disclosure button {
@@ -506,27 +388,25 @@ textarea {
   color: var(--color-ink);
 }
 
-/* The way in: a container's parts are one click deep, so the affordance leads. */
 .groma-node__open {
-  border-color: var(--color-survey) !important;
-  color: var(--color-survey) !important;
+  border-bottom: 2px solid var(--color-survey) !important;
+  color: var(--color-ink) !important;
   font-weight: 600;
 }
 
-.groma-node__open:hover {
-  color: var(--color-ink) !important;
+.groma-flow .groma-handle {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0;
+  background: var(--color-paper);
 }
 
-/*
- * The trail of where a reader has walked, so entering a domain never strands
- * them: every step back out is one click, and the whole system is always home.
- */
 .groma-breadcrumb {
   margin-top: 12px;
   border: 1px solid var(--color-line);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(251, 250, 246, 0.96);
-  box-shadow: 0 4px 12px rgba(32, 36, 34, 0.08);
 }
 
 .groma-breadcrumb__trail {
@@ -534,9 +414,9 @@ textarea {
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
+  color: var(--color-ink-muted);
   font-family: var(--font-plan);
   font-size: 11px;
-  color: var(--color-ink-muted);
 }
 
 .groma-breadcrumb__step {
@@ -548,14 +428,12 @@ textarea {
 .groma-breadcrumb button {
   border: 0;
   background: transparent;
-  color: var(--color-survey);
+  color: var(--color-ink);
   cursor: pointer;
   font: inherit;
-}
-
-.groma-breadcrumb button:hover {
-  color: var(--color-ink);
   text-decoration: underline;
+  text-decoration-color: var(--color-survey);
+  text-underline-offset: 3px;
 }
 
 .groma-breadcrumb strong {
@@ -563,42 +441,28 @@ textarea {
   font-weight: 650;
 }
 
-.groma-node__terminal {
-  letter-spacing: 0.03em;
-}
-
-.groma-flow .groma-handle {
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid var(--color-ink);
-  border-radius: 0;
-  background: var(--color-paper);
-}
-
-/*
- * The panel is reference apparatus, not the subject. It sits quietly in the
- * corner with a hairline rule so the system it describes — named at title scale
- * on the plate — is the first thing the eye lands on, not the viewer's chrome.
- */
 .groma-title-block {
-  width: min(560px, calc(100vw - 360px));
-  min-width: 380px;
-  margin: 15px;
+  width: 300px;
+  min-width: 0;
+  margin: 12px;
   border: 1px solid var(--color-line);
   background: rgba(251, 250, 246, 0.94);
-  box-shadow: 0 6px 16px rgba(32, 36, 34, 0.05);
 }
 
 .groma-title-block__heading {
   display: grid;
   grid-template-columns: 1fr auto auto;
-  border-bottom: 1px solid var(--color-line);
 }
 
 .groma-title-block__heading > * {
   margin: 0;
-  padding: 5px 9px;
+  padding: 5px 8px;
   border-right: 1px solid var(--color-line);
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .groma-title-block__heading > *:last-child {
@@ -606,201 +470,87 @@ textarea {
 }
 
 .groma-title-block__heading p {
-  font-family: var(--font-plan);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--color-ink-muted);
-  text-transform: uppercase;
-}
-
-.groma-title-block__heading span {
-  font-family: var(--font-plan);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-  color: var(--color-ink-muted);
-  text-transform: uppercase;
-}
-
-/*
- * What the level in view measures out to, in plain sentences. Each line is a
- * counted relation against a named part — never a role word, never a verdict —
- * so a reader learns what stands out here without the drawing asserting it for
- * them. Set as prose, not stencil micro-type: these are the takeaways.
- */
-.groma-readout {
-  margin: 0;
-  padding: 7px 9px 8px;
-  border-bottom: 1px solid var(--color-line);
-}
-
-.groma-readout dt {
-  margin: 0 0 3px;
-  font-family: var(--font-plan);
   font-size: 9px;
   font-weight: 650;
-  letter-spacing: 0.09em;
-  color: var(--color-ink-muted);
-  text-transform: uppercase;
 }
 
-.groma-readout dd {
-  margin: 0;
-  padding: 2px 0 2px 11px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--color-ink);
-  text-indent: -11px;
-}
-
-.groma-readout dd::before {
-  content: "—";
-  padding-right: 5px;
-  color: var(--color-ink-muted);
-}
-
-/*
- * The one place on the sheet that states the sheet's own discipline, so it is
- * set as readable prose rather than stencil micro-type: this is what a reader
- * takes away about what they are looking at.
- */
-.groma-title-block__hint {
-  margin: 0;
-  padding: 7px 8px;
-  border-top: 1px solid var(--color-fine);
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--color-ink-muted);
-}
-
-.groma-title-block__hint strong {
-  color: var(--color-ink);
-  font-weight: 650;
-}
-
-.groma-title-block ol {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.groma-title-block li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 6px 8px;
-  border-right: 1px solid var(--color-fine);
-  font-family: var(--font-plan);
-  font-size: 8px;
-  color: var(--color-ink-muted);
-}
-
-.groma-title-block li:last-child {
-  border-right: 0;
-}
-
-.groma-title-block li strong {
-  color: var(--color-ink);
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-/*
- * Plain-language definitions of the marks the sheet uses. Set as reference in
- * the plan face, one term per row, so a reader can decode a badge without
- * leaving the drawing — and never meets a word for a mark that is not present.
- */
-.groma-title-block__glossary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--color-fine);
-  list-style: none;
-}
-
-.groma-title-block__glossary li {
-  display: block;
-  padding: 5px 8px;
-  border-right: 1px solid var(--color-fine);
-  border-bottom: 1px solid var(--color-fine);
-  font-family: var(--font-plan);
-  font-size: 8px;
-  line-height: 1.5;
-  color: var(--color-ink-muted);
-}
-
-.groma-title-block__glossary li:nth-child(2n) {
-  border-right: 0;
-}
-
-.groma-title-block__glossary li strong {
-  color: var(--color-ink);
-  font-weight: 650;
-}
-
-.groma-legend-mark {
-  display: inline-block;
-  box-sizing: border-box;
-  width: 16px;
-  height: 11px;
-  flex: 0 0 auto;
-}
-
-.groma-legend-mark--system {
-  border: 3px double var(--color-ink);
-}
-
-.groma-legend-mark--domain {
-  border: 2px solid var(--color-ink);
-}
-
-.groma-legend-mark--part {
-  border-right: 1px solid var(--color-ink);
-  border-left: 1px solid var(--color-ink);
-}
-
-.groma-legend-mark--element {
-  height: 5px;
-  border-top: 1px solid var(--color-ink);
-  border-bottom: 1px solid var(--color-ink);
-}
-
-.groma-legend-mark--unscaled {
-  border: 1px dashed var(--color-ink-muted);
-  border-radius: 50%;
-}
-
-.groma-legend-mark--edge {
-  border: 0;
-  border-top: 1.5px solid var(--color-ink);
-  border-radius: 0;
-  height: 0;
-  align-self: center;
-}
-
-.groma-legend-mark--quote {
-  border: 0;
-  border-left: 2px solid var(--color-fine);
-  border-radius: 0;
-}
-
-/*
- * The key explains the sheet's notation, not the project, so it stays folded
- * until asked for: a reader's first look belongs to the architecture.
- */
 .groma-title-block__key > summary {
   padding: 5px 8px;
   border-top: 1px solid var(--color-fine);
   color: var(--color-ink-muted);
   cursor: pointer;
   font-family: var(--font-plan);
-  font-size: 9px;
-  letter-spacing: 0.09em;
+  font-size: 8px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.groma-title-block__key p {
+  margin: 0;
+  padding: 8px 9px;
+  border-top: 1px solid var(--color-fine);
+  color: var(--color-ink-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.groma-evidence-register {
+  width: 290px;
+  margin: 14px;
+  border: 1.5px dashed var(--color-ink-muted);
+  background: rgba(251, 250, 246, 0.97);
+}
+
+.groma-evidence-register__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-bottom: 1px dashed var(--color-line);
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groma-evidence-register__heading span {
+  color: var(--color-ink-muted);
+  font-size: 8px;
+}
+
+.groma-evidence-register ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groma-evidence-register li + li {
+  border-top: 1px dashed var(--color-fine);
+}
+
+.groma-evidence-register button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.groma-evidence-register button:hover {
+  background: var(--color-fine);
+}
+
+.groma-evidence-register small {
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 8px;
 }
 
 .groma-bounded-notice,
@@ -808,61 +558,155 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1.5px solid var(--color-amber);
+  border: 1px solid var(--color-line);
   background: var(--color-paper);
-  color: var(--color-amber);
+  color: var(--color-ink-muted);
   font-family: var(--font-plan);
-  font-size: 10px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .groma-bounded-notice {
-  margin-bottom: 15px;
+  margin-bottom: 14px;
   padding: 6px 8px;
 }
 
 .groma-bounded-notice button {
   padding: 3px 6px;
-  border: 1px solid var(--color-amber);
+  border: 1px solid var(--color-ink);
   background: var(--color-paper);
-  color: var(--color-amber);
+  color: var(--color-ink);
   cursor: pointer;
 }
 
 .groma-empty-sheet {
-  margin-top: 180px;
+  margin-top: 120px;
   padding: 12px 16px;
-  border-color: var(--color-line);
+}
+
+.groma-search-result {
+  border-bottom: 1px solid var(--color-fine);
+}
+
+.groma-search-result > button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px 5px;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.groma-search-result > button:hover {
+  background: var(--color-fine);
+}
+
+.groma-search-result strong,
+.groma-search-result__purpose,
+.groma-search-result__context {
+  display: block;
+}
+
+.groma-search-result strong {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.groma-search-result__cue,
+.groma-search-result__context,
+.groma-search-result details {
   color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.groma-search-result__purpose {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--color-ink-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groma-search-result__context {
+  margin-top: 4px;
+}
+
+.groma-search-result details {
+  padding: 0 10px 6px;
+}
+
+.groma-search-result details code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding-top: 3px;
+  color: var(--color-ink-muted);
+  font-size: 9px;
+  text-transform: none;
+}
+
+.groma-spec-lead {
+  margin: 8px 0 12px;
+  padding: 0 0 11px;
+  border-bottom: 1px solid var(--color-ink);
+}
+
+.groma-spec-lead p {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groma-spec-lead h3 {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.groma-spec-lead > div {
+  padding-left: 9px;
+  border-left: 2px solid var(--color-survey);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.groma-spec-lead > div.is-missing {
+  border-left-color: var(--color-line);
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+
+.groma-spec-technical {
+  margin-top: 13px;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.groma-spec-technical > summary {
+  padding: 7px 0;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 800px) {
   .groma-title-block {
-    width: calc(100vw - 30px);
-    min-width: 0;
+    width: min(300px, calc(100vw - 30px));
   }
 
-  .groma-title-block ol {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/*
- * On a narrow screen the reference apparatus collapses to a single readable
- * column and the whole panel folds away behind its heading, so the blueprint
- * itself keeps the small viewport.
- */
-@media (max-width: 560px) {
-  .groma-title-block ol,
-  .groma-title-block__glossary {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .groma-title-block li {
-    border-right: 0;
-  }
-
-  .groma-scale-selector > div {
-    flex-wrap: wrap;
+  .groma-evidence-register {
+    width: min(290px, calc(100vw - 30px));
   }
 }

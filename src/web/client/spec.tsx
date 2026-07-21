@@ -27,7 +27,7 @@ import {
   type ApiRelationshipView,
   type ApiScaleEvidence,
 } from "./api.ts";
-import { displayText } from "./model.ts";
+import { componentPurpose, displayText } from "./model.ts";
 
 const RELATIONSHIP_LIMIT = 20;
 const SCALES: readonly ApiComponentScale[] = ["system", "domain", "part", "element"];
@@ -94,10 +94,17 @@ const SMALL_BUTTON =
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-2.5">
-      <dt className="font-plan text-[9px] tracking-widest text-ink-muted uppercase">{label}</dt>
-      <dd className="m-0 mt-0.5 text-xs break-words">{children}</dd>
+      <div className="font-plan text-[9px] tracking-widest text-ink-muted uppercase">{label}</div>
+      <div className="m-0 mt-0.5 text-xs break-words">{children}</div>
     </div>
   );
+}
+
+function relationshipSurfaceLabel(type: string, outgoing: boolean): string {
+  if (type === "informs") return outgoing ? "Tells" : "Told by";
+  if (type === "imports" || type === "requires" || type === "depends-on")
+    return outgoing ? "Needs" : "Needed by";
+  return outgoing ? "Relates to" : "Related from";
 }
 
 function EditorField({ label, children }: { label: string; children: ReactNode }) {
@@ -816,79 +823,24 @@ export function SpecPanel({
           </div>
         </form>
       ) : (
-        <dl className="m-0 px-3 pt-1 pb-3">
-          <Field label="Selection">{displayText(component)}</Field>
-          <Field label="Canonical name">{component.name ?? "—"}</Field>
-          <Field label="Type">{component.type ?? "component"}</Field>
-          <Field label="Stable identity">
-            <span className="font-plan">{component.id}</span>
+        <div className="m-0 px-3 pt-1 pb-3">
+          <section className="groma-spec-lead">
+            <p>
+              {component.scale ?? "unscaled"} · {component.type ?? "component"}
+            </p>
+            <h3>{displayText(component)}</h3>
+            {detail.read?.item.evidenceBound ? (
+              <p className="groma-spec-lead__observed">Observed in code</p>
+            ) : null}
+            <div className={componentPurpose(component) === undefined ? "is-missing" : undefined}>
+              {componentPurpose(component) ?? "Purpose not yet recorded."}
+            </div>
+          </section>
+          <Field label="Contained by">
+            {component.parent === undefined
+              ? "Blueprint root"
+              : (resolveDisplay(component.parent) ?? "Another component")}
           </Field>
-          {component.summary === undefined ? null : (
-            <Field label="Summary">{component.summary}</Field>
-          )}
-          {component.intent === undefined ? null : <Field label="Intent">{component.intent}</Field>}
-          <Field label="Scale">
-            {scaleAssessments.length === 0 ? (
-              (component.scale ?? "Unscaled")
-            ) : (
-              <ul className="m-0 list-none p-0">
-                {scaleAssessments.map(({ projectId, scale }) => {
-                  const proposal =
-                    scale.status === "proposed" || scale.status === "drift"
-                      ? scale.proposal
-                      : undefined;
-                  return (
-                    <li key={projectId} className="border-b border-fine py-1 last:border-b-0">
-                      <span className="font-plan text-[9px] text-ink-muted">{projectId}</span>
-                      <br />
-                      {scaleAssessmentText(scale, component.scale)}
-                      {!exported && proposal !== undefined ? (
-                        <button
-                          disabled={busy}
-                          type="button"
-                          className={`${SMALL_BUTTON} mt-1 block`}
-                          onClick={() => acceptScale(proposal)}
-                        >
-                          Accept {proposal}
-                        </button>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Field>
-          <Field label="Shared">
-            {component.shared === undefined ? "Not specified" : component.shared ? "Yes" : "No"}
-          </Field>
-          <ItemList label="Inputs" items={component.inputs} />
-          <ItemList label="Outputs" items={component.outputs} />
-          <ItemList label="Actions" items={component.actions} />
-          <Field label="Evidence">
-            {exported
-              ? "Evidence detail is not included in this bounded export"
-              : detail.read !== undefined && detail.read.evidence.length > 0
-                ? `Scan evidence from ${detail.read.evidence.length} source${detail.read.evidence.length === 1 ? "" : "s"}`
-                : "No scan evidence recorded"}
-          </Field>
-          {cognitiveComplexity.length === 0 ? null : (
-            <Field label="Cognitive complexity">
-              <ul className="m-0 list-none p-0">
-                {cognitiveComplexity.map((measurement) => (
-                  <li
-                    key={`${measurement.projectId}:${cognitiveComplexitySourceLabel(measurement)}`}
-                    className="border-b border-fine py-1 last:border-b-0"
-                  >
-                    <span className="font-plan text-[9px] text-ink-muted">
-                      {cognitiveComplexitySourceLabel(measurement)}
-                    </span>
-                    <br />
-                    {measurement.value} — scanner-measured nesting and branching
-                  </li>
-                ))}
-              </ul>
-            </Field>
-          )}
           <Field label="Relationships">
             {detail.relationships.length === 0 ? (
               "None on this page"
@@ -903,10 +855,12 @@ export function SpecPanel({
                       className="border-b border-fine py-1 last:border-b-0"
                     >
                       <span className="font-plan text-[9px] text-ink-muted uppercase">
-                        {outgoing ? "→" : "←"} {entry.relationship.type}
-                      </span>
-                      <br />
-                      {resolveDisplay(other) ?? <span className="font-plan">{other}</span>}
+                        {outgoing ? "→" : "←"}{" "}
+                        {relationshipSurfaceLabel(entry.relationship.type, outgoing)}
+                      </span>{" "}
+                      <strong className="font-medium">
+                        {resolveDisplay(other) ?? "Another component"}
+                      </strong>
                     </li>
                   );
                 })}
@@ -922,6 +876,72 @@ export function SpecPanel({
               </button>
             ) : null}
           </Field>
+          <ItemList label="What goes in" items={component.inputs} />
+          <ItemList label="What comes out" items={component.outputs} />
+          <ItemList label="What it can do" items={component.actions} />
+          <details className="groma-spec-technical">
+            <summary>Technical details</summary>
+            <Field label="Canonical name">{component.name ?? "—"}</Field>
+            <Field label="Stable identity">
+              <span className="font-plan">{component.id}</span>
+            </Field>
+            <Field label="Scale">
+              {scaleAssessments.length === 0 ? (
+                (component.scale ?? "Unscaled")
+              ) : (
+                <ul className="m-0 list-none p-0">
+                  {scaleAssessments.map(({ projectId, scale }) => {
+                    const proposal =
+                      scale.status === "proposed" || scale.status === "drift"
+                        ? scale.proposal
+                        : undefined;
+                    return (
+                      <li key={projectId} className="border-b border-fine py-1 last:border-b-0">
+                        {scaleAssessmentText(scale, component.scale)}
+                        {!exported && proposal !== undefined ? (
+                          <button
+                            disabled={busy}
+                            type="button"
+                            className={`${SMALL_BUTTON} mt-1 block`}
+                            onClick={() => acceptScale(proposal)}
+                          >
+                            Accept {proposal}
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Field>
+            <Field label="Shared">
+              {component.shared === undefined ? "Not specified" : component.shared ? "Yes" : "No"}
+            </Field>
+            <Field label="Evidence">
+              {exported
+                ? "Evidence detail is not included in this bounded export"
+                : detail.read !== undefined && detail.read.evidence.length > 0
+                  ? `Scan evidence from ${detail.read.evidence.length} source${detail.read.evidence.length === 1 ? "" : "s"}`
+                  : "No scan evidence recorded"}
+            </Field>
+            {cognitiveComplexity.length === 0 ? null : (
+              <Field label="Cognitive complexity">
+                <ul className="m-0 list-none p-0">
+                  {cognitiveComplexity.map((measurement) => (
+                    <li
+                      key={`${measurement.projectId}:${cognitiveComplexitySourceLabel(measurement)}`}
+                      className="border-b border-fine py-1 last:border-b-0"
+                    >
+                      {measurement.value} — scanner-measured nesting and branching
+                      <span className="block font-plan text-[9px] text-ink-muted">
+                        {cognitiveComplexitySourceLabel(measurement)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Field>
+            )}
+          </details>
           {feedback === undefined ? null : (
             <>
               <Diagnostics failure={feedback} />
@@ -965,7 +985,7 @@ export function SpecPanel({
               ))}
             </div>
           )}
-        </dl>
+        </div>
       )}
     </aside>
   );

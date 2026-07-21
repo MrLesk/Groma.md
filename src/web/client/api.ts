@@ -70,6 +70,7 @@ export type ApiScaleEvidence =
 export interface ApiComponentView {
   readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
+  readonly evidenceBound: boolean;
   readonly revision: string;
 }
 
@@ -109,7 +110,10 @@ export interface ApiComponentRead {
 export interface ApiSearchPage {
   readonly generation: number;
   readonly hasMore: boolean;
-  readonly items: readonly ApiComponent[];
+  readonly items: readonly {
+    readonly component: ApiComponent;
+    readonly evidenceBound: boolean;
+  }[];
   readonly nextCursor?: string;
 }
 
@@ -328,6 +332,7 @@ export function fetchComponent(
 export interface ApiConnectionItem {
   readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
+  readonly evidenceBound?: boolean;
   readonly relationships: readonly {
     readonly description?: string;
     readonly id: string;
@@ -408,6 +413,7 @@ function snapshotViews(items: readonly ApiConnectionItem[]): readonly ApiCompone
       ? {}
       : { cognitiveComplexity: item.cognitiveComplexity }),
     component: item.component,
+    evidenceBound: item.evidenceBound ?? false,
     revision: "snapshot",
   }));
 }
@@ -442,20 +448,23 @@ function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): Api
       return snapshotFailure("The snapshot search text is invalid") as ApiResult<T>;
     }
     const matches = snapshot.items
-      .map((item) => item.component)
-      .filter((component) =>
+      .filter((item) =>
         [
-          component.id,
-          component.intent,
-          component.label,
-          component.name,
-          component.scale,
-          component.summary,
-          component.type,
+          item.component.id,
+          item.component.intent,
+          item.component.label,
+          item.component.name,
+          item.component.scale,
+          item.component.summary,
+          item.component.type,
         ]
           .filter((value): value is string => value !== undefined)
           .some((value) => value.toLowerCase().includes(text)),
-      );
+      )
+      .map((item) => ({
+        component: item.component,
+        evidenceBound: item.evidenceBound ?? false,
+      }));
     return snapshotPage(matches, snapshot.generation, limit, cursor) as ApiResult<T>;
   }
   if (url.pathname === "/api/component") {
@@ -483,6 +492,7 @@ function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): Api
             ? {}
             : { cognitiveComplexity: item.cognitiveComplexity }),
           component: item.component,
+          evidenceBound: item.evidenceBound ?? false,
           revision: "snapshot",
         },
         relationships: page.value,

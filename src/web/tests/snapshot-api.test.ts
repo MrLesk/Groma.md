@@ -40,6 +40,7 @@ describe("static snapshot data source", () => {
             parent: "ent_root",
             summary: "Coordinates purchases",
           },
+          evidenceBound: true,
           relationships: [],
         },
       ],
@@ -60,13 +61,19 @@ describe("static snapshot data source", () => {
     });
     expect(await fetchSearch("purchases", 20)).toMatchObject({
       ok: true,
-      value: { items: [{ id: "ent_child" }] },
+      value: {
+        items: [{ component: { id: "ent_child" }, evidenceBound: true }],
+      },
     });
     expect(await fetchComponent("ent_child", 20)).toMatchObject({
       ok: true,
       value: {
         evidence: [],
-        item: { cognitiveComplexity: [{ value: 12 }], component: { id: "ent_child" } },
+        item: {
+          cognitiveComplexity: [{ value: 12 }],
+          component: { id: "ent_child" },
+          evidenceBound: true,
+        },
         relationships: { items: [{ relationship: { id: "rel_1" } }] },
       },
     });
