@@ -322,9 +322,15 @@ describe("built-in TypeScript and Bun scanner", () => {
     expect(actions).not.toContain("hidden");
     expect(actions).not.toContain("testOnly");
 
+    // The source files a boundary owns are emitted as their own components and
+    // contained by it, so a domain drills into its real contents.
+    expect(candidates).toContainEqual({ name: "routes.ts" });
+    expect(candidates).toContainEqual({ name: "model.ts" });
     const relationships = snapshot.records.filter((record) => record.kind === "relationship");
     expect(relationships.filter((record) => record.relationshipType === "imports").length).toBe(3);
-    expect(relationships.filter((record) => record.relationshipType === "contains").length).toBe(3);
+    // Three boundaries contain three files: src/index.ts, api/routes.ts, domain/model.ts,
+    // on top of the three package->boundary containments.
+    expect(relationships.filter((record) => record.relationshipType === "contains").length).toBe(6);
 
     const documentation = snapshot.records.filter((record) => record.kind === "documentation");
     expect(documentation.map((record) => record.content)).toContain(
@@ -2549,12 +2555,28 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    // Boundaries now also emit their directories and source files as components,
+    // so the set includes the [eventId] route directory and each handler file.
     expect(
       result.snapshot?.records
         .filter((record) => record.kind === "component-candidate")
         .map((record) => record.candidate.name)
         .sort(),
-    ).toEqual(["/api", "/api/events", "composables", "domain", "nuxt-project", "source"]);
+    ).toEqual([
+      "/api",
+      "/api/events",
+      "[eventId]",
+      "composables",
+      "domain",
+      "event.ts",
+      "health.post.ts",
+      "index.get.ts",
+      "nuxt-project",
+      "nuxt.config.ts",
+      "source",
+      "unqualified.ts",
+      "useEvent.ts",
+    ]);
     expect(
       result.snapshot?.records
         .filter((record) => record.kind === "action")

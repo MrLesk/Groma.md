@@ -36,6 +36,11 @@ const maxSourceBytes = 2 * 1024 * 1024;
 const maxDocumentationCharacters = 32 * 1024;
 const maxRecords = 4_096;
 const maxCanonicalCharacters = 1_500_000;
+// Kept in step with the reconciliation component ceiling (defaultHostBounds
+// maxComponents): the file/directory topography is dropped before the emitted
+// component count could exceed what reconciliation will accept, so a very large
+// repository still yields its upper levels with partial coverage.
+const maxComponentCandidates = 1_000;
 const maxExtractionWork = 2_000_000;
 const maxRelationshipProvenance = 32;
 const maxActionProvenance = 32;
@@ -4131,6 +4136,99 @@ async function scanScope(
       );
     }
     records[index] = enlarged;
+  }
+  // The topography inside each boundary: its directories and source files, wired
+  // by containment, so a domain drills into its real contents rather than being
+  // a terminal box. Nothing new is parsed — a boundary already knows the files it
+  // owns and their paths. Directories become intermediate components and each
+  // file a leaf; depth alone decides their scale downstream. This runs last, as
+  // enrichment: on budget pressure the deeper topography is simply dropped and
+  // coverage reported partial, so the primary architecture always survives.
+  let componentCandidateCount = records.reduce(
+    (total, record) => total + (record.kind === "component-candidate" ? 1 : 0),
+    0,
+  );
+  const roomForTopography = () =>
+    budget.records + 8 < maxRecords && componentCandidateCount < maxComponentCandidates;
+  const containsRelationship = (from: string, to: string, provenance: ObservationProvenance) =>
+    Object.freeze({
+      from: reference(scope, from),
+      key: observationKey("relationship", scope, "source-contains", from, to),
+      kind: "relationship" as const,
+      provenance: Object.freeze([provenance]),
+      relationshipType: observedContainmentRelationshipType,
+      scope,
+      to: reference(scope, to),
+    });
+  let topographyBudgetReached = false;
+  for (const boundary of boundaries) {
+    if (topographyBudgetReached) break;
+    const directoryKeys = new Map<string, string>();
+    for (const resource of boundary.files) {
+      chargeExtractionWork(budget);
+      const relative = relativeResource(resource, boundary.resource);
+      if (relative === undefined || relative === ".") continue;
+      const segments = relative.split("/");
+      let parentKey = boundary.key;
+      let directoryPath = "";
+      let aborted = false;
+      for (let index = 0; index < segments.length - 1; index += 1) {
+        const segment = segments[index]!;
+        directoryPath = directoryPath === "" ? segment : `${directoryPath}/${segment}`;
+        let directoryKey = directoryKeys.get(directoryPath);
+        if (directoryKey === undefined) {
+          if (!roomForTopography()) {
+            aborted = true;
+            break;
+          }
+          directoryKey = observationKey(
+            "component-candidate",
+            scope,
+            "source-directory",
+            boundary.key,
+            directoryPath,
+          );
+          directoryKeys.set(directoryPath, directoryKey);
+          append(
+            Object.freeze({
+              candidate: Object.freeze({ name: segment }),
+              key: directoryKey,
+              kind: "component-candidate",
+              provenance: Object.freeze([boundary.provenance]),
+              scope,
+            }),
+          );
+          componentCandidateCount += 1;
+          append(containsRelationship(parentKey, directoryKey, boundary.provenance));
+        }
+        parentKey = directoryKey;
+      }
+      if (aborted || !roomForTopography()) {
+        topographyBudgetReached = true;
+        partial = true;
+        break;
+      }
+      const file = await getFile(resource);
+      if (file === undefined) continue;
+      const fileKey = observationKey(
+        "component-candidate",
+        scope,
+        "source-file",
+        boundary.key,
+        relative,
+      );
+      append(
+        Object.freeze({
+          candidate: Object.freeze({ name: segments[segments.length - 1]! }),
+          key: fileKey,
+          kind: "component-candidate",
+          provenance: Object.freeze([fullProvenance(file)]),
+          scope,
+        }),
+      );
+      componentCandidateCount += 1;
+      append(containsRelationship(parentKey, fileKey, fullProvenance(file)));
+    }
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),

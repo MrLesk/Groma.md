@@ -3,6 +3,72 @@
   "source": {
     "componentBindings": [
       {
+        "componentId": "ent_ae5fb5588bb5198fe8524846534217c7",
+        "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
+        "present": true,
+        "projection": {
+          "name": "invariants.ts",
+          "parent": "ent_dc27dd8b576c2950cd5b445248045584",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_b99d55d596583817d56bf151e171663e",
+        "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
+        "present": true,
+        "projection": {
+          "name": "plugin-runtime.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_c890972300416d6c2ef6323b7c689b50",
+        "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
+        "present": true,
+        "projection": {
+          "name": "contracts.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_220d160641d58101347b50d5abb6a0f8",
+        "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+        "present": true,
+        "projection": {
+          "name": "query.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_d26332c0d45b529d63d7c800d333a86f",
+        "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
+        "present": true,
+        "projection": {
+          "name": "result.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_5d94ca2f084692662f6a9e0ca04dd074",
+        "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
+        "present": true,
+        "projection": {
+          "name": "lifecycle.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_d874ec5e618605ce1e0248310a7a628b",
         "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
         "present": true,
@@ -24,6 +90,94 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_0ddfb02ee107b23da2fc5b6239578982",
+        "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
+        "present": true,
+        "projection": {
+          "name": "program.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_6c6ff33a795d4de5efbc64d4257cdd57",
+        "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
+        "present": true,
+        "projection": {
+          "name": "scale-proposal.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_7186b44b625de156323bd464acb63411",
+        "key": "candidate.component-candidate.2517764b54327c4b6cccad98d37b3bf38f70d4212e5f2b73aeec5c686b2598b2",
+        "present": true,
+        "projection": {
+          "name": "assets.ts",
+          "parent": "ent_df026a00c094f2c586ac953ff361783e",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_32ab0b85745fd75e73fe40f4baa259a6",
+        "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
+        "present": true,
+        "projection": {
+          "name": "graph.ts",
+          "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
+          "scale": "element"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_de7c7556fb9f59e798c7ff2ddbe9580a",
+        "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
+        "present": true,
+        "projection": {
+          "name": "promise-observation.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_0c678f267188a132e990aed25ef682dc",
+        "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+        "present": true,
+        "projection": {
+          "name": "observed-structure.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_17fc0a859a30bb3aa198024e95ca791a",
+        "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+        "present": true,
+        "projection": {
+          "name": "local-resource-provider.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_e0b4e82e8f7c92c199741a1dd6dda618",
+        "key": "candidate.component-candidate.2cd2b792dd939a5e4af4d272afcdafda2eddd0ff11e235bc3913206cf2d66918",
+        "present": true,
+        "projection": {
+          "name": "typescript-bun-scanner.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_1c0ad4dc24a15521964f096ccaf7ecfa",
         "key": "candidate.component-candidate.2d0d88b7c1dfd942dbaf92e534b8f5251ff8c2c899bb9dfd54f201fd0bb9e215",
         "present": true,
@@ -36,6 +190,28 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_12fce6c75acf4d3e8afb1cf43dced943",
+        "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
+        "present": true,
+        "projection": {
+          "name": "local-transaction-journal.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_d90a2c9ad90ebcd5843661c1b8e4ac8e",
+        "key": "candidate.component-candidate.30acaa31cd6a91021eeda952b1b97653a83f76a84d4d1821f8d6f027844b6039",
+        "present": true,
+        "projection": {
+          "name": "plugin-runtime-bounds.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
         },
         "scope": "workspace"
       },
@@ -76,6 +252,17 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_b5a32eab1f8e4f7893056f7c0b7d55ca",
+        "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
+        "present": true,
+        "projection": {
+          "name": "observed-documentation.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_83702a52aa46b605c22cc1be63bf939a",
         "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
         "present": true,
@@ -89,6 +276,116 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_75564d7140eddf11281f4ae40da57c06",
+        "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
+        "present": true,
+        "projection": {
+          "name": "json-evidence-store.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_2868775497e01e62ead3ff062eef13bf",
+        "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
+        "present": true,
+        "projection": {
+          "name": "scanner-project-resources.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_fd715bd3f1bcb67dfc1b2dafd182fd68",
+        "key": "candidate.component-candidate.4718f93196af83447f79d75669522974da4085110e4eb417385f494acdaf1f8c",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_d67a54e7b5161786d1344fded42f9176",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_cf5698b9cb2541f5766768fb54a5e855",
+        "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+        "present": true,
+        "projection": {
+          "name": "model.ts",
+          "parent": "ent_dc27dd8b576c2950cd5b445248045584",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_3318a42f72c996181ef83fcc697fd5a2",
+        "key": "candidate.component-candidate.4cc097b0937d8d83b99c3f9de4e1662b6559990d196f38b5db71ed9287d6c9ca",
+        "present": true,
+        "projection": {
+          "name": "promise-observation.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_fa183efa17373d9954d29aefe36e7d42",
+        "key": "candidate.component-candidate.4e2f23c1f34835467628e77a11aef15289c6271290618d7ba0327033f4bf2ea5",
+        "present": true,
+        "projection": {
+          "name": "brand.ts",
+          "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
+          "scale": "element"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_d7a180089821ca2a91617a7977690f52",
+        "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+        "present": true,
+        "projection": {
+          "name": "events.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_8a9f80920f95a7660e3d4a10a9065a0e",
+        "key": "candidate.component-candidate.5245c6e8fc2b17ea9853a0b72028b40250b85751d6d504d9e7d553cdbe6a4264",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_e9de699a7d10037c9f133bcd239cbfd4",
+        "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
+        "present": true,
+        "projection": {
+          "name": "transaction.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_f62f2a639bcaa67fc9185bbfc6215fdb",
+        "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+        "present": true,
+        "projection": {
+          "name": "api.ts",
+          "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
+          "scale": "element"
         },
         "scope": "workspace"
       },
@@ -109,6 +406,171 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_25d0af960a675a607498d81c7c340338",
+        "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
+        "present": true,
+        "projection": {
+          "name": "canonical-json-utf8.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_ce6e96d8d5716c730e72554f698ffeab",
+        "key": "candidate.component-candidate.607a73e3ef0f6e338e857a28fcfef9c4c1d7b3654e0deeabbb769b881b6c9520",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_cabfd4caf1d6f633bc11e74f9738b886",
+        "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+        "present": true,
+        "projection": {
+          "name": "bootstrap-configuration.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_fad3cace34f1f2d8c54719c5418dd478",
+        "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
+        "present": true,
+        "projection": {
+          "name": "observation.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_31ab80b320231b92cd81e5efd97c5cee",
+        "key": "candidate.component-candidate.6932aa602211120ac80c757960f69711941461e7d8f40919d91d308f4d3f8297",
+        "present": true,
+        "projection": {
+          "name": "instructions",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_98079a43c43fa87a90d95df2bba126bf",
+        "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
+        "present": true,
+        "projection": {
+          "name": "aliases.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_34a7069d1650fdfdc8340ec18f99e57b",
+        "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
+        "present": true,
+        "projection": {
+          "name": "operations.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_a7562429a32e177a53b88e5925e5ad01",
+        "key": "candidate.component-candidate.6eebca45b392bad3e90434057a8f4008200892157bc428a386a10ed63f04dfb3",
+        "present": true,
+        "projection": {
+          "name": "default-host-identities.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_e97eaeb774680dd6c6f4fc147e2b3dc7",
+        "key": "candidate.component-candidate.70812f0a28b573080036ac2a31dafb6c134c30669b47903ec56128edd96729a3",
+        "present": true,
+        "projection": {
+          "name": "main.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_e3470868b3d3d87b9569da93075f6144",
+        "key": "candidate.component-candidate.728850a7895d59d734c630c351ae0902136546248783ad1a77691096748c91f9",
+        "present": true,
+        "projection": {
+          "name": "graph.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_5bb68f003e5214e3b8a4e675be44bb14",
+        "key": "candidate.component-candidate.7393e816b24bc899d18bbce1b3aa113b656a0749777195feebe451821eee7955",
+        "present": true,
+        "projection": {
+          "name": "contracts.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_ede7b95d488b53f6271e00b5f03658a4",
+        "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
+        "present": true,
+        "projection": {
+          "name": "server.ts",
+          "parent": "ent_df026a00c094f2c586ac953ff361783e",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_638adaada01eccf762f7796ee2c97479",
+        "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_31ab80b320231b92cd81e5efd97c5cee",
+          "scale": "element"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_9e8bc35b6b659d91845ad308e595475f",
+        "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
+        "present": true,
+        "projection": {
+          "name": "projection.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_32f8da5870323eb565d197186e8a87b1",
+        "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
+        "present": true,
+        "projection": {
+          "name": "reconciliation.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_2f0acb10032d99f99e27cb1d9c42b701",
         "key": "candidate.component-candidate.7f2a68f97204e505d45ff7773533dca00f37cf64991f63eda35977d2956423ff",
         "present": true,
@@ -121,6 +583,61 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_61404028144bda85ebcd3df4fd1b7163",
+        "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
+        "present": true,
+        "projection": {
+          "name": "alias-store.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_2697496c13b37a6fd2646c97857d6f0a",
+        "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+        "present": true,
+        "projection": {
+          "name": "snapshot-state.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_24ad2f2aaedf79d187dab7050d4a2ebd",
+        "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
+        "present": true,
+        "projection": {
+          "name": "path-containment.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_7a122d8fa8aaf2e0a85a4651e5117de1",
+        "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
+        "present": true,
+        "projection": {
+          "name": "projection-index.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_31d08e0a325dc152feb7a8e1917f41cd",
+        "key": "candidate.component-candidate.887242bd0854a68a3d13a2b59f2e5aea3495527d6c5672e9c173ebb14dd7386a",
+        "present": true,
+        "projection": {
+          "name": "contracts.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
         },
         "scope": "workspace"
       },
@@ -146,6 +663,28 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_7a33277ba783b02248355a00b1cfd592",
+        "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
+        "present": true,
+        "projection": {
+          "name": "scanner.ts",
+          "parent": "ent_d67a54e7b5161786d1344fded42f9176",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_2fbe2aeee68a2a7328214eeaeab2560d",
+        "key": "candidate.component-candidate.8ceaca45655b1c0150001330d42d740ebddcd5c276b60eaf3ab1478dee35fb58",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_dc27dd8b576c2950cd5b445248045584",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_25ee85056d4b897363fac6953821d78b",
         "key": "candidate.component-candidate.910bd7c23d553ab7073b62dffab2111518691e4d050616eeac9057f28c68ae35",
         "present": true,
@@ -158,6 +697,50 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "element",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_90d047bafce020521d255443a0f09d6d",
+        "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
+        "present": true,
+        "projection": {
+          "name": "default-bootstrap.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_19b674e6d58204a983721f1bc60621a7",
+        "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
+        "present": true,
+        "projection": {
+          "name": "surface.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_49a7de61296d5b4a2f2304fc14885e35",
+        "key": "candidate.component-candidate.9ce8e288d42ed589e1afbf75ab9fe9d7f3b1cb1c60b93c0c9d3403e3a1815628",
+        "present": true,
+        "projection": {
+          "name": "graph-query.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_b369bf593bc82c53d1a2e5d56783ad21",
+        "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+        "present": true,
+        "projection": {
+          "name": "payload.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
         },
         "scope": "workspace"
       },
@@ -233,6 +816,94 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_0e707f15fc32443be2e66458ec9cdc03",
+        "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
+        "present": true,
+        "projection": {
+          "name": "render.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_a942d3f0bc81db2e4074e7f34efcb690",
+        "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
+        "present": true,
+        "projection": {
+          "name": "projection-query-engine.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_35bd62027d6e988e2e64fc5b66357617",
+        "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
+        "present": true,
+        "projection": {
+          "name": "input.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_6e27da234c3541f80fb28f9ec747ae0d",
+        "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
+        "present": true,
+        "projection": {
+          "name": "splash.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_d20e6e9eea9e2e21dfa2cdc8e6e65d5a",
+        "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+        "present": true,
+        "projection": {
+          "name": "local-project-registry.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_285e78427fbf837690b7f6133ad2701c",
+        "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
+        "present": true,
+        "projection": {
+          "name": "blueprint-html.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_a933b758fcc7b88e86a4ab8741c4296a",
+        "key": "candidate.component-candidate.bd9283dad71a27f1de674d88bc285022bbbaeb0459e8c5b925928d0d7a6be148",
+        "present": true,
+        "projection": {
+          "name": "help.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_4b68b96998f321caad2be3aa5110d4df",
+        "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
+        "present": true,
+        "projection": {
+          "name": "markdown-intent-store.ts",
+          "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_d900583069d4f258c239e4be909e20a9",
         "key": "candidate.component-candidate.c1112eab6fb8a2c35abc037797d0ad45dcfefd291a57550b48200a31e7af84e3",
         "present": true,
@@ -249,6 +920,39 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_cca7172779f5710109f8ca27e386d7d4",
+        "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
+        "present": true,
+        "projection": {
+          "name": "capability-value.ts",
+          "parent": "ent_93b646ce861caf566a130dcd67d2c836",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_7917653d913c6d5907597ecb4097bd8c",
+        "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+        "present": true,
+        "projection": {
+          "name": "client",
+          "parent": "ent_df026a00c094f2c586ac953ff361783e",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_c59410bfdfbe140d088c4ae774c9ff1a",
+        "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
+        "present": true,
+        "projection": {
+          "name": "local-workspace.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_9107f4621787c46c6eee35fc42b0f21e",
         "key": "candidate.component-candidate.d694ae3157ea05f9c87a763b6b675b6a8dda53aa5921243fb00ad7cdbb433b63",
         "present": true,
@@ -261,6 +965,39 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_423298851da2c9097d15fb1bbaaa3a13",
+        "key": "candidate.component-candidate.d75c3bf28f484fa00685904196b746147362940a16e0ec8d009c609f6b817aab",
+        "present": true,
+        "projection": {
+          "name": "markdown-modules.d.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_16a21b9daff26494d6aced2ede36a008",
+        "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+        "present": true,
+        "projection": {
+          "name": "runtime-validation.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_246df04e4b4fd1bfb06e9b1dc155f7a3",
+        "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
+        "present": true,
+        "projection": {
+          "name": "contracts.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
         },
         "scope": "workspace"
       },
@@ -302,6 +1039,17 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_bb48435a4452ef38e19451bbf968d49b",
+        "key": "candidate.component-candidate.e4764610c670e0deee31b0b205158c1326df7ca7109e4341bb3fd28bc75b489f",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_93b646ce861caf566a130dcd67d2c836",
         "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
         "present": true,
@@ -336,6 +1084,17 @@
         "scope": "workspace"
       },
       {
+        "componentId": "ent_98f9d76e4fb8098a8682ef38568487b7",
+        "key": "candidate.component-candidate.ed7428b9492881c72b52f29ca97aa3bbd50994c847de1616c96bc684de7b7e49",
+        "present": true,
+        "projection": {
+          "name": "index.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
         "componentId": "ent_3d1426f2fe6cc330b3bd6d9d1cb98df1",
         "key": "candidate.component-candidate.ee35e6fb35ed895466b6a15965e263d375400b613a4fc46538d5ebd916266124",
         "present": true,
@@ -348,6 +1107,72 @@
           "derivation": "groma/structural-scale/v1",
           "proposal": "part",
           "status": "proposed"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_1b2472931546209aee131c435a35a02b",
+        "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
+        "present": true,
+        "projection": {
+          "name": "generation.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_a1e39baac435c84134d633ebb1e201c4",
+        "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
+        "present": true,
+        "projection": {
+          "name": "scanner-runtime.ts",
+          "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_9ed496744c2d4e3cefe6eaeb1ec6b9b3",
+        "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
+        "present": true,
+        "projection": {
+          "name": "parser.ts",
+          "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_f6fcbad7dc994eb22c84c16b7fb8cdc6",
+        "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+        "present": true,
+        "projection": {
+          "name": "model.ts",
+          "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
+          "scale": "element"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_05989e2ed62b0c241bebcaafd13202a5",
+        "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
+        "present": true,
+        "projection": {
+          "name": "runtime.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
+        },
+        "scope": "workspace"
+      },
+      {
+        "componentId": "ent_9cda15cd1f6d49d151214da56a8887be",
+        "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+        "present": true,
+        "projection": {
+          "name": "identity.ts",
+          "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
+          "scale": "part"
         },
         "scope": "workspace"
       }
@@ -848,7 +1673,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_d310499fa3c63d4eb57e31bbde2bfc3a",
+      "epoch": "epoch_f3718abcef50e39edb07f8e69b4fc304",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -969,6 +1794,96 @@
         },
         {
           "candidate": {
+            "name": "invariants.ts"
+          },
+          "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:63e8e370db59fc2f2e62f9f62d5e03c8e772120437bfdb23d539a194b3c6b5a5",
+              "resource": "src/standard-model/invariants.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "plugin-runtime.ts"
+          },
+          "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12de6906258229535f677aaa2a24b1f81981f0200fe82bf9f911b74421331507",
+              "resource": "src/core/plugin-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "contracts.ts"
+          },
+          "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12c0b750aa23889d5684dc90119365284f6109d07846cf871ee8e07ed0697749",
+              "resource": "src/persistence/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "query.ts"
+          },
+          "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:72a34029531853476c6ce891bbcdefdd1c2cf67bab13e422c8edc1abd0808947",
+              "resource": "src/core/query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "result.ts"
+          },
+          "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5ff98bee21f2d57afd85409be022361f6def958ffe34041c3b11c58e583f3c82",
+              "resource": "src/core/result.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "lifecycle.ts"
+          },
+          "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1d7afc4ddd7e592fb3712fbba7ae3bef51e7c22eab3bc804f0d015fdf391104f",
+              "resource": "src/host/lifecycle.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "persistence"
           },
           "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
@@ -986,6 +1901,126 @@
             "fileCount": 9,
             "reuseBreadth": 1
           }
+        },
+        {
+          "candidate": {
+            "name": "program.ts"
+          },
+          "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
+              "resource": "src/cli/program.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "scale-proposal.ts"
+          },
+          "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:859df2a594e6314c2d990c7fac0e8c5642dfb77b3c26f008d503615f8b7b19eb",
+              "resource": "src/application/scale-proposal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "assets.ts"
+          },
+          "key": "candidate.component-candidate.2517764b54327c4b6cccad98d37b3bf38f70d4212e5f2b73aeec5c686b2598b2",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+              "resource": "src/web/assets.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "graph.ts"
+          },
+          "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "promise-observation.ts"
+          },
+          "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d65495c2ba794d1286403bbefdde8ce26ce45c7d87714259745904e79b0a194e",
+              "resource": "src/core/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "observed-structure.ts"
+          },
+          "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "local-resource-provider.ts"
+          },
+          "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "typescript-bun-scanner.ts"
+          },
+          "key": "candidate.component-candidate.2cd2b792dd939a5e4af4d272afcdafda2eddd0ff11e235bc3913206cf2d66918",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
+              "resource": "src/host/typescript-bun-scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1009,6 +2044,36 @@
           "signals": {
             "reuseBreadth": 2
           }
+        },
+        {
+          "candidate": {
+            "name": "local-transaction-journal.ts"
+          },
+          "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9cea477dec132f1d7acb6b0785e6cbf966b5c14d380ef4db27b1a5269a4dd68d",
+              "resource": "src/persistence/local-transaction-journal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "plugin-runtime-bounds.ts"
+          },
+          "key": "candidate.component-candidate.30acaa31cd6a91021eeda952b1b97653a83f76a84d4d1821f8d6f027844b6039",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d56cfee541c8cec22289bc3001338f0bde7e6be8c6227ca3276c6349ab749178",
+              "resource": "src/host/plugin-runtime-bounds.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1052,6 +2117,21 @@
         },
         {
           "candidate": {
+            "name": "observed-documentation.ts"
+          },
+          "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:425faf8d3f6bf1ddc987161db795b9cb5c944c0906f7aeeb3d69dbe2c4923188",
+              "resource": "src/application/observed-documentation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "cli"
           },
           "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
@@ -1068,6 +2148,156 @@
             "declaredBoundary": true,
             "fileCount": 12
           }
+        },
+        {
+          "candidate": {
+            "name": "json-evidence-store.ts"
+          },
+          "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:2c5d3bdb8372050026b432ce8520a0e1c9200919c7e65721a77b463fc88cd977",
+              "resource": "src/persistence/json-evidence-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "scanner-project-resources.ts"
+          },
+          "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:abdbce65b9498f484f8553341f84741bb6b6086704bf43ec463c00981d3e9635",
+              "resource": "src/host/scanner-project-resources.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.4718f93196af83447f79d75669522974da4085110e4eb417385f494acdaf1f8c",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f0b28f5262fbd3e3521a1e2c1cfca43d625bb8e284561a569b9effc20b3566d8",
+              "resource": "src/plugin-sdk/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "model.ts"
+          },
+          "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "promise-observation.ts"
+          },
+          "key": "candidate.component-candidate.4cc097b0937d8d83b99c3f9de4e1662b6559990d196f38b5db71ed9287d6c9ca",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4c4e28e619b8efaea632db97b7086e64638729141ce9f09ca583d85d05f22ebb",
+              "resource": "src/application/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "brand.ts"
+          },
+          "key": "candidate.component-candidate.4e2f23c1f34835467628e77a11aef15289c6271290618d7ba0327033f4bf2ea5",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:fb56b31210fc549e0f9d95eae91c432a1bf9f0f6dfaecf5025e079197a1b4522",
+              "resource": "src/web/client/brand.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "events.ts"
+          },
+          "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:07fd734a41af09ab8f31f0b6b84f2eeced66acae19ce2c4afc87588a43008ad7",
+              "resource": "src/core/events.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.5245c6e8fc2b17ea9853a0b72028b40250b85751d6d504d9e7d553cdbe6a4264",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5447d7edeb363089992bd2933774c3a1664be436aa6920b898d62954e1740a13",
+              "resource": "src/persistence/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "transaction.ts"
+          },
+          "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1cb3d16294139d9d4cb6899dcffa922e650e703c397b164dea64b443f7fb27fb",
+              "resource": "src/core/transaction.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "api.ts"
+          },
+          "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1094,6 +2324,231 @@
         },
         {
           "candidate": {
+            "name": "canonical-json-utf8.ts"
+          },
+          "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:3ad5157049692f6aee941bf8040f63053f8ad192c7fb0f03a81e8d4b41c0811c",
+              "resource": "src/application/canonical-json-utf8.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.607a73e3ef0f6e338e857a28fcfef9c4c1d7b3654e0deeabbb769b881b6c9520",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:475a354b42648b1e2f3e9f1c5d9a0899713b2f80be74951c2f794ad45e4879d6",
+              "resource": "src/application/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "bootstrap-configuration.ts"
+          },
+          "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "observation.ts"
+          },
+          "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7fc4461a82ebdbe0b5fcd90421beee2521e42056946460171ba66e0b08314df7",
+              "resource": "src/core/observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "instructions"
+          },
+          "key": "candidate.component-candidate.6932aa602211120ac80c757960f69711941461e7d8f40919d91d308f4d3f8297",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
+              "resource": "src/cli/blueprint-html.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "aliases.ts"
+          },
+          "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:fb94eb92804aa9cbcb8f371b87b4b70b68e7a1dc648716ec56f96cd99fe19e6c",
+              "resource": "src/core/aliases.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "operations.ts"
+          },
+          "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:625eca4d96ee80691a9cc16841939304a5916565cc5ef350e6cb85624c38f3b9",
+              "resource": "src/application/operations.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "default-host-identities.ts"
+          },
+          "key": "candidate.component-candidate.6eebca45b392bad3e90434057a8f4008200892157bc428a386a10ed63f04dfb3",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03a836c16caee4d5f6f28d2ed856b9f90b1efc20c819543c87430606e600eabd",
+              "resource": "src/host/default-host-identities.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "main.ts"
+          },
+          "key": "candidate.component-candidate.70812f0a28b573080036ac2a31dafb6c134c30669b47903ec56128edd96729a3",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:146c63f137001cf0da07928102c57042d3fe5d23fcd669eca4544bcc8e819c06",
+              "resource": "src/cli/main.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "graph.ts"
+          },
+          "key": "candidate.component-candidate.728850a7895d59d734c630c351ae0902136546248783ad1a77691096748c91f9",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f00f497599c66954dc22f9e632cffcf25d5ab8b8e3c88dd56d8f36b2531f4980",
+              "resource": "src/core/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "contracts.ts"
+          },
+          "key": "candidate.component-candidate.7393e816b24bc899d18bbce1b3aa113b656a0749777195feebe451821eee7955",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:50310d9440eeeef2d2736bff4df2c95b14fbf8d1020a9373ff9686c1e07b2fbc",
+              "resource": "src/application/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "server.ts"
+          },
+          "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:de769364c840cd3f3484f2ece61fa19df6acb06f8c97ecc7d9034117b4afdea6",
+              "resource": "src/web/server.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:310e442fa1e68cf8d0cb52f532b36e6fa248234556929c9c7805a1ab8dfd035d",
+              "resource": "src/cli/instructions/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "projection.ts"
+          },
+          "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:79c94ca4654d8fe8d8b0301ab14e7d5b25a8da9e13f3f5c2927bb906130f2d0b",
+              "resource": "src/core/projection.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "reconciliation.ts"
+          },
+          "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
+              "resource": "src/application/reconciliation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "node:fs",
             "type": "external"
           },
@@ -1117,6 +2572,81 @@
         },
         {
           "candidate": {
+            "name": "alias-store.ts"
+          },
+          "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03faae518426c81bb34191151566ea768c7df547127cb3eae9b5794654b05cc4",
+              "resource": "src/persistence/alias-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "snapshot-state.ts"
+          },
+          "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "path-containment.ts"
+          },
+          "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:dfe08f12df194c0745ddf0d4ca0c690a7459f54dc30cb1dee2ff566dba4e7e78",
+              "resource": "src/host/path-containment.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "projection-index.ts"
+          },
+          "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:becc56a6cc7027574614c6965aa8c44c3272721ceb5411e8aed9f396d727531e",
+              "resource": "src/persistence/projection-index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "contracts.ts"
+          },
+          "key": "candidate.component-candidate.887242bd0854a68a3d13a2b59f2e5aea3495527d6c5672e9c173ebb14dd7386a",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:0b9e7914474c00348e7175da62b890a0b6151697d89d4d5d20591393ba8e7c9c",
+              "resource": "src/host/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "host"
           },
           "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
@@ -1137,6 +2667,36 @@
         },
         {
           "candidate": {
+            "name": "scanner.ts"
+          },
+          "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
+              "resource": "src/plugin-sdk/scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.8ceaca45655b1c0150001330d42d740ebddcd5c276b60eaf3ab1478dee35fb58",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a3be4105ea5eac2328e763568dbf3365bd1426320591c4202e3ac14f386ce248",
+              "resource": "src/standard-model/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "@babel/parser",
             "type": "external"
           },
@@ -1144,7 +2704,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -1157,6 +2717,66 @@
           "signals": {
             "reuseBreadth": 1
           }
+        },
+        {
+          "candidate": {
+            "name": "default-bootstrap.ts"
+          },
+          "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:0f7cc2ca34ae9cf78f0386c3e9d866abd1b85cc353b608c8d6ef4c3a280faccd",
+              "resource": "src/host/default-bootstrap.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "surface.ts"
+          },
+          "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a91db8eed645ca8103d262fc30b5723f8b962b139c251e43a1bdd72b86625066",
+              "resource": "src/cli/surface.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "graph-query.ts"
+          },
+          "key": "candidate.component-candidate.9ce8e288d42ed589e1afbf75ab9fe9d7f3b1cb1c60b93c0c9d3403e3a1815628",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:50a59a954f031983e306a1377ba83cf23b53145151b69fd8577d4de823ab6b56",
+              "resource": "src/core/graph-query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "payload.ts"
+          },
+          "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1208,7 +2828,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -1221,6 +2841,126 @@
           "signals": {
             "reuseBreadth": 1
           }
+        },
+        {
+          "candidate": {
+            "name": "render.ts"
+          },
+          "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:693ae5ab6c1f3dd3036286461d4fd2f0d3a0aa641c19c74620d4c9afd01fec3b",
+              "resource": "src/cli/render.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "projection-query-engine.ts"
+          },
+          "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:ea2e3e97f309ee453897adfeb7c0e5a64a6f1e65e335741d9fb2f134d5086266",
+              "resource": "src/persistence/projection-query-engine.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "input.ts"
+          },
+          "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d9a2278cd198cf39fad6e2556e7590e6287768cfeac3fae4c0245627a27449bd",
+              "resource": "src/cli/input.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "splash.ts"
+          },
+          "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:00170b919993e3d8bf06115aa7f505a2af9fc057458d33a7d82257be8b4a7d70",
+              "resource": "src/cli/splash.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "local-project-registry.ts"
+          },
+          "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4456d715058a2a0e8d364932879dfa8fb4fbba3424aee5608f216fb762c18fe0",
+              "resource": "src/host/local-project-registry.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "blueprint-html.ts"
+          },
+          "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
+              "resource": "src/cli/blueprint-html.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "help.ts"
+          },
+          "key": "candidate.component-candidate.bd9283dad71a27f1de674d88bc285022bbbaeb0459e8c5b925928d0d7a6be148",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:8cb4bfbec2d6dd17d07c895257a7e8c3b774a9ed334d13b7cbfb7fb2689c01d7",
+              "resource": "src/cli/help.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "markdown-intent-store.ts"
+          },
+          "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4901fd7e2b1281f063fa20351e8c1a2f152e80f7af54888d00a6cbd85d189a0d",
+              "resource": "src/persistence/markdown-intent-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1247,6 +2987,51 @@
         },
         {
           "candidate": {
+            "name": "capability-value.ts"
+          },
+          "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:df2af7c9e39f54ca42647d81b7cbf4a56072e03a6d5152d5891f4a9a0a2ba8b7",
+              "resource": "src/application/capability-value.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "client"
+          },
+          "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+              "resource": "src/web/assets.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "local-workspace.ts"
+          },
+          "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:003b3d327dde2f9f10bc844165bef3b469259a2ecb1ade2bdf378f506c6861be",
+              "resource": "src/host/local-workspace.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "node:os",
             "type": "external"
           },
@@ -1267,6 +3052,51 @@
           "signals": {
             "reuseBreadth": 2
           }
+        },
+        {
+          "candidate": {
+            "name": "markdown-modules.d.ts"
+          },
+          "key": "candidate.component-candidate.d75c3bf28f484fa00685904196b746147362940a16e0ec8d009c609f6b817aab",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f00fc9a608a4e9b751ac06aa31250c1dd25257912ee2775474cc2957056268e0",
+              "resource": "src/cli/markdown-modules.d.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "runtime-validation.ts"
+          },
+          "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "contracts.ts"
+          },
+          "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:794d78617ed3b9e5b185a8aa0dbf24b4cd282c85dce2fe9a37ed5f2dceceb6d3",
+              "resource": "src/cli/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1313,6 +3143,21 @@
         },
         {
           "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.e4764610c670e0deee31b0b205158c1326df7ca7109e4341bb3fd28bc75b489f",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:b7cc7cb7ffe122a4244a63611918e502393dab8122323113e76997de044fa9a0",
+              "resource": "src/host/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
             "name": "application"
           },
           "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
@@ -1340,7 +3185,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -1353,6 +3198,21 @@
           "signals": {
             "reuseBreadth": 1
           }
+        },
+        {
+          "candidate": {
+            "name": "index.ts"
+          },
+          "key": "candidate.component-candidate.ed7428b9492881c72b52f29ca97aa3bbd50994c847de1616c96bc684de7b7e49",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:93ab3f1be789020be9981412e29694c4629b01613e48828cc6b68e002f383f5f",
+              "resource": "src/core/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "candidate": {
@@ -1376,6 +3236,96 @@
           "signals": {
             "reuseBreadth": 2
           }
+        },
+        {
+          "candidate": {
+            "name": "generation.ts"
+          },
+          "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f74a9c3e5b3e575a2a82774eae914c60ef4614277f67e5b6fea35ab5a5b67914",
+              "resource": "src/core/generation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "scanner-runtime.ts"
+          },
+          "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:8b1403f4f6d071bcc2ab72f4b0b417bc78130273f7b501c6e229e1af67a17dbe",
+              "resource": "src/host/scanner-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "parser.ts"
+          },
+          "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:16bacf9561770bcfa3c8b18c2c53229d88ab18f415f05e729b84681bb5859a67",
+              "resource": "src/cli/parser.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "model.ts"
+          },
+          "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "runtime.ts"
+          },
+          "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:38f2d2f0b275db70830f915f7660433fa04c41212966c2653263538a6e77a7c2",
+              "resource": "src/core/runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
+        },
+        {
+          "candidate": {
+            "name": "identity.ts"
+          },
+          "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+          "kind": "component-candidate",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9eb0bd87ebc64eab5460252a331eec7ea8cd207420c2cfa642bf556feca2215c",
+              "resource": "src/core/identity.ts",
+              "scope": "workspace"
+            }
+          ],
+          "scope": "workspace"
         },
         {
           "content": "# Groma brand\n\nGroma is named after the Roman surveyor's cross-staff — the instrument that transferred architectural intent onto the ground. Every Roman city, road, and camp was laid out behind one. The people who used it were the *gromatici*; Groma's community name, **the Gromatics**, honors them.\n\n## Assets\n\n| File | What it is | Use it for |\n|---|---|---|\n| `mark-frontal.svg` | The primary glyph: staff, crossbar, two plumb lines, ground line | Avatars, favicons, app icons, anywhere small |\n| `mark-topdown.svg` | The groma seen from above: a surveyor's cross over the sighted point | Alternative glyph; watermarks, stickers, loading marks |\n| `mark-sightline.svg` | Frontal glyph plus one accent sight line hitting a surveyed point | Hero contexts, splash screens, docs headers |\n| `lockup.svg` | Glyph + `groma` wordmark + `.md` suffix in the accent color | README header, website header, social banners |\n\nThe illustrated blueprint-style drawing (full instrument with four plumb lines, construction lines, and the sighted point) is the hero illustration for the website and launch material. It is an illustration, not a mark — never scale it below roughly 200 px.\n\n## Rules\n\n1. **Reduction system, not one logo.** The illustrated version is for hero surfaces only. Everything at or below 64 px uses `mark-frontal.svg`. The glyph must stay legible at 16 px — if a proposed variant fails at 16 px, it is not a mark.\n2. **Match stroke weights.** The glyph's stroke weight and the wordmark's weight must read as one voice. Never pair a hairline mark with a heavy wordmark or vice versa.\n3. **One accent color.** The accent is the sight line: teal `#1D9E75`. It marks the surveyed point — intent projected onto reality. Nothing else in the identity gets color. Structural strokes are `currentColor` (black on light, white on dark).\n4. **The wordmark is lowercase.** The product is a CLI: `groma`. Prefer engineering-drawing faces (DIN-derived: DIN, Overpass, Archivo) over techno or sci-fi faces. The lockup in this folder uses a system-font placeholder — outline the final type before print or social use.\n5. **`.md` is part of the brand.** The full name is `groma.md` — domain, npm package, and lockup. In the lockup the `.md` suffix is set in the accent teal. Use the bare glyph when space demands, but never set the wordmark as \"Groma\" title-case in product surfaces.\n6. **Clear space.** Keep at least the width of the crossbar's plumb-line drop (roughly 25% of the glyph height) free around the mark.\n\n## Don't\n\n- Don't add gradients, shadows, or 3D effects to the marks.\n- Don't recolor the structural strokes; only the sight line and surveyed point carry the accent.\n- Don't use the illustrated hero version as an avatar or favicon.\n- Don't rotate the frontal mark; the plumb lines hang — gravity is part of the meaning.\n- Don't set the wordmark in title case or add spacing between `groma` and `.md`.\n\n## Dark backgrounds\n\nThe marks use `currentColor`, so they invert cleanly when inlined in HTML/CSS. When embedding as `<img>` on GitHub, use a `<picture>` element with `prefers-color-scheme` and the `*-dark.svg` variants in this folder (same geometry, strokes fixed to `#F0EFEA`). The dark variants are generated from the sources — edit the source, then regenerate.\n",
@@ -1603,6 +3553,27 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.00d3f6d5a8cdfba4b7fdcfe9bd38ac71b0ad383bda9f021c5d4b1adf3b862a6b",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4c4e28e619b8efaea632db97b7086e64638729141ce9f09ca583d85d05f22ebb",
+              "resource": "src/application/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.4cc097b0937d8d83b99c3f9de4e1662b6559990d196f38b5db71ed9287d6c9ca",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
             "scope": "workspace"
           },
@@ -1673,6 +3644,48 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.093df6bd0b51e18eec370ff0e9bcf86e4184480a079f63d6441ed912c4009105",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1cb3d16294139d9d4cb6899dcffa922e650e703c397b164dea64b443f7fb27fb",
+              "resource": "src/core/transaction.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.09c543b08b180c2ab0b303c8379c1ee8a070ec8be0c2910c5b33750b1eae223c",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:50a59a954f031983e306a1377ba83cf23b53145151b69fd8577d4de823ab6b56",
+              "resource": "src/core/graph-query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.9ce8e288d42ed589e1afbf75ab9fe9d7f3b1cb1c60b93c0c9d3403e3a1815628",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
             "scope": "workspace"
           },
@@ -1698,6 +3711,48 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.0a2764211eb28838a2c8944f4f8d0a7fbb4993009aad5b63fb34fb7cee5e3d7d",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+              "resource": "src/web/assets.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.0a734f1cfd1a210d96e816668189e8f2665debf775694281ef88b1891b64a8de",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a3be4105ea5eac2328e763568dbf3365bd1426320591c4202e3ac14f386ce248",
+              "resource": "src/standard-model/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.8ceaca45655b1c0150001330d42d740ebddcd5c276b60eaf3ab1478dee35fb58",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
             "scope": "workspace"
           },
@@ -1714,6 +3769,27 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.14be255199bdfeac7cc1f37cf22a4fbcac47c98f43364204b77d678f89a5750d",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:de769364c840cd3f3484f2ece61fa19df6acb06f8c97ecc7d9034117b4afdea6",
+              "resource": "src/web/server.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
             "scope": "workspace"
           }
         },
@@ -1825,6 +3901,153 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1889b0e078fcba7c1543a162ef0e54fd06ae242e7e2936dbb247dc232deb4647",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
+              "resource": "src/cli/blueprint-html.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1c49d6dc157f841e14ddc9068bc1209b13df74a9ee339462093863067c3b69bc",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7932384fd59c644473b664230e99616c5eb77e1483e481f20fcb957113107d8f",
+              "resource": "src/web/client/api.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1c7578c11e92da0843b57aea7a96af04ebae554065f318296695389fc0cb0b12",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:93ab3f1be789020be9981412e29694c4629b01613e48828cc6b68e002f383f5f",
+              "resource": "src/core/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.ed7428b9492881c72b52f29ca97aa3bbd50994c847de1616c96bc684de7b7e49",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1d654be80720d2985b91e52032f44fcbde33cddf9c517fbac8597a7a51684206",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:bcedf7a4e92489e697c34a6d164cf6158b707b9f7187e7f06a9688b29c249e3c",
+              "resource": "src/application/reconciliation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1e4d9d5b7285ef9ac8d369300bfa37fbd58ea70d7a5e1c20ee5b483a3dedf274",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1f7b15ae2962d4f3864eba657d1024d195245ae414a44475e0e5c30b7fdce311",
+              "resource": "src/cli/program.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.1f8abbad7b9eca4ae7b72e51b295ea390b231b2b4aae07734bf5fa69b929f9d1",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:26d59f963da8bcb0cd8a897f203f8edff5e7ac845576475cb37c3273a6acdb9d",
+              "resource": "src/application/snapshot-state.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.216ae8f676424e0650d9805411b3e07a00da57f6a5ab6b93620a889d8101327c",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4456d715058a2a0e8d364932879dfa8fb4fbba3424aee5608f216fb762c18fe0",
+              "resource": "src/host/local-project-registry.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
             "scope": "workspace"
           },
@@ -1913,6 +4136,90 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.23324d88f239c76cb9ebfd04e8c6f537c99c11579f598f30b620dc9b6ffc275a",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:63e8e370db59fc2f2e62f9f62d5e03c8e772120437bfdb23d539a194b3c6b5a5",
+              "resource": "src/standard-model/invariants.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.235e60c10947ecb80d7eb60883e06c55c3d9a834dd385314afd933d4776848af",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9eb0bd87ebc64eab5460252a331eec7ea8cd207420c2cfa642bf556feca2215c",
+              "resource": "src/core/identity.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.2706f220645c277bca8d3ebe798a6e54e4eda3c9c466d54ea15217d8698b5cef",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:425faf8d3f6bf1ddc987161db795b9cb5c944c0906f7aeeb3d69dbe2c4923188",
+              "resource": "src/application/observed-documentation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.277e3f503f26a74f9685e8c3f8fe26336241ed9f44b66a67f5b3a017668eaa8f",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9e744be993c93753a9cfbb7200922001748eddc0b6b147b4f2efb41e61678827",
+              "resource": "src/application/observed-structure.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
             "scope": "workspace"
           },
@@ -1920,7 +4227,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
               "range": {
                 "endByteExclusive": 80,
                 "startByte": 65
@@ -2116,6 +4423,48 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.29ef02ef4fa433e82f99c14898ec229c55afeb78d7e27a31d9387ac173773742",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:fb94eb92804aa9cbcb8f371b87b4b70b68e7a1dc648716ec56f96cd99fe19e6c",
+              "resource": "src/core/aliases.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.2d5bc8a224d279ddbb20b9a463802f2315930020a7f6171326b1e433e7281d2f",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:becc56a6cc7027574614c6965aa8c44c3272721ceb5411e8aed9f396d727531e",
+              "resource": "src/persistence/projection-index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
             "scope": "workspace"
           },
@@ -2136,6 +4485,69 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.5b1890b26ded2a73237906778938b7816f54abf4157bd4d7d88733fc6afe9644",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.301a9336a7f37ede20f86e34ce76827b37c8dab4da9ca3fe048d816c84026f83",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03a836c16caee4d5f6f28d2ed856b9f90b1efc20c819543c87430606e600eabd",
+              "resource": "src/host/default-host-identities.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.6eebca45b392bad3e90434057a8f4008200892157bc428a386a10ed63f04dfb3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.31e055d1047878eb8ce4a73665bcb36c7cf62189a38fa354d23937066cda03e3",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:ea2e3e97f309ee453897adfeb7c0e5a64a6f1e65e335741d9fb2f134d5086266",
+              "resource": "src/persistence/projection-query-engine.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.375bc0a2ec1246d91c7bcc94774f55d63178395c5880ae740284fc61206f426d",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12de6906258229535f677aaa2a24b1f81981f0200fe82bf9f911b74421331507",
+              "resource": "src/core/plugin-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
             "scope": "workspace"
           }
         },
@@ -2286,6 +4698,111 @@
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
             "scope": "workspace"
           },
+          "key": "candidate.relationship.3bfc0d30e7bbc0d8f09f855e5875b7c0f06cc178a3ef7150e44feadf9fbd4ee9",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:003b3d327dde2f9f10bc844165bef3b469259a2ecb1ade2bdf378f506c6861be",
+              "resource": "src/host/local-workspace.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.41b63c4d1fdae21a7600729647676c5fba8271cfb8788bb9213bb759763f64c8",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7389df0fb4b9d2e6fffac724bd29f35a7154b72cfe7d77211174aa4ec441d6c1",
+              "resource": "src/persistence/local-resource-provider.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.437b73a825be94df6b6d10efecb463d7f4b7d71392ab275d9c60f9640b812233",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:146c63f137001cf0da07928102c57042d3fe5d23fcd669eca4544bcc8e819c06",
+              "resource": "src/cli/main.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.70812f0a28b573080036ac2a31dafb6c134c30669b47903ec56128edd96729a3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.457e91cbee44d8dca3bb5ea246b48e5396911e9b98e4f391b0c958785c7578cc",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f00f497599c66954dc22f9e632cffcf25d5ab8b8e3c88dd56d8f36b2531f4980",
+              "resource": "src/core/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.728850a7895d59d734c630c351ae0902136546248783ad1a77691096748c91f9",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.47c275d373057bb33ec2ebe341f80d06fdae52c5d89ad2a53c1ca8c0d1de2178",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:4901fd7e2b1281f063fa20351e8c1a2f152e80f7af54888d00a6cbd85d189a0d",
+              "resource": "src/persistence/markdown-intent-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
           "key": "candidate.relationship.492a5d418a30161b1079e62b730cb4bf9445b63719bcfebc886752eb9d10d86d",
           "kind": "relationship",
           "provenance": [
@@ -2308,7 +4825,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
               "range": {
                 "endByteExclusive": 40,
                 "startByte": 27
@@ -2321,6 +4838,48 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.2d0d88b7c1dfd942dbaf92e534b8f5251ff8c2c899bb9dfd54f201fd0bb9e215",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.4f866d1594165f52a799acbbdead8d727e169fcd9949251bc16640a422530f36",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:9cea477dec132f1d7acb6b0785e6cbf966b5c14d380ef4db27b1a5269a4dd68d",
+              "resource": "src/persistence/local-transaction-journal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.53fddd688ccb5f553237374fb522d20a3fcdfe1013ca104109dc13ff354ae8e1",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5ff98bee21f2d57afd85409be022361f6def958ffe34041c3b11c58e583f3c82",
+              "resource": "src/core/result.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
             "scope": "workspace"
           }
         },
@@ -2347,6 +4906,69 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.593f6d7b77df768e7e04100f6efde64e118848a8054b0f5ef85525317e767d19",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:df2af7c9e39f54ca42647d81b7cbf4a56072e03a6d5152d5891f4a9a0a2ba8b7",
+              "resource": "src/application/capability-value.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.5b77e973f4657343c6701157f680c9b11043ce81fbc720b47942dcf6d087c9b1",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:79c94ca4654d8fe8d8b0301ab14e7d5b25a8da9e13f3f5c2927bb906130f2d0b",
+              "resource": "src/core/projection.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.5fc79a66b66f9d6f4d2329afaf37cebc5f03741ece44b3eebea794acdcd252b6",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:8b1403f4f6d071bcc2ab72f4b0b417bc78130273f7b501c6e229e1af67a17dbe",
+              "resource": "src/host/scanner-runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
             "scope": "workspace"
           },
@@ -2354,7 +4976,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -2367,6 +4989,48 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.ed1eb4b58e6804dc4399eb6f2b3755828f5c8025e4097f4bfe7a81cbc4c465f3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.67259ecd97478fee272c35eba64e8f5dda6675784dde0d7d70b77d85991b6b60",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a91db8eed645ca8103d262fc30b5723f8b962b139c251e43a1bdd72b86625066",
+              "resource": "src/cli/surface.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.67cad15e2863c681f3107158fcbc1840cb6c5247f4f4cd42410171cff2c18848",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7e68cb0dccb314f3606b67bc0b84eb8c70c4abfc65d7c46bfff2ebe1b9b2eff6",
+              "resource": "src/host/bootstrap-configuration.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
             "scope": "workspace"
           }
         },
@@ -2388,6 +5052,27 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.6dc66374cdb044d5f98afe796263b9cb6d977610ebdd70172015a872b5f15cb2",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:2c5d3bdb8372050026b432ce8520a0e1c9200919c7e65721a77b463fc88cd977",
+              "resource": "src/persistence/json-evidence-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
             "scope": "workspace"
           }
         },
@@ -2427,7 +5112,7 @@
               "scope": "workspace"
             },
             {
-              "fingerprint": "sha256:673d5fe3d9df99780278435ca8c4bde8e4d0a7e9267aff1afa08c81752f16bd8",
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
               "range": {
                 "endByteExclusive": 538,
                 "startByte": 514
@@ -2440,6 +5125,69 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.6f6242999182c483c48618a12d611fdff62cedb68e22b60fd9097e5e829c5057",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:7fc4461a82ebdbe0b5fcd90421beee2521e42056946460171ba66e0b08314df7",
+              "resource": "src/core/observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.707c9ac1f789ff7e7c8ef12a9e6143211fb732aa57f44e3a20e72b1f870a996e",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5447d7edeb363089992bd2933774c3a1664be436aa6920b898d62954e1740a13",
+              "resource": "src/persistence/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.5245c6e8fc2b17ea9853a0b72028b40250b85751d6d504d9e7d553cdbe6a4264",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.735affd136de89f2194c0458db17110d6fcd9905bab7b968817ec97e35de346b",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d56cfee541c8cec22289bc3001338f0bde7e6be8c6227ca3276c6349ab749178",
+              "resource": "src/host/plugin-runtime-bounds.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.30acaa31cd6a91021eeda952b1b97653a83f76a84d4d1821f8d6f027844b6039",
             "scope": "workspace"
           }
         },
@@ -2585,6 +5333,48 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.2d0d88b7c1dfd942dbaf92e534b8f5251ff8c2c899bb9dfd54f201fd0bb9e215",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.7b52ab57297e6ae43cbb9e522299db111400ad5c6a64eccf2b77f01c87422aa1",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:72a34029531853476c6ce891bbcdefdd1c2cf67bab13e422c8edc1abd0808947",
+              "resource": "src/core/query.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.6932aa602211120ac80c757960f69711941461e7d8f40919d91d308f4d3f8297",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.7ba27003ecf4f47c939fe52dfd24457e5ec3cf55ccc4621f817d20943540a811",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:310e442fa1e68cf8d0cb52f532b36e6fa248234556929c9c7805a1ab8dfd035d",
+              "resource": "src/cli/instructions/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
             "scope": "workspace"
           }
         },
@@ -2785,6 +5575,69 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.83ea8f585924bcfb65cfaeb5d519a052b53650232e03598a679c96be16203ed2",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:50310d9440eeeef2d2736bff4df2c95b14fbf8d1020a9373ff9686c1e07b2fbc",
+              "resource": "src/application/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.7393e816b24bc899d18bbce1b3aa113b656a0749777195feebe451821eee7955",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.83ffb70e56807c50a45b6f494196d4bba1fae17e27fc43ce48fc69c5c3f10455",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
+              "resource": "src/web/client/graph.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.854fb8ac7a772d23ce4c912eceb724e9899e15ca72f15ccad2f97bb489b4ba35",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d65495c2ba794d1286403bbefdde8ce26ce45c7d87714259745904e79b0a194e",
+              "resource": "src/core/promise-observation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
             "scope": "workspace"
           },
@@ -2810,6 +5663,90 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.8c679d2b352e7a319ae84d9a17284c73cd637b8a70f1254cc2741742f08ab431",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:3ad5157049692f6aee941bf8040f63053f8ad192c7fb0f03a81e8d4b41c0811c",
+              "resource": "src/application/canonical-json-utf8.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.8d5da1dff71595a7da97189f364cf5ae8a4e4113f7f1f6f4480a40291e7371d6",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:dfe08f12df194c0745ddf0d4ca0c690a7459f54dc30cb1dee2ff566dba4e7e78",
+              "resource": "src/host/path-containment.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.8dca6b31c1fff5f3010705e2fb4397bb45ad6cbfe8f3251a2aea6391e1a91a5c",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:abdbce65b9498f484f8553341f84741bb6b6086704bf43ec463c00981d3e9635",
+              "resource": "src/host/scanner-project-resources.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.8fbb7c5f8a091a49082d72a126502da153cfc2252f71dd8ff9bee527f47f9908",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f74a9c3e5b3e575a2a82774eae914c60ef4614277f67e5b6fea35ab5a5b67914",
+              "resource": "src/core/generation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
             "scope": "workspace"
           },
@@ -2817,7 +5754,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
+              "fingerprint": "sha256:007fa985b22a7dc65d8e826fdc43f7c209076ef510f44adb51c45eb991b5cc52",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -2830,6 +5767,90 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.a60f3eca3a716529a7bd658285c8ec0287d36d782bf221149dce688fdbac3717",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.915a1c07ffe985173ecbc0d30a7aab43ebe851f64cdfaa9e921fdb8141cb7ca6",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:8cb4bfbec2d6dd17d07c895257a7e8c3b774a9ed334d13b7cbfb7fb2689c01d7",
+              "resource": "src/cli/help.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.bd9283dad71a27f1de674d88bc285022bbbaeb0459e8c5b925928d0d7a6be148",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.918225c6c2a29c69b2ccc5826364107689eee5a35e9246cf183141d6f0fb8153",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:693ae5ab6c1f3dd3036286461d4fd2f0d3a0aa641c19c74620d4c9afd01fec3b",
+              "resource": "src/cli/render.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.965fbd3cb292e33c1073cee07a90f0190ef813e87cebbc445f62fed31ad9d94c",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:38f2d2f0b275db70830f915f7660433fa04c41212966c2653263538a6e77a7c2",
+              "resource": "src/core/runtime.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.968581093578034ef754387d8c525c1f83051d6e7a952ac31d2f046aa0826b41",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f00fc9a608a4e9b751ac06aa31250c1dd25257912ee2775474cc2957056268e0",
+              "resource": "src/cli/markdown-modules.d.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.d75c3bf28f484fa00685904196b746147362940a16e0ec8d009c609f6b817aab",
             "scope": "workspace"
           }
         },
@@ -2864,6 +5885,48 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.9ccb6fcd831b5ec76e99b5a9c54641a5a6b2bd4cc7183d5a7ccc2830c5343c8a",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d9a2278cd198cf39fad6e2556e7590e6287768cfeac3fae4c0245627a27449bd",
+              "resource": "src/cli/input.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.9cddaf961a7e87ec7df28ff65a4638a66870cada0386eb8749ddde58b0d1bbbb",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:16bacf9561770bcfa3c8b18c2c53229d88ab18f415f05e729b84681bb5859a67",
+              "resource": "src/cli/parser.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
             "scope": "workspace"
           }
         },
@@ -3039,6 +6102,132 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.b111436afb3b86cbe71ddb31dd40133b51d18270ace0bce34ec2a98f524f6291",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:f0b28f5262fbd3e3521a1e2c1cfca43d625bb8e284561a569b9effc20b3566d8",
+              "resource": "src/plugin-sdk/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.4718f93196af83447f79d75669522974da4085110e4eb417385f494acdaf1f8c",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.b18c78a4fdd35976d87359a07536e35814518051967270add1b4ebe590608f2f",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1b7e4c7a28a1dfd9eb3d414ba868cb2eb958775178d2a5b6f9daaebe17728e32",
+              "resource": "src/host/typescript-bun-scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.2cd2b792dd939a5e4af4d272afcdafda2eddd0ff11e235bc3913206cf2d66918",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.b38369e35ee35e037e430955cfaa710e8618b676c93906da4f4391aca5180aee",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:0b9e7914474c00348e7175da62b890a0b6151697d89d4d5d20591393ba8e7c9c",
+              "resource": "src/host/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.887242bd0854a68a3d13a2b59f2e5aea3495527d6c5672e9c173ebb14dd7386a",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.34441675f79d11540cf357ad7a3c151b7ea748234ffd9782874fe851be26007b",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.b4970439bbd8c5ff3731c1e2b8b8f28747ad3446b6137ebb3498ec71fae91f81",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:d2c82519cd22ee5e9db01af2703e81da5fc3bb93afec871582568e8084d72a6c",
+              "resource": "src/plugin-sdk/scanner.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.bf3d01dccf38a6d84b0353c333a6e808f0336d024fa4c5c2ea17785a490092e4",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:69ebf8ae3e3a19e17c5ccc5c1623905047110156478b07c5acd89fce2b1e9e19",
+              "resource": "src/core/payload.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.bf7ea3bda659fc32d16c0883c28785d5095f64f448fbc37b0b5c91a8979830ab",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:558a8f2febf9793af11d88a637db98f18a588347e71b3946dc6fe55cd2197a45",
+              "resource": "src/cli/blueprint-html.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.6932aa602211120ac80c757960f69711941461e7d8f40919d91d308f4d3f8297",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
             "scope": "workspace"
           },
@@ -3060,6 +6249,69 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.c6d5a70af5fa3fe26338aed636281563a564c917f9e88378961acc660c64f177",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:859df2a594e6314c2d990c7fac0e8c5642dfb77b3c26f008d503615f8b7b19eb",
+              "resource": "src/application/scale-proposal.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.c9b78a4d80f6220a101ee6919ecd7659649f6b3ecfb29c44df2662677e45367e",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:794d78617ed3b9e5b185a8aa0dbf24b4cd282c85dce2fe9a37ed5f2dceceb6d3",
+              "resource": "src/cli/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3690784a0d57b958871af28150ade9852e5d212772bf0e213951dd364ef49d62",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.cf6833a373dde0a46f124f2474703ff2b40d6155885d5313842c391f495c7a9a",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:07fd734a41af09ab8f31f0b6b84f2eeced66acae19ce2c4afc87588a43008ad7",
+              "resource": "src/core/events.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
             "scope": "workspace"
           },
@@ -3076,6 +6328,69 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.d2924c55763448b8781597254dafffe38f76299dd24f8109436201eff4a0fc48",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:00170b919993e3d8bf06115aa7f505a2af9fc057458d33a7d82257be8b4a7d70",
+              "resource": "src/cli/splash.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.d7f14579e01f5dd3cc1d4772f934b5d750fd65de54b5956080dd8ceec0245c5a",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:a0cc671356da4c6a607b3918160a6d5a1279618570655bd3cda77a5a4130085f",
+              "resource": "src/host/runtime-validation.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.dba44c9f9440bc663af35526a61ec533d06bbe05ed9394a966b9a6abdef90bfa",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:b7cc7cb7ffe122a4244a63611918e502393dab8122323113e76997de044fa9a0",
+              "resource": "src/host/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.e4764610c670e0deee31b0b205158c1326df7ca7109e4341bb3fd28bc75b489f",
             "scope": "workspace"
           }
         },
@@ -3152,6 +6467,27 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.e447d7f1f1f6f5a9501b9bfe79eddbcbca44f951f9a4792e5199395e927b4770",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:fb56b31210fc549e0f9d95eae91c432a1bf9f0f6dfaecf5025e079197a1b4522",
+              "resource": "src/web/client/brand.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.4e2f23c1f34835467628e77a11aef15289c6271290618d7ba0327033f4bf2ea5",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
             "scope": "workspace"
           },
@@ -3202,6 +6538,27 @@
         },
         {
           "from": {
+            "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.e72fd4c2df22c23604848f5b20a6500d7b6d7ab9d6cd8966854f1aca749824ed",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:cf8366e832f85eb61e34141eec20161d4b1b1d902702df7c40c6b0ce989c857d",
+              "resource": "src/standard-model/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
             "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
             "scope": "workspace"
           },
@@ -3218,6 +6575,111 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.3e4d26eaaaa39b2057f4b91aeaea5c0abb20afa894f446fd58f05a764a5a9d55",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.ceadaa8d266536f624100183c170e5c568c90392b4ab9274bfb64e40c86a654e",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.ec059effb6dcae021d435f5443b1208bda86fe1457e9aeaf6c99e308b3dc2928",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:169bb4be819ad3995b0b39b3e275abe35b2a9b98fe842ea005a33c429d9c7af3",
+              "resource": "src/web/client/model.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.f0c15c49f8dc1eaacdaf74a20a54e72b33cd68934aa99af837349960a296b323",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:5c10626594584dca8a3ad590a668ddc694ee6337f225aaee4b88833a2a781ba3",
+              "resource": "src/web/assets.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.2517764b54327c4b6cccad98d37b3bf38f70d4212e5f2b73aeec5c686b2598b2",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.f0ccdd27a6f847ad54015ef874d12d0b463692fcd4cf88b837258274e38d5d22",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:475a354b42648b1e2f3e9f1c5d9a0899713b2f80be74951c2f794ad45e4879d6",
+              "resource": "src/application/index.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.607a73e3ef0f6e338e857a28fcfef9c4c1d7b3654e0deeabbb769b881b6c9520",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.f4a78250bc0f90e75c80bbe499e13c80e2825bb7edd01f538109c5c3dac3fae9",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:0f7cc2ca34ae9cf78f0386c3e9d866abd1b85cc353b608c8d6ef4c3a280faccd",
+              "resource": "src/host/default-bootstrap.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.f5714993e656de5b337443865a3737fd1f895898225b5555166f56f1e6ad06d7",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:12c0b750aa23889d5684dc90119365284f6109d07846cf871ee8e07ed0697749",
+              "resource": "src/persistence/contracts.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
             "scope": "workspace"
           }
         },
@@ -3377,6 +6839,48 @@
             "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
             "scope": "workspace"
           },
+          "key": "candidate.relationship.f96e6a35d147d89a0ebaf03ca295f85876c2619ac3d5cf5bcb2e953b20130fc9",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:1d7afc4ddd7e592fb3712fbba7ae3bef51e7c22eab3bc804f0d015fdf391104f",
+              "resource": "src/host/lifecycle.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.e8689b01d79d6387210822f4af390e26228f9e6231eac02be21e2f69a18830d3",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.fa0a882cc857fe15ac285748b5ff23e68948c61e153fc3d8c9ec1d59d056bca0",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:625eca4d96ee80691a9cc16841939304a5916565cc5ef350e6cb85624c38f3b9",
+              "resource": "src/application/operations.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.8b6f2bec52f893277303794f30c828ab126b80f09971ec10bff940a6b94e07cb",
+            "scope": "workspace"
+          },
           "key": "candidate.relationship.fe7d1883d581acaadb0f9b1e7aff81ccc7978a007a4c3ba30a92b32c73ceec09",
           "kind": "relationship",
           "provenance": [
@@ -3403,6 +6907,27 @@
           "scope": "workspace",
           "to": {
             "key": "candidate.component-candidate.ddea7528f22d4b2f185ef0ca72badb78ed4aa48f9582638da38fed32d35b2478",
+            "scope": "workspace"
+          }
+        },
+        {
+          "from": {
+            "key": "candidate.component-candidate.1abd68399d8543d9f664a97dfd96c80c765edee9fb296d0d47fe5803ef6a1a67",
+            "scope": "workspace"
+          },
+          "key": "candidate.relationship.feadd70940dd07f1dfa909239ebb078de13b73d846a61b12c8264604541be05f",
+          "kind": "relationship",
+          "provenance": [
+            {
+              "fingerprint": "sha256:03faae518426c81bb34191151566ea768c7df547127cb3eae9b5794654b05cc4",
+              "resource": "src/persistence/alias-store.ts",
+              "scope": "workspace"
+            }
+          ],
+          "relationshipType": "contains",
+          "scope": "workspace",
+          "to": {
+            "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
             "scope": "workspace"
           }
         }

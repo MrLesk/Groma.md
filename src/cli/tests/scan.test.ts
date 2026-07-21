@@ -236,11 +236,28 @@ describe("CLI scan workflow", () => {
     expect(scanned.exitCode).toBe(CLI_EXIT.success);
     expect(JSON.parse(scanned.output).result.observations.records).toBeGreaterThan(100);
 
-    const exported = await run(root, ["--format=json", "blueprint", "export", "--limit", "100"]);
-    expect(exported.exitCode).toBe(CLI_EXIT.success);
-    const items = JSON.parse(exported.output).result.value.items as Array<{
-      component: { actions?: readonly unknown[]; name: string };
-    }>;
+    // Scanning real topography emits a component per source file too, so the
+    // route areas no longer fit one bounded page; page through to collect them.
+    const items: Array<{ component: { actions?: readonly unknown[]; name: string } }> = [];
+    let cursor: string | undefined;
+    do {
+      const exported = await run(root, [
+        "--format=json",
+        "blueprint",
+        "export",
+        "--limit",
+        "100",
+        ...(cursor === undefined ? [] : ["--cursor", cursor]),
+      ]);
+      expect(exported.exitCode).toBe(CLI_EXIT.success);
+      const page = JSON.parse(exported.output).result.value as {
+        hasMore: boolean;
+        items: typeof items;
+        nextCursor?: string;
+      };
+      items.push(...page.items);
+      cursor = page.hasMore ? page.nextCursor : undefined;
+    } while (cursor !== undefined);
     expect(items.flatMap((item) => item.component.actions ?? [])).toHaveLength(120);
     expect(
       items.find((item) => item.component.name === "/api/users")?.component.actions,

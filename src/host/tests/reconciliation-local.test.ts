@@ -878,7 +878,7 @@ describe("local completed-snapshot reconciliation", () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
-    const records = Array.from({ length: defaultHostBounds.maxEmbeddedItems + 1 }, (_, index) =>
+    const records = Array.from({ length: defaultHostBounds.maxComponents + 1 }, (_, index) =>
       candidate(`component-${index}`, `Component ${index}`),
     );
     expect(await host.reconciliation.reconcile(snapshot("epoch-limit", records))).toMatchObject({
