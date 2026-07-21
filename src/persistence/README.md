@@ -29,3 +29,6 @@ chunks, Merkle proofs, repair mode, adoption protocol, or canonical authority.
 The v0.2 component layout is readable and hierarchy-shaped; the v0.2 evidence layout is bounded and
 source-sharded. Explicit migration of v0.1 workspaces remains a separate host workflow. Unsupported
 schemas, sibling filename collisions, and ambiguous state fail closed rather than being guessed.
+The component reader ignores only the exact incidental operating-system metadata filenames
+`.DS_Store`, `Thumbs.db`, and `desktop.ini`; every other unexpected component-tree entry fails with
+its canonical path so the workspace can be repaired directly.

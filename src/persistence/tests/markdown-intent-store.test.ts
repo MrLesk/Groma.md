@@ -347,6 +347,29 @@ describe("provider-backed readable component store", () => {
     });
   });
 
+  test("ignores only documented incidental operating-system metadata", async () => {
+    const provider = await resources();
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: provider,
+    });
+    const id = entityId("b1");
+    const encoded = store.serialize(component(id, { name: "Platform" }), []);
+    if (!encoded.ok) throw new Error("expected serialization");
+    await publish(provider, "groma/components/Platform.md", encoded.value.bytes);
+    await publish(provider, "groma/components/.DS_Store", encoder.encode("finder"));
+    await publish(provider, "groma/components/Platform/Thumbs.db", encoder.encode("explorer"));
+    await publish(provider, "groma/components/Platform/desktop.ini", encoder.encode("shell"));
+
+    const loaded = await store.load();
+
+    expect(loaded).toMatchObject({ ok: true });
+    if (!loaded.ok) return;
+    expect(loaded.value.documents.map((document) => String(document.locator))).toEqual([
+      "groma/components/Platform.md",
+    ]);
+  });
+
   test("validates parents, containment cycles, relationship targets, and sibling collisions", async () => {
     const scenarios: readonly {
       code: string;
@@ -409,7 +432,14 @@ describe("provider-backed readable component store", () => {
       resources: provider,
     });
     expect(await store.load()).toMatchObject({
-      diagnostics: [{ code: "unexpected-intent-resource" }],
+      diagnostics: [
+        {
+          code: "unexpected-intent-resource",
+          details: { kind: "file", locator: "groma/components/readme.json" },
+          message:
+            "Component folders contain an unexpected file at groma/components/readme.json; remove it or move it outside groma/components",
+        },
+      ],
       ok: false,
     });
 
