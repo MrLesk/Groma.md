@@ -30,6 +30,23 @@ export function displayText(component: ApiComponent): string {
   return component.label ?? component.name ?? component.id;
 }
 
+export function componentPurpose(component: ApiComponent): string | undefined {
+  return component.intent ?? component.summary;
+}
+
+export function hasReadableMeaning(component: ApiComponent): boolean {
+  return component.intent !== undefined || component.label !== undefined;
+}
+
+export function isImplementationEvidence(component: ApiComponent, evidenceBound: boolean): boolean {
+  return (
+    evidenceBound &&
+    !hasReadableMeaning(component) &&
+    component.scale !== "system" &&
+    component.scale !== "domain"
+  );
+}
+
 function upsertViews(
   nodes: ReadonlyMap<string, BlueprintNode>,
   views: readonly ApiComponentView[],

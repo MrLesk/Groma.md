@@ -1,80 +1,59 @@
-import dagre from "@dagrejs/dagre";
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
+import type { ApiCognitiveComplexityEvidence, ApiComponentScale } from "./api.ts";
 import {
-  cognitiveComplexitySourceLabel,
-  type ApiCognitiveComplexityEvidence,
-  type ApiComponentScale,
-} from "./api.ts";
-import { displayText, type BlueprintModel } from "./model.ts";
+  componentPurpose,
+  displayText,
+  isImplementationEvidence,
+  type BlueprintModel,
+  type BlueprintNode,
+} from "./model.ts";
 
 export type BlueprintNotation = ApiComponentScale | "unscaled";
 
+export const LEVEL_COMPONENT_BUDGET = 8;
+export const LEVEL_EVIDENCE_BUDGET = 5;
+export const LEVEL_RELATIONSHIP_BUDGET = 8;
+
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
-  /** True when this component contains parts, so it offers a way in. */
   readonly canOpen: boolean;
   readonly childCount: number;
-  readonly childState: "collapsed" | "empty" | "expanded" | "unread";
-  /** A scanner measurement, shown only when it is comparable on this sheet. */
   readonly cognitiveComplexity?: number;
-  /** Borrowed dependencies this one draws on, counted apart from the system's own. */
-  readonly borrows: number;
-  /** Components of this system that this one draws on. */
-  readonly dependsOn: number;
-  /** Components that draw on this one. */
-  readonly dependents: number;
-  readonly entryPoint: boolean;
-  readonly external: boolean;
-  readonly hasMoreChildren: boolean;
+  readonly evidenceBound: boolean;
   readonly label: string;
   readonly notation: BlueprintNotation;
-  readonly provisional: boolean;
+  readonly purpose?: string;
+  readonly relationshipCount: number;
   readonly shared: boolean;
-  /** A sentence the source itself states about this component, when it states one. */
-  readonly summary?: string;
   readonly type: string;
 }
 
 export interface BlueprintGroupNodeData extends Record<string, unknown> {
-  /**
-   * Stated only where the contents genuinely read in one direction, so the
-   * caption never promises an order the dependencies do not have.
-   */
-  readonly axis?: string;
-  /** What the container holds, counted, so the heading states a fact. */
-  readonly contains?: string;
-  readonly kind: "band" | "container";
+  readonly contains: string;
+  readonly kind: "container";
   readonly label: string;
   readonly notation: BlueprintNotation;
-  /** A container is still a component, and still says what the source says. */
-  readonly summary?: string;
+  readonly purpose?: string;
+}
+
+export interface BlueprintEvidenceItem {
+  readonly childCount: number;
+  readonly id: string;
+  readonly label: string;
+  readonly type: string;
 }
 
 export type BlueprintFlowNode = Node<BlueprintFlowNodeData, "component">;
 export type BlueprintGroupNode = Node<BlueprintGroupNodeData, "group">;
 export type BlueprintFlowEdge = Edge;
 
-/** An evidence mark that carries its own vocabulary a reader may not know. */
-export type BlueprintTerm = "borrowed" | "cognitive" | "entry" | "external" | "quoted" | "shared";
-
 export interface BlueprintFlowGraph {
   readonly edges: readonly BlueprintFlowEdge[];
+  readonly evidence: readonly BlueprintEvidenceItem[];
   readonly nodes: readonly (BlueprintFlowNode | BlueprintGroupNode)[];
-  /** Notations actually drawn, so the legend can describe only what is present. */
-  readonly notations: readonly BlueprintNotation[];
-  /**
-   * What the current level measures out to, in plain language — the most
-   * depended-on part, the one that reaches the most, entry points, an import
-   * cycle, the largest. Each line is a measured relation plus a count plus a
-   * verbatim name plus its scope; never a role word, never a judgement, so it
-   * stays on the "measure" side of the line the scanner must not cross.
-   */
-  readonly readout: readonly string[];
-  /**
-   * Vocabulary marks actually drawn, so the key defines only the words a reader
-   * can see on the sheet and never introduces one that is not there.
-   */
-  readonly terms: readonly BlueprintTerm[];
+  readonly omittedComponents: number;
+  readonly omittedRelationships: number;
+  readonly visibleComponents: number;
 }
 
 export interface BlueprintDependency {
@@ -83,48 +62,16 @@ export interface BlueprintDependency {
   readonly type: string;
 }
 
-const NODE_DIMENSIONS: Readonly<Record<BlueprintNotation, { height: number; width: number }>> =
-  Object.freeze({
-    domain: Object.freeze({ height: 108, width: 292 }),
-    element: Object.freeze({ height: 84, width: 236 }),
-    part: Object.freeze({ height: 96, width: 264 }),
-    system: Object.freeze({ height: 120, width: 320 }),
-    unscaled: Object.freeze({ height: 92, width: 252 }),
-  });
+export interface BlueprintGraphOptions {
+  readonly childCounts?: ReadonlyMap<string, number>;
+  readonly dependencies: readonly BlueprintDependency[];
+  readonly focusId?: string | undefined;
+  readonly model: BlueprintModel;
+}
 
-/**
- * Room for the description a component's own source states about it, clamped to
- * three lines on the card. Reserved only when there is a sentence to show, so a
- * project that documents nothing gets compact cards rather than empty gaps.
- */
-const SUMMARY_HEIGHT = 52;
-
-/** Reserved for a group's title rule, so a heading never sits on a child. */
-const GROUP_TITLE = 44;
-
-/**
- * Extra head room a container needs when it carries its own description. A
- * container is the largest thing on the sheet, so the sentence describing it is
- * the one a reader meets first and is given room to be read.
- */
-const GROUP_SUMMARY_HEIGHT = 46;
-const GROUP_PAD = 26;
-const GROUP_GAP = 88;
-const SHEET_ROW_WIDTH = 1_640;
-
-/**
- * Borrowed code is drawn smaller than anything built here and placed in a lane
- * beside the parts that use it, wired to them, so a reader sees what each
- * dependency is for without it competing with the system for first attention.
- */
-const EXTERNAL_CELL = Object.freeze({ height: 44, width: 236 });
-
-export const SCALE_ORDER: readonly ApiComponentScale[] = Object.freeze([
-  "system",
-  "domain",
-  "part",
-  "element",
-]);
+const CARD = Object.freeze({ height: 164, width: 260 });
+const GAP = Object.freeze({ x: 38, y: 54 });
+const FRAME = Object.freeze({ head: 96, pad: 32 });
 
 export function nextScaleLabel(scale: ApiComponentScale | undefined): string {
   switch (scale) {
@@ -145,182 +92,30 @@ function notationOf(scale: ApiComponentScale | undefined): BlueprintNotation {
   return scale ?? "unscaled";
 }
 
-/** Depth of a component's scale on the ladder; unscaled sorts last. */
-function scaleRank(scale: ApiComponentScale | undefined): number {
-  const index = scale === undefined ? -1 : SCALE_ORDER.indexOf(scale);
-  return index === -1 ? SCALE_ORDER.length : index;
-}
-
-interface LaidOutSubgraph {
-  readonly height: number;
-  readonly positions: ReadonlyMap<string, { readonly x: number; readonly y: number }>;
-  readonly width: number;
-}
-
-function layoutSubgraph(
-  ids: readonly string[],
-  edges: readonly { readonly source: string; readonly target: string }[],
-  sizeOf: (id: string) => { height: number; width: number },
-): LaidOutSubgraph {
-  // With no dependencies to order them, cards would stack in one tall column, so
-  // they are packed into a squarish grid instead — a readable contact sheet of a
-  // component's parts until their own wiring gives them a shape.
-  if (edges.length === 0 && ids.length > 3) {
-    const columns = Math.ceil(Math.sqrt(ids.length));
-    const columnWidth = Math.max(...ids.map((id) => sizeOf(id).width));
-    const gapX = 40;
-    const gapY = 32;
-    const positions = new Map<string, { readonly x: number; readonly y: number }>();
-    const rowHeights: number[] = [];
-    ids.forEach((id, index) => {
-      const row = Math.floor(index / columns);
-      rowHeights[row] = Math.max(rowHeights[row] ?? 0, sizeOf(id).height);
-    });
-    const rowTop = rowHeights.map((_, row) =>
-      rowHeights.slice(0, row).reduce((sum, height) => sum + height + gapY, 0),
-    );
-    ids.forEach((id, index) => {
-      const row = Math.floor(index / columns);
-      const column = index % columns;
-      positions.set(id, { x: column * (columnWidth + gapX), y: rowTop[row]! });
-    });
-    const rows = rowHeights.length;
-    const usedColumns = Math.min(columns, ids.length);
-    return {
-      height: (rowTop[rows - 1] ?? 0) + (rowHeights[rows - 1] ?? 0),
-      positions,
-      width: usedColumns * columnWidth + (usedColumns - 1) * gapX,
-    };
-  }
-  const layout = new dagre.graphlib.Graph();
-  // Generous rank and node separation leaves channels between the cards for the
-  // dependency lines to run in, so a route reaches its target through a gap
-  // instead of being hidden behind an intervening card.
-  layout.setGraph({ marginx: 0, marginy: 0, nodesep: 56, rankdir: "LR", ranksep: 116 });
-  layout.setDefaultEdgeLabel(() => ({}));
-  for (const id of ids) layout.setNode(id, { ...sizeOf(id) });
-  for (const edge of edges) {
-    if (ids.includes(edge.source) && ids.includes(edge.target)) {
-      layout.setEdge(edge.source, edge.target);
-    }
-  }
-  dagre.layout(layout);
-
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const id of ids) {
-    const size = sizeOf(id);
-    const point = layout.node(id) as { readonly x: number; readonly y: number };
-    minX = Math.min(minX, point.x - size.width / 2);
-    minY = Math.min(minY, point.y - size.height / 2);
-    maxX = Math.max(maxX, point.x + size.width / 2);
-    maxY = Math.max(maxY, point.y + size.height / 2);
-  }
-  const positions = new Map<string, { readonly x: number; readonly y: number }>();
-  for (const id of ids) {
-    const size = sizeOf(id);
-    const point = layout.node(id) as { readonly x: number; readonly y: number };
-    positions.set(id, {
-      x: Math.round(point.x - size.width / 2 - minX),
-      y: Math.round(point.y - size.height / 2 - minY),
-    });
-  }
-  return {
-    height: ids.length === 0 ? 0 : maxY - minY,
-    positions,
-    width: ids.length === 0 ? 0 : maxX - minX,
-  };
-}
-
-export interface BlueprintGraphOptions {
-  /** Observed count of each component's contained parts, container or leaf. */
-  readonly childCounts?: ReadonlyMap<string, number>;
-  readonly dependencies: readonly BlueprintDependency[];
-  /** When set, the sheet is re-rooted onto this component's contents. */
-  readonly focusId?: string | undefined;
-  readonly model: BlueprintModel;
-}
-
 /**
- * The description the scanner records on a file's own exported functions. Such
- * an export is not a way into the system — only a served route or a package's
- * public API is — so it must not light the "entry" mark just because a drilled-in
- * file lists the functions it defines. Mirrors the scanner's fileExportDescription;
- * a web test pins the two together so the marker cannot drift unnoticed.
+ * Evidence-bound, meaning-empty fine-grained components are implementation
+ * evidence. They remain inspectable, but do not become architecture by being
+ * placed on the same graph as purposeful components.
  */
-export const fileExportActionDescription = "Exported function";
-
-/**
- * Whether a component exposes a public way in — a served route or a declared
- * public export — as opposed to merely listing the functions a file exports. The
- * two arrive on the same channel but never on the same component, so the export
- * marker alone tells them apart.
- */
-function hasPublicEntry(component: {
-  readonly actions?: readonly { readonly description?: string }[];
-}): boolean {
-  return (component.actions ?? []).some(
-    (action) => action.description !== fileExportActionDescription,
-  );
+export function isImplementationOnly(node: BlueprintNode): boolean {
+  return isImplementationEvidence(node.view.component, node.view.evidenceBound);
 }
 
-/**
- * The groups of components that reference one another in a cycle (Tarjan's
- * strongly-connected components of size two or more). Deterministic: the input
- * order fixes the traversal, and each returned group is sorted by id so the same
- * observation always yields the same cycle report.
- */
-function importCycles(
-  ids: readonly string[],
-  edges: readonly { readonly source: string; readonly target: string }[],
-): string[][] {
-  const outgoing = new Map<string, string[]>(ids.map((id) => [id, []]));
-  for (const edge of edges) {
-    if (edge.source !== edge.target && outgoing.has(edge.source) && outgoing.has(edge.target)) {
-      outgoing.get(edge.source)!.push(edge.target);
-    }
-  }
-  let counter = 0;
-  const index = new Map<string, number>();
-  const low = new Map<string, number>();
-  const onStack = new Set<string>();
-  const stack: string[] = [];
-  const groups: string[][] = [];
-  const connect = (v: string): void => {
-    index.set(v, counter);
-    low.set(v, counter);
-    counter += 1;
-    stack.push(v);
-    onStack.add(v);
-    for (const w of outgoing.get(v)!) {
-      if (!index.has(w)) {
-        connect(w);
-        low.set(v, Math.min(low.get(v)!, low.get(w)!));
-      } else if (onStack.has(w)) {
-        low.set(v, Math.min(low.get(v)!, index.get(w)!));
-      }
-    }
-    if (low.get(v) === index.get(v)) {
-      const group: string[] = [];
-      let w: string;
-      do {
-        w = stack.pop()!;
-        onStack.delete(w);
-        group.push(w);
-      } while (w !== v);
-      if (group.length > 1) groups.push(group.sort());
-    }
-  };
-  for (const id of ids) if (!index.has(id)) connect(id);
-  return groups.sort(
-    (left, right) => right.length - left.length || left[0]!.localeCompare(right[0]!),
-  );
+function gridPosition(index: number, columns: number): { readonly x: number; readonly y: number } {
+  return Object.freeze({
+    x: (index % columns) * (CARD.width + GAP.x),
+    y: Math.floor(index / columns) * (CARD.height + GAP.y),
+  });
+}
+
+function relationshipLabel(type: string): string {
+  if (type === "imports" || type === "requires" || type === "depends-on") return "needs";
+  if (type === "informs") return "tells";
+  const readable = type.replaceAll(/[._-]+/g, " ");
+  return readable.length <= 18 ? readable : "relates";
 }
 
 interface ComparableCognitiveComplexity {
-  readonly evidence: ApiCognitiveComplexityEvidence;
   readonly values: ReadonlyMap<string, number>;
 }
 
@@ -329,550 +124,211 @@ function cognitiveProvenanceKey(evidence: ApiCognitiveComplexityEvidence): strin
   return `${evidence.projectId}\u0000${scanner.id}\u0000${scanner.instance}\u0000${scanner.version}`;
 }
 
-/**
- * A cognitive-complexity number only has a meaning beside values produced by
- * the same scanner for the same observed project. Keep that boundary here,
- * before a card or readout can make an accidental cross-scanner comparison.
- */
 function comparableCognitiveComplexity(
   ids: readonly string[],
   model: BlueprintModel,
 ): ComparableCognitiveComplexity | undefined {
-  const sources = new Map<
-    string,
-    { readonly evidence: ApiCognitiveComplexityEvidence; readonly values: Map<string, number> }
-  >();
-  const conflicting = new Map<string, Set<string>>();
-
+  const sources = new Map<string, Map<string, Set<number>>>();
   for (const id of ids) {
     for (const evidence of model.nodes.get(id)?.view.cognitiveComplexity ?? []) {
       if (!Number.isSafeInteger(evidence.value) || evidence.value < 0) continue;
       const key = cognitiveProvenanceKey(evidence);
-      const source = sources.get(key) ?? { evidence, values: new Map<string, number>() };
-      sources.set(key, source);
-      const previous = source.values.get(id);
-      if (previous === undefined) source.values.set(id, evidence.value);
-      else if (previous !== evidence.value) {
-        const idsWithConflicts = conflicting.get(key) ?? new Set<string>();
-        idsWithConflicts.add(id);
-        conflicting.set(key, idsWithConflicts);
-      }
+      const values = sources.get(key) ?? new Map<string, Set<number>>();
+      const componentValues = values.get(id) ?? new Set<number>();
+      componentValues.add(evidence.value);
+      values.set(id, componentValues);
+      sources.set(key, values);
     }
   }
-
-  const comparable = [...sources.entries()]
-    .map(([key, source]) => {
-      const values = new Map(source.values);
-      for (const id of conflicting.get(key) ?? []) values.delete(id);
-      return { key, ...source, values };
-    })
+  const chosen = [...sources.entries()]
+    .map(([key, values]) => ({
+      key,
+      values: new Map(
+        [...values].flatMap(([id, measured]) =>
+          measured.size === 1 ? [[id, [...measured][0]!] as const] : [],
+        ),
+      ),
+    }))
     .filter((source) => source.values.size >= 2)
     .sort(
       (left, right) => right.values.size - left.values.size || left.key.localeCompare(right.key),
-    );
-  const chosen = comparable[0];
-  return chosen === undefined
-    ? undefined
-    : Object.freeze({ evidence: chosen.evidence, values: new Map(chosen.values) });
+    )[0];
+  return chosen === undefined ? undefined : Object.freeze({ values: chosen.values });
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
   const { dependencies, focusId, model } = options;
   const childCounts = options.childCounts ?? new Map<string, number>();
-
-  const isExternal = (id: string) => model.nodes.get(id)?.view.component.type === "external";
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
-
-  // The sheet shows exactly one level at a time, held inside a frame. The frame
-  // is the component the reader has walked into — the focused one, or the single
-  // owned system at the top — drawn as a plate; its direct parts are cards
-  // inside it. Going deeper is re-rooting onto a part (focus), not unfolding it
-  // in place, so a domain reads as "this domain and its parts", never as an
-  // ever-growing nest. Everything below the shown level stays out of view until
-  // entered.
   const ownedRootIds = model.rootIds.filter(
-    (id) => componentOf(id) !== undefined && !isExternal(id),
+    (id) => componentOf(id) !== undefined && componentOf(id)?.type !== "external",
   );
   const frameId =
-    focusId !== undefined && componentOf(focusId) !== undefined
+    focusId !== undefined && model.nodes.has(focusId)
       ? focusId
       : ownedRootIds.length === 1
         ? ownedRootIds[0]
         : undefined;
+  const candidates =
+    frameId === undefined
+      ? ownedRootIds
+      : [...(model.nodes.get(frameId)?.childIds ?? [])].filter((id) => model.nodes.has(id));
 
-  const visible = new Set<string>();
-  if (frameId !== undefined) {
-    visible.add(frameId);
-    for (const childId of model.nodes.get(frameId)?.childIds ?? []) {
-      if (componentOf(childId) !== undefined) visible.add(childId);
-    }
-  } else {
-    for (const rootId of ownedRootIds) visible.add(rootId);
+  const architectural = candidates.filter((id) => {
+    const node = model.nodes.get(id);
+    return (
+      node !== undefined && node.view.component.type !== "external" && !isImplementationOnly(node)
+    );
+  });
+  const implementation = candidates.filter((id) => {
+    const node = model.nodes.get(id);
+    return node !== undefined && isImplementationOnly(node);
+  });
+  const visibleIds = architectural.slice(0, LEVEL_COMPONENT_BUDGET);
+  const visibleSet = new Set(visibleIds);
+  const evidenceIds = implementation.slice(0, LEVEL_EVIDENCE_BUDGET);
+
+  const relationshipPairs = new Set<string>();
+  const visibleRelationships = dependencies.flatMap((dependency) => {
+    if (
+      dependency.source === dependency.target ||
+      !visibleSet.has(dependency.source) ||
+      !visibleSet.has(dependency.target)
+    )
+      return [];
+    const pair = `${dependency.source}\u0000${dependency.target}`;
+    if (relationshipPairs.has(pair)) return [];
+    relationshipPairs.add(pair);
+    return [dependency];
+  });
+  const drawnRelationships = visibleRelationships.slice(0, LEVEL_RELATIONSHIP_BUDGET);
+  const incident = new Map<string, number>();
+  for (const relationship of drawnRelationships) {
+    incident.set(relationship.source, (incident.get(relationship.source) ?? 0) + 1);
+    incident.set(relationship.target, (incident.get(relationship.target) ?? 0) + 1);
   }
-  // Borrowed code belongs to the top of the map, not to a domain's interior, so
-  // it is shown alongside the system and hidden once a reader has focused inward.
-  if (focusId === undefined) {
-    for (const rootId of model.rootIds) if (isExternal(rootId)) visible.add(rootId);
-  }
 
-  const owned = [...visible].filter((id) => !isExternal(id));
-  const externals = [...visible].filter((id) => isExternal(id));
-  const childrenOf = (id: string): readonly string[] =>
-    (model.nodes.get(id)?.childIds ?? []).filter((childId) => visible.has(childId));
-
-  // Nesting comes from the loaded hierarchy itself, so a component is a sheet
-  // root exactly when nothing drawn contains it.
-  const nested = new Set<string>();
-  for (const id of visible) {
-    for (const childId of childrenOf(id)) nested.add(childId);
-  }
-  const ownedRoots = owned.filter((id) => !nested.has(id));
-
+  const columns = Math.min(4, Math.max(1, visibleIds.length));
+  const rows = Math.max(1, Math.ceil(visibleIds.length / columns));
+  const contentWidth = columns * CARD.width + (columns - 1) * GAP.x;
+  const contentHeight = rows * CARD.height + (rows - 1) * GAP.y;
+  const frameWidth = Math.max(760, contentWidth + FRAME.pad * 2);
+  const frameHeight = Math.max(360, FRAME.head + contentHeight + FRAME.pad * 2);
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
-  const notations = new Set<BlueprintNotation>();
-  const terms = new Set<BlueprintTerm>();
-  // Absolute box of every emitted card, so a borrowed dependency can be placed
-  // beside the parts that actually use it rather than in a distant tray.
-  const boxOf = new Map<string, { height: number; width: number; x: number; y: number }>();
 
-  /**
-   * A component that holds visible contents is drawn as the plate around them
-   * rather than as a card of its own, so only the rest can carry a count or an
-   * arrow endpoint.
-   */
-  const carded = new Set([...visible].filter((id) => childrenOf(id).length === 0));
-  const cognitiveComplexity = comparableCognitiveComplexity(
-    owned.filter((id) => carded.has(id)),
-    model,
-  );
-
-  /**
-   * The dependencies this sheet can actually show: both ends drawn, no self
-   * references, each pair once.
-   *
-   * Counting anything wider breaks the sheet's most checkable promise. A card
-   * reading "uses 5" beside five arrows can be verified by eye; one that also
-   * counts edges reaching components at a finer rung than the reader chose to
-   * see is a number nothing on the page adds up to, and a reader who catches it
-   * once has no reason to trust any other figure here.
-   */
-  const drawnDependencies: { readonly source: string; readonly target: string }[] = [];
-  const pairs = new Set<string>();
-  for (const dependency of dependencies) {
-    if (dependency.source === dependency.target) continue;
-    if (!carded.has(dependency.source) || !carded.has(dependency.target)) continue;
-    const pair = `${dependency.source} ${dependency.target}`;
-    if (pairs.has(pair)) continue;
-    pairs.add(pair);
-    drawnDependencies.push(Object.freeze({ source: dependency.source, target: dependency.target }));
-  }
-
-  // Counted in both directions, because "used by many" and "uses many" describe
-  // opposite kinds of component and a single total tells the two apart from
-  // neither. Borrowed code is counted separately from the system's own parts,
-  // so "uses" can always be reconciled against the siblings drawn alongside.
-  const dependsOn = new Map<string, Set<string>>();
-  const borrows = new Map<string, Set<string>>();
-  const dependents = new Map<string, Set<string>>();
-  for (const dependency of drawnDependencies) {
-    const bucket = isExternal(dependency.target) ? borrows : dependsOn;
-    const out = bucket.get(dependency.source) ?? new Set<string>();
-    out.add(dependency.target);
-    bucket.set(dependency.source, out);
-    const into = dependents.get(dependency.target) ?? new Set<string>();
-    into.add(dependency.source);
-    dependents.set(dependency.target, into);
-  }
-
-  // Contents are arranged by how they depend on each other, so a group reads
-  // left to right along its own dependency order instead of as a bare stack.
-  const edgesAmong = (
-    ids: readonly string[],
-  ): readonly { readonly source: string; readonly target: string }[] => {
-    const within = new Set(ids);
-    const seen = new Set<string>();
-    const among: { readonly source: string; readonly target: string }[] = [];
-    for (const dependency of dependencies) {
-      if (!within.has(dependency.source) || !within.has(dependency.target)) continue;
-      if (dependency.source === dependency.target) continue;
-      const key = `${dependency.source}\u0000${dependency.target}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      among.push(Object.freeze({ source: dependency.source, target: dependency.target }));
-    }
-    return among;
-  };
-
-  /** A leaf card's footprint, grown only when the source describes it. */
-  const cardSize = (id: string): { height: number; width: number } => {
-    const component = componentOf(id);
-    if (isExternal(id)) return { ...EXTERNAL_CELL };
-    const base = NODE_DIMENSIONS[notationOf(component?.scale)];
-    const described = (component?.summary ?? "").length > 0;
-    return { height: base.height + (described ? SUMMARY_HEIGHT : 0), width: base.width };
-  };
-
-  const sizeOf = (id: string): { height: number; width: number } => {
-    const nested = childrenOf(id);
-    if (nested.length === 0) return cardSize(id);
-    const inner = groupSize(id);
-    return { height: inner.height, width: inner.width };
-  };
-
-  /**
-   * Whether a container's contents really do read in one direction. The layout
-   * ranks children by their dependencies, so left-to-right already means "uses"
-   * — but only while that order exists. A cycle has no first member, so where
-   * one is present the sheet says nothing about direction rather than captioning
-   * an order it had to break arbitrarily to draw.
-   */
-  const readsInOneDirection = (ids: readonly string[]): boolean => {
-    const among = edgesAmong(ids);
-    if (among.length === 0) return false;
-    const outgoing = new Map<string, string[]>();
-    for (const edge of among) {
-      outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
-    }
-    const settled = new Set<string>();
-    const onPath = new Set<string>();
-    const acyclic = (id: string): boolean => {
-      if (onPath.has(id)) return false;
-      if (settled.has(id)) return true;
-      onPath.add(id);
-      for (const next of outgoing.get(id) ?? []) {
-        if (!acyclic(next)) return false;
-      }
-      onPath.delete(id);
-      settled.add(id);
-      return true;
-    };
-    return ids.every((id) => acyclic(id));
-  };
-
-  // A container's footprint is its own laid-out contents plus title and padding.
-  const groupHead = (id: string): number =>
-    GROUP_TITLE + ((componentOf(id)?.summary ?? "").length > 0 ? GROUP_SUMMARY_HEIGHT : 0);
-
-  const groupSizes = new Map<string, { height: number; width: number }>();
-  function groupSize(id: string): { height: number; width: number } {
-    const known = groupSizes.get(id);
-    if (known !== undefined) return known;
-    const nested = childrenOf(id);
-    const laid = layoutSubgraph(nested, edgesAmong(nested), sizeOf);
-    const size = {
-      height: Math.round(laid.height + GROUP_PAD * 2 + groupHead(id)),
-      width: Math.round(Math.max(laid.width + GROUP_PAD * 2, 280)),
-    };
-    groupSizes.set(id, size);
-    return size;
-  }
-
-  const emitComponent = (
-    id: string,
-    position: { x: number; y: number },
-    parentId?: string,
-    parentOrigin: { x: number; y: number } = { x: 0, y: 0 },
-  ) => {
-    const component = componentOf(id)!;
-    const node = model.nodes.get(id)!;
-    const nested = childrenOf(id);
-    const notation = notationOf(component.scale);
-    notations.add(notation);
-    const childIds = node.childIds;
-    const childState =
-      childIds === undefined
-        ? "unread"
-        : childIds.length === 0
-          ? "empty"
-          : nested.length === 0
-            ? "collapsed"
-            : "expanded";
-    const size = nested.length === 0 ? cardSize(id) : groupSize(id);
-    const origin = { x: parentOrigin.x + position.x, y: parentOrigin.y + position.y };
-    boxOf.set(id, { height: size.height, width: size.width, x: origin.x, y: origin.y });
-
-    if (nested.length > 0) {
-      if ((component.summary ?? "").length > 0) terms.add("quoted");
-      // Containers render as a plate their contents sit inside, the way a
-      // grouped drawing reads: the title names the group, children are nested.
-      nodes.push(
-        Object.freeze({
-          data: Object.freeze({
-            ...(readsInOneDirection(nested) ? { axis: "uses →" } : {}),
-            contains: `${nested.length} ${nextScaleLabel(notation === "unscaled" ? undefined : notation)}`,
-            kind: "container" as const,
-            label: displayText(component),
-            notation,
-            ...(component.summary === undefined || component.summary.length === 0
-              ? {}
-              : { summary: component.summary }),
-          }),
-          draggable: false,
-          height: size.height,
-          id: `group:${id}`,
-          ...(parentId === undefined ? {} : { extent: "parent" as const, parentId }),
-          position: Object.freeze(position),
-          selectable: false,
-          style: Object.freeze({ height: size.height, width: size.width }),
-          type: "group" as const,
-          width: size.width,
-          zIndex: 0,
-        }),
-      );
-      const laid = layoutSubgraph(nested, edgesAmong(nested), sizeOf);
-      const head = groupHead(id);
-      for (const childId of nested) {
-        const childPosition = laid.positions.get(childId)!;
-        emitComponent(
-          childId,
-          { x: childPosition.x + GROUP_PAD, y: childPosition.y + GROUP_PAD + head },
-          `group:${id}`,
-          origin,
-        );
-      }
-      return;
-    }
-
-    const entryPoint = hasPublicEntry(component);
-    const external = component.type === "external";
-    const shared = component.shared === true;
-    const measuredCognitiveComplexity = cognitiveComplexity?.values.get(id);
-    if (external) terms.add("external");
-    if (shared) terms.add("shared");
-    if (entryPoint) terms.add("entry");
-    if (measuredCognitiveComplexity !== undefined) terms.add("cognitive");
-    if ((borrows.get(id)?.size ?? 0) > 0) terms.add("borrowed");
-    if (!external && (component.summary ?? "").length > 0) terms.add("quoted");
-    const observedChildCount = childCounts.get(id) ?? childIds?.length ?? 0;
+  if (frameId !== undefined) {
+    const frame = model.nodes.get(frameId)!;
+    const component = frame.view.component;
+    const purpose = componentPurpose(component);
+    const total = childCounts.get(frameId) ?? candidates.length;
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          canOpen: observedChildCount > 0 && !external,
-          childCount: observedChildCount,
-          childState,
-          ...(measuredCognitiveComplexity === undefined
-            ? {}
-            : { cognitiveComplexity: measuredCognitiveComplexity }),
-          borrows: borrows.get(id)?.size ?? 0,
-          dependsOn: dependsOn.get(id)?.size ?? 0,
-          dependents: dependents.get(id)?.size ?? 0,
-          entryPoint,
-          external,
-          hasMoreChildren: node.hasMoreChildren,
+          contains: `${total} ${nextScaleLabel(component.scale)}`,
+          kind: "container" as const,
           label: displayText(component),
-          notation,
-          provisional: component.scale === undefined,
-          shared,
-          ...(component.summary === undefined || component.summary.length === 0
-            ? {}
-            : { summary: component.summary }),
+          notation: notationOf(component.scale),
+          ...(purpose === undefined ? {} : { purpose }),
+        }),
+        draggable: false,
+        height: frameHeight,
+        id: `group:${frameId}`,
+        position: Object.freeze({ x: 0, y: 0 }),
+        selectable: false,
+        style: Object.freeze({ height: frameHeight, width: frameWidth }),
+        type: "group" as const,
+        width: frameWidth,
+        zIndex: 0,
+      }),
+    );
+  }
+
+  const cognitive = comparableCognitiveComplexity(visibleIds, model);
+  for (const [index, id] of visibleIds.entries()) {
+    const blueprintNode = model.nodes.get(id)!;
+    const component = blueprintNode.view.component;
+    const purpose = componentPurpose(component);
+    const childCount = childCounts.get(id) ?? blueprintNode.childIds?.length ?? 0;
+    const base = gridPosition(index, columns);
+    const position =
+      frameId === undefined
+        ? base
+        : Object.freeze({ x: base.x + FRAME.pad, y: base.y + FRAME.head + FRAME.pad });
+    const measured = cognitive?.values.get(id);
+    nodes.push(
+      Object.freeze({
+        data: Object.freeze({
+          canOpen: childCount > 0,
+          childCount,
+          ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
+          evidenceBound: blueprintNode.view.evidenceBound,
+          label: displayText(component),
+          notation: notationOf(component.scale),
+          ...(purpose === undefined ? {} : { purpose }),
+          relationshipCount: incident.get(id) ?? 0,
+          shared: component.shared === true,
           type: component.type ?? "component",
         }),
-        height: size.height,
+        height: CARD.height,
         id,
-        ...(parentId === undefined ? {} : { extent: "parent" as const, parentId }),
-        position: Object.freeze(position),
-        sourcePosition: Position.Right,
-        style: Object.freeze({ height: size.height, width: size.width }),
-        targetPosition: Position.Left,
+        ...(frameId === undefined
+          ? {}
+          : { extent: "parent" as const, parentId: `group:${frameId}` }),
+        position,
+        sourcePosition: Position.Bottom,
+        style: Object.freeze({ height: CARD.height, width: CARD.width }),
+        targetPosition: Position.Top,
         type: "component" as const,
-        width: size.width,
-        // Clear of the edge layer. React Flow lifts edges that run inside a
-        // container above their plate, so a card has to sit above that in turn
-        // or every line crossing it reads as a box drawn around the card.
+        width: CARD.width,
         zIndex: 10,
       }),
     );
-  };
-
-  // Owned architecture first, packed across the sheet.
-  const ownedLayout = layoutSubgraph(ownedRoots, [], sizeOf);
-  let sheetBottom = 0;
-  let shelfX = 0;
-  let shelfY = 0;
-  let shelfHeight = 0;
-  for (const rootId of ownedRoots) {
-    const size = sizeOf(rootId);
-    if (shelfX > 0 && shelfX + size.width > SHEET_ROW_WIDTH) {
-      shelfX = 0;
-      shelfY += shelfHeight + GROUP_GAP;
-      shelfHeight = 0;
-    }
-    emitComponent(rootId, { x: shelfX, y: shelfY });
-    shelfX += size.width + GROUP_GAP;
-    shelfHeight = Math.max(shelfHeight, size.height);
-    sheetBottom = Math.max(sheetBottom, shelfY + size.height);
-  }
-  void ownedLayout;
-
-  void sheetBottom;
-
-  // Borrowed code is placed beside the parts that use it and wired to them, so a
-  // reader sees what each dependency is for rather than a detached inventory.
-  // Each external sits in a lane to the right of the system, aligned with the
-  // average height of its consumers so its connecting lines stay short, and the
-  // lanes are pushed apart just enough that no two overlap.
-  if (externals.length > 0) {
-    const consumersOf = new Map<string, string[]>();
-    for (const dependency of drawnDependencies) {
-      if (!isExternal(dependency.target)) continue;
-      consumersOf.set(dependency.target, [
-        ...(consumersOf.get(dependency.target) ?? []),
-        dependency.source,
-      ]);
-    }
-    const consumerBoxes = [...boxOf.values()].filter((box, index) => {
-      void index;
-      return box.width > 0;
-    });
-    const sheetRight = Math.max(...consumerBoxes.map((box) => box.x + box.width), 0);
-    const cell = EXTERNAL_CELL;
-    const laneX = sheetRight + GROUP_GAP * 1.4;
-    const preferredY = (id: string): number => {
-      const centres = (consumersOf.get(id) ?? [])
-        .map((consumer) => boxOf.get(consumer))
-        .filter((box): box is NonNullable<typeof box> => box !== undefined)
-        .map((box) => box.y + box.height / 2);
-      if (centres.length === 0) return 0;
-      return centres.reduce((sum, y) => sum + y, 0) / centres.length - cell.height / 2;
-    };
-    const ordered = [...externals].sort((left, right) => preferredY(left) - preferredY(right));
-    let cursorY = Number.NEGATIVE_INFINITY;
-    for (const id of ordered) {
-      const y = Math.max(preferredY(id), cursorY + cell.height + 16);
-      cursorY = y;
-      emitComponent(id, { x: laneX, y: Math.round(y) });
-    }
   }
 
-  // The same set the counts were taken from, so a card's figures and the lines
-  // leaving it can never disagree.
-  const edges: BlueprintFlowEdge[] = [];
-  for (const dependency of drawnDependencies) {
-    const id = `depends:${dependency.source}:${dependency.target}`;
-    const toExternal = isExternal(dependency.target);
-    edges.push(
-      Object.freeze({
-        className: toExternal ? "groma-edge groma-edge--external" : "groma-edge",
-        id,
-        interactionWidth: 12,
-        // The scanner observed a direction; drawing the line without it discards
-        // the only thing that distinguishes "uses" from "is used by".
-        markerEnd: Object.freeze({
-          color: toExternal ? "#aab2ab" : "#5c665e",
-          height: toExternal ? 11 : 14,
-          type: MarkerType.ArrowClosed,
-          width: toExternal ? 11 : 14,
-        }),
-        source: dependency.source,
-        target: dependency.target,
-        // A line to borrowed code runs orthogonally out to the dependency lane on
-        // the right, so it travels in the margin rather than curving back across
-        // the system; a line between the system's own parts curves, which reads
-        // and separates from its neighbours better where the graph is dense.
-        type: toExternal ? ("smoothstep" as const) : ("default" as const),
-        ...(toExternal ? { pathOptions: Object.freeze({ borderRadius: 8 }) } : {}),
-        // Above the container plates so a line is never lost inside one, but
-        // below the cards: a route that crosses a card's face reads as a box
-        // drawn around it, which is how these lines became unfollowable.
-        zIndex: 1,
+  const edges: BlueprintFlowEdge[] = drawnRelationships.map((relationship) =>
+    Object.freeze({
+      className: "groma-edge",
+      id: `relationship:${relationship.source}:${relationship.target}`,
+      interactionWidth: 14,
+      label: relationshipLabel(relationship.type),
+      labelBgBorderRadius: 0,
+      labelBgPadding: [5, 2] as [number, number],
+      labelBgStyle: Object.freeze({ fill: "#fbfaf6", fillOpacity: 0.94 }),
+      labelStyle: Object.freeze({ fill: "#4d5551", fontFamily: "ui-monospace", fontSize: 9 }),
+      markerEnd: Object.freeze({
+        color: "#4d5551",
+        height: 14,
+        type: MarkerType.ArrowClosed,
+        width: 14,
       }),
-    );
-  }
-
-  // What the current level measures out to. Computed from the SAME drawn
-  // dependency set the card counts use, so every figure here equals a figure on
-  // a card and the arrows a reader can count. Every line states a measured
-  // relation and a count against a named part; none assigns a role or a verdict.
-  const readout: string[] = [];
-  const levelCards = owned.filter((id) => carded.has(id) && componentOf(id)?.name !== undefined);
-  const siblings = levelCards.length;
-  const drawnAmongLevel = drawnDependencies.filter(
-    (dependency) => carded.has(dependency.source) && carded.has(dependency.target),
+      source: relationship.source,
+      target: relationship.target,
+      type: "smoothstep" as const,
+      zIndex: 1,
+    }),
   );
-  const framePartial = frameId !== undefined && model.nodes.get(frameId)?.hasMoreChildren === true;
-  if (siblings >= 3 && !framePartial) {
-    const nameOf = (id: string) => displayText(componentOf(id)!);
-    const byId = (left: string, right: string) => left.localeCompare(right);
-    const inDeg = (id: string) => dependents.get(id)?.size ?? 0;
-    const outDeg = (id: string) => dependsOn.get(id)?.size ?? 0;
-    const others = siblings - 1;
 
-    const maxIn = Math.max(...levelCards.map(inDeg));
-    if (maxIn > 0) {
-      const tops = levelCards.filter((id) => inDeg(id) === maxIn).sort(byId);
-      readout.push(
-        tops.length === 1
-          ? `Most depended on: ${nameOf(tops[0]!)} — ${maxIn} of the ${others} others here import it.`
-          : `Most depended on: ${tops.slice(0, 3).map(nameOf).join(", ")} — each imported by ${maxIn}.`,
-      );
-    }
+  const evidence = evidenceIds.map((id) => {
+    const node = model.nodes.get(id)!;
+    return Object.freeze({
+      childCount: childCounts.get(id) ?? node.childIds?.length ?? 0,
+      id,
+      label: displayText(node.view.component),
+      type: node.view.component.type ?? "observed component",
+    });
+  });
+  const totalCandidates =
+    frameId === undefined
+      ? candidates.length
+      : Math.max(candidates.length, childCounts.get(frameId) ?? 0);
+  const omittedComponents = Math.max(0, totalCandidates - visibleIds.length - evidenceIds.length);
 
-    const maxOut = Math.max(...levelCards.map(outDeg));
-    if (maxOut > 0) {
-      const top = levelCards.filter((id) => outDeg(id) === maxOut).sort(byId)[0]!;
-      readout.push(`Reaches the most: ${nameOf(top)} — imports ${maxOut} of the ${others} others.`);
-    }
-
-    const entries = levelCards
-      .filter((id) => {
-        const component = componentOf(id);
-        return component !== undefined && hasPublicEntry(component);
-      })
-      .sort(byId);
-    if (entries.length > 0 && entries.length < siblings) {
-      readout.push(
-        `Ways in: ${entries.slice(0, 4).map(nameOf).join(", ")}${entries.length > 4 ? ", …" : ""} — each exposes a public entry.`,
-      );
-    }
-
-    const cycle = importCycles(levelCards, drawnAmongLevel)[0];
-    if (cycle !== undefined) {
-      readout.push(
-        cycle.length === 2
-          ? `${nameOf(cycle[0]!)} and ${nameOf(cycle[1]!)} import each other.`
-          : `${cycle.length} here form an import cycle: ${cycle.slice(0, 5).map(nameOf).join(", ")}${cycle.length > 5 ? ", …" : ""}.`,
-      );
-    }
-
-    const sizeOf = (id: string) => childCounts.get(id) ?? 0;
-    const maxSize = Math.max(...levelCards.map(sizeOf));
-    if (maxSize > 0 && drawnAmongLevel.length > 0) {
-      const largest = levelCards.filter((id) => sizeOf(id) === maxSize).sort(byId)[0]!;
-      readout.push(`Largest here: ${nameOf(largest)} (${maxSize} inside).`);
-    }
-  }
-
-  if (cognitiveComplexity !== undefined) {
-    const scored = owned
-      .filter((id) => carded.has(id) && cognitiveComplexity.values.has(id))
-      .sort((left, right) => {
-        const difference =
-          cognitiveComplexity.values.get(right)! - cognitiveComplexity.values.get(left)!;
-        return difference || left.localeCompare(right);
-      });
-    const highest = scored[0];
-    if (highest !== undefined) {
-      const value = cognitiveComplexity.values.get(highest)!;
-      readout.push(
-        `Highest cognitive complexity shown: ${displayText(componentOf(highest)!)} — ${value}, measured by ${cognitiveComplexitySourceLabel(cognitiveComplexity.evidence)}.`,
-      );
-    }
-  }
-
-  const TERM_ORDER: readonly BlueprintTerm[] = [
-    "entry",
-    "shared",
-    "cognitive",
-    "quoted",
-    "borrowed",
-    "external",
-  ];
   return Object.freeze({
     edges: Object.freeze(edges),
+    evidence: Object.freeze(evidence),
     nodes: Object.freeze(nodes),
-    notations: Object.freeze(SCALE_ORDER.filter((scale) => notations.has(scale))),
-    readout: Object.freeze(readout),
-    terms: Object.freeze(TERM_ORDER.filter((term) => terms.has(term))),
+    omittedComponents,
+    omittedRelationships: Math.max(0, visibleRelationships.length - edges.length),
+    visibleComponents: visibleIds.length,
   });
 }

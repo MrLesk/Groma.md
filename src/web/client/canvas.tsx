@@ -8,14 +8,7 @@ import {
   ReactFlow,
   type NodeProps,
 } from "@xyflow/react";
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useMemo, type KeyboardEvent } from "react";
 
 import type { BlueprintModel } from "./model.ts";
 import {
@@ -23,8 +16,6 @@ import {
   nextScaleLabel,
   type BlueprintFlowNode,
   type BlueprintGroupNode,
-  type BlueprintNotation,
-  type BlueprintTerm,
 } from "./graph.ts";
 
 interface CanvasActions {
@@ -34,196 +25,105 @@ interface CanvasActions {
 }
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
-
-/**
- * Keeps the drawing clear of the fixed title block and view controls, and lets
- * a small blueprint grow to fill the frame so the architecture — not a band of
- * empty grid — is what a reader meets first. A large blueprint still fits below
- * 1x, so the cap only bites when there is room to spare.
- */
 const FIT_VIEW = Object.freeze({
-  maxZoom: 1.5,
-  padding: Object.freeze({ bottom: "9%", left: "4%", right: "4%", top: "35%" }),
-});
-
-const NOTATION_LABELS: Readonly<Record<BlueprintNotation, string>> = Object.freeze({
-  domain: "domain plate",
-  element: "element tick",
-  part: "part corners",
-  system: "system double rule",
-  unscaled: "unscaled dashed rule",
+  maxZoom: 1,
+  minZoom: 0.82,
+  padding: Object.freeze({ bottom: "10%", left: "5%", right: "5%", top: "12%" }),
 });
 
 function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   const actions = useContext(CanvasActionsContext);
   if (actions === undefined) throw new Error("Blueprint canvas actions are unavailable");
-  const activateNodeControl = (event: KeyboardEvent<HTMLButtonElement>, action: () => void) => {
+  const activate = (event: KeyboardEvent<HTMLButtonElement>, action: () => void) => {
     event.stopPropagation();
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     action();
   };
-
-  // Borrowed code is listed, not drawn: a name and how widely it is relied on is
-  // everything the scan can honestly say about a dependency whose insides it
-  // never looked at.
-  if (data.external) {
-    return (
-      <article
-        className={`groma-node groma-node--borrowed${selected ? " is-selected" : ""}`}
-        data-scale={data.notation}
-        onClick={() => actions.onSelect(id)}
-      >
-        <Handle type="target" position={Position.Left} className="groma-handle" />
-        <button
-          type="button"
-          className="nodrag nopan groma-node__select"
-          aria-label={`Inspect ${data.label}`}
-          onClick={() => actions.onSelect(id)}
-          onKeyDown={(event) => activateNodeControl(event, () => actions.onSelect(id))}
-        >
-          {data.label}
-        </button>
-        <ul className="groma-node__evidence" aria-label={`Observed facts about ${data.label}`}>
-          {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
-        </ul>
-        <Handle type="source" position={Position.Right} className="groma-handle" />
-      </article>
-    );
-  }
-
   return (
     <article
       className={`groma-node groma-node--${data.notation}${selected ? " is-selected" : ""}`}
-      data-scale={data.notation}
+      data-evidence-bound={data.evidenceBound || undefined}
       onClick={() => actions.onSelect(id)}
     >
-      <Handle type="target" position={Position.Left} className="groma-handle" />
+      <Handle type="target" position={Position.Top} className="groma-handle" />
       <div className="groma-node__rule" aria-hidden="true" />
       <div className="groma-node__heading">
         <span className="groma-node__notation" aria-hidden="true" />
         <span>{data.notation}</span>
-        {data.external ? <span>borrowed</span> : null}
+        <span>{data.type}</span>
+        {data.evidenceBound ? <span className="groma-node__observed">observed</span> : null}
       </div>
       <button
         type="button"
         className="nodrag nopan groma-node__select"
         aria-label={`Inspect ${data.label}`}
         onClick={() => actions.onSelect(id)}
-        onKeyDown={(event) => activateNodeControl(event, () => actions.onSelect(id))}
+        onKeyDown={(event) => activate(event, () => actions.onSelect(id))}
       >
         {data.label}
       </button>
-      {data.summary === undefined ? null : (
-        <p className="groma-node__summary" title={data.summary}>
-          {data.summary}
-        </p>
-      )}
-      <ul className="groma-node__evidence" aria-label={`Observed facts about ${data.label}`}>
+      <p className={`groma-node__purpose${data.purpose === undefined ? " is-missing" : ""}`}>
+        {data.purpose ?? "Purpose not yet recorded."}
+      </p>
+      <ul className="groma-node__evidence" aria-label={`Context for ${data.label}`}>
         {data.shared ? <li className="groma-chip groma-chip--shared">shared</li> : null}
-        {data.entryPoint ? <li className="groma-chip groma-chip--entry">entry</li> : null}
-        {data.dependsOn > 0 ? <li className="groma-chip">uses {data.dependsOn}</li> : null}
-        {data.dependents > 0 ? <li className="groma-chip">used by {data.dependents}</li> : null}
-        {data.borrows > 0 ? <li className="groma-chip">{data.borrows} external</li> : null}
+        {data.relationshipCount > 0 ? (
+          <li className="groma-chip">
+            {data.relationshipCount} relationship{data.relationshipCount === 1 ? "" : "s"}
+          </li>
+        ) : null}
         {data.cognitiveComplexity === undefined ? null : (
           <li className="groma-chip">cognitive {data.cognitiveComplexity}</li>
         )}
-        {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
         {data.canOpen ? (
           <button
             type="button"
             className="groma-node__open"
-            aria-label={`Open ${data.label} and see its ${nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)}`}
             onClick={(event) => {
               event.stopPropagation();
               actions.onFocus(id);
             }}
-            onKeyDown={(event) => activateNodeControl(event, () => actions.onFocus(id))}
+            onKeyDown={(event) => activate(event, () => actions.onFocus(id))}
           >
-            Open {data.childCount}{" "}
+            Focus on {data.childCount}{" "}
             {nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} →
           </button>
         ) : (
           <button
             type="button"
-            aria-label={`Show the detail of ${data.label}`}
             onClick={(event) => {
               event.stopPropagation();
               actions.onSelect(id);
             }}
-            onKeyDown={(event) => activateNodeControl(event, () => actions.onSelect(id))}
+            onKeyDown={(event) => activate(event, () => actions.onSelect(id))}
           >
-            Detail →
+            Inspect →
           </button>
         )}
       </div>
-      <Handle type="source" position={Position.Right} className="groma-handle" />
+      <Handle type="source" position={Position.Bottom} className="groma-handle" />
     </article>
   );
 }
 
 function GroupNode({ data }: NodeProps<BlueprintGroupNode>) {
   return (
-    <div
-      className={`groma-group groma-group--${data.kind} groma-group--${data.notation}`}
-      data-scale={data.notation}
-    >
-      <span className="groma-group__title">{data.label}</span>
-      {data.contains === undefined ? null : (
+    <section className={`groma-group groma-group--${data.notation}`}>
+      <div className="groma-group__heading">
+        <span className="groma-group__title">{data.label}</span>
         <span className="groma-group__contains">{data.contains}</span>
-      )}
-      {data.axis === undefined ? null : <span className="groma-group__axis">{data.axis}</span>}
-      {data.summary === undefined ? null : <p className="groma-group__summary">{data.summary}</p>}
-    </div>
+      </div>
+      <p className={`groma-group__summary${data.purpose === undefined ? " is-missing" : ""}`}>
+        {data.purpose ?? "Purpose not yet recorded."}
+      </p>
+    </section>
   );
 }
 
 const NODE_TYPES = Object.freeze({ component: ComponentNode, group: GroupNode });
-
-function LegendItem({ notation }: { notation: BlueprintNotation }) {
-  return (
-    <li>
-      <span className={`groma-legend-mark groma-legend-mark--${notation}`} aria-hidden="true" />
-      <span>
-        <strong>{notation}</strong> · {NOTATION_LABELS[notation]}
-      </span>
-    </li>
-  );
-}
-
-/**
- * Plain-language definitions of the vocabulary a mark carries, each paired with
- * the structural fact the scanner measured to earn it. Rendered only for terms
- * actually drawn, so the key never teaches a word the reader cannot find.
- */
-const TERM_GLOSSARY: Readonly<Record<BlueprintTerm, { label: string; gloss: string }>> =
-  Object.freeze({
-    borrowed: Object.freeze({ label: "N external", gloss: "draws on N packages from outside" }),
-    cognitive: Object.freeze({
-      label: "cognitive N",
-      gloss: "scanner-measured nesting and branching; compare only within that scanner",
-    }),
-    entry: Object.freeze({ label: "entry", gloss: "a way in: a command or served route" }),
-    external: Object.freeze({ label: "borrowed", gloss: "third-party code, not built here" }),
-    quoted: Object.freeze({
-      label: "quoted line",
-      gloss: "the component's own words, measured not written",
-    }),
-    shared: Object.freeze({ label: "shared", gloss: "used across two or more of the parts here" }),
-  });
-
-function TermItem({ term }: { term: BlueprintTerm }) {
-  const { label, gloss } = TERM_GLOSSARY[term];
-  return (
-    <li>
-      <span>
-        <strong>{label}</strong> · {gloss}
-      </span>
-    </li>
-  );
-}
 
 export interface CanvasProps extends CanvasActions {
   readonly childCounts: ReadonlyMap<string, number>;
@@ -251,33 +151,67 @@ export function Canvas({
     () => buildBlueprintFlowGraph({ childCounts, dependencies, focusId, model }),
     [childCounts, dependencies, focusId, model],
   );
+  const relatedIds = useMemo(() => {
+    if (selectedId === undefined) return new Set<string>();
+    const ids = new Set([selectedId]);
+    for (const edge of graph.edges) {
+      if (edge.source === selectedId || edge.target === selectedId) {
+        ids.add(edge.source);
+        ids.add(edge.target);
+      }
+    }
+    return ids;
+  }, [graph.edges, selectedId]);
   const nodes = useMemo(
-    () => graph.nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
-    [graph.nodes, selectedId],
+    () =>
+      graph.nodes.map((node) => ({
+        ...node,
+        ...(node.type === "group" || selectedId === undefined
+          ? {}
+          : {
+              className:
+                node.id === selectedId
+                  ? "is-selected-node"
+                  : relatedIds.has(node.id)
+                    ? "is-path-endpoint"
+                    : "is-dimmed",
+            }),
+        selected: node.id === selectedId,
+      })),
+    [graph.nodes, relatedIds, selectedId],
+  );
+  const edges = useMemo(
+    () =>
+      graph.edges.map((edge) => ({
+        ...edge,
+        className: `${edge.className ?? ""}${
+          selectedId === undefined
+            ? ""
+            : edge.source === selectedId || edge.target === selectedId
+              ? " is-related"
+              : " is-dimmed"
+        }`,
+      })),
+    [graph.edges, selectedId],
   );
   const actions = useMemo(
     () => ({ onFocus, onLoadMoreRoots, onSelect }),
     [onFocus, onLoadMoreRoots, onSelect],
   );
-
-  // The notation key is reference, not the subject, so on a small screen where
-  // it would fill the viewport it starts folded and the blueprint keeps the room.
-  const [notationOpen, setNotationOpen] = useState(
-    () => !(typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches),
-  );
+  const additional = graph.omittedComponents + (model.hasMoreRoots ? 1 : 0);
 
   return (
     <CanvasActionsContext.Provider value={actions}>
-      <div className="groma-flow" data-renderer="react-flow-dagre">
+      <div className="groma-flow" data-renderer="react-flow-bounded-level">
         <ReactFlow<BlueprintFlowNode | BlueprintGroupNode>
           key={`${focusId ?? "top"}:${graph.nodes.length}`}
           nodes={[...nodes]}
-          edges={[...graph.edges]}
+          edges={[...edges]}
           nodeTypes={NODE_TYPES}
           fitView
           fitViewOptions={FIT_VIEW}
-          minZoom={0.12}
-          maxZoom={2.5}
+          minZoom={0.82}
+          maxZoom={1.6}
           nodesConnectable={false}
           panOnScroll
           zoomOnScroll={false}
@@ -285,7 +219,6 @@ export function Canvas({
           nodesDraggable={false}
           nodesFocusable={false}
           elementsSelectable
-          panOnDrag
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
           colorMode="light"
@@ -303,7 +236,7 @@ export function Canvas({
             <Panel position="top-center" className="groma-breadcrumb" data-canvas-keys="skip">
               <nav aria-label="Where you are" className="groma-breadcrumb__trail">
                 <button type="button" onClick={() => onFocusTo(0)}>
-                  the whole system
+                  overview
                 </button>
                 {focusPath.map((crumb, index) => (
                   <span key={crumb.id} className="groma-breadcrumb__step">
@@ -322,61 +255,50 @@ export function Canvas({
           ) : null}
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
-              <p>Architectural blueprint</p>
-              <span>Scan {model.generation}</span>
-              <span>{model.nodes.size} components drawn</span>
+              <p>{focusId === undefined ? "System overview" : "Focused level"}</p>
+              <span>scan {model.generation}</span>
+              <span>{graph.visibleComponents} shown</span>
             </div>
-            {graph.readout.length > 0 ? (
-              <dl className="groma-readout" aria-label="What this level measures out to">
-                <dt>At this level</dt>
-                {graph.readout.map((line) => (
-                  <dd key={line}>{line}</dd>
-                ))}
-              </dl>
-            ) : null}
-            {graph.notations.length > 0 ? (
-              <details
-                className="groma-title-block__key"
-                open={notationOpen}
-                onToggle={(event) => setNotationOpen(event.currentTarget.open)}
-              >
-                <summary>Notation</summary>
-                <ol aria-label="Component scale notation">
-                  {graph.notations.map((notation) => (
-                    <LegendItem key={notation} notation={notation} />
-                  ))}
-                  <li>
-                    <span
-                      className="groma-legend-mark groma-legend-mark--edge"
-                      aria-hidden="true"
-                    />
-                    <span>
-                      <strong>A → B</strong> · A uses B
-                    </span>
-                  </li>
-                </ol>
-                {graph.terms.length > 0 ? (
-                  <ul className="groma-title-block__glossary" aria-label="What the marks mean">
-                    {graph.terms.map((term) => (
-                      <TermItem key={term} term={term} />
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="groma-title-block__hint">
-                  Everything here is <strong>evidence</strong>: measured or quoted verbatim by a
-                  blind scan that reports structure and never interprets it. Meaning you add &mdash;
-                  the <strong>intent</strong> &mdash; a scan never writes and a rescan never erases.
-                  Scale sets what is shown; zoom only changes how large it looks.
-                </p>
-              </details>
-            ) : null}
+            <details className="groma-title-block__key">
+              <summary>How to read this sheet</summary>
+              <p>
+                Solid boundaries are architecture. Dashed entries are implementation evidence.
+                Arrows read from the component that needs something to the component it needs.
+              </p>
+            </details>
           </Panel>
-          {model.hasMoreRoots ? (
+          {graph.evidence.length > 0 ? (
+            <Panel position="bottom-right" className="groma-evidence-register">
+              <div className="groma-evidence-register__heading">
+                <strong>Implementation evidence</strong>
+                <span>observed, not curated</span>
+              </div>
+              <ol>
+                {graph.evidence.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" onClick={() => onSelect(item.id)}>
+                      <span>{item.label}</span>
+                      <small>{item.type}</small>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </Panel>
+          ) : null}
+          {additional > 0 || graph.omittedRelationships > 0 ? (
             <Panel position="bottom-center" className="groma-bounded-notice">
-              <span>More root components remain outside this bounded sheet.</span>
-              <button type="button" onClick={onLoadMoreRoots}>
-                Load next root page
-              </button>
+              <span>
+                {additional > 0 ? `+${additional} more components · ` : ""}
+                {graph.omittedRelationships > 0
+                  ? `+${graph.omittedRelationships} relationships · `
+                  : ""}
+                use focus or search
+              </span>
+              {model.hasMoreRoots ? (
+                <button type="button" onClick={onLoadMoreRoots}>
+                  Read more roots
+                </button>
+              ) : null}
             </Panel>
           ) : null}
           {model.rootIds.length === 0 ? (

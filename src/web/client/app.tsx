@@ -12,8 +12,10 @@ import {
 import { GROMA_LOCKUP } from "./brand.ts";
 import { Canvas } from "./canvas.tsx";
 import {
+  componentPurpose,
   displayText,
   emptyModel,
+  isImplementationEvidence,
   mergeChildrenPage,
   mergeRootsPage,
   type BlueprintModel,
@@ -22,7 +24,7 @@ import { shouldContinueOwnedRootDiscovery } from "./root-discovery.ts";
 import { SpecPanel } from "./spec.tsx";
 
 const ROOT_LIMIT = 20;
-const CHILD_LIMIT = 10;
+const CHILD_LIMIT = 12;
 const CONNECTION_LIMIT = 100;
 const SEARCH_LIMIT = 20;
 
@@ -164,19 +166,14 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedId, focusStack.length]);
 
-  // The framed component's whole content must be present to draw it, so the frame
-  // loads every page of its children, not just the first — whether it is a domain
-  // just entered or the system shown on arrival. Without this a system with more
-  // direct parts than one page would silently draw only the first page, and a
-  // level-wide readout would count against a denominator that is not all here. The
-  // effect re-fires as each page arrives until the parent reports no more, and the
-  // paging guard keeps it idempotent.
+  // A focus reads one bounded page. The canvas then applies the stricter visual
+  // budget and sends the reader to focus/search for the rest; it never pages a
+  // level to exhaustion and then shrinks the result below readable scale.
   useEffect(() => {
     if (frameId === undefined) return;
     const node = model.nodes.get(frameId);
     if (node === undefined) return;
     if (node.childIds === undefined) loadChildren(frameId);
-    else if (node.hasMoreChildren) loadChildren(frameId, node.childrenCursor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameId, model.nodes]);
 
@@ -240,10 +237,10 @@ export function App() {
     <div className="flex h-screen flex-col">
       <header
         data-canvas-keys="skip"
-        className="z-20 flex items-center justify-between gap-3 border-b-2 border-ink bg-paper px-3 py-2 sm:gap-4 sm:px-5"
+        className="z-20 flex items-center justify-between gap-3 border-b border-line bg-paper px-3 py-1.5 sm:gap-4 sm:px-5"
       >
         <div
-          className="w-28 shrink-0 text-ink sm:w-36 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+          className="w-24 shrink-0 text-ink sm:w-28 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
           dangerouslySetInnerHTML={{ __html: GROMA_LOCKUP }}
         />
         <p className="m-0 hidden font-plan text-[11px] tracking-wide text-ink-muted uppercase md:block">
@@ -283,31 +280,51 @@ export function App() {
             </button>
           </form>
           {search.open && search.page !== undefined ? (
-            <div className="absolute top-full right-0 z-30 mt-1 max-h-80 w-80 overflow-auto border-[1.5px] border-ink bg-paper">
+            <div className="absolute top-full right-0 z-30 mt-1 max-h-[70vh] w-96 overflow-auto border-[1.5px] border-ink bg-paper">
               {search.page.items.length === 0 ? (
                 <p className="m-0 px-3 py-2 font-plan text-xs text-ink-muted">
                   No components match on this bounded page.
                 </p>
               ) : (
-                search.page.items.map((component) => (
-                  <button
-                    key={component.id}
-                    type="button"
-                    onClick={() => {
-                      setCreateOpen(false);
-                      setSelectedId(component.id);
-                      setSearch((current) => ({ ...current, open: false }));
-                    }}
-                    className="block w-full border-0 border-b border-fine bg-transparent px-3 py-1.5 text-left text-xs hover:bg-fine focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-survey"
-                  >
-                    <span className="font-semibold">{displayText(component)}</span>
-                    <span className="float-right font-plan text-[9px] text-ink-muted uppercase">
-                      {component.type ?? "component"}
-                    </span>
-                    <br />
-                    <span className="font-plan text-[10px] text-ink-muted">{component.id}</span>
-                  </button>
-                ))
+                search.page.items.map((item) => {
+                  const { component } = item;
+                  const implementation = isImplementationEvidence(component, item.evidenceBound);
+                  const parent =
+                    component.parent === undefined ? undefined : resolveDisplay(component.parent);
+                  return (
+                    <div key={component.id} className="groma-search-result">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateOpen(false);
+                          setSelectedId(component.id);
+                          setSearch((current) => ({ ...current, open: false }));
+                        }}
+                      >
+                        <span className="groma-search-result__cue">
+                          {implementation
+                            ? "Implementation evidence"
+                            : componentPurpose(component) === undefined
+                              ? "Purpose not recorded"
+                              : "Architectural intent"}
+                        </span>
+                        <strong>{displayText(component)}</strong>
+                        <span className="groma-search-result__purpose">
+                          {componentPurpose(component) ?? "No purpose has been written yet."}
+                        </span>
+                        <span className="groma-search-result__context">
+                          {component.parent === undefined
+                            ? "Blueprint root"
+                            : `Inside ${parent ?? "another component"}`}
+                        </span>
+                      </button>
+                      <details>
+                        <summary>Technical details</summary>
+                        <code>{component.id}</code>
+                      </details>
+                    </div>
+                  );
+                })
               )}
               {search.page.hasMore ? (
                 <button

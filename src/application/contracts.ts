@@ -209,6 +209,8 @@ export interface ComponentView {
    */
   readonly cognitiveComplexity?: readonly ComponentCognitiveComplexityEvidence[];
   readonly component: StandardComponent;
+  /** True when at least one current scanner binding supports this component. */
+  readonly evidenceBound: boolean;
   readonly revision: string;
 }
 
@@ -290,10 +292,23 @@ export interface BlueprintComponentPage {
   readonly nextCursor?: ContinuationCursor;
 }
 
+export interface BlueprintSearchItem {
+  readonly component: StandardComponent;
+  readonly evidenceBound: boolean;
+}
+
+export interface BlueprintSearchPage {
+  readonly generation: GraphGeneration;
+  readonly hasMore: boolean;
+  readonly items: readonly BlueprintSearchItem[];
+  readonly nextCursor?: ContinuationCursor;
+}
+
 /** One component and every canonical outgoing depth-1 relationship from that source. */
 export interface BlueprintExportItem {
   readonly cognitiveComplexity?: readonly ComponentCognitiveComplexityEvidence[];
   readonly component: StandardComponent;
+  readonly evidenceBound: boolean;
   readonly relationships: readonly StandardRelationship[];
 }
 
@@ -327,7 +342,7 @@ export interface BlueprintTraversalPage {
 export interface ApplicationOperations {
   initialize(request: InitializeWorkspaceRequest): Promise<Result<WorkspaceInitializationOutcome>>;
   exportBlueprint(request: ExportBlueprintRequest): Promise<Result<BlueprintExportPage>>;
-  searchBlueprint(request: SearchBlueprintRequest): Promise<Result<BlueprintComponentPage>>;
+  searchBlueprint(request: SearchBlueprintRequest): Promise<Result<BlueprintSearchPage>>;
   traverseBlueprint(request: TraverseBlueprintRequest): Promise<Result<BlueprintTraversalPage>>;
   getComponent(request: GetComponentRequest): Promise<Result<ExactComponentRead>>;
   listComponents(request: ListComponentsRequest): Promise<Result<ComponentPage>>;

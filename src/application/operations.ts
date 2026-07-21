@@ -58,6 +58,8 @@ import type {
   BlueprintComponentPage,
   BlueprintExportItem,
   BlueprintExportPage,
+  BlueprintSearchItem,
+  BlueprintSearchPage,
   BlueprintTraversalHit,
   BlueprintTraversalPage,
   ComponentCognitiveComplexityEvidence,
@@ -1442,6 +1444,32 @@ function cognitiveComplexityEvidence(
   return views;
 }
 
+/** Current evidence support, projected without exposing scanner identities or records. */
+function evidenceBoundComponents(
+  snapshot: ReadSnapshot,
+  components: readonly StandardComponent[],
+  options: ApplicationOperationsContext,
+): ReadonlySet<string> {
+  if (snapshot.evidence === undefined || components.length === 0) return new Set();
+  const parsed = parseEvidenceState(snapshot.evidence, {
+    maxComponents: options.bounds.maxEmbeddedItems,
+    maxRecords: options.bounds.maxRequestDataValues,
+    maxRelationships: options.bounds.maxRelationshipMutations,
+    maxSources: options.bounds.maxComponents,
+  });
+  if (!parsed.ok) return new Set();
+  const wanted = new Set(components.map((component) => component.id));
+  const bound = new Set<string>();
+  for (const source of parsed.value.sources) {
+    for (const binding of source.componentBindings) {
+      if (!binding.present) continue;
+      const resolved = options.graph.resolveEntityIdentity(snapshot.graph, binding.componentId);
+      if (resolved.ok && wanted.has(resolved.value.resolved)) bound.add(resolved.value.resolved);
+    }
+  }
+  return bound;
+}
+
 function componentScaleEvidence(
   assessment: NonNullable<ComponentBinding["scaleAssessment"]>,
   curated: StandardComponent["scale"],
@@ -1831,6 +1859,11 @@ async function componentPage(
       confirmedPage.value.items,
       options,
     );
+    const evidenceBound = evidenceBoundComponents(
+      confirmed.value,
+      confirmedPage.value.items,
+      options,
+    );
     const views: ComponentView[] = [];
     for (let index = 0; index < confirmedPage.value.items.length; index += 1) {
       const component = confirmedPage.value.items[index]!;
@@ -1840,6 +1873,7 @@ async function componentPage(
       views[index] = Object.freeze({
         ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
         component,
+        evidenceBound: evidenceBound.has(component.id),
         revision: revision.value,
       });
     }
@@ -3688,6 +3722,7 @@ export function createApplicationOperations(
     if (!observed.ok) return readProviderFailure(observed.diagnostics);
     if (observed.value.generation !== components.value.generation) return graphQueryUnavailable();
     const cognitive = cognitiveComplexityEvidence(observed.value, components.value.items, options);
+    const evidenceBound = evidenceBoundComponents(observed.value, components.value.items, options);
     const items: BlueprintExportItem[] = [];
     const exportedRelationshipIds = new Set<string>();
     const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
@@ -3706,7 +3741,7 @@ export function createApplicationOperations(
     ) {
       const component = components.value.items[componentIndex]!;
       const measured = cognitive.get(component.id);
-      const itemFields = measured === undefined ? 2 : 3;
+      const itemFields = measured === undefined ? 3 : 4;
       if (structuralRemaining.value < itemFields) {
         return blueprintExportPageBoundExceeded(
           "structural-values",
@@ -3811,6 +3846,7 @@ export function createApplicationOperations(
       items[componentIndex] = Object.freeze({
         ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
         component,
+        evidenceBound: evidenceBound.has(component.id),
         relationships: Object.freeze(relationships),
       });
     }
@@ -3830,7 +3866,7 @@ export function createApplicationOperations(
 
   const searchBlueprint = async (
     request: SearchBlueprintRequest,
-  ): Promise<Result<BlueprintComponentPage>> => {
+  ): Promise<Result<BlueprintSearchPage>> => {
     const inspected = exactRequest(
       request,
       [
@@ -3895,7 +3931,26 @@ export function createApplicationOperations(
       "search",
       options,
     );
-    return projected.ok ? boundedBlueprintPage(projected.value, "search", options) : projected;
+    if (!projected.ok) return projected;
+    const observed = await snapshot(Object.freeze([]), options);
+    if (!observed.ok) return readProviderFailure(observed.diagnostics);
+    if (observed.value.generation !== projected.value.generation) return graphQueryUnavailable();
+    const evidenceBound = evidenceBoundComponents(observed.value, projected.value.items, options);
+    const items: BlueprintSearchItem[] = projected.value.items.map((component) =>
+      Object.freeze({ component, evidenceBound: evidenceBound.has(component.id) }),
+    );
+    return boundedBlueprintPage(
+      Object.freeze({
+        generation: projected.value.generation,
+        hasMore: projected.value.hasMore,
+        items: Object.freeze(items),
+        ...(projected.value.nextCursor === undefined
+          ? {}
+          : { nextCursor: projected.value.nextCursor }),
+      }),
+      "search",
+      options,
+    );
   };
 
   const traverseBlueprint = async (
@@ -4045,6 +4100,9 @@ export function createApplicationOperations(
       const cognitive = cognitiveComplexityEvidence(read.value, [component], options).get(
         component.id,
       );
+      const evidenceBound = evidenceBoundComponents(read.value, [component], options).has(
+        component.id,
+      );
       const exact = exactQuery(
         read.value.generation,
         Object.freeze({
@@ -4053,6 +4111,7 @@ export function createApplicationOperations(
           item: Object.freeze({
             ...(cognitive === undefined ? {} : { cognitiveComplexity: cognitive }),
             component,
+            evidenceBound,
             revision: revision.value,
           }),
           relationships: relationships.value,
