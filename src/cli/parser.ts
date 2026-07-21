@@ -6,13 +6,14 @@ import {
   CLI_MAX_SEARCH_CHARACTERS,
   CLI_MAX_TRAVERSAL_DEPTH,
   type CliCommand,
+  type CliComponentFilters,
   type CliDiagnostic,
   type CliFormat,
   type CliInputSource,
   type CliInvocationResult,
 } from "./contracts.ts";
+import { isStandardComponentScale } from "../application/index.ts";
 import { WEB_DEFAULT_PORT } from "../web/server.ts";
-import { isStandardComponentScale, type StandardComponentScale } from "../standard-model/index.ts";
 
 function diagnostic(message: string): CliDiagnostic {
   return Object.freeze({ code: "cli-invalid-invocation", message });
@@ -81,13 +82,13 @@ function filteredPage(args: readonly string[]):
   | {
       readonly cursor?: string;
       readonly limit: number;
-      readonly scale?: StandardComponentScale;
+      readonly scale?: CliComponentFilters["scale"];
       readonly shared?: boolean;
     }
   | undefined {
   let cursor: string | undefined;
   let limit: number | undefined;
-  let scale: StandardComponentScale | undefined;
+  let scale: CliComponentFilters["scale"];
   let shared: boolean | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];

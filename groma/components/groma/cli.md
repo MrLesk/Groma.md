@@ -18,4 +18,5 @@ scale: domain
 - imports [node:path](groma:component/ent_d900583069d4f258c239e4be909e20a9?relationship=rel_7fd4fddf986e36c0c68ac89d5382e7bf)
 - imports [web](groma:component/ent_df026a00c094f2c586ac953ff361783e?relationship=rel_9ad12ca9dff00a83c64ac6169e0483b7)
 - imports [node:os](groma:component/ent_9107f4621787c46c6eee35fc42b0f21e?relationship=rel_b02ba445007e5c187012d64b80361cab)
+- imports [standard-model](groma:component/ent_dc27dd8b576c2950cd5b445248045584?relationship=rel_d5da98cd0850699cf754356aa8c4592e)
 - imports [application](groma:component/ent_93b646ce861caf566a130dcd67d2c836?relationship=rel_dd347f24f142029d42794cd6c0d579df)

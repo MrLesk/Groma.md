@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { parse } from "@babel/parser";
+import { isAlias, parseDocument, visit } from "yaml";
 
 import {
   observedContainmentRelationshipType,
@@ -50,6 +51,10 @@ const maxRelationshipObservations = 1_000;
 // re-exports hundreds of names lists a bounded, reproducible sample rather than
 // swamping the file's detail or the per-component embedded-item ceiling.
 const maxFileExportActions = 32;
+// Detailed AST evidence is enrichment. Large repositories keep their complete
+// package and source-boundary inventory, then spend this bounded sample across
+// those boundaries instead of exhausting the whole scan on every source file.
+const maxDetailedSourceFiles = 256;
 /**
  * The description carried by every file-level export action, so a file's own
  * exported functions can be told apart from a package's public-API surface: the
@@ -228,7 +233,6 @@ interface PackageEvidence {
   readonly resource: string;
   readonly root: string;
   readonly scope: string;
-  readonly workspacePatterns: readonly string[];
 }
 
 interface PackageEntryEvidence {
@@ -237,6 +241,7 @@ interface PackageEntryEvidence {
 }
 
 interface WorkspaceEvidence {
+  readonly excludedPatterns?: readonly string[];
   readonly owner?: PackageEvidence;
   readonly patterns: readonly string[];
   readonly root: string;
@@ -1465,6 +1470,10 @@ async function inventoryScope(
           });
         }
       }
+      for (const name of ["pnpm-workspace.yaml", "pnpm-workspace.yml"]) {
+        const manifest = byName.get(name);
+        if (manifest !== undefined && manifest.kind !== "file") return emptyPartial();
+      }
     }
     for (const entry of entries) {
       const normalized = entry.resource.normalize("NFC").toLowerCase();
@@ -1508,12 +1517,17 @@ async function inventoryScope(
         ) {
           partial = true;
         }
+        const pnpmWorkspace =
+          entry.resource === joinResource(root, "pnpm-workspace.yaml") ||
+          entry.resource === joinResource(root, "pnpm-workspace.yml");
         const selectable =
           basename(entry.resource) === "package.json" ||
+          pnpmWorkspace ||
           readmePattern.test(basename(entry.resource)) ||
           sourceExtensionPattern.test(entry.resource);
         const projectMetadata =
           basename(entry.resource) === "package.json" ||
+          pnpmWorkspace ||
           readmePattern.test(basename(entry.resource));
         if (!selectable || (!projectMetadata && !included(relative, config.include))) continue;
         if (sourceExtensionPattern.test(entry.resource)) {
@@ -1819,6 +1833,7 @@ function packageImportRules(value: unknown): Readonly<{
 
 function workspacePatterns(
   value: unknown,
+  allowRoot = false,
 ): Readonly<{ readonly partial: boolean; readonly patterns: readonly string[] }> {
   if (value === undefined) {
     return Object.freeze({ partial: false, patterns: Object.freeze([]) });
@@ -1838,7 +1853,14 @@ function workspacePatterns(
   const seen = new Set<string>();
   for (const item of candidate) {
     const normalized = normalizeTsconfigRelativeValue(item);
-    if (!validatePattern(normalized) || normalized === "." || seen.has(normalized)) {
+    if (normalized === "." && allowRoot) {
+      if (seen.has(normalized)) {
+        return Object.freeze({ partial: true, patterns: Object.freeze([]) });
+      }
+      seen.add(normalized);
+      continue;
+    }
+    if (!validatePattern(normalized) || seen.has(normalized)) {
       return Object.freeze({ partial: true, patterns: Object.freeze([]) });
     }
     seen.add(normalized);
@@ -1848,6 +1870,54 @@ function workspacePatterns(
     partial: false,
     patterns: Object.freeze(patterns.sort(compareCodeUnits)),
   });
+}
+
+function pnpmWorkspacePatterns(text: string): Readonly<{
+  readonly excludedPatterns: readonly string[];
+  readonly partial: boolean;
+  readonly patterns: readonly string[];
+}> {
+  const refused = Object.freeze({
+    excludedPatterns: Object.freeze([]),
+    partial: true,
+    patterns: Object.freeze([]),
+  });
+  try {
+    const document = parseDocument(text, { schema: "core", uniqueKeys: true });
+    if (document.errors.length > 0 || document.warnings.length > 0) return refused;
+    let unsupported = false;
+    visit(document, {
+      Alias: () => {
+        unsupported = true;
+        return visit.BREAK;
+      },
+      Node: (_key, node) => {
+        if (isAlias(node) || node.anchor !== undefined || node.tag !== undefined) {
+          unsupported = true;
+          return visit.BREAK;
+        }
+      },
+    });
+    if (unsupported) return refused;
+    const value: unknown = document.toJS({ maxAliasCount: 0 });
+    if (!hasOwnDataRecord(value) || !Array.isArray(value.packages)) return refused;
+    const included: unknown[] = [];
+    const excluded: unknown[] = [];
+    for (const pattern of value.packages) {
+      if (typeof pattern === "string" && pattern.startsWith("!")) excluded.push(pattern.slice(1));
+      else included.push(pattern);
+    }
+    const includes = workspacePatterns(included, true);
+    const exclusions = workspacePatterns(excluded);
+    if (includes.partial || exclusions.partial) return refused;
+    return Object.freeze({
+      excludedPatterns: exclusions.patterns,
+      partial: false,
+      patterns: includes.patterns,
+    });
+  } catch {
+    return refused;
+  }
 }
 
 function workspacePatternMatches(root: string, pattern: string): boolean {
@@ -1915,7 +1985,10 @@ function parsePackage(
         ? workspacePatterns(parsed.workspaces)
         : Object.freeze({ partial: false, patterns: Object.freeze([]) });
     const workspace =
-      root === scopeRoot && parsed.workspaces !== undefined
+      root === scopeRoot &&
+      parsed.workspaces !== undefined &&
+      !workspaces.partial &&
+      workspaces.patterns.length > 0
         ? Object.freeze({ patterns: workspaces.patterns, root })
         : undefined;
     const name = parsed.name;
@@ -1940,7 +2013,6 @@ function parsePackage(
       resource: file.resource,
       root,
       scope: file.scope,
-      workspacePatterns: workspaces.patterns,
     });
     return Object.freeze({
       ...(typeof parsed.description === "string" && parsed.description.length > 0
@@ -3010,6 +3082,42 @@ function packageForResource(
   return owner;
 }
 
+function detailedSourceFiles(
+  sourceFiles: readonly string[],
+  packages: readonly PackageEvidence[],
+  boundaries: readonly BoundaryEvidence[],
+): readonly string[] {
+  const available = new Set(sourceFiles);
+  const selected: string[] = [];
+  const seen = new Set<string>();
+  const add = (resource: string | undefined): void => {
+    if (
+      resource === undefined ||
+      !available.has(resource) ||
+      seen.has(resource) ||
+      selected.length >= maxDetailedSourceFiles
+    ) {
+      return;
+    }
+    seen.add(resource);
+    selected.push(resource);
+  };
+
+  for (const item of packages) for (const entry of item.entries) add(entry.target);
+  for (let depth = 0; selected.length < maxDetailedSourceFiles; depth += 1) {
+    let found = false;
+    for (const boundary of boundaries) {
+      const resource = boundary.files[depth];
+      if (resource === undefined) continue;
+      found = true;
+      add(resource);
+    }
+    if (!found) break;
+  }
+  for (const resource of sourceFiles) add(resource);
+  return Object.freeze(selected);
+}
+
 function nuxtServerRoute(resource: string): string | undefined {
   const relative = relativeResource(resource, "server/api");
   if (relative === undefined || relative === ".") return undefined;
@@ -3627,6 +3735,54 @@ async function scanScope(
         packageDescriptions.set(parsed.package.resource, parsed.description);
     }
   }
+  const pnpmWorkspaceFiles = inventory.files.filter(
+    (item) =>
+      dirname(item) === root &&
+      (basename(item) === "pnpm-workspace.yaml" || basename(item) === "pnpm-workspace.yml"),
+  );
+  const clearRootWorkspace = (): void => {
+    for (let index = workspaceDeclarations.length - 1; index >= 0; index -= 1) {
+      if (workspaceDeclarations[index]!.root === root) workspaceDeclarations.splice(index, 1);
+    }
+  };
+  if (pnpmWorkspaceFiles.length > 1) {
+    partial = true;
+    clearRootWorkspace();
+  } else if (pnpmWorkspaceFiles.length === 1) {
+    const file = await getFile(pnpmWorkspaceFiles[0]!);
+    if (file === undefined) {
+      partial = true;
+      clearRootWorkspace();
+    } else {
+      const pnpm = pnpmWorkspacePatterns(file.text);
+      partial ||= pnpm.partial;
+      if (pnpm.partial) clearRootWorkspace();
+      else {
+        const declared = workspaceDeclarations.find((item) => item.root === root);
+        if (
+          declared !== undefined &&
+          (pnpm.excludedPatterns.length > 0 ||
+            declared.patterns.length !== pnpm.patterns.length ||
+            declared.patterns.some((pattern, index) => pattern !== pnpm.patterns[index]))
+        ) {
+          partial = true;
+          clearRootWorkspace();
+        } else if (declared === undefined && pnpm.patterns.length > 0) {
+          const owner = packages.find((item) => item.root === root);
+          workspaceDeclarations.push(
+            Object.freeze({
+              ...(pnpm.excludedPatterns.length === 0
+                ? {}
+                : { excludedPatterns: pnpm.excludedPatterns }),
+              ...(owner === undefined ? {} : { owner }),
+              patterns: pnpm.patterns,
+              root,
+            }),
+          );
+        }
+      }
+    }
+  }
   packages.sort((left, right) => compareCodeUnits(left.root, right.root));
   workspaceDeclarations.sort((left, right) => compareCodeUnits(left.root, right.root));
   const sourceFiles = inventory.files.filter((item) => sourceExtensionPattern.test(item));
@@ -3707,8 +3863,10 @@ async function scanScope(
   const boundaryByFile = new Map<string, BoundaryEvidence>();
   for (const boundary of boundaries)
     for (const file of boundary.files) boundaryByFile.set(file, boundary);
+  const selectedSourceFiles = detailedSourceFiles(sourceFiles, packages, boundaries);
+  if (selectedSourceFiles.length < sourceFiles.length) partial = true;
   const parsedSources = new Map<string, ParsedSource>();
-  for (const resource of sourceFiles) {
+  for (const resource of selectedSourceFiles) {
     chargeExtractionWork(budget);
     const file = await getFile(resource);
     if (file === undefined) continue;
@@ -3719,6 +3877,23 @@ async function scanScope(
   const records: ObservationRecord[] = [];
   const append = (record: ObservationRecord, reserved = false): void =>
     appendObservation(records, budget, record, reserved);
+  // Leave room for the structural records emitted after enrichment. Detail may
+  // yield at this soft ceiling; required blueprint structure still uses append.
+  const detailCharacterCeiling = maxCanonicalCharacters - 32_768;
+  // Optional enrichment yields to record and character budgets instead of
+  // turning an otherwise useful architectural scan into an atomic failure.
+  const appendDetail = (record: ObservationRecord, reserved = false): boolean => {
+    const characters = boundedStructuralCharacters(record);
+    if (
+      budget.records + (reserved ? 0 : 1) > maxRecords ||
+      budget.canonicalCharacters + characters > detailCharacterCeiling
+    ) {
+      partial = true;
+      return false;
+    }
+    append(record, reserved);
+    return true;
+  };
   const packageByKey = new Map<string, PackageEvidence>();
   const workspaceMemberPackages = new Set<PackageEvidence>();
   for (const item of packages) {
@@ -3739,7 +3914,7 @@ async function scanScope(
       description !== undefined &&
       validObservationText(description, maxDocumentationCharacters)
     ) {
-      append(
+      appendDetail(
         documentationRecord(
           scope,
           ["package-description", item.root, item.name],
@@ -3759,6 +3934,13 @@ async function scanScope(
       if (member.root === declaration.root) continue;
       const relativeMember = relativeResource(member.root, declaration.root);
       if (relativeMember === undefined || relativeMember === ".") continue;
+      if (
+        declaration.excludedPatterns?.some((pattern) => {
+          chargeExtractionWork(budget);
+          return workspacePatternMatches(relativeMember, pattern);
+        }) === true
+      )
+        continue;
       const matches = declaration.patterns.filter((pattern) => {
         chargeExtractionWork(budget);
         return workspacePatternMatches(relativeMember, pattern);
@@ -3799,8 +3981,11 @@ async function scanScope(
   }
   const workspaceByName = new Map<string, PackageEvidence>();
   const ambiguousWorkspaceNames = new Set<string>();
+  const workspaceOwners = new Set(
+    workspaceDeclarations.flatMap((item) => (item.owner === undefined ? [] : [item.owner])),
+  );
   for (const member of packages.filter(
-    (item) => workspaceMemberPackages.has(item) || item.workspacePatterns.length > 0,
+    (item) => workspaceMemberPackages.has(item) || workspaceOwners.has(item),
   )) {
     chargeExtractionWork(budget);
     if (workspaceByName.has(member.name)) ambiguousWorkspaceNames.add(member.name);
@@ -3874,7 +4059,7 @@ async function scanScope(
               scope,
               observationKey("component-candidate", scope, "package", owner.root, owner.name),
             );
-    append(
+    appendDetail(
       documentationRecord(
         scope,
         ["readme", resource],
@@ -4058,24 +4243,27 @@ async function scanScope(
     const provenance = [...acceptedProvenance.entries()]
       .sort((left, right) => compareCodeUnits(left[0], right[0]))
       .map((item) => item[1]);
-    append(
-      Object.freeze({
-        component: reference(scope, aggregate.componentKey),
-        description: `Public export at ${aggregate.publicSubpath}`,
-        key: aggregate.actionKey,
-        kind: "action",
-        name: aggregate.name,
-        provenance: Object.freeze(provenance),
-        scope,
-      }),
-    );
+    if (
+      !appendDetail(
+        Object.freeze({
+          component: reference(scope, aggregate.componentKey),
+          description: `Public export at ${aggregate.publicSubpath}`,
+          key: aggregate.actionKey,
+          kind: "action",
+          name: aggregate.name,
+          provenance: Object.freeze(provenance),
+          scope,
+        }),
+      )
+    )
+      continue;
     for (const doc of [...docs.values()].sort(
       (left, right) =>
         compareCodeUnits(left.resource, right.resource) ||
         compareCodeUnits(left.discriminator, right.discriminator),
     )) {
       chargeExtractionWork(budget);
-      append(
+      appendDetail(
         documentationRecord(
           scope,
           [
@@ -4231,16 +4419,19 @@ async function scanScope(
                   workspace.name,
                 );
           if (workspace === undefined && !externalCandidates.has(toKey)) {
+            if (
+              !appendDetail(
+                Object.freeze({
+                  candidate: Object.freeze({ name: externalName, type: "external" }),
+                  key: toKey,
+                  kind: "component-candidate",
+                  provenance: Object.freeze([rangeProvenance(file, imported.start, imported.end)]),
+                  scope,
+                }),
+              )
+            )
+              continue;
             externalCandidates.add(toKey);
-            append(
-              Object.freeze({
-                candidate: Object.freeze({ name: externalName, type: "external" }),
-                key: toKey,
-                kind: "component-candidate",
-                provenance: Object.freeze([rangeProvenance(file, imported.start, imported.end)]),
-                scope,
-              }),
-            );
           }
         }
       }
@@ -4264,7 +4455,7 @@ async function scanScope(
     }
     for (const route of parsed.routes) {
       chargeExtractionWork(budget);
-      append(
+      appendDetail(
         Object.freeze({
           component: reference(scope, from.key),
           key: observationKey("action", scope, "bun-route", from.key, route.name),
@@ -4303,7 +4494,7 @@ async function scanScope(
       partial = true;
       continue;
     }
-    append(
+    appendDetail(
       Object.freeze({
         component: reference(scope, candidate.componentKey),
         key: observationKey("action", scope, "nuxt-route", candidate.componentKey, name),
@@ -4314,7 +4505,7 @@ async function scanScope(
       }),
     );
   }
-  const topographyCharacterCeiling = maxCanonicalCharacters - 32_768;
+  const topographyCharacterCeiling = detailCharacterCeiling;
   const emittedRelationshipIdentities = new Set<string>();
   for (const [identity, aggregate] of relationships) {
     chargeExtractionWork(budget);
@@ -4388,14 +4579,13 @@ async function scanScope(
         ...(reuseBreadth === undefined ? {} : { reuseBreadth }),
       }),
     });
-    budget.canonicalCharacters +=
+    const addedCharacters =
       boundedStructuralCharacters(enlarged) - boundedStructuralCharacters(record);
-    if (budget.canonicalCharacters > maxCanonicalCharacters) {
-      throw new ScannerStop(
-        "typescript-scanner-budget-exceeded",
-        "TypeScript scanner observation character budget was exceeded",
-      );
+    if (budget.canonicalCharacters + addedCharacters > detailCharacterCeiling) {
+      partial = true;
+      continue;
     }
+    budget.canonicalCharacters += addedCharacters;
     records[index] = enlarged;
   }
   // The topography inside each boundary: its directories and source files, wired

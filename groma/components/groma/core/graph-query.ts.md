@@ -16,3 +16,4 @@ scale: part
 - imports [identity.ts](groma:component/ent_9cda15cd1f6d49d151214da56a8887be?relationship=rel_5a17b3c7d89f6ef8e6cb9cb972903116)
 - imports [result.ts](groma:component/ent_d26332c0d45b529d63d7c800d333a86f?relationship=rel_a61fe31f352e8cc9a14de45248c6225f)
 - imports [query.ts](groma:component/ent_220d160641d58101347b50d5abb6a0f8?relationship=rel_ad9d146816bfa35a4e2997c3fd3f3ee3)
+- imports [payload.ts](groma:component/ent_b369bf593bc82c53d1a2e5d56783ad21?relationship=rel_effd0e3eefb40b85aeb1faff6fa11e0e)

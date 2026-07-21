@@ -24,6 +24,7 @@ import type {
   ProjectRegistrationOperations,
   ProjectRegistrationSnapshot,
 } from "./local-project-registry.ts";
+import { copyHostDiagnostics } from "./runtime-validation.ts";
 
 export const scannerExecutionApiVersion = "groma.scanner-execution/v1" as const;
 export type ScannerExecutionStatus =
@@ -505,11 +506,22 @@ export function createScannerExecutionRuntime(
       else if (
         settled.type === "rejected" ||
         typeof settled.value !== "object" ||
-        settled.value === null ||
-        (settled.value as { ok?: unknown }).ok !== true
+        settled.value === null
       ) {
         status = "failed";
         failures.push(diagnostic("scanner-execution-failed", "Scanner execution failed"));
+      } else if ((settled.value as { ok?: unknown }).ok !== true) {
+        status = "failed";
+        const scannerDiagnostics = copyHostDiagnostics(
+          (settled.value as { diagnostics?: unknown }).diagnostics,
+          selected.maxDiagnostics,
+          "scanner-execution-failed",
+        );
+        if (scannerDiagnostics.ok && scannerDiagnostics.value.length > 0) {
+          failures.push(...scannerDiagnostics.value);
+        } else {
+          failures.push(diagnostic("scanner-execution-failed", "Scanner execution failed"));
+        }
       } else {
         const snapshot = observation.snapshot();
         if (!snapshot.ok) {

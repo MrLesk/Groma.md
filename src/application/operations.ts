@@ -23,6 +23,7 @@ import {
   type GraphTraversalQuery,
   type ObservationRecord,
   type ObservationReference,
+  type ObservationSourceIdentity,
   type PreparedBoundedQuery,
   type ProjectionReadIdentity,
   type ResourceKey,
@@ -59,6 +60,7 @@ import type {
   BlueprintExportPage,
   BlueprintTraversalHit,
   BlueprintTraversalPage,
+  ComponentCognitiveComplexityEvidence,
   ComponentEvidenceView,
   ComponentScaleEvidenceView,
   ComponentPage,
@@ -1351,6 +1353,95 @@ function componentEvidence(
   return success(Object.freeze(views));
 }
 
+/**
+ * Projects the one scanner scalar the visual blueprint currently understands.
+ * Invalid, stale, or conflicting observations disappear from this optional view
+ * rather than making a canonical component read fail or inviting a guessed score.
+ */
+function cognitiveComplexityEvidence(
+  snapshot: ReadSnapshot,
+  components: readonly StandardComponent[],
+  options: ApplicationOperationsContext,
+): ReadonlyMap<string, readonly ComponentCognitiveComplexityEvidence[]> {
+  if (snapshot.evidence === undefined || components.length === 0) return new Map();
+  const parsed = parseEvidenceState(snapshot.evidence, {
+    maxComponents: options.bounds.maxEmbeddedItems,
+    maxRecords: options.bounds.maxRequestDataValues,
+    maxRelationships: options.bounds.maxRelationshipMutations,
+    maxSources: options.bounds.maxComponents,
+  });
+  if (!parsed.ok) return new Map();
+
+  const wanted = new Set(components.map((component) => component.id));
+  const collected = new Map<
+    string,
+    Map<
+      string,
+      {
+        readonly projectId: string;
+        readonly scanner: ObservationSourceIdentity;
+        readonly values: Set<number>;
+      }
+    >
+  >();
+  for (const source of parsed.value.sources) {
+    const scanner = source.snapshot.source;
+    const provenance = `${source.snapshot.projectId}\u0000${scanner.id}\u0000${scanner.instance}\u0000${scanner.version}`;
+    const scoresByBinding = new Map<string, number[]>();
+    for (const record of source.snapshot.records) {
+      if (
+        record.kind !== "component-candidate" ||
+        record.signals?.cognitiveComplexity === undefined
+      )
+        continue;
+      const identity = `${record.scope}\u0000${record.key}`;
+      const scores = scoresByBinding.get(identity);
+      if (scores === undefined) scoresByBinding.set(identity, [record.signals.cognitiveComplexity]);
+      else scores.push(record.signals.cognitiveComplexity);
+    }
+    for (const binding of source.componentBindings) {
+      if (!binding.present) continue;
+      const resolved = options.graph.resolveEntityIdentity(snapshot.graph, binding.componentId);
+      if (!resolved.ok || !wanted.has(resolved.value.resolved)) continue;
+      const scores = scoresByBinding.get(`${binding.scope}\u0000${binding.key}`) ?? [];
+      if (scores.length === 0) continue;
+      const bySource = collected.get(resolved.value.resolved) ?? new Map();
+      const measured = bySource.get(provenance) ?? {
+        projectId: source.snapshot.projectId,
+        scanner,
+        values: new Set<number>(),
+      };
+      for (const score of scores) measured.values.add(score);
+      bySource.set(provenance, measured);
+      collected.set(resolved.value.resolved, bySource);
+    }
+  }
+
+  const views = new Map<string, readonly ComponentCognitiveComplexityEvidence[]>();
+  for (const [componentId, bySource] of collected) {
+    const entries = [...bySource.values()]
+      .flatMap((measured) =>
+        measured.values.size === 1
+          ? [
+              Object.freeze({
+                projectId: measured.projectId,
+                scanner: measured.scanner,
+                value: [...measured.values][0]!,
+              }),
+            ]
+          : [],
+      )
+      .sort((left, right) =>
+        compareText(
+          `${left.projectId}\u0000${left.scanner.id}\u0000${left.scanner.instance}\u0000${left.scanner.version}`,
+          `${right.projectId}\u0000${right.scanner.id}\u0000${right.scanner.instance}\u0000${right.scanner.version}`,
+        ),
+      );
+    if (entries.length > 0) views.set(componentId, Object.freeze(entries));
+  }
+  return views;
+}
+
 function componentScaleEvidence(
   assessment: NonNullable<ComponentBinding["scaleAssessment"]>,
   curated: StandardComponent["scale"],
@@ -1735,12 +1826,22 @@ async function componentPage(
         ),
       );
     }
+    const cognitive = cognitiveComplexityEvidence(
+      confirmed.value,
+      confirmedPage.value.items,
+      options,
+    );
     const views: ComponentView[] = [];
     for (let index = 0; index < confirmedPage.value.items.length; index += 1) {
       const component = confirmedPage.value.items[index]!;
       const revision = revisionFor(confirmed.value, resources[index]!, "Component");
       if (!revision.ok) return revision;
-      views[index] = Object.freeze({ component, revision: revision.value });
+      const measured = cognitive.get(component.id);
+      views[index] = Object.freeze({
+        ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
+        component,
+        revision: revision.value,
+      });
     }
     const page = pageQuery(
       prepared.value,
@@ -3583,6 +3684,10 @@ export function createApplicationOperations(
     );
     if (!components.ok) return components;
     if (components.value.generation !== identity.value.generation) return graphQueryUnavailable();
+    const observed = await snapshot(Object.freeze([]), options);
+    if (!observed.ok) return readProviderFailure(observed.diagnostics);
+    if (observed.value.generation !== components.value.generation) return graphQueryUnavailable();
+    const cognitive = cognitiveComplexityEvidence(observed.value, components.value.items, options);
     const items: BlueprintExportItem[] = [];
     const exportedRelationshipIds = new Set<string>();
     const structuralRemaining = { value: options.bounds.maxSnapshotStateValues };
@@ -3600,13 +3705,15 @@ export function createApplicationOperations(
       componentIndex += 1
     ) {
       const component = components.value.items[componentIndex]!;
-      if (structuralRemaining.value < 2) {
+      const measured = cognitive.get(component.id);
+      const itemFields = measured === undefined ? 2 : 3;
+      if (structuralRemaining.value < itemFields) {
         return blueprintExportPageBoundExceeded(
           "structural-values",
           options.bounds.maxSnapshotStateValues,
         );
       }
-      structuralRemaining.value -= 2;
+      structuralRemaining.value -= itemFields;
       const componentConsumption = consumeBlueprintStructuralValues(
         component,
         structuralRemaining,
@@ -3619,6 +3726,21 @@ export function createApplicationOperations(
               options.bounds.maxSnapshotStateValues,
             )
           : graphQueryUnavailable();
+      }
+      if (measured !== undefined) {
+        const measuredConsumption = consumeBlueprintStructuralValues(
+          measured,
+          structuralRemaining,
+          options,
+        );
+        if (measuredConsumption !== "accepted") {
+          return measuredConsumption === "bound-exceeded"
+            ? blueprintExportPageBoundExceeded(
+                "structural-values",
+                options.bounds.maxSnapshotStateValues,
+              )
+            : graphQueryUnavailable();
+        }
       }
       const relationships: StandardRelationship[] = [];
       let traversalCursor: ContinuationCursor | undefined;
@@ -3687,6 +3809,7 @@ export function createApplicationOperations(
         traversalCursor = traversal.value.nextCursor;
       } while (traversalCursor !== undefined);
       items[componentIndex] = Object.freeze({
+        ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
         component,
         relationships: Object.freeze(relationships),
       });
@@ -3919,12 +4042,19 @@ export function createApplicationOperations(
       if (!relationships.ok) return relationships;
       const evidence = componentEvidence(read.value, component, options);
       if (!evidence.ok) return evidence;
+      const cognitive = cognitiveComplexityEvidence(read.value, [component], options).get(
+        component.id,
+      );
       const exact = exactQuery(
         read.value.generation,
         Object.freeze({
           evidence: evidence.value,
           generation: read.value.generation,
-          item: Object.freeze({ component, revision: revision.value }),
+          item: Object.freeze({
+            ...(cognitive === undefined ? {} : { cognitiveComplexity: cognitive }),
+            component,
+            revision: revision.value,
+          }),
           relationships: relationships.value,
         }),
         options,

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileStandalone } from "../../scripts/standalone-compiler.ts";
+import { hasExternalStaticExportAssets } from "../../scripts/static-export-verification.ts";
 
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
 const defaultExecutable = path.join(
@@ -378,8 +379,7 @@ async function verifyTerminal(workspaceRoot: string): Promise<void> {
     assert.ok(html.includes(`"id":"${ids.orders}"`));
     assert.ok(html.includes(`"id":"${ids.orderItem}"`));
     assert.ok(html.includes("connect-src 'none'"));
-    assert.ok(!/<script\b[^>]*\bsrc=/i.test(html));
-    assert.ok(!/<link\b[^>]*\brel=["']stylesheet["']/i.test(html));
+    assert.equal(await hasExternalStaticExportAssets(html), false);
     if (expectedHtml === undefined) expectedHtml = html;
     else assert.equal(html, expectedHtml);
   }

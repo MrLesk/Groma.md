@@ -748,18 +748,12 @@ export function createReconciliationOperations(
       const existingRelationships = new Map<string, StandardRelationship>(
         decoded.value.relationships.map((relationship) => [relationship.id, relationship]),
       );
-      if (
-        priorSource?.relationshipBindings.some(
-          (binding) => binding.present && !existingRelationships.has(binding.relationId),
-        )
-      ) {
-        return failure(
-          diagnostic("reconciliation-binding-missing", "A durable binding target is missing"),
-        );
-      }
       const componentRecords = snapshot.value.records.filter(
         (record): record is Extract<ObservationRecord, { kind: "component-candidate" }> =>
           record.kind === "component-candidate",
+      );
+      const currentComponentIdentities = new Set(
+        componentRecords.map((record) => qualified(record.scope, record.key)),
       );
       if (componentRecords.length > options.bounds.maxComponents) {
         return failure(
@@ -780,11 +774,20 @@ export function createReconciliationOperations(
         }
       }
       for (const binding of priorSource?.componentBindings ?? []) {
+        const identity = qualified(binding.scope, binding.key);
+        const notObserved = !currentComponentIdentities.has(identity);
         const resolved = options.graph.resolveEntityIdentity(
           decoded.value.graph,
           binding.componentId,
         );
         if (!resolved.ok || !existingComponents.has(resolved.value.resolved)) {
+          // Canonical intent is already absent. A successful snapshot with no
+          // matching record can retire only this dangling scanner binding; a
+          // present record still needs an exact target and fails below.
+          if (notObserved) {
+            priorComponents.set(identity, Object.freeze({ ...binding, present: false }));
+            continue;
+          }
           return failure(
             diagnostic("reconciliation-binding-missing", "A component binding target is missing"),
           );
@@ -802,7 +805,7 @@ export function createReconciliationOperations(
         }
         resolvedComponentIds.add(resolved.value.resolved);
         priorComponents.set(
-          qualified(binding.scope, binding.key),
+          identity,
           binding.componentId === resolved.value.resolved
             ? binding
             : Object.freeze({ ...binding, componentId: resolved.value.resolved }),
@@ -907,9 +910,6 @@ export function createReconciliationOperations(
       }
       const componentIds = new Map(
         [...componentBindings].map(([identity, binding]) => [identity, binding.componentId]),
-      );
-      const currentComponentIdentities = new Set(
-        componentRecords.map((record) => qualified(record.scope, record.key)),
       );
       const containmentRecords = snapshot.value.records.filter(
         (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
@@ -1056,9 +1056,15 @@ export function createReconciliationOperations(
           ),
         );
       }
+      const currentRelationshipIdentities = new Set(
+        relationshipRecords.map((record) => qualified(record.scope, record.key)),
+      );
       const priorRelationships = new Map<string, RelationshipBinding>();
       const resolvedRelationshipProjections = new Map<string, RelationshipProjection>();
       for (const binding of priorSource?.relationshipBindings ?? []) {
+        const identity = qualified(binding.scope, binding.key);
+        const notObserved = !currentRelationshipIdentities.has(identity);
+        const missingRelationship = !existingRelationships.has(binding.relationId);
         const source = options.graph.resolveEntityIdentity(
           decoded.value.graph,
           binding.projection.source,
@@ -1073,6 +1079,17 @@ export function createReconciliationOperations(
           !resolvedComponentIds.has(source.value.resolved) ||
           !resolvedComponentIds.has(target.value.resolved)
         ) {
+          // Both the relation and at least one endpoint are already absent. A
+          // successful snapshot that omits the record can retire the dangling
+          // binding without choosing a replacement identity.
+          if (notObserved && missingRelationship) {
+            priorRelationships.set(
+              identity,
+              Object.freeze({ ...binding, present: false, removed: true }),
+            );
+            resolvedRelationshipProjections.set(identity, binding.projection);
+            continue;
+          }
           return failure(
             diagnostic(
               "reconciliation-binding-missing",
@@ -1080,8 +1097,14 @@ export function createReconciliationOperations(
             ),
           );
         }
-        const identity = qualified(binding.scope, binding.key);
-        priorRelationships.set(identity, binding);
+        // The endpoints can remain live after an explicit relation removal.
+        // Retire only that missing relation when this snapshot also omits it.
+        priorRelationships.set(
+          identity,
+          missingRelationship && notObserved
+            ? Object.freeze({ ...binding, present: false, removed: true })
+            : binding,
+        );
         resolvedRelationshipProjections.set(
           identity,
           Object.freeze({

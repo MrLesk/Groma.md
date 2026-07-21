@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
+import { hasExternalStaticExportAssets } from "./static-export-verification.ts";
+
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 interface VerificationOptions {
@@ -198,13 +200,13 @@ async function verifyStaticExport(executable: string, cwd: string): Promise<void
   if (firstHtml !== secondHtml) {
     throw new Error("Compiled static export was not deterministic");
   }
+  const hasExternalAssets = await hasExternalStaticExportAssets(firstHtml);
   if (
     !firstHtml.includes('data-groma-export="read-only"') ||
     !firstHtml.includes("groma-read-only-blueprint-v1") ||
     !firstHtml.includes("react-flow-dagre") ||
     !firstHtml.includes("connect-src 'none'") ||
-    /<script\b[^>]*\bsrc=/i.test(firstHtml) ||
-    /<link\b[^>]*\brel=["']stylesheet["']/i.test(firstHtml)
+    hasExternalAssets
   ) {
     throw new Error("Compiled static export was not a self-contained read-only client");
   }

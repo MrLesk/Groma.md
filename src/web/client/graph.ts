@@ -1,7 +1,11 @@
 import dagre from "@dagrejs/dagre";
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
-import type { ApiComponentScale } from "./api.ts";
+import {
+  cognitiveComplexitySourceLabel,
+  type ApiCognitiveComplexityEvidence,
+  type ApiComponentScale,
+} from "./api.ts";
 import { displayText, type BlueprintModel } from "./model.ts";
 
 export type BlueprintNotation = ApiComponentScale | "unscaled";
@@ -11,6 +15,8 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly canOpen: boolean;
   readonly childCount: number;
   readonly childState: "collapsed" | "empty" | "expanded" | "unread";
+  /** A scanner measurement, shown only when it is comparable on this sheet. */
+  readonly cognitiveComplexity?: number;
   /** Borrowed dependencies this one draws on, counted apart from the system's own. */
   readonly borrows: number;
   /** Components of this system that this one draws on. */
@@ -49,7 +55,7 @@ export type BlueprintGroupNode = Node<BlueprintGroupNodeData, "group">;
 export type BlueprintFlowEdge = Edge;
 
 /** An evidence mark that carries its own vocabulary a reader may not know. */
-export type BlueprintTerm = "borrowed" | "entry" | "external" | "quoted" | "shared";
+export type BlueprintTerm = "borrowed" | "cognitive" | "entry" | "external" | "quoted" | "shared";
 
 export interface BlueprintFlowGraph {
   readonly edges: readonly BlueprintFlowEdge[];
@@ -313,6 +319,63 @@ function importCycles(
   );
 }
 
+interface ComparableCognitiveComplexity {
+  readonly evidence: ApiCognitiveComplexityEvidence;
+  readonly values: ReadonlyMap<string, number>;
+}
+
+function cognitiveProvenanceKey(evidence: ApiCognitiveComplexityEvidence): string {
+  const { scanner } = evidence;
+  return `${evidence.projectId}\u0000${scanner.id}\u0000${scanner.instance}\u0000${scanner.version}`;
+}
+
+/**
+ * A cognitive-complexity number only has a meaning beside values produced by
+ * the same scanner for the same observed project. Keep that boundary here,
+ * before a card or readout can make an accidental cross-scanner comparison.
+ */
+function comparableCognitiveComplexity(
+  ids: readonly string[],
+  model: BlueprintModel,
+): ComparableCognitiveComplexity | undefined {
+  const sources = new Map<
+    string,
+    { readonly evidence: ApiCognitiveComplexityEvidence; readonly values: Map<string, number> }
+  >();
+  const conflicting = new Map<string, Set<string>>();
+
+  for (const id of ids) {
+    for (const evidence of model.nodes.get(id)?.view.cognitiveComplexity ?? []) {
+      if (!Number.isSafeInteger(evidence.value) || evidence.value < 0) continue;
+      const key = cognitiveProvenanceKey(evidence);
+      const source = sources.get(key) ?? { evidence, values: new Map<string, number>() };
+      sources.set(key, source);
+      const previous = source.values.get(id);
+      if (previous === undefined) source.values.set(id, evidence.value);
+      else if (previous !== evidence.value) {
+        const idsWithConflicts = conflicting.get(key) ?? new Set<string>();
+        idsWithConflicts.add(id);
+        conflicting.set(key, idsWithConflicts);
+      }
+    }
+  }
+
+  const comparable = [...sources.entries()]
+    .map(([key, source]) => {
+      const values = new Map(source.values);
+      for (const id of conflicting.get(key) ?? []) values.delete(id);
+      return { key, ...source, values };
+    })
+    .filter((source) => source.values.size >= 2)
+    .sort(
+      (left, right) => right.values.size - left.values.size || left.key.localeCompare(right.key),
+    );
+  const chosen = comparable[0];
+  return chosen === undefined
+    ? undefined
+    : Object.freeze({ evidence: chosen.evidence, values: new Map(chosen.values) });
+}
+
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
   const { dependencies, focusId, model } = options;
   const childCounts = options.childCounts ?? new Map<string, number>();
@@ -378,6 +441,10 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
    * arrow endpoint.
    */
   const carded = new Set([...visible].filter((id) => childrenOf(id).length === 0));
+  const cognitiveComplexity = comparableCognitiveComplexity(
+    owned.filter((id) => carded.has(id)),
+    model,
+  );
 
   /**
    * The dependencies this sheet can actually show: both ends drawn, no self
@@ -569,9 +636,11 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     const entryPoint = hasPublicEntry(component);
     const external = component.type === "external";
     const shared = component.shared === true;
+    const measuredCognitiveComplexity = cognitiveComplexity?.values.get(id);
     if (external) terms.add("external");
     if (shared) terms.add("shared");
     if (entryPoint) terms.add("entry");
+    if (measuredCognitiveComplexity !== undefined) terms.add("cognitive");
     if ((borrows.get(id)?.size ?? 0) > 0) terms.add("borrowed");
     if (!external && (component.summary ?? "").length > 0) terms.add("quoted");
     const observedChildCount = childCounts.get(id) ?? childIds?.length ?? 0;
@@ -581,6 +650,9 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
           canOpen: observedChildCount > 0 && !external,
           childCount: observedChildCount,
           childState,
+          ...(measuredCognitiveComplexity === undefined
+            ? {}
+            : { cognitiveComplexity: measuredCognitiveComplexity }),
           borrows: borrows.get(id)?.size ?? 0,
           dependsOn: dependsOn.get(id)?.size ?? 0,
           dependents: dependents.get(id)?.size ?? 0,
@@ -771,9 +843,27 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     }
   }
 
+  if (cognitiveComplexity !== undefined) {
+    const scored = owned
+      .filter((id) => carded.has(id) && cognitiveComplexity.values.has(id))
+      .sort((left, right) => {
+        const difference =
+          cognitiveComplexity.values.get(right)! - cognitiveComplexity.values.get(left)!;
+        return difference || left.localeCompare(right);
+      });
+    const highest = scored[0];
+    if (highest !== undefined) {
+      const value = cognitiveComplexity.values.get(highest)!;
+      readout.push(
+        `Highest cognitive complexity shown: ${displayText(componentOf(highest)!)} — ${value}, measured by ${cognitiveComplexitySourceLabel(cognitiveComplexity.evidence)}.`,
+      );
+    }
+  }
+
   const TERM_ORDER: readonly BlueprintTerm[] = [
     "entry",
     "shared",
+    "cognitive",
     "quoted",
     "borrowed",
     "external",
@@ -782,7 +872,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     edges: Object.freeze(edges),
     nodes: Object.freeze(nodes),
     notations: Object.freeze(SCALE_ORDER.filter((scale) => notations.has(scale))),
-    readout: Object.freeze(drawnAmongLevel.length > 0 ? readout : []),
+    readout: Object.freeze(readout),
     terms: Object.freeze(TERM_ORDER.filter((term) => terms.has(term))),
   });
 }

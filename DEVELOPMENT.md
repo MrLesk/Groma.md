@@ -77,10 +77,10 @@ boundary. Submission is a local atomic handoff, not a streaming protocol.
 
 Before a pull request is opened, two independent `gpt-5.6-terra` agents at `xhigh` and one
 local Claude pass review the complete change. Justified findings are fixed before the PR is
-created. The ready PR then receives one awaited automatic Codex review. If that review finds
-issues, fix the justified ones and require green CI after the fix; do not wait for the
-automatic follow-up Codex review, even if the PR shows a new 👀 reaction. This keeps review
-bounded at three local passes and one online pass.
+created. Merge the ready PR when required CI is green; do not wait for the automatic Codex
+review, and never request another one. If Codex findings arrive before merge, fix the
+justified ones and require green CI after the fix. Pure Backlog finalization corrections and
+prose-only delivery-workflow edits need only exact diff and CLI-state verification.
 
 ## Source Boundaries
 

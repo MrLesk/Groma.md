@@ -30,6 +30,21 @@ export interface ApiComponent {
 
 export type ApiComponentScale = "system" | "domain" | "part" | "element";
 
+/** A raw scanner measurement, never curated component meaning. */
+export interface ApiCognitiveComplexityEvidence {
+  readonly projectId: string;
+  readonly scanner: {
+    readonly id: string;
+    readonly instance: string;
+    readonly version: string;
+  };
+  readonly value: number;
+}
+
+export function cognitiveComplexitySourceLabel(evidence: ApiCognitiveComplexityEvidence): string {
+  return `${evidence.projectId} · ${evidence.scanner.id}/${evidence.scanner.instance}@${evidence.scanner.version}`;
+}
+
 export type ApiScaleEvidence =
   | {
       readonly derivation: string;
@@ -53,6 +68,7 @@ export type ApiScaleEvidence =
     };
 
 export interface ApiComponentView {
+  readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
   readonly revision: string;
 }
@@ -310,6 +326,7 @@ export function fetchComponent(
 }
 
 export interface ApiConnectionItem {
+  readonly cognitiveComplexity?: readonly ApiCognitiveComplexityEvidence[];
   readonly component: ApiComponent;
   readonly relationships: readonly {
     readonly description?: string;
@@ -386,7 +403,13 @@ function snapshotPage<T>(
 }
 
 function snapshotViews(items: readonly ApiConnectionItem[]): readonly ApiComponentView[] {
-  return items.map((item) => ({ component: item.component, revision: "snapshot" }));
+  return items.map((item) => ({
+    ...(item.cognitiveComplexity === undefined
+      ? {}
+      : { cognitiveComplexity: item.cognitiveComplexity }),
+    component: item.component,
+    revision: "snapshot",
+  }));
 }
 
 function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): ApiResult<T> {
@@ -455,7 +478,13 @@ function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): Api
       value: {
         evidence: [],
         generation: snapshot.generation,
-        item: { component: item.component, revision: "snapshot" },
+        item: {
+          ...(item.cognitiveComplexity === undefined
+            ? {}
+            : { cognitiveComplexity: item.cognitiveComplexity }),
+          component: item.component,
+          revision: "snapshot",
+        },
         relationships: page.value,
       } as T,
     };
