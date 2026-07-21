@@ -145,10 +145,11 @@ export function assembleStaticBlueprintHtml(
     `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`,
   );
   return withPolicy
-    .replace("</head>", `${styles}\n  </head>`)
+    .replace("</head>", () => `${styles}\n  </head>`)
     .replace(
       "</body>",
-      `<script>globalThis.__GROMA_BLUEPRINT_SNAPSHOT__=${snapshotJson};</script>${scripts}\n  </body>`,
+      () =>
+        `<script>globalThis.__GROMA_BLUEPRINT_SNAPSHOT__=${snapshotJson};</script>${scripts}\n  </body>`,
     )
     .replace("<body>", '<body data-groma-export="read-only">');
 }

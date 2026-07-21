@@ -79,5 +79,8 @@ describe("groma export command", () => {
     expect(html).toContain("react-flow-continuous-zoom");
     expect(html).not.toMatch(/<script\b[^>]*\bsrc=/i);
     expect(html).not.toMatch(/<link\b[^>]*\brel=["']stylesheet["']/i);
+    const clientModule = /<script type="module">([\s\S]*?)<\/script>/.exec(html)?.[1];
+    expect(clientModule).toBeDefined();
+    expect(() => new Bun.Transpiler({ loader: "js" }).scan(clientModule!)).not.toThrow();
   });
 });

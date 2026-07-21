@@ -5,6 +5,10 @@ import { assembleStaticBlueprintHtml } from "../export.ts";
 
 describe("static blueprint bundle", () => {
   test("inlines the client and safely bakes canonical snapshot JSON", () => {
+    const replacementTokens = "$& $` $'";
+    const clientScript =
+      'var load = ($, value) => () => ($ && (value = $(value)), value); globalThis.tokens = "$& $` $\'";';
+    const stylesheet = `body::after { content: "${replacementTokens}"; }`;
     const snapshot: StaticBlueprintSnapshot = {
       format: "groma-read-only-blueprint-v1",
       generation: 4,
@@ -13,7 +17,7 @@ describe("static blueprint bundle", () => {
           component: {
             id: "ent_1",
             kind: "component",
-            name: "</script><script>bad()</script>",
+            name: `</script><script>bad()</script> ${replacementTokens}`,
           },
           relationships: [],
         },
@@ -23,8 +27,8 @@ describe("static blueprint bundle", () => {
       {
         document:
           '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src self"><link rel="stylesheet" href="client.css"></head><body><div id="root"></div><script type="module" src="client.js"></script></body></html>',
-        scripts: ['document.documentElement.dataset.client = "ready";'],
-        stylesheets: ["body { color: black; }"],
+        scripts: [clientScript],
+        stylesheets: [stylesheet],
       },
       snapshot,
     );
@@ -32,15 +36,16 @@ describe("static blueprint bundle", () => {
       {
         document:
           '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src self"><link rel="stylesheet" href="client.css"></head><body><div id="root"></div><script type="module" src="client.js"></script></body></html>',
-        scripts: ['document.documentElement.dataset.client = "ready";'],
-        stylesheets: ["body { color: black; }"],
+        scripts: [clientScript],
+        stylesheets: [stylesheet],
       },
       snapshot,
     );
     expect(first).toBe(second);
-    expect(first).toContain("<style>body { color: black; }</style>");
-    expect(first).toContain('<script type="module">document.documentElement.dataset.client');
+    expect(first).toContain(`<style>${stylesheet}</style>`);
+    expect(first).toContain(`<script type="module">${clientScript}</script>`);
     expect(first).toContain("\\u003c/script>");
+    expect(first).toContain(`bad()\\u003c/script> ${replacementTokens}`);
     expect(first).toContain("connect-src 'none'");
     expect(first).not.toContain("<script>bad()");
     expect(first).not.toContain("client.css");
