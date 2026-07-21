@@ -31,6 +31,7 @@ export type CliCommand =
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
   | { readonly guide?: string; readonly kind: "instructions" }
+  | { readonly kind: "export"; readonly output: string }
   | { readonly kind: "web"; readonly port: number }
   | {
       readonly kind: "scan";
@@ -180,6 +181,8 @@ export function commandName(command: CliCommand): string {
       return "component reparent";
     case "component-remove":
       return "component remove";
+    case "export":
+      return "export";
     case "project-add":
       return "project add";
     case "project-get":

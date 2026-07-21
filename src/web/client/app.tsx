@@ -5,6 +5,7 @@ import {
   fetchConnections,
   fetchRoots,
   fetchSearch,
+  isStaticBlueprintSnapshot,
   type ApiFailure,
   type ApiSearchPage,
 } from "./api.ts";
@@ -31,6 +32,7 @@ interface SearchState {
 }
 
 export function App() {
+  const exported = isStaticBlueprintSnapshot();
   const [model, setModel] = useState<BlueprintModel>(emptyModel);
   const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -215,7 +217,8 @@ export function App() {
           dangerouslySetInnerHTML={{ __html: GROMA_LOCKUP }}
         />
         <p className="m-0 hidden font-plan text-[11px] tracking-wide text-ink-muted uppercase md:block">
-          Current blueprint{model.generation > 0 ? ` · generation ${model.generation}` : ""}
+          {exported ? "Read-only export" : "Current blueprint"}
+          {model.generation > 0 ? ` · generation ${model.generation}` : ""}
         </p>
         <div className="relative">
           <form onSubmit={submitSearch} className="flex gap-1.5">
