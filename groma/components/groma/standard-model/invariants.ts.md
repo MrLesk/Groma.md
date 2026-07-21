@@ -1,16 +1,9 @@
 ---
 id: ent_ae5fb5588bb5198fe8524846534217c7
 scale: part
-itemIds:
-  actions:
-    create-standard-model-invariant-10a19cf34d68d181: observation:workspace:candidate.action.cd76906781419c47ea1a48ac1b5a4015389986b38c258a5c840e64ab21329300
 ---
 
 # invariants.ts
-
-## Actions
-
-- `create-standard-model-invariant-10a19cf34d68d181`: createStandardModelInvariant — Exported function
 
 ## Contained by
 

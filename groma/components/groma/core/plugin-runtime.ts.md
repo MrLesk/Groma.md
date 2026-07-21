@@ -1,16 +1,9 @@
 ---
 id: ent_b99d55d596583817d56bf151e171663e
 scale: part
-itemIds:
-  actions:
-    validate-plugin-registration-1894f3f0b4231551: observation:workspace:candidate.action.09d7cb7f750504d60a6074dacb14936cda739861eb7006f344fb7d1878c3674d
 ---
 
 # plugin-runtime.ts
-
-## Actions
-
-- `validate-plugin-registration-1894f3f0b4231551`: validatePluginRegistration — Exported function
 
 ## Contained by
 

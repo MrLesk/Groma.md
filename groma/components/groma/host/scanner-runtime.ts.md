@@ -1,16 +1,9 @@
 ---
 id: ent_a1e39baac435c84134d633ebb1e201c4
 scale: part
-itemIds:
-  actions:
-    create-scanner-execution-runtime-efd5222566539974: observation:workspace:candidate.action.1517700bd41a31ab0ce45ff6f50d4d4e61aabe63dc515cdd68b3ae6d2024d178
 ---
 
 # scanner-runtime.ts
-
-## Actions
-
-- `create-scanner-execution-runtime-efd5222566539974`: createScannerExecutionRuntime — Exported function
 
 ## Contained by
 

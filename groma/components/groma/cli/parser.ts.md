@@ -1,16 +1,9 @@
 ---
 id: ent_9ed496744c2d4e3cefe6eaeb1ec6b9b3
 scale: part
-itemIds:
-  actions:
-    parse-invocation-e3248d820423c7b9: observation:workspace:candidate.action.49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d
 ---
 
 # parser.ts
-
-## Actions
-
-- `parse-invocation-e3248d820423c7b9`: parseInvocation — Exported function
 
 ## Contained by
 

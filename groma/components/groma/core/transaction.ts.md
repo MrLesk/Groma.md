@@ -1,18 +1,9 @@
 ---
 id: ent_e9de699a7d10037c9f133bcd239cbfd4
 scale: part
-itemIds:
-  actions:
-    parse-resource-key-e07f09075ae808f6: observation:workspace:candidate.action.c20a5e5e17831cfe2b03a1dcf8f9ce95196da265f6a896c9a3f63e638606fd06
-    parse-content-revision-569486290a383cd2: observation:workspace:candidate.action.efd3ab875becaaba5f01c7e6559a96ca44c52fd3f88bbf88fad2e63f1f4b0d12
 ---
 
 # transaction.ts
-
-## Actions
-
-- `parse-resource-key-e07f09075ae808f6`: parseResourceKey — Exported function
-- `parse-content-revision-569486290a383cd2`: parseContentRevision — Exported function
 
 ## Contained by
 

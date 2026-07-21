@@ -1,16 +1,9 @@
 ---
 id: ent_0e707f15fc32443be2e66458ec9cdc03
 scale: part
-itemIds:
-  actions:
-    render-command-result-6fdbd8b8c705aae8: observation:workspace:candidate.action.52f3d388a59e904f4bc17882d8c8e8c574e0cfa2425b32a9063b28a3070587b1
 ---
 
 # render.ts
-
-## Actions
-
-- `render-command-result-6fdbd8b8c705aae8`: renderCommandResult — Exported function
 
 ## Contained by
 

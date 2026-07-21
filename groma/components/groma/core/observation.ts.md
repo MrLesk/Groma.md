@@ -1,18 +1,9 @@
 ---
 id: ent_fad3cace34f1f2d8c54719c5418dd478
 scale: part
-itemIds:
-  actions:
-    canonicalize-observation-session-begin-9db7f40f9c387bb3: observation:workspace:candidate.action.3d133ab26d48c7812d2ae300f5e1321116fc73fdd28ae97952e3a020a42c0668
-    create-observation-session-21c6b9a03d32dc56: observation:workspace:candidate.action.d0e12bc18dc67b1f9fdff6f8eb64b87918f3656276a1a88c3c403bfc581a1960
 ---
 
 # observation.ts
-
-## Actions
-
-- `canonicalize-observation-session-begin-9db7f40f9c387bb3`: canonicalizeObservationSessionBegin — Exported function
-- `create-observation-session-21c6b9a03d32dc56`: createObservationSession — Exported function
 
 ## Contained by
 

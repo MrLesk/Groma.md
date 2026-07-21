@@ -258,10 +258,17 @@ describe("CLI scan workflow", () => {
       items.push(...page.items);
       cursor = page.hasMore ? page.nextCursor : undefined;
     } while (cursor !== undefined);
-    expect(items.flatMap((item) => item.component.actions ?? [])).toHaveLength(120);
+    expect(items.flatMap((item) => item.component.actions ?? [])).toHaveLength(0);
+    const evidenceFiles = (await readdir(path.join(root, "groma", "evidence"))).filter(
+      (file) => file !== "index.json",
+    );
+    expect(evidenceFiles).toHaveLength(1);
+    const evidence = JSON.parse(
+      await readFile(path.join(root, "groma", "evidence", evidenceFiles[0]!), "utf8"),
+    ) as { source: { snapshot: { records: readonly { kind: string }[] } } };
     expect(
-      items.find((item) => item.component.name === "/api/users")?.component.actions,
-    ).toBeUndefined();
+      evidence.source.snapshot.records.filter((record) => record.kind === "action"),
+    ).toHaveLength(120);
     expect(
       items
         .filter((item) => item.component.name.startsWith("/api/"))

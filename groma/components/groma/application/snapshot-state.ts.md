@@ -1,22 +1,9 @@
 ---
 id: ent_2697496c13b37a6fd2646c97857d6f0a
 scale: part
-itemIds:
-  actions:
-    application-snapshot-state-decoder-metad-4accda1799b1eb78: observation:workspace:candidate.action.38e2814853bc96fe63177893b932d5c0fece3691d4ac5bc5173c8f8fde23ca45
-    is-canonical-application-snapshot-compon-8b1dd5ba9aa2e688: observation:workspace:candidate.action.a8d60f308b8c3a3b012db2da86609b89405c131e434ad7fb1faab7169ee9c160
-    is-canonical-application-snapshot-relati-ea507d1ec9421d78: observation:workspace:candidate.action.dd42c80dd38a8f4569a9230a7b3188ee5e8e0853fb3386321a26f7fd70f497f0
-    create-application-snapshot-state-decode-c186ca8aa66f9a55: observation:workspace:candidate.action.f8fe45d9f740dca5925abb467af2b2d379074ae3f33509fe9f4192ea0a8f1081
 ---
 
 # snapshot-state.ts
-
-## Actions
-
-- `application-snapshot-state-decoder-metad-4accda1799b1eb78`: applicationSnapshotStateDecoderMetadata — Exported function
-- `is-canonical-application-snapshot-compon-8b1dd5ba9aa2e688`: isCanonicalApplicationSnapshotComponent — Exported function
-- `is-canonical-application-snapshot-relati-ea507d1ec9421d78`: isCanonicalApplicationSnapshotRelationship — Exported function
-- `create-application-snapshot-state-decode-c186ca8aa66f9a55`: createApplicationSnapshotStateDecoder — Exported function
 
 ## Contained by
 

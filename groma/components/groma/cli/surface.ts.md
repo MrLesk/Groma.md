@@ -1,16 +1,9 @@
 ---
 id: ent_19b674e6d58204a983721f1bc60621a7
 scale: part
-itemIds:
-  actions:
-    create-cli-surface-controller-4014030612f1776a: observation:workspace:candidate.action.79f3477b458f9c376115668ec9a18043620c21cb7dc63f31737dd7c7ccb8f025
 ---
 
 # surface.ts
-
-## Actions
-
-- `create-cli-surface-controller-4014030612f1776a`: createCliSurfaceController — Exported function
 
 ## Contained by
 

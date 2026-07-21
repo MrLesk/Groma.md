@@ -1,16 +1,9 @@
 ---
 id: ent_2868775497e01e62ead3ff062eef13bf
 scale: part
-itemIds:
-  actions:
-    create-local-scanner-project-resources-e29c93e9f47bebc2: observation:workspace:candidate.action.d872e35f5c07b57ed52fde73ced7846877e19ddc25743c749485e485c4ce2cf5
 ---
 
 # scanner-project-resources.ts
-
-## Actions
-
-- `create-local-scanner-project-resources-e29c93e9f47bebc2`: createLocalScannerProjectResources — Exported function
 
 ## Contained by
 

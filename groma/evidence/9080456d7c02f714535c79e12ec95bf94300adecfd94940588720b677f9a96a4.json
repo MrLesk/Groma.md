@@ -7,13 +7,6 @@
         "key": "candidate.component-candidate.021a8f546d03e6f6891b63b2ac3d98dbab8b46f156e6292bf7ffcc0206860247",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.cd76906781419c47ea1a48ac1b5a4015389986b38c258a5c840e64ab21329300",
-              "name": "createStandardModelInvariant"
-            }
-          ],
           "name": "invariants.ts",
           "parent": "ent_dc27dd8b576c2950cd5b445248045584",
           "scale": "part"
@@ -25,13 +18,6 @@
         "key": "candidate.component-candidate.0416498aba3c86320ff126caffa97e8d9b96de94c1a8ad8a03466fb6ba29906f",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.09d7cb7f750504d60a6074dacb14936cda739861eb7006f344fb7d1878c3674d",
-              "name": "validatePluginRegistration"
-            }
-          ],
           "name": "plugin-runtime.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -43,23 +29,6 @@
         "key": "candidate.component-candidate.0fa6de9dd709d21dceb105d8b1678dadbee25dd643cefa8edbe487c1862819c8",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0fbf27d3847356916a1a22f027e92aa1897a4c95d122d92f6809588167294439",
-              "name": "parseWorkspaceResourceLocator"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.538914bf602195400f2ad46fbae1d3ffe0c8c02d73a1363bb27839ae4c6a1566",
-              "name": "workspaceResourceLocator"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e422b5ed92186b3d897ef97185f561222d9a8e02fcfbd27de9c2e269f755d477",
-              "name": "isReservedWorkspaceResourceSegment"
-            }
-          ],
           "name": "contracts.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -71,23 +40,6 @@
         "key": "candidate.component-candidate.106a096b62d3cb041e1b16ced1e569540e7fcb2f122852acee9a227e1128e7bf",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.712afadde9e640aa37c8d4e001acfb5ed2e9a29e0f98bae4b2bfc902d518023a",
-              "name": "invokeCapturedBoundedQueryExact"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.b10b5c597fdb65e34dc6720be1fbfd2b2e40fdb54e22f5c2cecb504cad7c42f6",
-              "name": "invokeCapturedBoundedQueryPrepare"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.f8a547cb243c855d7ce99560c25d120398142e9070c963bbad1f119ade1b3217",
-              "name": "invokeCapturedBoundedQueryPage"
-            }
-          ],
           "name": "query.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -99,18 +51,6 @@
         "key": "candidate.component-candidate.16dcdf71c1fc9b15619d758b7a596388a7f3eea248ebb9aebfa6511f1dee4389",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0ffc52e7190f8789463be9eb450ce10582b2840f7f63bda74c3461201e339c48",
-              "name": "success"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a67a19d2a493131c649987129d3af964ba844cae3f41370543dbb34e595aad07",
-              "name": "failure"
-            }
-          ],
           "name": "result.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -122,18 +62,6 @@
         "key": "candidate.component-candidate.18323a750a7d01fe6a6061c5afec1abc473398ecf920a837eef1202cdba6a87c",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.76313bccca60870ee23ef34ebff6d82d4aa708fa50c32fc21d130a8db3454be8",
-              "name": "runHost"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.80184cd0d78c91d83fc701b858c0269626f3830edd53f62b938d128eaecf658d",
-              "name": "createProcessSignalSource"
-            }
-          ],
           "name": "lifecycle.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -166,13 +94,6 @@
         "key": "candidate.component-candidate.1c64d2422f824fa6dca7424dc404bf9158fa63896a997ea38dc4efce9df2294d",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.ec93b631b325426d7890ab052381458679a330220d34b2dce17631253c2cb601",
-              "name": "runProgram"
-            }
-          ],
           "name": "program.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -184,18 +105,6 @@
         "key": "candidate.component-candidate.1f322856f0b7900e32c767983ab53b238c2c036f5bc94d05b78d292313028af5",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.56ee3c4a1d7cd8b5214472d273f32367ef27a5a4261f770ed5f2743171bf44b8",
-              "name": "validateStructuralScaleProposalConfigurationV1"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.aec93307cbe8cc15b972ccff0ae5007e6c455cd96a7cd87073a0d9fef333c31c",
-              "name": "deriveStructuralScaleProposalV1"
-            }
-          ],
           "name": "scale-proposal.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -218,18 +127,6 @@
         "key": "candidate.component-candidate.25b3a6b316667e0ba58b5259f6d778f3a9ba0384123116baaf283e1b89cc5a82",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.808c97b2c9a72a02087507d4ae0c77810737aa71458274e39904c0d830c74321",
-              "name": "nextScaleLabel"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d254f25d8bd01f75925337aab864e9c7102651eec25eba1c5a8184a34df19b41",
-              "name": "buildBlueprintFlowGraph"
-            }
-          ],
           "name": "graph.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -241,18 +138,6 @@
         "key": "candidate.component-candidate.25e977d5650a69fef5e042bd0bf322d64d9a9712ab9db069902804b3bd14969e",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.1a7f4d98c4943cfaf8bc3f4c0336495498fcf01ee57cc91e998d50dfa00976cb",
-              "name": "containNativePromise"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.804fd03f889539b4aec7f77991c7b3e89170b40a426b517bae3e2cb5cad386c1",
-              "name": "observeNativePromise"
-            }
-          ],
           "name": "promise-observation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -264,23 +149,6 @@
         "key": "candidate.component-candidate.270db70bcd1b6524ca4c9d10ad8d88d23ec3b745ddce8ace834931025d7ac506",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.7f8dae475c40e72cba830be685ea06eedaf14bd81f499b3ae667fd5678c5e540",
-              "name": "observedSharedFromSignals"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.8b15993a2c2b2e8b273cb3eb9fccec8b2227cb0ba0603bd6d8ed0d4f460dc088",
-              "name": "resolveObservedStructure"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.dccc0558390decc1ad118ef52c0fb46297eb30e771a49ab907ef1449ccb0eed5",
-              "name": "observedScaleForDepth"
-            }
-          ],
           "name": "observed-structure.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -292,28 +160,6 @@
         "key": "candidate.component-candidate.29fee7ca35036735f6086abdd80fe0a20d604477c031fe35213e61154c0c7582",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3dea5e26267c1141ddd372b8c6e4eaa9bff0c09b0e4e4891c69a040770a91325",
-              "name": "shouldSyncLocalReplacementDirectory"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.90cc19f9f9e146aece0574b076c2c766db7e754edeab6bdcff42e68ab586d587",
-              "name": "allowsCustomLocalCoordinationRoot"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e077705eff51e461d1e4c59b1d1e617ba1f89faed6507ee07c3c1c4c51ca7ec0",
-              "name": "createLocalResourceProvider"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e3756145e962e03469b07a2393f49a5f51ed8524bd2cbaffa9cb3b86e37b0dda",
-              "name": "shouldSyncLocalCoordinationDirectory"
-            }
-          ],
           "name": "local-resource-provider.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -352,18 +198,6 @@
         "key": "candidate.component-candidate.2e1db2445154074b2b7dce1bc7eee5551cc3c33aa3574af24fa1e0d4e41d1707",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0",
-              "name": "createMarkdownIntentTransactionAdapter"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.f6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589",
-              "name": "createLocalTransactionJournal"
-            }
-          ],
           "name": "local-transaction-journal.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -422,13 +256,6 @@
         "key": "candidate.component-candidate.383b3f1a96263874d94b1d238291d21c260fc972082fc3aa9812abc17923debd",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.ea7b87e7bb484180bdd320c2332c5dc0d6a6775951f8d75f7e16228f44546856",
-              "name": "observedSummaryFromDocumentation"
-            }
-          ],
           "name": "observed-documentation.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -457,23 +284,6 @@
         "key": "candidate.component-candidate.41a8afc9f96de291f7a11a55e0ff0f326d72c9ffa19d8c3a7ae0d8b3bafec953",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0aba7e653de427bf4e13717f2f06e141a3507d60a926e2af16cc8e5dc9c46415",
-              "name": "createJsonEvidenceStore"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.309580c14693e20adcd0d1e09d03b1f036625902840bbfab1c119ab7e88e8f59",
-              "name": "jsonEvidenceSourceLocator"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.ec8337275632680b5a6531db8df2f1e9b901030e559f81d85cf5b3ddf414d0c4",
-              "name": "jsonEvidenceIndexLocator"
-            }
-          ],
           "name": "json-evidence-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -485,13 +295,6 @@
         "key": "candidate.component-candidate.461b5be74b04278b251dd01fcdc261741209699a39514d409b4f91e9343dbc0e",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d872e35f5c07b57ed52fde73ced7846877e19ddc25743c749485e485c4ce2cf5",
-              "name": "createLocalScannerProjectResources"
-            }
-          ],
           "name": "scanner-project-resources.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -514,43 +317,6 @@
         "key": "candidate.component-candidate.48f57d2bf3d31c96ded9f5fe34a76b72bf4b65c744eacc1fa9bb99c2c4341268",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0be9c04c8a2e5f6247a14972b838714eca7386b01171fbf31ac3648f996c1605",
-              "name": "createStandardModelCapability"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.2d81c514bab0eb984551240ba7b25aa8abf37a9809ed42241d4655615b8ffd7e",
-              "name": "isStandardComponentIconDomain"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a6d08b672b14005c617e36b8d1ce7f0534593178821286ada353ea3cbdc17923",
-              "name": "standardComponentDisplayText"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d5f73113ff27f9bc5a4eb880f52145558eb2407e3d3b25c0ab6576b903aa2483",
-              "name": "isStandardComponentSummary"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d7c2e18b860fb4481a718ec20b407aa50555a212f6aedf4f9ca9b228ddd9c1b2",
-              "name": "isStandardComponentScale"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e78109961296b3131202e298f8a104bee25f0eb6c76acb66cd2a11b4bc122aa4",
-              "name": "isCoarserStandardScale"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.ecebb6665926ec0478caafad55473824df098bbe092619b859948e564acf784a",
-              "name": "isStandardComponentLabel"
-            }
-          ],
           "name": "model.ts",
           "parent": "ent_dc27dd8b576c2950cd5b445248045584",
           "scale": "part"
@@ -584,23 +350,6 @@
         "key": "candidate.component-candidate.50e5087cfe6f2c1b8b80154e9aa5090efdd3ad7f140b1d1eb157ee9b94ead9ca",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.8244335d8887c7d3d26833cc6ef545e6b6d2a616499d8df4cc03ad6e7c3bef4c",
-              "name": "parseGraphCommittedEvent"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.fb06cc666ddbd5443c4d04b53a92e8a9180524e25dba6c32fdae3c3ce49eb39b",
-              "name": "createGraphCommittedEvent"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.fd167b41507ec1cc04e37692416e3f91434848bc882b4c92d065b5c835bd6963",
-              "name": "sequenceGraphCommittedEvent"
-            }
-          ],
           "name": "events.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -623,18 +372,6 @@
         "key": "candidate.component-candidate.59c3f3ac89389b87d00979a58b825b735d1e9f175f3a8622814f49dffc231940",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.c20a5e5e17831cfe2b03a1dcf8f9ce95196da265f6a896c9a3f63e638606fd06",
-              "name": "parseResourceKey"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.efd3ab875becaaba5f01c7e6559a96ca44c52fd3f88bbf88fad2e63f1f4b0d12",
-              "name": "parseContentRevision"
-            }
-          ],
           "name": "transaction.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -646,33 +383,6 @@
         "key": "candidate.component-candidate.59f786be3d5e62e31e75cda0e0a758fc9aa82c2497db4322d5587357ed927803",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.34f780a89eb5afc4b4f4e782ec7e891d4de6fcc76b9c36eee22d4bc12472bbd3",
-              "name": "fetchRoots"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.48249d6edadf819eb5e50257a2f18075c5c251cad5d28479dfd154f606667acb",
-              "name": "fetchSearch"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.be0042dfaa8795208d6242695f82e5544ae7a4bc3696479f4e0228c5252fd3e1",
-              "name": "fetchConnections"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.efe5e5ee866ed118e419cac7d1b54f08bdda6fa31c1513b453607f60e09207e6",
-              "name": "fetchComponent"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.f7c9ed7cc0d494162374df373bc056fc569082da7acc1fbc14714307805556e2",
-              "name": "fetchChildren"
-            }
-          ],
           "name": "api.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -700,13 +410,6 @@
         "key": "candidate.component-candidate.5bd9b0f256b20878060c5aec83aa4874e9b8716c353cd6a386a523c8f63ea856",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0d8196a0155a66a87d3e36b816c2aee40d753fcdd684f557d42e491b952be2e7",
-              "name": "measureCanonicalJsonUtf8Bytes"
-            }
-          ],
           "name": "canonical-json-utf8.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -729,53 +432,6 @@
         "key": "candidate.component-candidate.614e191ff4f4e6f0dbf4a49940ced45e522c7e41d726027db4800cce341a76da",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.1746f7ed6113208cbf8ae5e4679a5ee5a17662186dbc2d11ab5e5ae5efa5ed67",
-              "name": "parseBootstrapConfiguration"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.2a128a8537d06297d6263dd4ca729cd2c4b8ef610b01d25bf8fb2bb294f4f719",
-              "name": "loadBootstrapConfiguration"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.2b71b800293bc308b0e5fb3b00eddae1b11148f69b483ae52a4497aa4297cf9e",
-              "name": "localBootstrapConvention"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.35faf0ec6c8b84d5cf64d5c2c182d6d47005c38e7490efe16dd83b481f8f03cc",
-              "name": "createYamlConfigurationParser"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.36c328734a6eb01156810d1b480b33d841eb1495c5aa3356a52fbe2fe61cfc1c",
-              "name": "bootstrapConfigurationStillUsable"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a1dd2704dfd8a4c34887c69db92c1d93f920293402989a7f5336ed5a3e61c8d1",
-              "name": "canonicalizeProjectRegistration"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.b8d43c245e8eeb20af08cf7852dfb575ce9385f5b8ec54b47387823c02460827",
-              "name": "serializeBootstrapConfiguration"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d19cf6261e2e4203d61950e536f958b1a726cc196c210dc435b1fb37e740fa81",
-              "name": "isProjectRegistrationId"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.da802c09d2fe72d3ac5c239df12859f445bdd23ad8438bba95d0cad89c89ffc3",
-              "name": "createLocalConfigurationDiscovery"
-            }
-          ],
           "name": "bootstrap-configuration.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -787,18 +443,6 @@
         "key": "candidate.component-candidate.63fe6fc88e4a4e4f4e0447174aab839e27d6d887bad412aadb101359cef191ab",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3d133ab26d48c7812d2ae300f5e1321116fc73fdd28ae97952e3a020a42c0668",
-              "name": "canonicalizeObservationSessionBegin"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d0e12bc18dc67b1f9fdff6f8eb64b87918f3656276a1a88c3c403bfc581a1960",
-              "name": "createObservationSession"
-            }
-          ],
           "name": "observation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -821,13 +465,6 @@
         "key": "candidate.component-candidate.6ce3954ad757ad4c96668664a1195fa497cfb2d1b0536407df4a4bedeed4a6cb",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.7e3153a59900689a4af0c2fb09185b3203c066cdd96f8c3ce5d79d458b187076",
-              "name": "createEntityAliasResolver"
-            }
-          ],
           "name": "aliases.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -839,13 +476,6 @@
         "key": "candidate.component-candidate.6dea20b39238db099b8d91865327a2332865be11290eb964a57ffe98fc38666d",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.9135d5e34bbdd3d5c68ef31b07e79ae62079d95bf415d92a64113d98d4532ce6",
-              "name": "createApplicationOperations"
-            }
-          ],
           "name": "operations.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -901,13 +531,6 @@
         "key": "candidate.component-candidate.75f52e1dc89870533635826611c9985ae3189eb58593c20e6af2a956f9ae4c77",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a877eb87aa6b9b943ca15d4b0d0958ad7c6b6d0ee0a6c816d6f8994bc64be2ea",
-              "name": "serveWebBlueprint"
-            }
-          ],
           "name": "server.ts",
           "parent": "ent_df026a00c094f2c586ac953ff361783e",
           "scale": "part"
@@ -919,18 +542,6 @@
         "key": "candidate.component-candidate.76ceccb7f25ee909e01e478eadbad8b3f817e0121291da0e4d07a167c2cd2e78",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.b96b8e2dfec9071f0c753cca9fe5e55ed22e61f49b549130a0257baebbeba234",
-              "name": "instructionIndexText"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.fe718dd2887f6b73b131cb743e95b2f3f8199e4703eb6587c251b0a75c2dabc6",
-              "name": "instructionGuide"
-            }
-          ],
           "name": "index.ts",
           "parent": "ent_31ab80b320231b92cd81e5efd97c5cee",
           "scale": "element"
@@ -942,13 +553,6 @@
         "key": "candidate.component-candidate.77a4b675afdfff452ddf18f3e9eb8d2ad64f5f8efd61b3f7075709ff397456fe",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.cf0c8216572881fc78a10f053d044391af5773e8d273c8855cfb5ab8d3a0ccb2",
-              "name": "parseProjectionCanonicalFingerprint"
-            }
-          ],
           "name": "projection.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -960,18 +564,6 @@
         "key": "candidate.component-candidate.7ee76ee0acfb8b3aeaaa1dfa2939b1208ac7cac3d9d6ed6c2f80673f26621703",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0458f683128b2aa386a66f59aec4b63a9fc6c5b1c5073a45a5bb4aff28dece65",
-              "name": "createReconciliationOperations"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.da5711f2a710f2621605626c0854514fe37e5b7dc43d5f631a7807c3a6aa9a89",
-              "name": "parseEvidenceState"
-            }
-          ],
           "name": "reconciliation.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -999,18 +591,6 @@
         "key": "candidate.component-candidate.8152e94bcfe1699fe0ae712d6f3218375437fc54279217f42121b1e4b1760f7b",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.046ddebe70476d587c17d941771f0586fa683b8ec5fa4fc918fc6bf210fba323",
-              "name": "createAliasStore"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.fb6b048b1a79c4e39f5b59ecac54320a284fa362a379f9151125b1883e4e6e79",
-              "name": "aliasStoreLocator"
-            }
-          ],
           "name": "alias-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -1022,28 +602,6 @@
         "key": "candidate.component-candidate.82ab0309f81ea56e893eb72d6e8b08e896337999d1e0d084f3bf9640f4567938",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.38e2814853bc96fe63177893b932d5c0fece3691d4ac5bc5173c8f8fde23ca45",
-              "name": "applicationSnapshotStateDecoderMetadata"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a8d60f308b8c3a3b012db2da86609b89405c131e434ad7fb1faab7169ee9c160",
-              "name": "isCanonicalApplicationSnapshotComponent"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.dd42c80dd38a8f4569a9230a7b3188ee5e8e0853fb3386321a26f7fd70f497f0",
-              "name": "isCanonicalApplicationSnapshotRelationship"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.f8fe45d9f740dca5925abb467af2b2d379074ae3f33509fe9f4192ea0a8f1081",
-              "name": "createApplicationSnapshotStateDecoder"
-            }
-          ],
           "name": "snapshot-state.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -1055,13 +613,6 @@
         "key": "candidate.component-candidate.8560ce6f93d6a397b0cdfc3194c79cfcd90c6064402feb8240292371ba78346e",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3194143c23eddd4573815f13b14f2f10be69f499d88a97b06e34b3b87044c740",
-              "name": "isPathWithin"
-            }
-          ],
           "name": "path-containment.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1073,18 +624,6 @@
         "key": "candidate.component-candidate.862e44483f265b5d80447452914af2f5ebff947c00a6cff3b843d816f5d71933",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3b5cd01e75c1bd23cedd7484173f8cbfac7ad89c751a9cb59159a50e9c3ebccb",
-              "name": "createLocalProjectionIndex"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3f32b1c8e9cae20f862ab7d23e4ade30c53f0194486d9c7003d1114a2211329c",
-              "name": "createTransactionProjectionCanonicalSource"
-            }
-          ],
           "name": "projection-index.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -1128,18 +667,6 @@
         "key": "candidate.component-candidate.8c7f653ed42193b8bdcd87a9bf142607b4de598b66f985d5d4daf9e0a1b755c2",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a8a56cd3945669223f077c046a9fa7b2e6985d889f84882fa20ff1362523de24",
-              "name": "defineScanner"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.b720f83814a5768cef36a9d7e3943bf767d69884014cf4e25cec4bac47168f4a",
-              "name": "createScannerRequest"
-            }
-          ],
           "name": "scanner.ts",
           "parent": "ent_d67a54e7b5161786d1344fded42f9176",
           "scale": "part"
@@ -1178,18 +705,6 @@
         "key": "candidate.component-candidate.917e3da2feef46ee106aa45b2be780c8468950026447ae0d4e2c4dc0d2a96996",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.5b077fbae5995afc702be3c88ea21dc221331fdb8864e38bc1e4a5190c769f0e",
-              "name": "createDefaultBootstrapRegistry"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.66339e07ba6c4e55c68105a25467f43745cf5892d19b80495527fde9cf07f0f0",
-              "name": "initialProjectDisplayName"
-            }
-          ],
           "name": "default-bootstrap.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1201,13 +716,6 @@
         "key": "candidate.component-candidate.99fb36af7cdd3f1d74da33aa50c843c7def2b7f26267145e1e2314e3af16ee90",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.79f3477b458f9c376115668ec9a18043620c21cb7dc63f31737dd7c7ccb8f025",
-              "name": "createCliSurfaceController"
-            }
-          ],
           "name": "surface.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1230,28 +738,6 @@
         "key": "candidate.component-candidate.9efcc9ccf7523c91fc01f72022ca9ae20eb3792005a6540d5733c733b256bb7c",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.06a721744a0609ae9e19e5ae8fd072f4944faa9a73e14fcc74b7f4b2ba47aa37",
-              "name": "copyCanonicalGraphData"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.730d444fd3a265f66eab419433cfd14eb59bdb806d5394b8d19a0f613f82bf8c",
-              "name": "createCanonicalGraphDataCapturer"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.9f93e343e4c6b3639549a1a5a9c267d7da8c3b4e66ccefff0e6afe7b9256e473",
-              "name": "copyGraphPayload"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d53c3b5797f339fa8097298b801190cd3f81e12c5caf7a4175bff5cc564ff929",
-              "name": "copyGraphPayloadPair"
-            }
-          ],
           "name": "payload.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -1263,18 +749,6 @@
         "key": "candidate.component-candidate.a481d6a01247335c3007e29374065fd75883103a45aee682d15d49d2d609a72c",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Public export at ./plugin-sdk",
-              "id": "observation:workspace:candidate.action.da56d451a03f44a990eed3a4511d66958ea57815c9a6e83f960ff713499eb140",
-              "name": "defineScanner"
-            },
-            {
-              "description": "Public export at ./plugin-sdk",
-              "id": "observation:workspace:candidate.action.e4922452f48b483c8d60aee8d13edbdd932d6f5990655e19c439e36d3866f46c",
-              "name": "createScannerRequest"
-            }
-          ],
           "name": "groma",
           "scale": "system",
           "summary": "Groma keeps a living map of your system's architecture inside your repo: meaning in plain Markdown files you can read and review, and scanner evidence in deterministic JSON.",
@@ -1291,16 +765,6 @@
         "key": "candidate.component-candidate.a58b29d0813128de922a4ec1cbd70d44f41c8a81ae01a62186993404ef953a3d",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "id": "observation:workspace:candidate.action.e59ca7230690c5d151063d82c1eee82601cb61edec6961b0f90b596256c03516",
-              "name": "ROUTE /api/*"
-            },
-            {
-              "id": "observation:workspace:candidate.action.f0df27213b313b6a35c2b9995e683bfaa86d10c3d8ea9a9e992fbf5c37b3a728",
-              "name": "ROUTE /"
-            }
-          ],
           "name": "web",
           "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
           "scale": "domain",
@@ -1334,13 +798,6 @@
         "key": "candidate.component-candidate.a7931c1a3b4b729fe4028c37872ea5daa482be521565d3faacc7e2293d7bedaf",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.52f3d388a59e904f4bc17882d8c8e8c574e0cfa2425b32a9063b28a3070587b1",
-              "name": "renderCommandResult"
-            }
-          ],
           "name": "render.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1352,13 +809,6 @@
         "key": "candidate.component-candidate.a938a52366ab77e395e04e5da91095db7bd8124af7cffe9887571162c988f4ca",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.bf086439c76a256fe481eab5a201069d4eea29144cce6e9c5df891a0733e4617",
-              "name": "createProjectionQueryEngine"
-            }
-          ],
           "name": "projection-query-engine.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -1370,13 +820,6 @@
         "key": "candidate.component-candidate.ae89f73858f06176d8f50185257f1d384641ea50ac14a4708ad2101f4e969de3",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.1ca75f18db587853382b82375d79d8158e28e27c8ec99a71993f0aa57a35bf6c",
-              "name": "decodeStructuredInput"
-            }
-          ],
           "name": "input.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1388,13 +831,6 @@
         "key": "candidate.component-candidate.af4e4be14d7b94b6cf11b988e5fac2d35041b79a04fedf491c22194e3f64b717",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.9eeadcbe369457a414c826abeedec5f74ce77da671d0e3b3dafac6ec8f22f03f",
-              "name": "formatSplash"
-            }
-          ],
           "name": "splash.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1406,23 +842,6 @@
         "key": "candidate.component-candidate.b6275ad7326a711de96634b6d2211361c1526a8d2c1d866e5140fd30ebd25888",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.2caaa280fb09203b64302daf76181a364f8a1cfee7707598f5c630ff5fc4824a",
-              "name": "createLocalProjectRegistry"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.a2d27e4da6c5d0b2d94d68a544d710d85893afe3bc1820f0a939df0cbe9d8fdd",
-              "name": "resolveProjectSourcePath"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.c801f6e712ba07284b02f021a8e7016de287aa0a37c1bac8418be4752eb144a0",
-              "name": "projectObservationBoundary"
-            }
-          ],
           "name": "local-project-registry.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1434,13 +853,6 @@
         "key": "candidate.component-candidate.b6873863454741edeac889ab5180f2ce94e460400e336909a297cd85d4b9662f",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.41ad1e67f911589b5649ee943fba2930c9856ab9c8842d70c780a41d3305493b",
-              "name": "renderBlueprintHtml"
-            }
-          ],
           "name": "blueprint-html.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1463,18 +875,6 @@
         "key": "candidate.component-candidate.c0e7c4b668f63f44e51f80f0a85f01b4cba2460bd88bf44949a4deed78cb886c",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3a329d638c27d65ab5c37690d12ee4371d6493bd79e6aca02d022f40cf7eeca7",
-              "name": "createMarkdownIntentStore"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.cd57831be389119d8fcdcfe8a4425da7583a5ee495818b6db02e0654f7ba7565",
-              "name": "markdownIntentResource"
-            }
-          ],
           "name": "markdown-intent-store.ts",
           "parent": "ent_d874ec5e618605ce1e0248310a7a628b",
           "scale": "part"
@@ -1502,13 +902,6 @@
         "key": "candidate.component-candidate.c760febe9220fb98680a8d032519449017a33642e2f6900d849606fac6a11825",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.ceb7606626a6b9d1d7ae50b783b37aa3b6a900de07eee82233f87a75e5967db7",
-              "name": "containCapabilityValue"
-            }
-          ],
           "name": "capability-value.ts",
           "parent": "ent_93b646ce861caf566a130dcd67d2c836",
           "scale": "part"
@@ -1531,13 +924,6 @@
         "key": "candidate.component-candidate.d4b119f3bcd9cbcb71996c32af9915f96c05071a442d638ab06072a2f82b4e7d",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e3e8327e40e39ffefa415c0587e37fa625d7b0821f3d5c961b82800013638681",
-              "name": "createLocalWorkspaceCapability"
-            }
-          ],
           "name": "local-workspace.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1576,28 +962,6 @@
         "key": "candidate.component-candidate.d76cd15bb189662eed675ebdecd3a983ba2afe9ad074ccc3c5b2f23f9871b4d5",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.4e92b2bfb3a9118630ef1f556c96c54eeebcaacfc680a69617222cadf0b616ad",
-              "name": "copyHostDiagnostics"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.70a92e279424e61304a71c3267db583bfc6e3e33a780ab2f9f3d955a798eddf7",
-              "name": "isHostProxy"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.74ff2878a9d0735c30566fed5c0156122f2693c4075223cf0d2eec6cae5ff60c",
-              "name": "inspectHostRecord"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.d61503fabd65516d7eb756cd7b431c087579c8246c062a44068c366a8beb812c",
-              "name": "inspectHostDenseArray"
-            }
-          ],
           "name": "runtime-validation.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1609,13 +973,6 @@
         "key": "candidate.component-candidate.dac1725fe66739c9f6b2b510ca6a0119569027904e146373af7ec9dbef34719e",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.775297bec95236bac2d005aa63311e15a513ab434c0c101b9ca286c73a74e4ab",
-              "name": "commandName"
-            }
-          ],
           "name": "contracts.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1736,18 +1093,6 @@
         "key": "candidate.component-candidate.ef9de5652a33d543900045978695f8fb03f922cb9bb97ce949a6f4527bb71d3c",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.abab8caf73bc597f303fc4fa0a75bfdb0143465691736443ab45c45952cd27da",
-              "name": "parseGraphGeneration"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.b129f7367a45b4172ec30f67d82b9c159f69c631df24332fc97ad3c650be4773",
-              "name": "nextGraphGeneration"
-            }
-          ],
           "name": "generation.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -1759,13 +1104,6 @@
         "key": "candidate.component-candidate.f34aa971729c35aa680dc5e2028f41ff311905f5f7335d9cd1a96c567d440446",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.1517700bd41a31ab0ce45ff6f50d4d4e61aabe63dc515cdd68b3ae6d2024d178",
-              "name": "createScannerExecutionRuntime"
-            }
-          ],
           "name": "scanner-runtime.ts",
           "parent": "ent_fcb48c7a702eac71d138e1eb2803cdc6",
           "scale": "part"
@@ -1777,13 +1115,6 @@
         "key": "candidate.component-candidate.f37ab647dd329e9c5b5519485c7bc7fcc03ac84f221601c493ae2495737254db",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.49a3c81c59e0358465a34313ada51cfd91e4419b629e797eb8824bf02e70d53d",
-              "name": "parseInvocation"
-            }
-          ],
           "name": "parser.ts",
           "parent": "ent_83702a52aa46b605c22cc1be63bf939a",
           "scale": "part"
@@ -1795,28 +1126,6 @@
         "key": "candidate.component-candidate.f3c39a19936c2f8535df4e334deb507fc533e739413be9b72a72d3e77e00849f",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.009fbd0eca14e56c9b263812b11b316fa4d08cd2d949acc2f81c3bc58f092545",
-              "name": "emptyModel"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.3548fd8e18f5ca1d0ca301752518464bfadd9f7fd5920f7cd762e70693c16fbf",
-              "name": "displayText"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.8d56d81b3df4e74ea8f8d5392b223c48bb32366a876aaaaabafd86b6f780d44a",
-              "name": "mergeRootsPage"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.bedd08c5fe46e43811d2eb4ba64b6684fd28fab03049f072300d30381b4cb331",
-              "name": "mergeChildrenPage"
-            }
-          ],
           "name": "model.ts",
           "parent": "ent_7917653d913c6d5907597ecb4097bd8c",
           "scale": "element"
@@ -1828,18 +1137,6 @@
         "key": "candidate.component-candidate.f668ebe0c02fd9e0adfafe5bd7cf75f5b4ac71ab4fc696261e90e84b7538c26a",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.4ac4ffdbbd492c17f75aaa80c5f2a29ee865d7e2816763f99e882d022c079167",
-              "name": "inspectExactRecord"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.e11ca2b3359683534715bce80fed9917349503c6156221980c0efb0644f7e64b",
-              "name": "inspectIntrinsicArrayLength"
-            }
-          ],
           "name": "runtime.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"
@@ -1851,23 +1148,6 @@
         "key": "candidate.component-candidate.f732331500ed626ca4ab19f0b17ae6b2275c4bd0ab17b1f8edb6f0172641be25",
         "present": true,
         "projection": {
-          "actions": [
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.0a57b6a0ce530c61f6e6bfbd47df8cd2cb93ac66d4f56575315bd3f694a7cf27",
-              "name": "parseEntityId"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.2590f33445c81544ae8858dfdaf04f5f945b0ecb16174b753a8cc849e890af75",
-              "name": "parseRelationId"
-            },
-            {
-              "description": "Exported function",
-              "id": "observation:workspace:candidate.action.5c25dd994fce4aa369e2400638e963e6910ed5df3742fc29e01b08173e33414b",
-              "name": "createOpaqueIdSource"
-            }
-          ],
           "name": "identity.ts",
           "parent": "ent_48d50ed37f4863230d8ae1e9c9683984",
           "scale": "part"

@@ -1,16 +1,9 @@
 ---
 id: ent_34a7069d1650fdfdc8340ec18f99e57b
 scale: part
-itemIds:
-  actions:
-    create-application-operations-1d7da58ea7101661: observation:workspace:candidate.action.9135d5e34bbdd3d5c68ef31b07e79ae62079d95bf415d92a64113d98d4532ce6
 ---
 
 # operations.ts
-
-## Actions
-
-- `create-application-operations-1d7da58ea7101661`: createApplicationOperations — Exported function
 
 ## Contained by
 

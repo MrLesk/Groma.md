@@ -3464,6 +3464,19 @@ function standardTransactionRequest(
   });
 }
 
+function readableLabelDependents(state: LoadedState, target: EntityId): readonly EntityId[] {
+  const dependents = new Set<EntityId>();
+  for (const component of state.components) {
+    if (component.parent === target && component.id !== target) dependents.add(component.id);
+  }
+  for (const relationship of state.relationships) {
+    if (relationship.target === target && relationship.source !== target) {
+      dependents.add(relationship.source);
+    }
+  }
+  return Object.freeze([...dependents].sort(compareText));
+}
+
 export function createApplicationOperations(
   source: ApplicationOperationsOptions,
 ): ApplicationOperations {
@@ -4135,7 +4148,7 @@ export function createApplicationOperations(
         : (requestData.value.relationships as ComponentRelationshipChanges);
     const mapped = componentResource(id.value, options);
     if (!mapped.ok) return rejected(...mapped.diagnostics);
-    const current = await snapshot(Object.freeze([mapped.value]), options);
+    let current = await snapshot(Object.freeze([mapped.value]), options);
     if (!current.ok) return snapshotFailure(current.diagnostics);
     const component = componentById(current.value, id.value);
     if (component === undefined) {
@@ -4188,6 +4201,30 @@ export function createApplicationOperations(
       id.value,
     );
     if (!computed.ok) return rejected(...computed.diagnostics);
+    const labelDependentIds =
+      component.name === computed.value.component.name
+        ? Object.freeze([])
+        : readableLabelDependents(current.value, id.value);
+    const labelDependentResources = new Map<EntityId, ResourceKey>();
+    for (const dependentId of labelDependentIds) {
+      const resource = componentResource(dependentId, options);
+      if (!resource.ok) return rejected(...resource.diagnostics);
+      labelDependentResources.set(dependentId, resource.value);
+    }
+    if (labelDependentResources.size > 0) {
+      const resources = Object.freeze(
+        [mapped.value, ...labelDependentResources.values()].sort(compareText),
+      );
+      const confirmed = await snapshot(resources, options);
+      if (!confirmed.ok) return snapshotFailure(confirmed.diagnostics);
+      if (
+        confirmed.value.generation !== current.value.generation ||
+        confirmed.value.revisions.get(mapped.value) !== expectedRevision.value
+      ) {
+        return revisionConflict();
+      }
+      current = confirmed;
+    }
     const resultingScale = computed.value.component.scale;
     const resultingParent = computed.value.component.parent;
     if (resultingScale !== undefined && resultingParent !== undefined) {
@@ -4252,17 +4289,26 @@ export function createApplicationOperations(
     const transaction = standardTransactionRequest(
       componentMutations,
       plannedRelationships.value.mutations,
-      Object.freeze([id.value]),
+      Object.freeze([id.value, ...labelDependentIds].sort(compareText)),
       plannedRelationships.value.affected,
       mapped.value,
       expectedRevision.value,
+      Object.freeze([]),
+      Object.freeze(
+        labelDependentIds.map((dependentId) => {
+          const resource = labelDependentResources.get(dependentId)!;
+          return Object.freeze({
+            expected: current.value.revisions.get(resource) ?? null,
+            resource,
+          });
+        }),
+      ),
     );
-    return executeMutation(
-      transaction,
-      new Map([[mapped.value, id.value]]),
-      computed.value.component,
-      options,
-    );
+    const resourceOwners = new Map<ResourceKey, string | null>([[mapped.value, id.value]]);
+    for (const [dependentId, resource] of labelDependentResources) {
+      resourceOwners.set(resource, dependentId);
+    }
+    return executeMutation(transaction, resourceOwners, computed.value.component, options);
   };
 
   const updateComponent = async (
@@ -4377,18 +4423,34 @@ export function createApplicationOperations(
         );
       }
       const obsoleteResource = componentResource(obsolete.value, options);
-      const survivorResource = componentResource(resolvedSurvivor.value.resolved, options);
       if (!obsoleteResource.ok) return rejected(...obsoleteResource.diagnostics);
-      if (!survivorResource.ok) return rejected(...survivorResource.diagnostics);
       const outgoing = initial.value.relationships.filter(
         (relationship) => relationship.source === obsolete.value,
       );
+      const survivingAffectedIds = new Set<EntityId>();
+      if (outgoing.length > 0) survivingAffectedIds.add(resolvedSurvivor.value.resolved);
+      for (const component of initial.value.components) {
+        if (component.parent === obsolete.value) survivingAffectedIds.add(component.id);
+      }
+      for (const relationship of initial.value.relationships) {
+        if (relationship.target !== obsolete.value) continue;
+        survivingAffectedIds.add(
+          relationship.source === obsolete.value
+            ? resolvedSurvivor.value.resolved
+            : relationship.source,
+        );
+      }
+      survivingAffectedIds.delete(obsolete.value);
+      const affectedResources = new Map<EntityId, ResourceKey>();
+      for (const affectedId of survivingAffectedIds) {
+        const resource = componentResource(affectedId, options);
+        if (!resource.ok) return rejected(...resource.diagnostics);
+        affectedResources.set(affectedId, resource.value);
+      }
       const resources = Object.freeze(
-        [
-          aliasesResource.value,
-          obsoleteResource.value,
-          ...(outgoing.length === 0 ? [] : [survivorResource.value]),
-        ].sort(compareText),
+        [aliasesResource.value, obsoleteResource.value, ...affectedResources.values()].sort(
+          compareText,
+        ),
       );
       const current = await snapshot(resources, options);
       if (!current.ok) return snapshotFailure(current.diagnostics);
@@ -4433,29 +4495,31 @@ export function createApplicationOperations(
         ),
       );
       const affectedComponents = Object.freeze(
-        [obsolete.value, ...(relationshipMutations.length === 0 ? [] : [survivor.id])].sort(
-          compareText,
-        ),
+        [obsolete.value, ...survivingAffectedIds].sort(compareText),
       );
+      const affectedRelationshipIds = new Set(
+        currentOutgoing.map((relationship) => relationship.id),
+      );
+      for (const relationship of current.value.relationships) {
+        if (relationship.target === obsolete.value) affectedRelationshipIds.add(relationship.id);
+      }
       const additionalExpected = [
         Object.freeze({
           expected: current.value.revisions.get(aliasesResource.value) ?? null,
           resource: aliasesResource.value,
         }),
-        ...(relationshipMutations.length === 0
-          ? []
-          : [
-              Object.freeze({
-                expected: current.value.revisions.get(survivorResource.value) ?? null,
-                resource: survivorResource.value,
-              }),
-            ]),
+        ...[...affectedResources].map(([, resource]) =>
+          Object.freeze({
+            expected: current.value.revisions.get(resource) ?? null,
+            resource,
+          }),
+        ),
       ];
       const transaction = standardTransactionRequest(
         Object.freeze([Object.freeze({ id: obsolete.value, type: "remove" })]),
         relationshipMutations,
         affectedComponents,
-        Object.freeze(currentOutgoing.map((relationship) => relationship.id)),
+        Object.freeze([...affectedRelationshipIds].sort(compareText)),
         obsoleteResource.value,
         expectedRevision.value,
         Object.freeze([
@@ -4470,9 +4534,9 @@ export function createApplicationOperations(
       const owners = new Map<ResourceKey, string | null>([
         [obsoleteResource.value, obsolete.value],
         [aliasesResource.value, null],
-        ...(relationshipMutations.length === 0
-          ? []
-          : ([[survivorResource.value, survivor.id]] as [ResourceKey, string | null][])),
+        ...[...affectedResources].map(
+          ([affectedId, resource]) => [resource, affectedId] as [ResourceKey, string | null],
+        ),
       ]);
       return executeMutation(transaction, owners, survivor, options);
     }

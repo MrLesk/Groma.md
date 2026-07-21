@@ -1,16 +1,9 @@
 ---
 id: ent_c59410bfdfbe140d088c4ae774c9ff1a
 scale: part
-itemIds:
-  actions:
-    create-local-workspace-capability-2044e9f620bc87d0: observation:workspace:candidate.action.e3e8327e40e39ffefa415c0587e37fa625d7b0821f3d5c961b82800013638681
 ---
 
 # local-workspace.ts
-
-## Actions
-
-- `create-local-workspace-capability-2044e9f620bc87d0`: createLocalWorkspaceCapability — Exported function
 
 ## Contained by
 

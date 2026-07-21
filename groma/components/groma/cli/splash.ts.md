@@ -1,16 +1,9 @@
 ---
 id: ent_6e27da234c3541f80fb28f9ec747ae0d
 scale: part
-itemIds:
-  actions:
-    format-splash-9214bcd8cb7cfdb8: observation:workspace:candidate.action.9eeadcbe369457a414c826abeedec5f74ce77da671d0e3b3dafac6ec8f22f03f
 ---
 
 # splash.ts
-
-## Actions
-
-- `format-splash-9214bcd8cb7cfdb8`: formatSplash — Exported function
 
 ## Contained by
 

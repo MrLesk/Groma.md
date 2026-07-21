@@ -731,18 +731,19 @@ describe("official local application operations composition", () => {
     const platformRevision = platform.revisions.find(
       (entry) => entry.componentId === conformanceIds.rootA,
     )?.revision;
-    const ordersRevision = orders.revisions.find(
+    if (platformRevision == null) throw new Error("missing revision");
+
+    const renamed = await host.operations.updateComponent({
+      expectedRevision: platformRevision,
+      id: conformanceIds.rootA,
+      patch: { name: "Commerce" },
+    });
+    expect(renamed).toMatchObject({ status: "committed" });
+    if (renamed.status !== "committed") return;
+    const renamedOrdersRevision = renamed.revisions.find(
       (entry) => entry.componentId === conformanceIds.serviceA,
     )?.revision;
-    if (platformRevision == null || ordersRevision == null) throw new Error("missing revision");
-
-    expect(
-      await host.operations.updateComponent({
-        expectedRevision: platformRevision,
-        id: conformanceIds.rootA,
-        patch: { name: "Commerce" },
-      }),
-    ).toMatchObject({ status: "committed" });
+    if (renamedOrdersRevision == null) throw new Error("missing renamed child revision");
     const afterRename = await host.store.load();
     if (!afterRename.ok) throw new Error(afterRename.diagnostics[0]?.message);
     expect(afterRename.value.documents.map((document) => String(document.locator))).toEqual([
@@ -751,10 +752,17 @@ describe("official local application operations composition", () => {
       "groma/components/Commerce/Orders.md",
       "groma/components/Commerce/Orders/Worker.md",
     ]);
+    const ordersDocument = afterRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (ordersDocument === undefined) throw new Error("missing Orders document");
+    expect(new TextDecoder().decode(ordersDocument.bytes)).toContain(
+      `[Commerce](groma:component/${conformanceIds.rootA})`,
+    );
 
     expect(
       await host.operations.reparentComponent({
-        expectedRevision: ordersRevision,
+        expectedRevision: renamedOrdersRevision,
         id: conformanceIds.serviceA,
         parent: conformanceIds.rootB,
       }),
@@ -769,6 +777,54 @@ describe("official local application operations composition", () => {
       "groma/components/Archive/Orders.md",
       "groma/components/Archive/Orders/Worker.md",
     ]);
+  });
+
+  test("refreshes incoming readable relationship labels when a target is renamed", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+
+    const payments = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceB, name: "Payments" },
+    });
+    const api = await host.operations.createComponent({
+      component: { id: conformanceIds.serviceA, name: "API" },
+      relationships: [
+        {
+          id: conformanceIds.crossBranch,
+          target: conformanceIds.serviceB,
+          type: "uses",
+        },
+      ],
+    });
+    expect(payments).toMatchObject({ status: "committed" });
+    expect(api).toMatchObject({ status: "committed" });
+    if (payments.status !== "committed") return;
+    const paymentsRevision = payments.revisions.find(
+      (entry) => entry.componentId === conformanceIds.serviceB,
+    )?.revision;
+    if (paymentsRevision == null) throw new Error("missing Payments revision");
+
+    const renamed = await host.operations.updateComponent({
+      expectedRevision: paymentsRevision,
+      id: conformanceIds.serviceB,
+      patch: { name: "Billing" },
+    });
+    expect(renamed).toMatchObject({ status: "committed" });
+    if (renamed.status !== "committed") return;
+    expect(renamed.revisions.map((entry) => entry.componentId)).toEqual([
+      conformanceIds.serviceA,
+      conformanceIds.serviceB,
+    ]);
+    const loaded = await host.store.load();
+    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+    const apiDocument = loaded.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (apiDocument === undefined) throw new Error("missing API document");
+    expect(new TextDecoder().decode(apiDocument.bytes)).toContain(
+      `[Billing](groma:component/${conformanceIds.serviceB}?relationship=${conformanceIds.crossBranch})`,
+    );
   });
 
   test("fails closed when a component scale would be coarser than its parent", async () => {

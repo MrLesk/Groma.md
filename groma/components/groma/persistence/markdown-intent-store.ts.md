@@ -1,18 +1,9 @@
 ---
 id: ent_4b68b96998f321caad2be3aa5110d4df
 scale: part
-itemIds:
-  actions:
-    create-markdown-intent-store-55b347af6d5be9d2: observation:workspace:candidate.action.3a329d638c27d65ab5c37690d12ee4371d6493bd79e6aca02d022f40cf7eeca7
-    markdown-intent-resource-3aad6519e344c21a: observation:workspace:candidate.action.cd57831be389119d8fcdcfe8a4425da7583a5ee495818b6db02e0654f7ba7565
 ---
 
 # markdown-intent-store.ts
-
-## Actions
-
-- `create-markdown-intent-store-55b347af6d5be9d2`: createMarkdownIntentStore — Exported function
-- `markdown-intent-resource-3aad6519e344c21a`: markdownIntentResource — Exported function
 
 ## Contained by
 

@@ -1,16 +1,9 @@
 ---
 id: ent_a942d3f0bc81db2e4074e7f34efcb690
 scale: part
-itemIds:
-  actions:
-    create-projection-query-engine-06ee7e7cac5e485f: observation:workspace:candidate.action.bf086439c76a256fe481eab5a201069d4eea29144cce6e9c5df891a0733e4617
 ---
 
 # projection-query-engine.ts
-
-## Actions
-
-- `create-projection-query-engine-06ee7e7cac5e485f`: createProjectionQueryEngine — Exported function
 
 ## Contained by
 

@@ -1,18 +1,9 @@
 ---
 id: ent_90d047bafce020521d255443a0f09d6d
 scale: part
-itemIds:
-  actions:
-    create-default-bootstrap-registry-cee9aff1a26ee4d6: observation:workspace:candidate.action.5b077fbae5995afc702be3c88ea21dc221331fdb8864e38bc1e4a5190c769f0e
-    initial-project-display-name-277b54b0def2b3f7: observation:workspace:candidate.action.66339e07ba6c4e55c68105a25467f43745cf5892d19b80495527fde9cf07f0f0
 ---
 
 # default-bootstrap.ts
-
-## Actions
-
-- `create-default-bootstrap-registry-cee9aff1a26ee4d6`: createDefaultBootstrapRegistry — Exported function
-- `initial-project-display-name-277b54b0def2b3f7`: initialProjectDisplayName — Exported function
 
 ## Contained by
 

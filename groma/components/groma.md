@@ -2,20 +2,11 @@
 id: ent_a754d5c9106660a7c4f25673e53bc015
 type: package
 scale: system
-itemIds:
-  actions:
-    define-scanner-5a6993640b653790: observation:workspace:candidate.action.da56d451a03f44a990eed3a4511d66958ea57815c9a6e83f960ff713499eb140
-    create-scanner-request-b8b744c183d2ab86: observation:workspace:candidate.action.e4922452f48b483c8d60aee8d13edbdd932d6f5990655e19c439e36d3866f46c
 ---
 
 # groma
 
 > Groma keeps a living map of your system's architecture inside your repo: meaning in plain Markdown files you can read and review, and scanner evidence in deterministic JSON.
-
-## Actions
-
-- `define-scanner-5a6993640b653790`: defineScanner — Public export at ./plugin-sdk
-- `create-scanner-request-b8b744c183d2ab86`: createScannerRequest — Public export at ./plugin-sdk
 
 ## Relationships
 

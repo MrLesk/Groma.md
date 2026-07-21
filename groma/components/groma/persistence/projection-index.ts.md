@@ -1,18 +1,9 @@
 ---
 id: ent_7a122d8fa8aaf2e0a85a4651e5117de1
 scale: part
-itemIds:
-  actions:
-    create-local-projection-index-2398277ebf37f2bb: observation:workspace:candidate.action.3b5cd01e75c1bd23cedd7484173f8cbfac7ad89c751a9cb59159a50e9c3ebccb
-    create-transaction-projection-canonical--377f27843bb4cd02: observation:workspace:candidate.action.3f32b1c8e9cae20f862ab7d23e4ade30c53f0194486d9c7003d1114a2211329c
 ---
 
 # projection-index.ts
-
-## Actions
-
-- `create-local-projection-index-2398277ebf37f2bb`: createLocalProjectionIndex — Exported function
-- `create-transaction-projection-canonical--377f27843bb4cd02`: createTransactionProjectionCanonicalSource — Exported function
 
 ## Contained by
 

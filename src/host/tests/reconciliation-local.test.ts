@@ -1110,7 +1110,7 @@ describe("local completed-snapshot reconciliation", () => {
     expect(reappearedApi.value.relationships.items[0]?.relationship.id).toBe(relationId);
   });
 
-  test("counts retained and refreshed members in one component bound", async () => {
+  test("stores observed members in evidence without projecting them into component intent", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
@@ -1124,6 +1124,11 @@ describe("local completed-snapshot reconciliation", () => {
     ).toMatchObject({ ok: true, value: { status: "committed" } });
     const evidencePath = evidenceSourcePath(workspace.workspaceRoot);
     const before = await readFile(evidencePath, "utf8");
+    expect(before).toContain('"kind": "input"');
+    const afterInputs = await host.operations.listComponents({ limit: 10 });
+    expect(afterInputs.ok).toBeTrue();
+    if (!afterInputs.ok) return;
+    expect(afterInputs.value.items[0]?.component.inputs).toBeUndefined();
     const outputs = Array.from({ length: defaultHostBounds.maxEmbeddedItems }, (_, index) =>
       member("output", `output-${index}`, "api"),
     );
@@ -1137,8 +1142,15 @@ describe("local completed-snapshot reconciliation", () => {
           ["component-candidate", "output"],
         ),
       ),
-    ).toMatchObject({ diagnostics: [{ code: "reconciliation-item-limit" }], ok: false });
-    expect(await readFile(evidencePath, "utf8")).toBe(before);
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const after = await readFile(evidencePath, "utf8");
+    expect(after).not.toBe(before);
+    expect(after).toContain('"kind": "output"');
+    const afterOutputs = await host.operations.listComponents({ limit: 10 });
+    expect(afterOutputs.ok).toBeTrue();
+    if (!afterOutputs.ok) return;
+    expect(afterOutputs.value.items[0]?.component.inputs).toBeUndefined();
+    expect(afterOutputs.value.items[0]?.component.outputs).toBeUndefined();
   });
 
   test("retains member evidence according to the member observation scope", async () => {
@@ -1162,9 +1174,7 @@ describe("local completed-snapshot reconciliation", () => {
     const components = await host.operations.listComponents({ limit: 10 });
     expect(components.ok).toBeTrue();
     if (!components.ok) return;
-    expect(components.value.items[0]?.component.inputs).toMatchObject([
-      { id: "observation:contracts:contract", name: "contract" },
-    ]);
+    expect(components.value.items[0]?.component.inputs).toBeUndefined();
 
     expect(
       await host.reconciliation.reconcile(
@@ -1178,10 +1188,7 @@ describe("local completed-snapshot reconciliation", () => {
     const afterObservedPartial = await host.operations.listComponents({ limit: 10 });
     expect(afterObservedPartial.ok).toBeTrue();
     if (!afterObservedPartial.ok) return;
-    expect(afterObservedPartial.value.items[0]?.component.inputs).toMatchObject([
-      { id: "observation:contracts:contract", name: "contract" },
-      { id: "observation:contracts:request", name: "request" },
-    ]);
+    expect(afterObservedPartial.value.items[0]?.component.inputs).toBeUndefined();
     const detail = await host.operations.getComponent({
       id: afterObservedPartial.value.items[0]!.component.id,
       relationships: { limit: 1 },
@@ -1198,7 +1205,7 @@ describe("local completed-snapshot reconciliation", () => {
     ]);
   });
 
-  test("advances automatic component ownership only for values applied to canonical state", async () => {
+  test("preserves curated items and never repopulates observed members into intent", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
@@ -1254,10 +1261,16 @@ describe("local completed-snapshot reconciliation", () => {
     });
     expect(relinquished.ok).toBeTrue();
     if (!relinquished.ok) return;
-    expect(relinquished.value.item.component).toMatchObject({
-      inputs: [{ id: "observation:workspace:request", name: "request" }],
-      name: "Public API",
-    });
+    expect(relinquished.value.item.component).toMatchObject({ name: "Public API" });
+    expect(relinquished.value.item.component.inputs).toBeUndefined();
+    const intent = await host.store.read(api.component.id);
+    if (!intent.ok) throw new Error(intent.diagnostics[0]?.message);
+    const markdown = new TextDecoder().decode(intent.value.bytes);
+    expect(markdown).not.toContain("## Inputs");
+    expect(markdown).not.toContain("observation:workspace:request");
+    expect(await readFile(evidenceSourcePath(workspace.workspaceRoot), "utf8")).toContain(
+      '"key": "request"',
+    );
   });
 
   test("keeps curated relationship ownership at the last applied projection", async () => {

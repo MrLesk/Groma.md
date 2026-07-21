@@ -1,16 +1,9 @@
 ---
 id: ent_0ddfb02ee107b23da2fc5b6239578982
 scale: part
-itemIds:
-  actions:
-    run-program-07365a0c619ab836: observation:workspace:candidate.action.ec93b631b325426d7890ab052381458679a330220d34b2dce17631253c2cb601
 ---
 
 # program.ts
-
-## Actions
-
-- `run-program-07365a0c619ab836`: runProgram — Exported function
 
 ## Contained by
 

@@ -1,16 +1,9 @@
 ---
 id: ent_98079a43c43fa87a90d95df2bba126bf
 scale: part
-itemIds:
-  actions:
-    create-entity-alias-resolver-65d4cd116919764b: observation:workspace:candidate.action.7e3153a59900689a4af0c2fb09185b3203c066cdd96f8c3ce5d79d458b187076
 ---
 
 # aliases.ts
-
-## Actions
-
-- `create-entity-alias-resolver-65d4cd116919764b`: createEntityAliasResolver — Exported function
 
 ## Contained by
 

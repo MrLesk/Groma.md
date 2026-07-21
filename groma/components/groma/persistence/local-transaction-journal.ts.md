@@ -1,18 +1,9 @@
 ---
 id: ent_12fce6c75acf4d3e8afb1cf43dced943
 scale: part
-itemIds:
-  actions:
-    create-markdown-intent-transaction-adapt-8f412ea5318e72d7: observation:workspace:candidate.action.98637db5a83178e427f36e6947da988bfcc06afb8cc452dda4d6f780a0cd04f0
-    create-local-transaction-journal-311cb79230767a46: observation:workspace:candidate.action.f6301102e8a7d62004812f290e0fe7b45b40613094c4dc453b1c5e527c14e589
 ---
 
 # local-transaction-journal.ts
-
-## Actions
-
-- `create-markdown-intent-transaction-adapt-8f412ea5318e72d7`: createMarkdownIntentTransactionAdapter — Exported function
-- `create-local-transaction-journal-311cb79230767a46`: createLocalTransactionJournal — Exported function
 
 ## Contained by
 

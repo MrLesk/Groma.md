@@ -1,18 +1,9 @@
 ---
 id: ent_7a33277ba783b02248355a00b1cfd592
 scale: part
-itemIds:
-  actions:
-    define-scanner-13d595558df22196: observation:workspace:candidate.action.a8a56cd3945669223f077c046a9fa7b2e6985d889f84882fa20ff1362523de24
-    create-scanner-request-252921b4ac1e2c99: observation:workspace:candidate.action.b720f83814a5768cef36a9d7e3943bf767d69884014cf4e25cec4bac47168f4a
 ---
 
 # scanner.ts
-
-## Actions
-
-- `define-scanner-13d595558df22196`: defineScanner — Exported function
-- `create-scanner-request-252921b4ac1e2c99`: createScannerRequest — Exported function
 
 ## Contained by
 

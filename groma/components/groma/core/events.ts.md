@@ -1,20 +1,9 @@
 ---
 id: ent_d7a180089821ca2a91617a7977690f52
 scale: part
-itemIds:
-  actions:
-    parse-graph-committed-event-d9caa5feebe6c0e2: observation:workspace:candidate.action.8244335d8887c7d3d26833cc6ef545e6b6d2a616499d8df4cc03ad6e7c3bef4c
-    create-graph-committed-event-1961a562913ee93b: observation:workspace:candidate.action.fb06cc666ddbd5443c4d04b53a92e8a9180524e25dba6c32fdae3c3ce49eb39b
-    sequence-graph-committed-event-8b748752732fe910: observation:workspace:candidate.action.fd167b41507ec1cc04e37692416e3f91434848bc882b4c92d065b5c835bd6963
 ---
 
 # events.ts
-
-## Actions
-
-- `parse-graph-committed-event-d9caa5feebe6c0e2`: parseGraphCommittedEvent — Exported function
-- `create-graph-committed-event-1961a562913ee93b`: createGraphCommittedEvent — Exported function
-- `sequence-graph-committed-event-8b748752732fe910`: sequenceGraphCommittedEvent — Exported function
 
 ## Contained by
 

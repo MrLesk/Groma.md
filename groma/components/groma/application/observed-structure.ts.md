@@ -1,20 +1,9 @@
 ---
 id: ent_0c678f267188a132e990aed25ef682dc
 scale: part
-itemIds:
-  actions:
-    observed-shared-from-signals-c3323c9b693411d0: observation:workspace:candidate.action.7f8dae475c40e72cba830be685ea06eedaf14bd81f499b3ae667fd5678c5e540
-    resolve-observed-structure-0f03a2883fc41fa1: observation:workspace:candidate.action.8b15993a2c2b2e8b273cb3eb9fccec8b2227cb0ba0603bd6d8ed0d4f460dc088
-    observed-scale-for-depth-94ac97ff982f4b1a: observation:workspace:candidate.action.dccc0558390decc1ad118ef52c0fb46297eb30e771a49ab907ef1449ccb0eed5
 ---
 
 # observed-structure.ts
-
-## Actions
-
-- `observed-shared-from-signals-c3323c9b693411d0`: observedSharedFromSignals — Exported function
-- `resolve-observed-structure-0f03a2883fc41fa1`: resolveObservedStructure — Exported function
-- `observed-scale-for-depth-94ac97ff982f4b1a`: observedScaleForDepth — Exported function
 
 ## Contained by
 

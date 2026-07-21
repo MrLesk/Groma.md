@@ -1,16 +1,9 @@
 ---
 id: ent_9e8bc35b6b659d91845ad308e595475f
 scale: part
-itemIds:
-  actions:
-    parse-projection-canonical-fingerprint-fc915a4c26b32c22: observation:workspace:candidate.action.cf0c8216572881fc78a10f053d044391af5773e8d273c8855cfb5ab8d3a0ccb2
 ---
 
 # projection.ts
-
-## Actions
-
-- `parse-projection-canonical-fingerprint-fc915a4c26b32c22`: parseProjectionCanonicalFingerprint — Exported function
 
 ## Contained by
 

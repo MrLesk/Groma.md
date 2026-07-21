@@ -1,18 +1,9 @@
 ---
 id: ent_df026a00c094f2c586ac953ff361783e
 scale: domain
-itemIds:
-  actions:
-    route-api-6906d30a45d74c56: observation:workspace:candidate.action.e59ca7230690c5d151063d82c1eee82601cb61edec6961b0f90b596256c03516
-    route-f5e6da8ba072de05: observation:workspace:candidate.action.f0df27213b313b6a35c2b9995e683bfaa86d10c3d8ea9a9e992fbf5c37b3a728
 ---
 
 # web
-
-## Actions
-
-- `route-api-6906d30a45d74c56`: ROUTE /api/*
-- `route-f5e6da8ba072de05`: ROUTE /
 
 ## Contained by
 

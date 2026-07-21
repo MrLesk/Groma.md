@@ -1,20 +1,9 @@
 ---
 id: ent_220d160641d58101347b50d5abb6a0f8
 scale: part
-itemIds:
-  actions:
-    invoke-captured-bounded-query-exact-c894bb8ce68174cb: observation:workspace:candidate.action.712afadde9e640aa37c8d4e001acfb5ed2e9a29e0f98bae4b2bfc902d518023a
-    invoke-captured-bounded-query-prepare-56c70e37ac3fcf2f: observation:workspace:candidate.action.b10b5c597fdb65e34dc6720be1fbfd2b2e40fdb54e22f5c2cecb504cad7c42f6
-    invoke-captured-bounded-query-page-22d5fe4590aebfd9: observation:workspace:candidate.action.f8a547cb243c855d7ce99560c25d120398142e9070c963bbad1f119ade1b3217
 ---
 
 # query.ts
-
-## Actions
-
-- `invoke-captured-bounded-query-exact-c894bb8ce68174cb`: invokeCapturedBoundedQueryExact — Exported function
-- `invoke-captured-bounded-query-prepare-56c70e37ac3fcf2f`: invokeCapturedBoundedQueryPrepare — Exported function
-- `invoke-captured-bounded-query-page-22d5fe4590aebfd9`: invokeCapturedBoundedQueryPage — Exported function
 
 ## Contained by
 

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 18:38'
-updated_date: '2026-07-21 19:02'
+updated_date: '2026-07-21 19:15'
 labels:
   - storage
   - simplicity
@@ -43,11 +43,11 @@ Refactor the official canonical Markdown representation and its direct read/writ
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Replace the v0.2 codec with one strict prose-first Markdown format: stable component identity and irreducible domain metadata in frontmatter; H1, purpose, items, containment, and relationships in ordinary Markdown.
-2. Keep references deterministic by rendering human labels as Markdown links whose destinations carry stable identities; retain short file-local item markers and strict duplicate/missing/cycle validation without a legacy parser or migration framework.
-3. Compose the existing transaction writer with the component-location map so canonical writes have readable link labels, preserve deterministic atomic publication, and do not change application-operation semantics.
-4. Rewrite the checked-in pre-release component documents once to the new format, deleting old representation helpers and tests that only certify v0.2 internals.
-5. Add focused round-trip, ambiguity, atomic-write, and init-scan-visual-loop coverage, then run proportional project checks.
+1. Remove observed input, output, and action members from component projections and ownership updates while retaining complete observations and component bindings in evidence JSON; preserve every curated component item.
+2. Rewrite the checked-in pre-release component documents to remove only observation-owned members, and canonicalize binding projections without member copies; keep the raw evidence snapshot unchanged.
+3. Extend the existing local transaction composition to identify documents whose direct parent or relationship target label changes, reserialize only those affected documents, and require their logical revisions in the same atomic request.
+4. Include those dependent component resources in application rename, merge, and reconciliation rename requests, without introducing a dependency framework or changing scanner contracts.
+5. Add focused later-scan evidence-separation and rename-link assertions, then run targeted and proportional aggregate verification before restoring acceptance criteria and Done status.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -58,10 +58,16 @@ Implemented one strict prose-first component Markdown representation. Stable com
 Objective verification: bun test passed 504 tests with 0 failures and 3142 expectations; bun run typecheck passed; bun run format:check passed; git diff --check passed. Direct loading of the rewritten tree produced 93 components and 278 relationships. A comparison against the exact pre-change tree found all 278 relationships and all nested item identities unchanged; the only entity differences were nine explicit shared:false values intentionally canonicalized to omission, with application reads treating omission as false. Focused coverage verifies prose round-trip, deterministic bytes, short local item markers with stable identity recovery, readable stable links, legacy rejection, ambiguity failures, bounded reads, and recursive loading. Existing CLI scan coverage exercises init, scan, and bare visual/export completion.
 
 Unrelated baseline checks: bun run check:boundaries still reports pre-existing standard-model imports in unchanged src/cli/contracts.ts and src/cli/parser.ts. bun run verify:1a builds the executable successfully, then its existing static-export smoke sentinel fails because the compiled HTML does not include react-flow-dagre; renderer and build sources are outside this diff. These were not widened into GROM-99.
+
+Terra P1 follow-up: reconciliation no longer turns observed input, output, or action records into canonical component items or ownership projections. Existing curated items are never patched by scans. The checked workspace rewrite removed 121 observation-owned item copies from 55 component documents and removed 122 redundant member copies from binding projections while preserving the raw evidence snapshot byte-for-byte at the parsed snapshot value. Strict evidence parsing now accepts only the separated projection shape; no legacy Markdown parser, migration framework, or fallback was added.
+
+Readable-link follow-up: name changes now enumerate only direct children and incoming relationship owners, confirm their logical revisions, include them as affected resources, and let the existing transaction adapter reserialize those documents in the same atomic publication. The adapter compares prior and next label maps and relationship targets, so location-only descendants can still retain bytes while every stale containment or relationship label is refreshed. Merge and reconciliation rename requests include the same bounded dependent resources directly; no dependency engine was introduced.
+
+Follow-up verification: the affected reconciliation, application-operation, and Markdown-store suites passed 46 tests; the affected CLI scan suite passed 5 tests. The single aggregate run passed 504 tests and exposed one obsolete CLI assertion that still expected observed routes in canonical actions; after correcting that assertion to verify zero canonical actions and 120 evidence actions, its complete 5-test suite passed. Typecheck, format check, and diff check passed. Strict checked-tree loading produced 93 components and 278 relationships with zero canonical member copies, one valid evidence source, and its raw observation snapshot unchanged. The old v0.2 rejection test passed, confirming no fallback. Follow-up delta: production +180/-200 (net -20), tests +105/-29 (net +76), 55 canonical documents -517 lines, and one evidence shard -720 redundant projection lines.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Canonical component Markdown is now ordinary prose-first Markdown with one stable component ID, readable stable links, short file-local item markers, omitted false defaults, strict fail-closed loading, and unchanged atomic local transaction semantics. The pre-release workspace was rewritten once across 93 component documents with no legacy compatibility layer. All 504 tests, typechecking, formatting, diff validation, and direct graph loading pass; two unrelated repository baseline checks remain documented in the implementation notes.
+Canonical Markdown now excludes scanner-observed member evidence while preserving curated items and complete raw evidence JSON. Renames and merges atomically refresh every directly dependent containment and incoming relationship label with explicit logical revision coverage. Focused reconciliation/store/application/CLI suites, aggregate coverage, typechecking, formatting, strict checked-tree loading, and legacy-format rejection verify the fixes; the follow-up also removes a net 20 production lines and 1,237 duplicated document/evidence lines.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,18 +1,9 @@
 ---
 id: ent_6c6ff33a795d4de5efbc64d4257cdd57
 scale: part
-itemIds:
-  actions:
-    validate-structural-scale-proposal-confi-e71b4227469aef72: observation:workspace:candidate.action.56ee3c4a1d7cd8b5214472d273f32367ef27a5a4261f770ed5f2743171bf44b8
-    derive-structural-scale-proposal-v1-e0993aa517fc3dee: observation:workspace:candidate.action.aec93307cbe8cc15b972ccff0ae5007e6c455cd96a7cd87073a0d9fef333c31c
 ---
 
 # scale-proposal.ts
-
-## Actions
-
-- `validate-structural-scale-proposal-confi-e71b4227469aef72`: validateStructuralScaleProposalConfigurationV1 — Exported function
-- `derive-structural-scale-proposal-v1-e0993aa517fc3dee`: deriveStructuralScaleProposalV1 — Exported function
 
 ## Contained by
 

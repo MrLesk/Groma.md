@@ -1,18 +1,9 @@
 ---
 id: ent_5d94ca2f084692662f6a9e0ca04dd074
 scale: part
-itemIds:
-  actions:
-    run-host-2cce6e3ee348159d: observation:workspace:candidate.action.76313bccca60870ee23ef34ebff6d82d4aa708fa50c32fc21d130a8db3454be8
-    create-process-signal-source-d9d99ca684a54536: observation:workspace:candidate.action.80184cd0d78c91d83fc701b858c0269626f3830edd53f62b938d128eaecf658d
 ---
 
 # lifecycle.ts
-
-## Actions
-
-- `run-host-2cce6e3ee348159d`: runHost — Exported function
-- `create-process-signal-source-d9d99ca684a54536`: createProcessSignalSource — Exported function
 
 ## Contained by
 
