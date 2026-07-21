@@ -20,6 +20,7 @@ Usage:
   groma --version
   groma [--format plain|json] init
   groma [--format plain|json] instructions [overview|scanning|curation|reading]
+  groma [--format plain|json] export [--output <file>]
   groma [--format plain|json] web [--port <0-65535>]
   groma [--format plain|json] scan [--project <project-id>] [--scanner <scanner-id>]
   groma [--format plain|json] scan (--input <file|-> | --stdin)
@@ -42,6 +43,9 @@ Usage:
   groma [--format plain|json] component remove <id> --revision <revision>
 
 Instructions prints the built-in working guides for humans and agents; it needs no workspace.
+Export writes blueprint.html by default: one deterministic, self-contained, read-only snapshot
+using the embedded web client and a finite sequence of shared bounded reads. The file opens without
+Groma or a server, makes no network requests, and contains no canonical mutation affordances.
 Web serves the embedded interactive blueprint on 127.0.0.1 only (default port 4766, 0 for an
 ephemeral port) until Ctrl+C. It exposes bounded reads and component create, update, move, merge,
 and remove through the same shared application operations as the CLI. Mutation requests use POST

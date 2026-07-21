@@ -375,6 +375,16 @@ function webCommand(args: readonly string[]): CliCommand | undefined {
   return Object.freeze({ kind: "web" as const, port: port ?? WEB_DEFAULT_PORT });
 }
 
+function exportCommand(args: readonly string[]): CliCommand | undefined {
+  if (args.length === 0)
+    return Object.freeze({ kind: "export" as const, output: "blueprint.html" });
+  if (args.length !== 2 || args[0] !== "--output") return undefined;
+  const output = args[1];
+  return output === undefined || output.length === 0 || output.length > 4_096
+    ? undefined
+    : Object.freeze({ kind: "export" as const, output });
+}
+
 function scanCommand(args: readonly string[]): CliCommand | undefined {
   let input: CliInputSource | undefined;
   let projectId: string | undefined;
@@ -475,15 +485,17 @@ export function parseInvocation(args: readonly string[]): CliInvocationResult {
       ? scanCommand(commandArgs.slice(1))
       : commandArgs[0] === "instructions"
         ? instructionsCommand(commandArgs.slice(1))
-        : commandArgs[0] === "web"
-          ? webCommand(commandArgs.slice(1))
-          : commandArgs[0] === "blueprint"
-            ? blueprintCommand(commandArgs.slice(1))
-            : commandArgs[0] === "component"
-              ? componentCommand(commandArgs.slice(1))
-              : commandArgs[0] === "project"
-                ? projectCommand(commandArgs.slice(1))
-                : undefined;
+        : commandArgs[0] === "export"
+          ? exportCommand(commandArgs.slice(1))
+          : commandArgs[0] === "web"
+            ? webCommand(commandArgs.slice(1))
+            : commandArgs[0] === "blueprint"
+              ? blueprintCommand(commandArgs.slice(1))
+              : commandArgs[0] === "component"
+                ? componentCommand(commandArgs.slice(1))
+                : commandArgs[0] === "project"
+                  ? projectCommand(commandArgs.slice(1))
+                  : undefined;
   if (command === undefined) {
     return failed(format, "The command invocation is invalid; run groma --help for usage");
   }

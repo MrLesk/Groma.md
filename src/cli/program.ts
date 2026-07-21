@@ -42,6 +42,7 @@ export interface ProgramOutput {
 export interface ProgramOptions {
   readonly confirm?: (question: string) => Promise<boolean>;
   readonly createRegistry?: (surface: HostSurface) => HostBootstrapRegistry;
+  readonly exportWriter?: (output: string, html: string) => Promise<string>;
   readonly inputReader?: CliInputReader;
   readonly presentBlueprint?: (html: string) => Promise<string>;
   readonly presentWebUrl?: (url: string) => void;
@@ -358,12 +359,20 @@ export async function runProgram(
     invocation.format === "plain" && terminal.stdin && terminal.stdout
       ? (options.confirm ?? defaultConfirm)
       : undefined;
+  const exportWriter =
+    options.exportWriter ??
+    (async (output: string, html: string) => {
+      const artifact = path.resolve(workspaceRoot, output);
+      await writeFile(artifact, html, { encoding: "utf8", mode: 0o644 });
+      return artifact;
+    });
   const controller = createCliSurfaceController(
     invocation,
     options.inputReader ?? defaultInputReader(workspaceRoot),
     terminal,
     webReady,
     confirmInit,
+    exportWriter,
   );
   const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =

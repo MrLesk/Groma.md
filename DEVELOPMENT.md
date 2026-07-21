@@ -47,6 +47,13 @@ processing the stylesheet during the build. For uncompiled development (`bun run
 `bunfig.toml` registers the same plugin under `[serve.static]`; the compiled executable is
 built with bunfig autoloading disabled and never reads that file at runtime.
 
+`groma export` reuses that embedded client rather than maintaining another renderer. It pages the
+shared blueprint export read to a fixed 2,500-component ceiling, bakes the snapshot into one HTML
+file, and inlines the compiled JavaScript and CSS. The file's content-security policy disables
+connections; its in-memory snapshot adapter supports navigation, inspection, and bounded search
+without a listener, canonical writes, or browser persistence. An export over the component or
+16 MiB artifact bound fails instead of silently truncating.
+
 The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
 application and host capabilities, never through ambient build-tool files.

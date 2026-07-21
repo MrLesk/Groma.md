@@ -40,6 +40,8 @@ export interface CliSurfaceController {
   readonly surface: HostSurface;
 }
 
+export type CliExportWriter = (output: string, html: string) => Promise<string>;
+
 function diagnostic(code: string, message: string): CliDiagnostic {
   return Object.freeze({ code, message });
 }
@@ -380,6 +382,60 @@ async function serveWeb(
       );
 }
 
+async function exportBlueprint(
+  command: Extract<CliCommand, { readonly kind: "export" }>,
+  context: HostSurfaceContext,
+  writer: CliExportWriter,
+): Promise<CliCommandResult> {
+  const status = context.workspace.status();
+  if (status.state === "missing") {
+    return failedResult(
+      command,
+      CLI_EXIT.workspace,
+      "web-export-workspace-missing",
+      "No Groma workspace exists here; run groma init first",
+    );
+  }
+  const operations = workspaceOperations(command, context);
+  if (!("listRoots" in operations)) return operations;
+  const [{ webFrontend }, { renderStaticBlueprintBundle }] = await Promise.all([
+    import("../web/assets.ts"),
+    import("../web/export.ts"),
+  ]);
+  const rendered = await renderStaticBlueprintBundle({ frontend: webFrontend, operations });
+  if (!rendered.ok) {
+    return failedResult(
+      command,
+      CLI_EXIT.infrastructure,
+      rendered.diagnostic.code,
+      rendered.diagnostic.message,
+    );
+  }
+  let artifact: string;
+  try {
+    artifact = await writer(command.output, rendered.value.html);
+  } catch {
+    return failedResult(
+      command,
+      CLI_EXIT.infrastructure,
+      "web-export-write-failed",
+      "The self-contained blueprint export could not be written",
+    );
+  }
+  return result(
+    command,
+    CLI_EXIT.success,
+    true,
+    Object.freeze({
+      artifact,
+      bytes: rendered.value.bytes,
+      components: rendered.value.componentCount,
+      generation: rendered.value.generation,
+      status: "written",
+    }),
+  );
+}
+
 async function execute(
   invocation: CliInvocation,
   context: HostSurfaceContext,
@@ -387,10 +443,22 @@ async function execute(
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
+  exportWriter?: CliExportWriter,
 ): Promise<CliCommandResult> {
   const command = invocation.command;
   if (command.kind === "overview") return overview(command, context, terminal);
   if (command.kind === "web") return serveWeb(command, context, webReady);
+  if (command.kind === "export") {
+    if (exportWriter === undefined) {
+      return failedResult(
+        command,
+        CLI_EXIT.infrastructure,
+        "web-export-writer-unavailable",
+        "The self-contained blueprint export writer is unavailable",
+      );
+    }
+    return exportBlueprint(command, context, exportWriter);
+  }
   if (command.kind === "init") {
     const initialized = await context.initialization.initialize(Object.freeze({}));
     if (!initialized.ok) return applicationResult(command, initialized);
@@ -709,6 +777,7 @@ export function createCliSurfaceController(
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
+  exportWriter?: CliExportWriter,
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
   let completion: Promise<void> | undefined;
@@ -720,7 +789,15 @@ export function createCliSurfaceController(
     start(context: HostSurfaceContext) {
       if (started) throw new Error("CLI surface can start only once");
       started = true;
-      completion = execute(invocation, context, reader, terminal, webReady, confirmInit).then(
+      completion = execute(
+        invocation,
+        context,
+        reader,
+        terminal,
+        webReady,
+        confirmInit,
+        exportWriter,
+      ).then(
         (value) => {
           if (!stopped || longRunning) captured = value;
         },

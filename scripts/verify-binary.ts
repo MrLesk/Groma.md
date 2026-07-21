@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -183,6 +183,33 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
   }
 }
 
+async function verifyStaticExport(executable: string, cwd: string): Promise<void> {
+  const firstPath = path.join(cwd, "team-blueprint.html");
+  const secondPath = path.join(cwd, "team-blueprint-copy.html");
+  const first = await runJson(executable, ["export", "--output", firstPath], cwd);
+  const second = await runJson(executable, ["export", "--output", secondPath], cwd);
+  if (first.ok !== true || second.ok !== true) {
+    throw new Error("Compiled static export did not complete");
+  }
+  const [firstHtml, secondHtml] = await Promise.all([
+    readFile(firstPath, "utf8"),
+    readFile(secondPath, "utf8"),
+  ]);
+  if (firstHtml !== secondHtml) {
+    throw new Error("Compiled static export was not deterministic");
+  }
+  if (
+    !firstHtml.includes('data-groma-export="read-only"') ||
+    !firstHtml.includes("groma-read-only-blueprint-v1") ||
+    !firstHtml.includes("react-flow-dagre") ||
+    !firstHtml.includes("connect-src 'none'") ||
+    /<script\b[^>]*\bsrc=/i.test(firstHtml) ||
+    /<link\b[^>]*\brel=["']stylesheet["']/i.test(firstHtml)
+  ) {
+    throw new Error("Compiled static export was not a self-contained read-only client");
+  }
+}
+
 const options = parseOptions(Bun.argv.slice(2));
 const artifact = await stat(options.executable);
 if (!artifact.isFile() || artifact.size === 0) throw new Error("Executable artifact is empty");
@@ -334,4 +361,5 @@ if (!options.skipRun) {
     throw new Error("Compiled visual overview was not bounded or evidence-grounded");
   }
   await verifyWebServer(options.executable, workspace);
+  await verifyStaticExport(options.executable, workspace);
 }
