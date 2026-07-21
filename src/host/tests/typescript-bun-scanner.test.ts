@@ -4,6 +4,8 @@ import {
   createObservationSession,
   observationSessionApiVersion,
   type CompletedObservationSnapshot,
+  type ComponentActionObservation,
+  type ObservationRecord,
   type ObservationSession,
   type ObservationSessionBegin,
   type Result,
@@ -23,12 +25,21 @@ import {
   type ScannerResourceReadRequest,
 } from "../../plugin-sdk/index.ts";
 import {
+  fileExportDescription,
   typescriptBunScanner,
   typescriptBunScannerIdentity,
   typescriptBunScannerRegistration,
 } from "../typescript-bun-scanner.ts";
 
 const encoder = new TextEncoder();
+
+// The public-API surface these tests assert on: public exports and served
+// routes, but not a file's own exported functions, which the scanner now also
+// records as actions on the file itself. The same name can be both, so the
+// file-export description is what tells the two measurements apart.
+function isPublicSurfaceAction(record: ObservationRecord): record is ComponentActionObservation {
+  return record.kind === "action" && record.description !== fileExportDescription;
+}
 
 function sourceExtension(resource: string): boolean {
   return /\.[cm]?[jt]sx?$/.test(resource);
@@ -315,12 +326,26 @@ describe("built-in TypeScript and Bun scanner", () => {
     expect(candidates).not.toContainEqual(expect.objectContaining({ name: "generated" }));
 
     const actions = snapshot.records
-      .filter((record) => record.kind === "action")
+      .filter((record) => isPublicSurfaceAction(record))
       .map((record) => record.name);
     expect(actions).toContain("startService");
     expect(actions).toContain("GET /café");
     expect(actions).not.toContain("hidden");
     expect(actions).not.toContain("testOnly");
+
+    // A file also reveals the functions it exports, recorded as actions on the
+    // file itself and marked apart from the package's public surface, so drilling
+    // to a leaf shows what it offers rather than only that it exists. model.ts
+    // exports a data object, not a callable, so it contributes no such action.
+    const fileExports = snapshot.records.filter(
+      (record): record is ComponentActionObservation =>
+        record.kind === "action" && record.description === fileExportDescription,
+    );
+    expect(fileExports.map((record) => record.name)).toEqual(["startService"]);
+    const indexFileKey = snapshot.records.find(
+      (record) => record.kind === "component-candidate" && record.candidate.name === "index.ts",
+    )?.key;
+    expect(fileExports[0]?.component.key).toBe(indexFileKey);
 
     // The source files a boundary owns are emitted as their own components and
     // contained by it, so a domain drills into its real contents.
@@ -348,7 +373,7 @@ describe("built-in TypeScript and Bun scanner", () => {
     ).toBeFalse();
 
     const route = snapshot.records.find(
-      (record) => record.kind === "action" && record.name === "GET /café",
+      (record) => isPublicSurfaceAction(record) && record.name === "GET /café",
     );
     expect(route?.provenance[0]?.range).toBeDefined();
     const routeBytes = encoder.encode(representativeProject["src/api/routes.ts"]);
@@ -391,7 +416,7 @@ export function publicApi() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name?.includes("/"),
+        (record) => isPublicSurfaceAction(record) && record.name?.includes("/"),
       ),
     ).toBeFalse();
     expect(
@@ -415,7 +440,7 @@ export function publicApi() {}
     expect(unrelatedShadow.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       unrelatedShadow.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["ROUTE /top", "publicApi"]);
@@ -432,7 +457,7 @@ export function publicApi() {}
     expect(replacedServe.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       replacedServe.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
 
@@ -500,12 +525,12 @@ export function publicApi() {}
       expect(shadowed.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         shadowed.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name?.startsWith("ROUTE "),
+          (record) => isPublicSurfaceAction(record) && record.name?.startsWith("ROUTE "),
         ),
       ).toBeFalse();
       expect(
         shadowed.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "publicApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -523,7 +548,7 @@ export function publicApi() {}
     expect(ordinary.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       ordinary.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "ROUTE /health",
+        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
       ),
     ).toBeTrue();
 
@@ -546,7 +571,7 @@ export function publicApi() {}
       expect(retained.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         retained.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "ROUTE /health",
+          (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
         ),
       ).toBeTrue();
     }
@@ -566,12 +591,12 @@ export function publicApi() {}
       expect(rejected.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         rejected.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name?.includes("/health"),
+          (record) => isPublicSurfaceAction(record) && record.name?.includes("/health"),
         ),
       ).toBeFalse();
       expect(
         rejected.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "api",
+          (record) => isPublicSurfaceAction(record) && record.name === "api",
         ),
       ).toBeTrue();
     }
@@ -601,7 +626,7 @@ export function publicApi() {}
     ).toBeTrue();
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "visible",
+        (record) => isPublicSurfaceAction(record) && record.name === "visible",
       ),
     ).toBeTrue();
     expect(result.fixture.read).not.toContain("code/private/hidden.ts");
@@ -690,7 +715,7 @@ export function publicApi() {}
     ).toEqual(["bun:sqlite", "node:domain", "node:fs"]);
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "ROUTE /health",
+        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
       ),
     ).toBeTrue();
   });
@@ -888,7 +913,7 @@ export function start() {}
     ).toBeTrue();
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "ROUTE /health",
+        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
       ),
     ).toBeTrue();
   });
@@ -916,7 +941,7 @@ export function start() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["safeApi"]);
 
@@ -929,7 +954,7 @@ export function start() {}
     });
     expect(pureNull.result.ok).toBeTrue();
     expect(pureNull.snapshot?.coverage[0]?.state).toBe("complete");
-    expect(pureNull.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(pureNull.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
 
     const conditionalImport = await scan({
       "package.json": JSON.stringify({
@@ -955,7 +980,7 @@ export function start() {}
     expect(duplicateMetadata.result.ok).toBeTrue();
     expect(duplicateMetadata.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      duplicateMetadata.snapshot?.records.some((record) => record.kind === "action"),
+      duplicateMetadata.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
     ).toBeFalse();
   });
 
@@ -980,7 +1005,8 @@ export function shared() {}
     });
 
     expect(result.result.ok).toBeTrue();
-    const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
+    const actions =
+      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
     expect(actions.filter((record) => record.name === "shared")).toHaveLength(2);
     expect(actions.filter((record) => record.name === "default")).toHaveLength(2);
     expect(actions.filter((record) => record.name === "namedLocal")).toHaveLength(1);
@@ -1059,7 +1085,7 @@ export function shared() {}
     expect(deepReexports.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       deepReexports.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "tooDeep",
+        (record) => isPublicSurfaceAction(record) && record.name === "tooDeep",
       ),
     ).toBeFalse();
   });
@@ -1088,7 +1114,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ),
     ).toBeTrue();
     expect(result.fixture.read).toContain("src/index.ts");
@@ -1141,7 +1167,7 @@ export function shared() {}
     expect(outputDirectories.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       outputDirectories.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "live",
+        (record) => isPublicSurfaceAction(record) && record.name === "live",
       ),
     ).toBeTrue();
     expect(outputDirectories.fixture.enumerated).not.toContain("artifacts");
@@ -1159,7 +1185,7 @@ export function shared() {}
     expect(nestedPolicy.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       nestedPolicy.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "visible",
+        (record) => isPublicSurfaceAction(record) && record.name === "visible",
       ),
     ).toBeTrue();
     expect(JSON.stringify(nestedPolicy.snapshot)).not.toContain("leaked");
@@ -1251,7 +1277,7 @@ export function shared() {}
     expect(imports?.some((record) => record.provenance.length === 4)).toBeTrue();
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["api"]);
   });
@@ -1267,7 +1293,7 @@ export function shared() {}
     });
     expect(proven.result.ok).toBeTrue();
     const action = proven.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     expect(action?.kind === "action" ? action.description : undefined).toBe(
       "Public export at ./plugin-sdk",
@@ -1299,13 +1325,13 @@ export function shared() {}
     expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       ambiguous.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["aOnly", "bOnly", "directApi", "explicitApi"]);
     expect(
       ambiguous.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
   });
@@ -1323,7 +1349,7 @@ export function shared() {}
     expect(duplicateTarget.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       duplicateTarget.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["shared"]);
 
@@ -1338,7 +1364,7 @@ export function shared() {}
     expect(diamond.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       diamond.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["shared"]);
   });
@@ -1358,7 +1384,7 @@ export function shared() {}
     expect(partialBarrel.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       partialBarrel.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["directApi", "otherApi"]);
@@ -1374,7 +1400,7 @@ export function shared() {}
     expect(cyclic.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       cyclic.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["directApi", "explicitApi"]);
@@ -1396,7 +1422,7 @@ export function shared() {}
     expect(depthOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       depthOverflow.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["directApi", "explicitApi"]);
@@ -1432,7 +1458,7 @@ export function shared() {}
     expect(exactBound.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       exactBound.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["deepApi", "directApi", "safeApi"]);
@@ -1443,13 +1469,13 @@ export function shared() {}
       expect(overflow.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         overflow.snapshot?.records
-          .filter((record) => record.kind === "action")
+          .filter((record) => isPublicSurfaceAction(record))
           .map((record) => record.name)
           .sort(),
       ).toEqual(["directApi", "safeApi"]);
       expect(
         overflow.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "deepApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "deepApi",
         ),
       ).toBeFalse();
     }
@@ -1480,7 +1506,7 @@ export function shared() {}
       expect(result.result.ok).toBeTrue();
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
       const action = result.snapshot?.records.find(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       );
       expect(action?.kind).toBe("action");
       expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
@@ -1507,7 +1533,7 @@ export function shared() {}
     expect(explicitOverflow.result.ok).toBeTrue();
     expect(explicitOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     const explicitAction = explicitOverflow.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "shared",
+      (record) => isPublicSurfaceAction(record) && record.name === "shared",
     );
     expect(explicitAction?.kind).toBe("action");
     expect(explicitAction?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
@@ -1536,7 +1562,7 @@ export function shared() {}
     expect(differentOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       differentOverflow.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
   });
@@ -1554,7 +1580,7 @@ export function shared() {}
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     const action = result.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "shared",
+      (record) => isPublicSurfaceAction(record) && record.name === "shared",
     );
     expect(action?.kind).toBe("action");
     expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
@@ -1588,7 +1614,7 @@ export function shared() {}
     expect(equivalent.result.ok).toBeTrue();
     expect(equivalent.snapshot?.coverage[0]?.state).toBe("partial");
     const equivalentAction = equivalent.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "shared",
+      (record) => isPublicSurfaceAction(record) && record.name === "shared",
     );
     expect(equivalentAction?.kind).toBe("action");
     expect(
@@ -1603,7 +1629,7 @@ export function shared() {}
     expect(different.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       different.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
 
@@ -1620,7 +1646,7 @@ export function shared() {}
     expect(unknown.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       unknown.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
 
@@ -1636,7 +1662,7 @@ export function shared() {}
     expect(proved.result.ok).toBeTrue();
     expect(proved.snapshot?.coverage[0]?.state).toBe("complete");
     const provedAction = proved.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "shared",
+      (record) => isPublicSurfaceAction(record) && record.name === "shared",
     );
     expect(provedAction?.kind).toBe("action");
     expect(provedAction?.provenance.some((item) => item.resource === "src/explicit.ts")).toBeTrue();
@@ -1674,7 +1700,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         result.snapshot?.records
-          .filter((record) => record.kind === "action")
+          .filter((record) => isPublicSurfaceAction(record))
           .map((record) => record.name),
       ).toEqual(["safeApi"]);
     }
@@ -1697,13 +1723,13 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["directApi", "safeApi"]);
     expect(
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
 
@@ -1716,7 +1742,7 @@ export function shared() {}
     expect(unknownSibling.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       unknownSibling.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "shared",
+        (record) => isPublicSurfaceAction(record) && record.name === "shared",
       ),
     ).toBeFalse();
   });
@@ -1739,7 +1765,7 @@ export function shared() {}
     expect(packageImport.result.ok).toBeTrue();
     expect(packageImport.snapshot?.coverage[0]?.state).toBe("complete");
     const packageImportAction = packageImport.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     expect(packageImportAction?.provenance.map((item) => item.resource)).toEqual(
       expect.arrayContaining([
@@ -1760,7 +1786,7 @@ export function shared() {}
     expect(tsconfigAlias.result.ok).toBeTrue();
     expect(tsconfigAlias.snapshot?.coverage[0]?.state).toBe("complete");
     const aliasAction = tsconfigAlias.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     expect(aliasAction?.provenance.map((item) => item.resource)).toEqual(
       expect.arrayContaining(["package.json", "src/index.ts", "src/internal.ts"]),
@@ -1804,7 +1830,9 @@ export function shared() {}
       });
       expect(unresolved.result.ok).toBeTrue();
       expect(unresolved.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(unresolved.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(
+        unresolved.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      ).toBeFalse();
     }
 
     const workspaceReexport = await scan({
@@ -1824,12 +1852,12 @@ export function shared() {}
     expect(workspaceReexport.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       workspaceReexport.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "reexported",
+        (record) => isPublicSurfaceAction(record) && record.name === "reexported",
       ),
     ).toBeFalse();
     expect(
       workspaceReexport.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "memberApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "memberApi",
       ),
     ).toBeTrue();
   });
@@ -1885,7 +1913,7 @@ export function shared() {}
     expect(encapsulated.result.ok).toBeTrue();
     expect(
       encapsulated.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
 
@@ -1898,7 +1926,7 @@ export function shared() {}
       expect(legacy.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         legacy.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "legacyApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "legacyApi",
         ),
       ).toBeTrue();
     }
@@ -1916,13 +1944,13 @@ export function shared() {}
     expect(multipleLegacy.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       multipleLegacy.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["mainApi", "moduleApi"]);
     expect(
       new Set(
         multipleLegacy.snapshot?.records
-          .filter((record) => record.kind === "action")
+          .filter((record) => isPublicSurfaceAction(record))
           .map((record) => record.key),
       ).size,
     ).toBe(2);
@@ -1939,7 +1967,7 @@ export function shared() {}
     expect(partiallyResolvedLegacy.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       partiallyResolvedLegacy.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["mainApi"]);
 
@@ -1955,7 +1983,7 @@ export function shared() {}
     expect(duplicateLegacy.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       duplicateLegacy.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["sharedApi"]);
 
@@ -1967,7 +1995,7 @@ export function shared() {}
     expect(ambiguousTarget.result.ok).toBeTrue();
     expect(ambiguousTarget.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      ambiguousTarget.snapshot?.records.some((record) => record.kind === "action"),
+      ambiguousTarget.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
     ).toBeFalse();
 
     for (const main of ["../src/index.ts", "/src/index.ts", "C:/src/index.ts"]) {
@@ -1977,7 +2005,7 @@ export function shared() {}
       });
       expect(unsafe.result.ok).toBeTrue();
       expect(unsafe.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(unsafe.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(unsafe.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
     }
   });
 
@@ -1996,7 +2024,8 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
-    const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
+    const actions =
+      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
     expect(actions.map((record) => record.name)).toEqual(["api"]);
     expect(new Set(actions[0]?.provenance.map((item) => item.resource))).toEqual(
       new Set(["package.json", "src/index.d.ts", "src/module.ts", "src/runtime.ts"]),
@@ -2031,7 +2060,7 @@ export function shared() {}
     expect(sameResourceDocs.result.ok).toBeTrue();
     expect(sameResourceDocs.snapshot?.coverage[0]?.state).toBe("complete");
     const sameResourceAction = sameResourceDocs.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     const retainedDocs =
       sameResourceDocs.snapshot?.records.flatMap((record) =>
@@ -2055,7 +2084,7 @@ export function shared() {}
     expect(declarationsOnly.result.ok).toBeTrue();
     expect(
       declarationsOnly.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "typeApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "typeApi",
       ),
     ).toBeTrue();
 
@@ -2064,7 +2093,7 @@ export function shared() {}
       "src/alternate.ts": "export function api() {}\n",
     });
     const alternateAction = alternateEntry.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     expect(alternateAction?.key).toBe(actions[0]?.key);
   });
@@ -2095,7 +2124,7 @@ export function shared() {}
     expect(replay.snapshot).toEqual(first.snapshot);
     expect(replay.emittedKeys).toEqual(first.emittedKeys);
     const action = first.snapshot?.records.find(
-      (record) => record.kind === "action" && record.name === "api",
+      (record) => isPublicSurfaceAction(record) && record.name === "api",
     );
     expect(action).toBeDefined();
     expect(action?.provenance).toHaveLength(3);
@@ -2155,7 +2184,9 @@ export function shared() {}
       });
       expect(malformed.result.ok).toBeTrue();
       expect(malformed.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(malformed.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(
+        malformed.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      ).toBeFalse();
     }
 
     const oversizedName = "a".repeat(257);
@@ -2177,7 +2208,7 @@ export function shared() {}
     expect(malformedActions.result.ok).toBeTrue();
     expect(malformedActions.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      malformedActions.snapshot?.records.some((record) => record.kind === "action"),
+      malformedActions.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
     ).toBeFalse();
   });
 
@@ -2320,7 +2351,8 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-    const actions = result.snapshot?.records.filter((record) => record.kind === "action") ?? [];
+    const actions =
+      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
     expect(actions.map((record) => record.name).sort()).toEqual(["publicDefault", "publicWork"]);
     for (const action of actions) {
       expect(action.description).toBe("Public export at ./direct");
@@ -2348,7 +2380,9 @@ export function shared() {}
       });
       expect(unsupported.result.ok).toBeTrue();
       expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(unsupported.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(
+        unsupported.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      ).toBeFalse();
     }
 
     const nonCallableImports = await scan({
@@ -2367,7 +2401,7 @@ export function shared() {}
     expect(nonCallableImports.result.ok).toBeTrue();
     expect(nonCallableImports.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      nonCallableImports.snapshot?.records.some((record) => record.kind === "action"),
+      nonCallableImports.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
     ).toBeFalse();
   });
 
@@ -2384,7 +2418,7 @@ export function shared() {}
 
       expect(result.result.ok).toBeTrue();
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
     }
 
     for (const unsupportedEntry of [
@@ -2400,7 +2434,9 @@ export function shared() {}
       });
       expect(unsupported.result.ok).toBeTrue();
       expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(unsupported.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(
+        unsupported.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      ).toBeFalse();
     }
 
     const namespace = await scan({
@@ -2410,7 +2446,7 @@ export function shared() {}
     });
     expect(namespace.result.ok).toBeTrue();
     expect(namespace.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(namespace.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(namespace.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
   });
 
   test("omits mutable, declaration-typed, and overloaded callable bindings", async () => {
@@ -2430,7 +2466,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["safeApi"]);
   });
@@ -2446,7 +2482,7 @@ export function shared() {}
     expect(allowlist.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       allowlist.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
     expect(allowlist.fixture.read).not.toContain("src/private.ts");
@@ -2468,7 +2504,7 @@ export function shared() {}
       expect(normalizedPatterns.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         normalizedPatterns.snapshot?.records
-          .filter((record) => record.kind === "action")
+          .filter((record) => isPublicSurfaceAction(record))
           .map((record) => record.name),
       ).toEqual(["publicApi"]);
       expect(normalizedPatterns.fixture.read).not.toContain("src/private/hidden.ts");
@@ -2512,7 +2548,7 @@ export function shared() {}
     expect(union.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       union.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["explicitApi", "includedApi"]);
@@ -2530,7 +2566,7 @@ export function shared() {}
     expect(incompleteFiles.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       incompleteFiles.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["validApi"]);
     expect(incompleteFiles.fixture.read).not.toContain("src/unlisted.ts");
@@ -2583,13 +2619,13 @@ export function shared() {}
     ]);
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["GET /api/events/[eventId]", "POST /api/health"]);
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .flatMap((record) => record.provenance.map((item) => item.resource))
         .sort(),
     ).toEqual(["server/api/events/[eventId]/index.get.ts", "server/api/health.post.ts"]);
@@ -2634,7 +2670,7 @@ export function shared() {}
             record.kind === "component-candidate" && record.candidate.type === "source-boundary",
         ),
       ).toBeFalse();
-      expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+      expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
     }
 
     const missingMarker = await scan({
@@ -2645,7 +2681,9 @@ export function shared() {}
     expect(missingMarker.result.ok).toBeTrue();
     expect(missingMarker.snapshot?.coverage[0]?.state).toBe("partial");
     expect(missingMarker.fixture.read).not.toContain("server/api/health.get.ts");
-    expect(missingMarker.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(
+      missingMarker.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+    ).toBeFalse();
   });
 
   test("omits conflicting Nuxt route claims across directories and extensions", async () => {
@@ -2673,7 +2711,7 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
   });
 
   test("leaves extensionless declaration-only entries partial without actions", async () => {
@@ -2683,7 +2721,7 @@ export function shared() {}
     });
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(result.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
   });
 
   test("prefers exact runtime resources over declaration sidecar fallbacks", async () => {
@@ -2696,7 +2734,7 @@ export function shared() {}
     expect(packageEntry.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       packageEntry.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["runtimeApi"]);
 
@@ -2720,7 +2758,7 @@ export function shared() {}
     expect(relativeImport.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       relativeImport.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["publicApi", "runtimeImport"]);
@@ -2731,7 +2769,7 @@ export function shared() {}
     ).toBeTrue();
     expect(
       relativeImport.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "declarationOnly",
+        (record) => isPublicSurfaceAction(record) && record.name === "declarationOnly",
       ),
     ).toBeFalse();
   });
@@ -2754,7 +2792,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicDeclaration"]);
     for (const resource of [
@@ -2784,7 +2822,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["visible"]);
     for (const directory of [".GROMA-CACHE", "GroMa", "src/.gRoMa-CaChE", "src/GROMA"])
@@ -2835,7 +2873,7 @@ export function shared() {}
       });
     const hasPublicAction = (result: Awaited<ReturnType<typeof scan>>): boolean =>
       result.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ) ?? false;
     const hasImportRelationship = (result: Awaited<ReturnType<typeof scan>>): boolean =>
       result.snapshot?.records.some(
@@ -2954,7 +2992,7 @@ export function shared() {}
     expect(commonJs.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       commonJs.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["GET /health"]);
     expect(
@@ -2984,7 +3022,7 @@ export function shared() {}
       expect(internalCommonJs.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         internalCommonJs.snapshot?.records
-          .filter((record) => record.kind === "action")
+          .filter((record) => isPublicSurfaceAction(record))
           .map((record) => record.name)
           .sort(),
       ).toEqual(["GET /legacy", "publicApi"]);
@@ -3010,7 +3048,7 @@ export function shared() {}
     expect(commonJavaScript.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       commonJavaScript.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["GET /js", "publicApi"]);
@@ -3023,7 +3061,7 @@ export function shared() {}
     expect(esmJavaScript.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       esmJavaScript.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ),
     ).toBeTrue();
 
@@ -3033,7 +3071,7 @@ export function shared() {}
     });
     expect(commonTs.result.ok).toBeTrue();
     expect(commonTs.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(commonTs.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(commonTs.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
 
     const esmBarrel = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.mjs", name: "esm-barrel" }),
@@ -3042,7 +3080,7 @@ export function shared() {}
     });
     expect(esmBarrel.result.ok).toBeTrue();
     expect(esmBarrel.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(esmBarrel.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(esmBarrel.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
 
     for (const extension of ["mjs", "mts"]) {
       const esm = await scan({
@@ -3056,7 +3094,7 @@ export function shared() {}
       expect(esm.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         esm.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "publicApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3079,7 +3117,7 @@ export function shared() {}
     expect(topLevelShadows.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       topLevelShadows.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
 
@@ -3099,7 +3137,7 @@ export function shared() {}
     expect(nestedShadows.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       nestedShadows.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ),
     ).toBeTrue();
 
@@ -3121,7 +3159,7 @@ export function shared() {}
       expect(unshadowedOutside.result.ok).toBeTrue();
       expect(unshadowedOutside.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        unshadowedOutside.snapshot?.records.some((record) => record.kind === "action"),
+        unshadowedOutside.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
       ).toBeFalse();
     }
 
@@ -3131,7 +3169,7 @@ export function shared() {}
     });
     expect(helper.result.ok).toBeTrue();
     expect(helper.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(helper.snapshot?.records.some((record) => record.kind === "action")).toBeFalse();
+    expect(helper.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
 
     const shadowedHelper = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.js", name: "shadowed-helper" }),
@@ -3145,7 +3183,7 @@ export function shared() {}
     expect(shadowedHelper.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       shadowedHelper.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ),
     ).toBeTrue();
   });
@@ -3220,7 +3258,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "publicApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3327,7 +3365,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "publicApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3374,7 +3412,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => record.kind === "action" && record.name === "publicApi",
+          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3392,7 +3430,7 @@ export function shared() {}
     expect(importedObject.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       importedObject.snapshot?.records.some(
-        (record) => record.kind === "action" && record.name === "publicApi",
+        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
       ),
     ).toBeTrue();
   });
@@ -3423,7 +3461,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name)
         .sort(),
     ).toEqual(["directoryApi", "fileApi"]);
@@ -3439,7 +3477,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["publicApi"]);
   });
@@ -3488,7 +3526,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => record.kind === "action")
+        .filter((record) => isPublicSurfaceAction(record))
         .map((record) => record.name),
     ).toEqual(["safeApi"]);
   });

@@ -285,7 +285,9 @@ function importCycles(
     }
   };
   for (const id of ids) if (!index.has(id)) connect(id);
-  return groups.sort((left, right) => right.length - left.length || left[0]!.localeCompare(right[0]!));
+  return groups.sort(
+    (left, right) => right.length - left.length || left[0]!.localeCompare(right[0]!),
+  );
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {

@@ -41,6 +41,17 @@ const maxCanonicalCharacters = 1_500_000;
 // component count could exceed what reconciliation will accept, so a very large
 // repository still yields its upper levels with partial coverage.
 const maxComponentCandidates = 1_000;
+// The most exported functions surfaced on a single file, so a rare barrel that
+// re-exports hundreds of names lists a bounded, reproducible sample rather than
+// swamping the file's detail or the per-component embedded-item ceiling.
+const maxFileExportActions = 32;
+/**
+ * The description carried by every file-level export action, so a file's own
+ * exported functions can be told apart from a package's public-API surface: the
+ * same name can legitimately be both, and only the description distinguishes the
+ * measurement of "this file exports it" from "this package publishes it".
+ */
+export const fileExportDescription = "Exported function";
 const maxExtractionWork = 2_000_000;
 const maxRelationshipProvenance = 32;
 const maxActionProvenance = 32;
@@ -4276,6 +4287,50 @@ async function scanScope(
       componentCandidateCount += 1;
       emittedFileKeys.add(fileKey);
       append(containsRelationship(parentKey, fileKey, fullProvenance(file)));
+
+      // A file also reveals the functions it exports, attached to the file as
+      // named actions, so drilling to a leaf shows what it offers rather than
+      // only that it exists. Nothing new is parsed — the exports were already
+      // read for the import graph. This runs after the entry-point pass above,
+      // so a file's own exports never make the file itself read as a way in;
+      // sorted and capped for a reproducible, bounded snapshot.
+      const fileParsed = parsedSources.get(resource);
+      if (fileParsed !== undefined) {
+        let fileExports = 0;
+        for (const callable of [...fileParsed.callables.values()].sort((left, right) =>
+          compareCodeUnits(left.name, right.name),
+        )) {
+          if (fileExports >= maxFileExportActions) {
+            partial = true;
+            break;
+          }
+          if (!roomForTopography()) {
+            topographyBudgetReached = true;
+            partial = true;
+            break;
+          }
+          append(
+            Object.freeze({
+              component: reference(scope, fileKey),
+              description: fileExportDescription,
+              key: observationKey(
+                "action",
+                scope,
+                "file-export",
+                boundary.key,
+                relative,
+                callable.name,
+              ),
+              kind: "action" as const,
+              name: callable.name,
+              provenance: Object.freeze([rangeProvenance(file, callable.start, callable.end)]),
+              scope,
+            }),
+          );
+          fileExports += 1;
+        }
+        if (topographyBudgetReached) break;
+      }
     }
   }
   // The file-to-file wiring, drawn only between files that were actually emitted,

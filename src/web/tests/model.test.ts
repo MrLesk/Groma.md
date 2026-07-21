@@ -280,7 +280,10 @@ describe("interactive map view-model", () => {
       roots,
       "ent_system",
       page(
-        [view("ent_a", { name: "a", scale: "domain" }), view("ent_b", { name: "b", scale: "domain" })],
+        [
+          view("ent_a", { name: "a", scale: "domain" }),
+          view("ent_b", { name: "b", scale: "domain" }),
+        ],
         true,
         "more",
       ),
