@@ -5,7 +5,6 @@ import {
   fetchConnections,
   fetchRoots,
   fetchSearch,
-  type ApiComponentScale,
   type ApiFailure,
   type ApiSearchPage,
 } from "./api.ts";
@@ -34,13 +33,11 @@ interface SearchState {
 export function App() {
   const [model, setModel] = useState<BlueprintModel>(emptyModel);
   const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState<SearchState>({ open: false, text: "" });
   const [dependencies, setDependencies] = useState<
     readonly { source: string; target: string; type: string }[]
   >([]);
-  const [visibleScale, setVisibleScale] = useState<ApiComponentScale | undefined>(undefined);
   const [focusStack, setFocusStack] = useState<readonly string[]>([]);
   const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
@@ -151,33 +148,13 @@ export function App() {
     });
   };
 
-  const onExpand = (id: string) => {
-    loadChildren(id);
-  };
   const onFocus = (id: string) => {
     setSelectedId(undefined);
-    setFolded((current) => {
-      if (!current.has(id)) return current;
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
     setFocusStack((stack) => (stack.at(-1) === id ? stack : [...stack, id]));
   };
   const onFocusTo = (depth: number) => {
     setSelectedId(undefined);
     setFocusStack((stack) => stack.slice(0, depth));
-  };
-  const onToggleFold = (id: string) => {
-    setFolded((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const onLoadMoreChildren = (id: string) => {
-    loadChildren(id, model.nodes.get(id)?.childrenCursor);
   };
   const onLoadMoreRoots = () => {
     void fetchRoots(ROOT_LIMIT, model.rootsCursor).then((result) => {
@@ -306,17 +283,11 @@ export function App() {
               dependencies={dependencies}
               focusId={focusId}
               focusPath={focusPath}
-              folded={folded}
-              onVisibleScale={setVisibleScale}
-              visibleScale={visibleScale}
               model={model}
-              onExpand={onExpand}
               onFocus={onFocus}
               onFocusTo={onFocusTo}
-              onLoadMoreChildren={onLoadMoreChildren}
               onLoadMoreRoots={onLoadMoreRoots}
               onSelect={setSelectedId}
-              onToggleFold={onToggleFold}
               selectedId={selectedId}
             />
           </div>

@@ -92,9 +92,7 @@ describe("interactive map view-model", () => {
     const top = buildBlueprintFlowGraph({
       childCounts,
       dependencies: [],
-      folded: new Set<string>(),
       model: parts,
-      visibleScale: undefined,
     });
     // The single system is the frame; its domain shows as a card inside it, and
     // the domain's own part stays out of view until the domain is entered.
@@ -108,9 +106,7 @@ describe("interactive map view-model", () => {
       childCounts,
       dependencies: [],
       focusId: "ent_domain",
-      folded: new Set<string>(),
       model: parts,
-      visibleScale: undefined,
     });
     expect(drilled.nodes.map((node) => node.id)).toEqual(["group:ent_domain", "ent_part"]);
     expect(drilled.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
@@ -127,9 +123,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     // No band: borrowed code is a first-class node wired to its consumer, placed
     // to the right of the parts that use it rather than in a detached tray.
@@ -184,9 +178,7 @@ describe("interactive map view-model", () => {
         // Repeated observations of one pair are one dependency.
         { source: "ent_a", target: "ent_b", type: "imports" },
       ],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     expect(graph.edges).toHaveLength(1);
     const a = graph.nodes.find((node) => node.id === "ent_a");
@@ -211,9 +203,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     // shared is present, external and borrowed are present; entry and quoted are not,
     // so the key must not offer to define words the reader cannot see.
@@ -237,9 +227,7 @@ describe("interactive map view-model", () => {
     const plate = (dependencies: readonly { source: string; target: string; type: string }[]) =>
       buildBlueprintFlowGraph({
         dependencies,
-        folded: new Set<string>(),
         model,
-        visibleScale: undefined,
       }).nodes.find((node) => node.id === "group:ent_system");
 
     // A dependency order exists, so the sheet may name the direction it drew.
@@ -258,7 +246,7 @@ describe("interactive map view-model", () => {
     expect(plate([])?.data.axis).toBeUndefined();
   });
 
-  test("the visible scale bounds how deep the sheet draws without unloading the model", () => {
+  test("the frame draws one level and keeps deeper loaded nodes out of view, not discarded", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const domains = mergeChildrenPage(
       roots,
@@ -272,13 +260,11 @@ describe("interactive map view-model", () => {
     );
     const shallow = buildBlueprintFlowGraph({
       dependencies: [],
-      folded: new Set<string>(),
       model,
-      visibleScale: "domain",
     });
     expect(shallow.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
     expect(shallow.notations).toEqual(["system", "domain"]);
-    // The finer rung is only hidden, never discarded.
+    // The deeper part is only out of view, never discarded from the model.
     expect(model.nodes.has("ent_part")).toBeTrue();
   });
 
@@ -295,9 +281,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     expect(graph.nodes.map((node) => node.data.notation)).toEqual([
       "system",

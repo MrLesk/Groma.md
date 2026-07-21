@@ -226,23 +226,15 @@ export interface BlueprintGraphOptions {
   readonly dependencies: readonly BlueprintDependency[];
   /** When set, the sheet is re-rooted onto this component's contents. */
   readonly focusId?: string | undefined;
-  readonly folded: ReadonlySet<string>;
   readonly model: BlueprintModel;
-  /** Deepest rung the sheet draws; finer components stay folded away. */
-  readonly visibleScale: ApiComponentScale | undefined;
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
-  const { dependencies, focusId, folded, model, visibleScale } = options;
+  const { dependencies, focusId, model } = options;
   const childCounts = options.childCounts ?? new Map<string, number>();
-  const depthLimit =
-    visibleScale === undefined ? Number.POSITIVE_INFINITY : scaleRank(visibleScale);
 
   const isExternal = (id: string) => model.nodes.get(id)?.view.component.type === "external";
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
-
-  void depthLimit;
-  void folded;
 
   // The sheet shows exactly one level at a time, held inside a frame. The frame
   // is the component the reader has walked into — the focused one, or the single
@@ -285,7 +277,6 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   // root exactly when nothing drawn contains it.
   const nested = new Set<string>();
   for (const id of visible) {
-    if (folded.has(id)) continue;
     for (const childId of childrenOf(id)) nested.add(childId);
   }
   const ownedRoots = owned.filter((id) => !nested.has(id));
@@ -302,9 +293,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
    * rather than as a card of its own, so only the rest can carry a count or an
    * arrow endpoint.
    */
-  const carded = new Set(
-    [...visible].filter((id) => childrenOf(id).length === 0 || folded.has(id)),
-  );
+  const carded = new Set([...visible].filter((id) => childrenOf(id).length === 0));
 
   /**
    * The dependencies this sheet can actually show: both ends drawn, no self
@@ -444,7 +433,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         ? "unread"
         : childIds.length === 0
           ? "empty"
-          : folded.has(id) || nested.length === 0
+          : nested.length === 0
             ? "collapsed"
             : "expanded";
     const size = nested.length === 0 ? cardSize(id) : groupSize(id);

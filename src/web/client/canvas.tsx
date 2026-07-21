@@ -18,11 +18,9 @@ import {
 } from "react";
 
 import type { BlueprintModel } from "./model.ts";
-import type { ApiComponentScale } from "./api.ts";
 import {
   buildBlueprintFlowGraph,
   nextScaleLabel,
-  SCALE_ORDER,
   type BlueprintFlowNode,
   type BlueprintGroupNode,
   type BlueprintNotation,
@@ -30,12 +28,9 @@ import {
 } from "./graph.ts";
 
 interface CanvasActions {
-  readonly onExpand: (id: string) => void;
   readonly onFocus: (id: string) => void;
-  readonly onLoadMoreChildren: (id: string) => void;
   readonly onLoadMoreRoots: () => void;
   readonly onSelect: (id: string | undefined) => void;
-  readonly onToggleFold: (id: string) => void;
 }
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
@@ -228,12 +223,9 @@ export interface CanvasProps extends CanvasActions {
   readonly dependencies: readonly { source: string; target: string; type: string }[];
   readonly focusId?: string | undefined;
   readonly focusPath: readonly { id: string; label: string }[];
-  readonly folded: ReadonlySet<string>;
   readonly model: BlueprintModel;
   readonly onFocusTo: (depth: number) => void;
-  readonly onVisibleScale: (scale: ApiComponentScale | undefined) => void;
   readonly selectedId?: string | undefined;
-  readonly visibleScale: ApiComponentScale | undefined;
 }
 
 export function Canvas({
@@ -241,31 +233,24 @@ export function Canvas({
   dependencies,
   focusId,
   focusPath,
-  folded,
   model,
-  onExpand,
   onFocus,
   onFocusTo,
-  onLoadMoreChildren,
   onLoadMoreRoots,
   onSelect,
-  onToggleFold,
-  onVisibleScale,
   selectedId,
-  visibleScale,
 }: CanvasProps) {
   const graph = useMemo(
-    () =>
-      buildBlueprintFlowGraph({ childCounts, dependencies, focusId, folded, model, visibleScale }),
-    [childCounts, dependencies, focusId, folded, model, visibleScale],
+    () => buildBlueprintFlowGraph({ childCounts, dependencies, focusId, model }),
+    [childCounts, dependencies, focusId, model],
   );
   const nodes = useMemo(
     () => graph.nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
     [graph.nodes, selectedId],
   );
   const actions = useMemo(
-    () => ({ onExpand, onFocus, onLoadMoreChildren, onLoadMoreRoots, onSelect, onToggleFold }),
-    [onExpand, onFocus, onLoadMoreChildren, onLoadMoreRoots, onSelect, onToggleFold],
+    () => ({ onFocus, onLoadMoreRoots, onSelect }),
+    [onFocus, onLoadMoreRoots, onSelect],
   );
 
   // The notation key is reference, not the subject, so on a small screen where
@@ -278,7 +263,7 @@ export function Canvas({
     <CanvasActionsContext.Provider value={actions}>
       <div className="groma-flow" data-renderer="react-flow-dagre">
         <ReactFlow<BlueprintFlowNode | BlueprintGroupNode>
-          key={`${focusId ?? "top"}:${visibleScale ?? "everything"}:${graph.nodes.length}`}
+          key={`${focusId ?? "top"}:${graph.nodes.length}`}
           nodes={[...nodes]}
           edges={[...graph.edges]}
           nodeTypes={NODE_TYPES}
@@ -333,28 +318,6 @@ export function Canvas({
               <p>Architectural blueprint</p>
               <span>Scan {model.generation}</span>
               <span>{model.nodes.size} components drawn</span>
-            </div>
-            <div className="groma-scale-selector">
-              <span id="groma-scale-label">Show down to</span>
-              <div role="group" aria-labelledby="groma-scale-label">
-                {SCALE_ORDER.map((scale) => (
-                  <button
-                    key={scale}
-                    type="button"
-                    aria-pressed={visibleScale === scale}
-                    onClick={() => onVisibleScale(visibleScale === scale ? undefined : scale)}
-                  >
-                    {scale}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  aria-pressed={visibleScale === undefined}
-                  onClick={() => onVisibleScale(undefined)}
-                >
-                  everything
-                </button>
-              </div>
             </div>
             {graph.notations.length > 0 ? (
               <details
