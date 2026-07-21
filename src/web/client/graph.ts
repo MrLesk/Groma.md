@@ -7,6 +7,8 @@ import { displayText, type BlueprintModel } from "./model.ts";
 export type BlueprintNotation = ApiComponentScale | "unscaled";
 
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
+  /** True when this component contains parts, so it offers a way in. */
+  readonly canOpen: boolean;
   readonly childCount: number;
   readonly childState: "collapsed" | "empty" | "expanded" | "unread";
   /** Borrowed dependencies this one draws on, counted apart from the system's own. */
@@ -146,6 +148,36 @@ function layoutSubgraph(
   edges: readonly { readonly source: string; readonly target: string }[],
   sizeOf: (id: string) => { height: number; width: number },
 ): LaidOutSubgraph {
+  // With no dependencies to order them, cards would stack in one tall column, so
+  // they are packed into a squarish grid instead — a readable contact sheet of a
+  // component's parts until their own wiring gives them a shape.
+  if (edges.length === 0 && ids.length > 3) {
+    const columns = Math.ceil(Math.sqrt(ids.length));
+    const columnWidth = Math.max(...ids.map((id) => sizeOf(id).width));
+    const gapX = 40;
+    const gapY = 32;
+    const positions = new Map<string, { readonly x: number; readonly y: number }>();
+    const rowHeights: number[] = [];
+    ids.forEach((id, index) => {
+      const row = Math.floor(index / columns);
+      rowHeights[row] = Math.max(rowHeights[row] ?? 0, sizeOf(id).height);
+    });
+    const rowTop = rowHeights.map((_, row) =>
+      rowHeights.slice(0, row).reduce((sum, height) => sum + height + gapY, 0),
+    );
+    ids.forEach((id, index) => {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      positions.set(id, { x: column * (columnWidth + gapX), y: rowTop[row]! });
+    });
+    const rows = rowHeights.length;
+    const usedColumns = Math.min(columns, ids.length);
+    return {
+      height: (rowTop[rows - 1] ?? 0) + (rowHeights[rows - 1] ?? 0),
+      positions,
+      width: usedColumns * columnWidth + (usedColumns - 1) * gapX,
+    };
+  }
   const layout = new dagre.graphlib.Graph();
   // Generous rank and node separation leaves channels between the cards for the
   // dependency lines to run in, so a route reaches its target through a gap
@@ -189,7 +221,11 @@ function layoutSubgraph(
 }
 
 export interface BlueprintGraphOptions {
+  /** Observed count of each component's contained parts, container or leaf. */
+  readonly childCounts?: ReadonlyMap<string, number>;
   readonly dependencies: readonly BlueprintDependency[];
+  /** When set, the sheet is re-rooted onto this component's contents. */
+  readonly focusId?: string | undefined;
   readonly folded: ReadonlySet<string>;
   readonly model: BlueprintModel;
   /** Deepest rung the sheet draws; finer components stay folded away. */
@@ -197,24 +233,48 @@ export interface BlueprintGraphOptions {
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
-  const { dependencies, folded, model, visibleScale } = options;
+  const { dependencies, focusId, folded, model, visibleScale } = options;
+  const childCounts = options.childCounts ?? new Map<string, number>();
   const depthLimit =
     visibleScale === undefined ? Number.POSITIVE_INFINITY : scaleRank(visibleScale);
 
   const isExternal = (id: string) => model.nodes.get(id)?.view.component.type === "external";
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
 
-  // Everything the sheet draws, honouring both explicit folding and the chosen rung.
+  void depthLimit;
+  void folded;
+
+  // The sheet shows exactly one level at a time, held inside a frame. The frame
+  // is the component the reader has walked into — the focused one, or the single
+  // owned system at the top — drawn as a plate; its direct parts are cards
+  // inside it. Going deeper is re-rooting onto a part (focus), not unfolding it
+  // in place, so a domain reads as "this domain and its parts", never as an
+  // ever-growing nest. Everything below the shown level stays out of view until
+  // entered.
+  const ownedRootIds = model.rootIds.filter(
+    (id) => componentOf(id) !== undefined && !isExternal(id),
+  );
+  const frameId =
+    focusId !== undefined && componentOf(focusId) !== undefined
+      ? focusId
+      : ownedRootIds.length === 1
+        ? ownedRootIds[0]
+        : undefined;
+
   const visible = new Set<string>();
-  const visit = (id: string) => {
-    const component = componentOf(id);
-    if (component === undefined || visible.has(id)) return;
-    if (scaleRank(component.scale) > depthLimit && component.scale !== undefined) return;
-    visible.add(id);
-    if (folded.has(id)) return;
-    for (const childId of model.nodes.get(id)?.childIds ?? []) visit(childId);
-  };
-  for (const rootId of model.rootIds) visit(rootId);
+  if (frameId !== undefined) {
+    visible.add(frameId);
+    for (const childId of model.nodes.get(frameId)?.childIds ?? []) {
+      if (componentOf(childId) !== undefined) visible.add(childId);
+    }
+  } else {
+    for (const rootId of ownedRootIds) visible.add(rootId);
+  }
+  // Borrowed code belongs to the top of the map, not to a domain's interior, so
+  // it is shown alongside the system and hidden once a reader has focused inward.
+  if (focusId === undefined) {
+    for (const rootId of model.rootIds) if (isExternal(rootId)) visible.add(rootId);
+  }
 
   const owned = [...visible].filter((id) => !isExternal(id));
   const externals = [...visible].filter((id) => isExternal(id));
@@ -441,10 +501,12 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     if (entryPoint) terms.add("entry");
     if ((borrows.get(id)?.size ?? 0) > 0) terms.add("borrowed");
     if (!external && (component.summary ?? "").length > 0) terms.add("quoted");
+    const observedChildCount = childCounts.get(id) ?? childIds?.length ?? 0;
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          childCount: childIds?.length ?? 0,
+          canOpen: observedChildCount > 0 && !external,
+          childCount: observedChildCount,
           childState,
           borrows: borrows.get(id)?.size ?? 0,
           dependsOn: dependsOn.get(id)?.size ?? 0,

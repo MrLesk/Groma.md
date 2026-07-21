@@ -327,7 +327,9 @@ describe("built-in TypeScript and Bun scanner", () => {
     expect(candidates).toContainEqual({ name: "routes.ts" });
     expect(candidates).toContainEqual({ name: "model.ts" });
     const relationships = snapshot.records.filter((record) => record.kind === "relationship");
-    expect(relationships.filter((record) => record.relationshipType === "imports").length).toBe(3);
+    // Three boundary-level imports, plus the two file-level imports behind them
+    // (routes.ts -> model.ts and index.ts -> routes.ts), now drawn in their own right.
+    expect(relationships.filter((record) => record.relationshipType === "imports").length).toBe(5);
     // Three boundaries contain three files: src/index.ts, api/routes.ts, domain/model.ts,
     // on top of the three package->boundary containments.
     expect(relationships.filter((record) => record.relationshipType === "contains").length).toBe(6);
@@ -675,7 +677,7 @@ export function publicApi() {}
       result.snapshot?.records.filter(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
       ) ?? [];
-    expect(imports).toHaveLength(4);
+    expect(imports).toHaveLength(5);
     expect(imports.some((record) => record.provenance.length === 2)).toBeTrue();
     expect(
       result.snapshot?.records
@@ -1215,7 +1217,7 @@ export function shared() {}
     const imports = result.snapshot?.records.filter(
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
-    expect(imports).toHaveLength(2);
+    expect(imports).toHaveLength(3);
     expect(imports?.some((record) => record.provenance.length === 3)).toBeTrue();
   });
 
@@ -1243,8 +1245,10 @@ export function shared() {}
     const imports = result.snapshot?.records.filter(
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
-    expect(imports).toHaveLength(1);
-    expect(imports?.[0]?.provenance).toHaveLength(4);
+    // One aggregated boundary import (carrying all four type-import provenances)
+    // plus the four file-level type imports behind it.
+    expect(imports).toHaveLength(5);
+    expect(imports?.some((record) => record.provenance.length === 4)).toBeTrue();
     expect(
       result.snapshot?.records
         .filter((record) => record.kind === "action")

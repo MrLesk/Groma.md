@@ -5,3 +5,7 @@ name: generation.ts
 scale: part
 parent: ent_48d50ed37f4863230d8ae1e9c9683984
 ---
+
+# Relationships
+
+- imports → ent_d26332c0d45b529d63d7c800d333a86f <!-- groma:relationship id=rel_4ed17c3d66f74ddc40cfa60920d9f0e5 target=ent_d26332c0d45b529d63d7c800d333a86f description=false -->

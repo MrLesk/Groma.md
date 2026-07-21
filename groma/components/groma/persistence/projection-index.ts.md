@@ -5,3 +5,9 @@ name: projection-index.ts
 scale: part
 parent: ent_d874ec5e618605ce1e0248310a7a628b
 ---
+
+# Relationships
+
+- imports → ent_2fbe2aeee68a2a7328214eeaeab2560d <!-- groma:relationship id=rel_1cf7ff425d546f72cc707c141d216f6b target=ent_2fbe2aeee68a2a7328214eeaeab2560d description=false -->
+- imports → ent_98f9d76e4fb8098a8682ef38568487b7 <!-- groma:relationship id=rel_6f7e9539b83276df7757d8e1f862a495 target=ent_98f9d76e4fb8098a8682ef38568487b7 description=false -->
+- imports → ent_b369bf593bc82c53d1a2e5d56783ad21 <!-- groma:relationship id=rel_a6e905896ba4c239c3ad3329d1980620 target=ent_b369bf593bc82c53d1a2e5d56783ad21 description=false -->

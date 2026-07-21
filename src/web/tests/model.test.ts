@@ -70,7 +70,7 @@ describe("interactive map view-model", () => {
     expect(unchanged.nodes.get("ent_x")?.view.component.id).toBe("ent_x");
   });
 
-  test("nests loaded containment inside container plates instead of a flat grid", () => {
+  test("shows one level inside a frame and drills deeper by focus", () => {
     const roots = mergeRootsPage(
       emptyModel(),
       page([view("ent_system", { name: "Product", scale: "system" })]),
@@ -85,29 +85,36 @@ describe("interactive map view-model", () => {
       "ent_domain",
       page([view("ent_part", { name: "Sessions", scale: "part" })]),
     );
-    const options = {
+    const childCounts = new Map([
+      ["ent_system", 1],
+      ["ent_domain", 1],
+    ]);
+    const top = buildBlueprintFlowGraph({
+      childCounts,
       dependencies: [],
       folded: new Set<string>(),
       model: parts,
       visibleScale: undefined,
-    };
-    const graph = buildBlueprintFlowGraph(options);
-    expect(graph).toEqual(buildBlueprintFlowGraph(options));
-    // Every container becomes a plate its contents are nested inside.
-    expect(graph.nodes.map((node) => node.id)).toEqual([
-      "group:ent_system",
-      "group:ent_domain",
-      "ent_part",
-    ]);
-    expect(graph.nodes.find((node) => node.id === "group:ent_domain")?.parentId).toBe(
-      "group:ent_system",
-    );
-    expect(graph.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
-    // Nesting carries containment, so no containment edges are drawn.
-    expect(graph.edges).toHaveLength(0);
-    expect(graph.notations).toEqual(["system", "domain", "part"]);
-    expect(graph.nodes.every((node) => Number.isInteger(node.position.x))).toBeTrue();
-    expect(graph.nodes.every((node) => Number.isInteger(node.position.y))).toBeTrue();
+    });
+    // The single system is the frame; its domain shows as a card inside it, and
+    // the domain's own part stays out of view until the domain is entered.
+    expect(top.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
+    expect(top.nodes.find((node) => node.id === "ent_domain")?.parentId).toBe("group:ent_system");
+    expect(top.nodes.find((node) => node.id === "ent_domain")?.data.canOpen).toBe(true);
+
+    // Focusing the domain re-roots the sheet onto it: it becomes the frame and
+    // its part is now the card in view.
+    const drilled = buildBlueprintFlowGraph({
+      childCounts,
+      dependencies: [],
+      focusId: "ent_domain",
+      folded: new Set<string>(),
+      model: parts,
+      visibleScale: undefined,
+    });
+    expect(drilled.nodes.map((node) => node.id)).toEqual(["group:ent_domain", "ent_part"]);
+    expect(drilled.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
+    expect(drilled.nodes.every((node) => Number.isInteger(node.position.x))).toBeTrue();
   });
 
   test("draws observed dependencies and wires externals to the parts that use them", () => {
@@ -273,24 +280,6 @@ describe("interactive map view-model", () => {
     expect(shallow.notations).toEqual(["system", "domain"]);
     // The finer rung is only hidden, never discarded.
     expect(model.nodes.has("ent_part")).toBeTrue();
-  });
-
-  test("folding removes descendants from layout without discarding loaded model state", () => {
-    const roots = mergeRootsPage(emptyModel(), page([view("ent_domain", { scale: "domain" })]));
-    const children = mergeChildrenPage(
-      roots,
-      "ent_domain",
-      page([view("ent_part", { scale: "part" })]),
-    );
-    const graph = buildBlueprintFlowGraph({
-      dependencies: [],
-      folded: new Set(["ent_domain"]),
-      model: children,
-      visibleScale: undefined,
-    });
-    expect(graph.nodes.map((node) => node.id)).toEqual(["ent_domain"]);
-    expect(graph.nodes[0]?.data.childState).toBe("collapsed");
-    expect(children.nodes.has("ent_part")).toBeTrue();
   });
 
   test("gives every canonical scale and the unscaled state distinct notation geometry", () => {

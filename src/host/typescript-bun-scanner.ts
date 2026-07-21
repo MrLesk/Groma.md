@@ -3892,12 +3892,49 @@ async function scanScope(
     { from: string; provenance: ObservationProvenance[]; to: string }
   >();
   const nuxtRoutes = new Map<string, Array<{ componentKey: string; file: FileEvidence }>>();
+  // File-to-file imports, kept alongside the aggregated boundary edges: they are
+  // what a reader sees on drilling into a domain — how its own files wire
+  // together — and the scanner already resolves every import to a target file.
+  const fileImportEdges = new Map<
+    string,
+    { from: string; provenance: ObservationProvenance[]; to: string }
+  >();
+  const fileComponentKey = (
+    boundary: BoundaryEvidence,
+    fileResource: string,
+  ): string | undefined => {
+    const relative = relativeResource(fileResource, boundary.resource);
+    return relative === undefined || relative === "."
+      ? undefined
+      : observationKey("component-candidate", scope, "source-file", boundary.key, relative);
+  };
   for (const [resource, parsed] of parsedSources) {
     chargeExtractionWork(budget);
     const from = boundaryByFile.get(resource);
     const file = await getFile(resource);
     if (from === undefined || file === undefined) continue;
     const owner = from.packageKey === undefined ? undefined : packageByKey.get(from.packageKey);
+    const fromFileKey = fileComponentKey(from, resource);
+    const recordFileEdge = (
+      targetBoundary: BoundaryEvidence,
+      targetResource: string,
+      imp: ImportEvidence,
+    ): void => {
+      const toFileKey = fileComponentKey(targetBoundary, targetResource);
+      if (fromFileKey === undefined || toFileKey === undefined || fromFileKey === toFileKey) return;
+      const identity = `${fromFileKey} ${toFileKey}`;
+      const known = fileImportEdges.get(identity);
+      const provenance = rangeProvenance(file, imp.start, imp.end);
+      if (known === undefined) {
+        fileImportEdges.set(identity, {
+          from: fromFileKey,
+          provenance: [provenance],
+          to: toFileKey,
+        });
+      } else if (known.provenance.length < maxRelationshipProvenance) {
+        known.provenance.push(provenance);
+      }
+    };
     for (const imported of parsed.imports) {
       chargeExtractionWork(budget);
       let toKey: string | undefined;
@@ -3908,7 +3945,9 @@ async function scanScope(
           continue;
         }
         const target = boundaryByFile.get(resolved);
-        if (target === undefined || target.key === from.key) continue;
+        if (target === undefined) continue;
+        recordFileEdge(target, resolved, imported);
+        if (target.key === from.key) continue;
         toKey = target.key;
       } else {
         const alias = imported.source.startsWith("#")
@@ -3930,6 +3969,7 @@ async function scanScope(
             partial = true;
             continue;
           }
+          recordFileEdge(target, alias.resource, imported);
           if (target.key === from.key) continue;
           toKey = target.key;
         } else if (imported.source.startsWith("#")) {
@@ -4148,6 +4188,7 @@ async function scanScope(
     (total, record) => total + (record.kind === "component-candidate" ? 1 : 0),
     0,
   );
+  const emittedFileKeys = new Set<string>();
   const roomForTopography = () =>
     budget.records + 8 < maxRecords && componentCandidateCount < maxComponentCandidates;
   const containsRelationship = (from: string, to: string, provenance: ObservationProvenance) =>
@@ -4227,8 +4268,38 @@ async function scanScope(
         }),
       );
       componentCandidateCount += 1;
+      emittedFileKeys.add(fileKey);
       append(containsRelationship(parentKey, fileKey, fullProvenance(file)));
     }
+  }
+  // The file-to-file wiring, drawn only between files that were actually emitted,
+  // so a drilled-in domain shows how its own files depend on one another. Sorted
+  // for a reproducible snapshot and bounded like the rest of the topography.
+  for (const [, edge] of [...fileImportEdges].sort((left, right) =>
+    compareCodeUnits(left[0], right[0]),
+  )) {
+    if (!emittedFileKeys.has(edge.from) || !emittedFileKeys.has(edge.to)) continue;
+    if (budget.records + 4 >= maxRecords) {
+      partial = true;
+      break;
+    }
+    edge.provenance.sort((left, right) =>
+      compareCodeUnits(
+        `${left.resource}:${left.range?.startByte ?? 0}`,
+        `${right.resource}:${right.range?.startByte ?? 0}`,
+      ),
+    );
+    append(
+      Object.freeze({
+        from: reference(scope, edge.from),
+        key: observationKey("relationship", scope, "file-imports", edge.from, edge.to),
+        kind: "relationship" as const,
+        provenance: Object.freeze(edge.provenance),
+        relationshipType: "imports",
+        scope,
+        to: reference(scope, edge.to),
+      }),
+    );
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),
