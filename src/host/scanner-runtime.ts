@@ -1,4 +1,5 @@
 import {
+  canonicalizeCompletedObservationSnapshot,
   createObservationSession,
   failure,
   observationSessionApiVersion,
@@ -55,6 +56,18 @@ export interface ScannerExecutionRequest {
   readonly projectId: string;
   readonly scannerId: string;
 }
+export interface ExternalObservationSubmissionRequest {
+  readonly cancellation?: AbortSignal;
+  readonly snapshot: unknown;
+}
+export interface ExternalObservationSubmissionReport {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly project: { readonly id: string; readonly name: string };
+  readonly recordCount: number;
+  readonly recovery?: TransactionRecovery;
+  readonly scannerId: string;
+  readonly status: "completed" | "indeterminate";
+}
 export interface ScannerRuntimeRecoveryReport {
   readonly abandoned: number;
   readonly acknowledged: number;
@@ -90,6 +103,9 @@ export interface ScannerExecutionRuntime {
   cancelAll(): Promise<readonly ScannerExecutionReport[]>;
   recover(): Promise<Result<ScannerRuntimeRecoveryReport>>;
   start(request: ScannerExecutionRequest): Promise<Result<ScannerExecutionSession>>;
+  submit(
+    request: ExternalObservationSubmissionRequest,
+  ): Promise<Result<ExternalObservationSubmissionReport>>;
 }
 
 interface Provider {
@@ -175,6 +191,20 @@ function boundedDiagnostics(values: readonly Diagnostic[], maximum: number): rea
   );
 }
 
+function scopesMatch(
+  snapshot: CompletedObservationSnapshot,
+  project: ProjectRegistrationSnapshot,
+): boolean {
+  return (
+    snapshot.scopes.length === project.coverage.length &&
+    snapshot.scopes.every(
+      (scope, index) =>
+        scope.id === project.coverage[index]?.id &&
+        scope.resourceRoot === project.coverage[index]?.resourceRoot,
+    )
+  );
+}
+
 export function createScannerExecutionRuntime(
   options: ScannerExecutionRuntimeOptions,
 ): ScannerExecutionRuntime {
@@ -185,6 +215,97 @@ export function createScannerExecutionRuntime(
   let stopping = false;
   const recover = async () =>
     success(Object.freeze({ abandoned: 0, acknowledged: 0, consumed: 0 }));
+
+  const submit = async (
+    request: ExternalObservationSubmissionRequest,
+  ): Promise<Result<ExternalObservationSubmissionReport>> => {
+    if (stopping)
+      return failure(
+        diagnostic("scanner-runtime-shutting-down", "Scanner runtime is shutting down"),
+      );
+    if (!catalog.ok) return catalog;
+    if (request.cancellation?.aborted)
+      return failure(diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled"));
+    const snapshot = canonicalizeCompletedObservationSnapshot(request.snapshot);
+    if (!snapshot.ok) return snapshot;
+    let projectResult: Result<ProjectRegistrationSnapshot>;
+    try {
+      projectResult = await options.projects.get({ id: snapshot.value.projectId });
+    } catch {
+      return failure(
+        diagnostic("scanner-project-unavailable", "Scanner project registration is unavailable"),
+      );
+    }
+    if (!projectResult.ok) return projectResult;
+    const project = projectResult.value;
+    if (catalog.value.has(snapshot.value.source.id)) {
+      return failure(
+        diagnostic(
+          "external-scan-provider-conflict",
+          "External observations cannot replace a loaded scanner provider's evidence",
+        ),
+      );
+    }
+    if (
+      project.availability !== "available" ||
+      !project.scanners.some((scanner) => scanner.id === snapshot.value.source.id) ||
+      !scopesMatch(snapshot.value, project)
+    ) {
+      return failure(
+        diagnostic(
+          "external-scan-registration-mismatch",
+          "External observations do not match the registered project, scanner, and coverage",
+        ),
+      );
+    }
+    const key = JSON.stringify([project.id, snapshot.value.source.id]);
+    if (active.has(key) || reservations.has(key)) {
+      return failure(
+        diagnostic(
+          "scanner-session-conflict",
+          "A scanner execution is already active for this project and scanner",
+        ),
+      );
+    }
+    reservations.add(key);
+    try {
+      if (stopping)
+        return failure(
+          diagnostic("scanner-runtime-shutting-down", "Scanner runtime is shutting down"),
+        );
+      if (request.cancellation?.aborted)
+        return failure(
+          diagnostic("scanner-execution-cancelled", "Scanner execution was cancelled"),
+        );
+      const consumed = await Promise.resolve()
+        .then(() => options.consumer.consume(snapshot.value, new AbortController().signal))
+        .catch(() =>
+          failure(
+            diagnostic(
+              "scanner-handoff-consumer-failed",
+              "Completed scanner observations could not be consumed",
+            ),
+          ),
+        );
+      if (!consumed.ok) return consumed;
+      return success(
+        Object.freeze({
+          diagnostics:
+            consumed.value === undefined
+              ? Object.freeze([])
+              : boundedDiagnostics(consumed.value.diagnostics, selected.maxDiagnostics),
+          project: Object.freeze({ id: project.id, name: project.name }),
+          recordCount: snapshot.value.records.length,
+          ...(consumed.value === undefined ? {} : { recovery: consumed.value.recovery }),
+          scannerId: snapshot.value.source.id,
+          status:
+            consumed.value === undefined ? ("completed" as const) : ("indeterminate" as const),
+        }),
+      );
+    } finally {
+      reservations.delete(key);
+    }
+  };
 
   const start = async (
     request: ScannerExecutionRequest,
@@ -448,5 +569,5 @@ export function createScannerExecutionRuntime(
     sessions.forEach((session) => session.cancel());
     return Object.freeze(await Promise.all(sessions.map((session) => session.completion)));
   };
-  return Object.freeze({ cancelAll, recover, start });
+  return Object.freeze({ cancelAll, recover, start, submit });
 }

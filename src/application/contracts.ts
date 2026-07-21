@@ -92,22 +92,27 @@ export interface BoundedPageRequest {
   readonly limit: number;
 }
 
+export interface ComponentReadFilters {
+  readonly scale?: StandardComponentScale;
+  readonly shared?: boolean;
+}
+
 export interface GetComponentRequest {
   readonly id: string;
   readonly relationships: BoundedPageRequest;
 }
 
-export interface ListComponentsRequest extends BoundedPageRequest {}
+export interface ListComponentsRequest extends BoundedPageRequest, ComponentReadFilters {}
 
-export interface ListRootComponentsRequest extends BoundedPageRequest {}
+export interface ListRootComponentsRequest extends BoundedPageRequest, ComponentReadFilters {}
 
-export interface ListChildComponentsRequest extends BoundedPageRequest {
+export interface ListChildComponentsRequest extends BoundedPageRequest, ComponentReadFilters {
   readonly parent: string;
 }
 
 export interface ExportBlueprintRequest extends BoundedPageRequest {}
 
-export interface SearchBlueprintRequest extends BoundedPageRequest {
+export interface SearchBlueprintRequest extends BoundedPageRequest, ComponentReadFilters {
   readonly text: string;
 }
 

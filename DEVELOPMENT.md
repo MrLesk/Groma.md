@@ -47,9 +47,21 @@ processing the stylesheet during the build. For uncompiled development (`bun run
 `bunfig.toml` registers the same plugin under `[serve.static]`; the compiled executable is
 built with bunfig autoloading disabled and never reads that file at runtime.
 
+`groma export` reuses that embedded client rather than maintaining another renderer. It pages the
+shared blueprint export read to a fixed 2,500-component ceiling, bakes the snapshot into one HTML
+file, and inlines the compiled JavaScript and CSS. The file's content-security policy disables
+connections; its in-memory snapshot adapter supports navigation, inspection, and bounded search
+without a listener, canonical writes, or browser persistence. An export over the component or
+16 MiB artifact bound fails instead of silently truncating.
+
 The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
 application and host capabilities, never through ambient build-tool files.
+
+Independent scanner processes can write the public SDK's completed observation snapshot as one
+bounded JSON document and submit it with `groma scan --input <file|->` or `groma scan --stdin`.
+See [`src/plugin-sdk/README.md`](src/plugin-sdk/README.md) for the minimal shape and registration
+boundary. Submission is a local atomic handoff, not a streaming protocol.
 
 ## Change Review
 
@@ -204,5 +216,6 @@ binary — Bun's embedded HTTP server with a bundled React, React Flow, dagre, a
 bound to the loopback interface. The initial canvas lays out only its bounded root page; every
 deeper scale enters the deterministic layout through an explicit bounded child-page action.
 
-The bounded scan, reconciliation, and local visual loop is implemented. Plans, Git history views,
-browser editing, and replacing bare `groma` with the web surface remain later work.
+The bounded scan, reconciliation, local visual loop, and protected loopback mutation API are
+implemented. Plans, Git history views, browser editing UI, and replacing bare `groma` with the web
+surface remain later work.

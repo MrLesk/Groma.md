@@ -46,6 +46,9 @@ exactly what is real now.
   hierarchy, with recursive folding, focus, and component detail.
 - `groma web` serves an interactive web blueprint embedded in the same binary, on your machine
   only (127.0.0.1), reading the blueprint through the same bounded operations as the CLI.
+- `groma export` writes the same embedded client and a finite blueprint snapshot to one
+  deterministic `blueprint.html`. The exported map is read-only, opens directly from disk without
+  Groma or a server, and makes no network requests. Use `--output <file>` to choose another path.
 - `groma instructions` prints built-in working guides for humans and AI agents, before any
   workspace exists.
 - `project add` registers additional codebases and scanner coverage explicitly.
@@ -91,7 +94,7 @@ bun run build         # compile the single-file executable to dist/groma
 bun run install:local # put the compiled groma command on your PATH
 ```
 
-After `bun run install:local`, `groma`, `groma scan`, and `groma web` work from any
+After `bun run install:local`, `groma`, `groma scan`, `groma web`, and `groma export` work from any
 directory, exactly like the compiled binary in `dist/`.
 
 To create the unpublished four-target preview package, run `bun run package`. It writes

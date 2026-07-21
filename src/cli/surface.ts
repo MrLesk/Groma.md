@@ -40,6 +40,8 @@ export interface CliSurfaceController {
   readonly surface: HostSurface;
 }
 
+export type CliExportWriter = (output: string, html: string) => Promise<string>;
+
 function diagnostic(code: string, message: string): CliDiagnostic {
   return Object.freeze({ code, message });
 }
@@ -72,6 +74,13 @@ function diagnosticExit(diagnostics: readonly { readonly code: string }[]): numb
   if (codes.includes("scanner-execution-cancelled")) return CLI_EXIT.cancelled;
   if (codes.includes("project-registry-state-indeterminate")) {
     return CLI_EXIT.indeterminate;
+  }
+  if (
+    codes.some(
+      (code) => code.includes("observation") || code === "external-scan-registration-mismatch",
+    )
+  ) {
+    return CLI_EXIT.semantic;
   }
   if (
     codes.some(
@@ -373,6 +382,60 @@ async function serveWeb(
       );
 }
 
+async function exportBlueprint(
+  command: Extract<CliCommand, { readonly kind: "export" }>,
+  context: HostSurfaceContext,
+  writer: CliExportWriter,
+): Promise<CliCommandResult> {
+  const status = context.workspace.status();
+  if (status.state === "missing") {
+    return failedResult(
+      command,
+      CLI_EXIT.workspace,
+      "web-export-workspace-missing",
+      "No Groma workspace exists here; run groma init first",
+    );
+  }
+  const operations = workspaceOperations(command, context);
+  if (!("listRoots" in operations)) return operations;
+  const [{ webFrontend }, { renderStaticBlueprintBundle }] = await Promise.all([
+    import("../web/assets.ts"),
+    import("../web/export.ts"),
+  ]);
+  const rendered = await renderStaticBlueprintBundle({ frontend: webFrontend, operations });
+  if (!rendered.ok) {
+    return failedResult(
+      command,
+      CLI_EXIT.infrastructure,
+      rendered.diagnostic.code,
+      rendered.diagnostic.message,
+    );
+  }
+  let artifact: string;
+  try {
+    artifact = await writer(command.output, rendered.value.html);
+  } catch {
+    return failedResult(
+      command,
+      CLI_EXIT.infrastructure,
+      "web-export-write-failed",
+      "The self-contained blueprint export could not be written",
+    );
+  }
+  return result(
+    command,
+    CLI_EXIT.success,
+    true,
+    Object.freeze({
+      artifact,
+      bytes: rendered.value.bytes,
+      components: rendered.value.componentCount,
+      generation: rendered.value.generation,
+      status: "written",
+    }),
+  );
+}
+
 async function execute(
   invocation: CliInvocation,
   context: HostSurfaceContext,
@@ -380,10 +443,22 @@ async function execute(
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
+  exportWriter?: CliExportWriter,
 ): Promise<CliCommandResult> {
   const command = invocation.command;
   if (command.kind === "overview") return overview(command, context, terminal);
   if (command.kind === "web") return serveWeb(command, context, webReady);
+  if (command.kind === "export") {
+    if (exportWriter === undefined) {
+      return failedResult(
+        command,
+        CLI_EXIT.infrastructure,
+        "web-export-writer-unavailable",
+        "The self-contained blueprint export writer is unavailable",
+      );
+    }
+    return exportBlueprint(command, context, exportWriter);
+  }
   if (command.kind === "init") {
     const initialized = await context.initialization.initialize(Object.freeze({}));
     if (!initialized.ok) return applicationResult(command, initialized);
@@ -396,6 +471,26 @@ async function execute(
     return result(command, exitCode, exitCode === CLI_EXIT.success, initialized);
   }
   if (command.kind === "scan") {
+    if (command.input !== undefined) {
+      const request = await structuredRequest(command, command.input, reader, context.cancellation);
+      if (!request.ok) return request.result;
+      const submitted = await context.scanners.submit({
+        cancellation: context.cancellation,
+        snapshot: request.value,
+      });
+      if (!submitted.ok) return applicationResult(command, submitted);
+      const report = submitted.value;
+      const value = Object.freeze({
+        diagnostics: report.diagnostics,
+        observations: Object.freeze({ records: report.recordCount }),
+        project: report.project,
+        ...(report.recovery === undefined ? {} : { recovery: report.recovery }),
+        scanner: report.scannerId,
+        status: report.status,
+      });
+      const exitCode = report.status === "completed" ? CLI_EXIT.success : CLI_EXIT.indeterminate;
+      return result(command, exitCode, exitCode === CLI_EXIT.success, value);
+    }
     if (confirmInit !== undefined && context.workspace.status().state === "missing") {
       const accepted = await confirmInit(
         "No groma workspace exists here. Create it with groma init and continue the scan? [y/N] ",
@@ -571,6 +666,8 @@ async function execute(
         await operations.searchBlueprint({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
           text: command.text,
         }),
       );
@@ -605,6 +702,8 @@ async function execute(
         await operations.listComponents({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-roots":
@@ -613,6 +712,8 @@ async function execute(
         await operations.listRoots({
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-children":
@@ -622,6 +723,8 @@ async function execute(
           ...(command.cursor === undefined ? {} : { cursor: command.cursor }),
           limit: command.limit,
           parent: command.parent,
+          ...(command.scale === undefined ? {} : { scale: command.scale }),
+          ...(command.shared === undefined ? {} : { shared: command.shared }),
         }),
       );
     case "component-update": {
@@ -674,6 +777,7 @@ export function createCliSurfaceController(
   terminal: { readonly stdin: boolean; readonly stdout: boolean },
   webReady?: (url: string) => void,
   confirmInit?: (question: string) => Promise<boolean>,
+  exportWriter?: CliExportWriter,
 ): CliSurfaceController {
   let captured: CliCommandResult | undefined;
   let completion: Promise<void> | undefined;
@@ -685,7 +789,15 @@ export function createCliSurfaceController(
     start(context: HostSurfaceContext) {
       if (started) throw new Error("CLI surface can start only once");
       started = true;
-      completion = execute(invocation, context, reader, terminal, webReady, confirmInit).then(
+      completion = execute(
+        invocation,
+        context,
+        reader,
+        terminal,
+        webReady,
+        confirmInit,
+        exportWriter,
+      ).then(
         (value) => {
           if (!stopped || longRunning) captured = value;
         },

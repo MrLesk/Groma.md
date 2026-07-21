@@ -1,9 +1,8 @@
 import {
   observedContainmentRelationshipType,
-  createObservationSession,
+  canonicalizeCompletedObservationSnapshot,
   createOpaqueIdSource,
   failure,
-  observationSessionApiVersion,
   parseContentRevision,
   parseEntityId,
   parseGraphGeneration,
@@ -222,49 +221,11 @@ function canonicalSnapshot(
   value: unknown,
   maximumRecords: number,
 ): Result<CompletedObservationSnapshot> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  if (
-    Object.keys(record).sort().join(",") !==
-      "apiVersion,coverage,epoch,projectId,records,scopes,source" ||
-    record.apiVersion !== observationSessionApiVersion ||
-    !Array.isArray(record.records) ||
-    record.records.length > maximumRecords
-  ) {
-    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
-  }
-  const session = createObservationSession(
-    {
-      apiVersion: observationSessionApiVersion,
-      epoch: record.epoch as string,
-      projectId: record.projectId as string,
-      scopes: record.scopes as CompletedObservationSnapshot["scopes"],
-      source: record.source as CompletedObservationSnapshot["source"],
-    },
-    { maxRecords: maximumRecords },
-  );
-  if (!session.ok)
-    return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
-  let sequence = 0;
-  for (let index = 0; index < record.records.length; index += 2_048) {
-    sequence += 1;
-    const submitted = session.value.submitBatch({
-      epoch: record.epoch as string,
-      records: record.records.slice(index, index + 2_048) as readonly ObservationRecord[],
-      sequence,
-    });
-    if (!submitted.ok)
-      return failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
-  }
-  const completed = session.value.complete({
-    coverage: record.coverage as CompletedObservationSnapshot["coverage"],
-    epoch: record.epoch as string,
-    sequence: sequence + 1,
+  const snapshot = canonicalizeCompletedObservationSnapshot(value, {
+    maxRecords: maximumRecords,
   });
-  return completed.ok
-    ? completed
+  return snapshot.ok
+    ? snapshot
     : failure(diagnostic("invalid-evidence-state", "Stored evidence snapshot is malformed"));
 }
 

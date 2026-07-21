@@ -39,6 +39,7 @@ import {
   isHostProxy,
 } from "./runtime-validation.ts";
 import { containCapabilityValue } from "../application/capability-value.ts";
+import { parseWorkspaceResourceLocator } from "../persistence/index.ts";
 
 export interface RunHostOptions {
   readonly context: HostProcessContext;
@@ -172,7 +173,7 @@ function cancelled(signal?: HostSignal): HostRunOutcome {
 }
 
 type ValidatedRecoveryOutcome =
-  | { readonly state: "failed" }
+  | { readonly diagnostics?: readonly Diagnostic[]; readonly state: "failed" }
   | { readonly report: WorkspaceRecoveryReport; readonly state: "completed" };
 
 type ObservedBootstrapOutcome =
@@ -304,7 +305,31 @@ function validatedRecoveryOutcome(value: unknown): Result<ValidatedRecoveryOutco
       100,
       "invalid-host-recovery-result",
     );
-    return diagnostics.ok ? success(Object.freeze({ state: "failed" })) : diagnostics;
+    if (!diagnostics.ok) return diagnostics;
+    const source = diagnostics.value.length === 1 ? diagnostics.value[0] : undefined;
+    const locator = source?.details?.locator;
+    const kind = source?.details?.kind;
+    const parsedLocator =
+      typeof locator === "string" ? parseWorkspaceResourceLocator(locator) : undefined;
+    const actionable =
+      source?.code === "unexpected-intent-resource" &&
+      parsedLocator?.ok === true &&
+      String(parsedLocator.value).startsWith("groma/components/") &&
+      (kind === "file" || kind === "directory" || kind === "link" || kind === "other")
+        ? Object.freeze([
+            Object.freeze({
+              code: "unexpected-intent-resource",
+              details: Object.freeze({ kind, locator: String(parsedLocator.value) }),
+              message: `Component folders contain an unexpected ${kind} at ${parsedLocator.value}; remove it or move it outside groma/components`,
+            }),
+          ])
+        : undefined;
+    return success(
+      Object.freeze({
+        ...(actionable === undefined ? {} : { diagnostics: actionable }),
+        state: "failed",
+      }),
+    );
   }
   if (result.value.ok !== true) {
     return failure(
@@ -561,7 +586,7 @@ function canonicalPluginLifecycle(value: unknown): Result<ContainedPluginLifecyc
 function canonicalScannerRuntime(value: unknown): Result<ScannerExecutionRuntime> {
   const scanners = inspectHostRecord(
     value,
-    [["cancelAll", "recover", "start"]],
+    [["cancelAll", "recover", "start", "submit"]],
     "invalid-host-composition",
     "Scanner runtime",
   );
@@ -569,7 +594,8 @@ function canonicalScannerRuntime(value: unknown): Result<ScannerExecutionRuntime
     !scanners.ok ||
     typeof scanners.value.cancelAll !== "function" ||
     typeof scanners.value.recover !== "function" ||
-    typeof scanners.value.start !== "function"
+    typeof scanners.value.start !== "function" ||
+    typeof scanners.value.submit !== "function"
   ) {
     return failure(diagnostic("invalid-host-composition", "Scanner runtime is malformed"));
   }
@@ -577,12 +603,15 @@ function canonicalScannerRuntime(value: unknown): Result<ScannerExecutionRuntime
   const cancelAll = scanners.value.cancelAll as ScannerExecutionRuntime["cancelAll"];
   const recover = scanners.value.recover as ScannerExecutionRuntime["recover"];
   const start = scanners.value.start as ScannerExecutionRuntime["start"];
+  const submit = scanners.value.submit as ScannerExecutionRuntime["submit"];
   return success(
     Object.freeze({
       cancelAll: () => intrinsicReflectApply(cancelAll, receiver, []),
       recover: () => intrinsicReflectApply(recover, receiver, []),
       start: (request: Parameters<ScannerExecutionRuntime["start"]>[0]) =>
         intrinsicReflectApply(start, receiver, [request]),
+      submit: (request: Parameters<ScannerExecutionRuntime["submit"]>[0]) =>
+        intrinsicReflectApply(submit, receiver, [request]),
     }),
   );
 }
@@ -1529,10 +1558,10 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                       "Workspace recovery failed",
                     );
                   } else if (recovered.recovered.state === "failed") {
-                    outcome = startupFailure(
-                      "workspace-recovery-failed",
-                      "Workspace recovery failed",
-                    );
+                    outcome =
+                      recovered.recovered.diagnostics === undefined
+                        ? startupFailure("workspace-recovery-failed", "Workspace recovery failed")
+                        : startupFailures(recovered.recovered.diagnostics);
                   } else {
                     recovery = "completed";
                   }
@@ -1551,6 +1580,7 @@ export async function runHost(options: RunHostOptions): Promise<HostRunOutcome> 
                     scanners: Object.freeze({
                       recover: composition.scanners.recover,
                       start: composition.scanners.start,
+                      submit: composition.scanners.submit,
                     }),
                     workspace: composition.workspace,
                   });

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -149,6 +149,28 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
     if (!roots.ok || rootsBody.ok !== true) {
       throw new Error("Compiled web server did not answer a bounded read");
     }
+    const componentId = "ent_00000000000000000000000000000001";
+    const created = await fetch(`${url}api/component/create`, {
+      body: JSON.stringify({ component: { id: componentId, name: "HTTP smoke" } }),
+      headers: { "Content-Type": "application/json", Origin: new URL(url).origin },
+      method: "POST",
+    });
+    const createdBody = (await created.json()) as { readonly status?: unknown };
+    if (!created.ok || createdBody.status !== "committed") {
+      throw new Error("Compiled web server did not commit a same-origin mutation");
+    }
+    const reread = await fetch(`${url}api/component?id=${componentId}&limit=5`);
+    const rereadBody = (await reread.json()) as {
+      readonly ok?: unknown;
+      readonly value?: { readonly item?: { readonly component?: { readonly name?: unknown } } };
+    };
+    if (
+      !reread.ok ||
+      rereadBody.ok !== true ||
+      rereadBody.value?.item?.component?.name !== "HTTP smoke"
+    ) {
+      throw new Error("Compiled web server did not reread its committed mutation");
+    }
     child.kill("SIGINT");
     const exitCode = await child.exited;
     // Windows signal emulation terminates without the graceful shutdown path.
@@ -158,6 +180,33 @@ async function verifyWebServer(executable: string, cwd: string): Promise<void> {
   } finally {
     clearTimeout(deadline);
     reader.releaseLock();
+  }
+}
+
+async function verifyStaticExport(executable: string, cwd: string): Promise<void> {
+  const firstPath = path.join(cwd, "team-blueprint.html");
+  const secondPath = path.join(cwd, "team-blueprint-copy.html");
+  const first = await runJson(executable, ["export", "--output", firstPath], cwd);
+  const second = await runJson(executable, ["export", "--output", secondPath], cwd);
+  if (first.ok !== true || second.ok !== true) {
+    throw new Error("Compiled static export did not complete");
+  }
+  const [firstHtml, secondHtml] = await Promise.all([
+    readFile(firstPath, "utf8"),
+    readFile(secondPath, "utf8"),
+  ]);
+  if (firstHtml !== secondHtml) {
+    throw new Error("Compiled static export was not deterministic");
+  }
+  if (
+    !firstHtml.includes('data-groma-export="read-only"') ||
+    !firstHtml.includes("groma-read-only-blueprint-v1") ||
+    !firstHtml.includes("react-flow-dagre") ||
+    !firstHtml.includes("connect-src 'none'") ||
+    /<script\b[^>]*\bsrc=/i.test(firstHtml) ||
+    /<link\b[^>]*\brel=["']stylesheet["']/i.test(firstHtml)
+  ) {
+    throw new Error("Compiled static export was not a self-contained read-only client");
   }
 }
 
@@ -194,6 +243,94 @@ if (!options.skipRun) {
   if (scan.ok !== true || scanResult?.status !== "completed") {
     throw new Error("Compiled scan workflow did not complete");
   }
+  const project = await runJson(
+    options.executable,
+    ["project", "get", "project.default"],
+    workspace,
+  );
+  const projectResult = project.result as
+    | {
+        readonly value?: {
+          readonly coverage?: unknown;
+          readonly id?: unknown;
+          readonly name?: unknown;
+          readonly revision?: unknown;
+          readonly scanners?: unknown;
+          readonly source?: unknown;
+        };
+      }
+    | undefined;
+  const registered = projectResult?.value;
+  if (
+    project.ok !== true ||
+    registered?.id !== "project.default" ||
+    typeof registered.name !== "string" ||
+    typeof registered.revision !== "string" ||
+    typeof registered.source !== "string" ||
+    !Array.isArray(registered.coverage) ||
+    !Array.isArray(registered.scanners)
+  ) {
+    throw new Error("Compiled project registration could not be read");
+  }
+  const registrationFile = path.join(root, "external-project.json");
+  await writeFile(
+    registrationFile,
+    JSON.stringify({
+      coverage: registered.coverage,
+      name: registered.name,
+      scanners: [...registered.scanners, { configuration: {}, id: "example.external" }],
+      source: registered.source,
+    }),
+  );
+  await runJson(
+    options.executable,
+    [
+      "project",
+      "update",
+      "project.default",
+      "--revision",
+      registered.revision,
+      "--input",
+      registrationFile,
+    ],
+    workspace,
+  );
+  const externalFile = path.join(root, "external-observations.json");
+  await writeFile(
+    externalFile,
+    JSON.stringify({
+      apiVersion: "groma.observation/v1",
+      coverage: [{ kinds: ["component-candidate"], scope: "workspace", state: "complete" }],
+      epoch: "epoch_external_000000000000000000000000",
+      projectId: "project.default",
+      records: [
+        {
+          candidate: { name: "External worker", type: "service" },
+          key: "component.external-worker",
+          kind: "component-candidate",
+          provenance: [
+            {
+              fingerprint: `sha256:${"a".repeat(64)}`,
+              resource: "external.ts",
+              scope: "workspace",
+            },
+          ],
+          scope: "workspace",
+        },
+      ],
+      scopes: registered.coverage,
+      source: { id: "example.external", instance: "default", version: "1.0.0" },
+    }),
+  );
+  const external = await runJson(options.executable, ["scan", "--input", externalFile], workspace);
+  const externalResult = external.result as Record<string, unknown> | undefined;
+  if (
+    external.ok !== true ||
+    externalResult?.status !== "completed" ||
+    externalResult.scanner !== "example.external"
+  ) {
+    throw new Error("Compiled external scan workflow did not complete");
+  }
   const components = await runJson(
     options.executable,
     ["component", "list", "--limit", "10"],
@@ -205,7 +342,7 @@ if (!options.skipRun) {
     components.ok !== true ||
     componentResult?.ok !== true ||
     !Array.isArray(componentResult.value?.items) ||
-    componentResult.value.items.length === 0
+    componentResult.value.items.length < 2
   ) {
     throw new Error("Compiled scan workflow did not produce a blueprint component");
   }
@@ -224,4 +361,5 @@ if (!options.skipRun) {
     throw new Error("Compiled visual overview was not bounded or evidence-grounded");
   }
   await verifyWebServer(options.executable, workspace);
+  await verifyStaticExport(options.executable, workspace);
 }

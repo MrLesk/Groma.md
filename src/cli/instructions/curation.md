@@ -33,5 +33,5 @@ rebinds identity.
   or `informs`, with an optional description.
 - When Groma cannot tell whether two things are the same component, it stops and
   reports instead of guessing. Resolve ambiguity explicitly with update or merge.
-- Never edit the files under `groma/` directly; the CLI keeps metadata, ordering,
-  and history consistent.
+- Never edit the files under `groma/` directly; shared operations behind the CLI and
+  protected loopback web API keep metadata, ordering, and history consistent.

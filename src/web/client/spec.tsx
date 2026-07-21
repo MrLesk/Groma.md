@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import {
   fetchComponent,
+  isStaticBlueprintSnapshot,
   type ApiComponentScale,
   type ApiComponentRead,
   type ApiFailure,
@@ -37,15 +38,15 @@ function ItemList({
   items,
 }: {
   label: string;
-  items: readonly { readonly name: string }[] | undefined;
+  items: readonly { readonly id: string; readonly name?: string }[] | undefined;
 }) {
   if (items === undefined || items.length === 0) return null;
   return (
     <Field label={label}>
       <ul className="m-0 list-none p-0">
         {items.map((item) => (
-          <li key={item.name} className="border-b border-fine py-0.5 last:border-b-0">
-            {item.name}
+          <li key={item.id} className="border-b border-fine py-0.5 last:border-b-0">
+            {item.name ?? item.id}
           </li>
         ))}
       </ul>
@@ -80,6 +81,7 @@ export interface SpecPanelProps {
 }
 
 export function SpecPanel({ onClose, resolveDisplay, selectedId }: SpecPanelProps) {
+  const exported = isStaticBlueprintSnapshot();
   const [detail, setDetail] = useState<DetailState>(IDLE);
 
   useEffect(() => {
@@ -197,9 +199,11 @@ export function SpecPanel({ onClose, resolveDisplay, selectedId }: SpecPanelProp
           <ItemList label="Outputs" items={component.outputs} />
           <ItemList label="Actions" items={component.actions} />
           <Field label="Evidence">
-            {detail.read !== undefined && detail.read.evidence.length > 0
-              ? `Scan evidence from ${detail.read.evidence.length} source${detail.read.evidence.length === 1 ? "" : "s"}`
-              : "No scan evidence recorded"}
+            {exported
+              ? "Evidence detail is not included in this bounded export"
+              : detail.read !== undefined && detail.read.evidence.length > 0
+                ? `Scan evidence from ${detail.read.evidence.length} source${detail.read.evidence.length === 1 ? "" : "s"}`
+                : "No scan evidence recorded"}
           </Field>
           <Field label="Relationships">
             {detail.relationships.length === 0 ? (

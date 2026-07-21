@@ -1,3 +1,5 @@
+import type { StandardComponentScale } from "../standard-model/index.ts";
+
 export const CLI_MAX_ARGUMENTS = 256;
 export const CLI_MAX_ARGUMENT_CHARACTERS = 65_536;
 export const CLI_MAX_CURSOR_CHARACTERS = 4_096;
@@ -25,14 +27,21 @@ export type CliFormat = "json" | "plain";
 export type CliInputSource =
   { readonly kind: "file"; readonly path: string } | { readonly kind: "stdin" };
 
+export interface CliComponentFilters {
+  readonly scale?: StandardComponentScale;
+  readonly shared?: boolean;
+}
+
 export type CliCommand =
   | { readonly kind: "help" }
   | { readonly kind: "version" }
   | { readonly kind: "overview" }
   | { readonly kind: "init" }
   | { readonly guide?: string; readonly kind: "instructions" }
+  | { readonly kind: "export"; readonly output: string }
   | { readonly kind: "web"; readonly port: number }
   | {
+      readonly input?: CliInputSource;
       readonly kind: "scan";
       readonly projectId?: string;
       readonly scannerId?: string;
@@ -46,6 +55,8 @@ export type CliCommand =
       readonly cursor?: string;
       readonly kind: "blueprint-search";
       readonly limit: number;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
       readonly text: string;
     }
   | {
@@ -81,12 +92,16 @@ export type CliCommand =
       readonly cursor?: string;
       readonly kind: "component-list" | "component-roots";
       readonly limit: number;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
     }
   | {
       readonly cursor?: string;
       readonly kind: "component-children";
       readonly limit: number;
       readonly parent: string;
+      readonly scale?: StandardComponentScale;
+      readonly shared?: boolean;
     }
   | { readonly input: CliInputSource; readonly kind: "component-update" }
   | {
@@ -180,6 +195,8 @@ export function commandName(command: CliCommand): string {
       return "component reparent";
     case "component-remove":
       return "component remove";
+    case "export":
+      return "export";
     case "project-add":
       return "project add";
     case "project-get":
