@@ -779,6 +779,119 @@ export function api() { return model; }
         ),
       ).toBeFalse();
     }
+    const pnpm = await scan({
+      "package.json": JSON.stringify({ name: "@fixture/pnpm-root" }),
+      "packages/member/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/pnpm-member",
+      }),
+      "packages/member/src/index.ts": "export function member() { return true; }\n",
+      "pnpm-workspace.yaml": [
+        "packages:",
+        "  - .",
+        "  - packages/*",
+        "onlyBuiltDependencies:",
+        "  - esbuild",
+        "",
+      ].join("\n"),
+    });
+    expect(pnpm.result.ok).toBeTrue();
+    expect(pnpm.snapshot?.coverage[0]?.state).toBe("complete");
+    const pnpmNamesByKey = new Map(
+      pnpm.snapshot?.records.flatMap((record) =>
+        record.kind === "component-candidate" ? [[record.key, record.candidate.name]] : [],
+      ),
+    );
+    expect(
+      pnpm.snapshot?.records.some(
+        (record) =>
+          record.kind === "relationship" &&
+          record.relationshipType === "contains" &&
+          pnpmNamesByKey.get(record.from.key) === "@fixture/pnpm-root" &&
+          pnpmNamesByKey.get(record.to.key) === "@fixture/pnpm-member",
+      ),
+    ).toBeTrue();
+
+    for (const pnpmWorkspace of ["packages:\n  - packages/b\n", "packages: [packages/b\n"]) {
+      const refused = await scan({
+        "package.json": JSON.stringify({
+          name: "@fixture/conflicting-root",
+          workspaces: ["packages/a"],
+        }),
+        "packages/a/package.json": JSON.stringify({
+          exports: "./src/index.ts",
+          name: "@fixture/a",
+        }),
+        "packages/a/src/index.ts": 'import "@fixture/conflicting-root";\n',
+        "packages/b/package.json": JSON.stringify({ name: "@fixture/b" }),
+        "pnpm-workspace.yaml": pnpmWorkspace,
+      });
+      expect(refused.result.ok).toBeTrue();
+      expect(refused.snapshot?.coverage[0]?.state).toBe("partial");
+      const refusedNamesByKey = new Map(
+        refused.snapshot?.records.flatMap((record) =>
+          record.kind === "component-candidate" ? [[record.key, record.candidate.name]] : [],
+        ),
+      );
+      expect(
+        refused.snapshot?.records.some(
+          (record) =>
+            record.kind === "relationship" &&
+            record.relationshipType === "contains" &&
+            refusedNamesByKey.get(record.from.key) === "@fixture/conflicting-root" &&
+            ["@fixture/a", "@fixture/b"].includes(refusedNamesByKey.get(record.to.key) ?? ""),
+        ),
+      ).toBeFalse();
+      expect(
+        refused.snapshot?.records.some(
+          (record) =>
+            record.kind === "component-candidate" &&
+            record.candidate.name === "@fixture/conflicting-root" &&
+            record.candidate.type === "external",
+        ),
+      ).toBeTrue();
+    }
+
+    const emptyWorkspace = await scan({
+      "nested/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/nested",
+      }),
+      "nested/src/index.ts": 'import "@fixture/empty-root";\n',
+      "package.json": JSON.stringify({ name: "@fixture/empty-root", workspaces: [] }),
+    });
+    expect(emptyWorkspace.result.ok).toBeTrue();
+    expect(
+      emptyWorkspace.snapshot?.records.some(
+        (record) =>
+          record.kind === "component-candidate" &&
+          record.candidate.name === "@fixture/empty-root" &&
+          record.candidate.type === "external",
+      ),
+    ).toBeTrue();
+
+    const excludedPnpmMember = await scan({
+      "package.json": JSON.stringify({ name: "@fixture/exclusion-root" }),
+      "packages/included/package.json": JSON.stringify({ name: "@fixture/included" }),
+      "packages/legacy/package.json": JSON.stringify({ name: "@fixture/legacy" }),
+      "pnpm-workspace.yaml": "packages:\n  - packages/*\n  - '!packages/legacy'\n",
+    });
+    expect(excludedPnpmMember.result.ok).toBeTrue();
+    expect(excludedPnpmMember.snapshot?.coverage[0]?.state).toBe("complete");
+    const excludedNamesByKey = new Map(
+      excludedPnpmMember.snapshot?.records.flatMap((record) =>
+        record.kind === "component-candidate" ? [[record.key, record.candidate.name]] : [],
+      ),
+    );
+    const excludedContainmentNames = excludedPnpmMember.snapshot?.records.flatMap((record) =>
+      record.kind === "relationship" &&
+      record.relationshipType === "contains" &&
+      excludedNamesByKey.get(record.from.key) === "@fixture/exclusion-root"
+        ? [excludedNamesByKey.get(record.to.key)]
+        : [],
+    );
+    expect(excludedContainmentNames).toEqual(["@fixture/included"]);
+
     const ambiguous = await scan({
       "package.json": JSON.stringify({
         name: "ambiguous-workspace",
@@ -3595,7 +3708,7 @@ export function shared() {}
     expect(imports.length).toBeLessThanOrEqual(1_000);
   });
 
-  test("fails stably before an oversized extraction can accumulate records", async () => {
+  test("publishes deterministic partial evidence when optional detail exceeds its bounds", async () => {
     const declarations = Array.from(
       { length: 4_100 },
       (_, index) => "export function action" + String(index).padStart(4, "0") + "() {}\n",
@@ -3608,12 +3721,36 @@ export function shared() {}
     const second = await scan(project);
 
     for (const result of [first, second]) {
-      expect(result.result.ok).toBeFalse();
-      if (!result.result.ok)
-        expect(result.result.diagnostics[0]?.code).toBe("typescript-scanner-budget-exceeded");
-      expect(result.emittedKeys).toEqual([]);
-      expect(result.session.inspect().state).toBe("failed");
+      expect(result.result.ok).toBeTrue();
+      expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+      expect(result.snapshot?.records.length).toBeLessThanOrEqual(4_096);
+      expect(result.session.inspect().state).toBe("completed");
     }
+    expect(first.snapshot).toEqual(second.snapshot);
+    expect(first.emittedKeys).toEqual(second.emittedKeys);
+  });
+
+  test("spreads bounded source detail deterministically across a large boundary inventory", async () => {
+    const project: Record<string, string> = {
+      "package.json": JSON.stringify({ name: "large-boundary-inventory" }),
+    };
+    for (let index = 0; index < 300; index += 1) {
+      const name = String(index).padStart(3, "0");
+      project[`src/domain-${name}/index.ts`] =
+        `export function action${name}() { return ${index}; }\n`;
+    }
+
+    const first = await scan(project);
+    const second = await scan(project);
+    expect(first.result.ok).toBeTrue();
+    expect(first.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(first.snapshot).toEqual(second.snapshot);
+    const fileActions =
+      first.snapshot?.records.filter(
+        (record) => record.kind === "action" && record.description === fileExportDescription,
+      ) ?? [];
+    expect(fileActions.length).toBeGreaterThan(0);
+    expect(fileActions.length).toBeLessThan(300);
   });
 
   test("fails cleanly for cancellation, provider failure, and rejected sinks", async () => {
