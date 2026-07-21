@@ -330,20 +330,39 @@ function webCommand(args: readonly string[]): CliCommand | undefined {
 }
 
 function scanCommand(args: readonly string[]): CliCommand | undefined {
+  let input: CliInputSource | undefined;
   let projectId: string | undefined;
   let scannerId: string | undefined;
-  for (let index = 0; index < args.length; index += 2) {
+  for (let index = 0; index < args.length; index += 1) {
     const option = args[index];
     const value = args[index + 1];
     if (option === "--project" && projectId === undefined && projectIdentifier(value)) {
       projectId = value;
+      index += 1;
     } else if (option === "--scanner" && scannerId === undefined && scannerIdentifier(value)) {
       scannerId = value;
+      index += 1;
+    } else if (option === "--stdin" && input === undefined) {
+      input = Object.freeze({ kind: "stdin" });
+    } else if (
+      option === "--input" &&
+      input === undefined &&
+      value !== undefined &&
+      value.length > 0 &&
+      value.length <= 4_096
+    ) {
+      input =
+        value === "-"
+          ? Object.freeze({ kind: "stdin" })
+          : Object.freeze({ kind: "file", path: value });
+      index += 1;
     } else {
       return undefined;
     }
   }
+  if (input !== undefined && (projectId !== undefined || scannerId !== undefined)) return undefined;
   return Object.freeze({
+    ...(input === undefined ? {} : { input }),
     kind: "scan" as const,
     ...(projectId === undefined ? {} : { projectId }),
     ...(scannerId === undefined ? {} : { scannerId }),

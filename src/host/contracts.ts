@@ -61,7 +61,9 @@ export interface WorkspaceAccessCapability extends WorkspaceInitializationCapabi
 }
 
 export type HostInitializationOperations = Readonly<Pick<ApplicationOperations, "initialize">>;
-export type ScannerSurfaceOperations = Readonly<Pick<ScannerExecutionRuntime, "recover" | "start">>;
+export type ScannerSurfaceOperations = Readonly<
+  Pick<ScannerExecutionRuntime, "recover" | "start" | "submit">
+>;
 
 export interface HostSurfaceContext {
   readonly cancellation: AbortSignal;

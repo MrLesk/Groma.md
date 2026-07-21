@@ -10,6 +10,7 @@ import {
   success,
   type AffectedGraphIdentities,
   type ContentRevision,
+  type Diagnostic,
   type EntityAlias,
   type EntityId,
   type GraphData,
@@ -235,6 +236,7 @@ const absoluteBounds: LocalTransactionJournalBounds = Object.freeze({
   maxTargetBytes: 64 * 1024 * 1024,
   maxTargets: 100_000,
 });
+const unexpectedIntentResourceFailures = new WeakMap<object, Diagnostic>();
 
 function diagnostic(
   code: string,
@@ -242,6 +244,61 @@ function diagnostic(
   details?: Readonly<Record<string, string | number | boolean>>,
 ) {
   return Object.freeze({ code, message, ...(details === undefined ? {} : { details }) });
+}
+
+function unexpectedIntentResourceFailure(value: unknown): Diagnostic | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  try {
+    const code = Object.getOwnPropertyDescriptor(value, "code");
+    const details = Object.getOwnPropertyDescriptor(value, "details");
+    if (
+      code === undefined ||
+      !("value" in code) ||
+      code.value !== "unexpected-intent-resource" ||
+      details === undefined ||
+      !("value" in details) ||
+      typeof details.value !== "object" ||
+      details.value === null
+    ) {
+      return undefined;
+    }
+    const kind = Object.getOwnPropertyDescriptor(details.value, "kind");
+    const locator = Object.getOwnPropertyDescriptor(details.value, "locator");
+    if (
+      kind === undefined ||
+      !("value" in kind) ||
+      typeof kind.value !== "string" ||
+      locator === undefined ||
+      !("value" in locator) ||
+      typeof locator.value !== "string" ||
+      !locator.value.startsWith("groma/components/")
+    ) {
+      return undefined;
+    }
+    const parsed = parseWorkspaceResourceLocator(locator.value);
+    if (!parsed.ok) return undefined;
+    return diagnostic(
+      "unexpected-intent-resource",
+      `Component folders contain an unexpected ${kind.value} at ${parsed.value}; remove it or move it outside groma/components`,
+      { kind: kind.value, locator: String(parsed.value) },
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function canonicalLoadError(source: unknown): Error {
+  const error = new Error("Canonical transaction state could not be loaded");
+  const actionable = unexpectedIntentResourceFailure(source);
+  if (actionable !== undefined) unexpectedIntentResourceFailures.set(error, actionable);
+  return error;
+}
+
+/** Returns only the actionable canonical-layout diagnostic retained from this local journal. */
+export function localTransactionUnexpectedIntentResource(error: unknown): Diagnostic | undefined {
+  return typeof error === "object" && error !== null
+    ? unexpectedIntentResourceFailures.get(error)
+    : undefined;
 }
 
 function compareText(left: string, right: string): number {
@@ -1795,7 +1852,7 @@ export function createLocalTransactionJournal(
     }
     if (loadError !== undefined) throw loadError;
     if (loaded === undefined) throw new Error("canonical transaction snapshot did not complete");
-    if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+    if (!loaded.ok) throw canonicalLoadError(loaded.diagnostics[0]);
     return snapshotInput(requested, after, loaded.value);
   };
 
@@ -1812,7 +1869,7 @@ export function createLocalTransactionJournal(
       const state = await readState();
       if (state.phase !== "idle") throw new Error("transaction state did not settle");
       const loaded = await options.adapter.load();
-      if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+      if (!loaded.ok) throw canonicalLoadError(loaded.diagnostics[0]);
       return snapshotInput(requested, state, loaded.value);
     } finally {
       await releaseTransactionLease(lease);
@@ -1842,7 +1899,7 @@ export function createLocalTransactionJournal(
         return Object.freeze({ reason: "generation", status: "conflict" });
       }
       const loaded = await options.adapter.load();
-      if (!loaded.ok) throw new Error(loaded.diagnostics[0]?.message);
+      if (!loaded.ok) throw canonicalLoadError(loaded.diagnostics[0]);
       const current = new Map(
         loaded.value.resources.map((entry) => [entry.resource, entry.revision]),
       );

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  observationSessionApiVersion,
   parseGraphGeneration,
   parseResourceKey,
   pluginRuntimeApiVersion,
@@ -19,19 +20,52 @@ import {
 import { createScannerExecutionRuntime } from "../scanner-runtime.ts";
 
 const scannerId = "official.test";
+const externalScannerId = "example.external";
 const project = Object.freeze({
   availability: "available" as const,
   coverage: Object.freeze([Object.freeze({ id: "source", resourceRoot: "." })]),
   id: "project_11111111111111111111111111111111",
   name: "Fixture",
   revision: `sha256:${"a".repeat(64)}`,
-  scanners: Object.freeze([Object.freeze({ configuration: Object.freeze({}), id: scannerId })]),
+  scanners: Object.freeze([
+    Object.freeze({ configuration: Object.freeze({}), id: externalScannerId }),
+    Object.freeze({ configuration: Object.freeze({}), id: scannerId }),
+  ]),
   source: ".",
 });
 const resources: ScannerProjectResources = Object.freeze({
   enumerate: async () =>
     success(Object.freeze({ entries: Object.freeze([]), truncatedByDepth: false })),
   read: async () => success(Object.freeze({ bytes: new Uint8Array() })),
+});
+const externalSnapshot: CompletedObservationSnapshot = Object.freeze({
+  apiVersion: observationSessionApiVersion,
+  coverage: Object.freeze([
+    Object.freeze({
+      kinds: Object.freeze(["component-candidate" as const]),
+      scope: "source",
+      state: "complete" as const,
+    }),
+  ]),
+  epoch: "epoch_external_000000000000000000000000",
+  projectId: project.id,
+  records: Object.freeze([
+    Object.freeze({
+      candidate: Object.freeze({ name: "External", type: "service" }),
+      key: "component.external",
+      kind: "component-candidate" as const,
+      provenance: Object.freeze([
+        Object.freeze({
+          fingerprint: "sha256:aaaaaaaaaaaaaaaa",
+          resource: "index.ts",
+          scope: "source",
+        }),
+      ]),
+      scope: "source",
+    }),
+  ]),
+  scopes: project.coverage,
+  source: Object.freeze({ id: externalScannerId, instance: "external", version: "1.0.0" }),
 });
 
 function valueOf<T>(result: Result<T>): T {
@@ -97,6 +131,60 @@ function runtime(
 }
 
 describe("scanner execution runtime", () => {
+  test("submits one registered complete external snapshot through the shared consumer", async () => {
+    let consumed: CompletedObservationSnapshot | undefined;
+    const execution = runtime(Object.freeze({ scan: async () => success(undefined) }), {
+      consumer: Object.freeze({
+        consume: async (snapshot: CompletedObservationSnapshot) => {
+          consumed = snapshot;
+          return success(undefined);
+        },
+      }),
+    });
+    expect(await execution.submit({ snapshot: externalSnapshot })).toMatchObject({
+      ok: true,
+      value: {
+        project: { id: project.id, name: project.name },
+        recordCount: 1,
+        scannerId: externalScannerId,
+        status: "completed",
+      },
+    });
+    expect(consumed).toMatchObject({ records: [{ key: "component.external" }] });
+    expect(
+      await execution.submit({
+        snapshot: {
+          ...externalSnapshot,
+          source: { ...externalSnapshot.source, id: scannerId },
+        },
+      }),
+    ).toMatchObject({ diagnostics: [{ code: "external-scan-provider-conflict" }], ok: false });
+    expect(
+      await execution.submit({
+        snapshot: {
+          ...externalSnapshot,
+          coverage: [{ kinds: ["component-candidate"], scope: "other", state: "complete" }],
+          records: [
+            {
+              ...externalSnapshot.records[0]!,
+              provenance: [{ ...externalSnapshot.records[0]!.provenance[0]!, scope: "other" }],
+              scope: "other",
+            },
+          ],
+          scopes: [{ id: "other", resourceRoot: "." }],
+        },
+      }),
+    ).toMatchObject({
+      diagnostics: [{ code: "external-scan-registration-mismatch" }],
+      ok: false,
+    });
+    const cancellation = new AbortController();
+    cancellation.abort();
+    expect(
+      await execution.submit({ cancellation: cancellation.signal, snapshot: externalSnapshot }),
+    ).toMatchObject({ diagnostics: [{ code: "scanner-execution-cancelled" }], ok: false });
+  });
+
   test("reserves a project and scanner before asynchronous resource setup", async () => {
     const setupStarted = deferred<void>();
     const setup = deferred<Result<ScannerProjectResources>>();
@@ -278,6 +366,14 @@ describe("scanner execution runtime", () => {
       diagnostics: [{ code: "transaction-outcome-indeterminate" }],
       recovery: { token: "prepared-fixture" },
       status: "indeterminate",
+    });
+    expect(await execution.submit({ snapshot: externalSnapshot })).toMatchObject({
+      ok: true,
+      value: {
+        diagnostics: [{ code: "transaction-outcome-indeterminate" }],
+        recovery: { token: "prepared-fixture" },
+        status: "indeterminate",
+      },
     });
   });
 });

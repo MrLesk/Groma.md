@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -45,6 +45,46 @@ async function composition(workspace: Awaited<ReturnType<typeof temporaryWorkspa
 }
 
 describe("official local application operations composition", () => {
+  test("recovers and serves canonical state alongside incidental operating-system metadata", async () => {
+    const workspace = await temporaryWorkspace();
+    const first = await composition(workspace);
+    expect(await first.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await first.operations.createComponent({
+        component: { id: conformanceIds.rootA, name: "Platform", type: "system" },
+      }),
+    ).toMatchObject({ status: "committed" });
+    expect(
+      await first.operations.createComponent({
+        component: {
+          id: conformanceIds.serviceA,
+          name: "API",
+          parent: conformanceIds.rootA,
+          type: "service",
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+    const canonicalRoot = path.join(workspace.workspaceRoot, "groma");
+    await mkdir(path.join(canonicalRoot, "intent"), { recursive: true });
+    await Promise.all([
+      writeFile(path.join(canonicalRoot, ".DS_Store"), "finder"),
+      writeFile(path.join(canonicalRoot, "components", ".DS_Store"), "finder"),
+      writeFile(path.join(canonicalRoot, "components", "Platform", "Thumbs.db"), "explorer"),
+      writeFile(path.join(canonicalRoot, "intent", "desktop.ini"), "shell"),
+    ]);
+
+    const restarted = await composition(workspace);
+
+    expect(await restarted.workspace.recover()).toMatchObject({ ok: true });
+    const components = await restarted.operations.listComponents({ limit: 10 });
+    expect(components.ok).toBeTrue();
+    if (!components.ok) return;
+    expect(components.value.items.map((item) => String(item.component.id))).toEqual([
+      conformanceIds.rootA,
+      conformanceIds.serviceA,
+    ]);
+  });
+
   test("atomically persists merge aliases and resolves chained references after restart", async () => {
     const workspace = await temporaryWorkspace();
     const first = await composition(workspace);
