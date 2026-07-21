@@ -110,7 +110,7 @@ describe("interactive map view-model", () => {
     expect(graph.nodes.every((node) => Number.isInteger(node.position.y))).toBeTrue();
   });
 
-  test("draws observed dependencies and keeps externals in their own band", () => {
+  test("draws observed dependencies and wires externals to the parts that use them", () => {
     const model = mergeRootsPage(
       emptyModel(),
       page([
@@ -124,10 +124,14 @@ describe("interactive map view-model", () => {
       model,
       visibleScale: undefined,
     });
-    const band = graph.nodes.find((node) => node.id === "band:external");
-    expect(band?.data.label).toBe("Depends on 1 external");
-    expect(graph.nodes.find((node) => node.id === "ent_lib")?.parentId).toBe("band:external");
-    expect(graph.nodes.find((node) => node.id === "ent_owned")?.parentId).toBeUndefined();
+    // No band: borrowed code is a first-class node wired to its consumer, placed
+    // to the right of the parts that use it rather than in a detached tray.
+    expect(graph.nodes.some((node) => node.id === "band:external")).toBe(false);
+    const external = graph.nodes.find((node) => node.id === "ent_lib");
+    const owned = graph.nodes.find((node) => node.id === "ent_owned");
+    expect(external?.parentId).toBeUndefined();
+    expect(owned?.parentId).toBeUndefined();
+    expect(external!.position.x).toBeGreaterThan(owned!.position.x);
     const edge = graph.edges[0];
     expect(edge?.id).toBe("depends:ent_owned:ent_lib");
     expect(edge?.className).toContain("groma-edge--external");
@@ -135,7 +139,6 @@ describe("interactive map view-model", () => {
     // one reached for are opposite kinds of thing, and one total would hide that.
     // Borrowed code is counted apart from the system's own parts, so a card's
     // "uses" can always be reconciled against the siblings drawn beside it.
-    const owned = graph.nodes.find((node) => node.id === "ent_owned");
     expect(owned?.data).toMatchObject({
       borrows: 1,
       dependents: 0,

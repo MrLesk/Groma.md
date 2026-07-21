@@ -141,9 +141,9 @@ export function SpecPanel({ onClose, resolveDisplay, selectedId }: SpecPanelProp
       aria-label="Component detail"
       aria-live="polite"
       data-canvas-keys="skip"
-      className="absolute top-4 right-4 z-10 max-h-[calc(100vh-104px)] w-72 overflow-auto border-[1.5px] border-ink bg-paper"
+      className="absolute inset-x-0 bottom-0 z-20 max-h-[60vh] overflow-auto border-t-[1.5px] border-ink bg-paper shadow-[0_-8px_24px_rgba(32,36,34,0.12)] sm:inset-x-auto sm:top-4 sm:right-4 sm:bottom-auto sm:max-h-[calc(100vh-104px)] sm:w-72 sm:border-[1.5px] sm:shadow-[0_8px_24px_rgba(32,36,34,0.10)]"
     >
-      <h2 className="m-0 flex items-center justify-between gap-2 border-b border-ink px-3 py-2 text-[11px] tracking-[.12em] uppercase">
+      <h2 className="sticky top-0 z-10 m-0 flex items-center justify-between gap-2 border-b border-ink bg-paper px-3 py-2 text-[11px] tracking-[.12em] uppercase">
         Component detail
         <button
           type="button"

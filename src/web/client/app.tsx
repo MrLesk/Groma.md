@@ -42,6 +42,7 @@ export function App() {
   >([]);
   const [visibleScale, setVisibleScale] = useState<ApiComponentScale | undefined>(undefined);
   const pending = useRef(new Set<string>());
+  const autoExpanded = useRef(new Set<string>());
 
   useEffect(() => {
     let disposed = false;
@@ -54,6 +55,21 @@ export function App() {
       disposed = true;
     };
   }, []);
+
+  // Open the system's own parts on arrival, so a reader meets the architecture
+  // rather than a single collapsed box they must first know to click. Only
+  // owned roots expand; borrowed code stays a listed dependency.
+  useEffect(() => {
+    for (const rootId of model.rootIds) {
+      const node = model.nodes.get(rootId);
+      if (node === undefined || autoExpanded.current.has(rootId)) continue;
+      if (node.view.component.type === "external") continue;
+      if (node.childIds !== undefined) continue;
+      autoExpanded.current.add(rootId);
+      loadChildren(rootId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.rootIds]);
 
   // One bounded page of observed dependencies, so the sheet can draw what the
   // scan already knows about how the parts depend on each other.
@@ -149,10 +165,10 @@ export function App() {
     <div className="flex h-screen flex-col">
       <header
         data-canvas-keys="skip"
-        className="z-20 flex items-center justify-between gap-4 border-b-2 border-ink bg-paper px-5 py-2"
+        className="z-20 flex items-center justify-between gap-3 border-b-2 border-ink bg-paper px-3 py-2 sm:gap-4 sm:px-5"
       >
         <div
-          className="w-36 shrink-0 text-ink [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
+          className="w-28 shrink-0 text-ink sm:w-36 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full"
           dangerouslySetInnerHTML={{ __html: GROMA_LOCKUP }}
         />
         <p className="m-0 hidden font-plan text-[11px] tracking-wide text-ink-muted uppercase md:block">
@@ -169,7 +185,7 @@ export function App() {
               }}
               placeholder="Search the blueprint"
               aria-label="Search the blueprint"
-              className="w-56 border border-ink bg-paper px-2 py-1.5 font-plan text-xs focus-visible:outline-2 focus-visible:outline-survey"
+              className="w-32 border border-ink bg-paper px-2 py-1.5 font-plan text-xs focus-visible:outline-2 focus-visible:outline-survey sm:w-56"
             />
             <button
               type="submit"
@@ -229,7 +245,7 @@ export function App() {
             </div>
           </div>
         ) : (
-          <div className={selectedId === undefined ? "h-full" : "h-full pr-0 md:pr-72"}>
+          <div className="h-full">
             <Canvas
               dependencies={dependencies}
               folded={folded}
