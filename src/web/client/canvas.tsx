@@ -148,7 +148,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
             }}
             onKeyDown={(event) => activate(event, () => actions.onExpand(id))}
           >
-            {data.projection === "observed-group" ? (
+            {data.projection === "observed-group" || data.projection === "observed-index" ? (
               <>
                 Explore {data.childCount} component{data.childCount === 1 ? "" : "s"} →
               </>
@@ -159,8 +159,6 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
               </>
             )}
           </button>
-        ) : data.projection === "unresolved-mapping" ? (
-          <span>Mapping needed</span>
         ) : (
           <button
             type="button"

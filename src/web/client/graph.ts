@@ -21,7 +21,7 @@ export interface BlueprintFlowNodeData extends Record<string, unknown> {
   readonly label: string;
   readonly notation: BlueprintNotation;
   readonly purpose?: string;
-  readonly projection?: "observed-group" | "unresolved-mapping";
+  readonly projection?: "observed-group" | "observed-index";
   readonly relationshipCount: number;
   readonly shared: boolean;
   readonly type: string;
@@ -250,6 +250,53 @@ function componentCount(count: number, adjective = ""): string {
   return `${count} ${prefix}component${count === 1 ? "" : "s"}`;
 }
 
+function clippedIndexLabel(value: string): string {
+  const points = [...value];
+  return points.length <= 28 ? value : `${points.slice(0, 27).join("")}…`;
+}
+
+function indexedChildren(
+  scopeId: string,
+  memberIds: readonly string[],
+  prefix: readonly string[],
+  nodes: Map<string, BlueprintNode>,
+  lineage: readonly number[] = [],
+): readonly string[] {
+  const ordered = orderedLevel(memberIds, nodes);
+  if (ordered.length <= LEVEL_COMPONENT_BUDGET) return ordered;
+
+  const bucketSize = Math.max(
+    LEVEL_COMPONENT_BUDGET,
+    Math.ceil(ordered.length / LEVEL_COMPONENT_BUDGET),
+  );
+  const ids: string[] = [];
+  for (let start = 0; start < ordered.length; start += bucketSize) {
+    const members = Object.freeze(ordered.slice(start, start + bucketSize));
+    const bucket = ids.length;
+    const nextLineage = Object.freeze([...lineage, bucket]);
+    const id = projectionId(scopeId, prefix, `:index:${nextLineage.join(".")}`);
+    const first = clippedIndexLabel(displayText(nodes.get(members[0]!)!.view.component));
+    const last = clippedIndexLabel(displayText(nodes.get(members.at(-1)!)!.view.component));
+    const label = first === last ? `${first} (${members.length})` : `${first} – ${last}`;
+    nodes.set(
+      id,
+      Object.freeze({
+        childIds: indexedChildren(scopeId, members, prefix, nodes, nextLineage),
+        hasMoreChildren: false,
+        projection: Object.freeze({ kind: "observed-index", memberCount: members.length }),
+        view: projectionView(
+          id,
+          label,
+          `${componentCount(members.length, "observed")} indexed from ${first} through ${last}.`,
+          "component index",
+        ),
+      }),
+    );
+    ids.push(id);
+  }
+  return Object.freeze(ids);
+}
+
 function projectedChildren(
   scopeId: string,
   memberIds: readonly string[],
@@ -257,11 +304,12 @@ function projectedChildren(
   paths: ReadonlyMap<string, string>,
   nodes: Map<string, BlueprintNode>,
 ): readonly string[] {
-  if (memberIds.length <= LEVEL_COMPONENT_BUDGET) return orderedLevel(memberIds, nodes);
+  const orderedMembers = orderedLevel(memberIds, nodes);
+  if (orderedMembers.length <= LEVEL_COMPONENT_BUDGET) return orderedMembers;
 
   const groups = new Map<string, string[]>();
   const ungrouped: string[] = [];
-  for (const id of memberIds) {
+  for (const id of orderedMembers) {
     const segments = pathSegments(paths.get(id) ?? "");
     const matchesPrefix = prefix.every((segment, index) => segments[index] === segment);
     const next = matchesPrefix ? segments[prefix.length] : undefined;
@@ -275,7 +323,7 @@ function projectedChildren(
   if (
     groups.size > 0 &&
     groups.size + ungrouped.length <= LEVEL_COMPONENT_BUDGET &&
-    groups.size + ungrouped.length < memberIds.length
+    groups.size + ungrouped.length < orderedMembers.length
   ) {
     const ids: string[] = [];
     for (const [segment, members] of [...groups].sort(([left], [right]) =>
@@ -304,22 +352,7 @@ function projectedChildren(
     return Object.freeze([...ids, ...orderedLevel(ungrouped, nodes)]);
   }
 
-  const id = projectionId(scopeId, prefix, ":unresolved");
-  const recognition = recognizeObservedArea(prefix, memberIds.length);
-  nodes.set(
-    id,
-    Object.freeze({
-      hasMoreChildren: false,
-      projection: Object.freeze({ kind: "unresolved-mapping", memberCount: memberIds.length }),
-      view: projectionView(
-        id,
-        "Structure not mapped",
-        `${memberIds.length} components are accounted for within ${recognition.evidencePath}, but current evidence does not support a smaller meaningful grouping.`,
-        "mapping gap",
-      ),
-    }),
-  );
-  return Object.freeze([id]);
+  return indexedChildren(scopeId, orderedMembers, prefix, nodes);
 }
 
 function visualProjectionModel(model: BlueprintModel): BlueprintModel {
@@ -479,7 +512,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          canOpen: blueprintNode.projection?.kind !== "unresolved-mapping" && childCount > 0,
+          canOpen: childCount > 0,
           childCount,
           evidenceBound: blueprintNode.view.evidenceBound,
           label: displayText(component),

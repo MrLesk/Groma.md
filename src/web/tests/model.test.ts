@@ -182,7 +182,7 @@ describe("interactive map view-model", () => {
     );
   });
 
-  test("reports an ungroupable over-budget level without omitting components", () => {
+  test("indexes an ungroupable over-budget level without omitting components", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const children = Array.from({ length: LEVEL_COMPONENT_BUDGET + 2 }, (_, index) =>
       view(`ent_domain_${index}`, {
@@ -197,16 +197,99 @@ describe("interactive map view-model", () => {
       dependencies: [],
       model,
     });
-    expect(graph.visibleComponents).toBe(1);
+    expect(graph.visibleComponents).toBe(2);
     expect(graph.levelComponents).toBe(children.length);
-    expect(graph.nodes).toHaveLength(2);
+    expect(graph.nodes).toHaveLength(3);
     expect(graph.omittedComponents).toBe(0);
-    expect(graph.nodes.find((node) => node.type === "component")?.data).toMatchObject({
-      childCount: children.length,
-      label: "Structure not mapped",
-      projection: "unresolved-mapping",
+    const indexes = graph.nodes.filter(
+      (node) => node.type === "component" && node.data.projection === "observed-index",
+    );
+    expect(indexes.map((node) => node.data.childCount)).toEqual([20, 2]);
+    expect(indexes.every((node) => node.data.canOpen)).toBeTrue();
+
+    const expanded = buildBlueprintFlowGraph({
+      dependencies: [],
+      expandedIds: [indexes[0]!.id],
+      model,
     });
+    expect(expanded.nodes.find((node) => node.id === indexes[0]!.id)?.type).toBe("group");
+    expect(
+      expanded.nodes.filter(
+        (node) => node.type === "component" && node.data.projection === undefined,
+      ),
+    ).toHaveLength(20);
     expect(model.nodes.has("ent_domain_9")).toBeTrue();
+  });
+
+  test("builds deterministic indexes regardless of canonical input order", () => {
+    const children = Array.from({ length: 49 }, (_, index) =>
+      view(`ent_item_${index.toString().padStart(2, "0")}`, {
+        name: `Item ${index.toString().padStart(2, "0")}`,
+      }),
+    );
+    const graphFor = (items: readonly ApiComponentView[]) => {
+      const roots = mergeRootsPage(emptyModel(), page([view("ent_system")]));
+      return buildBlueprintFlowGraph({
+        dependencies: [],
+        model: mergeChildrenPage(roots, "ent_system", page(items)),
+      });
+    };
+    const projected = (items: readonly ApiComponentView[]) =>
+      graphFor(items)
+        .nodes.filter((node) => node.type === "component")
+        .map((node) => ({
+          childCount: node.data.childCount,
+          id: node.id,
+          label: node.data.label,
+          projection: node.data.projection,
+        }));
+
+    expect(projected(children)).toEqual(projected(children.toReversed()));
+  });
+
+  test("recursively bounds very large presentation indexes", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system")]));
+    const children = Array.from({ length: 401 }, (_, index) =>
+      view(`ent_item_${index.toString().padStart(3, "0")}`, {
+        name: `Item ${index.toString().padStart(3, "0")}`,
+      }),
+    );
+    const model = mergeChildrenPage(roots, "ent_system", page(children));
+    const overview = buildBlueprintFlowGraph({ dependencies: [], model });
+    const topIndexes = overview.nodes.filter(
+      (node) => node.type === "component" && node.data.projection === "observed-index",
+    );
+    expect(topIndexes).toHaveLength(20);
+    expect(topIndexes.every((node) => Number(node.data.childCount) <= 21)).toBeTrue();
+
+    const top = topIndexes[0]!;
+    const nested = buildBlueprintFlowGraph({
+      dependencies: [],
+      expandedIds: [top.id],
+      model,
+    });
+    const nestedIndexes = nested.nodes.filter(
+      (node) =>
+        node.type === "component" &&
+        node.parentId === top.id &&
+        node.data.projection === "observed-index",
+    );
+    expect(nestedIndexes.map((node) => node.data.childCount)).toEqual([20, 1]);
+
+    const leaf = nestedIndexes[0]!;
+    const expanded = buildBlueprintFlowGraph({
+      dependencies: [],
+      expandedIds: [top.id, leaf.id],
+      model,
+    });
+    expect(
+      expanded.nodes.filter(
+        (node) =>
+          node.type === "component" &&
+          node.parentId === leaf.id &&
+          node.data.projection === undefined,
+      ),
+    ).toHaveLength(20);
   });
 
   test("normalizes all OpenClaw candidates into observed source areas", () => {
@@ -263,18 +346,34 @@ describe("interactive map view-model", () => {
     expect(graph.levelComponents).toBe(85);
     expect(graph.omittedComponents).toBe(0);
 
-    const extensions = visibleCards.find((node) => node.data.label === "Extensions")!;
+    const source = visibleCards.find((node) => node.data.label === "Source modules")!;
     const focused = buildBlueprintFlowGraph({
       childCounts: new Map([["ent_openclaw", 85]]),
       dependencies: [],
-      expandedIds: [extensions.id],
+      expandedIds: [source.id],
       model,
     });
-    expect(focused.nodes.find((node) => node.id === extensions.id)?.type).toBe("group");
-    expect(focused.nodes.some((node) => node.data.label === "Structure not mapped")).toBeTrue();
+    expect(focused.nodes.find((node) => node.id === source.id)?.type).toBe("group");
+    const indexes = focused.nodes.filter(
+      (node) => node.type === "component" && node.data.projection === "observed-index",
+    );
+    expect(indexes.map((node) => node.data.childCount)).toEqual([20, 20, 9]);
+    expect(focused.nodes.some((node) => node.data.label === "Structure not mapped")).toBeFalse();
     expect(
       focused.nodes.some((node) => node.type === "component" && node.data.label === "Packages"),
     ).toBeTrue();
+
+    const indexed = buildBlueprintFlowGraph({
+      childCounts: new Map([["ent_openclaw", 85]]),
+      dependencies: [],
+      expandedIds: [source.id, indexes[0]!.id],
+      model,
+    });
+    expect(
+      indexed.nodes.filter(
+        (node) => node.type === "component" && node.data.projection === undefined,
+      ),
+    ).toHaveLength(20);
   });
 
   test("keeps meaning-empty observed candidates visible with automatic notation", () => {
