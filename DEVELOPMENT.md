@@ -54,6 +54,15 @@ connections; its in-memory snapshot adapter supports navigation, inspection, and
 without a listener, canonical writes, or browser persistence. An export over the component or
 16 MiB artifact bound fails instead of silently truncating.
 
+The live `groma web` client uses the protected loopback mutation routes as its only write path.
+The existing detail panel authors component intent, items, outgoing relationships, scale, and
+shared state, and exposes create, move, merge, remove, and scale-proposal acceptance. Incoming
+relationships stay visible but are edited from their source component. Every mutation carries the
+read revision; a conflict requires an explicit refresh-and-review step, and validation refusals
+retain their application diagnostic names and details. A committed change reloads canonical reads
+instead of maintaining a second client-side semantic model. The static export detects its baked
+snapshot before rendering and contains none of these editing controls.
+
 The compiled executable does not load `.env`, `bunfig.toml`, `tsconfig.json`, or
 `package.json` at runtime. Any configuration Groma needs must arrive through supported
 application and host capabilities, never through ambient build-tool files.
@@ -216,6 +225,6 @@ binary — Bun's embedded HTTP server with a bundled React, React Flow, dagre, a
 bound to the loopback interface. The initial canvas lays out only its bounded root page; every
 deeper scale enters the deterministic layout through an explicit bounded child-page action.
 
-The bounded scan, reconciliation, local visual loop, and protected loopback mutation API are
-implemented. Plans, Git history views, browser editing UI, and replacing bare `groma` with the web
+The bounded scan, reconciliation, local visual loop, protected loopback mutation API, and browser
+editing UI are implemented. Plans, Git history views, and replacing bare `groma` with the web
 surface remain later work.

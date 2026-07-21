@@ -10,8 +10,16 @@ export interface ApiComponent {
   readonly shared?: boolean;
   readonly summary?: string;
   readonly type?: string;
-  readonly inputs?: readonly { readonly id: string; readonly name?: string }[];
-  readonly outputs?: readonly { readonly id: string; readonly name?: string }[];
+  readonly inputs?: readonly {
+    readonly id: string;
+    readonly name?: string;
+    readonly description?: string;
+  }[];
+  readonly outputs?: readonly {
+    readonly id: string;
+    readonly name?: string;
+    readonly description?: string;
+  }[];
   readonly actions?: readonly {
     readonly id: string;
     readonly name?: string;
@@ -90,11 +98,54 @@ export interface ApiSearchPage {
 }
 
 export interface ApiFailure {
-  readonly diagnostics: readonly { readonly code: string; readonly message: string }[];
+  readonly diagnostics: readonly ApiDiagnostic[];
+}
+
+export interface ApiDiagnostic {
+  readonly code: string;
+  readonly details?: Readonly<Record<string, string | number | boolean>>;
+  readonly message: string;
 }
 
 export type ApiResult<T> =
   { readonly ok: true; readonly value: T } | ({ readonly ok: false } & ApiFailure);
+
+export type ApiMutationOutcome<T> =
+  | {
+      readonly affected: {
+        readonly components: readonly string[];
+        readonly relationships: readonly string[];
+      };
+      readonly generation: number;
+      readonly revisions: readonly {
+        readonly componentId: string;
+        readonly revision: string | null;
+      }[];
+      readonly status: "committed";
+      readonly value: T;
+    }
+  | {
+      readonly diagnostics: readonly ApiDiagnostic[];
+      readonly status:
+        | "conflict"
+        | "indeterminate"
+        | "provider-failure"
+        | "request-failed"
+        | "validation-rejected";
+    };
+
+export interface ApiItemInput {
+  readonly description?: string;
+  readonly id: string;
+  readonly name?: string;
+}
+
+export interface ApiRelationshipInput {
+  readonly description?: string;
+  readonly id?: string;
+  readonly target: string;
+  readonly type: string;
+}
 
 async function read<T>(url: string): Promise<ApiResult<T>> {
   const snapshot = staticSnapshot();
@@ -111,6 +162,120 @@ async function read<T>(url: string): Promise<ApiResult<T>> {
       ok: false,
     };
   }
+}
+
+async function mutate<T>(url: string, body: unknown): Promise<ApiMutationOutcome<T>> {
+  if (staticSnapshot() !== undefined) {
+    return {
+      diagnostics: [
+        {
+          code: "web-read-only-snapshot",
+          message: "This exported blueprint cannot change canonical state",
+        },
+      ],
+      status: "request-failed",
+    };
+  }
+  try {
+    const response = await fetch(url, {
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const value: unknown = await response.json();
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "status" in value &&
+      typeof value.status === "string"
+    ) {
+      return value as ApiMutationOutcome<T>;
+    }
+    const failure = value as Partial<ApiFailure>;
+    return {
+      diagnostics: failure.diagnostics ?? [
+        { code: "web-mutation-failed", message: "The blueprint mutation was refused" },
+      ],
+      status: "request-failed",
+    };
+  } catch {
+    return {
+      diagnostics: [
+        { code: "web-request-failed", message: "The blueprint server could not be reached" },
+      ],
+      status: "request-failed",
+    };
+  }
+}
+
+export interface CreateComponentInput {
+  readonly component: {
+    readonly actions?: readonly ApiItemInput[];
+    readonly id?: string;
+    readonly inputs?: readonly ApiItemInput[];
+    readonly intent?: string;
+    readonly name?: string;
+    readonly outputs?: readonly ApiItemInput[];
+    readonly parent?: string;
+    readonly scale?: ApiComponentScale;
+    readonly shared?: boolean;
+    readonly type?: string;
+  };
+  readonly relationships?: readonly ApiRelationshipInput[];
+}
+
+export interface UpdateComponentInput {
+  readonly expectedRevision: string;
+  readonly id: string;
+  readonly patch: {
+    readonly actions?: readonly ApiItemInput[] | null;
+    readonly inputs?: readonly ApiItemInput[] | null;
+    readonly intent?: string | null;
+    readonly name?: string | null;
+    readonly outputs?: readonly ApiItemInput[] | null;
+    readonly scale?: ApiComponentScale | null;
+    readonly shared?: boolean | null;
+    readonly type?: string | null;
+  };
+  readonly relationships?: {
+    readonly remove?: readonly string[];
+    readonly upsert?: readonly ApiRelationshipInput[];
+  };
+}
+
+export function createComponent(
+  request: CreateComponentInput,
+): Promise<ApiMutationOutcome<ApiComponent>> {
+  return mutate("/api/component/create", request);
+}
+
+export function updateComponent(
+  request: UpdateComponentInput,
+): Promise<ApiMutationOutcome<ApiComponent>> {
+  return mutate("/api/component/update", request);
+}
+
+export function moveComponent(request: {
+  readonly expectedRevision: string;
+  readonly id: string;
+  readonly parent: string | null;
+}): Promise<ApiMutationOutcome<ApiComponent>> {
+  return mutate("/api/component/move", request);
+}
+
+export function mergeComponent(request: {
+  readonly expectedRevision: string;
+  readonly obsolete: string;
+  readonly survivor: string;
+}): Promise<ApiMutationOutcome<ApiComponent>> {
+  return mutate("/api/component/merge", request);
+}
+
+export function removeComponent(request: {
+  readonly expectedRevision: string;
+  readonly id: string;
+}): Promise<ApiMutationOutcome<string>> {
+  return mutate("/api/component/remove", request);
 }
 
 function withCursor(base: string, cursor?: string): string {
