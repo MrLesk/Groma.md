@@ -32,9 +32,14 @@ interface CanvasActions {
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
 
-/** Keeps the drawing clear of the fixed title block and view controls. */
+/**
+ * Keeps the drawing clear of the fixed title block and view controls, and lets
+ * a small blueprint grow to fill the frame so the architecture — not a band of
+ * empty grid — is what a reader meets first. A large blueprint still fits below
+ * 1x, so the cap only bites when there is room to spare.
+ */
 const FIT_VIEW = Object.freeze({
-  maxZoom: 1,
+  maxZoom: 1.5,
   padding: Object.freeze({ bottom: "9%", left: "4%", right: "4%", top: "35%" }),
 });
 
