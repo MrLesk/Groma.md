@@ -34,18 +34,20 @@ bun run format:check  # verify formatting without writing
 bun run check:boundaries # enforce architectural dependency directions
 bun run build         # compile the native standalone executable to dist/groma
 bun run package       # package every baseline target with a checksum manifest
-bun link              # one-time: make groma resolve to this checkout's dist/groma
+bun link              # POSIX, one-time: link groma to this checkout's dist/groma
 bun run install:local # alternatively copy a standalone executable onto your PATH
 bun run smoke         # verify one native artifact and the public init -> scan -> read workflow
 bun run verify:1a     # build and black-box verify the complete native 1A workflow
 bun run check         # run every required local verification gate
 ```
 
-For local development, run `bun link` once and then `bun run build` after changes. The linked
-`groma` command follows `dist/groma`, so no reinstall step is needed before running it in another
-project. `bun run install:local` remains the distinct standalone-copy workflow and must be rerun to
-pick up later builds. When moving an existing checkout to `bun link`, use `which -a groma` to find
-and retire an older copied command that appears before Bun's link on `PATH`.
+For local POSIX development, run `bun link` once, ensure Bun's global bin directory is on `PATH`,
+and then run `bun run build` after changes. The linked `groma` command follows `dist/groma`, so no
+reinstall step is needed before running it in another project. `bun run install:local` remains the
+distinct standalone-copy workflow and must be rerun to pick up later builds. When moving an
+existing checkout to `bun link`, use `which -a groma` to find and retire an older copied command
+that appears before Bun's link on `PATH`. On Windows, rebuild and rerun
+`bun run install:local --dest <directory-on-PATH>` to copy the new `groma.exe`.
 
 The embedded web surface is compiled into the executable in the same single `Bun.build` call
 that produces the standalone binary: `src/web/client/index.html`, its React modules, and the

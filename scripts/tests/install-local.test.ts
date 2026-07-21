@@ -36,9 +36,12 @@ describe.skipIf(posixOnly)("local install", () => {
   });
 });
 
-test("the Bun-linked command resolves to the native build output", async () => {
-  expect(packageJson.bin).toEqual({ groma: "dist/groma" });
-});
+test.skipIf(process.platform === "win32")(
+  "the Bun-linked command resolves to the native build output",
+  async () => {
+    expect(packageJson.bin).toEqual({ groma: "dist/groma" });
+  },
+);
 
 describe.skipIf(posixOnly)("Bun link", () => {
   test("keeps the command attached to a replaced build output", async () => {
