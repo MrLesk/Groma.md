@@ -1,11 +1,11 @@
 ---
 id: GROM-105
 title: Derive visual scale from observed structure
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 21:47'
-updated_date: '2026-07-21 22:22'
+updated_date: '2026-07-21 22:27'
 labels:
   - frontend
   - ux
@@ -29,14 +29,14 @@ Replace GROM-103's ranked truncation with an adaptive disposable hierarchy. Grom
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The OpenClaw overview represents all 85 current children through deterministic higher-level observed groups, with no arbitrary top-N omission or pagination
-- [ ] #2 Groma repeatedly selects the coarsest defensible observed level needed to keep the current visual layer roughly within 16-20 nodes; a level that remains over budget is not silently truncated
-- [ ] #3 Automatic groups are derived through bounded shared application reads from scanner evidence and remain disposable projection state; canonical components, parents, scale, and intent are unchanged
-- [ ] #4 Focusing an automatic group expands that same boundary with nearby context, and returning reverses the spatial transition
-- [ ] #5 When observations cannot produce a bounded meaningful level, the UI reports the unresolved mapping while still accounting for every component
-- [ ] #6 Focused fixtures cover the 85-component OpenClaw shape, deterministic grouping, complete component accounting, and an ungroupable over-budget level
-- [ ] #7 The overview uses available viewport space and routes visible relationship connectors from the nearest card sides without crossing component content or the system heading
-- [ ] #8 An expanded area provides an explicit Collapse control that returns one exploration level while preserving the reverse spatial transition
+- [x] #1 The OpenClaw overview represents all 85 current children through deterministic higher-level observed groups, with no arbitrary top-N omission or pagination
+- [x] #2 Groma repeatedly selects the coarsest defensible observed level needed to keep the current visual layer roughly within 16-20 nodes; a level that remains over budget is not silently truncated
+- [x] #3 Automatic groups are derived through bounded shared application reads from scanner evidence and remain disposable projection state; canonical components, parents, scale, and intent are unchanged
+- [x] #4 Focusing an automatic group expands that same boundary with nearby context, and returning reverses the spatial transition
+- [x] #5 When observations cannot produce a bounded meaningful level, the UI reports the unresolved mapping while still accounting for every component
+- [x] #6 Focused fixtures cover the 85-component OpenClaw shape, deterministic grouping, complete component accounting, and an ungroupable over-budget level
+- [x] #7 The overview uses available viewport space and routes visible relationship connectors from the nearest card sides without crossing component content or the system heading
+- [x] #8 An expanded area provides an explicit Collapse control that returns one exploration level while preserving the reverse spatial transition
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -51,4 +51,12 @@ Replace GROM-103's ranked truncation with an adaptive disposable hierarchy. Grom
 Implemented scanner-provenance path reads and disposable observed-area projection with complete accounting. Replaced ranked truncation with deterministic grouping and explicit mapping-gap output. Reworked the sheet into balanced rows with routing gutters, nearest-side handles, same-layer relationships, and redundant containment-line suppression. Fixed the Groma regression where known-but-unloaded children showed Inspect instead of Explore; canonical domain cards now expose Explore from bounded child counts and load their parts on demand. Live Browser QA confirmed OpenClaw's 85 components normalize to four observed areas and Groma's application domain expands in place to 11 parts, retains neighboring-domain context, reverses to overview, and emits no console warnings.
 
 Relationship rendering now draws only clear adjacent gutter routes; longer relationships remain discoverable in component detail. Added an explicit Collapse control to reverse one exploration level.
+
+Validation completed before delivery: 44 focused tests passed, TypeScript checks and production build passed, and rendered browser QA confirmed observed grouping, clear-gutter arrows, Explore, Collapse, and reverse camera behavior.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Derived a complete bounded visual hierarchy from scanner-observed paths without changing canonical architecture. Replaced truncation with deterministic observed areas and explicit mapping gaps, expanded areas in place with nearby context and Explore/Collapse controls, and restricted visible arrows to clear adjacent gutters. Verified with 44 focused tests, TypeScript checks, a production build, and rendered Groma/OpenClaw browser QA.
+<!-- SECTION:FINAL_SUMMARY:END -->
