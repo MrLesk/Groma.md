@@ -560,7 +560,13 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     );
   }
 
-  const TERM_ORDER: readonly BlueprintTerm[] = ["entry", "shared", "quoted", "borrowed", "external"];
+  const TERM_ORDER: readonly BlueprintTerm[] = [
+    "entry",
+    "shared",
+    "quoted",
+    "borrowed",
+    "external",
+  ];
   return Object.freeze({
     edges: Object.freeze(edges),
     nodes: Object.freeze(nodes),

@@ -99,14 +99,31 @@ function withoutInlineMarkup(value: string): string {
 }
 
 /**
- * The first sentence, when the block has one. A block that never terminates a
- * sentence — a clause introducing a list, say — is kept whole, because cutting
- * it at an arbitrary point would misquote the source.
+ * As many whole sentences from the front of the block as fit the budget, and
+ * never fewer than one. A terse opening sentence ("Host is Groma's composition
+ * root.") describes far less than the source does, so where the budget has room
+ * the next sentence is kept too — but only whole ones, because a sentence cut at
+ * an arbitrary point misquotes the source. A block that never terminates a
+ * sentence is returned whole for the caller to bound.
  */
-function firstSentence(value: string): string {
-  const match = /^(.+?[.!?])(?:\s|$)/.exec(value);
-  const sentence = match?.[1] ?? value;
-  return sentence.replace(/:$/, "").trim();
+function leadingSentences(value: string): string {
+  const collected: string[] = [];
+  let rest = value.trim();
+  while (rest.length > 0) {
+    const match = /^(.+?[.!?])(\s+|$)/.exec(rest);
+    if (match === null) {
+      if (collected.length === 0) collected.push(rest);
+      break;
+    }
+    const sentence = match[1]!;
+    const running = [...collected, sentence].join(" ");
+    // Keep the first sentence unconditionally; add later ones only while they
+    // still fit whole, so the result never trails off mid-thought.
+    if (collected.length > 0 && running.length > OBSERVED_SUMMARY_MAX_CHARACTERS) break;
+    collected.push(sentence);
+    rest = rest.slice(match[0].length);
+  }
+  return collected.join(" ").replace(/:$/, "").trim();
 }
 
 /** Truncates on a word boundary, marking that the source said more. */
@@ -141,7 +158,7 @@ export function observedSummaryFromDocumentation(
   );
   for (const block of normalized.split(/\n\s*\n/)) {
     if (!isProse(block)) continue;
-    const sentence = bounded(firstSentence(withoutInlineMarkup(block)));
+    const sentence = bounded(leadingSentences(withoutInlineMarkup(block)));
     if (sentence.length < OBSERVED_SUMMARY_MIN_CHARACTERS) continue;
     if (name !== undefined && comparable(sentence) === comparable(name)) continue;
     return sentence;

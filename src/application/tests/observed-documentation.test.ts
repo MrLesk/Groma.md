@@ -6,13 +6,23 @@ import {
 } from "../observed-documentation.ts";
 
 describe("observed documentation", () => {
-  test("repeats the first described sentence of a directory readme", () => {
+  test("carries the leading sentences of a directory readme, whole", () => {
     const summary = observedSummaryFromDocumentation(
       "# Persistence\n\nPersistence implements Groma's local adapters. It owns nothing else.\n",
       "markdown",
       "persistence",
     );
-    expect(summary).toBe("Persistence implements Groma's local adapters.");
+    expect(summary).toBe("Persistence implements Groma's local adapters. It owns nothing else.");
+  });
+
+  test("adds later sentences only while they fit whole within the budget", () => {
+    const first = "Host is the composition root.";
+    const long = ` It ${"connects and ".repeat(30)}wires everything.`;
+    const summary = observedSummaryFromDocumentation(`${first}${long}`, "markdown", "host")!;
+    // The overflowing second sentence is dropped whole rather than cut mid-word,
+    // so the result never trails off in the middle of a thought.
+    expect(summary).toBe(first);
+    expect(summary.endsWith("…")).toBe(false);
   });
 
   test("walks past markup and badges to the first line of actual prose", () => {
@@ -61,7 +71,7 @@ describe("observed documentation", () => {
         "/**\n * Canonicalizes the data-bearing parts of a scanner request.\n * Second line.\n */",
         "text",
       ),
-    ).toBe("Canonicalizes the data-bearing parts of a scanner request.");
+    ).toBe("Canonicalizes the data-bearing parts of a scanner request. Second line.");
   });
 
   test("reduces inline markdown to the words it decorates", () => {

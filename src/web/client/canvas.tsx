@@ -331,9 +331,9 @@ export function Canvas({
                 ) : null}
                 <p className="groma-title-block__hint">
                   Everything here is <strong>evidence</strong>: measured or quoted verbatim by a
-                  blind scan that reports structure and never interprets it. Meaning you add
-                  &mdash; the <strong>intent</strong> &mdash; a scan never writes and a rescan never
-                  erases. Scale sets what is shown; zoom only changes how large it looks.
+                  blind scan that reports structure and never interprets it. Meaning you add &mdash;
+                  the <strong>intent</strong> &mdash; a scan never writes and a rescan never erases.
+                  Scale sets what is shown; zoom only changes how large it looks.
                 </p>
               </details>
             ) : null}

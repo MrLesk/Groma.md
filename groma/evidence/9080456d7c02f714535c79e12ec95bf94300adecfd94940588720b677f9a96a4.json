@@ -83,7 +83,7 @@
           "name": "cli",
           "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
           "scale": "domain",
-          "summary": "The CLI is a bounded adapter over shared application operations."
+          "summary": "The CLI is a bounded adapter over shared application operations. It parses commands, reads explicit JSON input, and renders human or JSON envelopes."
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -310,7 +310,7 @@
           "parent": "ent_a754d5c9106660a7c4f25673e53bc015",
           "scale": "domain",
           "shared": true,
-          "summary": "Application composes Groma use cases from Core capabilities and the Standard Model."
+          "summary": "Application composes Groma use cases from Core capabilities and the Standard Model. It owns semantic operation order, transaction preparation, snapshot reads, and bounded query routing."
         },
         "scaleAssessment": {
           "derivation": "groma/structural-scale/v1",
@@ -848,7 +848,7 @@
           "state": "partial"
         }
       ],
-      "epoch": "epoch_b028f0d267bc5466977e2683548202a2",
+      "epoch": "epoch_d310499fa3c63d4eb57e31bbde2bfc3a",
       "projectId": "project_198bde57c817528c9d08d0ebdf630196",
       "records": [
         {
@@ -1208,7 +1208,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
+              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
@@ -1340,7 +1340,7 @@
           "kind": "component-candidate",
           "provenance": [
             {
-              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
+              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -2354,7 +2354,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
+              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
               "range": {
                 "endByteExclusive": 110,
                 "startByte": 95
@@ -2817,7 +2817,7 @@
           "kind": "relationship",
           "provenance": [
             {
-              "fingerprint": "sha256:93a7d43949f8cdff9c61cf6c31d3d68e4c3753d3d04ea6bc520bc88399f0a7dc",
+              "fingerprint": "sha256:f693c2eedb9364ba91b4be7aadff40a12b640374091b0b1080f2751a18336a44",
               "range": {
                 "endByteExclusive": 34,
                 "startByte": 18
