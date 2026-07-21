@@ -51,9 +51,10 @@ ephemeral port) until Ctrl+C. It exposes bounded reads and component create, upd
 and remove through the same shared application operations as the CLI. Mutation requests use POST
 under /api/component, require the exact loopback Origin and Host, and remain revision-checked.
 The web surface makes no request beyond the local listener.
+In a plain-format interactive terminal, web and scan offer to run groma init first when no
+workspace exists yet.
 Component create/update and project add/update input is one bounded UTF-8 JSON request envelope.
-Scan uses the only registered project and scanner when selection is unambiguous. In an
-interactive terminal, scan offers to run groma init first when no workspace exists yet. The initialized
+Scan uses the only registered project and scanner when selection is unambiguous. The initialized
 default project is configured for the built-in TypeScript/Bun scanner before its first scan.
 Scan input accepts one complete groma.observation/v1 JSON snapshot whose project, scanner, and
 coverage exactly match local registration, then uses the same atomic reconciliation path.
