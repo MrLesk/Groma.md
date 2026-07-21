@@ -674,6 +674,13 @@ describe("local completed-snapshot reconciliation", () => {
                 value: 27,
               },
             ],
+            observedPaths: [
+              {
+                projectId: "project.local",
+                resource: "src/index.ts",
+                scanner: { id: "groma.typescript-bun", instance: "builtin", version: "1.0.0" },
+              },
+            ],
           },
         ],
       },
@@ -684,12 +691,24 @@ describe("local completed-snapshot reconciliation", () => {
     const detail = await host.operations.getComponent({ id, relationships: { limit: 10 } });
     expect(detail).toMatchObject({
       ok: true,
-      value: { item: { cognitiveComplexity: [{ value: 27 }] } },
+      value: {
+        item: {
+          cognitiveComplexity: [{ value: 27 }],
+          observedPaths: [{ resource: "src/index.ts" }],
+        },
+      },
     });
     const exported = await host.operations.exportBlueprint({ limit: 10 });
     expect(exported).toMatchObject({
       ok: true,
-      value: { items: [{ cognitiveComplexity: [{ value: 27 }] }] },
+      value: {
+        items: [
+          {
+            cognitiveComplexity: [{ value: 27 }],
+            observedPaths: [{ resource: "src/index.ts" }],
+          },
+        ],
+      },
     });
   });
 

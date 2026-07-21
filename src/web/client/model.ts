@@ -11,6 +11,12 @@ export interface BlueprintNode {
   readonly childIds?: readonly string[];
   readonly childrenCursor?: string;
   readonly hasMoreChildren: boolean;
+  readonly projection?: {
+    readonly kind: "observed-group" | "unresolved-mapping";
+    readonly memberCount: number;
+  };
+  /** Canonical children represented by a coarser disposable child layer. */
+  readonly visualChildCount?: number;
   readonly view: ApiComponentView;
 }
 

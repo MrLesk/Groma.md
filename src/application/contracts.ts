@@ -211,6 +211,12 @@ export interface ComponentView {
   readonly component: StandardComponent;
   /** True when at least one current scanner binding supports this component. */
   readonly evidenceBound: boolean;
+  /**
+   * Project-relative resources that directly support this component candidate.
+   * Renderers may fold these into disposable visual areas; paths are evidence,
+   * never canonical containment or intent.
+   */
+  readonly observedPaths?: readonly ComponentObservedPathEvidence[];
   readonly revision: string;
 }
 
@@ -218,6 +224,12 @@ export interface ComponentCognitiveComplexityEvidence {
   readonly projectId: string;
   readonly scanner: ObservationSourceIdentity;
   readonly value: number;
+}
+
+export interface ComponentObservedPathEvidence {
+  readonly projectId: string;
+  readonly resource: string;
+  readonly scanner: ObservationSourceIdentity;
 }
 
 export interface RelationshipView {
@@ -309,6 +321,7 @@ export interface BlueprintExportItem {
   readonly cognitiveComplexity?: readonly ComponentCognitiveComplexityEvidence[];
   readonly component: StandardComponent;
   readonly evidenceBound: boolean;
+  readonly observedPaths?: readonly ComponentObservedPathEvidence[];
   readonly relationships: readonly StandardRelationship[];
 }
 

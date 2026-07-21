@@ -29,7 +29,7 @@ import {
 } from "./graph.ts";
 
 interface CanvasActions {
-  readonly onFocus: (id: string) => void;
+  readonly onFocus: (id: string, label: string) => void;
   readonly onSelect: (id: string | undefined) => void;
 }
 
@@ -39,7 +39,6 @@ const FIT_VIEW = Object.freeze({
   minZoom: 0.55,
   padding: Object.freeze({ bottom: "10%", left: "5%", right: "5%", top: "12%" }),
 });
-const NEARBY_CONTEXT_COUNT = 3;
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
@@ -68,27 +67,60 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
     <article
       className={`groma-node groma-node--${data.notation}${selected ? " is-selected" : ""}`}
       data-evidence-bound={data.evidenceBound || undefined}
-      onClick={() => actions.onSelect(id)}
+      data-projection={data.projection}
+      onClick={() => {
+        if (data.projection === undefined) actions.onSelect(id);
+      }}
     >
-      <Handle type="target" position={Position.Top} className="groma-handle" />
+      {([Position.Top, Position.Right, Position.Bottom, Position.Left] as const).flatMap(
+        (position) => {
+          const side = position.toLowerCase();
+          return [
+            <Handle
+              key={`target-${side}`}
+              id={`target-${side}`}
+              type="target"
+              position={position}
+              className="groma-handle"
+            />,
+            <Handle
+              key={`source-${side}`}
+              id={`source-${side}`}
+              type="source"
+              position={position}
+              className="groma-handle"
+            />,
+          ];
+        },
+      )}
       <div className="groma-node__rule" aria-hidden="true" />
       <div className="groma-node__heading">
         <span className="groma-node__notation" aria-hidden="true" />
         <span>
-          {data.evidenceBound && data.notation === "unscaled" ? "candidate" : data.notation}
+          {data.projection !== undefined
+            ? "observed"
+            : data.evidenceBound && data.notation === "unscaled"
+              ? "candidate"
+              : data.notation}
         </span>
         <span>{data.type}</span>
-        {data.evidenceBound ? <span className="groma-node__observed">observed</span> : null}
+        {data.evidenceBound && data.projection === undefined ? (
+          <span className="groma-node__observed">observed</span>
+        ) : null}
       </div>
-      <button
-        type="button"
-        className="nodrag nopan groma-node__select"
-        aria-label={`Inspect ${data.label}`}
-        onClick={() => actions.onSelect(id)}
-        onKeyDown={(event) => activate(event, () => actions.onSelect(id))}
-      >
-        {data.label}
-      </button>
+      {data.projection === undefined ? (
+        <button
+          type="button"
+          className="nodrag nopan groma-node__select"
+          aria-label={`Inspect ${data.label}`}
+          onClick={() => actions.onSelect(id)}
+          onKeyDown={(event) => activate(event, () => actions.onSelect(id))}
+        >
+          {data.label}
+        </button>
+      ) : (
+        <strong className="groma-node__select">{data.label}</strong>
+      )}
       <p className={`groma-node__purpose${data.purpose === undefined ? " is-missing" : ""}`}>
         {data.purpose ?? "Purpose not yet recorded."}
       </p>
@@ -110,13 +142,23 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
             className="groma-node__open"
             onClick={(event) => {
               event.stopPropagation();
-              actions.onFocus(id);
+              actions.onFocus(id, data.label);
             }}
-            onKeyDown={(event) => activate(event, () => actions.onFocus(id))}
+            onKeyDown={(event) => activate(event, () => actions.onFocus(id, data.label))}
           >
-            Focus on {data.childCount}{" "}
-            {nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} →
+            {data.projection === "observed-group" ? (
+              <>
+                Explore {data.childCount} component{data.childCount === 1 ? "" : "s"} →
+              </>
+            ) : (
+              <>
+                Explore {data.childCount}{" "}
+                {nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} →
+              </>
+            )}
           </button>
+        ) : data.projection === "unresolved-mapping" ? (
+          <span>Mapping needed</span>
         ) : (
           <button
             type="button"
@@ -130,7 +172,6 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
           </button>
         )}
       </div>
-      <Handle type="source" position={Position.Bottom} className="groma-handle" />
     </article>
   );
 }
@@ -188,32 +229,13 @@ export function Canvas({
   const focusTarget = graph.nodes.find((node) => node.id === graph.focusTargetId);
   const focusContentsLoaded =
     graph.focusTargetId !== undefined &&
-    model.nodes.get(graph.focusTargetId)?.childIds !== undefined;
+    (model.nodes.get(graph.focusTargetId) === undefined
+      ? focusTarget?.type === "group"
+      : model.nodes.get(graph.focusTargetId)?.childIds !== undefined);
   const cameraNodeIds = useMemo(() => {
     if (graph.focusTargetId === undefined) return [];
-    if (focusId === undefined || focusTarget === undefined) return [graph.focusTargetId];
-    const siblings = graph.nodes
-      .filter(
-        (node) =>
-          node.id !== focusTarget.id &&
-          node.parentId === focusTarget.parentId &&
-          node.type === "component",
-      )
-      .toSorted((left, right) => {
-        const leftDistance =
-          Math.abs(left.position.x - focusTarget.position.x) +
-          Math.abs(left.position.y - focusTarget.position.y);
-        const rightDistance =
-          Math.abs(right.position.x - focusTarget.position.x) +
-          Math.abs(right.position.y - focusTarget.position.y);
-        return leftDistance - rightDistance || left.id.localeCompare(right.id);
-      })
-      // A small local ring proves where the reader came from without zooming
-      // all the way back out to the complete parent level.
-      .slice(0, NEARBY_CONTEXT_COUNT)
-      .map((node) => node.id);
-    return [graph.focusTargetId, ...siblings];
-  }, [focusId, focusTarget, graph.focusTargetId, graph.nodes]);
+    return [graph.focusTargetId];
+  }, [graph.focusTargetId]);
   const cameraBounds = useMemo(() => {
     const byId = new Map(graph.nodes.map((node) => [node.id, node]));
     const positions = new Map<string, { x: number; y: number }>();
@@ -249,6 +271,7 @@ export function Canvas({
   }, [cameraNodeIds, graph.nodes]);
   useEffect(() => {
     if (
+      focusId === undefined ||
       graph.focusTargetId === undefined ||
       !focusContentsLoaded ||
       flow.current === null ||
@@ -269,10 +292,20 @@ export function Canvas({
           rect.width,
           rect.height,
           0.55,
-          focusId === undefined ? 1 : 1.3,
-          focusId === undefined ? 0.08 : 0.14,
+          1.3,
+          0.06,
         );
-        void instance.setViewport(viewport, { duration: reducedMotion ? 0 : 520 });
+        const zoom = Math.max(0.55, viewport.zoom * 0.84);
+        const centerX = cameraBounds.x + cameraBounds.width / 2;
+        const centerY = cameraBounds.y + cameraBounds.height / 2;
+        void instance.setViewport(
+          {
+            x: rect.width / 2 - centerX * zoom,
+            y: rect.height / 2 - centerY * zoom,
+            zoom,
+          },
+          { duration: reducedMotion ? 0 : 520 },
+        );
       });
     });
     return () => {
@@ -289,7 +322,24 @@ export function Canvas({
     cameraBounds,
     graph.focusTargetId,
     reducedMotion,
+    selectedId,
   ]);
+  useEffect(() => {
+    if (focusId !== undefined) return;
+    // React Flow measures newly loaded controlled nodes after React commits
+    // them. Fit once those measurements exist, including after the detail rail
+    // changes the available canvas width.
+    const timer = window.setTimeout(
+      () => {
+        void flow.current?.fitView({
+          ...FIT_VIEW,
+          duration: reducedMotion ? 0 : 320,
+        });
+      },
+      reducedMotion ? 0 : 540,
+    );
+    return () => window.clearTimeout(timer);
+  }, [flowReady, focusId, graph.nodes, reducedMotion, selectedId]);
   const relatedIds = useMemo(() => {
     if (selectedId === undefined) return new Set<string>();
     const ids = new Set([selectedId]);
@@ -388,15 +438,24 @@ export function Canvas({
                     )}
                   </span>
                 ))}
+                <button
+                  type="button"
+                  className="groma-breadcrumb__collapse"
+                  onClick={() => onFocusTo(focusPath.length - 1)}
+                >
+                  Collapse
+                </button>
               </nav>
             </Panel>
           ) : null}
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
-              <p>{focusId === undefined ? "System overview" : "Focused level"}</p>
+              <p>{focusId === undefined ? "System overview" : "Exploring component"}</p>
               <span>scan {model.generation}</span>
               <span>
-                {graph.visibleComponents} / {graph.levelComponents} at this level
+                {graph.visibleComponents === graph.levelComponents
+                  ? `${graph.levelComponents} component${graph.levelComponents === 1 ? "" : "s"} at this level`
+                  : `${graph.levelComponents} component${graph.levelComponents === 1 ? "" : "s"} · ${graph.visibleComponents} visible area${graph.visibleComponents === 1 ? "" : "s"}`}
               </span>
             </div>
             <details className="groma-title-block__key">
@@ -404,6 +463,9 @@ export function Canvas({
               <p>
                 Solid boundaries are architecture. Dashed entries are implementation evidence.
                 Arrows read from the component that needs something to the component it needs.
+                {graph.omittedRelationships > 0
+                  ? ` ${graph.omittedRelationships} longer relationship${graph.omittedRelationships === 1 ? " remains" : "s remain"} in component detail to keep paths clear.`
+                  : ""}
               </p>
             </details>
           </Panel>
