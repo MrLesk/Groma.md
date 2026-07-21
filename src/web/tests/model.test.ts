@@ -190,6 +190,30 @@ describe("interactive map view-model", () => {
     expect(drawnFrom).toBe(graph.edges.length);
   });
 
+  test("reports only the vocabulary the sheet actually draws", () => {
+    const model = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_owned", { name: "Core", scale: "domain", shared: true }),
+        view("ent_plain", { name: "Cli", scale: "domain" }),
+        view("ent_lib", { name: "yaml", type: "external" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
+      folded: new Set<string>(),
+      model,
+      visibleScale: undefined,
+    });
+    // shared is present, external and borrowed are present; entry and quoted are not,
+    // so the key must not offer to define words the reader cannot see.
+    expect(graph.terms).toContain("shared");
+    expect(graph.terms).toContain("external");
+    expect(graph.terms).toContain("borrowed");
+    expect(graph.terms).not.toContain("entry");
+    expect(graph.terms).not.toContain("quoted");
+  });
+
   test("names the reading order only where the contents form one", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const model = mergeChildrenPage(

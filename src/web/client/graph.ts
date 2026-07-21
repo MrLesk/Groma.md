@@ -46,11 +46,19 @@ export type BlueprintFlowNode = Node<BlueprintFlowNodeData, "component">;
 export type BlueprintGroupNode = Node<BlueprintGroupNodeData, "group">;
 export type BlueprintFlowEdge = Edge;
 
+/** An evidence mark that carries its own vocabulary a reader may not know. */
+export type BlueprintTerm = "borrowed" | "entry" | "external" | "quoted" | "shared";
+
 export interface BlueprintFlowGraph {
   readonly edges: readonly BlueprintFlowEdge[];
   readonly nodes: readonly (BlueprintFlowNode | BlueprintGroupNode)[];
   /** Notations actually drawn, so the legend can describe only what is present. */
   readonly notations: readonly BlueprintNotation[];
+  /**
+   * Vocabulary marks actually drawn, so the key defines only the words a reader
+   * can see on the sheet and never introduces one that is not there.
+   */
+  readonly terms: readonly BlueprintTerm[];
 }
 
 export interface BlueprintDependency {
@@ -222,6 +230,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
 
   const nodes: (BlueprintFlowNode | BlueprintGroupNode)[] = [];
   const notations = new Set<BlueprintNotation>();
+  const terms = new Set<BlueprintTerm>();
 
   /**
    * A component that holds visible contents is drawn as the plate around them
@@ -371,6 +380,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     const size = nested.length === 0 ? cardSize(id) : groupSize(id);
 
     if (nested.length > 0) {
+      if ((component.summary ?? "").length > 0) terms.add("quoted");
       // Containers render as a plate their contents sit inside, the way a
       // grouped drawing reads: the title names the group, children are nested.
       nodes.push(
@@ -410,6 +420,14 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       return;
     }
 
+    const entryPoint = (component.actions?.length ?? 0) > 0;
+    const external = component.type === "external";
+    const shared = component.shared === true;
+    if (external) terms.add("external");
+    if (shared) terms.add("shared");
+    if (entryPoint) terms.add("entry");
+    if ((borrows.get(id)?.size ?? 0) > 0) terms.add("borrowed");
+    if (!external && (component.summary ?? "").length > 0) terms.add("quoted");
     nodes.push(
       Object.freeze({
         data: Object.freeze({
@@ -418,13 +436,13 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
           borrows: borrows.get(id)?.size ?? 0,
           dependsOn: dependsOn.get(id)?.size ?? 0,
           dependents: dependents.get(id)?.size ?? 0,
-          entryPoint: (component.actions?.length ?? 0) > 0,
-          external: component.type === "external",
+          entryPoint,
+          external,
           hasMoreChildren: node.hasMoreChildren,
           label: displayText(component),
           notation,
           provisional: component.scale === undefined,
-          shared: component.shared === true,
+          shared,
           ...(component.summary === undefined || component.summary.length === 0
             ? {}
             : { summary: component.summary }),
@@ -542,9 +560,11 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     );
   }
 
+  const TERM_ORDER: readonly BlueprintTerm[] = ["entry", "shared", "quoted", "borrowed", "external"];
   return Object.freeze({
     edges: Object.freeze(edges),
     nodes: Object.freeze(nodes),
     notations: Object.freeze(SCALE_ORDER.filter((scale) => notations.has(scale))),
+    terms: Object.freeze(TERM_ORDER.filter((term) => terms.has(term))),
   });
 }

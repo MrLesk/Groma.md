@@ -19,6 +19,7 @@ import {
   type BlueprintFlowNode,
   type BlueprintGroupNode,
   type BlueprintNotation,
+  type BlueprintTerm,
 } from "./graph.ts";
 
 interface CanvasActions {
@@ -34,7 +35,7 @@ const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined)
 /** Keeps the drawing clear of the fixed title block and view controls. */
 const FIT_VIEW = Object.freeze({
   maxZoom: 1,
-  padding: Object.freeze({ bottom: "9%", left: "4%", right: "4%", top: "26%" }),
+  padding: Object.freeze({ bottom: "9%", left: "4%", right: "4%", top: "35%" }),
 });
 
 const NOTATION_LABELS: Readonly<Record<BlueprintNotation, string>> = Object.freeze({
@@ -180,6 +181,34 @@ function LegendItem({ notation }: { notation: BlueprintNotation }) {
   );
 }
 
+/**
+ * Plain-language definitions of the vocabulary a mark carries, each paired with
+ * the structural fact the scanner measured to earn it. Rendered only for terms
+ * actually drawn, so the key never teaches a word the reader cannot find.
+ */
+const TERM_GLOSSARY: Readonly<Record<BlueprintTerm, { label: string; gloss: string }>> =
+  Object.freeze({
+    borrowed: Object.freeze({ label: "N external", gloss: "draws on N packages from outside" }),
+    entry: Object.freeze({ label: "entry", gloss: "a way in: a command or served route" }),
+    external: Object.freeze({ label: "borrowed", gloss: "third-party code, not built here" }),
+    quoted: Object.freeze({
+      label: "quoted line",
+      gloss: "the component's own words, measured not written",
+    }),
+    shared: Object.freeze({ label: "shared", gloss: "used across two or more of the parts here" }),
+  });
+
+function TermItem({ term }: { term: BlueprintTerm }) {
+  const { label, gloss } = TERM_GLOSSARY[term];
+  return (
+    <li>
+      <span>
+        <strong>{label}</strong> · {gloss}
+      </span>
+    </li>
+  );
+}
+
 export interface CanvasProps extends CanvasActions {
   readonly dependencies: readonly { source: string; target: string; type: string }[];
   readonly folded: ReadonlySet<string>;
@@ -251,7 +280,7 @@ export function Canvas({
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
               <p>Architectural blueprint</p>
-              <span>Generation {model.generation}</span>
+              <span>Scan {model.generation}</span>
               <span>{model.nodes.size} components drawn</span>
             </div>
             <div className="groma-scale-selector">
@@ -292,20 +321,19 @@ export function Canvas({
                       <strong>A → B</strong> · A uses B
                     </span>
                   </li>
-                  <li>
-                    <span
-                      className="groma-legend-mark groma-legend-mark--quote"
-                      aria-hidden="true"
-                    />
-                    <span>
-                      <strong>quoted line</strong> · the source&rsquo;s own words
-                    </span>
-                  </li>
                 </ol>
+                {graph.terms.length > 0 ? (
+                  <ul className="groma-title-block__glossary" aria-label="What the marks mean">
+                    {graph.terms.map((term) => (
+                      <TermItem key={term} term={term} />
+                    ))}
+                  </ul>
+                ) : null}
                 <p className="groma-title-block__hint">
-                  Counts are measured. Descriptions are quoted verbatim from each component&rsquo;s
-                  own documentation, never written here; where the source says nothing, this sheet
-                  says nothing. Scale sets what is shown; zoom only changes how large it looks.
+                  Everything here is <strong>evidence</strong>: measured or quoted verbatim by a
+                  blind scan that reports structure and never interprets it. Meaning you add
+                  &mdash; the <strong>intent</strong> &mdash; a scan never writes and a rescan never
+                  erases. Scale sets what is shown; zoom only changes how large it looks.
                 </p>
               </details>
             ) : null}

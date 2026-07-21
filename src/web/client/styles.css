@@ -515,19 +515,24 @@ input {
   background: var(--color-paper);
 }
 
+/*
+ * The panel is reference apparatus, not the subject. It sits quietly in the
+ * corner with a hairline rule so the system it describes — named at title scale
+ * on the plate — is the first thing the eye lands on, not the viewer's chrome.
+ */
 .groma-title-block {
-  width: min(660px, calc(100vw - 340px));
-  min-width: 420px;
+  width: min(560px, calc(100vw - 360px));
+  min-width: 380px;
   margin: 15px;
-  border: 1.5px solid var(--color-ink);
-  background: rgba(251, 250, 246, 0.96);
-  box-shadow: 0 8px 22px rgba(32, 36, 34, 0.06);
+  border: 1px solid var(--color-line);
+  background: rgba(251, 250, 246, 0.94);
+  box-shadow: 0 6px 16px rgba(32, 36, 34, 0.05);
 }
 
 .groma-title-block__heading {
   display: grid;
   grid-template-columns: 1fr auto auto;
-  border-bottom: 1px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .groma-title-block__heading > * {
@@ -541,19 +546,39 @@ input {
 }
 
 .groma-title-block__heading p {
-  font-size: 12px;
-  font-weight: 750;
+  font-family: var(--font-plan);
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.1em;
+  color: var(--color-ink-muted);
   text-transform: uppercase;
 }
 
-.groma-title-block__heading span,
-.groma-title-block__hint {
+.groma-title-block__heading span {
   font-family: var(--font-plan);
   font-size: 9px;
   letter-spacing: 0.04em;
   color: var(--color-ink-muted);
   text-transform: uppercase;
+}
+
+/*
+ * The one place on the sheet that states the sheet's own discipline, so it is
+ * set as readable prose rather than stencil micro-type: this is what a reader
+ * takes away about what they are looking at.
+ */
+.groma-title-block__hint {
+  margin: 0;
+  padding: 7px 8px;
+  border-top: 1px solid var(--color-fine);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+}
+
+.groma-title-block__hint strong {
+  color: var(--color-ink);
+  font-weight: 650;
 }
 
 .groma-title-block ol {
@@ -584,6 +609,40 @@ input {
   color: var(--color-ink);
   font-weight: 650;
   text-transform: uppercase;
+}
+
+/*
+ * Plain-language definitions of the marks the sheet uses. Set as reference in
+ * the plan face, one term per row, so a reader can decode a badge without
+ * leaving the drawing — and never meets a word for a mark that is not present.
+ */
+.groma-title-block__glossary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-fine);
+  list-style: none;
+}
+
+.groma-title-block__glossary li {
+  display: block;
+  padding: 5px 8px;
+  border-right: 1px solid var(--color-fine);
+  border-bottom: 1px solid var(--color-fine);
+  font-family: var(--font-plan);
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+}
+
+.groma-title-block__glossary li:nth-child(2n) {
+  border-right: 0;
+}
+
+.groma-title-block__glossary li strong {
+  color: var(--color-ink);
+  font-weight: 650;
 }
 
 .groma-legend-mark {
@@ -645,12 +704,6 @@ input {
   font-size: 9px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-}
-
-.groma-title-block__hint {
-  margin: 0;
-  padding: 5px 8px;
-  border-top: 1px solid var(--color-fine);
 }
 
 .groma-bounded-notice,
