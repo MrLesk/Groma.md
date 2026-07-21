@@ -18,6 +18,7 @@ import {
   mergeRootsPage,
   type BlueprintModel,
 } from "./model.ts";
+import { shouldContinueOwnedRootDiscovery } from "./root-discovery.ts";
 import { SpecPanel } from "./spec.tsx";
 
 const ROOT_LIMIT = 20;
@@ -44,6 +45,9 @@ export function App() {
   const [focusStack, setFocusStack] = useState<readonly string[]>([]);
   const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
+  const pendingRoots = useRef(false);
+  const rootPagesRead = useRef(0);
+  const mounted = useRef(true);
   const autoExpanded = useRef(new Set<string>());
   const focusId = focusStack.at(-1);
   // The component the sheet is framed on: the one walked into, or the single
@@ -55,17 +59,42 @@ export function App() {
   );
   const frameId = focusId ?? (ownedRootIds.length === 1 ? ownedRootIds[0] : undefined);
 
-  useEffect(() => {
-    let disposed = false;
-    void fetchRoots(ROOT_LIMIT).then((result) => {
-      if (disposed) return;
-      if (result.ok) setModel((current) => mergeRootsPage(current, result.value));
-      else setFailure(result);
+  const loadRoots = (cursor?: string) => {
+    if (pendingRoots.current) return;
+    pendingRoots.current = true;
+    void fetchRoots(ROOT_LIMIT, cursor).then((result) => {
+      pendingRoots.current = false;
+      if (!mounted.current) return;
+      if (result.ok) {
+        rootPagesRead.current += 1;
+        setModel((current) => mergeRootsPage(current, result.value));
+      } else setFailure(result);
     });
+  };
+
+  useEffect(() => {
+    mounted.current = true;
     return () => {
-      disposed = true;
+      mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    loadRoots();
+    // The reader sees one bounded root page immediately. Later pages are chosen
+    // below only when opaque root ordering has not yet reached owned code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Scanner identities deliberately sort opaquely, so a dependency-heavy project
+  // can place many borrowed roots before its own system. Continue a small, explicit
+  // root budget until the drawing has an owned plate; the existing "more roots"
+  // control remains responsible for anything beyond that budget.
+  useEffect(() => {
+    if (!shouldContinueOwnedRootDiscovery(model, rootPagesRead.current)) return;
+    loadRoots(model.rootsCursor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.hasMoreRoots, model.nodes, model.rootIds, model.rootsCursor]);
 
   // Open the system's own parts on arrival, so a reader meets the architecture
   // rather than a single collapsed box they must first know to click. Only
@@ -173,9 +202,7 @@ export function App() {
     setFocusStack((stack) => stack.slice(0, depth));
   };
   const onLoadMoreRoots = () => {
-    void fetchRoots(ROOT_LIMIT, model.rootsCursor).then((result) => {
-      if (result.ok) setModel((current) => mergeRootsPage(current, result.value));
-    });
+    if (model.rootsCursor !== undefined) loadRoots(model.rootsCursor);
   };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {

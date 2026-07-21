@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { fileExportDescription } from "../../host/typescript-bun-scanner.ts";
+import { shouldContinueOwnedRootDiscovery } from "../client/root-discovery.ts";
 import type { ApiComponentPage, ApiComponentView } from "../client/api.ts";
 import {
   buildBlueprintFlowGraph,
@@ -10,8 +11,12 @@ import {
 import { displayText, emptyModel, mergeChildrenPage, mergeRootsPage } from "../client/model.ts";
 
 function view(id: string, extra: Record<string, unknown> = {}): ApiComponentView {
+  const { cognitiveComplexity, ...component } = extra as Record<string, unknown> & {
+    readonly cognitiveComplexity?: ApiComponentView["cognitiveComplexity"];
+  };
   return {
-    component: { id, kind: "component", ...extra },
+    ...(cognitiveComplexity === undefined ? {} : { cognitiveComplexity }),
+    component: { id, kind: "component", ...component },
     revision: `sha256:${id}`,
   } as ApiComponentView;
 }
@@ -48,6 +53,21 @@ describe("interactive map view-model", () => {
     expect(second.rootIds).toEqual(["ent_a", "ent_b", "ent_c"]);
     expect(second.hasMoreRoots).toBeFalse();
     expect(second.rootsCursor).toBeUndefined();
+  });
+
+  test("continues only a small root budget until it reaches owned code", () => {
+    const borrowed = mergeRootsPage(
+      emptyModel(),
+      page([view("ext_a", { type: "external" })], true, "after-borrowed"),
+    );
+    expect(shouldContinueOwnedRootDiscovery(borrowed, 1)).toBeTrue();
+    expect(shouldContinueOwnedRootDiscovery(borrowed, 5)).toBeFalse();
+
+    const owned = mergeRootsPage(
+      borrowed,
+      page([view("ent_system", { scale: "system" })], true, "after-system"),
+    );
+    expect(shouldContinueOwnedRootDiscovery(owned, 2)).toBeFalse();
   });
 
   test("merges bounded children pages under their parent only", () => {
@@ -217,6 +237,71 @@ describe("interactive map view-model", () => {
     expect(graph.terms).toContain("borrowed");
     expect(graph.terms).not.toContain("entry");
     expect(graph.terms).not.toContain("quoted");
+  });
+
+  test("compares cognitive complexity only within one scanner's measured project", () => {
+    const source = {
+      projectId: "prj_local",
+      scanner: { id: "typescript-bun", instance: "default", version: "1.0.0" },
+    };
+    const model = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const withChildren = mergeChildrenPage(
+      model,
+      "ent_system",
+      page([
+        view("ent_a", { cognitiveComplexity: [{ ...source, value: 3 }], name: "a" }),
+        view("ent_b", { cognitiveComplexity: [{ ...source, value: 18 }], name: "b" }),
+        view("ent_c", {
+          cognitiveComplexity: [
+            {
+              projectId: "prj_local",
+              scanner: { id: "other", instance: "default", version: "1.0.0" },
+              value: 99,
+            },
+          ],
+          name: "c",
+        }),
+        view("ent_missing", { name: "missing evidence" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({ dependencies: [], model: withChildren });
+    expect(graph.nodes.find((node) => node.id === "ent_a")?.data.cognitiveComplexity).toBe(3);
+    expect(graph.nodes.find((node) => node.id === "ent_b")?.data.cognitiveComplexity).toBe(18);
+    expect(
+      graph.nodes.find((node) => node.id === "ent_c")?.data.cognitiveComplexity,
+    ).toBeUndefined();
+    expect(
+      graph.nodes.find((node) => node.id === "ent_missing")?.data.cognitiveComplexity,
+    ).toBeUndefined();
+    expect(graph.terms).toContain("cognitive");
+    expect(graph.readout).toContain(
+      "Highest cognitive complexity shown: b — 18, measured by prj_local · typescript-bun/default@1.0.0.",
+    );
+  });
+
+  test("does not rank a lone or conflicting cognitive-complexity measurement", () => {
+    const source = {
+      projectId: "prj_local",
+      scanner: { id: "typescript-bun", instance: "default", version: "1.0.0" },
+    };
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", {
+          cognitiveComplexity: [
+            { ...source, value: 3 },
+            { ...source, value: 4 },
+          ],
+          name: "a",
+        }),
+        view("ent_b", { cognitiveComplexity: [{ ...source, value: 18 }], name: "b" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({ dependencies: [], model });
+    expect(graph.terms).not.toContain("cognitive");
+    expect(graph.readout).toEqual([]);
   });
 
   test("a file's own exports are not a way in, but a served route is", () => {

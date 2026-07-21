@@ -651,6 +651,48 @@ describe("local completed-snapshot reconciliation", () => {
     expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
   });
 
+  test("projects cognitive complexity as scanner evidence in bounded reads and exports", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("cognitive-1", [candidate("parser", "parser.ts", { cognitiveComplexity: 27 })]),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+
+    const listed = await host.operations.listComponents({ limit: 10 });
+    expect(listed).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          {
+            cognitiveComplexity: [
+              {
+                projectId: "project.local",
+                scanner: { id: "groma.typescript-bun", instance: "builtin", version: "1.0.0" },
+                value: 27,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (!listed.ok) return;
+    const id = listed.value.items[0]!.component.id;
+
+    const detail = await host.operations.getComponent({ id, relationships: { limit: 10 } });
+    expect(detail).toMatchObject({
+      ok: true,
+      value: { item: { cognitiveComplexity: [{ value: 27 }] } },
+    });
+    const exported = await host.operations.exportBlueprint({ limit: 10 });
+    expect(exported).toMatchObject({
+      ok: true,
+      value: { items: [{ cognitiveComplexity: [{ value: 27 }] }] },
+    });
+  });
+
   test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);

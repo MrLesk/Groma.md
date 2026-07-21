@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import {
+  cognitiveComplexitySourceLabel,
   createComponent,
   fetchComponent,
   isStaticBlueprintSnapshot,
@@ -611,6 +612,7 @@ export function SpecPanel({
   };
 
   const component = detail.read?.item.component;
+  const cognitiveComplexity = detail.read?.item.cognitiveComplexity ?? [];
   const scaleAssessments = (detail.read?.evidence ?? []).flatMap((entry) =>
     entry.scale === undefined ? [] : [{ projectId: entry.projectId, scale: entry.scale }],
   );
@@ -869,6 +871,24 @@ export function SpecPanel({
                 ? `Scan evidence from ${detail.read.evidence.length} source${detail.read.evidence.length === 1 ? "" : "s"}`
                 : "No scan evidence recorded"}
           </Field>
+          {cognitiveComplexity.length === 0 ? null : (
+            <Field label="Cognitive complexity">
+              <ul className="m-0 list-none p-0">
+                {cognitiveComplexity.map((measurement) => (
+                  <li
+                    key={`${measurement.projectId}:${cognitiveComplexitySourceLabel(measurement)}`}
+                    className="border-b border-fine py-1 last:border-b-0"
+                  >
+                    <span className="font-plan text-[9px] text-ink-muted">
+                      {cognitiveComplexitySourceLabel(measurement)}
+                    </span>
+                    <br />
+                    {measurement.value} — scanner-measured nesting and branching
+                  </li>
+                ))}
+              </ul>
+            </Field>
+          )}
           <Field label="Relationships">
             {detail.relationships.length === 0 ? (
               "None on this page"
