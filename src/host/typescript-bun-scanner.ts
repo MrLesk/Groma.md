@@ -36,6 +36,22 @@ const maxSourceBytes = 2 * 1024 * 1024;
 const maxDocumentationCharacters = 32 * 1024;
 const maxRecords = 4_096;
 const maxCanonicalCharacters = 1_500_000;
+// Kept in step with the reconciliation component ceiling (defaultHostBounds
+// maxComponents): the file/directory topography is dropped before the emitted
+// component count could exceed what reconciliation will accept, so a very large
+// repository still yields its upper levels with partial coverage.
+const maxComponentCandidates = 1_000;
+// The most exported functions surfaced on a single file, so a rare barrel that
+// re-exports hundreds of names lists a bounded, reproducible sample rather than
+// swamping the file's detail or the per-component embedded-item ceiling.
+const maxFileExportActions = 32;
+/**
+ * The description carried by every file-level export action, so a file's own
+ * exported functions can be told apart from a package's public-API surface: the
+ * same name can legitimately be both, and only the description distinguishes the
+ * measurement of "this file exports it" from "this package publishes it".
+ */
+export const fileExportDescription = "Exported function";
 const maxExtractionWork = 2_000_000;
 const maxRelationshipProvenance = 32;
 const maxActionProvenance = 32;
@@ -3887,12 +3903,49 @@ async function scanScope(
     { from: string; provenance: ObservationProvenance[]; to: string }
   >();
   const nuxtRoutes = new Map<string, Array<{ componentKey: string; file: FileEvidence }>>();
+  // File-to-file imports, kept alongside the aggregated boundary edges: they are
+  // what a reader sees on drilling into a domain — how its own files wire
+  // together — and the scanner already resolves every import to a target file.
+  const fileImportEdges = new Map<
+    string,
+    { from: string; provenance: ObservationProvenance[]; to: string }
+  >();
+  const fileComponentKey = (
+    boundary: BoundaryEvidence,
+    fileResource: string,
+  ): string | undefined => {
+    const relative = relativeResource(fileResource, boundary.resource);
+    return relative === undefined || relative === "."
+      ? undefined
+      : observationKey("component-candidate", scope, "source-file", boundary.key, relative);
+  };
   for (const [resource, parsed] of parsedSources) {
     chargeExtractionWork(budget);
     const from = boundaryByFile.get(resource);
     const file = await getFile(resource);
     if (from === undefined || file === undefined) continue;
     const owner = from.packageKey === undefined ? undefined : packageByKey.get(from.packageKey);
+    const fromFileKey = fileComponentKey(from, resource);
+    const recordFileEdge = (
+      targetBoundary: BoundaryEvidence,
+      targetResource: string,
+      imp: ImportEvidence,
+    ): void => {
+      const toFileKey = fileComponentKey(targetBoundary, targetResource);
+      if (fromFileKey === undefined || toFileKey === undefined || fromFileKey === toFileKey) return;
+      const identity = `${fromFileKey} ${toFileKey}`;
+      const known = fileImportEdges.get(identity);
+      const provenance = rangeProvenance(file, imp.start, imp.end);
+      if (known === undefined) {
+        fileImportEdges.set(identity, {
+          from: fromFileKey,
+          provenance: [provenance],
+          to: toFileKey,
+        });
+      } else if (known.provenance.length < maxRelationshipProvenance) {
+        known.provenance.push(provenance);
+      }
+    };
     for (const imported of parsed.imports) {
       chargeExtractionWork(budget);
       let toKey: string | undefined;
@@ -3903,7 +3956,9 @@ async function scanScope(
           continue;
         }
         const target = boundaryByFile.get(resolved);
-        if (target === undefined || target.key === from.key) continue;
+        if (target === undefined) continue;
+        recordFileEdge(target, resolved, imported);
+        if (target.key === from.key) continue;
         toKey = target.key;
       } else {
         const alias = imported.source.startsWith("#")
@@ -3925,6 +3980,7 @@ async function scanScope(
             partial = true;
             continue;
           }
+          recordFileEdge(target, alias.resource, imported);
           if (target.key === from.key) continue;
           toKey = target.key;
         } else if (imported.source.startsWith("#")) {
@@ -4131,6 +4187,183 @@ async function scanScope(
       );
     }
     records[index] = enlarged;
+  }
+  // The topography inside each boundary: its directories and source files, wired
+  // by containment, so a domain drills into its real contents rather than being
+  // a terminal box. Nothing new is parsed — a boundary already knows the files it
+  // owns and their paths. Directories become intermediate components and each
+  // file a leaf; depth alone decides their scale downstream. This runs last, as
+  // enrichment: on budget pressure the deeper topography is simply dropped and
+  // coverage reported partial, so the primary architecture always survives.
+  let componentCandidateCount = records.reduce(
+    (total, record) => total + (record.kind === "component-candidate" ? 1 : 0),
+    0,
+  );
+  const emittedFileKeys = new Set<string>();
+  // Enrichment stops well short of every ceiling — record count, distinct
+  // components, and canonical characters alike — so a large repository yields as
+  // much topography as fits and reports the rest as partial, never overflowing.
+  const topographyCharacterCeiling = maxCanonicalCharacters - 32_768;
+  const roomForTopography = () =>
+    budget.records + 8 < maxRecords &&
+    componentCandidateCount < maxComponentCandidates &&
+    budget.canonicalCharacters < topographyCharacterCeiling;
+  const containsRelationship = (from: string, to: string, provenance: ObservationProvenance) =>
+    Object.freeze({
+      from: reference(scope, from),
+      key: observationKey("relationship", scope, "source-contains", from, to),
+      kind: "relationship" as const,
+      provenance: Object.freeze([provenance]),
+      relationshipType: observedContainmentRelationshipType,
+      scope,
+      to: reference(scope, to),
+    });
+  let topographyBudgetReached = false;
+  for (const boundary of boundaries) {
+    if (topographyBudgetReached) break;
+    const directoryKeys = new Map<string, string>();
+    for (const resource of boundary.files) {
+      chargeExtractionWork(budget);
+      const relative = relativeResource(resource, boundary.resource);
+      if (relative === undefined || relative === ".") continue;
+      const segments = relative.split("/");
+      let parentKey = boundary.key;
+      let directoryPath = "";
+      let aborted = false;
+      for (let index = 0; index < segments.length - 1; index += 1) {
+        const segment = segments[index]!;
+        directoryPath = directoryPath === "" ? segment : `${directoryPath}/${segment}`;
+        let directoryKey = directoryKeys.get(directoryPath);
+        if (directoryKey === undefined) {
+          if (!roomForTopography()) {
+            aborted = true;
+            break;
+          }
+          directoryKey = observationKey(
+            "component-candidate",
+            scope,
+            "source-directory",
+            boundary.key,
+            directoryPath,
+          );
+          directoryKeys.set(directoryPath, directoryKey);
+          append(
+            Object.freeze({
+              candidate: Object.freeze({ name: segment }),
+              key: directoryKey,
+              kind: "component-candidate",
+              provenance: Object.freeze([boundary.provenance]),
+              scope,
+            }),
+          );
+          componentCandidateCount += 1;
+          append(containsRelationship(parentKey, directoryKey, boundary.provenance));
+        }
+        parentKey = directoryKey;
+      }
+      if (aborted || !roomForTopography()) {
+        topographyBudgetReached = true;
+        partial = true;
+        break;
+      }
+      const file = await getFile(resource);
+      if (file === undefined) continue;
+      const fileKey = observationKey(
+        "component-candidate",
+        scope,
+        "source-file",
+        boundary.key,
+        relative,
+      );
+      append(
+        Object.freeze({
+          candidate: Object.freeze({ name: segments[segments.length - 1]! }),
+          key: fileKey,
+          kind: "component-candidate",
+          provenance: Object.freeze([fullProvenance(file)]),
+          scope,
+        }),
+      );
+      componentCandidateCount += 1;
+      emittedFileKeys.add(fileKey);
+      append(containsRelationship(parentKey, fileKey, fullProvenance(file)));
+
+      // A file also reveals the functions it exports, attached to the file as
+      // named actions, so drilling to a leaf shows what it offers rather than
+      // only that it exists. Nothing new is parsed — the exports were already
+      // read for the import graph. This runs after the entry-point pass above,
+      // so a file's own exports never make the file itself read as a way in;
+      // sorted and capped for a reproducible, bounded snapshot.
+      const fileParsed = parsedSources.get(resource);
+      if (fileParsed !== undefined) {
+        let fileExports = 0;
+        for (const callable of [...fileParsed.callables.values()].sort((left, right) =>
+          compareCodeUnits(left.name, right.name),
+        )) {
+          if (fileExports >= maxFileExportActions) {
+            partial = true;
+            break;
+          }
+          if (!roomForTopography()) {
+            topographyBudgetReached = true;
+            partial = true;
+            break;
+          }
+          append(
+            Object.freeze({
+              component: reference(scope, fileKey),
+              description: fileExportDescription,
+              key: observationKey(
+                "action",
+                scope,
+                "file-export",
+                boundary.key,
+                relative,
+                callable.name,
+              ),
+              kind: "action" as const,
+              name: callable.name,
+              provenance: Object.freeze([rangeProvenance(file, callable.start, callable.end)]),
+              scope,
+            }),
+          );
+          fileExports += 1;
+        }
+        if (topographyBudgetReached) break;
+      }
+    }
+  }
+  // The file-to-file wiring, drawn only between files that were actually emitted,
+  // so a drilled-in domain shows how its own files depend on one another. Sorted
+  // for a reproducible snapshot and bounded like the rest of the topography.
+  for (const [, edge] of [...fileImportEdges].sort((left, right) =>
+    compareCodeUnits(left[0], right[0]),
+  )) {
+    if (!emittedFileKeys.has(edge.from) || !emittedFileKeys.has(edge.to)) continue;
+    if (
+      budget.records + 4 >= maxRecords ||
+      budget.canonicalCharacters >= topographyCharacterCeiling
+    ) {
+      partial = true;
+      break;
+    }
+    edge.provenance.sort((left, right) =>
+      compareCodeUnits(
+        `${left.resource}:${left.range?.startByte ?? 0}`,
+        `${right.resource}:${right.range?.startByte ?? 0}`,
+      ),
+    );
+    append(
+      Object.freeze({
+        from: reference(scope, edge.from),
+        key: observationKey("relationship", scope, "file-imports", edge.from, edge.to),
+        kind: "relationship" as const,
+        provenance: Object.freeze(edge.provenance),
+        relationshipType: "imports",
+        scope,
+        to: reference(scope, edge.to),
+      }),
+    );
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),

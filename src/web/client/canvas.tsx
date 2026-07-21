@@ -18,11 +18,9 @@ import {
 } from "react";
 
 import type { BlueprintModel } from "./model.ts";
-import type { ApiComponentScale } from "./api.ts";
 import {
   buildBlueprintFlowGraph,
   nextScaleLabel,
-  SCALE_ORDER,
   type BlueprintFlowNode,
   type BlueprintGroupNode,
   type BlueprintNotation,
@@ -30,11 +28,9 @@ import {
 } from "./graph.ts";
 
 interface CanvasActions {
-  readonly onExpand: (id: string) => void;
-  readonly onLoadMoreChildren: (id: string) => void;
+  readonly onFocus: (id: string) => void;
   readonly onLoadMoreRoots: () => void;
   readonly onSelect: (id: string | undefined) => void;
-  readonly onToggleFold: (id: string) => void;
 }
 
 const CanvasActionsContext = createContext<CanvasActions | undefined>(undefined);
@@ -61,15 +57,12 @@ const NOTATION_LABELS: Readonly<Record<BlueprintNotation, string>> = Object.free
 function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
   const actions = useContext(CanvasActionsContext);
   if (actions === undefined) throw new Error("Blueprint canvas actions are unavailable");
-  const hasLoadedChildren = data.childState === "expanded" || data.childState === "collapsed";
   const activateNodeControl = (event: KeyboardEvent<HTMLButtonElement>, action: () => void) => {
     event.stopPropagation();
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     action();
   };
-  const toggleChildren = () =>
-    data.childState === "unread" ? actions.onExpand(id) : actions.onToggleFold(id);
 
   // Borrowed code is listed, not drawn: a name and how widely it is relied on is
   // everything the scan can honestly say about a dependency whose insides it
@@ -135,7 +128,21 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.childCount > 0 ? <li className="groma-chip">{data.childCount} inside</li> : null}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
-        {data.childState === "empty" ? (
+        {data.canOpen ? (
+          <button
+            type="button"
+            className="groma-node__open"
+            aria-label={`Open ${data.label} and see its ${nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onFocus(id);
+            }}
+            onKeyDown={(event) => activateNodeControl(event, () => actions.onFocus(id))}
+          >
+            Open {data.childCount}{" "}
+            {nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} →
+          </button>
+        ) : (
           <button
             type="button"
             aria-label={`Show the detail of ${data.label}`}
@@ -147,40 +154,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
           >
             Detail →
           </button>
-        ) : (
-          <button
-            type="button"
-            aria-expanded={hasLoadedChildren ? data.childState === "expanded" : undefined}
-            aria-label={
-              data.childState === "unread"
-                ? `Show ${nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} inside ${data.label}`
-                : `${data.childState === "collapsed" ? "Unfold" : "Fold"} ${data.label}`
-            }
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleChildren();
-            }}
-            onKeyDown={(event) => activateNodeControl(event, toggleChildren)}
-          >
-            {data.childState === "unread"
-              ? `Show ${nextScaleLabel(data.notation === "unscaled" ? undefined : data.notation)} →`
-              : data.childState === "collapsed"
-                ? `Unfold ${data.childCount} →`
-                : `Fold ${data.childCount}`}
-          </button>
         )}
-        {data.hasMoreChildren && data.childState === "expanded" ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              actions.onLoadMoreChildren(id);
-            }}
-            onKeyDown={(event) => activateNodeControl(event, () => actions.onLoadMoreChildren(id))}
-          >
-            More · bounded page
-          </button>
-        ) : null}
       </div>
       <Handle type="source" position={Position.Right} className="groma-handle" />
     </article>
@@ -245,38 +219,38 @@ function TermItem({ term }: { term: BlueprintTerm }) {
 }
 
 export interface CanvasProps extends CanvasActions {
+  readonly childCounts: ReadonlyMap<string, number>;
   readonly dependencies: readonly { source: string; target: string; type: string }[];
-  readonly folded: ReadonlySet<string>;
+  readonly focusId?: string | undefined;
+  readonly focusPath: readonly { id: string; label: string }[];
   readonly model: BlueprintModel;
-  readonly onVisibleScale: (scale: ApiComponentScale | undefined) => void;
+  readonly onFocusTo: (depth: number) => void;
   readonly selectedId?: string | undefined;
-  readonly visibleScale: ApiComponentScale | undefined;
 }
 
 export function Canvas({
+  childCounts,
   dependencies,
-  folded,
+  focusId,
+  focusPath,
   model,
-  onExpand,
-  onLoadMoreChildren,
+  onFocus,
+  onFocusTo,
   onLoadMoreRoots,
   onSelect,
-  onToggleFold,
-  onVisibleScale,
   selectedId,
-  visibleScale,
 }: CanvasProps) {
   const graph = useMemo(
-    () => buildBlueprintFlowGraph({ dependencies, folded, model, visibleScale }),
-    [dependencies, folded, model, visibleScale],
+    () => buildBlueprintFlowGraph({ childCounts, dependencies, focusId, model }),
+    [childCounts, dependencies, focusId, model],
   );
   const nodes = useMemo(
     () => graph.nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
     [graph.nodes, selectedId],
   );
   const actions = useMemo(
-    () => ({ onExpand, onLoadMoreChildren, onLoadMoreRoots, onSelect, onToggleFold }),
-    [onExpand, onLoadMoreChildren, onLoadMoreRoots, onSelect, onToggleFold],
+    () => ({ onFocus, onLoadMoreRoots, onSelect }),
+    [onFocus, onLoadMoreRoots, onSelect],
   );
 
   // The notation key is reference, not the subject, so on a small screen where
@@ -289,7 +263,7 @@ export function Canvas({
     <CanvasActionsContext.Provider value={actions}>
       <div className="groma-flow" data-renderer="react-flow-dagre">
         <ReactFlow<BlueprintFlowNode | BlueprintGroupNode>
-          key={visibleScale ?? "everything"}
+          key={`${focusId ?? "top"}:${graph.nodes.length}`}
           nodes={[...nodes]}
           edges={[...graph.edges]}
           nodeTypes={NODE_TYPES}
@@ -318,34 +292,41 @@ export function Canvas({
             showInteractive={false}
             fitViewOptions={FIT_VIEW}
           />
+          {focusPath.length > 0 ? (
+            <Panel position="top-center" className="groma-breadcrumb" data-canvas-keys="skip">
+              <nav aria-label="Where you are" className="groma-breadcrumb__trail">
+                <button type="button" onClick={() => onFocusTo(0)}>
+                  the whole system
+                </button>
+                {focusPath.map((crumb, index) => (
+                  <span key={crumb.id} className="groma-breadcrumb__step">
+                    <span aria-hidden="true">/</span>
+                    {index === focusPath.length - 1 ? (
+                      <strong>{crumb.label}</strong>
+                    ) : (
+                      <button type="button" onClick={() => onFocusTo(index + 1)}>
+                        {crumb.label}
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </nav>
+            </Panel>
+          ) : null}
           <Panel position="top-left" className="groma-title-block">
             <div className="groma-title-block__heading">
               <p>Architectural blueprint</p>
               <span>Scan {model.generation}</span>
               <span>{model.nodes.size} components drawn</span>
             </div>
-            <div className="groma-scale-selector">
-              <span id="groma-scale-label">Show down to</span>
-              <div role="group" aria-labelledby="groma-scale-label">
-                {SCALE_ORDER.map((scale) => (
-                  <button
-                    key={scale}
-                    type="button"
-                    aria-pressed={visibleScale === scale}
-                    onClick={() => onVisibleScale(visibleScale === scale ? undefined : scale)}
-                  >
-                    {scale}
-                  </button>
+            {graph.readout.length > 0 ? (
+              <dl className="groma-readout" aria-label="What this level measures out to">
+                <dt>At this level</dt>
+                {graph.readout.map((line) => (
+                  <dd key={line}>{line}</dd>
                 ))}
-                <button
-                  type="button"
-                  aria-pressed={visibleScale === undefined}
-                  onClick={() => onVisibleScale(undefined)}
-                >
-                  everything
-                </button>
-              </div>
-            </div>
+              </dl>
+            ) : null}
             {graph.notations.length > 0 ? (
               <details
                 className="groma-title-block__key"

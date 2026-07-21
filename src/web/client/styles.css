@@ -504,6 +504,63 @@ input {
   color: var(--color-ink);
 }
 
+/* The way in: a container's parts are one click deep, so the affordance leads. */
+.groma-node__open {
+  border-color: var(--color-survey) !important;
+  color: var(--color-survey) !important;
+  font-weight: 600;
+}
+
+.groma-node__open:hover {
+  color: var(--color-ink) !important;
+}
+
+/*
+ * The trail of where a reader has walked, so entering a domain never strands
+ * them: every step back out is one click, and the whole system is always home.
+ */
+.groma-breadcrumb {
+  margin-top: 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: rgba(251, 250, 246, 0.96);
+  box-shadow: 0 4px 12px rgba(32, 36, 34, 0.08);
+}
+
+.groma-breadcrumb__trail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-family: var(--font-plan);
+  font-size: 11px;
+  color: var(--color-ink-muted);
+}
+
+.groma-breadcrumb__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.groma-breadcrumb button {
+  border: 0;
+  background: transparent;
+  color: var(--color-survey);
+  cursor: pointer;
+  font: inherit;
+}
+
+.groma-breadcrumb button:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
+}
+
+.groma-breadcrumb strong {
+  color: var(--color-ink);
+  font-weight: 650;
+}
+
 .groma-node__terminal {
   letter-spacing: 0.03em;
 }
@@ -561,6 +618,43 @@ input {
   letter-spacing: 0.04em;
   color: var(--color-ink-muted);
   text-transform: uppercase;
+}
+
+/*
+ * What the level in view measures out to, in plain sentences. Each line is a
+ * counted relation against a named part — never a role word, never a verdict —
+ * so a reader learns what stands out here without the drawing asserting it for
+ * them. Set as prose, not stencil micro-type: these are the takeaways.
+ */
+.groma-readout {
+  margin: 0;
+  padding: 7px 9px 8px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.groma-readout dt {
+  margin: 0 0 3px;
+  font-family: var(--font-plan);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+}
+
+.groma-readout dd {
+  margin: 0;
+  padding: 2px 0 2px 11px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--color-ink);
+  text-indent: -11px;
+}
+
+.groma-readout dd::before {
+  content: "—";
+  padding-right: 5px;
+  color: var(--color-ink-muted);
 }
 
 /*

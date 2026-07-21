@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
+import { fileExportDescription } from "../../host/typescript-bun-scanner.ts";
 import type { ApiComponentPage, ApiComponentView } from "../client/api.ts";
-import { buildBlueprintFlowGraph, nextScaleLabel } from "../client/graph.ts";
+import {
+  buildBlueprintFlowGraph,
+  fileExportActionDescription,
+  nextScaleLabel,
+} from "../client/graph.ts";
 import { displayText, emptyModel, mergeChildrenPage, mergeRootsPage } from "../client/model.ts";
 
 function view(id: string, extra: Record<string, unknown> = {}): ApiComponentView {
@@ -70,7 +75,7 @@ describe("interactive map view-model", () => {
     expect(unchanged.nodes.get("ent_x")?.view.component.id).toBe("ent_x");
   });
 
-  test("nests loaded containment inside container plates instead of a flat grid", () => {
+  test("shows one level inside a frame and drills deeper by focus", () => {
     const roots = mergeRootsPage(
       emptyModel(),
       page([view("ent_system", { name: "Product", scale: "system" })]),
@@ -85,29 +90,32 @@ describe("interactive map view-model", () => {
       "ent_domain",
       page([view("ent_part", { name: "Sessions", scale: "part" })]),
     );
-    const options = {
-      dependencies: [],
-      folded: new Set<string>(),
-      model: parts,
-      visibleScale: undefined,
-    };
-    const graph = buildBlueprintFlowGraph(options);
-    expect(graph).toEqual(buildBlueprintFlowGraph(options));
-    // Every container becomes a plate its contents are nested inside.
-    expect(graph.nodes.map((node) => node.id)).toEqual([
-      "group:ent_system",
-      "group:ent_domain",
-      "ent_part",
+    const childCounts = new Map([
+      ["ent_system", 1],
+      ["ent_domain", 1],
     ]);
-    expect(graph.nodes.find((node) => node.id === "group:ent_domain")?.parentId).toBe(
-      "group:ent_system",
-    );
-    expect(graph.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
-    // Nesting carries containment, so no containment edges are drawn.
-    expect(graph.edges).toHaveLength(0);
-    expect(graph.notations).toEqual(["system", "domain", "part"]);
-    expect(graph.nodes.every((node) => Number.isInteger(node.position.x))).toBeTrue();
-    expect(graph.nodes.every((node) => Number.isInteger(node.position.y))).toBeTrue();
+    const top = buildBlueprintFlowGraph({
+      childCounts,
+      dependencies: [],
+      model: parts,
+    });
+    // The single system is the frame; its domain shows as a card inside it, and
+    // the domain's own part stays out of view until the domain is entered.
+    expect(top.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
+    expect(top.nodes.find((node) => node.id === "ent_domain")?.parentId).toBe("group:ent_system");
+    expect(top.nodes.find((node) => node.id === "ent_domain")?.data.canOpen).toBe(true);
+
+    // Focusing the domain re-roots the sheet onto it: it becomes the frame and
+    // its part is now the card in view.
+    const drilled = buildBlueprintFlowGraph({
+      childCounts,
+      dependencies: [],
+      focusId: "ent_domain",
+      model: parts,
+    });
+    expect(drilled.nodes.map((node) => node.id)).toEqual(["group:ent_domain", "ent_part"]);
+    expect(drilled.nodes.find((node) => node.id === "ent_part")?.parentId).toBe("group:ent_domain");
+    expect(drilled.nodes.every((node) => Number.isInteger(node.position.x))).toBeTrue();
   });
 
   test("draws observed dependencies and wires externals to the parts that use them", () => {
@@ -120,9 +128,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     // No band: borrowed code is a first-class node wired to its consumer, placed
     // to the right of the parts that use it rather than in a detached tray.
@@ -177,9 +183,7 @@ describe("interactive map view-model", () => {
         // Repeated observations of one pair are one dependency.
         { source: "ent_a", target: "ent_b", type: "imports" },
       ],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     expect(graph.edges).toHaveLength(1);
     const a = graph.nodes.find((node) => node.id === "ent_a");
@@ -204,9 +208,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [{ source: "ent_owned", target: "ent_lib", type: "imports" }],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     // shared is present, external and borrowed are present; entry and quoted are not,
     // so the key must not offer to define words the reader cannot see.
@@ -215,6 +217,122 @@ describe("interactive map view-model", () => {
     expect(graph.terms).toContain("borrowed");
     expect(graph.terms).not.toContain("entry");
     expect(graph.terms).not.toContain("quoted");
+  });
+
+  test("a file's own exports are not a way in, but a served route is", () => {
+    const model = mergeRootsPage(
+      emptyModel(),
+      page([
+        view("ent_web", {
+          name: "web",
+          scale: "domain",
+          actions: [{ id: "act_route", name: "GET /health" }],
+        }),
+        view("ent_file", {
+          name: "result.ts",
+          scale: "part",
+          // The same channel carries a file's exported functions, marked apart so
+          // listing them never reads as exposing the system.
+          actions: [
+            { description: fileExportActionDescription, id: "act_success", name: "success" },
+            { description: fileExportActionDescription, id: "act_failure", name: "failure" },
+          ],
+        }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({ dependencies: [], model });
+    const routed = graph.nodes.find((node) => node.id === "ent_web");
+    const file = graph.nodes.find((node) => node.id === "ent_file");
+    expect(routed?.data.entryPoint).toBe(true);
+    expect(file?.data.entryPoint).toBe(false);
+    // The key defines "entry" because the route is present, not because a file
+    // happens to export functions.
+    expect(graph.terms).toContain("entry");
+  });
+
+  test("the web's file-export marker stays pinned to the scanner's", () => {
+    expect(fileExportActionDescription).toBe(fileExportDescription);
+  });
+
+  test("measures what stands out at a level, as figures a reader can count", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+        view("ent_c", { name: "c", scale: "domain" }),
+        view("ent_d", { name: "d", scale: "domain" }),
+      ]),
+    );
+    // a reaches every other; b is reached from every other. Both figures equal the
+    // count of the "others here", so each line reconciles against the arrows drawn.
+    const graph = buildBlueprintFlowGraph({
+      childCounts: new Map([
+        ["ent_a", 5],
+        ["ent_b", 2],
+        ["ent_c", 2],
+        ["ent_d", 2],
+      ]),
+      dependencies: [
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        { source: "ent_a", target: "ent_c", type: "imports" },
+        { source: "ent_a", target: "ent_d", type: "imports" },
+        { source: "ent_c", target: "ent_b", type: "imports" },
+        { source: "ent_d", target: "ent_b", type: "imports" },
+      ],
+      model,
+    });
+    expect(graph.readout).toEqual([
+      "Most depended on: b — 3 of the 3 others here import it.",
+      "Reaches the most: a — imports 3 of the 3 others.",
+      "Largest here: a (5 inside).",
+    ]);
+  });
+
+  test("states a cycle as a measured relation, never a defect", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    const model = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([
+        view("ent_a", { name: "a", scale: "domain" }),
+        view("ent_b", { name: "b", scale: "domain" }),
+        view("ent_c", { name: "c", scale: "domain" }),
+      ]),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [
+        { source: "ent_a", target: "ent_b", type: "imports" },
+        { source: "ent_b", target: "ent_a", type: "imports" },
+      ],
+      model,
+    });
+    expect(graph.readout).toContain("a and b import each other.");
+  });
+
+  test("stays silent when a level is too small or its frame is still loading", () => {
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
+    // Only two siblings loaded, and the frame still has more to page: no honest
+    // "of the N others" figure exists yet, so the readout says nothing.
+    const partial = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page(
+        [
+          view("ent_a", { name: "a", scale: "domain" }),
+          view("ent_b", { name: "b", scale: "domain" }),
+        ],
+        true,
+        "more",
+      ),
+    );
+    const graph = buildBlueprintFlowGraph({
+      dependencies: [{ source: "ent_a", target: "ent_b", type: "imports" }],
+      model: partial,
+    });
+    expect(graph.readout).toEqual([]);
   });
 
   test("names the reading order only where the contents form one", () => {
@@ -230,9 +348,7 @@ describe("interactive map view-model", () => {
     const plate = (dependencies: readonly { source: string; target: string; type: string }[]) =>
       buildBlueprintFlowGraph({
         dependencies,
-        folded: new Set<string>(),
         model,
-        visibleScale: undefined,
       }).nodes.find((node) => node.id === "group:ent_system");
 
     // A dependency order exists, so the sheet may name the direction it drew.
@@ -251,7 +367,7 @@ describe("interactive map view-model", () => {
     expect(plate([])?.data.axis).toBeUndefined();
   });
 
-  test("the visible scale bounds how deep the sheet draws without unloading the model", () => {
+  test("the frame draws one level and keeps deeper loaded nodes out of view, not discarded", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const domains = mergeChildrenPage(
       roots,
@@ -265,32 +381,12 @@ describe("interactive map view-model", () => {
     );
     const shallow = buildBlueprintFlowGraph({
       dependencies: [],
-      folded: new Set<string>(),
       model,
-      visibleScale: "domain",
     });
     expect(shallow.nodes.map((node) => node.id)).toEqual(["group:ent_system", "ent_domain"]);
     expect(shallow.notations).toEqual(["system", "domain"]);
-    // The finer rung is only hidden, never discarded.
+    // The deeper part is only out of view, never discarded from the model.
     expect(model.nodes.has("ent_part")).toBeTrue();
-  });
-
-  test("folding removes descendants from layout without discarding loaded model state", () => {
-    const roots = mergeRootsPage(emptyModel(), page([view("ent_domain", { scale: "domain" })]));
-    const children = mergeChildrenPage(
-      roots,
-      "ent_domain",
-      page([view("ent_part", { scale: "part" })]),
-    );
-    const graph = buildBlueprintFlowGraph({
-      dependencies: [],
-      folded: new Set(["ent_domain"]),
-      model: children,
-      visibleScale: undefined,
-    });
-    expect(graph.nodes.map((node) => node.id)).toEqual(["ent_domain"]);
-    expect(graph.nodes[0]?.data.childState).toBe("collapsed");
-    expect(children.nodes.has("ent_part")).toBeTrue();
   });
 
   test("gives every canonical scale and the unscaled state distinct notation geometry", () => {
@@ -306,9 +402,7 @@ describe("interactive map view-model", () => {
     );
     const graph = buildBlueprintFlowGraph({
       dependencies: [],
-      folded: new Set<string>(),
       model,
-      visibleScale: undefined,
     });
     expect(graph.nodes.map((node) => node.data.notation)).toEqual([
       "system",

@@ -7,6 +7,8 @@ import { displayText, type BlueprintModel } from "./model.ts";
 export type BlueprintNotation = ApiComponentScale | "unscaled";
 
 export interface BlueprintFlowNodeData extends Record<string, unknown> {
+  /** True when this component contains parts, so it offers a way in. */
+  readonly canOpen: boolean;
   readonly childCount: number;
   readonly childState: "collapsed" | "empty" | "expanded" | "unread";
   /** Borrowed dependencies this one draws on, counted apart from the system's own. */
@@ -54,6 +56,14 @@ export interface BlueprintFlowGraph {
   readonly nodes: readonly (BlueprintFlowNode | BlueprintGroupNode)[];
   /** Notations actually drawn, so the legend can describe only what is present. */
   readonly notations: readonly BlueprintNotation[];
+  /**
+   * What the current level measures out to, in plain language — the most
+   * depended-on part, the one that reaches the most, entry points, an import
+   * cycle, the largest. Each line is a measured relation plus a count plus a
+   * verbatim name plus its scope; never a role word, never a judgement, so it
+   * stays on the "measure" side of the line the scanner must not cross.
+   */
+  readonly readout: readonly string[];
   /**
    * Vocabulary marks actually drawn, so the key defines only the words a reader
    * can see on the sheet and never introduces one that is not there.
@@ -146,6 +156,36 @@ function layoutSubgraph(
   edges: readonly { readonly source: string; readonly target: string }[],
   sizeOf: (id: string) => { height: number; width: number },
 ): LaidOutSubgraph {
+  // With no dependencies to order them, cards would stack in one tall column, so
+  // they are packed into a squarish grid instead — a readable contact sheet of a
+  // component's parts until their own wiring gives them a shape.
+  if (edges.length === 0 && ids.length > 3) {
+    const columns = Math.ceil(Math.sqrt(ids.length));
+    const columnWidth = Math.max(...ids.map((id) => sizeOf(id).width));
+    const gapX = 40;
+    const gapY = 32;
+    const positions = new Map<string, { readonly x: number; readonly y: number }>();
+    const rowHeights: number[] = [];
+    ids.forEach((id, index) => {
+      const row = Math.floor(index / columns);
+      rowHeights[row] = Math.max(rowHeights[row] ?? 0, sizeOf(id).height);
+    });
+    const rowTop = rowHeights.map((_, row) =>
+      rowHeights.slice(0, row).reduce((sum, height) => sum + height + gapY, 0),
+    );
+    ids.forEach((id, index) => {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      positions.set(id, { x: column * (columnWidth + gapX), y: rowTop[row]! });
+    });
+    const rows = rowHeights.length;
+    const usedColumns = Math.min(columns, ids.length);
+    return {
+      height: (rowTop[rows - 1] ?? 0) + (rowHeights[rows - 1] ?? 0),
+      positions,
+      width: usedColumns * columnWidth + (usedColumns - 1) * gapX,
+    };
+  }
   const layout = new dagre.graphlib.Graph();
   // Generous rank and node separation leaves channels between the cards for the
   // dependency lines to run in, so a route reaches its target through a gap
@@ -189,32 +229,128 @@ function layoutSubgraph(
 }
 
 export interface BlueprintGraphOptions {
+  /** Observed count of each component's contained parts, container or leaf. */
+  readonly childCounts?: ReadonlyMap<string, number>;
   readonly dependencies: readonly BlueprintDependency[];
-  readonly folded: ReadonlySet<string>;
+  /** When set, the sheet is re-rooted onto this component's contents. */
+  readonly focusId?: string | undefined;
   readonly model: BlueprintModel;
-  /** Deepest rung the sheet draws; finer components stay folded away. */
-  readonly visibleScale: ApiComponentScale | undefined;
+}
+
+/**
+ * The description the scanner records on a file's own exported functions. Such
+ * an export is not a way into the system — only a served route or a package's
+ * public API is — so it must not light the "entry" mark just because a drilled-in
+ * file lists the functions it defines. Mirrors the scanner's fileExportDescription;
+ * a web test pins the two together so the marker cannot drift unnoticed.
+ */
+export const fileExportActionDescription = "Exported function";
+
+/**
+ * Whether a component exposes a public way in — a served route or a declared
+ * public export — as opposed to merely listing the functions a file exports. The
+ * two arrive on the same channel but never on the same component, so the export
+ * marker alone tells them apart.
+ */
+function hasPublicEntry(component: {
+  readonly actions?: readonly { readonly description?: string }[];
+}): boolean {
+  return (component.actions ?? []).some(
+    (action) => action.description !== fileExportActionDescription,
+  );
+}
+
+/**
+ * The groups of components that reference one another in a cycle (Tarjan's
+ * strongly-connected components of size two or more). Deterministic: the input
+ * order fixes the traversal, and each returned group is sorted by id so the same
+ * observation always yields the same cycle report.
+ */
+function importCycles(
+  ids: readonly string[],
+  edges: readonly { readonly source: string; readonly target: string }[],
+): string[][] {
+  const outgoing = new Map<string, string[]>(ids.map((id) => [id, []]));
+  for (const edge of edges) {
+    if (edge.source !== edge.target && outgoing.has(edge.source) && outgoing.has(edge.target)) {
+      outgoing.get(edge.source)!.push(edge.target);
+    }
+  }
+  let counter = 0;
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const groups: string[][] = [];
+  const connect = (v: string): void => {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter += 1;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of outgoing.get(v)!) {
+      if (!index.has(w)) {
+        connect(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const group: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        group.push(w);
+      } while (w !== v);
+      if (group.length > 1) groups.push(group.sort());
+    }
+  };
+  for (const id of ids) if (!index.has(id)) connect(id);
+  return groups.sort(
+    (left, right) => right.length - left.length || left[0]!.localeCompare(right[0]!),
+  );
 }
 
 export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): BlueprintFlowGraph {
-  const { dependencies, folded, model, visibleScale } = options;
-  const depthLimit =
-    visibleScale === undefined ? Number.POSITIVE_INFINITY : scaleRank(visibleScale);
+  const { dependencies, focusId, model } = options;
+  const childCounts = options.childCounts ?? new Map<string, number>();
 
   const isExternal = (id: string) => model.nodes.get(id)?.view.component.type === "external";
   const componentOf = (id: string) => model.nodes.get(id)?.view.component;
 
-  // Everything the sheet draws, honouring both explicit folding and the chosen rung.
+  // The sheet shows exactly one level at a time, held inside a frame. The frame
+  // is the component the reader has walked into — the focused one, or the single
+  // owned system at the top — drawn as a plate; its direct parts are cards
+  // inside it. Going deeper is re-rooting onto a part (focus), not unfolding it
+  // in place, so a domain reads as "this domain and its parts", never as an
+  // ever-growing nest. Everything below the shown level stays out of view until
+  // entered.
+  const ownedRootIds = model.rootIds.filter(
+    (id) => componentOf(id) !== undefined && !isExternal(id),
+  );
+  const frameId =
+    focusId !== undefined && componentOf(focusId) !== undefined
+      ? focusId
+      : ownedRootIds.length === 1
+        ? ownedRootIds[0]
+        : undefined;
+
   const visible = new Set<string>();
-  const visit = (id: string) => {
-    const component = componentOf(id);
-    if (component === undefined || visible.has(id)) return;
-    if (scaleRank(component.scale) > depthLimit && component.scale !== undefined) return;
-    visible.add(id);
-    if (folded.has(id)) return;
-    for (const childId of model.nodes.get(id)?.childIds ?? []) visit(childId);
-  };
-  for (const rootId of model.rootIds) visit(rootId);
+  if (frameId !== undefined) {
+    visible.add(frameId);
+    for (const childId of model.nodes.get(frameId)?.childIds ?? []) {
+      if (componentOf(childId) !== undefined) visible.add(childId);
+    }
+  } else {
+    for (const rootId of ownedRootIds) visible.add(rootId);
+  }
+  // Borrowed code belongs to the top of the map, not to a domain's interior, so
+  // it is shown alongside the system and hidden once a reader has focused inward.
+  if (focusId === undefined) {
+    for (const rootId of model.rootIds) if (isExternal(rootId)) visible.add(rootId);
+  }
 
   const owned = [...visible].filter((id) => !isExternal(id));
   const externals = [...visible].filter((id) => isExternal(id));
@@ -225,7 +361,6 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
   // root exactly when nothing drawn contains it.
   const nested = new Set<string>();
   for (const id of visible) {
-    if (folded.has(id)) continue;
     for (const childId of childrenOf(id)) nested.add(childId);
   }
   const ownedRoots = owned.filter((id) => !nested.has(id));
@@ -242,9 +377,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
    * rather than as a card of its own, so only the rest can carry a count or an
    * arrow endpoint.
    */
-  const carded = new Set(
-    [...visible].filter((id) => childrenOf(id).length === 0 || folded.has(id)),
-  );
+  const carded = new Set([...visible].filter((id) => childrenOf(id).length === 0));
 
   /**
    * The dependencies this sheet can actually show: both ends drawn, no self
@@ -384,7 +517,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
         ? "unread"
         : childIds.length === 0
           ? "empty"
-          : folded.has(id) || nested.length === 0
+          : nested.length === 0
             ? "collapsed"
             : "expanded";
     const size = nested.length === 0 ? cardSize(id) : groupSize(id);
@@ -433,7 +566,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
       return;
     }
 
-    const entryPoint = (component.actions?.length ?? 0) > 0;
+    const entryPoint = hasPublicEntry(component);
     const external = component.type === "external";
     const shared = component.shared === true;
     if (external) terms.add("external");
@@ -441,10 +574,12 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     if (entryPoint) terms.add("entry");
     if ((borrows.get(id)?.size ?? 0) > 0) terms.add("borrowed");
     if (!external && (component.summary ?? "").length > 0) terms.add("quoted");
+    const observedChildCount = childCounts.get(id) ?? childIds?.length ?? 0;
     nodes.push(
       Object.freeze({
         data: Object.freeze({
-          childCount: childIds?.length ?? 0,
+          canOpen: observedChildCount > 0 && !external,
+          childCount: observedChildCount,
           childState,
           borrows: borrows.get(id)?.size ?? 0,
           dependsOn: dependsOn.get(id)?.size ?? 0,
@@ -573,6 +708,69 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     );
   }
 
+  // What the current level measures out to. Computed from the SAME drawn
+  // dependency set the card counts use, so every figure here equals a figure on
+  // a card and the arrows a reader can count. Every line states a measured
+  // relation and a count against a named part; none assigns a role or a verdict.
+  const readout: string[] = [];
+  const levelCards = owned.filter((id) => carded.has(id) && componentOf(id)?.name !== undefined);
+  const siblings = levelCards.length;
+  const drawnAmongLevel = drawnDependencies.filter(
+    (dependency) => carded.has(dependency.source) && carded.has(dependency.target),
+  );
+  const framePartial = frameId !== undefined && model.nodes.get(frameId)?.hasMoreChildren === true;
+  if (siblings >= 3 && !framePartial) {
+    const nameOf = (id: string) => displayText(componentOf(id)!);
+    const byId = (left: string, right: string) => left.localeCompare(right);
+    const inDeg = (id: string) => dependents.get(id)?.size ?? 0;
+    const outDeg = (id: string) => dependsOn.get(id)?.size ?? 0;
+    const others = siblings - 1;
+
+    const maxIn = Math.max(...levelCards.map(inDeg));
+    if (maxIn > 0) {
+      const tops = levelCards.filter((id) => inDeg(id) === maxIn).sort(byId);
+      readout.push(
+        tops.length === 1
+          ? `Most depended on: ${nameOf(tops[0]!)} — ${maxIn} of the ${others} others here import it.`
+          : `Most depended on: ${tops.slice(0, 3).map(nameOf).join(", ")} — each imported by ${maxIn}.`,
+      );
+    }
+
+    const maxOut = Math.max(...levelCards.map(outDeg));
+    if (maxOut > 0) {
+      const top = levelCards.filter((id) => outDeg(id) === maxOut).sort(byId)[0]!;
+      readout.push(`Reaches the most: ${nameOf(top)} — imports ${maxOut} of the ${others} others.`);
+    }
+
+    const entries = levelCards
+      .filter((id) => {
+        const component = componentOf(id);
+        return component !== undefined && hasPublicEntry(component);
+      })
+      .sort(byId);
+    if (entries.length > 0 && entries.length < siblings) {
+      readout.push(
+        `Ways in: ${entries.slice(0, 4).map(nameOf).join(", ")}${entries.length > 4 ? ", …" : ""} — each exposes a public entry.`,
+      );
+    }
+
+    const cycle = importCycles(levelCards, drawnAmongLevel)[0];
+    if (cycle !== undefined) {
+      readout.push(
+        cycle.length === 2
+          ? `${nameOf(cycle[0]!)} and ${nameOf(cycle[1]!)} import each other.`
+          : `${cycle.length} here form an import cycle: ${cycle.slice(0, 5).map(nameOf).join(", ")}${cycle.length > 5 ? ", …" : ""}.`,
+      );
+    }
+
+    const sizeOf = (id: string) => childCounts.get(id) ?? 0;
+    const maxSize = Math.max(...levelCards.map(sizeOf));
+    if (maxSize > 0 && drawnAmongLevel.length > 0) {
+      const largest = levelCards.filter((id) => sizeOf(id) === maxSize).sort(byId)[0]!;
+      readout.push(`Largest here: ${nameOf(largest)} (${maxSize} inside).`);
+    }
+  }
+
   const TERM_ORDER: readonly BlueprintTerm[] = [
     "entry",
     "shared",
@@ -584,6 +782,7 @@ export function buildBlueprintFlowGraph(options: BlueprintGraphOptions): Bluepri
     edges: Object.freeze(edges),
     nodes: Object.freeze(nodes),
     notations: Object.freeze(SCALE_ORDER.filter((scale) => notations.has(scale))),
+    readout: Object.freeze(drawnAmongLevel.length > 0 ? readout : []),
     terms: Object.freeze(TERM_ORDER.filter((term) => terms.has(term))),
   });
 }

@@ -410,7 +410,10 @@ export function createDefaultBootstrapRegistry(
           start: () => {
             const model = createStandardModelCapability();
             const invariant = createStandardModelInvariant({
-              maxComponentMutations: defaultHostBounds.maxEmbeddedItems,
+              // A first scan of real topography creates a component per source
+              // file in one transaction, so the mutation envelope must admit the
+              // whole component budget, not the per-component embedded-item one.
+              maxComponentMutations: defaultHostBounds.maxComponents,
               maxComponents: defaultHostBounds.maxComponents,
               maxOwnerCharacters: defaultHostBounds.maxOwnerCharacters,
               maxPinnedComponentIds: defaultHostBounds.maxPinnedComponentIds,
@@ -783,7 +786,10 @@ export function createDefaultBootstrapRegistry(
             });
             const reconciliation = createReconciliationOperations({
               bounds: {
-                maxComponents: defaultHostBounds.maxEmbeddedItems,
+                // A scan of real code topography emits a component per source file
+                // and directory, so the observed-component ceiling is the whole
+                // component budget, not the per-component embedded-item budget.
+                maxComponents: defaultHostBounds.maxComponents,
                 maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
                 maxRecords: defaultHostBounds.maxRequestDataValues,
                 maxRelationships: defaultHostBounds.maxRelationshipMutations,

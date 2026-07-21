@@ -5,7 +5,6 @@ import {
   fetchConnections,
   fetchRoots,
   fetchSearch,
-  type ApiComponentScale,
   type ApiFailure,
   type ApiSearchPage,
 } from "./api.ts";
@@ -34,15 +33,24 @@ interface SearchState {
 export function App() {
   const [model, setModel] = useState<BlueprintModel>(emptyModel);
   const [failure, setFailure] = useState<ApiFailure | undefined>(undefined);
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState<SearchState>({ open: false, text: "" });
   const [dependencies, setDependencies] = useState<
     readonly { source: string; target: string; type: string }[]
   >([]);
-  const [visibleScale, setVisibleScale] = useState<ApiComponentScale | undefined>(undefined);
+  const [focusStack, setFocusStack] = useState<readonly string[]>([]);
+  const [childCounts, setChildCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const pending = useRef(new Set<string>());
   const autoExpanded = useRef(new Set<string>());
+  const focusId = focusStack.at(-1);
+  // The component the sheet is framed on: the one walked into, or the single
+  // owned system at the top. Its whole content is what the level draws, so it is
+  // the node whose children must be paged to completion — matching how the canvas
+  // chooses the frame, so what is drawn and what is loaded never disagree.
+  const ownedRootIds = model.rootIds.filter(
+    (id) => model.nodes.get(id)?.view.component.type !== "external",
+  );
+  const frameId = focusId ?? (ownedRootIds.length === 1 ? ownedRootIds[0] : undefined);
 
   useEffect(() => {
     let disposed = false;
@@ -71,35 +79,74 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.rootIds]);
 
-  // One bounded page of observed dependencies, so the sheet can draw what the
-  // scan already knows about how the parts depend on each other.
+  // Every observed dependency, and — from the same paged read — how many parts
+  // each component contains. The child counts tell a container from a leaf
+  // before it is opened, so a directory offers a way in while a file offers only
+  // its detail. Pages are bounded; a very large graph stops at a bounded cap.
   useEffect(() => {
     let disposed = false;
-    void fetchConnections(CONNECTION_LIMIT).then((result) => {
-      if (disposed || !result.ok) return;
-      const edges = result.value.items.flatMap((item) =>
-        item.relationships.map((relationship) => ({
-          source: relationship.source,
-          target: relationship.target,
-          type: relationship.type,
-        })),
-      );
-      setDependencies(edges);
-    });
+    const edges: { source: string; target: string; type: string }[] = [];
+    const counts = new Map<string, number>();
+    const seenComponents = new Set<string>();
+    const consume = (cursor?: string, pagesLeft = 24): void => {
+      void fetchConnections(CONNECTION_LIMIT, cursor).then((result) => {
+        if (disposed || !result.ok) return;
+        for (const item of result.value.items) {
+          if (!seenComponents.has(item.component.id)) {
+            seenComponents.add(item.component.id);
+            const parent = item.component.parent;
+            if (parent !== undefined) counts.set(parent, (counts.get(parent) ?? 0) + 1);
+          }
+          for (const relationship of item.relationships) {
+            edges.push({
+              source: relationship.source,
+              target: relationship.target,
+              type: relationship.type,
+            });
+          }
+        }
+        if (result.value.hasMore && result.value.nextCursor !== undefined && pagesLeft > 0) {
+          consume(result.value.nextCursor, pagesLeft - 1);
+        } else {
+          setDependencies([...edges]);
+          setChildCounts(new Map(counts));
+        }
+      });
+    };
+    consume();
     return () => {
       disposed = true;
     };
   }, []);
 
-  // Escape closes the detail panel, matching the search field's dismissal.
+  // Escape steps back out: first it closes an open detail, then it walks up the
+  // focus path one level, so a reader can always retreat the way they came in.
   useEffect(() => {
-    if (selectedId === undefined) return;
+    if (selectedId === undefined && focusStack.length === 0) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedId(undefined);
+      if (event.key !== "Escape") return;
+      if (selectedId !== undefined) setSelectedId(undefined);
+      else setFocusStack((stack) => stack.slice(0, -1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId]);
+  }, [selectedId, focusStack.length]);
+
+  // The framed component's whole content must be present to draw it, so the frame
+  // loads every page of its children, not just the first — whether it is a domain
+  // just entered or the system shown on arrival. Without this a system with more
+  // direct parts than one page would silently draw only the first page, and a
+  // level-wide readout would count against a denominator that is not all here. The
+  // effect re-fires as each page arrives until the parent reports no more, and the
+  // paging guard keeps it idempotent.
+  useEffect(() => {
+    if (frameId === undefined) return;
+    const node = model.nodes.get(frameId);
+    if (node === undefined) return;
+    if (node.childIds === undefined) loadChildren(frameId);
+    else if (node.hasMoreChildren) loadChildren(frameId, node.childrenCursor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameId, model.nodes]);
 
   const loadChildren = (parentId: string, cursor?: string) => {
     if (pending.current.has(parentId)) return;
@@ -112,19 +159,13 @@ export function App() {
     });
   };
 
-  const onExpand = (id: string) => {
-    loadChildren(id);
+  const onFocus = (id: string) => {
+    setSelectedId(undefined);
+    setFocusStack((stack) => (stack.at(-1) === id ? stack : [...stack, id]));
   };
-  const onToggleFold = (id: string) => {
-    setFolded((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const onLoadMoreChildren = (id: string) => {
-    loadChildren(id, model.nodes.get(id)?.childrenCursor);
+  const onFocusTo = (depth: number) => {
+    setSelectedId(undefined);
+    setFocusStack((stack) => stack.slice(0, depth));
   };
   const onLoadMoreRoots = () => {
     void fetchRoots(ROOT_LIMIT, model.rootsCursor).then((result) => {
@@ -160,6 +201,8 @@ export function App() {
     const node = model.nodes.get(id);
     return node === undefined ? undefined : displayText(node.view.component);
   };
+
+  const focusPath = focusStack.map((id) => ({ id, label: resolveDisplay(id) ?? id }));
 
   return (
     <div className="flex h-screen flex-col">
@@ -247,16 +290,15 @@ export function App() {
         ) : (
           <div className="h-full">
             <Canvas
+              childCounts={childCounts}
               dependencies={dependencies}
-              folded={folded}
-              onVisibleScale={setVisibleScale}
-              visibleScale={visibleScale}
+              focusId={focusId}
+              focusPath={focusPath}
               model={model}
-              onExpand={onExpand}
-              onLoadMoreChildren={onLoadMoreChildren}
+              onFocus={onFocus}
+              onFocusTo={onFocusTo}
               onLoadMoreRoots={onLoadMoreRoots}
               onSelect={setSelectedId}
-              onToggleFold={onToggleFold}
               selectedId={selectedId}
             />
           </div>

@@ -12,7 +12,11 @@ export interface ApiComponent {
   readonly type?: string;
   readonly inputs?: readonly { readonly id: string; readonly name: string }[];
   readonly outputs?: readonly { readonly id: string; readonly name: string }[];
-  readonly actions?: readonly { readonly id: string; readonly name: string }[];
+  readonly actions?: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly description?: string;
+  }[];
   readonly scale?: ApiComponentScale;
 }
 
