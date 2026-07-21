@@ -372,10 +372,14 @@ async function verifyTerminal(workspaceRoot: string): Promise<void> {
     assert.ok(output.includes('"status":"opened"'), output);
     const html = await readFile(artifact, "utf8");
     assert.ok(html.startsWith("<!doctype html>"));
-    assert.ok(html.includes('aria-label="groma.md lockup"'));
-    assert.ok(html.includes(`data-id="${ids.orders}"`));
-    assert.ok(html.includes(`data-id="${ids.orderItem}"`));
-    assert.ok(html.includes("Bounded view stops here: child page limit."));
+    assert.ok(html.includes('data-groma-export="read-only"'));
+    assert.ok(html.includes("groma-read-only-blueprint-v1"));
+    assert.ok(html.includes("globalThis.__GROMA_BLUEPRINT_SNAPSHOT__="));
+    assert.ok(html.includes(`"id":"${ids.orders}"`));
+    assert.ok(html.includes(`"id":"${ids.orderItem}"`));
+    assert.ok(html.includes("connect-src 'none'"));
+    assert.ok(!/<script\b[^>]*\bsrc=/i.test(html));
+    assert.ok(!/<link\b[^>]*\brel=["']stylesheet["']/i.test(html));
     if (expectedHtml === undefined) expectedHtml = html;
     else assert.equal(html, expectedHtml);
   }

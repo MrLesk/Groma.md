@@ -19,6 +19,7 @@
     "check:boundaries": "bun run scripts/check-boundaries.ts",
     "smoke": "bun run scripts/verify-binary.ts",
     "verify:1a": "bun run build && bun run smoke && bun run tests/iteration-1a/verify.ts",
+    "verify:organization-scale": "bun run tests/organization-scale/verify.ts",
     "check": "bun run format:check && bun run typecheck && bun run check:boundaries && bun run test && bun run verify:1a"
   },
   "devDependencies": {

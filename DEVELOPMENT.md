@@ -47,12 +47,13 @@ processing the stylesheet during the build. For uncompiled development (`bun run
 `bunfig.toml` registers the same plugin under `[serve.static]`; the compiled executable is
 built with bunfig autoloading disabled and never reads that file at runtime.
 
-`groma export` reuses that embedded client rather than maintaining another renderer. It pages the
-shared blueprint export read to a fixed 2,500-component ceiling, bakes the snapshot into one HTML
-file, and inlines the compiled JavaScript and CSS. The file's content-security policy disables
-connections; its in-memory snapshot adapter supports navigation, inspection, and bounded search
-without a listener, canonical writes, or browser persistence. An export over the component or
-16 MiB artifact bound fails instead of silently truncating.
+`groma export` and interactive bare `groma` reuse that embedded client rather than maintaining
+another renderer. They page the shared blueprint export read to a fixed 2,500-component ceiling,
+bake the snapshot into one HTML file, and inline the compiled JavaScript and CSS. The file's
+content-security policy disables connections; its in-memory snapshot adapter supports navigation,
+inspection, and bounded search without a listener, canonical writes, or browser persistence. An
+export over the component or 16 MiB artifact bound fails instead of silently truncating. Bare
+`groma` writes the identical bundle to a temporary local file and opens it with the system browser.
 
 The live `groma web` client uses the protected loopback mutation routes as its only write path.
 The existing detail panel authors component intent, items, outgoing relationships, scale, and
@@ -219,11 +220,11 @@ in the production entry point or production executable.
 
 ## Deliberately Deferred
 
-In an interactive terminal, bare `groma` opens the disposable local visual artifact without an
-HTTP server or React. `groma web` serves the embedded interactive web surface from the compiled
-binary — Bun's embedded HTTP server with a bundled React, React Flow, dagre, and Tailwind client —
-bound to the loopback interface. The initial canvas lays out only its bounded root page; every
-deeper scale enters the deterministic layout through an explicit bounded child-page action.
+In an interactive terminal, bare `groma` opens the disposable exported bundle without an HTTP
+server. `groma web` serves the same embedded React, React Flow, dagre, and Tailwind client from the
+compiled binary through Bun's HTTP server bound to the loopback interface. The initial canvas lays
+out only its bounded root page; every deeper scale enters the deterministic layout through an
+explicit bounded child-page action.
 
 The bounded scan, reconciliation, local visual loop, protected loopback mutation API, and browser
 editing UI are implemented. Plans, Git history views, and replacing bare `groma` with the web

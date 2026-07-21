@@ -42,8 +42,8 @@ exactly what is real now.
   `blueprint search`, `blueprint traverse`, and a complete paged `blueprint export`.
 - `groma scan` selects the initialized project and built-in TypeScript/Bun scanner,
   records bounded evidence, and reconciles it without overwriting curated intent.
-- Bare `groma` opens a deterministic self-contained local HTML blueprint from the bounded current
-  hierarchy, with recursive folding, focus, and component detail.
+- Bare `groma` opens the same deterministic self-contained read-only bundle as `groma export`,
+  built from bounded shared reads with recursive folding, focus, and component detail.
 - `groma web` serves an interactive web blueprint embedded in the same binary, on your machine
   only (127.0.0.1). Its side panel creates and curates components through the same protected
   operations as the CLI; stale revisions and semantic blockers are shown before anything changes.
