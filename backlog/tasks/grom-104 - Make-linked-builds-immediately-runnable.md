@@ -1,11 +1,11 @@
 ---
 id: GROM-104
 title: Make linked builds immediately runnable
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 21:36'
-updated_date: '2026-07-21 21:45'
+updated_date: '2026-07-21 21:46'
 labels: []
 dependencies: []
 type: bug
@@ -20,10 +20,10 @@ Developers who link the Groma repository must have the groma command resolve to 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 On POSIX, the package exposes a groma executable that resolves through a Bun link to the repository build output
-- [ ] #2 After one bun link setup on POSIX, rebuilding dist/groma changes the executable used by the groma command without another link or copy step
-- [ ] #3 The documented local development loop distinguishes the POSIX one-time link setup from each rebuild, the standalone-copy workflow, and Windows rebuild-copy behavior
-- [ ] #4 Focused tests cover the linked command resolution behavior on supported hosts
+- [x] #1 On POSIX, the package exposes a groma executable that resolves through a Bun link to the repository build output
+- [x] #2 After one bun link setup on POSIX, rebuilding dist/groma changes the executable used by the groma command without another link or copy step
+- [x] #3 The documented local development loop distinguishes the POSIX one-time link setup from each rebuild, the standalone-copy workflow, and Windows rebuild-copy behavior
+- [x] #4 Focused tests cover the linked command resolution behavior on supported hosts
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -45,5 +45,5 @@ Final Terra review identified that Bun's bin target is POSIX-only because Window
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added the missing package bin mapping so bun link exposes the repository dist/groma as the groma command. Kept install:local as a separate standalone-copy workflow, documented the one-time link plus rebuild loop, and added an isolated Bun-link regression that proves replacing the build output changes the command without relinking. Verified with a native build, live PATH/link resolution, four focused tests, formatting, and both type checks.
+Added the POSIX Bun bin link so one-time bun link follows every rebuilt dist/groma, kept install:local as the explicit copy workflow, and documented PATH and Windows boundaries. Verified with the isolated Bun-link replacement test, the focused four-test suite, formatting, and both TypeScript configurations; PR #97 merged.
 <!-- SECTION:FINAL_SUMMARY:END -->
