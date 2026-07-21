@@ -693,6 +693,50 @@ describe("local completed-snapshot reconciliation", () => {
     });
   });
 
+  test("reads detail and scanner evidence beyond the per-component embedded-item bound", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const records = Array.from({ length: defaultHostBounds.maxEmbeddedItems + 1 }, (_, index) =>
+      candidate(
+        `component-${index.toString().padStart(3, "0")}`,
+        index === defaultHostBounds.maxEmbeddedItems ? "Evidence target" : `Component ${index}`,
+        index === defaultHostBounds.maxEmbeddedItems ? { cognitiveComplexity: 27 } : undefined,
+      ),
+    );
+    expect(await host.reconciliation.reconcile(snapshot("large-evidence", records))).toMatchObject({
+      ok: true,
+      value: { status: "committed" },
+    });
+
+    const searched = await host.operations.searchBlueprint({ limit: 10, text: "Evidence target" });
+    expect(searched).toMatchObject({
+      ok: true,
+      value: { items: [{ name: "Evidence target" }] },
+    });
+    if (!searched.ok) return;
+    const target = searched.value.items[0]!;
+    expect(
+      await host.operations.getComponent({
+        id: target.id,
+        relationships: { limit: 10 },
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        evidence: [
+          {
+            binding: {
+              key: `component-${defaultHostBounds.maxEmbeddedItems}`,
+              present: true,
+            },
+          },
+        ],
+        item: { cognitiveComplexity: [{ value: 27 }] },
+      },
+    });
+  });
+
   test("builds hierarchy, scale, and sharing from observed containment alone", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);

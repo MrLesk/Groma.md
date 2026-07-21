@@ -1312,7 +1312,7 @@ function componentEvidence(
 ): Result<readonly ComponentEvidenceView[]> {
   if (snapshot.evidence === undefined) return success(Object.freeze([]));
   const parsed = parseEvidenceState(snapshot.evidence, {
-    maxComponents: options.bounds.maxEmbeddedItems,
+    maxComponents: options.bounds.maxComponents,
     maxRecords: options.bounds.maxRequestDataValues,
     maxRelationships: options.bounds.maxRelationshipMutations,
     maxSources: options.bounds.maxComponents,
@@ -1365,7 +1365,7 @@ function cognitiveComplexityEvidence(
 ): ReadonlyMap<string, readonly ComponentCognitiveComplexityEvidence[]> {
   if (snapshot.evidence === undefined || components.length === 0) return new Map();
   const parsed = parseEvidenceState(snapshot.evidence, {
-    maxComponents: options.bounds.maxEmbeddedItems,
+    maxComponents: options.bounds.maxComponents,
     maxRecords: options.bounds.maxRequestDataValues,
     maxRelationships: options.bounds.maxRelationshipMutations,
     maxSources: options.bounds.maxComponents,
