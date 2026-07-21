@@ -3464,17 +3464,26 @@ function standardTransactionRequest(
   });
 }
 
-function readableLabelDependents(state: LoadedState, target: EntityId): readonly EntityId[] {
+function readableLabelDependents(
+  state: LoadedState,
+  target: EntityId,
+  options: Pick<ApplicationOperationsContext, "graph">,
+): Result<readonly EntityId[]> {
   const dependents = new Set<EntityId>();
   for (const component of state.components) {
-    if (component.parent === target && component.id !== target) dependents.add(component.id);
+    if (component.parent === undefined) continue;
+    const parent = options.graph.resolveEntityIdentity(state.graph, component.parent);
+    if (!parent.ok) return parent;
+    if (parent.value.resolved === target && component.id !== target) dependents.add(component.id);
   }
   for (const relationship of state.relationships) {
-    if (relationship.target === target && relationship.source !== target) {
+    const resolvedTarget = options.graph.resolveEntityIdentity(state.graph, relationship.target);
+    if (!resolvedTarget.ok) return resolvedTarget;
+    if (resolvedTarget.value.resolved === target && relationship.source !== target) {
       dependents.add(relationship.source);
     }
   }
-  return Object.freeze([...dependents].sort(compareText));
+  return success(Object.freeze([...dependents].sort(compareText)));
 }
 
 export function createApplicationOperations(
@@ -4201,10 +4210,12 @@ export function createApplicationOperations(
       id.value,
     );
     if (!computed.ok) return rejected(...computed.diagnostics);
-    const labelDependentIds =
-      component.name === computed.value.component.name
-        ? Object.freeze([])
-        : readableLabelDependents(current.value, id.value);
+    let labelDependentIds: readonly EntityId[] = Object.freeze([]);
+    if (component.name !== computed.value.component.name) {
+      const dependents = readableLabelDependents(current.value, id.value, options);
+      if (!dependents.ok) return rejected(...dependents.diagnostics);
+      labelDependentIds = dependents.value;
+    }
     const labelDependentResources = new Map<EntityId, ResourceKey>();
     for (const dependentId of labelDependentIds) {
       const resource = componentResource(dependentId, options);

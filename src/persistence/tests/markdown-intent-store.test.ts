@@ -315,6 +315,29 @@ describe("readable Markdown component codec", () => {
     expect(String(decoded.value.resource)).toBe(`component:${id}`);
   });
 
+  test("rejects unpaired inline surrogate escapes while accepting a valid pair", () => {
+    const id = entityId("89");
+    const store = createMarkdownIntentStore({
+      model: createStandardModelCapability(),
+      resources: {} as never,
+    });
+    const locator = workspaceResourceLocator("groma", "components", `${id}.md`);
+    if (!locator.ok) throw new Error("expected locator");
+    const paired = store.decode(
+      locator.value,
+      encoder.encode(`---\nid: ${id}\n---\n\n# Smile \\ud83d\\ude00\n`),
+    );
+    expect(paired).toMatchObject({ ok: true });
+    if (!paired.ok) return;
+    expect((paired.value.entity.payload as { readonly name: string }).name).toBe("Smile 😀");
+    expect(
+      store.decode(locator.value, encoder.encode(`---\nid: ${id}\n---\n\n# Broken \\ud800\n`)),
+    ).toMatchObject({
+      diagnostics: [{ code: "invalid-intent-unicode" }],
+      ok: false,
+    });
+  });
+
   test("fails closed on old schemas, malformed body metadata, conflicts, and lossy Unicode", () => {
     const id = entityId("90");
     const store = createMarkdownIntentStore({

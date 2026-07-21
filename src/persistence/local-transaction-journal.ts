@@ -12,6 +12,7 @@ import {
   type ContentRevision,
   type Diagnostic,
   type EntityAlias,
+  type EntityAliasResolver,
   type EntityId,
   type GraphData,
   type GraphEntity,
@@ -725,7 +726,10 @@ function readableComponentLabels(
   aliases: readonly EntityAlias[],
   model: StandardModelCapability,
   maximumAliases: number,
-): Result<ReadonlyMap<EntityId, string>> {
+): Result<{
+  readonly labels: ReadonlyMap<EntityId, string>;
+  readonly resolver: EntityAliasResolver;
+}> {
   const labels = new Map<EntityId, string>();
   for (const entity of components.values()) {
     const component = model.parse(entity);
@@ -743,7 +747,7 @@ function readableComponentLabels(
     if (!resolved.ok) return resolved;
     labels.set(alias.source, labels.get(resolved.value.resolved)!);
   }
-  return success(labels);
+  return success(Object.freeze({ labels, resolver: resolver.value }));
 }
 
 export function createMarkdownIntentTransactionAdapter(
@@ -871,13 +875,21 @@ export function createMarkdownIntentTransactionAdapter(
       rewritten.add(id.value);
     }
     const changedLabels = new Set<EntityId>();
-    for (const id of new Set([...priorLabels.value.keys(), ...nextLabels.value.keys()])) {
-      if (priorLabels.value.get(id) !== nextLabels.value.get(id)) changedLabels.add(id);
+    for (const id of new Set([
+      ...priorLabels.value.labels.keys(),
+      ...nextLabels.value.labels.keys(),
+    ])) {
+      if (priorLabels.value.labels.get(id) !== nextLabels.value.labels.get(id)) {
+        changedLabels.add(id);
+      }
     }
     for (const entity of applied.value.components.values()) {
       const component = options.model.parse(entity);
       if (!component.ok) return component;
-      if (component.value.parent !== undefined && changedLabels.has(component.value.parent)) {
+      if (component.value.parent === undefined) continue;
+      const parent = nextLabels.value.resolver.resolve(component.value.parent);
+      if (!parent.ok) return parent;
+      if (changedLabels.has(component.value.parent) || changedLabels.has(parent.value.resolved)) {
         rewritten.add(component.value.id);
       }
     }
@@ -888,8 +900,11 @@ export function createMarkdownIntentTransactionAdapter(
       ]),
     );
     for (const relationship of applied.value.relationships.values()) {
+      const target = nextLabels.value.resolver.resolve(relationship.target);
+      if (!target.ok) return target;
       if (
         changedLabels.has(relationship.target) ||
+        changedLabels.has(target.value.resolved) ||
         priorRelationshipById.get(relationship.id)?.target !== relationship.target
       ) {
         rewritten.add(relationship.source);
@@ -931,7 +946,7 @@ export function createMarkdownIntentTransactionAdapter(
           entity,
           ownedRelations,
           nextLocator,
-          nextLabels.value,
+          nextLabels.value.labels,
         );
         if (!document.ok) return document;
         applied.value.components.set(id, document.value.entity);

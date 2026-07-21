@@ -284,8 +284,44 @@ describe("official local application operations composition", () => {
       throw new Error("missing survivor revision");
     }
 
-    const secondMerge = await first.operations.mergeComponent({
+    const renamedSurvivor = await first.operations.updateComponent({
       expectedRevision: survivorRevision,
+      id: conformanceIds.rootB,
+      patch: { name: "Renamed survivor" },
+    });
+    expect(renamedSurvivor).toMatchObject({ status: "committed" });
+    if (renamedSurvivor.status !== "committed") return;
+    expect(renamedSurvivor.revisions.map((entry) => entry.componentId)).toEqual([
+      conformanceIds.rootB,
+      conformanceIds.serviceA,
+      conformanceIds.nestedService,
+    ]);
+    const renamedSurvivorRevision = renamedSurvivor.revisions.find(
+      (entry) => entry.componentId === conformanceIds.rootB,
+    )?.revision;
+    if (renamedSurvivorRevision === null || renamedSurvivorRevision === undefined) {
+      throw new Error("missing renamed survivor revision");
+    }
+    const afterAliasRename = await first.store.load();
+    if (!afterAliasRename.ok) throw new Error(afterAliasRename.diagnostics[0]?.message);
+    const childDocument = afterAliasRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.nestedService,
+    );
+    const observerDocument = afterAliasRename.value.documents.find(
+      (document) => document.entity.id === conformanceIds.serviceA,
+    );
+    if (childDocument === undefined || observerDocument === undefined) {
+      throw new Error("missing alias-dependent document");
+    }
+    expect(new TextDecoder().decode(childDocument.bytes)).toContain(
+      `[Renamed survivor](groma:component/${conformanceIds.rootA})`,
+    );
+    expect(new TextDecoder().decode(observerDocument.bytes)).toContain(
+      `[Renamed survivor](groma:component/${conformanceIds.rootB}?relationship=${conformanceIds.sibling})`,
+    );
+
+    const secondMerge = await first.operations.mergeComponent({
+      expectedRevision: renamedSurvivorRevision,
       obsolete: conformanceIds.rootB,
       survivor: conformanceIds.serviceB,
     });

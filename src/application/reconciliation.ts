@@ -1277,12 +1277,20 @@ export function createReconciliationOperations(
         snapshot: snapshot.value,
         sourceKey: key,
       });
-      for (const renamed of renamedComponents) {
-        for (const component of existingComponents.values()) {
-          if (component.parent === renamed) touchedComponents.add(component.id);
-        }
-        for (const relationship of existingRelationships.values()) {
-          if (relationship.target === renamed) touchedComponents.add(relationship.source);
+      for (const component of existingComponents.values()) {
+        if (component.parent === undefined) continue;
+        const parent = options.graph.resolveEntityIdentity(decoded.value.graph, component.parent);
+        if (!parent.ok) return parent;
+        if (renamedComponents.has(parent.value.resolved)) touchedComponents.add(component.id);
+      }
+      for (const relationship of existingRelationships.values()) {
+        const target = options.graph.resolveEntityIdentity(
+          decoded.value.graph,
+          relationship.target,
+        );
+        if (!target.ok) return target;
+        if (renamedComponents.has(target.value.resolved)) {
+          touchedComponents.add(relationship.source);
         }
       }
       if (

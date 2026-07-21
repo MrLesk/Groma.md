@@ -479,7 +479,8 @@ function decodeInline(value: string, path: string): Result<string> {
     }
     index += 1;
   }
-  return success(decoded);
+  const unicode = validateUnicode(decoded, path);
+  return unicode.ok ? success(decoded) : unicode;
 }
 
 function encodeLocalId(value: string): string {
