@@ -1,15 +1,35 @@
 ---
 id: GROM-95
 title: Surface cognitive complexity in the visual blueprint
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-21 18:19'
-updated_date: '2026-07-21 19:02'
+updated_date: '2026-07-21 19:15'
 labels:
   - web
   - topology
 dependencies: []
+modified_files:
+  - >-
+    backlog/tasks/grom-95 -
+    Surface-cognitive-complexity-in-the-visual-blueprint.md
+  - groma/components/groma/web/client/api.ts.md
+  - groma/components/groma/web/client/root-discovery.ts.md
+  - >-
+    groma/evidence/9080456d7c02f714535c79e12ec95bf94300adecfd94940588720b677f9a96a4.json
+  - groma/transaction-state.json
+  - src/application/contracts.ts
+  - src/application/operations.ts
+  - src/host/tests/reconciliation-local.test.ts
+  - src/web/client/api.ts
+  - src/web/client/app.tsx
+  - src/web/client/canvas.tsx
+  - src/web/client/graph.ts
+  - src/web/client/root-discovery.ts
+  - src/web/client/spec.tsx
+  - src/web/tests/model.test.ts
+  - src/web/tests/snapshot-api.test.ts
 priority: high
 type: enhancement
 ordinal: 90000
@@ -61,3 +81,9 @@ created: 2026-07-21 19:02
 Post-repair verification: after GROM-100, two consecutive self-scans completed at generation 19 (603 records); the second made no changes. Bounded component and blueprint-export reads report official.typescript/default@1.0.0 evidence for root-discovery.ts (1) and api.ts (37). A static 95-component export contains the cognitive evidence and the highest-score readout. This completes the previously blocked self-blueprint criterion.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Surfaced scanner-measured cognitive complexity with exact project and scanner provenance through bounded live and static blueprint reads. The visual layer ranks only comparable evidence, highlights the highest measured file, and discovers an owned root within five bounded pages. Verified by 508 tests, a deterministic repeated self-scan, a 95-component static export, two Terra reviews, Claude, and green CI; merged as PR 91.
+<!-- SECTION:FINAL_SUMMARY:END -->

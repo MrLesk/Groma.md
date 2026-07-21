@@ -86,6 +86,9 @@ Before creating a pull request, run exactly two independent local review agents 
 task's supported semantic boundary. Each agent performs one bounded pass and returns
 actionable findings; do not create recursive or open-ended review loops.
 
+Pure Backlog finalization corrections and prose-only delivery-workflow edits do not
+need the three-pass local review. Verify their exact diff and resulting CLI state.
+
 Also ask Claude once to review the local branch before the pull request is created:
 
 ```sh
@@ -103,14 +106,11 @@ each finding against the task, the manifesto, and the implementation before deci
 whether to act on it. Resolve justified findings from both Terra reviews and Claude,
 rerun proportional verification, and only then create the ready-for-review pull request.
 
-Wait for exactly the first Codex bot review started by the ready pull request. Do not tag
-`@codex`, request another Codex review, or restart the review cycle manually. A 👀 reaction
-means that first review is still in progress; a 👍 reaction means it finished without
-findings. If the first review reports findings, inspect them and fix those independently
-justified by the task, manifesto, implementation, and available checks. Push the fixes and
-wait for green CI, but do not wait for the automatic follow-up Codex review: a new 👀 after
-the review-fix push is not a merge blocker. Merge once the first Codex review has been
-handled and required CI is green.
+Do not wait for the Codex bot before merging. Never tag `@codex`, request another Codex
+review, or restart its review cycle manually. Merge once required CI is green. If Codex
+reports findings before the merge, inspect them and fix those independently justified by
+the task, manifesto, implementation, and available checks, then wait only for green CI.
+A 👀 reaction is never a merge blocker.
 
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.47.1 -->
