@@ -94,6 +94,47 @@ describe("interactive map view-model", () => {
     );
   });
 
+  test("sizes expanded plates to their bounded child content", () => {
+    const graphWithChildren = (count: number) => {
+      const roots = mergeRootsPage(emptyModel(), page([view("ent_system")]));
+      const children = Array.from({ length: count }, (_, index) =>
+        view(`ent_child_${index}`, { name: `Child ${index}` }),
+      );
+      return buildBlueprintFlowGraph({
+        dependencies: [],
+        model: mergeChildrenPage(roots, "ent_system", page(children)),
+      });
+    };
+    const widthOf = (graph: ReturnType<typeof graphWithChildren>, id: string) =>
+      graph.nodes.find((node) => node.id === id)?.width;
+
+    expect(widthOf(graphWithChildren(1), "ent_system")).toBe(296);
+    expect(widthOf(graphWithChildren(2), "ent_system")).toBe(568);
+    expect(widthOf(graphWithChildren(5), "ent_system")).toBe(1_384);
+
+    const roots = mergeRootsPage(emptyModel(), page([view("ent_system")]));
+    const domains = mergeChildrenPage(
+      roots,
+      "ent_system",
+      page([view("ent_domain"), view("ent_sibling")]),
+    );
+    const nestedModel = mergeChildrenPage(
+      domains,
+      "ent_domain",
+      page([view("ent_part_a"), view("ent_part_b")]),
+    );
+    const nested = buildBlueprintFlowGraph({
+      dependencies: [],
+      expandedIds: ["ent_domain"],
+      model: nestedModel,
+    });
+    const nestedPlate = nested.nodes.find((node) => node.id === "ent_domain")!;
+    expect(nestedPlate.width).toBe(568);
+    expect(nestedPlate.position.x + Number(nestedPlate.width) + 28).toBe(
+      Number(widthOf(nested, "ent_system")),
+    );
+  });
+
   test("offers focus from a known child count before children are loaded", () => {
     const roots = mergeRootsPage(
       emptyModel(),

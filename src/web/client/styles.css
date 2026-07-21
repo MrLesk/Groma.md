@@ -164,8 +164,10 @@ textarea {
 
 .groma-group__heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 14px;
+  column-gap: 14px;
+  row-gap: 4px;
   margin: 18px 24px 0;
   padding-right: 32px;
 }

@@ -459,7 +459,7 @@ function layoutLevel(
     }
   }
   if (column > 0) y += rowHeight + GAP.y;
-  const width = Math.max(720, contentWidth + FRAME.pad * 2);
+  const width = contentWidth + FRAME.pad * 2;
   const height = Math.max(320, y + FRAME.pad - GAP.y);
   return Object.freeze({
     height,
