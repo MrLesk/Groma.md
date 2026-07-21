@@ -30,7 +30,7 @@ describe("groma export command", () => {
     expect(collected.text()).toContain("web-export-workspace-missing");
   });
 
-  test("writes the same offline embedded client for identical blueprint state", async () => {
+  test("writes and opens the same offline embedded client for identical blueprint state", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "groma-export-ready-"));
     expect(
       await runProgram(["--format=json", "init"], collectOutput().output, { workspaceRoot: root }),
@@ -58,6 +58,20 @@ describe("groma export command", () => {
     expect(writes[0]?.output).toBe("team-blueprint.html");
     expect(writes[0]?.html).toBe(writes[1]?.html);
     const html = writes[0]!.html;
+    let openedHtml = "";
+    const opened = collectOutput();
+    expect(
+      await runProgram([], opened.output, {
+        presentBlueprint: async (bundle) => {
+          openedHtml = bundle;
+          return path.join(root, "opened-blueprint.html");
+        },
+        terminal: { stdin: true, stdout: true },
+        workspaceRoot: root,
+      }),
+    ).toBe(0);
+    expect(opened.text()).toContain('"status":"opened"');
+    expect(openedHtml).toBe(html);
     expect(html).toContain('data-groma-export="read-only"');
     expect(html).toContain("groma-read-only-blueprint-v1");
     expect(html).toContain("globalThis.__GROMA_BLUEPRINT_SNAPSHOT__=");

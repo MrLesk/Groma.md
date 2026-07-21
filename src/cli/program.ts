@@ -18,7 +18,6 @@ import {
   type CliCommandResult,
   type CliFormat,
   type CliInputSource,
-  type CliOverviewResult,
 } from "./contracts.ts";
 import { GROMA_VERSION, HELP_TEXT } from "./help.ts";
 import {
@@ -30,7 +29,6 @@ import {
 import { parseInvocation } from "./parser.ts";
 import { renderCommandResult } from "./render.ts";
 import { createCliSurfaceController, type CliInputReader } from "./surface.ts";
-import { renderBlueprintHtml } from "./blueprint-html.ts";
 
 export { GROMA_VERSION, HELP_TEXT } from "./help.ts";
 
@@ -373,6 +371,7 @@ export async function runProgram(
     webReady,
     confirmInit,
     exportWriter,
+    options.presentBlueprint ?? presentBlueprint,
   );
   const managementCommand = isRegistryManagementCommand(invocation.command);
   const registry =
@@ -412,50 +411,7 @@ export async function runProgram(
       color,
     );
   }
-  let commandResult = controller.result();
-  if (
-    invocation.command.kind === "overview" &&
-    invocation.format === "plain" &&
-    commandResult?.ok === true &&
-    typeof commandResult.result === "object" &&
-    commandResult.result !== null &&
-    (commandResult.result as { readonly kind?: unknown }).kind === "hierarchy"
-  ) {
-    const rendered = renderBlueprintHtml(
-      commandResult.result as Extract<CliOverviewResult, { readonly kind: "hierarchy" }>,
-    );
-    if (!rendered.ok) {
-      commandResult = diagnosticResult(
-        command,
-        CLI_EXIT.infrastructure,
-        "cli-blueprint-artifact-bound-exceeded",
-        "The bounded visual blueprint exceeds the local artifact limit",
-      );
-    } else {
-      try {
-        const artifact = await (options.presentBlueprint ?? presentBlueprint)(rendered.html);
-        commandResult = Object.freeze({
-          command,
-          exitCode: CLI_EXIT.success,
-          ok: true,
-          result: Object.freeze({
-            artifact,
-            generation: (commandResult.result as { readonly generation: number }).generation,
-            nodeCount: (commandResult.result as { readonly nodes: readonly unknown[] }).nodes
-              .length,
-            status: "opened",
-          }),
-        });
-      } catch {
-        commandResult = diagnosticResult(
-          command,
-          CLI_EXIT.infrastructure,
-          "cli-blueprint-artifact-unavailable",
-          "The local visual blueprint could not be opened",
-        );
-      }
-    }
-  }
+  const commandResult = controller.result();
   return emit(
     commandResult ??
       diagnosticResult(
