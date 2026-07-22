@@ -5,6 +5,7 @@ import {
   observationSessionApiVersion,
   type CompletedObservationSnapshot,
   type ComponentActionObservation,
+  type ComponentCandidateObservation,
   type ObservationRecord,
   type ObservationSession,
   type ObservationSessionBegin,
@@ -26,7 +27,6 @@ import {
 } from "../../plugin-sdk/index.ts";
 import {
   cognitiveComplexityOfSource,
-  fileExportDescription,
   typescriptBunScanner,
   typescriptBunScannerIdentity,
   typescriptBunScannerRegistration,
@@ -34,12 +34,19 @@ import {
 
 const encoder = new TextEncoder();
 
-// The public-API surface these tests assert on: public exports and served
-// routes, but not a file's own exported functions, which the scanner now also
-// records as actions on the file itself. The same name can be both, so the
-// file-export description is what tells the two measurements apart.
-function isPublicSurfaceAction(record: ObservationRecord): record is ComponentActionObservation {
-  return record.kind === "action" && record.description !== fileExportDescription;
+type PublicSurfaceObservation = ComponentActionObservation | ComponentCandidateObservation;
+
+function isPublicSurfaceObservation(record: ObservationRecord): record is PublicSurfaceObservation {
+  return (
+    record.kind === "action" ||
+    (record.kind === "component-candidate" &&
+      record.candidate.type === "function" &&
+      record.signals?.entryPoint === true)
+  );
+}
+
+function observationName(record: PublicSurfaceObservation): string | undefined {
+  return record.kind === "component-candidate" ? record.candidate.name : record.name;
 }
 
 function sourceExtension(resource: string): boolean {
@@ -323,42 +330,30 @@ describe("built-in TypeScript and Bun scanner", () => {
     expect(boundarySignals[0]).toMatchObject({
       signals: { declaredBoundary: true, fileCount: 1 },
     });
-    expect(candidates).toContainEqual({ name: "@acme/db", type: "external" });
+    expect(candidates).not.toContainEqual({ name: "@acme/db", type: "external" });
     expect(candidates).not.toContainEqual(expect.objectContaining({ name: "generated" }));
 
     const actions = snapshot.records
-      .filter((record) => isPublicSurfaceAction(record))
-      .map((record) => record.name);
+      .filter((record) => isPublicSurfaceObservation(record))
+      .map((record) => observationName(record));
     expect(actions).toContain("startService");
     expect(actions).toContain("GET /café");
     expect(actions).not.toContain("hidden");
     expect(actions).not.toContain("testOnly");
 
-    // A file also reveals the functions it exports, recorded as actions on the
-    // file itself and marked apart from the package's public surface, so drilling
-    // to a leaf shows what it offers rather than only that it exists. model.ts
-    // exports a data object, not a callable, so it contributes no such action.
-    const fileExports = snapshot.records.filter(
-      (record): record is ComponentActionObservation =>
-        record.kind === "action" && record.description === fileExportDescription,
+    const startService = snapshot.records.find(
+      (record) => record.kind === "component-candidate" && record.candidate.name === "startService",
     );
-    expect(fileExports.map((record) => record.name)).toEqual(["startService"]);
-    const indexFileKey = snapshot.records.find(
-      (record) => record.kind === "component-candidate" && record.candidate.name === "index.ts",
-    )?.key;
-    expect(fileExports[0]?.component.key).toBe(indexFileKey);
-
-    // The source files a boundary owns are emitted as their own components and
-    // contained by it, so a domain drills into its real contents.
-    expect(candidates).toContainEqual({ name: "routes.ts" });
-    expect(candidates).toContainEqual({ name: "model.ts" });
+    expect(startService).toMatchObject({
+      candidate: { type: "function" },
+      signals: { cognitiveComplexity: 0, entryPoint: true, sourceLines: 1 },
+    });
+    expect(candidates.some((candidate) => candidate.name?.endsWith(".ts"))).toBeFalse();
     const relationships = snapshot.records.filter((record) => record.kind === "relationship");
-    // Three boundary-level imports, plus the two file-level imports behind them
-    // (routes.ts -> model.ts and index.ts -> routes.ts), now drawn in their own right.
-    expect(relationships.filter((record) => record.relationshipType === "imports").length).toBe(5);
-    // Three boundaries contain three files: src/index.ts, api/routes.ts, domain/model.ts,
-    // on top of the three package->boundary containments.
-    expect(relationships.filter((record) => record.relationshipType === "contains").length).toBe(6);
+    expect(relationships.filter((record) => record.relationshipType === "imports")).toHaveLength(1);
+    expect(relationships.filter((record) => record.relationshipType === "contains")).toHaveLength(
+      4,
+    );
 
     const documentation = snapshot.records.filter((record) => record.kind === "documentation");
     expect(documentation.map((record) => record.content)).toContain(
@@ -374,7 +369,7 @@ describe("built-in TypeScript and Bun scanner", () => {
     ).toBeFalse();
 
     const route = snapshot.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "GET /café",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "GET /café",
     );
     expect(route?.provenance[0]?.range).toBeDefined();
     const routeBytes = encoder.encode(representativeProject["src/api/routes.ts"]);
@@ -399,6 +394,171 @@ describe("built-in TypeScript and Bun scanner", () => {
     expect(first.fixture.enumerated).not.toContain("node_modules");
   });
 
+  test("models exported functions and assigns dependencies through private helpers", async () => {
+    const apiSource = [
+      'import { persist } from "@fixture/store";',
+      'import telemetry from "@vendor/telemetry";',
+      'import unused from "unused-package";',
+      "function privateSave(value: string) {",
+      "  telemetry.track(value);",
+      "  return persist(value);",
+      "}",
+      "export function save(value: string) {",
+      "  if (!value) return false;",
+      "  return privateSave(value);",
+      "}",
+      "export function health() {",
+      "  return true;",
+      "}",
+    ].join("\n");
+    const result = await scan({
+      "package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/api",
+        workspaces: ["packages/*"],
+      }),
+      "packages/store/package.json": JSON.stringify({
+        exports: "./src/index.ts",
+        name: "@fixture/store",
+      }),
+      "packages/store/src/index.ts": "export function persist(value: string) { return value; }\n",
+      "src/index.ts": apiSource,
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    const candidates =
+      result.snapshot?.records.filter((record) => record.kind === "component-candidate") ?? [];
+    const functions = candidates.filter((record) => record.candidate.type === "function");
+    expect(functions.map((record) => record.candidate.name).sort()).toEqual([
+      "health",
+      "persist",
+      "save",
+    ]);
+    expect(candidates.some((record) => record.candidate.name === "privateSave")).toBeFalse();
+    expect(candidates.some((record) => record.candidate.name?.endsWith(".ts"))).toBeFalse();
+    expect(functions.find((record) => record.candidate.name === "save")).toMatchObject({
+      signals: { cognitiveComplexity: 1, entryPoint: true, sourceLines: 4 },
+    });
+
+    const save = functions.find((record) => record.candidate.name === "save")!;
+    const persist = functions.find((record) => record.candidate.name === "persist")!;
+    const telemetry = candidates.find(
+      (record) =>
+        record.candidate.type === "external" && record.candidate.name === "@vendor/telemetry",
+    )!;
+    expect(telemetry).toBeDefined();
+    expect(
+      candidates.some(
+        (record) =>
+          record.candidate.type === "external" && record.candidate.name === "unused-package",
+      ),
+    ).toBeFalse();
+    const dependencies =
+      result.snapshot?.records.filter(
+        (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
+          record.kind === "relationship" && record.relationshipType === "imports",
+      ) ?? [];
+    expect(dependencies.map((record) => [record.from.key, record.to.key])).toEqual(
+      expect.arrayContaining([
+        [save.key, persist.key],
+        [save.key, telemetry.key],
+      ]),
+    );
+    expect(dependencies).toHaveLength(2);
+    const dependencyEvidence = dependencies.map((record) => {
+      const range = record.provenance[0]!.range!;
+      return new TextDecoder().decode(
+        encoder.encode(apiSource).slice(range.startByte, range.endByteExclusive),
+      );
+    });
+    expect(dependencyEvidence.sort()).toEqual(["persist", "telemetry"]);
+  });
+
+  test("fails closed when a local call has several exported surfaces", async () => {
+    const result = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "callable-alias" }),
+      "src/index.ts": [
+        "export function run() { return true; }",
+        "export { run as start };",
+        "export function api() { return run(); }",
+      ].join("\n"),
+    });
+
+    expect(result.result.ok).toBeTrue();
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
+    const dependencies = result.snapshot?.records.filter(
+      (record) => record.kind === "relationship" && record.relationshipType === "imports",
+    );
+    expect(dependencies).toEqual([]);
+
+    const typeOnly = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "empty-type-import" }),
+      "src/index.ts": 'import type {} from "types-only";\nexport function api() {}\n',
+    });
+    expect(typeOnly.result.ok).toBeTrue();
+    expect(typeOnly.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(
+      typeOnly.snapshot?.records.some(
+        (record) =>
+          (record.kind === "relationship" && record.relationshipType === "imports") ||
+          (record.kind === "component-candidate" && record.candidate.type === "external"),
+      ),
+    ).toBeFalse();
+  });
+
+  test("keeps nested callable bodies out of enclosing dependencies and tracks named defaults", async () => {
+    const nested = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "nested-callable" }),
+      "src/index.ts": [
+        'import database from "database";',
+        "export function api() {",
+        "  function neverCalled() { database(); }",
+        "  return true;",
+        "}",
+      ].join("\n"),
+    });
+    expect(nested.result.ok).toBeTrue();
+    expect(nested.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(
+      nested.snapshot?.records.some(
+        (record) =>
+          (record.kind === "relationship" && record.relationshipType === "imports") ||
+          (record.kind === "component-candidate" && record.candidate.type === "external"),
+      ),
+    ).toBeFalse();
+
+    const namedDefault = await scan({
+      "package.json": JSON.stringify({ exports: "./src/index.ts", name: "named-default" }),
+      "src/index.ts": [
+        'import database from "database";',
+        "export default function worker() { return database(); }",
+        "export function api() { return worker(); }",
+      ].join("\n"),
+    });
+    expect(namedDefault.result.ok).toBeTrue();
+    expect(namedDefault.snapshot?.coverage[0]?.state).toBe("complete");
+    const candidates =
+      namedDefault.snapshot?.records.filter((record) => record.kind === "component-candidate") ??
+      [];
+    const api = candidates.find((record) => record.candidate.name === "api")!;
+    const defaultExport = candidates.find((record) => record.candidate.name === "default")!;
+    const database = candidates.find((record) => record.candidate.name === "database")!;
+    expect(
+      namedDefault.snapshot?.records
+        .filter(
+          (record): record is Extract<ObservationRecord, { kind: "relationship" }> =>
+            record.kind === "relationship" && record.relationshipType === "imports",
+        )
+        .map((record) => [record.from.key, record.to.key]),
+    ).toEqual(
+      expect.arrayContaining([
+        [api.key, defaultExport.key],
+        [defaultExport.key, database.key],
+      ]),
+    );
+  });
+
   test("omits dynamic, shadowed, ambiguous claims and reports partial coverage", async () => {
     const result = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.ts", name: "ambiguous" }),
@@ -417,7 +577,7 @@ export function publicApi() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name?.includes("/"),
+        (record) => isPublicSurfaceObservation(record) && observationName(record)?.includes("/"),
       ),
     ).toBeFalse();
     expect(
@@ -441,8 +601,8 @@ export function publicApi() {}
     expect(unrelatedShadow.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       unrelatedShadow.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["ROUTE /top", "publicApi"]);
 
@@ -458,8 +618,8 @@ export function publicApi() {}
     expect(replacedServe.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       replacedServe.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicApi"]);
 
     const shadowedFixtures = [
@@ -526,12 +686,13 @@ export function publicApi() {}
       expect(shadowed.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         shadowed.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name?.startsWith("ROUTE "),
+          (record) =>
+            isPublicSurfaceObservation(record) && observationName(record)?.startsWith("ROUTE "),
         ),
       ).toBeFalse();
       expect(
         shadowed.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -549,7 +710,8 @@ export function publicApi() {}
     expect(ordinary.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       ordinary.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
+        (record) =>
+          isPublicSurfaceObservation(record) && observationName(record) === "ROUTE /health",
       ),
     ).toBeTrue();
 
@@ -572,7 +734,8 @@ export function publicApi() {}
       expect(retained.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         retained.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
+          (record) =>
+            isPublicSurfaceObservation(record) && observationName(record) === "ROUTE /health",
         ),
       ).toBeTrue();
     }
@@ -592,12 +755,13 @@ export function publicApi() {}
       expect(rejected.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         rejected.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name?.includes("/health"),
+          (record) =>
+            isPublicSurfaceObservation(record) && observationName(record)?.includes("/health"),
         ),
       ).toBeFalse();
       expect(
         rejected.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "api",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
         ),
       ).toBeTrue();
     }
@@ -627,7 +791,7 @@ export function publicApi() {}
     ).toBeTrue();
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "visible",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "visible",
       ),
     ).toBeTrue();
     expect(result.fixture.read).not.toContain("code/private/hidden.ts");
@@ -651,7 +815,9 @@ export function publicApi() {}
           'import fs from "node:fs";',
           'import sqlite from "bun:sqlite";',
           'Bun.serve({ routes: { "/health": () => new Response(String(model)) } });',
-          "void aliasedModel; void member; void ancestorAlias; void fs; void sqlite;",
+          "export function dependencies() {",
+          "  void model; void aliasedModel; void member; void ancestorAlias; void fs; void sqlite;",
+          "}",
         ].join("\n"),
         "src/domain/model.ts": "export const model = true;\n",
         "src/tsconfig.json": JSON.stringify({
@@ -685,15 +851,7 @@ export function publicApi() {}
       result.snapshot?.records
         .filter((record) => record.kind === "component-candidate")
         .map((record) => record.candidate),
-    ).toEqual(
-      expect.arrayContaining([
-        { name: "api" },
-        { name: "bun:sqlite", type: "external" },
-        { name: "domain" },
-        { name: "node:domain", type: "external" },
-        { name: "node:fs", type: "external" },
-      ]),
-    );
+    ).toEqual(expect.arrayContaining([{ name: "api" }, { name: "domain" }]));
     expect(
       result.snapshot?.records.some(
         (record) => record.kind === "relationship" && record.relationshipType === "source-boundary",
@@ -703,7 +861,7 @@ export function publicApi() {}
       result.snapshot?.records.filter(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
       ) ?? [];
-    expect(imports).toHaveLength(5);
+    expect(imports).toHaveLength(4);
     expect(imports.some((record) => record.provenance.length === 2)).toBeTrue();
     expect(
       result.snapshot?.records
@@ -716,7 +874,8 @@ export function publicApi() {}
     ).toEqual(["bun:sqlite", "node:domain", "node:fs"]);
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
+        (record) =>
+          isPublicSurfaceObservation(record) && observationName(record) === "ROUTE /health",
       ),
     ).toBeTrue();
   });
@@ -961,8 +1120,7 @@ export function api() { return model; }
       "packages/api/src/index.ts": [
         'import { rootValue } from "@fixture/member";',
         'import { publicValue } from "@fixture/member/public";',
-        "void rootValue; void publicValue;",
-        "export function api() {}",
+        "export function api() { return rootValue && publicValue; }",
       ].join("\n"),
     });
     expect(exported.result.ok).toBeTrue();
@@ -987,7 +1145,7 @@ export function api() { return model; }
       ].join("\n"),
     });
     expect(unexported.result.ok).toBeTrue();
-    expect(unexported.snapshot?.coverage[0]?.state).toBe("partial");
+    expect(unexported.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       unexported.snapshot?.records.some(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
@@ -1027,7 +1185,8 @@ export function start() {}
     ).toBeTrue();
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "ROUTE /health",
+        (record) =>
+          isPublicSurfaceObservation(record) && observationName(record) === "ROUTE /health",
       ),
     ).toBeTrue();
   });
@@ -1055,8 +1214,8 @@ export function start() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["safeApi"]);
 
     const pureNull = await scan({
@@ -1068,7 +1227,9 @@ export function start() {}
     });
     expect(pureNull.result.ok).toBeTrue();
     expect(pureNull.snapshot?.coverage[0]?.state).toBe("complete");
-    expect(pureNull.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      pureNull.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
 
     const conditionalImport = await scan({
       "package.json": JSON.stringify({
@@ -1094,7 +1255,7 @@ export function start() {}
     expect(duplicateMetadata.result.ok).toBeTrue();
     expect(duplicateMetadata.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      duplicateMetadata.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      duplicateMetadata.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
     ).toBeFalse();
   });
 
@@ -1109,7 +1270,7 @@ import type { Only } from "./types/index.ts";
 const local = () => true;
 export { local as namedLocal };
 export default local;
-export function shared() {}
+export function shared(value?: Only) { return value; }
 `,
       "src/b.ts": `
 export default (function () { return true; });
@@ -1120,14 +1281,16 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     const actions =
-      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
-    expect(actions.filter((record) => record.name === "shared")).toHaveLength(2);
-    expect(actions.filter((record) => record.name === "default")).toHaveLength(2);
-    expect(actions.filter((record) => record.name === "namedLocal")).toHaveLength(1);
+      result.snapshot?.records.filter((record) => isPublicSurfaceObservation(record)) ?? [];
+    expect(actions.filter((record) => observationName(record) === "shared")).toHaveLength(2);
+    expect(actions.filter((record) => observationName(record) === "default")).toHaveLength(2);
+    expect(actions.filter((record) => observationName(record) === "namedLocal")).toHaveLength(1);
     expect(new Set(actions.map((record) => record.key)).size).toBe(actions.length);
     expect(
-      actions.filter((record) => record.name === "shared").map((record) => record.description),
-    ).toEqual(["Public export at ./a", "Public export at ./b"]);
+      actions
+        .filter((record) => observationName(record) === "shared")
+        .every((record) => record.kind === "component-candidate"),
+    ).toBeTrue();
     expect(
       result.snapshot?.records.some(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
@@ -1199,7 +1362,7 @@ export function shared() {}
     expect(deepReexports.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       deepReexports.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "tooDeep",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "tooDeep",
       ),
     ).toBeFalse();
   });
@@ -1228,7 +1391,7 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ),
     ).toBeTrue();
     expect(result.fixture.read).toContain("src/index.ts");
@@ -1281,7 +1444,7 @@ export function shared() {}
     expect(outputDirectories.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       outputDirectories.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "live",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "live",
       ),
     ).toBeTrue();
     expect(outputDirectories.fixture.enumerated).not.toContain("artifacts");
@@ -1299,7 +1462,7 @@ export function shared() {}
     expect(nestedPolicy.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       nestedPolicy.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "visible",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "visible",
       ),
     ).toBeTrue();
     expect(JSON.stringify(nestedPolicy.snapshot)).not.toContain("leaked");
@@ -1321,8 +1484,10 @@ export function shared() {}
         'import missing from "@missing/value";',
         'import ambiguous from "@ambiguous/value";',
         'import external from "left-pad";',
-        "void model; void baseModel; void packageModel; void missing; void ambiguous; void external;",
-        "export function api() {}",
+        "export function api() {",
+        "  void model; void baseModel; void packageModel;",
+        "  void missing; void ambiguous; void external;",
+        "}",
       ].join("\n"),
       "src/domain/model.ts": "export const model = true;\n",
       "tsconfig.json": JSON.stringify({
@@ -1357,7 +1522,7 @@ export function shared() {}
     const imports = result.snapshot?.records.filter(
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
-    expect(imports).toHaveLength(3);
+    expect(imports).toHaveLength(2);
     expect(imports?.some((record) => record.provenance.length === 3)).toBeTrue();
   });
 
@@ -1370,8 +1535,7 @@ export function shared() {}
         'type C = import("../domain/c.ts").C;',
         'import D = require("../domain/d.ts");',
         'import type { T } from "../domain/types";',
-        "void (null as A | C | D | T);",
-        "export function api() {}",
+        "export function api(value: A | T) { return value; }",
       ].join("\n"),
       "src/domain/a.ts": "export interface A { a: true }\n",
       "src/domain/b.ts": "export interface B { b: true }\n",
@@ -1385,14 +1549,11 @@ export function shared() {}
     const imports = result.snapshot?.records.filter(
       (record) => record.kind === "relationship" && record.relationshipType === "imports",
     );
-    // One aggregated boundary import (carrying all four type-import provenances)
-    // plus the four file-level type imports behind it.
-    expect(imports).toHaveLength(5);
-    expect(imports?.some((record) => record.provenance.length === 4)).toBeTrue();
+    expect(imports).toHaveLength(1);
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["api"]);
   });
 
@@ -1407,11 +1568,9 @@ export function shared() {}
     });
     expect(proven.result.ok).toBeTrue();
     const action = proven.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
     );
-    expect(action?.kind === "action" ? action.description : undefined).toBe(
-      "Public export at ./plugin-sdk",
-    );
+    expect(action?.kind).toBe("component-candidate");
     expect(action?.provenance.map((item) => item.resource)).toEqual(
       expect.arrayContaining(["package.json", "src/index.ts", "src/impl.ts"]),
     );
@@ -1439,13 +1598,13 @@ export function shared() {}
     expect(ambiguous.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       ambiguous.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["aOnly", "bOnly", "directApi", "explicitApi"]);
     expect(
       ambiguous.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
   });
@@ -1463,8 +1622,8 @@ export function shared() {}
     expect(duplicateTarget.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       duplicateTarget.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["shared"]);
 
     const diamond = await scan({
@@ -1478,8 +1637,8 @@ export function shared() {}
     expect(diamond.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       diamond.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["shared"]);
   });
 
@@ -1498,8 +1657,8 @@ export function shared() {}
     expect(partialBarrel.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       partialBarrel.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["directApi", "otherApi"]);
 
@@ -1514,8 +1673,8 @@ export function shared() {}
     expect(cyclic.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       cyclic.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["directApi", "explicitApi"]);
 
@@ -1536,8 +1695,8 @@ export function shared() {}
     expect(depthOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       depthOverflow.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["directApi", "explicitApi"]);
   });
@@ -1572,8 +1731,8 @@ export function shared() {}
     expect(exactBound.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       exactBound.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["deepApi", "directApi", "safeApi"]);
 
@@ -1583,13 +1742,13 @@ export function shared() {}
       expect(overflow.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         overflow.snapshot?.records
-          .filter((record) => isPublicSurfaceAction(record))
-          .map((record) => record.name)
+          .filter((record) => isPublicSurfaceObservation(record))
+          .map((record) => observationName(record))
           .sort(),
       ).toEqual(["directApi", "safeApi"]);
       expect(
         overflow.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "deepApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "deepApi",
         ),
       ).toBeFalse();
     }
@@ -1620,9 +1779,9 @@ export function shared() {}
       expect(result.result.ok).toBeTrue();
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
       const action = result.snapshot?.records.find(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       );
-      expect(action?.kind).toBe("action");
+      expect(action?.kind).toBe("component-candidate");
       expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
       expect(action?.provenance.some((item) => item.resource.startsWith("src/long/"))).toBeFalse();
     }
@@ -1647,9 +1806,9 @@ export function shared() {}
     expect(explicitOverflow.result.ok).toBeTrue();
     expect(explicitOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     const explicitAction = explicitOverflow.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "shared",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
     );
-    expect(explicitAction?.kind).toBe("action");
+    expect(explicitAction?.kind).toBe("component-candidate");
     expect(explicitAction?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
     expect(
       explicitAction?.provenance.some((item) => item.resource.startsWith("src/long/")),
@@ -1676,7 +1835,7 @@ export function shared() {}
     expect(differentOverflow.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       differentOverflow.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
   });
@@ -1694,9 +1853,9 @@ export function shared() {}
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     const action = result.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "shared",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
     );
-    expect(action?.kind).toBe("action");
+    expect(action?.kind).toBe("component-candidate");
     expect(action?.provenance.some((item) => item.resource === "src/short.ts")).toBeTrue();
     expect(action?.provenance.some((item) => item.resource.startsWith("src/long/"))).toBeFalse();
   });
@@ -1728,9 +1887,9 @@ export function shared() {}
     expect(equivalent.result.ok).toBeTrue();
     expect(equivalent.snapshot?.coverage[0]?.state).toBe("partial");
     const equivalentAction = equivalent.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "shared",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
     );
-    expect(equivalentAction?.kind).toBe("action");
+    expect(equivalentAction?.kind).toBe("component-candidate");
     expect(
       equivalentAction?.provenance.some((item) => item.resource === "src/short.ts"),
     ).toBeTrue();
@@ -1743,7 +1902,7 @@ export function shared() {}
     expect(different.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       different.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
 
@@ -1760,7 +1919,7 @@ export function shared() {}
     expect(unknown.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       unknown.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
 
@@ -1776,9 +1935,9 @@ export function shared() {}
     expect(proved.result.ok).toBeTrue();
     expect(proved.snapshot?.coverage[0]?.state).toBe("complete");
     const provedAction = proved.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "shared",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
     );
-    expect(provedAction?.kind).toBe("action");
+    expect(provedAction?.kind).toBe("component-candidate");
     expect(provedAction?.provenance.some((item) => item.resource === "src/explicit.ts")).toBeTrue();
     expect(provedAction?.provenance.some((item) => item.resource === "src/star.ts")).toBeFalse();
   });
@@ -1814,8 +1973,8 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         result.snapshot?.records
-          .filter((record) => isPublicSurfaceAction(record))
-          .map((record) => record.name),
+          .filter((record) => isPublicSurfaceObservation(record))
+          .map((record) => observationName(record)),
       ).toEqual(["safeApi"]);
     }
   });
@@ -1837,13 +1996,13 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["directApi", "safeApi"]);
     expect(
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
 
@@ -1856,7 +2015,7 @@ export function shared() {}
     expect(unknownSibling.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       unknownSibling.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "shared",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "shared",
       ),
     ).toBeFalse();
   });
@@ -1879,7 +2038,7 @@ export function shared() {}
     expect(packageImport.result.ok).toBeTrue();
     expect(packageImport.snapshot?.coverage[0]?.state).toBe("complete");
     const packageImportAction = packageImport.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
     );
     expect(packageImportAction?.provenance.map((item) => item.resource)).toEqual(
       expect.arrayContaining([
@@ -1900,7 +2059,7 @@ export function shared() {}
     expect(tsconfigAlias.result.ok).toBeTrue();
     expect(tsconfigAlias.snapshot?.coverage[0]?.state).toBe("complete");
     const aliasAction = tsconfigAlias.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
     );
     expect(aliasAction?.provenance.map((item) => item.resource)).toEqual(
       expect.arrayContaining(["package.json", "src/index.ts", "src/internal.ts"]),
@@ -1945,7 +2104,7 @@ export function shared() {}
       expect(unresolved.result.ok).toBeTrue();
       expect(unresolved.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        unresolved.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+        unresolved.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
       ).toBeFalse();
     }
 
@@ -1966,12 +2125,12 @@ export function shared() {}
     expect(workspaceReexport.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       workspaceReexport.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "reexported",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "reexported",
       ),
     ).toBeFalse();
     expect(
       workspaceReexport.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "memberApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "memberApi",
       ),
     ).toBeTrue();
   });
@@ -1985,8 +2144,7 @@ export function shared() {}
       }),
       "packages/api/src/index.ts": [
         'import stray from "@fixture/stray";',
-        "void stray;",
-        "export function api() {}",
+        "export function api() { void stray; }",
       ].join("\n"),
       "tools/stray/package.json": JSON.stringify({ name: "@fixture/stray" }),
     });
@@ -2027,8 +2185,8 @@ export function shared() {}
     expect(encapsulated.result.ok).toBeTrue();
     expect(
       encapsulated.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicApi"]);
 
     for (const main of ["./src/index.ts", "src/index.ts"]) {
@@ -2040,7 +2198,7 @@ export function shared() {}
       expect(legacy.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         legacy.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "legacyApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "legacyApi",
         ),
       ).toBeTrue();
     }
@@ -2058,13 +2216,13 @@ export function shared() {}
     expect(multipleLegacy.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       multipleLegacy.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["mainApi", "moduleApi"]);
     expect(
       new Set(
         multipleLegacy.snapshot?.records
-          .filter((record) => isPublicSurfaceAction(record))
+          .filter((record) => isPublicSurfaceObservation(record))
           .map((record) => record.key),
       ).size,
     ).toBe(2);
@@ -2081,8 +2239,8 @@ export function shared() {}
     expect(partiallyResolvedLegacy.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       partiallyResolvedLegacy.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["mainApi"]);
 
     const duplicateLegacy = await scan({
@@ -2097,8 +2255,8 @@ export function shared() {}
     expect(duplicateLegacy.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       duplicateLegacy.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["sharedApi"]);
 
     const ambiguousTarget = await scan({
@@ -2109,7 +2267,7 @@ export function shared() {}
     expect(ambiguousTarget.result.ok).toBeTrue();
     expect(ambiguousTarget.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      ambiguousTarget.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      ambiguousTarget.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
     ).toBeFalse();
 
     for (const main of ["../src/index.ts", "/src/index.ts", "C:/src/index.ts"]) {
@@ -2119,11 +2277,13 @@ export function shared() {}
       });
       expect(unsafe.result.ok).toBeTrue();
       expect(unsafe.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(unsafe.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+      expect(
+        unsafe.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+      ).toBeFalse();
     }
   });
 
-  test("aggregates same-named legacy exports without losing declarations or JSDoc", async () => {
+  test("fails closed when same-named legacy entries point at different callables", async () => {
     const result = await scan({
       "package.json": JSON.stringify({
         main: "src/runtime.ts",
@@ -2137,24 +2297,10 @@ export function shared() {}
     });
 
     expect(result.result.ok).toBeTrue();
-    expect(result.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     const actions =
-      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
-    expect(actions.map((record) => record.name)).toEqual(["api"]);
-    expect(new Set(actions[0]?.provenance.map((item) => item.resource))).toEqual(
-      new Set(["package.json", "src/index.d.ts", "src/module.ts", "src/runtime.ts"]),
-    );
-    const docs =
-      result.snapshot?.records.flatMap((record) =>
-        record.kind === "documentation" && record.subject?.key === actions[0]?.key
-          ? [record.content]
-          : [],
-      ) ?? [];
-    expect(docs.sort()).toEqual([
-      "/** Declaration API. */",
-      "/** Module API. */",
-      "/** Runtime API. */",
-    ]);
+      result.snapshot?.records.filter((record) => isPublicSurfaceObservation(record)) ?? [];
+    expect(actions).toEqual([]);
 
     const sameResourceDocs = await scan({
       "package.json": JSON.stringify({
@@ -2172,9 +2318,9 @@ export function shared() {}
       "src/runtime.ts": 'export { first as api } from "./implementation.ts";\n',
     });
     expect(sameResourceDocs.result.ok).toBeTrue();
-    expect(sameResourceDocs.snapshot?.coverage[0]?.state).toBe("complete");
+    expect(sameResourceDocs.snapshot?.coverage[0]?.state).toBe("partial");
     const sameResourceAction = sameResourceDocs.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
     );
     const retainedDocs =
       sameResourceDocs.snapshot?.records.flatMap((record) =>
@@ -2182,14 +2328,8 @@ export function shared() {}
           ? [record]
           : [],
       ) ?? [];
-    expect(retainedDocs.map((record) => record.content).sort()).toEqual([
-      "/** First API. */",
-      "/** Second API. */",
-    ]);
-    expect(new Set(retainedDocs.map((record) => record.key)).size).toBe(2);
-    expect(
-      retainedDocs.every((record) => record.subject?.key === sameResourceAction?.key),
-    ).toBeTrue();
+    expect(sameResourceAction).toBeUndefined();
+    expect(retainedDocs).toEqual([]);
 
     const declarationsOnly = await scan({
       "package.json": JSON.stringify({ name: "declarations-only", types: "src/index.d.ts" }),
@@ -2198,21 +2338,12 @@ export function shared() {}
     expect(declarationsOnly.result.ok).toBeTrue();
     expect(
       declarationsOnly.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "typeApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "typeApi",
       ),
     ).toBeTrue();
-
-    const alternateEntry = await scan({
-      "package.json": JSON.stringify({ main: "src/alternate.ts", name: "alternate-entry" }),
-      "src/alternate.ts": "export function api() {}\n",
-    });
-    const alternateAction = alternateEntry.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
-    );
-    expect(alternateAction?.key).toBe(actions[0]?.key);
   });
 
-  test("retains a deterministic bounded public proof when later aggregates overflow", async () => {
+  test("fails closed when a later legacy aggregate may identify a different callable", async () => {
     const source: Record<string, string> = {
       "package.json": JSON.stringify({
         main: "src/a-short.ts",
@@ -2238,21 +2369,16 @@ export function shared() {}
     expect(replay.snapshot).toEqual(first.snapshot);
     expect(replay.emittedKeys).toEqual(first.emittedKeys);
     const action = first.snapshot?.records.find(
-      (record) => isPublicSurfaceAction(record) && record.name === "api",
+      (record) => isPublicSurfaceObservation(record) && observationName(record) === "api",
     );
-    expect(action).toBeDefined();
-    expect(action?.provenance).toHaveLength(3);
-    expect(new Set(action?.provenance.map((item) => item.resource))).toEqual(
-      new Set(["package.json", "src/a-short.ts"]),
-    );
-    expect(action?.provenance.some((item) => item.resource.startsWith("src/z-chain/"))).toBeFalse();
+    expect(action).toBeUndefined();
     expect(
       first.snapshot?.records.flatMap((record) =>
         record.kind === "documentation" && record.subject?.key === action?.key
           ? [record.content]
           : [],
       ),
-    ).toEqual(["/** Short API. */"]);
+    ).toEqual([]);
   });
 
   test("never reinterprets an external package-import target as a local file", async () => {
@@ -2299,7 +2425,7 @@ export function shared() {}
       expect(malformed.result.ok).toBeTrue();
       expect(malformed.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        malformed.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+        malformed.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
       ).toBeFalse();
     }
 
@@ -2322,7 +2448,7 @@ export function shared() {}
     expect(malformedActions.result.ok).toBeTrue();
     expect(malformedActions.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      malformedActions.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      malformedActions.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
     ).toBeFalse();
   });
 
@@ -2342,10 +2468,11 @@ export function shared() {}
         'import traversal from "foo/../bar";',
         'import control from "bad\\u0001name";',
         'import tooLong from "' + oversized + '";',
-        "void scoped; void plain; void lodashInternal; void packageFeature; void runtime;",
-        "void malformedScope; void url;",
-        "void empty; void traversal; void control; void tooLong;",
-        "export function api() {}",
+        "export function api() {",
+        "  void scoped; void plain; void lodashInternal; void packageFeature; void runtime;",
+        "  void malformedScope; void url;",
+        "  void empty; void traversal; void control; void tooLong;",
+        "}",
       ].join("\n"),
     });
 
@@ -2378,9 +2505,11 @@ export function shared() {}
         'import undici from "undici";',
         'import bareTest from "test";',
         'import nodeTest from "node:test";',
-        "void fs; void promises; void runtimePromises; void timers; void timerPromises;",
-        "void bareBun; void bunSqlite; void extra; void socket; void undici;",
-        "void bareTest; void nodeTest;",
+        "export function api() {",
+        "  void fs; void promises; void runtimePromises; void timers; void timerPromises;",
+        "  void bareBun; void bunSqlite; void extra; void socket; void undici;",
+        "  void bareTest; void nodeTest;",
+        "}",
       ].join("\n"),
     });
 
@@ -2422,7 +2551,7 @@ export function shared() {}
 
     const aliased = await scan({
       "package.json": JSON.stringify({ exports: "./src/api/index.ts", name: "builtin-alias" }),
-      "src/api/index.ts": 'import fs from "fs";\nvoid fs;\n',
+      "src/api/index.ts": 'import fs from "fs";\nexport function api() { void fs; }\n',
       "src/domain/fs.ts": "export default {};\n",
       "tsconfig.json": JSON.stringify({
         compilerOptions: { baseUrl: ".", paths: { fs: ["src/domain/fs.ts"] } },
@@ -2466,10 +2595,13 @@ export function shared() {}
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     const actions =
-      result.snapshot?.records.filter((record) => isPublicSurfaceAction(record)) ?? [];
-    expect(actions.map((record) => record.name).sort()).toEqual(["publicDefault", "publicWork"]);
+      result.snapshot?.records.filter((record) => isPublicSurfaceObservation(record)) ?? [];
+    expect(actions.map((record) => observationName(record)).sort()).toEqual([
+      "publicDefault",
+      "publicWork",
+    ]);
     for (const action of actions) {
-      expect(action.description).toBe("Public export at ./direct");
+      expect(action.kind).toBe("component-candidate");
       expect([...new Set(action.provenance.map((item) => item.resource))].sort()).toEqual([
         "package.json",
         "src/direct.ts",
@@ -2495,7 +2627,7 @@ export function shared() {}
       expect(unsupported.result.ok).toBeTrue();
       expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        unsupported.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+        unsupported.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
       ).toBeFalse();
     }
 
@@ -2515,7 +2647,7 @@ export function shared() {}
     expect(nonCallableImports.result.ok).toBeTrue();
     expect(nonCallableImports.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
-      nonCallableImports.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      nonCallableImports.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
     ).toBeFalse();
   });
 
@@ -2532,7 +2664,9 @@ export function shared() {}
 
       expect(result.result.ok).toBeTrue();
       expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-      expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+      expect(
+        result.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+      ).toBeFalse();
     }
 
     for (const unsupportedEntry of [
@@ -2549,7 +2683,7 @@ export function shared() {}
       expect(unsupported.result.ok).toBeTrue();
       expect(unsupported.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        unsupported.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+        unsupported.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
       ).toBeFalse();
     }
 
@@ -2560,7 +2694,9 @@ export function shared() {}
     });
     expect(namespace.result.ok).toBeTrue();
     expect(namespace.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(namespace.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      namespace.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
   });
 
   test("omits mutable, declaration-typed, and overloaded callable bindings", async () => {
@@ -2580,8 +2716,8 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["safeApi"]);
   });
 
@@ -2596,8 +2732,8 @@ export function shared() {}
     expect(allowlist.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       allowlist.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicApi"]);
     expect(allowlist.fixture.read).not.toContain("src/private.ts");
 
@@ -2618,8 +2754,8 @@ export function shared() {}
       expect(normalizedPatterns.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         normalizedPatterns.snapshot?.records
-          .filter((record) => isPublicSurfaceAction(record))
-          .map((record) => record.name),
+          .filter((record) => isPublicSurfaceObservation(record))
+          .map((record) => observationName(record)),
       ).toEqual(["publicApi"]);
       expect(normalizedPatterns.fixture.read).not.toContain("src/private/hidden.ts");
     }
@@ -2662,8 +2798,8 @@ export function shared() {}
     expect(union.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       union.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["explicitApi", "includedApi"]);
     expect(union.fixture.read).not.toContain("src/included/omitted.ts");
@@ -2680,8 +2816,8 @@ export function shared() {}
     expect(incompleteFiles.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       incompleteFiles.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["validApi"]);
     expect(incompleteFiles.fixture.read).not.toContain("src/unlisted.ts");
   });
@@ -2719,27 +2855,21 @@ export function shared() {}
     ).toEqual([
       "/api",
       "/api/events",
-      "[eventId]",
       "composables",
       "domain",
-      "event.ts",
-      "health.post.ts",
-      "index.get.ts",
       "nuxt-project",
-      "nuxt.config.ts",
       "source",
-      "unqualified.ts",
-      "useEvent.ts",
+      "useEvent",
     ]);
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["GET /api/events/[eventId]", "POST /api/health"]);
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
+        .filter((record) => isPublicSurfaceObservation(record))
         .flatMap((record) => record.provenance.map((item) => item.resource))
         .sort(),
     ).toEqual(["server/api/events/[eventId]/index.get.ts", "server/api/health.post.ts"]);
@@ -2784,7 +2914,9 @@ export function shared() {}
             record.kind === "component-candidate" && record.candidate.type === "source-boundary",
         ),
       ).toBeFalse();
-      expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+      expect(
+        result.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+      ).toBeFalse();
     }
 
     const missingMarker = await scan({
@@ -2796,7 +2928,7 @@ export function shared() {}
     expect(missingMarker.snapshot?.coverage[0]?.state).toBe("partial");
     expect(missingMarker.fixture.read).not.toContain("server/api/health.get.ts");
     expect(
-      missingMarker.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+      missingMarker.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
     ).toBeFalse();
   });
 
@@ -2825,7 +2957,9 @@ export function shared() {}
 
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      result.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
   });
 
   test("leaves extensionless declaration-only entries partial without actions", async () => {
@@ -2835,7 +2969,9 @@ export function shared() {}
     });
     expect(result.result.ok).toBeTrue();
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(result.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      result.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
   });
 
   test("prefers exact runtime resources over declaration sidecar fallbacks", async () => {
@@ -2848,8 +2984,8 @@ export function shared() {}
     expect(packageEntry.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       packageEntry.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["runtimeApi"]);
 
     const relativeImport = await scan({
@@ -2872,8 +3008,8 @@ export function shared() {}
     expect(relativeImport.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       relativeImport.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["publicApi", "runtimeImport"]);
     expect(
@@ -2883,7 +3019,8 @@ export function shared() {}
     ).toBeTrue();
     expect(
       relativeImport.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "declarationOnly",
+        (record) =>
+          isPublicSurfaceObservation(record) && observationName(record) === "declarationOnly",
       ),
     ).toBeFalse();
   });
@@ -2906,8 +3043,8 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicDeclaration"]);
     for (const resource of [
       "src/index.gen.d.ts",
@@ -2936,8 +3073,8 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["visible"]);
     for (const directory of [".GROMA-CACHE", "GroMa", "src/.gRoMa-CaChE", "src/GROMA"])
       expect(result.fixture.enumerated).not.toContain(directory);
@@ -2954,8 +3091,7 @@ export function shared() {}
         'import { dollars } from "@literal/$$";',
         'import { ampersand } from "@literal/$&";',
         'import { capture } from "@literal/$1";',
-        "void dollars; void ampersand; void capture;",
-        "export function api() {}",
+        "export function api() { void dollars; void ampersand; void capture; }",
       ].join("\n"),
       "tsconfig.json": JSON.stringify({
         compilerOptions: { paths: { "@literal/*": ["lib/*"] } },
@@ -2987,7 +3123,7 @@ export function shared() {}
       });
     const hasPublicAction = (result: Awaited<ReturnType<typeof scan>>): boolean =>
       result.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ) ?? false;
     const hasImportRelationship = (result: Awaited<ReturnType<typeof scan>>): boolean =>
       result.snapshot?.records.some(
@@ -2999,8 +3135,7 @@ export function shared() {}
         extension,
         [
           'import { model } from "../domain/model.ts";',
-          "const typed = <{ ok: boolean }>model;",
-          "export function publicApi() { return typed; }",
+          "export function publicApi() { return <{ ok: boolean }>model; }",
         ].join("\n"),
       );
       expect(typed.result.ok).toBeTrue();
@@ -3013,8 +3148,7 @@ export function shared() {}
       "cts",
       [
         'import { model } from "../domain/model.ts";',
-        "const typed = <{ ok: boolean }>model;",
-        "export function publicApi() { return typed; }",
+        "export function publicApi() { return <{ ok: boolean }>model; }",
       ].join("\n"),
     );
     expect(commonTypeScript.result.ok).toBeTrue();
@@ -3034,7 +3168,7 @@ export function shared() {}
       expect(jsx.result.ok).toBeTrue();
       expect(jsx.snapshot?.coverage[0]?.state).toBe("complete");
       expect(hasPublicAction(jsx)).toBeTrue();
-      expect(hasImportRelationship(jsx)).toBeTrue();
+      expect(hasImportRelationship(jsx)).toBeFalse();
     }
 
     for (const fixture of [
@@ -3106,14 +3240,14 @@ export function shared() {}
     expect(commonJs.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       commonJs.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["GET /health"]);
     expect(
       commonJs.snapshot?.records.some(
         (record) => record.kind === "relationship" && record.relationshipType === "imports",
       ),
-    ).toBeTrue();
+    ).toBeFalse();
 
     for (const extension of ["cjs", "cts"]) {
       const internalCommonJs = await scan({
@@ -3136,8 +3270,8 @@ export function shared() {}
       expect(internalCommonJs.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
         internalCommonJs.snapshot?.records
-          .filter((record) => isPublicSurfaceAction(record))
-          .map((record) => record.name)
+          .filter((record) => isPublicSurfaceObservation(record))
+          .map((record) => observationName(record))
           .sort(),
       ).toEqual(["GET /legacy", "publicApi"]);
       expect(
@@ -3162,8 +3296,8 @@ export function shared() {}
     expect(commonJavaScript.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       commonJavaScript.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["GET /js", "publicApi"]);
 
@@ -3175,7 +3309,7 @@ export function shared() {}
     expect(esmJavaScript.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       esmJavaScript.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ),
     ).toBeTrue();
 
@@ -3185,7 +3319,9 @@ export function shared() {}
     });
     expect(commonTs.result.ok).toBeTrue();
     expect(commonTs.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(commonTs.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      commonTs.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
 
     const esmBarrel = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.mjs", name: "esm-barrel" }),
@@ -3194,7 +3330,9 @@ export function shared() {}
     });
     expect(esmBarrel.result.ok).toBeTrue();
     expect(esmBarrel.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(esmBarrel.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      esmBarrel.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
 
     for (const extension of ["mjs", "mts"]) {
       const esm = await scan({
@@ -3208,7 +3346,7 @@ export function shared() {}
       expect(esm.snapshot?.coverage[0]?.state).toBe("complete");
       expect(
         esm.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3231,8 +3369,8 @@ export function shared() {}
     expect(topLevelShadows.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       topLevelShadows.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicApi"]);
 
     const nestedShadows = await scan({
@@ -3251,7 +3389,7 @@ export function shared() {}
     expect(nestedShadows.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       nestedShadows.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ),
     ).toBeTrue();
 
@@ -3273,7 +3411,7 @@ export function shared() {}
       expect(unshadowedOutside.result.ok).toBeTrue();
       expect(unshadowedOutside.snapshot?.coverage[0]?.state).toBe("partial");
       expect(
-        unshadowedOutside.snapshot?.records.some((record) => isPublicSurfaceAction(record)),
+        unshadowedOutside.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
       ).toBeFalse();
     }
 
@@ -3283,7 +3421,9 @@ export function shared() {}
     });
     expect(helper.result.ok).toBeTrue();
     expect(helper.snapshot?.coverage[0]?.state).toBe("partial");
-    expect(helper.snapshot?.records.some((record) => isPublicSurfaceAction(record))).toBeFalse();
+    expect(
+      helper.snapshot?.records.some((record) => isPublicSurfaceObservation(record)),
+    ).toBeFalse();
 
     const shadowedHelper = await scan({
       "package.json": JSON.stringify({ exports: "./src/index.js", name: "shadowed-helper" }),
@@ -3297,7 +3437,7 @@ export function shared() {}
     expect(shadowedHelper.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       shadowedHelper.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ),
     ).toBeTrue();
   });
@@ -3372,7 +3512,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3479,7 +3619,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3526,7 +3666,7 @@ export function shared() {}
       expect(result.snapshot?.coverage[0]?.state).toBe(fixture.expected);
       expect(
         result.snapshot?.records.some(
-          (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+          (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
         ),
       ).toBeTrue();
     }
@@ -3544,7 +3684,7 @@ export function shared() {}
     expect(importedObject.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       importedObject.snapshot?.records.some(
-        (record) => isPublicSurfaceAction(record) && record.name === "publicApi",
+        (record) => isPublicSurfaceObservation(record) && observationName(record) === "publicApi",
       ),
     ).toBeTrue();
   });
@@ -3575,8 +3715,8 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("complete");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name)
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record))
         .sort(),
     ).toEqual(["directoryApi", "fileApi"]);
   });
@@ -3591,8 +3731,8 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["publicApi"]);
   });
 
@@ -3640,14 +3780,14 @@ export function shared() {}
     expect(result.snapshot?.coverage[0]?.state).toBe("partial");
     expect(
       result.snapshot?.records
-        .filter((record) => isPublicSurfaceAction(record))
-        .map((record) => record.name),
+        .filter((record) => isPublicSurfaceObservation(record))
+        .map((record) => observationName(record)),
     ).toEqual(["safeApi"]);
   });
 
   test("classifies bare Node builtins as runtime imports in source-only scopes", async () => {
     const result = await scan({
-      "src/index.ts": 'import fs from "fs";\nvoid fs;\nexport function api() {}\n',
+      "src/index.ts": 'import fs from "fs";\nexport function api() { void fs; }\n',
     });
 
     expect(result.result.ok).toBeTrue();
@@ -3745,12 +3885,12 @@ export function shared() {}
     expect(first.result.ok).toBeTrue();
     expect(first.snapshot?.coverage[0]?.state).toBe("partial");
     expect(first.snapshot).toEqual(second.snapshot);
-    const fileActions =
+    const callableCandidates =
       first.snapshot?.records.filter(
-        (record) => record.kind === "action" && record.description === fileExportDescription,
+        (record) => record.kind === "component-candidate" && record.candidate.type === "function",
       ) ?? [];
-    expect(fileActions.length).toBeGreaterThan(0);
-    expect(fileActions.length).toBeLessThan(300);
+    expect(callableCandidates.length).toBeGreaterThan(0);
+    expect(callableCandidates.length).toBeLessThan(300);
   });
 
   test("fails cleanly for cancellation, provider failure, and rejected sinks", async () => {
@@ -3822,7 +3962,7 @@ export function shared() {}
       phase: 1,
       provides: [{ cardinality: "multiple", id: "groma.scanners/v1", version: "1.0.0" }],
       requires: [],
-      version: "1.0.0",
+      version: "2.0.0",
     });
   });
 });

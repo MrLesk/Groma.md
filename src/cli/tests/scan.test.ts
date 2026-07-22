@@ -236,8 +236,8 @@ describe("CLI scan workflow", () => {
     expect(scanned.exitCode).toBe(CLI_EXIT.success);
     expect(JSON.parse(scanned.output).result.observations.records).toBeGreaterThan(100);
 
-    // Scanning real topography emits a component per source file too, so the
-    // route areas no longer fit one bounded page; page through to collect them.
+    // This fixture emits enough bounded architecture evidence to require more
+    // than one page; page through to collect every route observation.
     const items: Array<{ component: { actions?: readonly unknown[]; name: string } }> = [];
     let cursor: string | undefined;
     do {

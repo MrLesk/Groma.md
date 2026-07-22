@@ -136,6 +136,11 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
         {data.cognitiveComplexity === undefined ? null : (
           <li className="groma-chip">cognitive {data.cognitiveComplexity}</li>
         )}
+        {data.sourceLines === undefined ? null : (
+          <li className="groma-chip">
+            {data.sourceLines} source line{data.sourceLines === 1 ? "" : "s"}
+          </li>
+        )}
       </ul>
       <div className="groma-node__disclosure nodrag nopan">
         {data.canOpen ? (
@@ -148,7 +153,7 @@ function ComponentNode({ data, id, selected }: NodeProps<BlueprintFlowNode>) {
             }}
             onKeyDown={(event) => activate(event, () => actions.onExpand(id))}
           >
-            {data.projection === "observed-group" || data.projection === "observed-index" ? (
+            {data.projection === "observed-index" ? (
               <>
                 Explore {data.childCount} component{data.childCount === 1 ? "" : "s"} →
               </>

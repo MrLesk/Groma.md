@@ -79,7 +79,10 @@ import { createLocalWorkspaceCapability } from "./local-workspace.ts";
 import { createLocalProjectRegistry } from "./local-project-registry.ts";
 import { createLocalScannerProjectResources } from "./scanner-project-resources.ts";
 import { createScannerExecutionRuntime } from "./scanner-runtime.ts";
-import { typescriptBunScannerRegistration } from "./typescript-bun-scanner.ts";
+import {
+  legacyTypeScriptTopographyRetirementCandidates,
+  typescriptBunScannerRegistration,
+} from "./typescript-bun-scanner.ts";
 import { defaultHostPluginRegistrationBounds } from "./plugin-runtime-bounds.ts";
 import { defaultHostCapabilityIds, defaultHostPluginIds } from "./default-host-identities.ts";
 
@@ -410,9 +413,9 @@ export function createDefaultBootstrapRegistry(
           start: () => {
             const model = createStandardModelCapability();
             const invariant = createStandardModelInvariant({
-              // A first scan of real topography creates a component per source
-              // file in one transaction, so the mutation envelope must admit the
-              // whole component budget, not the per-component embedded-item one.
+              // A first scan can create the full bounded component inventory in
+              // one transaction, so the mutation envelope admits that whole
+              // budget rather than the per-component embedded-item ceiling.
               maxComponentMutations: defaultHostBounds.maxComponents,
               maxComponents: defaultHostBounds.maxComponents,
               maxOwnerCharacters: defaultHostBounds.maxOwnerCharacters,
@@ -786,9 +789,8 @@ export function createDefaultBootstrapRegistry(
             });
             const reconciliation = createReconciliationOperations({
               bounds: {
-                // A scan of real code topography emits a component per source file
-                // and directory, so the observed-component ceiling is the whole
-                // component budget, not the per-component embedded-item budget.
+                // A scan may emit the full bounded component inventory, so the
+                // observed-component ceiling is the whole component budget.
                 maxComponents: defaultHostBounds.maxComponents,
                 maxEmbeddedItems: defaultHostBounds.maxEmbeddedItems,
                 maxRecords: defaultHostBounds.maxRequestDataValues,
@@ -801,6 +803,7 @@ export function createDefaultBootstrapRegistry(
               entropy,
               evidenceResourceMapper,
               graph,
+              legacyComponentRetirementSelector: legacyTypeScriptTopographyRetirementCandidates,
               resourceMapper,
               snapshotStateDecoder,
               structuralScaleProposal:

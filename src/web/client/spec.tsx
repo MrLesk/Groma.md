@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import {
-  cognitiveComplexitySourceLabel,
+  measurementSourceLabel,
   createComponent,
   fetchComponent,
   isStaticBlueprintSnapshot,
@@ -620,6 +620,7 @@ export function SpecPanel({
 
   const component = detail.read?.item.component;
   const cognitiveComplexity = detail.read?.item.cognitiveComplexity ?? [];
+  const sourceLines = detail.read?.item.sourceLines ?? [];
   const scaleAssessments = (detail.read?.evidence ?? []).flatMap((entry) =>
     entry.scale === undefined ? [] : [{ projectId: entry.projectId, scale: entry.scale }],
   );
@@ -929,12 +930,30 @@ export function SpecPanel({
                 <ul className="m-0 list-none p-0">
                   {cognitiveComplexity.map((measurement) => (
                     <li
-                      key={`${measurement.projectId}:${cognitiveComplexitySourceLabel(measurement)}`}
+                      key={`${measurement.projectId}:${measurementSourceLabel(measurement)}`}
                       className="border-b border-fine py-1 last:border-b-0"
                     >
                       {measurement.value} — scanner-measured nesting and branching
                       <span className="block font-plan text-[9px] text-ink-muted">
-                        {cognitiveComplexitySourceLabel(measurement)}
+                        {measurementSourceLabel(measurement)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Field>
+            )}
+            {sourceLines.length === 0 ? null : (
+              <Field label="Source span">
+                <ul className="m-0 list-none p-0">
+                  {sourceLines.map((measurement) => (
+                    <li
+                      key={`${measurement.projectId}:${measurementSourceLabel(measurement)}`}
+                      className="border-b border-fine py-1 last:border-b-0"
+                    >
+                      {measurement.value} physical source line
+                      {measurement.value === 1 ? "" : "s"} in this callable declaration
+                      <span className="block font-plan text-[9px] text-ink-muted">
+                        {measurementSourceLabel(measurement)}
                       </span>
                     </li>
                   ))}

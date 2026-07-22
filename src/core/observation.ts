@@ -89,6 +89,8 @@ export interface ComponentCandidateStructuralSignals {
   readonly fileCount?: number;
   /** Distinct sibling candidates observed importing into this one. */
   readonly reuseBreadth?: number;
+  /** Physical source lines spanned by this candidate's own declaration. */
+  readonly sourceLines?: number;
 }
 
 export interface ComponentCandidateObservation extends ObservationRecordBase {
@@ -827,6 +829,7 @@ const signalCountFields = [
   "exportCount",
   "fileCount",
   "reuseBreadth",
+  "sourceLines",
 ] as const;
 const signalMarkerFields = ["declaredBoundary", "entryPoint"] as const;
 

@@ -80,6 +80,16 @@ function candidate(
   });
 }
 
+function legacyTopographyCandidate(key: string, name: string): ObservationRecord {
+  return Object.freeze({
+    candidate: Object.freeze({ name }),
+    key,
+    kind: "component-candidate",
+    provenance,
+    scope: "workspace",
+  });
+}
+
 function relationship(key: string, from: string, to: string): ObservationRecord {
   return Object.freeze({
     from: Object.freeze({ key: from, scope: "workspace" }),
@@ -139,6 +149,7 @@ function snapshot(
     "output",
     "relationship",
   ]),
+  sourceVersion = "1.0.0",
 ): CompletedObservationSnapshot {
   const session = valueOf(
     createObservationSession({
@@ -146,7 +157,7 @@ function snapshot(
       epoch,
       projectId: "project.local",
       scopes: Object.freeze([Object.freeze({ id: "workspace", resourceRoot: "." })]),
-      source: Object.freeze({ id: sourceId, instance: "builtin", version: "1.0.0" }),
+      source: Object.freeze({ id: sourceId, instance: "builtin", version: sourceVersion }),
     }),
   );
   valueOf(session.submitBatch({ epoch, records, sequence: 1 }));
@@ -651,13 +662,217 @@ describe("local completed-snapshot reconciliation", () => {
     expect(await readFile(evidencePath, "utf8")).toBe(retiredEvidence);
   });
 
-  test("projects cognitive complexity as scanner evidence in bounded reads and exports", async () => {
+  test("retires positively identified scanner-v1 file topography on a partial v2 rescan", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const kinds = [
+      "action",
+      "component-candidate",
+      "documentation",
+      "input",
+      "output",
+      "relationship",
+    ] as const;
+    const legacy = [
+      candidate("package", "Package"),
+      candidate("source", "Source"),
+      legacyTopographyCandidate("directory", "services"),
+      legacyTopographyCandidate("file", "index.ts"),
+      candidate("dependency", "Dependency"),
+      contains("package-source", "package", "source"),
+      contains("source-directory", "source", "directory"),
+      contains("directory-file", "directory", "file"),
+      relationship("file-dependency", "file", "dependency"),
+    ];
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("typescript-v1", legacy, "official.typescript", "complete", kinds, "1.0.0"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+
+    const current = [
+      candidate("package", "Package"),
+      candidate("source", "Source"),
+      candidate("function", "start"),
+      contains("package-source", "package", "source"),
+      contains("source-function", "source", "function"),
+    ];
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("typescript-v2", current, "official.typescript", "partial", kinds, "2.0.0"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const listed = await host.operations.listComponents({ limit: 20 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    expect(listed.value.items.map((item) => item.component.name).sort()).toEqual([
+      "Dependency",
+      "Package",
+      "Source",
+      "start",
+    ]);
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot("typescript-v2-replay", current, "official.typescript", "partial", kinds, "2.0.0"),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "unchanged" } });
+  });
+
+  test("preserves a curated legacy file component during scanner-v2 retirement", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const kinds = [
+      "action",
+      "component-candidate",
+      "documentation",
+      "input",
+      "output",
+      "relationship",
+    ] as const;
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "curated-v1",
+          [
+            candidate("package", "Package"),
+            legacyTopographyCandidate("file", "index.ts"),
+            contains("package-file", "package", "file"),
+          ],
+          "official.typescript",
+          "complete",
+          kinds,
+          "1.0.0",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const before = await host.operations.listComponents({ limit: 10 });
+    expect(before.ok).toBeTrue();
+    if (!before.ok) return;
+    const file = before.value.items.find((item) => item.component.name === "index.ts")!;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: file.revision,
+        id: file.component.id,
+        patch: { intent: "Keep this curated migration note." },
+      }),
+    ).toMatchObject({ status: "committed" });
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "curated-v2",
+          [candidate("package", "Package")],
+          "official.typescript",
+          "complete",
+          kinds,
+          "2.0.0",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const after = await host.operations.listComponents({ limit: 10 });
+    expect(after.ok).toBeTrue();
+    if (!after.ok) return;
+    expect(after.value.items.find((item) => item.component.name === "index.ts")).toMatchObject({
+      component: { intent: "Keep this curated migration note.", name: "index.ts" },
+    });
+  });
+
+  test("keeps every incident relationship when curated evidence blocks file retirement", async () => {
+    const workspace = await temporaryWorkspace();
+    const host = await composition(workspace);
+    expect(await host.operations.initialize({})).toMatchObject({ ok: true });
+    const kinds = [
+      "action",
+      "component-candidate",
+      "documentation",
+      "input",
+      "output",
+      "relationship",
+    ] as const;
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "relationships-v1",
+          [
+            candidate("package", "Package"),
+            legacyTopographyCandidate("file", "index.ts"),
+            candidate("first", "First"),
+            candidate("second", "Second"),
+            contains("package-file", "package", "file"),
+            relationship("file-first", "file", "first"),
+            relationship("file-second", "file", "second"),
+          ],
+          "official.typescript",
+          "complete",
+          kinds,
+          "1.0.0",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const listed = await host.operations.listComponents({ limit: 10 });
+    expect(listed.ok).toBeTrue();
+    if (!listed.ok) return;
+    const file = listed.value.items.find((item) => item.component.name === "index.ts")!;
+    const detail = await host.operations.getComponent({
+      id: file.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(detail.ok).toBeTrue();
+    if (!detail.ok) return;
+    const curated = detail.value.relationships.items[0]!.relationship;
+    expect(
+      await host.operations.updateComponent({
+        expectedRevision: detail.value.item.revision,
+        id: file.component.id,
+        patch: {},
+        relationships: {
+          upsert: [
+            {
+              description: "Curated dependency.",
+              id: curated.id,
+              target: curated.target,
+              type: curated.type,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({ status: "committed" });
+
+    expect(
+      await host.reconciliation.reconcile(
+        snapshot(
+          "relationships-v2",
+          [candidate("package", "Package")],
+          "official.typescript",
+          "partial",
+          kinds,
+          "2.0.0",
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: { status: "committed" } });
+    const after = await host.operations.getComponent({
+      id: file.component.id,
+      relationships: { limit: 10 },
+    });
+    expect(after).toMatchObject({
+      ok: true,
+      value: {
+        relationships: { items: [{ relationship: { description: "Curated dependency." } }, {}] },
+      },
+    });
+  });
+
+  test("projects per-function scanner measurements in bounded reads and exports", async () => {
     const workspace = await temporaryWorkspace();
     const host = await composition(workspace);
     expect(await host.operations.initialize({})).toMatchObject({ ok: true });
     expect(
       await host.reconciliation.reconcile(
-        snapshot("cognitive-1", [candidate("parser", "parser.ts", { cognitiveComplexity: 27 })]),
+        snapshot("cognitive-1", [
+          candidate("parser", "parseRequest", { cognitiveComplexity: 27, sourceLines: 44 }),
+        ]),
       ),
     ).toMatchObject({ ok: true, value: { status: "committed" } });
 
@@ -672,6 +887,13 @@ describe("local completed-snapshot reconciliation", () => {
                 projectId: "project.local",
                 scanner: { id: "groma.typescript-bun", instance: "builtin", version: "1.0.0" },
                 value: 27,
+              },
+            ],
+            sourceLines: [
+              {
+                projectId: "project.local",
+                scanner: { id: "groma.typescript-bun", instance: "builtin", version: "1.0.0" },
+                value: 44,
               },
             ],
             observedPaths: [
@@ -695,6 +917,7 @@ describe("local completed-snapshot reconciliation", () => {
         item: {
           cognitiveComplexity: [{ value: 27 }],
           observedPaths: [{ resource: "src/index.ts" }],
+          sourceLines: [{ value: 44 }],
         },
       },
     });
@@ -706,6 +929,7 @@ describe("local completed-snapshot reconciliation", () => {
           {
             cognitiveComplexity: [{ value: 27 }],
             observedPaths: [{ resource: "src/index.ts" }],
+            sourceLines: [{ value: 44 }],
           },
         ],
       },
