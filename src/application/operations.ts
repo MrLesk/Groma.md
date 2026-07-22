@@ -62,7 +62,7 @@ import type {
   BlueprintSearchPage,
   BlueprintTraversalHit,
   BlueprintTraversalPage,
-  ComponentCognitiveComplexityEvidence,
+  ComponentMeasurementEvidence,
   ComponentEvidenceView,
   ComponentObservedPathEvidence,
   ComponentScaleEvidenceView,
@@ -1357,15 +1357,16 @@ function componentEvidence(
 }
 
 /**
- * Projects the one scanner scalar the visual blueprint currently understands.
+ * Projects one scanner scalar into bounded component reads.
  * Invalid, stale, or conflicting observations disappear from this optional view
  * rather than making a canonical component read fail or inviting a guessed score.
  */
-function cognitiveComplexityEvidence(
+function componentMeasurementEvidence(
   snapshot: ReadSnapshot,
   components: readonly StandardComponent[],
   options: ApplicationOperationsContext,
-): ReadonlyMap<string, readonly ComponentCognitiveComplexityEvidence[]> {
+  signal: "cognitiveComplexity" | "sourceLines",
+): ReadonlyMap<string, readonly ComponentMeasurementEvidence[]> {
   if (snapshot.evidence === undefined || components.length === 0) return new Map();
   const parsed = parseEvidenceState(snapshot.evidence, {
     maxComponents: options.bounds.maxComponents,
@@ -1392,15 +1393,13 @@ function cognitiveComplexityEvidence(
     const provenance = `${source.snapshot.projectId}\u0000${scanner.id}\u0000${scanner.instance}\u0000${scanner.version}`;
     const scoresByBinding = new Map<string, number[]>();
     for (const record of source.snapshot.records) {
-      if (
-        record.kind !== "component-candidate" ||
-        record.signals?.cognitiveComplexity === undefined
-      )
-        continue;
+      if (record.kind !== "component-candidate") continue;
+      const measured = record.signals?.[signal];
+      if (measured === undefined) continue;
       const identity = `${record.scope}\u0000${record.key}`;
       const scores = scoresByBinding.get(identity);
-      if (scores === undefined) scoresByBinding.set(identity, [record.signals.cognitiveComplexity]);
-      else scores.push(record.signals.cognitiveComplexity);
+      if (scores === undefined) scoresByBinding.set(identity, [measured]);
+      else scores.push(measured);
     }
     for (const binding of source.componentBindings) {
       if (!binding.present) continue;
@@ -1420,7 +1419,7 @@ function cognitiveComplexityEvidence(
     }
   }
 
-  const views = new Map<string, readonly ComponentCognitiveComplexityEvidence[]>();
+  const views = new Map<string, readonly ComponentMeasurementEvidence[]>();
   for (const [componentId, bySource] of collected) {
     const entries = [...bySource.values()]
       .flatMap((measured) =>
@@ -1920,10 +1919,17 @@ async function componentPage(
         ),
       );
     }
-    const cognitive = cognitiveComplexityEvidence(
+    const cognitive = componentMeasurementEvidence(
       confirmed.value,
       confirmedPage.value.items,
       options,
+      "cognitiveComplexity",
+    );
+    const sourceLines = componentMeasurementEvidence(
+      confirmed.value,
+      confirmedPage.value.items,
+      options,
+      "sourceLines",
     );
     const evidenceBound = evidenceBoundComponents(
       confirmed.value,
@@ -1937,12 +1943,14 @@ async function componentPage(
       const revision = revisionFor(confirmed.value, resources[index]!, "Component");
       if (!revision.ok) return revision;
       const measured = cognitive.get(component.id);
+      const lines = sourceLines.get(component.id);
       const paths = observedPaths.get(component.id);
       views[index] = Object.freeze({
         ...(measured === undefined ? {} : { cognitiveComplexity: measured }),
         component,
         evidenceBound: evidenceBound.has(component.id),
         ...(paths === undefined ? {} : { observedPaths: paths }),
+        ...(lines === undefined ? {} : { sourceLines: lines }),
         revision: revision.value,
       });
     }
@@ -3790,7 +3798,18 @@ export function createApplicationOperations(
     const observed = await snapshot(Object.freeze([]), options);
     if (!observed.ok) return readProviderFailure(observed.diagnostics);
     if (observed.value.generation !== components.value.generation) return graphQueryUnavailable();
-    const cognitive = cognitiveComplexityEvidence(observed.value, components.value.items, options);
+    const cognitive = componentMeasurementEvidence(
+      observed.value,
+      components.value.items,
+      options,
+      "cognitiveComplexity",
+    );
+    const sourceLines = componentMeasurementEvidence(
+      observed.value,
+      components.value.items,
+      options,
+      "sourceLines",
+    );
     const evidenceBound = evidenceBoundComponents(observed.value, components.value.items, options);
     const observedPaths = observedPathEvidence(observed.value, components.value.items, options);
     const items: BlueprintExportItem[] = [];
@@ -3811,8 +3830,13 @@ export function createApplicationOperations(
     ) {
       const component = components.value.items[componentIndex]!;
       const measured = cognitive.get(component.id);
+      const lines = sourceLines.get(component.id);
       const paths = observedPaths.get(component.id);
-      const itemFields = 3 + (measured === undefined ? 0 : 1) + (paths === undefined ? 0 : 1);
+      const itemFields =
+        3 +
+        (measured === undefined ? 0 : 1) +
+        (paths === undefined ? 0 : 1) +
+        (lines === undefined ? 0 : 1);
       if (structuralRemaining.value < itemFields) {
         return blueprintExportPageBoundExceeded(
           "structural-values",
@@ -3934,6 +3958,7 @@ export function createApplicationOperations(
         component,
         evidenceBound: evidenceBound.has(component.id),
         ...(paths === undefined ? {} : { observedPaths: paths }),
+        ...(lines === undefined ? {} : { sourceLines: lines }),
         relationships: Object.freeze(relationships),
       });
     }
@@ -4184,9 +4209,18 @@ export function createApplicationOperations(
       if (!relationships.ok) return relationships;
       const evidence = componentEvidence(read.value, component, options);
       if (!evidence.ok) return evidence;
-      const cognitive = cognitiveComplexityEvidence(read.value, [component], options).get(
-        component.id,
-      );
+      const cognitive = componentMeasurementEvidence(
+        read.value,
+        [component],
+        options,
+        "cognitiveComplexity",
+      ).get(component.id);
+      const sourceLines = componentMeasurementEvidence(
+        read.value,
+        [component],
+        options,
+        "sourceLines",
+      ).get(component.id);
       const evidenceBound = evidenceBoundComponents(read.value, [component], options).has(
         component.id,
       );
@@ -4201,6 +4235,7 @@ export function createApplicationOperations(
             component,
             evidenceBound,
             ...(paths === undefined ? {} : { observedPaths: paths }),
+            ...(sourceLines === undefined ? {} : { sourceLines }),
             revision: revision.value,
           }),
           relationships: relationships.value,

@@ -16,6 +16,7 @@ import {
   type GraphDataRecord,
   type GraphKernel,
   type ObservationRecord,
+  type ObservationReference,
   type ResourceKey,
   type Result,
   type TransactionRecovery,
@@ -65,6 +66,11 @@ export interface ReconciliationOptions {
   readonly entropy: EntropySource;
   readonly evidenceResourceMapper: EvidenceResourceMapper;
   readonly graph: Pick<GraphKernel, "resolveEntityIdentity">;
+  /** Scanner-owned policy for retiring obsolete candidates across a version boundary. */
+  readonly legacyComponentRetirementSelector?: (
+    prior: CompletedObservationSnapshot | undefined,
+    current: CompletedObservationSnapshot,
+  ) => readonly ObservationReference[];
   readonly resourceMapper: ComponentResourceMapper;
   readonly snapshotStateDecoder: ApplicationSnapshotStateDecoder;
   readonly structuralScaleProposal?: StructuralScaleProposalConfigurationV1;
@@ -615,6 +621,33 @@ function relationshipMatches(
   );
 }
 
+function componentExactlyMatchesProjection(
+  component: StandardComponent,
+  projection: ComponentProjection,
+): boolean {
+  for (const field of [
+    "iconDomain",
+    "label",
+    "name",
+    "parent",
+    "scale",
+    "shared",
+    "summary",
+    "type",
+  ] as const) {
+    if (component[field] !== projection[field]) return false;
+  }
+  return (
+    component.intent === undefined &&
+    component.inputs === undefined &&
+    component.outputs === undefined &&
+    component.actions === undefined &&
+    component.lifecycle === undefined &&
+    component.desired === undefined &&
+    Object.keys(component.extensions).length === 0
+  );
+}
+
 function evidenceGraphData(state: EvidenceState): GraphData {
   return state as unknown as GraphData;
 }
@@ -895,14 +928,6 @@ export function createReconciliationOperations(
           hasCompleteCoverage(snapshot.value, binding.scope, "component-candidate")
         )
           componentBindings.set(identity, Object.freeze({ ...binding, present: false }));
-      }
-      if (componentBindings.size > options.bounds.maxComponents) {
-        return failure(
-          diagnostic(
-            "reconciliation-component-limit",
-            "Canonical component binding capacity is exceeded",
-          ),
-        );
       }
       const componentIds = new Map(
         [...componentBindings].map(([identity, binding]) => [identity, binding.componentId]),
@@ -1282,6 +1307,133 @@ export function createReconciliationOperations(
           diagnostic(
             "reconciliation-relationship-limit",
             "Canonical relationship binding capacity is exceeded",
+          ),
+        );
+      }
+      const legacyRetirementIdentities = new Set(
+        (
+          options.legacyComponentRetirementSelector?.(priorSource?.snapshot, snapshot.value) ?? []
+        ).map((reference) => qualified(reference.scope, reference.key)),
+      );
+      if (legacyRetirementIdentities.size > 0) {
+        const scheduledRelationshipRemovals = new Set(
+          relationshipMutations.flatMap((mutation) => {
+            const value = mutation as Readonly<Record<string, unknown>>;
+            return value.type === "remove" && typeof value.id === "string" ? [value.id] : [];
+          }),
+        );
+        const aliasedComponents = new Set<string>(
+          decoded.value.aliases.flatMap((alias) => [alias.source, alias.target]),
+        );
+        const retirementCandidates = new Map<string, ComponentBinding>();
+        const eligibleLegacyBinding = (identity: string, binding: ComponentBinding): boolean => {
+          if (
+            currentComponentIdentities.has(identity) ||
+            otherSourceComponentIds.has(binding.componentId) ||
+            aliasedComponents.has(binding.componentId)
+          ) {
+            return false;
+          }
+          const component = existingComponents.get(binding.componentId);
+          return (
+            component !== undefined &&
+            componentExactlyMatchesProjection(component, binding.projection)
+          );
+        };
+        for (const [identity, binding] of componentBindings) {
+          if (
+            legacyRetirementIdentities.has(identity) &&
+            eligibleLegacyBinding(identity, binding)
+          ) {
+            retirementCandidates.set(binding.componentId, binding);
+          }
+        }
+        const migrationRemovableRelationships = new Map<
+          string,
+          readonly [string, RelationshipBinding]
+        >();
+        for (const relationship of existingRelationships.values()) {
+          const entry = [...relationshipBindings].find(
+            ([, binding]) => binding.relationId === relationship.id,
+          );
+          if (entry !== undefined && relationshipMatches(relationship, entry[1].projection)) {
+            migrationRemovableRelationships.set(relationship.id, entry);
+          }
+        }
+        let narrowed = true;
+        while (narrowed) {
+          narrowed = false;
+          for (const componentId of [...retirementCandidates.keys()]) {
+            const hasSurvivingChild = [...existingComponents.values()].some(
+              (component) =>
+                component.parent === componentId && !retirementCandidates.has(component.id),
+            );
+            const hasSurvivingRelationship = [...existingRelationships.values()].some(
+              (relationship) =>
+                (relationship.source === componentId || relationship.target === componentId) &&
+                !scheduledRelationshipRemovals.has(relationship.id) &&
+                !migrationRemovableRelationships.has(relationship.id),
+            );
+            if (hasSurvivingChild || hasSurvivingRelationship) {
+              retirementCandidates.delete(componentId);
+              narrowed = true;
+            }
+          }
+        }
+        const retiredIds = new Set(retirementCandidates.keys());
+        for (const relationship of existingRelationships.values()) {
+          if (
+            (!retiredIds.has(relationship.source) && !retiredIds.has(relationship.target)) ||
+            scheduledRelationshipRemovals.has(relationship.id)
+          ) {
+            continue;
+          }
+          const entry = migrationRemovableRelationships.get(relationship.id);
+          if (entry === undefined) continue;
+          relationshipMutations.push(Object.freeze({ id: relationship.id, type: "remove" }));
+          touchedComponents.add(relationship.source);
+          touchedRelationships.add(relationship.id);
+          scheduledRelationshipRemovals.add(relationship.id);
+          relationshipBindings.set(
+            entry[0],
+            Object.freeze({ ...entry[1], present: false, removed: true }),
+          );
+        }
+        const retirementDepth = (componentId: string): number => {
+          let current = existingComponents.get(componentId)?.parent;
+          let depth = 0;
+          const visited = new Set<string>();
+          while (current !== undefined && retiredIds.has(current) && !visited.has(current)) {
+            visited.add(current);
+            depth += 1;
+            current = existingComponents.get(current)?.parent;
+          }
+          return depth;
+        };
+        for (const componentId of [...retiredIds].sort(
+          (left, right) =>
+            retirementDepth(right) - retirementDepth(left) || compareText(left, right),
+        )) {
+          componentMutations.push(Object.freeze({ id: componentId, type: "remove" }));
+          touchedComponents.add(componentId);
+        }
+        for (const [identity, binding] of componentBindings) {
+          if (retiredIds.has(binding.componentId)) componentBindings.delete(identity);
+        }
+        for (const [identity, binding] of relationshipBindings) {
+          if (
+            retiredIds.has(binding.projection.source) ||
+            retiredIds.has(binding.projection.target)
+          ) {
+            relationshipBindings.delete(identity);
+          }
+        }
+      }
+      if (componentBindings.size > options.bounds.maxComponents) {
+        return failure(
+          diagnostic(
+            "reconciliation-component-limit",
+            "Canonical component binding capacity is exceeded",
           ),
         );
       }

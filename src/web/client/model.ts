@@ -12,7 +12,7 @@ export interface BlueprintNode {
   readonly childrenCursor?: string;
   readonly hasMoreChildren: boolean;
   readonly projection?: {
-    readonly kind: "observed-group" | "observed-index";
+    readonly kind: "observed-index";
     readonly memberCount: number;
   };
   /** Canonical children represented by a coarser disposable child layer. */

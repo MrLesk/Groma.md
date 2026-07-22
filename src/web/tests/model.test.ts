@@ -15,17 +15,20 @@ function view(id: string, extra: Record<string, unknown> = {}): ApiComponentView
     cognitiveComplexity,
     evidenceBound = false,
     observedPaths,
+    sourceLines,
     ...component
   } = extra as Record<string, unknown> & {
     readonly cognitiveComplexity?: ApiComponentView["cognitiveComplexity"];
     readonly evidenceBound?: boolean;
     readonly observedPaths?: ApiComponentView["observedPaths"];
+    readonly sourceLines?: ApiComponentView["sourceLines"];
   };
   return {
     ...(cognitiveComplexity === undefined ? {} : { cognitiveComplexity }),
     component: { id, kind: "component", ...component },
     evidenceBound,
     ...(observedPaths === undefined ? {} : { observedPaths }),
+    ...(sourceLines === undefined ? {} : { sourceLines }),
     revision: `sha256:${id}`,
   } as ApiComponentView;
 }
@@ -333,7 +336,7 @@ describe("interactive map view-model", () => {
     ).toHaveLength(20);
   });
 
-  test("normalizes all OpenClaw candidates into observed source areas", () => {
+  test("indexes large levels without deriving visual groups from evidence paths", () => {
     const roots = mergeRootsPage(
       emptyModel(),
       page([view("ent_openclaw", { name: "openclaw", scale: "system" })]),
@@ -368,26 +371,18 @@ describe("interactive map view-model", () => {
       model,
     });
     const visibleCards = graph.nodes.filter((node) => node.type === "component");
-    expect(visibleCards).toHaveLength(4);
-    expect(visibleCards.map((node) => node.data.label)).toEqual([
-      "Extensions",
-      "Packages",
-      "Source modules",
-      "User interface",
-    ]);
-    expect(visibleCards.map((node) => node.data.type)).toEqual([
-      "extensions/",
-      "packages/",
-      "src/",
-      "ui/",
-    ]);
-    expect(visibleCards.map((node) => node.data.childCount)).toEqual([33, 2, 49, 1]);
-    expect(visibleCards.every((node) => node.data.projection === "observed-group")).toBeTrue();
-    expect(graph.visibleComponents).toBe(4);
+    expect(visibleCards).toHaveLength(5);
+    expect(visibleCards.map((node) => node.data.childCount)).toEqual([20, 20, 20, 20, 5]);
+    expect(visibleCards.every((node) => node.data.projection === "observed-index")).toBeTrue();
+    expect(visibleCards.every((node) => node.data.type === "component index")).toBeTrue();
+    expect(visibleCards.map((node) => node.data.label).join(" ")).not.toMatch(
+      /Extensions|Packages|Source modules|User interface/,
+    );
+    expect(graph.visibleComponents).toBe(5);
     expect(graph.levelComponents).toBe(85);
     expect(graph.omittedComponents).toBe(0);
 
-    const source = visibleCards.find((node) => node.data.label === "Source modules")!;
+    const source = visibleCards[0]!;
     const focused = buildBlueprintFlowGraph({
       childCounts: new Map([["ent_openclaw", 85]]),
       dependencies: [],
@@ -398,20 +393,10 @@ describe("interactive map view-model", () => {
     const indexes = focused.nodes.filter(
       (node) => node.type === "component" && node.data.projection === "observed-index",
     );
-    expect(indexes.map((node) => node.data.childCount)).toEqual([20, 20, 9]);
+    expect(indexes).toHaveLength(4);
     expect(focused.nodes.some((node) => node.data.label === "Structure not mapped")).toBeFalse();
     expect(
-      focused.nodes.some((node) => node.type === "component" && node.data.label === "Packages"),
-    ).toBeTrue();
-
-    const indexed = buildBlueprintFlowGraph({
-      childCounts: new Map([["ent_openclaw", 85]]),
-      dependencies: [],
-      expandedIds: [source.id, indexes[0]!.id],
-      model,
-    });
-    expect(
-      indexed.nodes.filter(
+      focused.nodes.filter(
         (node) => node.type === "component" && node.data.projection === undefined,
       ),
     ).toHaveLength(20);
@@ -485,7 +470,7 @@ describe("interactive map view-model", () => {
     );
   });
 
-  test("orders disposable source areas deterministically", () => {
+  test("orders disposable indexes deterministically without reading paths", () => {
     const roots = mergeRootsPage(emptyModel(), page([view("ent_system", { scale: "system" })]));
     const children = Array.from({ length: 24 }, (_, index) =>
       view(`ent_${index.toString().padStart(2, "0")}`, {
@@ -505,8 +490,8 @@ describe("interactive map view-model", () => {
     });
     expect(
       graph.nodes.filter((node) => node.type === "component").map((node) => node.data.label),
-    ).toEqual(["Areas"]);
-    expect(graph.visibleComponents).toBe(1);
+    ).toEqual(["Part 0 – Part 5", "Part 6 – Part 9"]);
+    expect(graph.visibleComponents).toBe(2);
     expect(graph.levelComponents).toBe(24);
     expect(graph.omittedComponents).toBe(0);
   });
@@ -583,7 +568,7 @@ describe("interactive map view-model", () => {
     expect(graph.omittedRelationships).toBe(1);
   });
 
-  test("keeps cognitive complexity as secondary comparable evidence", () => {
+  test("keeps per-function measurements as secondary comparable evidence", () => {
     const source = {
       projectId: "prj_local",
       scanner: { id: "typescript-bun", instance: "default", version: "1.0.0" },
@@ -595,12 +580,14 @@ describe("interactive map view-model", () => {
       page([
         view("ent_a", {
           cognitiveComplexity: [{ ...source, value: 3 }],
+          sourceLines: [{ ...source, value: 7 }],
           name: "a",
           scale: "domain",
           summary: "Own a.",
         }),
         view("ent_b", {
           cognitiveComplexity: [{ ...source, value: 18 }],
+          sourceLines: [{ ...source, value: 31 }],
           name: "b",
           scale: "domain",
           summary: "Own b.",
@@ -610,6 +597,8 @@ describe("interactive map view-model", () => {
     const graph = buildBlueprintFlowGraph({ dependencies: [], model });
     expect(graph.nodes.find((node) => node.id === "ent_a")?.data.cognitiveComplexity).toBe(3);
     expect(graph.nodes.find((node) => node.id === "ent_b")?.data.cognitiveComplexity).toBe(18);
+    expect(graph.nodes.find((node) => node.id === "ent_a")?.data.sourceLines).toBe(7);
+    expect(graph.nodes.find((node) => node.id === "ent_b")?.data.sourceLines).toBe(31);
   });
 
   test("names the next semantic disclosure stratum", () => {

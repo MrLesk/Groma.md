@@ -217,14 +217,20 @@ export interface ComponentView {
    * never canonical containment or intent.
    */
   readonly observedPaths?: readonly ComponentObservedPathEvidence[];
+  /** Scanner-measured physical source lines for this exact component candidate. */
+  readonly sourceLines?: readonly ComponentSourceLinesEvidence[];
   readonly revision: string;
 }
 
-export interface ComponentCognitiveComplexityEvidence {
+export interface ComponentMeasurementEvidence {
   readonly projectId: string;
   readonly scanner: ObservationSourceIdentity;
   readonly value: number;
 }
+
+export type ComponentCognitiveComplexityEvidence = ComponentMeasurementEvidence;
+
+export type ComponentSourceLinesEvidence = ComponentMeasurementEvidence;
 
 export interface ComponentObservedPathEvidence {
   readonly projectId: string;
@@ -322,6 +328,7 @@ export interface BlueprintExportItem {
   readonly component: StandardComponent;
   readonly evidenceBound: boolean;
   readonly observedPaths?: readonly ComponentObservedPathEvidence[];
+  readonly sourceLines?: readonly ComponentSourceLinesEvidence[];
   readonly relationships: readonly StandardRelationship[];
 }
 

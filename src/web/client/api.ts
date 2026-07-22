@@ -31,7 +31,7 @@ export interface ApiComponent {
 export type ApiComponentScale = "system" | "domain" | "part" | "element";
 
 /** A raw scanner measurement, never curated component meaning. */
-export interface ApiCognitiveComplexityEvidence {
+export interface ApiMeasurementEvidence {
   readonly projectId: string;
   readonly scanner: {
     readonly id: string;
@@ -41,7 +41,11 @@ export interface ApiCognitiveComplexityEvidence {
   readonly value: number;
 }
 
-/** Scanner-owned resource path used only for disposable visual grouping. */
+export type ApiCognitiveComplexityEvidence = ApiMeasurementEvidence;
+
+export type ApiSourceLinesEvidence = ApiMeasurementEvidence;
+
+/** Scanner-owned resource path retained as provenance, never a visual label. */
 export interface ApiObservedPathEvidence {
   readonly projectId: string;
   readonly resource: string;
@@ -52,7 +56,7 @@ export interface ApiObservedPathEvidence {
   };
 }
 
-export function cognitiveComplexitySourceLabel(evidence: ApiCognitiveComplexityEvidence): string {
+export function measurementSourceLabel(evidence: ApiMeasurementEvidence): string {
   return `${evidence.projectId} · ${evidence.scanner.id}/${evidence.scanner.instance}@${evidence.scanner.version}`;
 }
 
@@ -83,6 +87,7 @@ export interface ApiComponentView {
   readonly component: ApiComponent;
   readonly evidenceBound: boolean;
   readonly observedPaths?: readonly ApiObservedPathEvidence[];
+  readonly sourceLines?: readonly ApiSourceLinesEvidence[];
   readonly revision: string;
 }
 
@@ -346,6 +351,7 @@ export interface ApiConnectionItem {
   readonly component: ApiComponent;
   readonly evidenceBound?: boolean;
   readonly observedPaths?: readonly ApiObservedPathEvidence[];
+  readonly sourceLines?: readonly ApiSourceLinesEvidence[];
   readonly relationships: readonly {
     readonly description?: string;
     readonly id: string;
@@ -428,6 +434,7 @@ function snapshotViews(items: readonly ApiConnectionItem[]): readonly ApiCompone
     component: item.component,
     evidenceBound: item.evidenceBound ?? false,
     ...(item.observedPaths === undefined ? {} : { observedPaths: item.observedPaths }),
+    ...(item.sourceLines === undefined ? {} : { sourceLines: item.sourceLines }),
     revision: "snapshot",
   }));
 }
@@ -508,6 +515,7 @@ function readSnapshot<T>(rawUrl: string, snapshot: StaticBlueprintSnapshot): Api
           component: item.component,
           evidenceBound: item.evidenceBound ?? false,
           ...(item.observedPaths === undefined ? {} : { observedPaths: item.observedPaths }),
+          ...(item.sourceLines === undefined ? {} : { sourceLines: item.sourceLines }),
           revision: "snapshot",
         },
         relationships: page.value,

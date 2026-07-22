@@ -9,6 +9,7 @@ import {
   scannerApiVersion,
   scannerCapabilityId,
   scannerCapabilityVersion,
+  type CompletedObservationSnapshot,
   type Diagnostic,
   type DocumentationObservation,
   type ObservationProvenance,
@@ -23,7 +24,8 @@ import {
 } from "../plugin-sdk/index.ts";
 
 const scannerId = "official.typescript";
-const scannerVersion = "1.0.0";
+const scannerVersion = "2.0.0";
+const legacyTopographyScannerVersion = "1.0.0";
 
 const inventoryPageSize = 1_000;
 const observationBatchSize = 128;
@@ -37,31 +39,15 @@ const maxSourceBytes = 2 * 1024 * 1024;
 const maxDocumentationCharacters = 32 * 1024;
 const maxRecords = 4_096;
 const maxCanonicalCharacters = 1_500_000;
-// Kept in step with the reconciliation component ceiling (defaultHostBounds
-// maxComponents): the file/directory topography is dropped before the emitted
-// component count could exceed what reconciliation will accept, so a very large
-// repository still yields its upper levels with partial coverage.
-const maxComponentCandidates = 1_000;
 // Kept in step with the reconciliation relationship ceiling (defaultHostBounds
-// maxRelationships): aggregated and file-level imports share this count, so a
+// maxRelationships): boundary and callable imports share this count, so a
 // dense repository publishes bounded partial evidence instead of asking
 // reconciliation to reject the completed observation.
 const maxRelationshipObservations = 1_000;
-// The most exported functions surfaced on a single file, so a rare barrel that
-// re-exports hundreds of names lists a bounded, reproducible sample rather than
-// swamping the file's detail or the per-component embedded-item ceiling.
-const maxFileExportActions = 32;
 // Detailed AST evidence is enrichment. Large repositories keep their complete
 // package and source-boundary inventory, then spend this bounded sample across
 // those boundaries instead of exhausting the whole scan on every source file.
 const maxDetailedSourceFiles = 256;
-/**
- * The description carried by every file-level export action, so a file's own
- * exported functions can be told apart from a package's public-API surface: the
- * same name can legitimately be both, and only the description distinguishes the
- * measurement of "this file exports it" from "this package publishes it".
- */
-export const fileExportDescription = "Exported function";
 const maxExtractionWork = 2_000_000;
 const maxRelationshipProvenance = 32;
 const maxActionProvenance = 32;
@@ -72,6 +58,106 @@ const maxPackageEntryLiterals = 256;
 const maxNuxtActionsPerBoundary = 64;
 
 const sourceExtensionPattern = /\.(?:[cm]?[jt]sx?|d\.[cm]?ts)$/;
+
+function qualifiedObservation(reference: ObservationReference): string {
+  return `${reference.scope}\u0000${reference.key}`;
+}
+
+/**
+ * Selects only scanner-v1 file and inferred-directory candidates that v2 no
+ * longer publishes. Reconciliation owns deletion safety; the scanner owns the
+ * meaning of its superseded keys and version boundary.
+ */
+export function legacyTypeScriptTopographyRetirementCandidates(
+  prior: CompletedObservationSnapshot | undefined,
+  current: CompletedObservationSnapshot,
+): readonly ObservationReference[] {
+  if (
+    prior?.source.id !== scannerId ||
+    prior.source.version !== legacyTopographyScannerVersion ||
+    current.source.id !== scannerId ||
+    current.source.version !== scannerVersion
+  ) {
+    return Object.freeze([]);
+  }
+
+  const currentCandidates = new Set(
+    current.records.flatMap((record) =>
+      record.kind === "component-candidate"
+        ? [qualifiedObservation(Object.freeze({ key: record.key, scope: record.scope }))]
+        : [],
+    ),
+  );
+  const priorCandidates = new Map(
+    prior.records.flatMap((record) =>
+      record.kind === "component-candidate"
+        ? [
+            [
+              qualifiedObservation(Object.freeze({ key: record.key, scope: record.scope })),
+              record,
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+  const parentByChild = new Map<string, string | undefined>();
+  for (const record of prior.records) {
+    if (
+      record.kind !== "relationship" ||
+      record.relationshipType !== observedContainmentRelationshipType
+    ) {
+      continue;
+    }
+    const child = qualifiedObservation(record.to);
+    const parent = qualifiedObservation(record.from);
+    const existing = parentByChild.get(child);
+    if (!parentByChild.has(child)) parentByChild.set(child, parent);
+    else if (existing !== parent) parentByChild.set(child, undefined);
+  }
+
+  const selected = new Set<string>();
+  for (const [identity, record] of priorCandidates) {
+    if (currentCandidates.has(identity)) continue;
+    const sourceName = record.provenance
+      .map((item) => item.resource.split("/").at(-1))
+      .find((name) => name === record.candidate.name);
+    if (sourceName !== undefined && sourceExtensionPattern.test(sourceName)) {
+      selected.add(identity);
+    }
+  }
+
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const identity of [...selected]) {
+      const parentIdentity = parentByChild.get(identity);
+      if (
+        parentIdentity === undefined ||
+        selected.has(parentIdentity) ||
+        currentCandidates.has(parentIdentity)
+      ) {
+        continue;
+      }
+      const parent = priorCandidates.get(parentIdentity);
+      if (
+        parent === undefined ||
+        parent.candidate.type !== undefined ||
+        parent.signals?.declaredBoundary === true
+      ) {
+        continue;
+      }
+      selected.add(parentIdentity);
+      expanded = true;
+    }
+  }
+
+  return Object.freeze(
+    [...selected].sort(compareCodeUnits).map((identity) => {
+      const record = priorCandidates.get(identity)!;
+      return Object.freeze({ key: record.key, scope: record.scope });
+    }),
+  );
+}
 
 /**
  * A readme is prose, so only prose extensions qualify. Matching any extension
@@ -270,17 +356,51 @@ interface BoundaryEvidence {
 }
 
 interface ImportEvidence {
+  readonly bindings: readonly ImportBindingEvidence[];
   readonly end: number;
+  readonly moduleEffect: boolean;
   readonly source: string;
   readonly start: number;
 }
 
+interface ImportBindingEvidence {
+  readonly imported: string;
+  readonly local: string;
+  readonly namespace: boolean;
+  readonly typeOnly: boolean;
+}
+
+interface ImportedUseEvidence {
+  readonly binding: ImportBindingEvidence;
+  readonly imported: ImportEvidence;
+  readonly useEnd: number;
+  readonly useStart: number;
+}
+
+interface CallableUseEvidence {
+  readonly imported: readonly ImportedUseEvidence[];
+  readonly localCalls: readonly string[];
+  readonly partial: boolean;
+}
+
 interface CallableEvidence {
+  readonly cognitiveComplexity: number;
   readonly end: number;
   readonly jsdoc?: Readonly<{ readonly end: number; readonly start: number }>;
+  readonly localName: string;
   readonly name: string;
   readonly resource: string;
+  readonly sourceLines: number;
   readonly start: number;
+  readonly uses: CallableUseEvidence;
+}
+
+interface LocalCallableEvidence {
+  readonly cognitiveComplexity: number;
+  readonly declaration: AstNode;
+  readonly partial: boolean;
+  readonly sourceLines: number;
+  readonly uses: CallableUseEvidence;
 }
 
 interface PublicCallableEvidence {
@@ -321,14 +441,8 @@ interface RouteEvidence {
 
 interface ParsedSource {
   readonly callables: ReadonlyMap<string, CallableEvidence>;
-  /**
-   * Cognitive Complexity (Campbell / SonarSource) for the whole file: a count of
-   * how hard it is to follow, not how much it branches. It is computed from this
-   * scanner's own AST and is therefore language-specific — emitted as raw scanner
-   * evidence and only ever compared across scanners after per-scanner normalization.
-   */
-  readonly cognitiveComplexity: number;
   readonly imports: readonly ImportEvidence[];
+  readonly locals: ReadonlyMap<string, LocalCallableEvidence>;
   readonly partial: boolean;
   readonly reexports: readonly ReexportEvidence[];
   readonly routes: readonly RouteEvidence[];
@@ -2490,6 +2604,7 @@ const cognitiveLogicalOperators = new Set(["&&", "||", "??"]);
 function computeCognitiveComplexity(
   program: AstNode,
   consume: () => void,
+  rootFunction?: AstNode,
 ): { readonly partial: boolean; readonly value: number } {
   let total = 0;
   let exceeded = false;
@@ -2601,6 +2716,7 @@ function computeCognitiveComplexity(
       case "ObjectMethod":
       case "ClassMethod":
       case "ClassPrivateMethod": {
+        if (rootFunction !== undefined && node !== rootFunction) return;
         // Each function is its own scope: its body starts back at nesting zero,
         // so a nested function never deepens its parent's count (the SonarJS
         // model). The whole-file score is the sum of every scope's own count.
@@ -2765,6 +2881,252 @@ function bunParserPlugins(resource: string): Array<"jsx" | "typescript"> {
   return [];
 }
 
+function callableFunctionNode(declaration: AstNode): AstNode | undefined {
+  if (
+    declaration.type === "FunctionDeclaration" ||
+    declaration.type === "FunctionExpression" ||
+    declaration.type === "ArrowFunctionExpression"
+  )
+    return declaration;
+  if (declaration.type !== "VariableDeclarator" || !isAstNode(declaration.init)) return undefined;
+  return declaration.init.type === "FunctionExpression" ||
+    declaration.init.type === "ArrowFunctionExpression"
+    ? declaration.init
+    : undefined;
+}
+
+function physicalSourceLines(text: string, start: number, end: number): number {
+  if (end <= start) return 0;
+  let lines = 1;
+  for (let index = start; index < end && index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) lines += 1;
+  }
+  return lines;
+}
+
+function collectPatternNames(value: unknown, names: Set<string>, consume: () => void): boolean {
+  if (!isAstNode(value)) return true;
+  const stack: Array<Readonly<{ readonly depth: number; readonly node: AstNode }>> = [
+    Object.freeze({ depth: 0, node: value }),
+  ];
+  let inspected = 0;
+  while (stack.length > 0) {
+    consume();
+    const current = stack.pop()!;
+    inspected += 1;
+    if (inspected > 256 || current.depth > 32) return false;
+    const name = identifierName(current.node);
+    if (name !== undefined) {
+      names.add(name);
+      continue;
+    }
+    for (const child of Object.values(current.node)) {
+      if (isAstNode(child)) stack.push({ depth: current.depth + 1, node: child });
+      else if (Array.isArray(child)) {
+        for (const item of child) {
+          if (isAstNode(item)) stack.push({ depth: current.depth + 1, node: item });
+        }
+      }
+    }
+  }
+  return true;
+}
+
+function identifierIsReference(node: AstNode, parent: AstNode | undefined, key: string): boolean {
+  if (node.type !== "Identifier" || parent === undefined) return false;
+  if (
+    (parent.type === "VariableDeclarator" && key === "id") ||
+    ((parent.type === "FunctionDeclaration" ||
+      parent.type === "FunctionExpression" ||
+      parent.type === "ArrowFunctionExpression" ||
+      parent.type === "ObjectMethod" ||
+      parent.type === "ClassMethod" ||
+      parent.type === "ClassPrivateMethod") &&
+      (key === "id" || key === "params")) ||
+    ((parent.type === "ClassDeclaration" || parent.type === "ClassExpression") && key === "id") ||
+    ((parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+      key === "property" &&
+      parent.computed !== true) ||
+    ((parent.type === "ObjectProperty" ||
+      parent.type === "ObjectMethod" ||
+      parent.type === "ClassMethod" ||
+      parent.type === "ClassPrivateMethod") &&
+      key === "key" &&
+      parent.computed !== true) ||
+    ((parent.type === "LabeledStatement" ||
+      parent.type === "BreakStatement" ||
+      parent.type === "ContinueStatement") &&
+      key === "label") ||
+    (parent.type === "TSQualifiedName" && key === "right")
+  )
+    return false;
+  return true;
+}
+
+function analyzeCallableUses(
+  root: AstNode,
+  imports: readonly ImportEvidence[],
+  localNames: ReadonlySet<string>,
+  ownName: string,
+  consume: () => void,
+): CallableUseEvidence {
+  const importByLocal = new Map<
+    string,
+    Readonly<{ readonly binding: ImportBindingEvidence; readonly imported: ImportEvidence }>
+  >();
+  let partial = false;
+  for (const imported of imports) {
+    for (const binding of imported.bindings) {
+      if (importByLocal.has(binding.local)) partial = true;
+      else importByLocal.set(binding.local, Object.freeze({ binding, imported }));
+    }
+  }
+  const bound = new Set<string>();
+  const stack: Array<
+    Readonly<{
+      readonly depth: number;
+      readonly key: string;
+      readonly node: AstNode;
+      readonly parent?: AstNode;
+    }>
+  > = [];
+  for (const [key, child] of Object.entries(root)) {
+    if (key === "id") continue;
+    if (isAstNode(child)) stack.push({ depth: 1, key, node: child, parent: root });
+    else if (Array.isArray(child)) {
+      for (const item of child) {
+        if (isAstNode(item)) stack.push({ depth: 1, key, node: item, parent: root });
+      }
+    }
+  }
+  const entries: typeof stack = [];
+  let inspected = 0;
+  while (stack.length > 0) {
+    consume();
+    const current = stack.pop()!;
+    inspected += 1;
+    if (inspected > maxAstNodesPerFile || current.depth > maxAstDepth) {
+      partial = true;
+      break;
+    }
+    entries.push(current);
+    const node = current.node;
+    const nestedCallable =
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod";
+    if (nestedCallable) {
+      // Nested callable bodies are outside this exported callable's direct
+      // dependency claim. Top-level helpers are analyzed separately below.
+      partial = true;
+      continue;
+    }
+    if (node.type === "VariableDeclarator") {
+      partial = !collectPatternNames(node.id, bound, consume) || partial;
+    } else if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+      const name = identifierName(node.id);
+      if (name !== undefined) bound.add(name);
+    } else if (node.type === "CatchClause") {
+      partial = !collectPatternNames(node.param, bound, consume) || partial;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (isAstNode(child))
+        stack.push({ depth: current.depth + 1, key, node: child, parent: node });
+      else if (Array.isArray(child)) {
+        for (const item of child) {
+          if (isAstNode(item))
+            stack.push({ depth: current.depth + 1, key, node: item, parent: node });
+        }
+      }
+    }
+  }
+  const shadowed = new Set(
+    [...bound].filter((name) => importByLocal.has(name) || localNames.has(name)),
+  );
+  if (shadowed.size > 0) partial = true;
+  const importedUses = new Map<string, ImportedUseEvidence>();
+  const localCalls = new Set<string>();
+  for (const current of entries) {
+    const node = current.node;
+    if (node.type === "AssignmentExpression" || node.type === "UpdateExpression") {
+      const target = node.type === "AssignmentExpression" ? node.left : node.argument;
+      const targetName = identifierName(target);
+      if (
+        targetName !== undefined &&
+        (importByLocal.has(targetName) || localNames.has(targetName))
+      ) {
+        partial = true;
+      }
+    }
+    const name = identifierName(node);
+    if (
+      name === undefined ||
+      shadowed.has(name) ||
+      !identifierIsReference(node, current.parent, current.key)
+    )
+      continue;
+    const imported = importByLocal.get(name);
+    if (imported !== undefined) {
+      if (imported.binding.namespace) {
+        const parent = current.parent;
+        if (
+          parent === undefined ||
+          (parent.type !== "MemberExpression" && parent.type !== "OptionalMemberExpression") ||
+          current.key !== "object"
+        ) {
+          partial = true;
+          continue;
+        }
+        const member = propertyName(parent.property, parent.computed);
+        if (member === undefined) {
+          partial = true;
+          continue;
+        }
+        const use = Object.freeze({
+          binding: Object.freeze({ ...imported.binding, imported: member }),
+          imported: imported.imported,
+          useEnd: nodeRange(parent).end,
+          useStart: nodeRange(parent).start,
+        });
+        importedUses.set(`${imported.imported.source}\u0000${name}\u0000${member}`, use);
+      } else {
+        importedUses.set(
+          `${imported.imported.source}\u0000${name}\u0000${imported.binding.imported}`,
+          Object.freeze({
+            binding: imported.binding,
+            imported: imported.imported,
+            useEnd: nodeRange(node).end,
+            useStart: nodeRange(node).start,
+          }),
+        );
+      }
+      continue;
+    }
+    if (!localNames.has(name) || name === ownName) continue;
+    const directCall =
+      current.parent !== undefined &&
+      (current.parent.type === "CallExpression" ||
+        current.parent.type === "OptionalCallExpression") &&
+      current.key === "callee";
+    if (directCall) localCalls.add(name);
+    else partial = true;
+  }
+  return Object.freeze({
+    imported: Object.freeze(
+      [...importedUses.values()].sort(
+        (left, right) =>
+          compareCodeUnits(left.imported.source, right.imported.source) ||
+          compareCodeUnits(left.binding.imported, right.binding.imported),
+      ),
+    ),
+    localCalls: Object.freeze([...localCalls].sort(compareCodeUnits)),
+    partial,
+  });
+}
+
 function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource {
   let tree: unknown;
   try {
@@ -2777,8 +3139,8 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   } catch {
     return Object.freeze({
       callables: new Map(),
-      cognitiveComplexity: 0,
       imports: Object.freeze([]),
+      locals: new Map(),
       partial: true,
       reexports: Object.freeze([]),
       routes: Object.freeze([]),
@@ -2787,8 +3149,8 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   if (!isAstNode(tree) || !isAstNode(tree.program) || !Array.isArray(tree.program.body)) {
     return Object.freeze({
       callables: new Map(),
-      cognitiveComplexity: 0,
       imports: [],
+      locals: new Map(),
       partial: true,
       reexports: [],
       routes: [],
@@ -2814,7 +3176,16 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         const source = literalString(sourceNode);
         const range = isAstNode(sourceNode) ? nodeRange(sourceNode) : nodeRange(node);
         if (source === undefined) traversalPartial = true;
-        else nestedTypeImports.push(Object.freeze({ end: range.end, source, start: range.start }));
+        else
+          nestedTypeImports.push(
+            Object.freeze({
+              bindings: Object.freeze([]),
+              end: range.end,
+              moduleEffect: false,
+              source,
+              start: range.start,
+            }),
+          );
       } else if (node.type === "TSImportEqualsDeclaration") {
         const local = identifierName(node.id);
         if (local === undefined || node.isExport === true) traversalPartial = true;
@@ -2827,7 +3198,16 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         const source = literalString(expression);
         const range = isAstNode(expression) ? nodeRange(expression) : nodeRange(node);
         if (source === undefined) traversalPartial = true;
-        else nestedTypeImports.push(Object.freeze({ end: range.end, source, start: range.start }));
+        else
+          nestedTypeImports.push(
+            Object.freeze({
+              bindings: Object.freeze([]),
+              end: range.end,
+              moduleEffect: false,
+              source,
+              start: range.start,
+            }),
+          );
       }
     },
     () => chargeExtractionWork(budget),
@@ -2835,14 +3215,15 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
   if (!boundedAst) {
     return Object.freeze({
       callables: new Map(),
-      cognitiveComplexity: 0,
       imports: Object.freeze([]),
+      locals: new Map(),
       partial: true,
       reexports: Object.freeze([]),
       routes: Object.freeze([]),
     });
   }
   let partial = traversalPartial;
+  const imports: ImportEvidence[] = [...nestedTypeImports];
   const locals = new Map<string, Readonly<{ readonly name: string; readonly node: AstNode }>>();
   const unsupportedLocalCallables = new Set<string>();
   const rememberLocal = (
@@ -2865,21 +3246,47 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
     ) {
       partial = true;
     }
-    if (
-      statement.type === "ImportDeclaration" &&
-      statement.importKind !== "type" &&
-      statement.importKind !== "typeof" &&
-      Array.isArray(statement.specifiers)
-    ) {
+    if (statement.type === "ImportDeclaration" && Array.isArray(statement.specifiers)) {
+      const source = literalString(statement.source);
+      const range = isAstNode(statement.source)
+        ? nodeRange(statement.source)
+        : nodeRange(statement);
+      const bindings: ImportBindingEvidence[] = [];
       for (const specifier of statement.specifiers) {
-        if (!isAstNode(specifier) || typeOnlySpecifier(specifier)) continue;
+        if (!isAstNode(specifier)) {
+          partial = true;
+          continue;
+        }
         const local = identifierName(specifier.local);
         if (local === undefined || !validObservationText(local, 256)) {
           partial = true;
         } else {
           unsupportedImportedBindings.add(local);
+          const typeOnly = typeOnlySpecifier(statement) || typeOnlySpecifier(specifier);
+          if (specifier.type === "ImportDefaultSpecifier") {
+            bindings.push(
+              Object.freeze({ imported: "default", local, namespace: false, typeOnly }),
+            );
+          } else if (specifier.type === "ImportNamespaceSpecifier") {
+            bindings.push(Object.freeze({ imported: "*", local, namespace: true, typeOnly }));
+          } else if (specifier.type === "ImportSpecifier") {
+            const imported = propertyName(specifier.imported, false);
+            if (imported === undefined || !validObservationText(imported, 256)) partial = true;
+            else bindings.push(Object.freeze({ imported, local, namespace: false, typeOnly }));
+          } else partial = true;
         }
       }
+      if (source === undefined) partial = true;
+      else
+        imports.push(
+          Object.freeze({
+            bindings: Object.freeze(bindings),
+            end: range.end,
+            moduleEffect: bindings.length === 0 && !typeOnlySpecifier(statement),
+            source,
+            start: range.start,
+          }),
+        );
     }
     const localDeclaration =
       statement.type === "ExportNamedDeclaration" &&
@@ -2889,44 +3296,118 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         : statement;
     const declared = callableDeclaration(localDeclaration);
     if (declared !== undefined) rememberLocal(declared);
+    if (statement.type === "ExportDefaultDeclaration" && isAstNode(statement.declaration)) {
+      const defaultLocal = callableDeclaration(statement.declaration);
+      if (defaultLocal !== undefined) rememberLocal(defaultLocal);
+    }
     for (const name of unsupportedVariableCallableNames(localDeclaration)) {
       locals.delete(name);
       unsupportedLocalCallables.add(name);
     }
     for (const variable of variableCallables(localDeclaration)) rememberLocal(variable);
   }
+  const localNames = new Set(locals.keys());
+  const localEvidence = new Map<string, LocalCallableEvidence>();
+  for (const [name, local] of locals) {
+    const range = nodeRange(local.node);
+    if (local.node.type === "TSDeclareFunction" && range.end > range.start) {
+      localEvidence.set(
+        name,
+        Object.freeze({
+          cognitiveComplexity: 0,
+          declaration: local.node,
+          partial: false,
+          sourceLines: physicalSourceLines(file.text, range.start, range.end),
+          uses: Object.freeze({
+            imported: Object.freeze([]),
+            localCalls: Object.freeze([]),
+            partial: false,
+          }),
+        }),
+      );
+      continue;
+    }
+    const functionNode = callableFunctionNode(local.node);
+    if (functionNode === undefined || range.end <= range.start) {
+      partial = true;
+      continue;
+    }
+    const complexity = computeCognitiveComplexity(
+      functionNode,
+      () => chargeExtractionWork(budget),
+      functionNode,
+    );
+    const uses = analyzeCallableUses(functionNode, imports, localNames, name, () =>
+      chargeExtractionWork(budget),
+    );
+    localEvidence.set(
+      name,
+      Object.freeze({
+        cognitiveComplexity: complexity.value,
+        declaration: local.node,
+        partial: complexity.partial || uses.partial,
+        sourceLines: physicalSourceLines(file.text, range.start, range.end),
+        uses,
+      }),
+    );
+  }
   const callables = new Map<string, CallableEvidence>();
-  const imports: ImportEvidence[] = [...nestedTypeImports];
   const reexports: ReexportEvidence[] = [];
   const routes: RouteEvidence[] = [];
-  const addCallable = (name: string, declaration: AstNode, exportNode: AstNode): void => {
+  const addCallable = (
+    name: string,
+    localName: string,
+    declaration: AstNode,
+    exportNode: AstNode,
+  ): void => {
     const range = nodeRange(declaration);
     if (range.end <= range.start || !validObservationText(name, 256)) {
       partial = true;
       return;
     }
     const jsdoc = leadingJsdoc(declaration) ?? leadingJsdoc(exportNode);
+    let measured = localEvidence.get(localName);
+    if (measured === undefined) {
+      const functionNode = callableFunctionNode(declaration);
+      if (functionNode === undefined) {
+        partial = true;
+        return;
+      }
+      const complexity = computeCognitiveComplexity(
+        functionNode,
+        () => chargeExtractionWork(budget),
+        functionNode,
+      );
+      const uses = analyzeCallableUses(functionNode, imports, localNames, localName, () =>
+        chargeExtractionWork(budget),
+      );
+      partial ||= complexity.partial || uses.partial;
+      measured = Object.freeze({
+        cognitiveComplexity: complexity.value,
+        declaration,
+        partial: complexity.partial || uses.partial,
+        sourceLines: physicalSourceLines(file.text, range.start, range.end),
+        uses,
+      });
+    }
+    partial ||= measured.partial;
     callables.set(
       name,
       Object.freeze({
+        cognitiveComplexity: measured.cognitiveComplexity,
         end: range.end,
         ...(jsdoc === undefined ? {} : { jsdoc }),
+        localName,
         name,
         resource: file.resource,
+        sourceLines: measured.sourceLines,
         start: range.start,
+        uses: measured.uses,
       }),
     );
   };
   for (const statement of body) {
     if (!isAstNode(statement)) continue;
-    if (statement.type === "ImportDeclaration") {
-      const source = literalString(statement.source);
-      const range = isAstNode(statement.source)
-        ? nodeRange(statement.source)
-        : nodeRange(statement);
-      if (source === undefined) partial = true;
-      else imports.push(Object.freeze({ end: range.end, source, start: range.start }));
-    }
     if (statement.type === "ExportNamedDeclaration") {
       if (
         isAstNode(statement.declaration) &&
@@ -2935,11 +3416,11 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         const declared = callableDeclaration(statement.declaration);
         if (declared !== undefined) {
           if (unsupportedLocalCallables.has(declared.name)) partial = true;
-          else addCallable(declared.name, declared.node, statement);
+          else addCallable(declared.name, declared.name, declared.node, statement);
         }
         for (const variable of variableCallables(statement.declaration)) {
           if (unsupportedLocalCallables.has(variable.name)) partial = true;
-          else addCallable(variable.name, variable.node, statement);
+          else addCallable(variable.name, variable.name, variable.node, statement);
         }
         if (unsupportedVariableCallableNames(statement.declaration).length > 0) partial = true;
       }
@@ -2948,7 +3429,15 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         const range = isAstNode(statement.source)
           ? nodeRange(statement.source)
           : nodeRange(statement);
-        imports.push(Object.freeze({ end: range.end, source, start: range.start }));
+        imports.push(
+          Object.freeze({
+            bindings: Object.freeze([]),
+            end: range.end,
+            moduleEffect: false,
+            source,
+            start: range.start,
+          }),
+        );
         const exported: Array<Readonly<{ readonly imported: string; readonly name: string }>> = [];
         if (statement.exportKind !== "type" && Array.isArray(statement.specifiers)) {
           for (const specifier of statement.specifiers) {
@@ -2984,7 +3473,7 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
           }
           const local = locals.get(localName);
           if (local !== undefined && exportedName !== undefined)
-            addCallable(exportedName, local.node, statement);
+            addCallable(exportedName, localName, local.node, statement);
           else if (
             unsupportedImportedBindings.has(localName) ||
             unsupportedLocalCallables.has(localName)
@@ -2999,7 +3488,15 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         : nodeRange(statement);
       if (source === undefined) partial = true;
       else {
-        imports.push(Object.freeze({ end: range.end, source, start: range.start }));
+        imports.push(
+          Object.freeze({
+            bindings: Object.freeze([]),
+            end: range.end,
+            moduleEffect: false,
+            source,
+            start: range.start,
+          }),
+        );
         if (statement.exportKind !== "type") reexports.push(Object.freeze({ source }));
       }
     } else if (statement.type === "ExportDefaultDeclaration" && isAstNode(statement.declaration)) {
@@ -3008,11 +3505,16 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
         statement.declaration.type === "FunctionExpression" ||
         statement.declaration.type === "ArrowFunctionExpression"
       ) {
-        addCallable("default", statement.declaration, statement);
+        addCallable(
+          "default",
+          identifierName(statement.declaration.id) ?? "default",
+          statement.declaration,
+          statement,
+        );
       } else if (statement.declaration.type === "Identifier") {
         const localName = identifierName(statement.declaration) ?? "";
         const local = locals.get(localName);
-        if (local !== undefined) addCallable("default", local.node, statement);
+        if (local !== undefined) addCallable("default", localName, local.node, statement);
         else if (
           unsupportedImportedBindings.has(localName) ||
           unsupportedLocalCallables.has(localName)
@@ -3031,28 +3533,30 @@ function parseSource(file: FileEvidence, budget: ExtractionBudget): ParsedSource
     offsets.push(callable.start, callable.end);
     if (callable.jsdoc !== undefined) offsets.push(callable.jsdoc.start, callable.jsdoc.end);
   }
+  for (const local of localEvidence.values()) {
+    for (const use of local.uses.imported) offsets.push(use.useStart, use.useEnd);
+  }
   for (const imported of imports) offsets.push(imported.start, imported.end);
   for (const route of routes) offsets.push(route.start, route.end);
   if (!cacheByteOffsets(file, offsets)) {
     return Object.freeze({
       callables: new Map(),
-      cognitiveComplexity: 0,
       imports: Object.freeze([]),
+      locals: new Map(),
       partial: true,
       reexports: Object.freeze([]),
       routes: Object.freeze([]),
     });
   }
-  const complexity = computeCognitiveComplexity(tree.program, () => chargeExtractionWork(budget));
   return Object.freeze({
     callables,
-    cognitiveComplexity: complexity.value,
     imports: Object.freeze(
       imports.sort(
         (left, right) => compareCodeUnits(left.source, right.source) || left.start - right.start,
       ),
     ),
-    partial: partial || complexity.partial,
+    locals: localEvidence,
+    partial,
     reexports: Object.freeze(reexports),
     routes: Object.freeze(
       routes.sort(
@@ -4081,35 +4585,16 @@ async function scanScope(
     );
     return resolved.matched && !resolved.partial ? resolved.resource : undefined;
   };
-  const publicActions = new Map<
-    string,
-    {
-      actionKey: string;
-      componentKey: string;
-      contributions: Array<{
-        doc?: {
-          content: string;
-          discriminator: string;
-          provenance: ObservationProvenance;
-          resource: string;
-        };
-        proof: readonly ObservationProvenance[];
-        sortKey: string;
-      }>;
-      name: string;
-      publicSubpath: string;
-      root: string;
-    }
-  >();
+  interface CallableSurface {
+    readonly callable: CallableEvidence;
+    readonly name: string;
+    readonly proof: readonly ObservationProvenance[];
+    readonly publicSubpath: string;
+    readonly root: string;
+  }
+  const publicSurfaces = new Map<string, CallableSurface[]>();
   for (const item of packages) {
     chargeExtractionWork(budget);
-    const packageKey = observationKey(
-      "component-candidate",
-      scope,
-      "package",
-      item.root,
-      item.name,
-    );
     for (const entry of item.entries) {
       chargeExtractionWork(budget);
       const callables = publicCallables(entry.target, parsedSources, resolvePublicReexport, () =>
@@ -4143,144 +4628,188 @@ async function scanScope(
         ].sort((left, right) =>
           compareCodeUnits(provenanceIdentity(left), provenanceIdentity(right)),
         );
-        const actionKey = observationKey(
-          "action",
-          scope,
-          "public-export",
-          item.root,
-          entry.publicSubpath,
-          publicName,
-        );
-        const identity = `${item.root}\u0000${entry.publicSubpath}\u0000${publicName}`;
-        let aggregate = publicActions.get(identity);
-        if (aggregate === undefined) {
-          aggregate = {
-            actionKey,
-            componentKey: packageKey,
-            contributions: [],
+        const binding = publicCallableBindingIdentity(publicCallable);
+        const surfaces = publicSurfaces.get(binding) ?? [];
+        surfaces.push(
+          Object.freeze({
+            callable,
             name: publicName,
+            proof: Object.freeze(uniqueProof),
             publicSubpath: entry.publicSubpath,
             root: item.root,
-          };
-          publicActions.set(identity, aggregate);
-        }
-        let doc:
-          | {
-              content: string;
-              discriminator: string;
-              provenance: ObservationProvenance;
-              resource: string;
-            }
-          | undefined;
-        if (callable.jsdoc !== undefined) {
-          const content = file.text.slice(callable.jsdoc.start, callable.jsdoc.end);
-          if (validObservationText(content, maxDocumentationCharacters)) {
-            const provenance = rangeProvenance(file, callable.jsdoc.start, callable.jsdoc.end);
-            doc = {
-              content,
-              discriminator: callable.name,
-              provenance,
-              resource: callable.resource,
-            };
-          } else partial = true;
-        }
-        aggregate.contributions.push({
-          ...(doc === undefined ? {} : { doc }),
-          proof: Object.freeze(uniqueProof),
-          sortKey: [
-            String(uniqueProof.length).padStart(3, "0"),
-            entry.target,
-            callable.resource,
-            callable.name,
-            String(callable.start).padStart(10, "0"),
-            String(callable.end).padStart(10, "0"),
-            publicCallable.proofResources.join("\u0000"),
-          ].join("\u0000"),
-        });
+          }),
+        );
+        publicSurfaces.set(binding, surfaces);
       }
     }
   }
-  for (const aggregate of [...publicActions.values()].sort((left, right) =>
-    compareCodeUnits(left.actionKey, right.actionKey),
-  )) {
-    chargeExtractionWork(budget);
-    const acceptedProvenance = new Map<string, ObservationProvenance>();
-    const docs = new Map<
-      string,
-      {
-        content: string;
-        discriminator: string;
-        provenance: ObservationProvenance;
-        resource: string;
-      }
-    >();
-    for (const contribution of aggregate.contributions.sort((left, right) =>
-      compareCodeUnits(left.sortKey, right.sortKey),
-    )) {
-      chargeExtractionWork(budget);
-      const nextProof = new Set(acceptedProvenance.keys());
-      for (const provenance of contribution.proof) {
-        nextProof.add(provenanceIdentity(provenance));
-      }
-      if (nextProof.size > maxActionProvenance) {
-        partial = true;
-        continue;
-      }
-      for (const provenance of contribution.proof) {
-        acceptedProvenance.set(provenanceIdentity(provenance), provenance);
-      }
-      if (contribution.doc !== undefined) {
-        docs.set(
-          `${contribution.doc.resource}\u0000${contribution.doc.discriminator}`,
-          contribution.doc,
-        );
-      }
-    }
-    if (acceptedProvenance.size === 0) {
+  interface CallableCandidatePlan {
+    readonly callable: CallableEvidence;
+    readonly entryPoint: boolean;
+    readonly key: string;
+    readonly name: string;
+    readonly ownerKey: string;
+    readonly proof: readonly ObservationProvenance[];
+  }
+  const candidatePlans = new Map<string, CallableCandidatePlan>();
+  for (const [binding, surfaces] of publicSurfaces) {
+    const ordered = surfaces.toSorted((left, right) =>
+      compareCodeUnits(
+        `${left.root}\u0000${left.publicSubpath}\u0000${left.name}`,
+        `${right.root}\u0000${right.publicSubpath}\u0000${right.name}`,
+      ),
+    );
+    const selected = ordered[0]!;
+    const boundary = boundaryByFile.get(selected.callable.resource);
+    const owner = packageForResource(selected.callable.resource, packages, () =>
+      chargeExtractionWork(budget),
+    );
+    const ownerKey =
+      boundary?.key ??
+      (owner === undefined
+        ? undefined
+        : observationKey("component-candidate", scope, "package", owner.root, owner.name));
+    if (ownerKey === undefined) {
       partial = true;
       continue;
     }
-    const provenance = [...acceptedProvenance.entries()]
-      .sort((left, right) => compareCodeUnits(left[0], right[0]))
-      .map((item) => item[1]);
+    const proof = new Map<string, ObservationProvenance>();
+    for (const surface of ordered) {
+      for (const provenance of surface.proof) {
+        if (proof.size >= maxActionProvenance && !proof.has(provenanceIdentity(provenance))) {
+          partial = true;
+          continue;
+        }
+        proof.set(provenanceIdentity(provenance), provenance);
+      }
+    }
+    candidatePlans.set(
+      binding,
+      Object.freeze({
+        callable: selected.callable,
+        entryPoint: true,
+        key: observationKey(
+          "component-candidate",
+          scope,
+          "public-callable",
+          selected.root,
+          selected.publicSubpath,
+          selected.name,
+        ),
+        name: selected.name,
+        ownerKey,
+        proof: Object.freeze(
+          [...proof.entries()]
+            .sort((left, right) => compareCodeUnits(left[0], right[0]))
+            .map((entry) => entry[1]),
+        ),
+      }),
+    );
+  }
+  const internalSurfaces = new Map<
+    string,
+    Array<Readonly<{ readonly binding: string; readonly callable: CallableEvidence }>>
+  >();
+  for (const [resource, parsed] of parsedSources) {
+    const boundary = boundaryByFile.get(resource);
+    if (boundary === undefined) continue;
+    for (const [name, callable] of parsed.callables) {
+      const binding = publicCallableBindingIdentity(
+        Object.freeze({ callable, proofResources: Object.freeze([resource]) }),
+      );
+      if (candidatePlans.has(binding)) continue;
+      if (/\.d\.[cm]?ts$/.test(resource)) continue;
+      const identity = `${boundary.key}\u0000${name}`;
+      const candidates = internalSurfaces.get(identity) ?? [];
+      candidates.push(Object.freeze({ binding, callable }));
+      internalSurfaces.set(identity, candidates);
+    }
+  }
+  for (const [identity, candidates] of internalSurfaces) {
+    const bindings = new Set(candidates.map((candidate) => candidate.binding));
+    if (bindings.size !== 1) {
+      partial = true;
+      continue;
+    }
+    const selected = candidates.toSorted((left, right) =>
+      compareCodeUnits(left.callable.resource, right.callable.resource),
+    )[0]!;
+    const boundary = boundaryByFile.get(selected.callable.resource)!;
+    const file = await getFile(selected.callable.resource);
+    if (file === undefined) continue;
+    candidatePlans.set(
+      selected.binding,
+      Object.freeze({
+        callable: selected.callable,
+        entryPoint: false,
+        key: observationKey("component-candidate", scope, "exported-callable", identity),
+        name: selected.callable.name,
+        ownerKey: boundary.key,
+        proof: Object.freeze([
+          rangeProvenance(file, selected.callable.start, selected.callable.end),
+        ]),
+      }),
+    );
+  }
+  const candidateByBinding = new Map<string, CallableCandidatePlan>();
+  const candidateKeyCounts = new Map<string, number>();
+  for (const plan of candidatePlans.values()) {
+    candidateKeyCounts.set(plan.key, (candidateKeyCounts.get(plan.key) ?? 0) + 1);
+  }
+  for (const [binding, plan] of [...candidatePlans].sort((left, right) =>
+    compareCodeUnits(left[1].key, right[1].key),
+  )) {
+    if ((candidateKeyCounts.get(plan.key) ?? 0) !== 1) {
+      partial = true;
+      continue;
+    }
     if (
       !appendDetail(
         Object.freeze({
-          component: reference(scope, aggregate.componentKey),
-          description: `Public export at ${aggregate.publicSubpath}`,
-          key: aggregate.actionKey,
-          kind: "action",
-          name: aggregate.name,
-          provenance: Object.freeze(provenance),
+          candidate: Object.freeze({ name: plan.name, type: "function" }),
+          key: plan.key,
+          kind: "component-candidate",
+          provenance: plan.proof,
           scope,
+          signals: Object.freeze({
+            cognitiveComplexity: plan.callable.cognitiveComplexity,
+            ...(plan.entryPoint ? { entryPoint: true } : {}),
+            sourceLines: plan.callable.sourceLines,
+          }),
         }),
       )
     )
       continue;
-    for (const doc of [...docs.values()].sort(
-      (left, right) =>
-        compareCodeUnits(left.resource, right.resource) ||
-        compareCodeUnits(left.discriminator, right.discriminator),
-    )) {
-      chargeExtractionWork(budget);
-      appendDetail(
-        documentationRecord(
-          scope,
-          [
-            "public-jsdoc",
-            aggregate.root,
-            aggregate.publicSubpath,
-            aggregate.name,
-            doc.resource,
-            doc.discriminator,
-          ],
-          doc.content,
-          "text",
-          doc.provenance,
-          reference(scope, aggregate.actionKey),
-        ),
-      );
+    append(
+      Object.freeze({
+        from: reference(scope, plan.ownerKey),
+        key: observationKey("relationship", scope, "contains-callable", plan.ownerKey, plan.key),
+        kind: "relationship",
+        provenance: plan.proof,
+        relationshipType: observedContainmentRelationshipType,
+        scope,
+        to: reference(scope, plan.key),
+      }),
+    );
+    candidateByBinding.set(binding, plan);
+    if (plan.callable.jsdoc === undefined) continue;
+    const file = await getFile(plan.callable.resource);
+    if (file === undefined) continue;
+    const content = file.text.slice(plan.callable.jsdoc.start, plan.callable.jsdoc.end);
+    if (!validObservationText(content, maxDocumentationCharacters)) {
+      partial = true;
+      continue;
     }
+    appendDetail(
+      documentationRecord(
+        scope,
+        ["callable-jsdoc", plan.key],
+        content,
+        "text",
+        rangeProvenance(file, plan.callable.jsdoc.start, plan.callable.jsdoc.end),
+        reference(scope, plan.key),
+      ),
+    );
   }
   const externalCandidates = new Set<string>();
   const relationships = new Map<
@@ -4288,170 +4817,230 @@ async function scanScope(
     { from: string; provenance: ObservationProvenance[]; to: string }
   >();
   const nuxtRoutes = new Map<string, Array<{ componentKey: string; file: FileEvidence }>>();
-  // File-to-file imports, kept alongside the aggregated boundary edges: they are
-  // what a reader sees on drilling into a domain — how its own files wire
-  // together — and the scanner already resolves every import to a target file.
-  const fileImportEdges = new Map<
-    string,
-    { from: string; provenance: ObservationProvenance[]; to: string }
-  >();
-  const fileComponentKey = (
-    boundary: BoundaryEvidence,
-    fileResource: string,
-  ): string | undefined => {
-    const relative = relativeResource(fileResource, boundary.resource);
-    return relative === undefined || relative === "."
-      ? undefined
-      : observationKey("component-candidate", scope, "source-file", boundary.key, relative);
+  const candidatesByLocal = new Map<string, CallableCandidatePlan[]>();
+  for (const plan of candidateByBinding.values()) {
+    const identity = `${plan.callable.resource}\u0000${plan.callable.localName}`;
+    const candidates = candidatesByLocal.get(identity) ?? [];
+    candidates.push(plan);
+    candidatesByLocal.set(identity, candidates);
+  }
+  const recordRelationship = (
+    from: string,
+    to: string,
+    provenance: ObservationProvenance,
+  ): void => {
+    if (from === to) return;
+    const identity = `${from}\u0000${to}`;
+    const aggregate = relationships.get(identity);
+    if (aggregate === undefined) {
+      if (relationships.size >= maxRelationshipObservations) {
+        partial = true;
+        return;
+      }
+      reserveRecordSlot(budget);
+      relationships.set(identity, { from, provenance: [provenance], to });
+    } else if (aggregate.provenance.length < maxRelationshipProvenance) {
+      aggregate.provenance.push(provenance);
+    } else partial = true;
   };
+  const exactCallableTarget = (resource: string, exportedName: string): string | undefined => {
+    const resolved = publicCallables(resource, parsedSources, resolvePublicReexport, () =>
+      chargeExtractionWork(budget),
+    );
+    partial ||= resolved.partial;
+    const callable = resolved.callables.get(exportedName);
+    if (callable === undefined) return undefined;
+    return candidateByBinding.get(publicCallableBindingIdentity(callable))?.key;
+  };
+  const importTarget = (
+    fromResource: string,
+    imported: ImportEvidence,
+    exportedName: string | undefined,
+    file: FileEvidence,
+  ): string | undefined => {
+    const fromBoundary = boundaryByFile.get(fromResource);
+    const owner =
+      fromBoundary?.packageKey === undefined
+        ? undefined
+        : packageByKey.get(fromBoundary.packageKey);
+    let resolvedResource: string | undefined;
+    if (imported.source.startsWith(".")) {
+      resolvedResource = resolveResource(fromResource, imported.source, resourceSet);
+      if (resolvedResource === undefined) {
+        partial = true;
+        return undefined;
+      }
+    } else {
+      const alias = imported.source.startsWith("#")
+        ? owner === undefined
+          ? Object.freeze({ matched: true, partial: true })
+          : resolveAlias(owner.imports, imported.source, resourceSet, () =>
+              chargeExtractionWork(budget),
+            )
+        : resolveAlias(inventory.aliases, imported.source, resourceSet, () =>
+            chargeExtractionWork(budget),
+          );
+      if (alias.matched) {
+        if (alias.partial || alias.resource === undefined) {
+          partial = true;
+          return undefined;
+        }
+        resolvedResource = alias.resource;
+      } else if (imported.source.startsWith("#")) {
+        partial = true;
+        return undefined;
+      }
+    }
+    if (resolvedResource !== undefined) {
+      if (exportedName !== undefined) {
+        const callable = exactCallableTarget(resolvedResource, exportedName);
+        if (callable !== undefined) return callable;
+      }
+      const targetBoundary = boundaryByFile.get(resolvedResource);
+      if (targetBoundary === undefined) partial = true;
+      return targetBoundary?.key;
+    }
+    const builtinName = nodeBuiltinName(imported.source);
+    const runtimeSpecifier =
+      builtinName !== undefined ||
+      imported.source.startsWith("node:") ||
+      imported.source.startsWith("bun:");
+    if (owner === undefined && !runtimeSpecifier) {
+      partial = true;
+      return undefined;
+    }
+    const externalName = builtinName ?? externalPackageName(imported.source);
+    if (externalName === undefined || !validObservationText(externalName, 256)) {
+      partial = true;
+      return undefined;
+    }
+    if (
+      builtinName === undefined &&
+      !runtimeSpecifier &&
+      ambiguousWorkspaceNames.has(externalName)
+    ) {
+      partial = true;
+      return undefined;
+    }
+    let workspace: PackageEvidence | undefined;
+    if (builtinName === undefined && !runtimeSpecifier) {
+      workspace = owner?.name === externalName ? owner : workspaceByName.get(externalName);
+    }
+    if (workspace !== undefined) {
+      const suffix = imported.source.slice(externalName.length);
+      const publicSubpath = suffix.length === 0 ? "." : `.${suffix}`;
+      const entry = workspace.entries.find(
+        (candidate) => candidate.publicSubpath === publicSubpath,
+      );
+      if (entry === undefined) {
+        partial = true;
+        return undefined;
+      }
+      if (exportedName !== undefined) {
+        const callable = exactCallableTarget(entry.target, exportedName);
+        if (callable !== undefined) return callable;
+      }
+      return observationKey(
+        "component-candidate",
+        scope,
+        "package",
+        workspace.root,
+        workspace.name,
+      );
+    }
+    const target = observationKey("component-candidate", scope, "external", externalName);
+    if (!externalCandidates.has(target)) {
+      if (
+        !appendDetail(
+          Object.freeze({
+            candidate: Object.freeze({ name: externalName, type: "external" }),
+            key: target,
+            kind: "component-candidate",
+            provenance: Object.freeze([rangeProvenance(file, imported.start, imported.end)]),
+            scope,
+          }),
+        )
+      )
+        return undefined;
+      externalCandidates.add(target);
+    }
+    return target;
+  };
+  const dependenciesFor = (
+    plan: CallableCandidatePlan,
+  ): Readonly<{
+    readonly imported: readonly ImportedUseEvidence[];
+    readonly localTargets: readonly CallableCandidatePlan[];
+  }> => {
+    const parsed = parsedSources.get(plan.callable.resource);
+    if (parsed === undefined) return Object.freeze({ imported: [], localTargets: [] });
+    const imported = new Map<string, ImportedUseEvidence>();
+    const localTargets = new Map<string, CallableCandidatePlan>();
+    const visited = new Set<string>();
+    const visit = (name: string, uses: CallableUseEvidence): void => {
+      if (visited.has(name)) return;
+      visited.add(name);
+      partial ||= uses.partial;
+      for (const use of uses.imported) {
+        imported.set(
+          `${use.imported.source}\u0000${use.binding.imported}\u0000${use.useStart}`,
+          use,
+        );
+      }
+      for (const called of uses.localCalls) {
+        const visibleCandidates = candidatesByLocal.get(`${plan.callable.resource}\u0000${called}`);
+        if (visibleCandidates !== undefined) {
+          const visible = visibleCandidates.length === 1 ? visibleCandidates[0] : undefined;
+          if (visible === undefined) {
+            partial = true;
+            continue;
+          }
+          if (visible.key !== plan.key) localTargets.set(visible.key, visible);
+          continue;
+        }
+        const helper = parsed.locals.get(called);
+        if (helper === undefined) {
+          partial = true;
+          continue;
+        }
+        visit(called, helper.uses);
+      }
+    };
+    visit(plan.callable.localName, plan.callable.uses);
+    return Object.freeze({
+      imported: Object.freeze([...imported.values()]),
+      localTargets: Object.freeze([...localTargets.values()]),
+    });
+  };
+  for (const plan of candidateByBinding.values()) {
+    const file = await getFile(plan.callable.resource);
+    if (file === undefined) continue;
+    const dependencies = dependenciesFor(plan);
+    for (const target of dependencies.localTargets) {
+      recordRelationship(
+        plan.key,
+        target.key,
+        rangeProvenance(file, plan.callable.start, plan.callable.end),
+      );
+    }
+    for (const use of dependencies.imported) {
+      const target = importTarget(plan.callable.resource, use.imported, use.binding.imported, file);
+      if (target !== undefined) {
+        recordRelationship(plan.key, target, rangeProvenance(file, use.useStart, use.useEnd));
+      }
+    }
+  }
   for (const [resource, parsed] of parsedSources) {
     chargeExtractionWork(budget);
     const from = boundaryByFile.get(resource);
     const file = await getFile(resource);
     if (from === undefined || file === undefined) continue;
-    const owner = from.packageKey === undefined ? undefined : packageByKey.get(from.packageKey);
-    const fromFileKey = fileComponentKey(from, resource);
-    const recordFileEdge = (
-      targetBoundary: BoundaryEvidence,
-      targetResource: string,
-      imp: ImportEvidence,
-    ): void => {
-      const toFileKey = fileComponentKey(targetBoundary, targetResource);
-      if (fromFileKey === undefined || toFileKey === undefined || fromFileKey === toFileKey) return;
-      const identity = `${fromFileKey} ${toFileKey}`;
-      const known = fileImportEdges.get(identity);
-      const provenance = rangeProvenance(file, imp.start, imp.end);
-      if (known === undefined) {
-        fileImportEdges.set(identity, {
-          from: fromFileKey,
-          provenance: [provenance],
-          to: toFileKey,
-        });
-      } else if (known.provenance.length < maxRelationshipProvenance) {
-        known.provenance.push(provenance);
-      }
-    };
     for (const imported of parsed.imports) {
-      chargeExtractionWork(budget);
-      let toKey: string | undefined;
-      if (imported.source.startsWith(".")) {
-        const resolved = resolveResource(resource, imported.source, resourceSet);
-        if (resolved === undefined) {
-          partial = true;
-          continue;
-        }
-        const target = boundaryByFile.get(resolved);
-        if (target === undefined) continue;
-        recordFileEdge(target, resolved, imported);
-        if (target.key === from.key) continue;
-        toKey = target.key;
-      } else {
-        const alias = imported.source.startsWith("#")
-          ? owner === undefined
-            ? Object.freeze({ matched: true, partial: true })
-            : resolveAlias(owner.imports, imported.source, resourceSet, () =>
-                chargeExtractionWork(budget),
-              )
-          : resolveAlias(inventory.aliases, imported.source, resourceSet, () =>
-              chargeExtractionWork(budget),
-            );
-        if (alias.matched) {
-          if (alias.partial || alias.resource === undefined) {
-            partial = true;
-            continue;
-          }
-          const target = boundaryByFile.get(alias.resource);
-          if (target === undefined) {
-            partial = true;
-            continue;
-          }
-          recordFileEdge(target, alias.resource, imported);
-          if (target.key === from.key) continue;
-          toKey = target.key;
-        } else if (imported.source.startsWith("#")) {
-          partial = true;
-          continue;
-        } else {
-          const builtinName = nodeBuiltinName(imported.source);
-          const runtimeSpecifier =
-            builtinName !== undefined ||
-            imported.source.startsWith("node:") ||
-            imported.source.startsWith("bun:");
-          if (owner === undefined && !runtimeSpecifier) {
-            partial = true;
-            continue;
-          }
-          const externalName = builtinName ?? externalPackageName(imported.source);
-          if (externalName === undefined || !validObservationText(externalName, 256)) {
-            partial = true;
-            continue;
-          }
-          if (
-            builtinName === undefined &&
-            !runtimeSpecifier &&
-            ambiguousWorkspaceNames.has(externalName)
-          ) {
-            partial = true;
-            continue;
-          }
-          let workspace: PackageEvidence | undefined;
-          if (builtinName === undefined && !runtimeSpecifier) {
-            if (owner?.name === externalName) {
-              workspace = owner;
-            } else workspace = workspaceByName.get(externalName);
-          }
-          if (workspace !== undefined) {
-            const suffix = imported.source.slice(externalName.length);
-            const publicSubpath = suffix.length === 0 ? "." : `.${suffix}`;
-            if (!workspace.entries.some((entry) => entry.publicSubpath === publicSubpath)) {
-              partial = true;
-              continue;
-            }
-          }
-          toKey =
-            workspace === undefined
-              ? observationKey("component-candidate", scope, "external", externalName)
-              : observationKey(
-                  "component-candidate",
-                  scope,
-                  "package",
-                  workspace.root,
-                  workspace.name,
-                );
-          if (workspace === undefined && !externalCandidates.has(toKey)) {
-            if (
-              !appendDetail(
-                Object.freeze({
-                  candidate: Object.freeze({ name: externalName, type: "external" }),
-                  key: toKey,
-                  kind: "component-candidate",
-                  provenance: Object.freeze([rangeProvenance(file, imported.start, imported.end)]),
-                  scope,
-                }),
-              )
-            )
-              continue;
-            externalCandidates.add(toKey);
-          }
-        }
+      if (!imported.moduleEffect) continue;
+      const target = importTarget(resource, imported, undefined, file);
+      if (target !== undefined) {
+        recordRelationship(from.key, target, rangeProvenance(file, imported.start, imported.end));
       }
-      const relationshipIdentity = `${from.key}\u0000${toKey}`;
-      const aggregate = relationships.get(relationshipIdentity);
-      const provenance = rangeProvenance(file, imported.start, imported.end);
-      if (aggregate === undefined) {
-        if (relationships.size >= maxRelationshipObservations) {
-          partial = true;
-          continue;
-        }
-        reserveRecordSlot(budget);
-        relationships.set(relationshipIdentity, {
-          from: from.key,
-          provenance: [provenance],
-          to: toKey,
-        });
-      } else if (aggregate.provenance.length < maxRelationshipProvenance)
-        aggregate.provenance.push(provenance);
-      else partial = true;
     }
     for (const route of parsed.routes) {
       chargeExtractionWork(budget);
@@ -4505,7 +5094,7 @@ async function scanScope(
       }),
     );
   }
-  const topographyCharacterCeiling = detailCharacterCeiling;
+  const relationshipCharacterCeiling = detailCharacterCeiling;
   const emittedRelationshipIdentities = new Set<string>();
   for (const [identity, aggregate] of relationships) {
     chargeExtractionWork(budget);
@@ -4526,7 +5115,7 @@ async function scanScope(
     });
     if (
       budget.canonicalCharacters + boundedStructuralCharacters(record) >
-      topographyCharacterCeiling
+      relationshipCharacterCeiling
     ) {
       partial = true;
       continue;
@@ -4573,6 +5162,7 @@ async function scanScope(
     const enlarged = Object.freeze({
       ...record,
       signals: Object.freeze({
+        ...record.signals,
         ...(declaredBoundary === undefined ? {} : { declaredBoundary }),
         ...(entryPoint === undefined ? {} : { entryPoint }),
         ...(fileCount === undefined ? {} : { fileCount }),
@@ -4587,200 +5177,6 @@ async function scanScope(
     }
     budget.canonicalCharacters += addedCharacters;
     records[index] = enlarged;
-  }
-  // The topography inside each boundary: its directories and source files, wired
-  // by containment, so a domain drills into its real contents rather than being
-  // a terminal box. Nothing new is parsed — a boundary already knows the files it
-  // owns and their paths. Directories become intermediate components and each
-  // file a leaf; depth alone decides their scale downstream. This runs last, as
-  // enrichment: on budget pressure the deeper topography is simply dropped and
-  // coverage reported partial, so the primary architecture always survives.
-  let componentCandidateCount = records.reduce(
-    (total, record) => total + (record.kind === "component-candidate" ? 1 : 0),
-    0,
-  );
-  const emittedFileKeys = new Set<string>();
-  // Enrichment stops well short of every ceiling — record count, distinct
-  // components, and canonical characters alike — so a large repository yields as
-  // much topography as fits and reports the rest as partial, never overflowing.
-  const roomForTopography = () =>
-    budget.records + 8 < maxRecords &&
-    componentCandidateCount < maxComponentCandidates &&
-    budget.canonicalCharacters < topographyCharacterCeiling;
-  const containsRelationship = (from: string, to: string, provenance: ObservationProvenance) =>
-    Object.freeze({
-      from: reference(scope, from),
-      key: observationKey("relationship", scope, "source-contains", from, to),
-      kind: "relationship" as const,
-      provenance: Object.freeze([provenance]),
-      relationshipType: observedContainmentRelationshipType,
-      scope,
-      to: reference(scope, to),
-    });
-  let topographyBudgetReached = false;
-  for (const boundary of boundaries) {
-    if (topographyBudgetReached) break;
-    const directoryKeys = new Map<string, string>();
-    for (const resource of boundary.files) {
-      chargeExtractionWork(budget);
-      const relative = relativeResource(resource, boundary.resource);
-      if (relative === undefined || relative === ".") continue;
-      const segments = relative.split("/");
-      let parentKey = boundary.key;
-      let directoryPath = "";
-      let aborted = false;
-      for (let index = 0; index < segments.length - 1; index += 1) {
-        const segment = segments[index]!;
-        directoryPath = directoryPath === "" ? segment : `${directoryPath}/${segment}`;
-        let directoryKey = directoryKeys.get(directoryPath);
-        if (directoryKey === undefined) {
-          if (!roomForTopography()) {
-            aborted = true;
-            break;
-          }
-          directoryKey = observationKey(
-            "component-candidate",
-            scope,
-            "source-directory",
-            boundary.key,
-            directoryPath,
-          );
-          directoryKeys.set(directoryPath, directoryKey);
-          append(
-            Object.freeze({
-              candidate: Object.freeze({ name: segment }),
-              key: directoryKey,
-              kind: "component-candidate",
-              provenance: Object.freeze([boundary.provenance]),
-              scope,
-            }),
-          );
-          componentCandidateCount += 1;
-          append(containsRelationship(parentKey, directoryKey, boundary.provenance));
-        }
-        parentKey = directoryKey;
-      }
-      if (aborted || !roomForTopography()) {
-        topographyBudgetReached = true;
-        partial = true;
-        break;
-      }
-      const file = await getFile(resource);
-      if (file === undefined) continue;
-      const fileKey = observationKey(
-        "component-candidate",
-        scope,
-        "source-file",
-        boundary.key,
-        relative,
-      );
-      // A parsed file carries its Cognitive Complexity — how hard it is to
-      // follow — as a structural signal on its own component. It is measured with
-      // this scanner's rules, so it travels as raw evidence and is only ever
-      // compared across scanners once normalized per scanner.
-      const fileParsed = parsedSources.get(resource);
-      append(
-        Object.freeze({
-          candidate: Object.freeze({ name: segments[segments.length - 1]! }),
-          key: fileKey,
-          kind: "component-candidate",
-          provenance: Object.freeze([fullProvenance(file)]),
-          scope,
-          ...(fileParsed === undefined || fileParsed.cognitiveComplexity === 0
-            ? {}
-            : {
-                signals: Object.freeze({ cognitiveComplexity: fileParsed.cognitiveComplexity }),
-              }),
-        }),
-      );
-      componentCandidateCount += 1;
-      emittedFileKeys.add(fileKey);
-      append(containsRelationship(parentKey, fileKey, fullProvenance(file)));
-
-      // A file also reveals the functions it exports, attached to the file as
-      // named actions, so drilling to a leaf shows what it offers rather than
-      // only that it exists. Nothing new is parsed — the exports were already
-      // read for the import graph. This runs after the entry-point pass above,
-      // so a file's own exports never make the file itself read as a way in;
-      // sorted and capped for a reproducible, bounded snapshot.
-      if (fileParsed !== undefined) {
-        let fileExports = 0;
-        for (const callable of [...fileParsed.callables.values()].sort((left, right) =>
-          compareCodeUnits(left.name, right.name),
-        )) {
-          if (fileExports >= maxFileExportActions) {
-            partial = true;
-            break;
-          }
-          if (!roomForTopography()) {
-            topographyBudgetReached = true;
-            partial = true;
-            break;
-          }
-          append(
-            Object.freeze({
-              component: reference(scope, fileKey),
-              description: fileExportDescription,
-              key: observationKey(
-                "action",
-                scope,
-                "file-export",
-                boundary.key,
-                relative,
-                callable.name,
-              ),
-              kind: "action" as const,
-              name: callable.name,
-              provenance: Object.freeze([rangeProvenance(file, callable.start, callable.end)]),
-              scope,
-            }),
-          );
-          fileExports += 1;
-        }
-        if (topographyBudgetReached) break;
-      }
-    }
-  }
-  // The file-to-file wiring, drawn only between files that were actually emitted,
-  // so a drilled-in domain shows how its own files depend on one another. Sorted
-  // for a reproducible snapshot and bounded like the rest of the topography.
-  let emittedRelationshipCount = emittedRelationshipIdentities.size;
-  for (const [, edge] of [...fileImportEdges].sort((left, right) =>
-    compareCodeUnits(left[0], right[0]),
-  )) {
-    if (!emittedFileKeys.has(edge.from) || !emittedFileKeys.has(edge.to)) continue;
-    if (
-      emittedRelationshipCount >= maxRelationshipObservations ||
-      budget.records + 4 >= maxRecords ||
-      budget.canonicalCharacters >= topographyCharacterCeiling
-    ) {
-      partial = true;
-      break;
-    }
-    edge.provenance.sort((left, right) =>
-      compareCodeUnits(
-        `${left.resource}:${left.range?.startByte ?? 0}`,
-        `${right.resource}:${right.range?.startByte ?? 0}`,
-      ),
-    );
-    const record = Object.freeze({
-      from: reference(scope, edge.from),
-      key: observationKey("relationship", scope, "file-imports", edge.from, edge.to),
-      kind: "relationship" as const,
-      provenance: Object.freeze(edge.provenance),
-      relationshipType: "imports",
-      scope,
-      to: reference(scope, edge.to),
-    });
-    if (
-      budget.canonicalCharacters + boundedStructuralCharacters(record) >
-      topographyCharacterCeiling
-    ) {
-      partial = true;
-      break;
-    }
-    append(record);
-    emittedRelationshipCount += 1;
   }
   records.sort((left, right) =>
     compareCodeUnits(`${left.kind}\u0000${left.key}`, `${right.kind}\u0000${right.key}`),

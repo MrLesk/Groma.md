@@ -700,6 +700,9 @@ function applyStandardMutation(
     );
   }
   for (const source of touchedRelationshipSources) {
+    // When the same atomic mutation removes both an owned relationship and its
+    // source component, there is no surviving source document to rewrite.
+    if (!graph.value.components.has(source) && !graph.value.aliases.has(source)) continue;
     const resolved = validatedAliases.value.resolve(source);
     if (!resolved.ok) return resolved;
     if (!affectedComponents.has(resolved.value.resolved)) {
