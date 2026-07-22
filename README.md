@@ -20,6 +20,18 @@ stays local: no server, no account, no upload.
 _(A groma was the Roman surveyor's instrument used to lay out cities and roads — a tool
 for projecting a plan onto the ground.)_
 
+---
+
+## How GPT-5.6 helped me build this project
+
+I mostly used GPT-5.6 as a chief of staff. It kept the big picture in view, split the
+work into focused tasks, coordinated specialist agents, reviewed their output, and
+moved each change from idea to shipped PR. In just 11 days, this approach helped turn
+Groma from an idea into a working local-first product. I kept the vision and made the
+decisions; GPT-5.6 handled the massive execution between them.
+
+---
+
 ## The goal
 
 The target three-command loop takes you from an unfamiliar codebase to a map you can understand:
