@@ -309,182 +309,207 @@ test('reloads architecture Markdown while preserving the open viewer process', a
   const outsideGroma = path.join(fixtureRoot, 'outside.md')
   const originalPlanReadme = await readFile(planReadme, 'utf8')
 
-  await page.goto('http://127.0.0.1:4180')
-  await expect(page.getByTestId('revision-context-title')).toHaveText(
-    'Revision 02 — Live viewer',
-  )
-  await page.getByRole('button', { name: 'Open Groma system' }).click()
-  await page.getByRole('button', { name: 'Open Viewer container' }).click()
-  await expect(page.getByTestId('view-component')).toBeVisible()
-  await page.evaluate(() => {
-    window.__gromaLiveReloadSentinel = 'same-page'
-  })
-
-  await writeFile(
-    planComponent,
-    [
-      '---',
-      'id: live-sample',
-      'kind: component',
-      'parent: viewer',
-      '---',
-      '',
-      '# Live sample',
-      '',
-      'Appears without restarting.',
-      '',
-    ].join('\n'),
-  )
-  await expect(page.getByTestId('c4-node-live-sample')).toBeVisible()
-
-  await writeFile(
-    planComponent,
-    [
-      '---',
-      'id: live-sample',
-      'kind: component',
-      'parent: viewer',
-      '---',
-      '',
-      '# Renamed live sample',
-      '',
-      'Changes after a complete rebuild.',
-      '',
-    ].join('\n'),
-  )
-  await expect(page.getByTestId('c4-node-live-sample')).toContainText(
-    'Renamed live sample',
-  )
-  await rm(planComponent)
-  await expect(page.getByTestId('c4-node-live-sample')).toHaveCount(0)
-
-  await mkdir(
-    path.join(removableContainerRoot, 'components'),
-    { recursive: true },
-  )
-  await writeFile(
-    path.join(removableContainerRoot, 'container.md'),
-    [
-      '---',
-      'id: removable-live-container',
-      'kind: container',
-      'parent: groma',
-      '---',
-      '',
-      '# Removable live container',
-      '',
-      'Exercises focus recovery.',
-      '',
-    ].join('\n'),
-  )
-  await writeFile(
-    path.join(removableContainerRoot, 'components/worker.md'),
-    [
-      '---',
-      'id: removable-live-worker',
-      'kind: component',
-      'parent: removable-live-container',
-      '---',
-      '',
-      '# Removable live worker',
-      '',
-      'Makes the temporary container expandable.',
-      '',
-    ].join('\n'),
-  )
-  await page.getByRole('button', { name: 'Previous level' }).click()
-  await expect(
-    page.getByRole('button', { name: /Open Removable live container/ }),
-  ).toBeVisible()
-  await page.getByRole('button', {
-    name: /Open Removable live container/,
-  }).click()
-  await expect(page.getByTestId('c4-node-removable-live-worker')).toBeVisible()
-  await rm(removableContainerRoot, { recursive: true })
-  await expect(page.getByTestId('view-container')).toBeVisible()
-
-  await mkdir(path.dirname(observedComponent), { recursive: true })
-  await writeFile(
-    observedComponent,
-    [
-      '---',
-      'id: live-observed',
-      'kind: component',
-      'parent: architecture-workspace',
-      '---',
-      '',
-      '# Live observed component',
-      '',
-      'Appears as an observed-only component.',
-      '',
-    ].join('\n'),
-  )
-  await expect.poll(async () => {
-    const response = await page.request.get(
-      'http://127.0.0.1:4180/api/model',
+  try {
+    await page.goto('http://127.0.0.1:4180')
+    await expect(page.getByTestId('revision-context-title')).toHaveText(
+      'Revision 02 — Live viewer',
     )
-    const nextPayload = await response.json()
-    return nextPayload.observedModel.elements.some(element => {
-      return element.id === 'live-observed'
+    await page.getByRole('button', { name: 'Open Groma system' }).click()
+    await page.getByRole('button', { name: 'Open Viewer container' }).click()
+    await expect(page.getByTestId('view-component')).toBeVisible()
+    await page.evaluate(() => {
+      window.__gromaLiveReloadSentinel = 'same-page'
     })
-  }).toBe(true)
-  await expect(
-    page.getByRole('button', {
-      name: /Open Architecture workspace container/,
-    }),
-  ).toBeVisible()
-  await page.getByRole('button', {
-    name: /Open Architecture workspace container/,
-  }).click()
-  await expect(page.getByTestId('c4-node-live-observed')).toBeVisible()
-  await rm(observedComponent)
-  await expect(page.getByTestId('c4-node-live-observed')).toHaveCount(0)
-  await expect(page.getByTestId('view-component')).toBeVisible()
 
-  await writeFile(
-    planReadme,
-    '# Reloaded revision title\n\nReloaded revision description.\n',
-  )
-  await expect(page.getByTestId('revision-context-title')).toHaveText(
-    'Reloaded revision title',
-  )
-  await expect(page.getByTestId('revision-context-description')).toHaveText(
-    'Reloaded revision description.',
-  )
-  await expect(page.locator('[data-element-id="Reloaded revision title"]')).toHaveCount(0)
-
-  const generationAfterArchitectureChanges = (
-    await (await page.request.get('http://127.0.0.1:4180/api/model')).json()
-  ).generation
-  await writeFile(outsideGroma, '# Outside Groma\n')
-  await page.waitForTimeout(500)
-  const generationAfterOutsideChange = (
-    await (await page.request.get('http://127.0.0.1:4180/api/model')).json()
-  ).generation
-  expect(generationAfterOutsideChange).toBe(generationAfterArchitectureChanges)
-
-  await mkdir(path.dirname(invalidDocument), { recursive: true })
-  await writeFile(
-    invalidDocument,
-    '---\nid: [invalid\n---\n\n# Invalid while editing\n',
-  )
-  await expect(page.getByRole('status')).toContainText(
-    'Keeping the last valid architecture',
-  )
-  await rm(invalidDocument)
-  await expect(page.getByRole('status')).toHaveCount(0)
-  await expect(page.getByTestId('view-component')).toBeVisible()
-
-  expect(
-    await page.evaluate(() => window.__gromaLiveReloadSentinel),
-  ).toBe('same-page')
-  await writeFile(planReadme, originalPlanReadme)
-  await expect.poll(async () => {
-    const response = await page.request.get(
-      'http://127.0.0.1:4180/api/model',
+    await writeFile(
+      planComponent,
+      [
+        '---',
+        'id: live-sample',
+        'kind: component',
+        'parent: viewer',
+        '---',
+        '',
+        '# Live sample',
+        '',
+        'Appears without restarting.',
+        '',
+      ].join('\n'),
     )
-    return (await response.json()).revisionContext.title
-  }).toBe('Revision 02 — Live viewer')
+    await expect(page.getByTestId('c4-node-live-sample')).toBeVisible()
+
+    await writeFile(
+      planComponent,
+      [
+        '---',
+        'id: live-sample',
+        'kind: component',
+        'parent: viewer',
+        '---',
+        '',
+        '# Renamed live sample',
+        '',
+        'Changes after a complete rebuild.',
+        '',
+      ].join('\n'),
+    )
+    await expect(page.getByTestId('c4-node-live-sample')).toContainText(
+      'Renamed live sample',
+    )
+    await rm(planComponent)
+    await expect(page.getByTestId('c4-node-live-sample')).toHaveCount(0)
+
+    await mkdir(
+      path.join(removableContainerRoot, 'components'),
+      { recursive: true },
+    )
+    await writeFile(
+      path.join(removableContainerRoot, 'container.md'),
+      [
+        '---',
+        'id: removable-live-container',
+        'kind: container',
+        'parent: groma',
+        '---',
+        '',
+        '# Removable live container',
+        '',
+        'Exercises focus recovery.',
+        '',
+      ].join('\n'),
+    )
+    await writeFile(
+      path.join(removableContainerRoot, 'components/worker.md'),
+      [
+        '---',
+        'id: removable-live-worker',
+        'kind: component',
+        'parent: removable-live-container',
+        '---',
+        '',
+        '# Removable live worker',
+        '',
+        'Makes the temporary container expandable.',
+        '',
+      ].join('\n'),
+    )
+    await page.getByRole('button', { name: 'Previous level' }).click()
+    await expect(
+      page.getByRole('button', { name: /Open Removable live container/ }),
+    ).toBeVisible()
+    await page.getByRole('button', {
+      name: /Open Removable live container/,
+    }).click()
+    await expect(page.getByTestId('c4-node-removable-live-worker')).toBeVisible()
+    await page.getByRole('button', { name: 'Zoom In' }).focus()
+    await expect(page.getByRole('button', { name: 'Zoom In' })).toBeFocused()
+    await rm(removableContainerRoot, { recursive: true })
+    await expect(page.getByTestId('view-container')).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Container view' }),
+    ).toBeFocused()
+
+    await mkdir(path.dirname(observedComponent), { recursive: true })
+    await writeFile(
+      observedComponent,
+      [
+        '---',
+        'id: live-observed',
+        'kind: component',
+        'parent: architecture-workspace',
+        '---',
+        '',
+        '# Live observed component',
+        '',
+        'Appears as an observed-only component.',
+        '',
+      ].join('\n'),
+    )
+    await expect.poll(async () => {
+      const response = await page.request.get(
+        'http://127.0.0.1:4180/api/model',
+      )
+      const nextPayload = await response.json()
+      return nextPayload.observedModel.elements.some(element => {
+        return element.id === 'live-observed'
+      })
+    }).toBe(true)
+    await expect(
+      page.getByRole('button', {
+        name: /Open Architecture workspace container/,
+      }),
+    ).toBeVisible()
+    await page.getByRole('button', {
+      name: /Open Architecture workspace container/,
+    }).click()
+    await expect(page.getByTestId('c4-node-live-observed')).toBeVisible()
+    await rm(observedComponent)
+    await expect(page.getByTestId('c4-node-live-observed')).toHaveCount(0)
+    await expect(page.getByTestId('view-component')).toBeVisible()
+
+    await writeFile(
+      planReadme,
+      '# Reloaded revision title\n\nReloaded revision description.\n',
+    )
+    await expect(page.getByTestId('revision-context-title')).toHaveText(
+      'Reloaded revision title',
+    )
+    await expect(page.getByTestId('revision-context-description')).toHaveText(
+      'Reloaded revision description.',
+    )
+    await expect(
+      page.locator('[data-element-id="Reloaded revision title"]'),
+    ).toHaveCount(0)
+
+    const generationAfterArchitectureChanges = (
+      await (await page.request.get('http://127.0.0.1:4180/api/model')).json()
+    ).generation
+    await writeFile(outsideGroma, '# Outside Groma\n')
+    await page.waitForTimeout(500)
+    const generationAfterOutsideChange = (
+      await (await page.request.get('http://127.0.0.1:4180/api/model')).json()
+    ).generation
+    expect(generationAfterOutsideChange).toBe(generationAfterArchitectureChanges)
+
+    await mkdir(path.dirname(invalidDocument), { recursive: true })
+    await writeFile(
+      invalidDocument,
+      '---\nid: [invalid\n---\n\n# Invalid while editing\n',
+    )
+    await expect(page.getByRole('status')).toContainText(
+      'Keeping the last valid architecture',
+    )
+    await rm(invalidDocument)
+    await expect(page.getByRole('status')).toHaveCount(0)
+    await expect(page.getByTestId('view-component')).toBeVisible()
+
+    expect(
+      await page.evaluate(() => window.__gromaLiveReloadSentinel),
+    ).toBe('same-page')
+  } finally {
+    await rm(planComponent, { force: true })
+    await rm(removableContainerRoot, { recursive: true, force: true })
+    await rm(path.dirname(observedComponent), {
+      recursive: true,
+      force: true,
+    })
+    await rm(invalidDocument, { force: true })
+    await rm(outsideGroma, { force: true })
+    await writeFile(planReadme, originalPlanReadme)
+    await expect.poll(async () => {
+      const response = await page.request.get(
+        'http://127.0.0.1:4180/api/model',
+      )
+      const finalPayload = await response.json()
+      return {
+        reloadError: finalPayload.reloadError,
+        title: finalPayload.revisionContext.title,
+      }
+    }).toEqual({
+      reloadError: null,
+      title: 'Revision 02 — Live viewer',
+    })
+  }
 })
 
 test('never replaces a newer model with an older delayed generation', async ({

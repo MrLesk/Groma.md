@@ -368,6 +368,7 @@ export function ViewerApp() {
 
   useEffect(() => {
     if (displayFocusPath !== focusPath) {
+      shouldFocusLevelRef.current = true
       setFocusPath(displayFocusPath)
     }
   }, [displayFocusPath, focusPath])

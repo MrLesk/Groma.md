@@ -1,11 +1,10 @@
-import { watch } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { buildArchitectureModel } from '../architecture-model.mjs'
 import { loadRevision } from '../architecture-reader.mjs'
 import index from './index.html'
+import { startMarkdownWatcher } from './markdown-watcher.mjs'
 
 const defaultRepositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -130,6 +129,15 @@ function sendReloadEvent(event, data) {
   }
 }
 
+function publishReloadError(message) {
+  reloadError = message
+  sendReloadEvent('architecture-error', {
+    generation: payload.generation,
+    message,
+  })
+  console.error(`Groma kept generation ${payload.generation}: ${message}`)
+}
+
 const server = Bun.serve({
   hostname: '127.0.0.1',
   port,
@@ -190,7 +198,6 @@ const server = Bun.serve({
 
 let settleTimer
 let reloadQueue = Promise.resolve()
-let markdownEventSequence = 0
 function scheduleReload() {
   clearTimeout(settleTimer)
   settleTimer = setTimeout(() => {
@@ -203,67 +210,51 @@ function scheduleReload() {
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        reloadError = message
-        sendReloadEvent('architecture-error', {
-          generation: payload.generation,
-          message,
-        })
-        console.error(`Groma reload kept generation ${payload.generation}: ${message}`)
+        publishReloadError(message)
       }
     })
   }, 120)
 }
 
-async function directoryContainsMarkdown(directory) {
-  const entries = await readdir(directory, { withFileTypes: true })
-  return entries.some(entry => {
-    return entry.isFile() && entry.name.endsWith('.md')
-  })
-}
+const markdownWatcher = await startMarkdownWatcher(repositoryRoot, {
+  onMarkdownChange: scheduleReload,
+  onError(error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    publishReloadError(`Architecture Markdown watcher failed: ${detail}`)
+  },
+})
 
-async function scheduleReloadForNewMarkdownDirectory(
-  watchRoot,
-  filename,
-  eventSequence,
-) {
-  await new Promise(resolve => setTimeout(resolve, 120))
-  if (eventSequence !== markdownEventSequence) return
+let shutdownPromise
+function shutdown() {
+  if (shutdownPromise) return shutdownPromise
 
-  const changedPath = path.join(watchRoot, filename)
-  try {
-    if (
-      (await stat(changedPath)).isDirectory()
-      && await directoryContainsMarkdown(changedPath)
-    ) {
-      scheduleReload()
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      console.error(
-        `Groma could not inspect watched path ${changedPath}: ${error.message}`,
-      )
-    }
-  }
-}
-
-for (const relativeDirectory of ['groma/observed', 'groma/plans']) {
-  const watchRoot = path.join(repositoryRoot, relativeDirectory)
-  watch(
-    watchRoot,
-    { recursive: true },
-    (eventType, filename) => {
-      if (typeof filename === 'string' && filename.endsWith('.md')) {
-        markdownEventSequence += 1
-        scheduleReload()
-      } else if (eventType === 'rename' && typeof filename === 'string') {
-        void scheduleReloadForNewMarkdownDirectory(
-          watchRoot,
-          filename,
-          markdownEventSequence,
-        )
+  shutdownPromise = (async () => {
+    clearTimeout(settleTimer)
+    await markdownWatcher.close()
+    await reloadQueue
+    for (const client of reloadClients) {
+      try {
+        client.close()
+      } catch {
+        // The browser may already have closed its event stream.
       }
-    },
-  )
+    }
+    reloadClients.clear()
+    await server.stop(true)
+  })()
+  return shutdownPromise
+}
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    void shutdown().then(
+      () => process.exit(0),
+      error => {
+        console.error(`Groma viewer shutdown failed: ${error.message}`)
+        process.exit(1)
+      },
+    )
+  })
 }
 
 console.log(

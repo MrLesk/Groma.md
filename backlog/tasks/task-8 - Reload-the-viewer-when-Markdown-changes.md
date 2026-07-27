@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:44'
+updated_date: '2026-07-27 23:57'
 labels: []
 milestone: m-1
 dependencies:
@@ -19,9 +19,12 @@ modified_files:
   - e2e/live-reload-fixture-server.mjs
   - e2e/viewer.spec.js
   - playwright.config.mjs
+  - src/viewer/markdown-watcher.mjs
   - src/viewer/server.mjs
   - src/viewer/styles.css
   - src/viewer/viewer-app.jsx
+  - test/markdown-watcher.test.mjs
+  - test/viewer-server-lifecycle.test.mjs
 priority: high
 type: feature
 ordinal: 8000
@@ -52,6 +55,8 @@ The viewer delivered by TASK-6 reads canonical architecture only from Markdown. 
 5. Run architecture validation, unit tests, browser tests, inspect the final diff, and finalize TASK-8.
 
 Corrective review: 6. Add deterministic browser coverage that delays an older model response past a newer generation and refuses stale payload application. 7. Persist last-good reload status/error server-side, replay status to late/reconnected clients, and clear it only after a successful full rebuild. 8. Restrict watcher scheduling to `.md` filenames for create/change/remove events and prove extensionless/non-Markdown changes inside watched roots do not advance generation. 9. Re-run disposable-fixture browser coverage, full reader/model validation, inspect canonical Markdown and worktree state, then re-finalize.
+
+Quality review: 10. Extract the narrow filesystem-event filter into a lifecycle-owned Markdown watcher that fingerprints only `.md` files when `fs.watch` omits a filename, suppressing filename-less non-Markdown events. 11. Retain watcher handles, surface watcher errors as persistent last-valid viewer status, and close watcher handles, pending debounce/reload work, SSE streams, and the Bun server on shutdown. 12. Add deterministic watcher snapshot/error/close tests, automatic-focus browser assertion, and failure-safe fixture cleanup; repeat live-reload and full browser runs before finalization.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -66,10 +71,16 @@ Spec review reopened the task: concurrent client fetches can regress generations
 Corrective implementation: the client now rejects responses older than the latest request, announced generation, or applied generation. The server persists `reloadError`, returns it with the last-good payload, replays current status on each SSE connection, and clears it only after a successful full rebuild. Watch events schedule directly only for `.md`; rename events for possible new directories perform one delayed, single-directory Markdown check so immediate nested Markdown creation remains observable without treating known non-Markdown files as architecture. Focused Playwright tests were observed failing before each correction and passing afterward.
 
 Corrective verification: `npm run check` passed architecture validation and 61 Node tests; `npm run test:viewer:browser` passed 7 scenarios including deterministic stale-response ordering, invalid-before-connect/status replay/reload recovery, and watched-root non-Markdown silence; `bun build src/viewer/main.jsx --outdir /tmp/groma-task8-review-build-20260728 --target browser` bundled 146 modules. `git diff --exit-code HEAD -- groma` confirmed canonical architecture unchanged, and the disposable fixture directory was removed.
+
+Quality review reopened TASK-8: filename-less `fs.watch` events are currently discarded, watcher handles/errors lack lifecycle ownership, automatic focus recovery does not request heading focus, and the main mutation-heavy browser scenario lacks failure cleanup.
+
+Quality correction: extracted a narrow lifecycle-owned Markdown watcher. Filename-less events recompute a SHA-256 fingerprint of only `.md` paths/content under observed/plans and notify only on fingerprint change; named non-Markdown events remain filtered. Two retained FSWatcher handles report errors without throwing, and close cancels handles, queued checks, and pending directory settlement. Server SIGINT/SIGTERM cleanup clears debounce, awaits reload work, closes SSE controllers/watchers/server, and watcher errors reuse persistent last-valid status. Automatic focus fallback now focuses the new level heading; the mutation-heavy browser scenario restores every fixture path in `finally`.
+
+Quality verification: filename-less Markdown and non-Markdown watcher tests passed; watcher error/handle/pending-timer close test passed; real SIGTERM lifecycle test with an active SSE stream passed after mutation-checking the absent-handler failure. Live-reload/race/reconnect/filter browser scenarios passed 8/8 across two repetitions, then the full suite passed 7/7. `npm run check` passed 65 Node tests and all four architecture revisions; Bun bundled 146 modules. Canonical `groma/` remained unchanged, `git diff --check` passed, and the disposable browser fixture was removed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented architecture-only live reload plus spec-review corrections. The client enforces latest-request and generation ordering, the server persists/replays last-good invalid-edit status across late connections and reconnects, and watcher filtering ignores extensionless/non-Markdown files while handling immediate Markdown creation in new directories with a targeted delayed check. Verified with 61 Node tests, 7 Playwright browser scenarios, a 146-module Bun browser build, clean canonical groma diff, and cleaned temporary fixture.
+Implemented the Revision 02 live viewer and all review corrections. Architecture changes are fully reread/rebuilt and generation-ordered; invalid edits and watcher errors preserve and replay last-valid status. A lifecycle-owned Markdown watcher fingerprints only `.md` files for filename-less events, filters non-Markdown changes, retains/error-handles/closes both filesystem handles, and participates in graceful server/SSE/debounce shutdown. Automatic focus recovery is accessible and browser fixture mutations always restore. Verified with 65 Node tests, repeated 8/8 focused browser cases, full 7/7 Playwright, a 146-module Bun build, clean canonical architecture, and cleaned fixtures.
 <!-- SECTION:FINAL_SUMMARY:END -->
