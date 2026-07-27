@@ -1,0 +1,405 @@
+import assert from 'node:assert/strict'
+import path from 'node:path'
+import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+import {
+  ArchitectureModelError,
+  buildArchitectureModel,
+} from '../src/architecture-model.mjs'
+import { loadRevision } from '../src/architecture-reader.mjs'
+
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+)
+
+function revisionRecord(documents) {
+  return {
+    revision: {
+      kind: 'plan',
+      name: 'test-revision',
+      sourceDirectory: 'groma/plans/test-revision',
+    },
+    documents,
+  }
+}
+
+function elementDocument({
+  id,
+  kind,
+  sourceFilename,
+  parent,
+  external,
+  relationships = [],
+}) {
+  const frontmatter = { id, kind }
+  if (parent !== undefined) {
+    frontmatter.parent = parent
+  }
+  if (external !== undefined) {
+    frontmatter.external = external
+  }
+
+  const nodes = [
+    ['h1', { id }, id],
+    ['p', {}, `${id} responsibility`],
+  ]
+
+  if (relationships.length > 0) {
+    nodes.push(
+      ['h2', { id: 'relationships' }, 'Relationships'],
+      [
+        'table',
+        {},
+        [
+          'thead',
+          {},
+          [
+            'tr',
+            {},
+            ['th', {}, 'Target'],
+            ['th', {}, 'Description'],
+            ['th', {}, 'Technology'],
+          ],
+        ],
+        [
+          'tbody',
+          {},
+          ...relationships.map(relationship => [
+            'tr',
+            {},
+            ['td', {}, ['a', { href: relationship.href }, relationship.label ?? 'Target']],
+            ['td', {}, relationship.description],
+            ['td', {}, relationship.technology],
+          ]),
+        ],
+      ],
+    )
+  }
+
+  return { sourceFilename, frontmatter, nodes }
+}
+
+test('exports a revision model builder', () => {
+  assert.equal(typeof buildArchitectureModel, 'function')
+})
+
+test('builds a serializable revision-local C4 graph from TASK-4 documents', async () => {
+  const loadedRevision = await loadRevision(
+    repositoryRoot,
+    { kind: 'plan', name: '02-live-viewer' },
+  )
+  const model = buildArchitectureModel(loadedRevision)
+  const reloadedModel = buildArchitectureModel(await loadRevision(
+    repositoryRoot,
+    { kind: 'plan', name: '02-live-viewer' },
+  ))
+
+  assert.deepEqual(model, reloadedModel)
+  assert.deepEqual(Object.keys(model), ['revision', 'elements', 'relationships'])
+  assert.deepEqual(model.revision, {
+    kind: 'plan',
+    name: '02-live-viewer',
+    sourceDirectory: 'groma/plans/02-live-viewer',
+  })
+  assert.deepEqual(
+    model.elements.map(element => element.id),
+    [
+      'architecture-model',
+      'architecture-workspace',
+      'canvas',
+      'coding-agent',
+      'git',
+      'groma',
+      'human-architect',
+      'markdown-reader',
+      'markdown-watcher',
+      'viewer',
+    ],
+  )
+  assert.deepEqual(
+    model.elements.find(element => element.id === 'human-architect'),
+    {
+      id: 'human-architect',
+      kind: 'person',
+      name: 'Human architect',
+      description: 'Understands, plans, and reviews the architecture of a software system.',
+      parentId: null,
+      external: false,
+      sourceFilename: 'groma/plans/02-live-viewer/people/human-architect.md',
+    },
+  )
+  assert.deepEqual(
+    model.elements.find(element => element.id === 'git'),
+    {
+      id: 'git',
+      kind: 'system',
+      name: 'Git',
+      description: 'Keeps history, diffs, and collaboration for the architecture files.',
+      parentId: null,
+      external: true,
+      sourceFilename: 'groma/plans/02-live-viewer/systems/git/system.md',
+    },
+  )
+  assert.deepEqual(
+    model.elements.find(element => element.id === 'viewer'),
+    {
+      id: 'viewer',
+      kind: 'container',
+      name: 'Viewer',
+      description: 'Turns the Markdown architecture into an explorable local visual map.',
+      parentId: 'groma',
+      external: false,
+      sourceFilename:
+        'groma/plans/02-live-viewer/systems/groma/containers/viewer/container.md',
+    },
+  )
+  assert.deepEqual(
+    model.elements.find(element => element.id === 'markdown-reader'),
+    {
+      id: 'markdown-reader',
+      kind: 'component',
+      name: 'Markdown reader',
+      description: 'Reads component documents into a portable syntax tree.',
+      parentId: 'viewer',
+      external: false,
+      sourceFilename:
+        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
+        + 'markdown-reader.md',
+    },
+  )
+  assert.equal(model.relationships.length, 10)
+  assert.deepEqual(
+    model.relationships.find(relationship => {
+      return relationship.sourceId === 'markdown-reader'
+        && relationship.targetId === 'architecture-model'
+    }),
+    {
+      sourceId: 'markdown-reader',
+      targetId: 'architecture-model',
+      description: 'Supplies parsed component documents',
+      technology: 'In-process data',
+      sourceFilename:
+        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
+        + 'markdown-reader.md',
+      targetSourceFilename:
+        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
+        + 'architecture-model.md',
+    },
+  )
+  assert.doesNotThrow(() => JSON.stringify(model))
+  assert.ok(Object.isFrozen(model))
+  assert.ok(Object.isFrozen(model.revision))
+  assert.ok(Object.isFrozen(model.elements))
+  assert.ok(Object.isFrozen(model.elements[0]))
+  assert.ok(Object.isFrozen(model.relationships))
+  assert.ok(Object.isFrozen(model.relationships[0]))
+})
+
+test('resolves a relationship link to the target document stable id', () => {
+  const source = elementDocument({
+    id: 'architect',
+    kind: 'person',
+    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    relationships: [{
+      href: '../systems/platform/system.md#context',
+      label: 'Readable platform name',
+      description: 'Uses the platform',
+      technology: 'Browser',
+    }],
+  })
+  const target = elementDocument({
+    id: 'stable-platform-id',
+    kind: 'system',
+    sourceFilename: 'groma/plans/test-revision/systems/platform/system.md',
+  })
+
+  const model = buildArchitectureModel(revisionRecord([target, source]))
+
+  assert.deepEqual(model.relationships, [{
+    sourceId: 'architect',
+    targetId: 'stable-platform-id',
+    description: 'Uses the platform',
+    technology: 'Browser',
+    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    targetSourceFilename: 'groma/plans/test-revision/systems/platform/system.md',
+  }])
+})
+
+test('orders equivalent unchanged revisions deterministically', () => {
+  const system = elementDocument({
+    id: 'z-system',
+    kind: 'system',
+    sourceFilename: 'groma/plans/test-revision/systems/z/system.md',
+  })
+  const person = elementDocument({
+    id: 'a-person',
+    kind: 'person',
+    sourceFilename: 'groma/plans/test-revision/people/a.md',
+    relationships: [
+      {
+        href: '../systems/z/system.md',
+        description: 'Second alphabetically',
+        technology: 'Two',
+      },
+      {
+        href: '../systems/z/system.md',
+        description: 'First alphabetically',
+        technology: 'One',
+      },
+    ],
+  })
+
+  const first = buildArchitectureModel(revisionRecord([system, person]))
+  const second = buildArchitectureModel(revisionRecord([person, system]))
+
+  assert.deepEqual(first, second)
+  assert.deepEqual(first.elements.map(element => element.id), ['a-person', 'z-system'])
+  assert.deepEqual(
+    first.relationships.map(relationship => relationship.description),
+    ['First alphabetically', 'Second alphabetically'],
+  )
+})
+
+for (const {
+  name,
+  documents,
+  code,
+  sourceFilename,
+  message,
+} of [
+  {
+    name: 'reports a duplicate stable id at the second document',
+    documents: [
+      elementDocument({
+        id: 'same-id',
+        kind: 'person',
+        sourceFilename: 'groma/plans/test-revision/people/first.md',
+      }),
+      elementDocument({
+        id: 'same-id',
+        kind: 'system',
+        sourceFilename: 'groma/plans/test-revision/systems/second/system.md',
+      }),
+    ],
+    code: 'DUPLICATE_ID',
+    sourceFilename: 'groma/plans/test-revision/systems/second/system.md',
+    message: /duplicate id "same-id".*people\/first\.md/,
+  },
+  {
+    name: 'reports an unknown parent id at the contained document',
+    documents: [
+      elementDocument({
+        id: 'orphan',
+        kind: 'container',
+        parent: 'missing-system',
+        sourceFilename:
+          'groma/plans/test-revision/systems/groma/containers/orphan/container.md',
+      }),
+    ],
+    code: 'UNKNOWN_PARENT_ID',
+    sourceFilename:
+      'groma/plans/test-revision/systems/groma/containers/orphan/container.md',
+    message: /unknown parent id "missing-system"/,
+  },
+  {
+    name: 'reports a parent with the wrong C4 kind',
+    documents: [
+      elementDocument({
+        id: 'person-parent',
+        kind: 'person',
+        sourceFilename: 'groma/plans/test-revision/people/person-parent.md',
+      }),
+      elementDocument({
+        id: 'wrongly-contained',
+        kind: 'container',
+        parent: 'person-parent',
+        sourceFilename:
+          'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/groma/containers/wrong/container.md',
+    message: /container "wrongly-contained" requires a system parent.*is a person/,
+  },
+  {
+    name: 'reports a root C4 element that declares a parent',
+    documents: [
+      elementDocument({
+        id: 'nested-person',
+        kind: 'person',
+        parent: 'some-system',
+        sourceFilename: 'groma/plans/test-revision/people/nested-person.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename: 'groma/plans/test-revision/people/nested-person.md',
+    message: /person "nested-person" cannot declare a parent/,
+  },
+  {
+    name: 'reports an unresolved relationship link at its source document',
+    documents: [
+      elementDocument({
+        id: 'architect',
+        kind: 'person',
+        sourceFilename: 'groma/plans/test-revision/people/architect.md',
+        relationships: [{
+          href: '../systems/missing/system.md',
+          description: 'Uses missing software',
+          technology: 'Browser',
+        }],
+      }),
+    ],
+    code: 'UNKNOWN_RELATIONSHIP_TARGET',
+    sourceFilename: 'groma/plans/test-revision/people/architect.md',
+    message: /relationship target.*systems\/missing\/system\.md.*does not resolve/,
+  },
+]) {
+  test(name, () => {
+    assert.throws(
+      () => buildArchitectureModel(revisionRecord(documents)),
+      error => {
+        assert.ok(error instanceof ArchitectureModelError)
+        assert.equal(error.code, code)
+        assert.equal(error.sourceFilename, sourceFilename)
+        assert.match(error.message, message)
+        return true
+      },
+    )
+  })
+}
+
+test('contains no presentation state', async () => {
+  const loadedRevision = await loadRevision(
+    repositoryRoot,
+    { kind: 'plan', name: '02-live-viewer' },
+  )
+
+  const model = buildArchitectureModel(loadedRevision)
+  const forbiddenKeys = new Set([
+    'coordinates',
+    'x',
+    'y',
+    'zoom',
+    'selection',
+    'selected',
+    'color',
+    'colors',
+    'position',
+    'layout',
+  ])
+
+  function assertNoPresentationState(value) {
+    if (value === null || typeof value !== 'object') {
+      return
+    }
+    for (const [key, child] of Object.entries(value)) {
+      assert.equal(forbiddenKeys.has(key), false, `unexpected presentation key "${key}"`)
+      assertNoPresentationState(child)
+    }
+  }
+
+  assertNoPresentationState(model)
+})
