@@ -153,3 +153,73 @@ test('rejects broken relationship links', async t => {
     /broken relationship link "\.\.\/\.\.\/\.\.\/git\/missing\.md"/,
   )
 })
+
+test('rejects relationship targets without a Markdown extension', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '../../../git/system.md',
+    '../../../git/system',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship target must be a relative Markdown link "\.\.\/\.\.\/\.\.\/git\/system"/,
+  )
+})
+
+test('rejects absolute relationship target URLs', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '../../../git/system.md',
+    'https://example.com/git.md',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship target must be a relative Markdown link "https:\/\/example\.com\/git\.md"/,
+  )
+})
+
+test('rejects an element without a level-one heading', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const gitFile = path.join(revisionRoot, 'systems', 'git', 'system.md')
+  await replaceInFile(gitFile, '# Git\n\n', '')
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /requires one level-one heading/,
+  )
+})
+
+test('rejects an element without prose immediately after its heading', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const gitFile = path.join(revisionRoot, 'systems', 'git', 'system.md')
+  await replaceInFile(
+    gitFile,
+    '\n# Git\n\nKeeps history, diffs, and collaboration for the architecture files.\n',
+    '\n# Git\n',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /requires prose immediately after its level-one heading/,
+  )
+})

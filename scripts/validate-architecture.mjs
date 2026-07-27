@@ -66,7 +66,70 @@ function collectLinks(node, links = []) {
   return links
 }
 
-function isLocalMarkdownLink(href) {
+function collectNodes(node, tag, nodes = []) {
+  if (!Array.isArray(node)) {
+    return nodes
+  }
+
+  const isAstNode = typeof node[0] === 'string'
+  if (isAstNode && node[0] === tag) {
+    nodes.push(node)
+  }
+
+  const children = isAstNode ? node.slice(2) : node
+  for (const child of children) {
+    collectNodes(child, tag, nodes)
+  }
+
+  return nodes
+}
+
+function collectRelationshipTargets(nodes) {
+  const targets = []
+  let inRelationshipsSection = false
+
+  for (const node of nodes) {
+    if (node[0] === 'h2') {
+      inRelationshipsSection = node[1]?.id === 'relationships'
+      continue
+    }
+
+    if (!inRelationshipsSection || node[0] !== 'table') {
+      continue
+    }
+
+    for (const row of collectNodes(node, 'tr')) {
+      const cells = row.slice(2).filter(child => child[0] === 'td')
+      if (cells.length === 0) {
+        continue
+      }
+
+      targets.push(collectLinks(cells[0])[0])
+    }
+  }
+
+  return targets
+}
+
+function nodeText(node) {
+  if (typeof node === 'string') {
+    return node
+  }
+
+  if (!Array.isArray(node)) {
+    return ''
+  }
+
+  const isAstNode = typeof node[0] === 'string'
+  const children = isAstNode ? node.slice(2) : node
+  return children.map(nodeText).join('')
+}
+
+function isRelativeMarkdownLink(href) {
+  if (typeof href !== 'string') {
+    return false
+  }
+
   return !href.startsWith('#')
     && !path.isAbsolute(href)
     && !/^[a-z][a-z\d+.-]*:/i.test(href)
@@ -131,9 +194,29 @@ export async function validateRevision(revisionRoot) {
       errors.push(`${relativeFile}: only a system can be external`)
     }
 
-    const links = collectLinks(tree.nodes)
-    for (const href of links.filter(isLocalMarkdownLink)) {
+    const headings = tree.nodes
+      .map((node, index) => ({ node, index }))
+      .filter(({ node }) => node[0] === 'h1')
+    if (headings.length !== 1 || nodeText(headings[0]?.node).trim().length === 0) {
+      errors.push(`${relativeFile}: requires one level-one heading with a readable name`)
+    } else {
+      const prose = tree.nodes[headings[0].index + 1]
+      if (prose?.[0] !== 'p' || nodeText(prose).trim().length === 0) {
+        errors.push(`${relativeFile}: requires prose immediately after its level-one heading`)
+      }
+    }
+
+    const relationshipTargets = collectRelationshipTargets(tree.nodes)
+    for (const href of relationshipTargets) {
       relationshipCount += 1
+      if (!isRelativeMarkdownLink(href)) {
+        errors.push(
+          `${relativeFile}: relationship target must be a relative Markdown link `
+          + `"${href ?? '(missing link)'}"`,
+        )
+        continue
+      }
+
       const hrefPath = decodeURIComponent(href.split('#', 1)[0])
       const target = path.resolve(path.dirname(file), hrefPath)
 
