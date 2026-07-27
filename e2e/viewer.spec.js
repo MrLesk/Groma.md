@@ -101,6 +101,14 @@ async function expectReadableNode(page, elementId, minimumWidth) {
   expect(geometry.titleHeight).toBeGreaterThanOrEqual(9)
 }
 
+async function expectComparisonStates(page, statesByElementId) {
+  for (const [elementId, comparisonStatus] of Object.entries(statesByElementId)) {
+    await expect(
+      page.locator(`[data-element-id="${elementId}"]`),
+    ).toHaveAttribute('data-comparison-status', comparisonStatus)
+  }
+}
+
 async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await page.setViewportSize(viewport)
   await page.goto('/')
@@ -108,7 +116,22 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await expect(page).toHaveTitle('Groma · Architecture viewer')
   await expect(page.getByTestId('view-context')).toBeVisible()
   await expect(page.locator('.status-page')).toHaveCount(0)
+  await expect(
+    page.getByRole('list', { name: 'Comparison key' }),
+  ).toBeVisible()
   await expectMembership(page, contextNodes, contextEdges)
+  await expectComparisonStates(page, {
+    'coding-agent': 'modification',
+    git: 'unchanged',
+    groma: 'modification',
+    'human-architect': 'modification',
+  })
+  await expect(
+    page.getByTestId('c4-node-groma').getByText('Planned modification'),
+  ).toBeVisible()
+  await expect(
+    page.getByTestId('c4-node-git').locator('.comparison-badge'),
+  ).toHaveCount(0)
   await expect(page.locator('.relationship-label')).toContainText([
     'Reads plans and records materialized architecture',
     'Versions and reviews architecture changes',
@@ -140,6 +163,19 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
     page.getByRole('heading', { name: 'Container view' }),
   ).toBeFocused()
   await expectMembership(page, containerNodes, containerEdges)
+  await expectComparisonStates(page, {
+    'architecture-workspace': 'unchanged',
+    groma: 'modification',
+    viewer: 'addition',
+  })
+  await expect(
+    page.getByTestId('c4-node-viewer').getByText('Planned addition'),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByTestId('c4-node-architecture-workspace')
+      .locator('.comparison-badge'),
+  ).toHaveCount(0)
   await expectAccessibleRelationships(page, containerEdges.length)
 
   await page.getByRole('button', { name: 'Open Viewer container' }).click()
@@ -148,6 +184,15 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
     page.getByRole('heading', { name: 'Component view' }),
   ).toBeFocused()
   await expectMembership(page, componentNodes, componentEdges)
+  await expectComparisonStates(page, {
+    'architecture-model': 'addition',
+    'architecture-workspace': 'unchanged',
+    canvas: 'addition',
+    groma: 'modification',
+    'markdown-reader': 'addition',
+    'markdown-watcher': 'addition',
+    viewer: 'addition',
+  })
   await expectAccessibleRelationships(page, componentEdges.length)
   if (viewport.name === 'mobile') {
     await expectReadableNode(page, 'architecture-model', 100)

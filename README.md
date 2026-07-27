@@ -21,23 +21,27 @@ npm ci
 npm run check
 ```
 
-## Open the local viewer
+## Compare a plan with observed architecture
 
-The viewer requires Bun 1.3.14 or newer. Start the read-only Revision 02 viewer,
-then open
+The viewer requires Bun 1.3.14 or newer. Start the read-only Revision 02
+comparison, then open
 `http://127.0.0.1:3000`:
 
 ```sh
 npm run viewer
 ```
 
-The server loads one revision at startup. Choose another complete revision without
-changing any Markdown:
+At startup the server reads `groma/observed` and one complete plan. Choose
+another plan without changing any Markdown:
 
 ```sh
-npm run viewer -- --revision observed
 npm run viewer -- --revision plan:03-code-observation
 ```
+
+Elements are matched by stable ID. A plan-only element is a ghost addition, an
+observed-only element is a planned removal, and a shared element is modified
+when its C4 properties or outgoing relationships differ. Revision names,
+Markdown paths, and transient viewer state do not affect this comparison.
 
 Run the interactive browser verification (Playwright starts and stops the local
 viewer):

@@ -40,11 +40,12 @@ const selectedRevision = revisionDescriptor(
     ?? process.env.GROMA_REVISION
     ?? 'plan:02-live-viewer',
 )
-const loadedRevision = await loadRevision(
-  repositoryRoot,
-  selectedRevision.descriptor,
-)
+const [loadedRevision, loadedObservedRevision] = await Promise.all([
+  loadRevision(repositoryRoot, selectedRevision.descriptor),
+  loadRevision(repositoryRoot, { kind: 'observed' }),
+])
 const model = buildArchitectureModel(loadedRevision)
+const observedModel = buildArchitectureModel(loadedObservedRevision)
 const requestedSystemId = argumentValue('--system')
   ?? process.env.GROMA_SYSTEM_ID
   ?? 'groma'
@@ -71,6 +72,7 @@ const payload = {
   revisionLabel: selectedRevision.label,
   focalSystemId: focalSystem.id,
   model,
+  observedModel,
 }
 
 const server = Bun.serve({

@@ -26,6 +26,175 @@ function nodeByElementId(view, elementId) {
   return view.nodes.find(node => node.data.elementId === elementId)
 }
 
+function syntheticComparisonModels() {
+  const shared = [
+    {
+      id: 'architect',
+      kind: 'person',
+      name: 'Architect',
+      description: 'Studies the architecture.',
+      parentId: null,
+      external: false,
+    },
+    {
+      id: 'groma',
+      kind: 'system',
+      name: 'Groma',
+      description: 'Keeps architecture readable.',
+      parentId: null,
+      external: false,
+    },
+    {
+      id: 'platform',
+      kind: 'container',
+      name: 'Platform',
+      description: 'Hosts architecture capabilities.',
+      parentId: 'groma',
+      external: false,
+    },
+    {
+      id: 'stable-component',
+      kind: 'component',
+      name: 'Stable component',
+      description: 'Stays architecturally equivalent.',
+      parentId: 'platform',
+      external: false,
+    },
+  ]
+  const observedElements = [
+    ...shared,
+    {
+      id: 'legacy-system',
+      kind: 'system',
+      name: 'Legacy system',
+      description: 'Connects only to the observed design.',
+      parentId: null,
+      external: true,
+    },
+    {
+      id: 'legacy-container',
+      kind: 'container',
+      name: 'Legacy container',
+      description: 'Will leave the desired design.',
+      parentId: 'groma',
+      external: false,
+    },
+    {
+      id: 'changed-component',
+      kind: 'component',
+      name: 'Current component',
+      description: 'Current responsibility.',
+      parentId: 'platform',
+      external: false,
+    },
+    {
+      id: 'legacy-component',
+      kind: 'component',
+      name: 'Legacy component',
+      description: 'Will be removed.',
+      parentId: 'platform',
+      external: false,
+    },
+  ]
+  const plannedElements = [
+    ...shared.map(element => ({
+      ...element,
+      sourceFilename: `groma/plans/synthetic/${element.id}.md`,
+      position: { x: 999, y: 999 },
+      selected: true,
+    })),
+    {
+      id: 'future-system',
+      kind: 'system',
+      name: 'Future system',
+      description: 'Connects only to the desired design.',
+      parentId: null,
+      external: true,
+    },
+    {
+      id: 'future-container',
+      kind: 'container',
+      name: 'Future container',
+      description: 'Will join the desired design.',
+      parentId: 'groma',
+      external: false,
+    },
+    {
+      id: 'changed-component',
+      kind: 'component',
+      name: 'Planned component',
+      description: 'Planned responsibility.',
+      parentId: 'platform',
+      external: false,
+    },
+    {
+      id: 'future-component',
+      kind: 'component',
+      name: 'Future component',
+      description: 'Will be added.',
+      parentId: 'platform',
+      external: false,
+    },
+  ]
+  const unchangedRelationship = {
+    sourceId: 'architect',
+    targetId: 'stable-component',
+    description: 'Studies architecture',
+    technology: 'Browser',
+  }
+
+  return {
+    observed: {
+      revision: {
+        kind: 'observed',
+        sourceDirectory: 'groma/observed',
+      },
+      elements: observedElements.map(element => ({
+        ...element,
+        sourceFilename: `groma/observed/${element.id}.md`,
+      })),
+      relationships: [
+        {
+          ...unchangedRelationship,
+          sourceFilename: 'groma/observed/architect.md',
+          targetSourceFilename: 'groma/observed/stable-component.md',
+        },
+        {
+          sourceId: 'legacy-system',
+          targetId: 'legacy-component',
+          description: 'Uses the legacy component',
+          technology: 'Observed API',
+          sourceFilename: 'groma/observed/legacy-system.md',
+          targetSourceFilename: 'groma/observed/legacy-component.md',
+        },
+      ],
+    },
+    planned: {
+      revision: {
+        kind: 'plan',
+        name: 'synthetic',
+        sourceDirectory: 'groma/plans/synthetic',
+      },
+      elements: plannedElements,
+      relationships: [
+        {
+          ...unchangedRelationship,
+          sourceFilename: 'groma/plans/synthetic/architect.md',
+          targetSourceFilename: 'groma/plans/synthetic/stable-component.md',
+        },
+        {
+          sourceId: 'future-system',
+          targetId: 'future-component',
+          description: 'Uses the future component',
+          technology: 'Planned API',
+          sourceFilename: 'groma/plans/synthetic/future-system.md',
+          targetSourceFilename: 'groma/plans/synthetic/future-component.md',
+        },
+      ],
+    },
+  }
+}
+
 function modelWithSyntheticContext() {
   const elements = [
     {
@@ -160,6 +329,135 @@ test('Plan 03 component projections keep component-bearing sibling containers ex
   assert.ok(nodeByElementId(scanner, 'source-watcher'))
   assert.ok(nodeByElementId(scanner, 'typescript-observer'))
   assert.ok(nodeByElementId(scanner, 'markdown-emitter'))
+})
+
+test('comparison classifies and draws root additions, removals, and unchanged elements', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const view = projectArchitectureView(
+    planned,
+    'groma',
+    [],
+    { observedModel: observed },
+  )
+
+  assert.equal(nodeByElementId(view, 'future-system').data.comparisonStatus, 'addition')
+  assert.equal(nodeByElementId(view, 'legacy-system').data.comparisonStatus, 'removal')
+  assert.equal(nodeByElementId(view, 'architect').data.comparisonStatus, 'unchanged')
+  assert.equal(nodeByElementId(view, 'groma').data.comparisonStatus, 'unchanged')
+})
+
+test('comparison preserves planned and observed-only containment at container level', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const view = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma'],
+    { observedModel: observed },
+  )
+  const boundary = nodeByElementId(view, 'groma')
+
+  assert.equal(boundary.data.comparisonStatus, 'unchanged')
+  assert.equal(
+    nodeByElementId(view, 'future-container').data.comparisonStatus,
+    'addition',
+  )
+  assert.equal(
+    nodeByElementId(view, 'legacy-container').data.comparisonStatus,
+    'removal',
+  )
+  assert.equal(nodeByElementId(view, 'future-container').parentId, boundary.id)
+  assert.equal(nodeByElementId(view, 'legacy-container').parentId, boundary.id)
+})
+
+test('comparison draws component additions, modifications, removals, and unchanged content', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const view = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma', 'platform'],
+    { observedModel: observed },
+  )
+
+  assert.equal(
+    nodeByElementId(view, 'future-component').data.comparisonStatus,
+    'addition',
+  )
+  assert.equal(
+    nodeByElementId(view, 'changed-component').data.comparisonStatus,
+    'modification',
+  )
+  assert.equal(
+    nodeByElementId(view, 'legacy-component').data.comparisonStatus,
+    'removal',
+  )
+  assert.equal(
+    nodeByElementId(view, 'stable-component').data.comparisonStatus,
+    'unchanged',
+  )
+  assert.equal(
+    nodeByElementId(view, 'changed-component').data.name,
+    'Planned component',
+  )
+})
+
+test('comparison is deterministic and ignores revision, source, and runtime metadata', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const before = JSON.stringify({ observed, planned })
+  const first = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma', 'platform'],
+    { observedModel: observed },
+  )
+  const second = projectArchitectureView(
+    {
+      ...planned,
+      revision: {
+        kind: 'plan',
+        name: 'renamed-revision',
+        sourceDirectory: 'elsewhere',
+      },
+      elements: [...planned.elements].reverse(),
+      relationships: [...planned.relationships].reverse(),
+    },
+    'groma',
+    ['groma', 'platform'],
+    { observedModel: observed },
+  )
+
+  assert.deepEqual(second, first)
+  assert.equal(
+    nodeByElementId(first, 'stable-component').data.comparisonStatus,
+    'unchanged',
+  )
+  assert.equal(JSON.stringify({ observed, planned }), before)
+})
+
+test('comparison treats outgoing relationship content as source element architecture', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const changedRelationshipPlan = {
+    ...planned,
+    relationships: planned.relationships.map(relationship => {
+      return relationship.sourceId === 'architect'
+        ? { ...relationship, technology: 'Planned desktop app' }
+        : relationship
+    }),
+  }
+  const view = projectArchitectureView(
+    changedRelationshipPlan,
+    'groma',
+    [],
+    { observedModel: observed },
+  )
+
+  assert.equal(
+    nodeByElementId(view, 'architect').data.comparisonStatus,
+    'modification',
+  )
+  assert.equal(
+    nodeByElementId(view, 'groma').data.comparisonStatus,
+    'unchanged',
+  )
 })
 
 test('system context excludes roots without a relationship to the focal subtree', () => {

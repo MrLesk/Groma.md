@@ -1,3 +1,5 @@
+import { compareArchitectureModels } from '../architecture-comparison.mjs'
+
 const nodeDimensions = {
   person: { width: 250, height: 132 },
   system: { width: 280, height: 148 },
@@ -28,6 +30,9 @@ function elementNode(element, position, options = {}) {
       description: element.description,
       external: element.external,
       expandable: options.expandable === true,
+      ...(element.comparisonStatus ? {
+        comparisonStatus: element.comparisonStatus,
+      } : {}),
     },
   }
 }
@@ -51,6 +56,9 @@ function boundaryNode(element, position, dimensions, options = {}) {
       description: element.description,
       external: element.external,
       expandable: false,
+      ...(element.comparisonStatus ? {
+        comparisonStatus: element.comparisonStatus,
+      } : {}),
     },
   }
 }
@@ -308,13 +316,21 @@ function focusLevel(focusPath, focalSystemId) {
   throw new TypeError('Focus must be [], [focal system], or [focal system, container]')
 }
 
-export function projectArchitectureView(model, focalSystemId, focusPath) {
+export function projectArchitectureView(
+  model,
+  focalSystemId,
+  focusPath,
+  options = {},
+) {
+  const projectedModel = options.observedModel
+    ? compareArchitectureModels(options.observedModel, model)
+    : model
   const elementsById = new Map(
-    model.elements.map(element => [element.id, element]),
+    projectedModel.elements.map(element => [element.id, element]),
   )
   const childrenByParent = new Map()
 
-  for (const element of model.elements) {
+  for (const element of projectedModel.elements) {
     if (!element.parentId) {
       continue
     }
@@ -331,7 +347,7 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
     throw new TypeError(`Focal element "${focalSystemId}" must be a software system`)
   }
   const connectedRootIds = connectedContextIds(
-    model,
+    projectedModel,
     focalSystemId,
     elementsById,
   )
@@ -340,14 +356,14 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
   let nodes
   if (level === 'context') {
     nodes = contextNodes(
-      model,
+      projectedModel,
       focalSystem,
       childrenByParent,
       connectedRootIds,
     )
   } else if (level === 'container') {
     nodes = containerNodes(
-      model,
+      projectedModel,
       focalSystem,
       childrenByParent,
       connectedRootIds,
@@ -364,7 +380,7 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
       )
     }
     nodes = componentNodes(
-      model,
+      projectedModel,
       focalSystem,
       selectedContainer,
       childrenByParent,
@@ -376,6 +392,6 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
     level,
     focusPath: [...focusPath],
     nodes,
-    edges: relationshipEdges(model, nodes, elementsById),
+    edges: relationshipEdges(projectedModel, nodes, elementsById),
   }
 }

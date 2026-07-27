@@ -31,6 +31,11 @@ const compactFitViewOptions = {
   minZoom: 0.55,
   maxZoom: 1.1,
 }
+const comparisonLabels = {
+  addition: 'Planned addition',
+  modification: 'Planned modification',
+  removal: 'Planned removal',
+}
 
 function useCompactViewport() {
   const [isCompact, setIsCompact] = useState(() => {
@@ -76,6 +81,11 @@ function TypeGlyph({ kind }) {
   )
 }
 
+function ComparisonBadge({ status }) {
+  const label = comparisonLabels[status]
+  return label ? <span className="comparison-badge">{label}</span> : null
+}
+
 function C4Node({ data }) {
   const content = (
     <>
@@ -83,6 +93,7 @@ function C4Node({ data }) {
         <TypeGlyph kind={data.kind} />
         {data.external ? `External ${data.kind}` : data.kind}
       </span>
+      <ComparisonBadge status={data.comparisonStatus} />
       <strong>{data.name}</strong>
       <span className="node-description">{data.description}</span>
       {data.expandable ? (
@@ -96,10 +107,15 @@ function C4Node({ data }) {
 
   return (
     <article
-      className={`c4-node c4-node--${data.kind}${data.external ? ' is-external' : ''}`}
+      className={
+        `c4-node c4-node--${data.kind}`
+        + `${data.external ? ' is-external' : ''}`
+        + `${data.comparisonStatus ? ` is-comparison-${data.comparisonStatus}` : ''}`
+      }
       data-testid={`c4-node-${data.elementId}`}
       data-element-id={data.elementId}
       data-kind={data.kind}
+      data-comparison-status={data.comparisonStatus}
     >
       <ElementHandles />
       {data.expandable ? (
@@ -121,14 +137,19 @@ function C4Node({ data }) {
 function BoundaryNode({ data }) {
   return (
     <section
-      className={`c4-boundary c4-boundary--${data.kind}`}
+      className={
+        `c4-boundary c4-boundary--${data.kind}`
+        + `${data.comparisonStatus ? ` is-comparison-${data.comparisonStatus}` : ''}`
+      }
       data-testid={`c4-boundary-${data.elementId}`}
       data-element-id={data.elementId}
       data-kind={data.kind}
+      data-comparison-status={data.comparisonStatus}
       aria-label={`${data.name} ${data.kind} boundary`}
     >
       <ElementHandles />
       <span className="boundary-index">C4 / {data.kind}</span>
+      <ComparisonBadge status={data.comparisonStatus} />
       <strong>{data.name}</strong>
       <span>{data.description}</span>
     </section>
@@ -276,6 +297,7 @@ export function ViewerApp() {
       payload.model,
       payload.focalSystemId,
       focusPath,
+      { observedModel: payload.observedModel },
     )
 
     return {
@@ -313,7 +335,9 @@ export function ViewerApp() {
   }
 
   const focusNames = focusPath.map(id => {
-    return payload.model.elements.find(element => element.id === id)?.name ?? id
+    return payload.model.elements.find(element => element.id === id)?.name
+      ?? payload.observedModel.elements.find(element => element.id === id)?.name
+      ?? id
   })
   const viewKey = focusPath.join('/') || 'context'
 
@@ -353,8 +377,8 @@ export function ViewerApp() {
         </nav>
 
         <div className="revision-stamp">
-          <span>Selected revision</span>
-          <strong>{payload.revisionLabel}</strong>
+          <span>Plan comparison</span>
+          <strong>{payload.revisionLabel} ↔ observed</strong>
         </div>
       </header>
 
@@ -372,6 +396,14 @@ export function ViewerApp() {
                   ? 'Runtime responsibilities inside the focal system.'
                   : 'The working parts inside the selected container.'}
             </p>
+            <ul className="comparison-key" aria-label="Comparison key">
+              {Object.entries(comparisonLabels).map(([status, label]) => (
+                <li key={status} data-comparison-status={status}>
+                  <span aria-hidden="true" />
+                  {label}
+                </li>
+              ))}
+            </ul>
           </div>
           {focusPath.length > 0 ? (
             <button type="button" className="back-button" onClick={goBack}>
@@ -436,7 +468,7 @@ export function ViewerApp() {
       </section>
 
       <footer className="viewer-footer">
-        <span>Read-only local view</span>
+        <span>Read-only comparison</span>
         <span>{view.nodes.length} elements · {view.edges.length} relationships</span>
         <span>
           {isCompactViewport
