@@ -5,10 +5,16 @@ import { buildArchitectureModel } from '../architecture-model.mjs'
 import { loadRevision } from '../architecture-reader.mjs'
 import index from './index.html'
 
-const repositoryRoot = path.resolve(
+const defaultRepositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
 )
+const testRepositoryRoot = process.env.NODE_ENV === 'test'
+  ? process.env.GROMA_TEST_REPOSITORY_ROOT
+  : undefined
+const repositoryRoot = testRepositoryRoot
+  ? path.resolve(testRepositoryRoot)
+  : defaultRepositoryRoot
 
 function argumentValue(name) {
   const index = Bun.argv.indexOf(name)

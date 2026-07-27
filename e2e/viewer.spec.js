@@ -109,6 +109,38 @@ async function expectComparisonStates(page, statesByElementId) {
   }
 }
 
+async function expectNoOverlap(page, testIds) {
+  const overlaps = await page.evaluate(ids => {
+    const boxes = ids.map(id => {
+      const element = document.querySelector(`[data-testid="${id}"]`)
+      const rectangle = element.getBoundingClientRect()
+      return {
+        id,
+        left: rectangle.left,
+        right: rectangle.right,
+        top: rectangle.top,
+        bottom: rectangle.bottom,
+      }
+    })
+    const collisions = []
+
+    for (const [index, box] of boxes.entries()) {
+      for (const peer of boxes.slice(index + 1)) {
+        const separated = box.right <= peer.left
+          || peer.right <= box.left
+          || box.bottom <= peer.top
+          || peer.bottom <= box.top
+        if (!separated) {
+          collisions.push(`${box.id}:${peer.id}`)
+        }
+      }
+    }
+    return collisions
+  }, testIds)
+
+  expect(overlaps).toEqual([])
+}
+
 async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await page.setViewportSize(viewport)
   await page.goto('/')
@@ -281,4 +313,54 @@ test('switches directly between component-bearing sibling containers in Plan 03'
   await expect(page.getByTestId('c4-boundary-viewer')).toBeVisible()
   await expect(page.getByTestId('c4-node-markdown-reader')).toBeVisible()
   expect(browserErrors).toEqual([])
+})
+
+test('keeps a four-state union of containers distinct and selectable', async ({
+  page,
+}, testInfo) => {
+  const browserMessages = []
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      browserMessages.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('pageerror', error => {
+    browserMessages.push(`pageerror: ${error.message}`)
+  })
+
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.goto('http://127.0.0.1:4179')
+  await page.getByRole('button', { name: 'Open Groma system' }).click()
+  await expect(page.getByTestId('view-container')).toBeVisible()
+
+  const containers = [
+    ['added-container', 'Added container', 'addition'],
+    ['modified-container', 'Modified container', 'modification'],
+    ['removed-container', 'Removed container', 'removal'],
+    ['stable-container', 'Stable container', 'unchanged'],
+  ]
+  await expectComparisonStates(
+    page,
+    Object.fromEntries(
+      containers.map(([elementId, , status]) => [elementId, status]),
+    ),
+  )
+  await expectNoOverlap(
+    page,
+    containers.map(([elementId]) => `c4-node-${elementId}`),
+  )
+  await page.screenshot({
+    path: testInfo.outputPath('four-state-containers.png'),
+    fullPage: true,
+  })
+
+  for (const [elementId, name] of containers) {
+    await page.getByRole('button', { name: `Open ${name} container` }).click()
+    await expect(page.getByTestId(`c4-boundary-${elementId}`)).toBeVisible()
+    await expect(page.getByTestId('view-component')).toBeVisible()
+    await page.getByRole('button', { name: 'Previous level' }).click()
+    await expect(page.getByTestId('view-container')).toBeVisible()
+  }
+
+  expect(browserMessages).toEqual([])
 })

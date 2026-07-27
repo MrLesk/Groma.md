@@ -53,6 +53,14 @@ function syntheticComparisonModels() {
       external: false,
     },
     {
+      id: 'stable-peer',
+      kind: 'container',
+      name: 'Stable peer',
+      description: 'Stays architecturally equivalent.',
+      parentId: 'groma',
+      external: false,
+    },
+    {
       id: 'stable-component',
       kind: 'component',
       name: 'Stable component',
@@ -60,9 +68,29 @@ function syntheticComparisonModels() {
       parentId: 'platform',
       external: false,
     },
+    ...['a', 'b', 'c'].map(suffix => ({
+      id: `bulk-component-${suffix}`,
+      kind: 'component',
+      name: `Bulk component ${suffix.toUpperCase()}`,
+      description: 'Exercises count-aware component layout.',
+      parentId: 'platform',
+      external: false,
+    })),
+    {
+      id: 'stable-peer-component',
+      kind: 'component',
+      name: 'Stable peer component',
+      description: 'Makes the stable peer selectable.',
+      parentId: 'stable-peer',
+      external: false,
+    },
   ]
   const observedElements = [
-    ...shared,
+    ...shared.map(element => {
+      return element.id === 'platform'
+        ? { ...element, description: 'Hosts current architecture capabilities.' }
+        : element
+    }),
     {
       id: 'legacy-system',
       kind: 'system',
@@ -95,10 +123,21 @@ function syntheticComparisonModels() {
       parentId: 'platform',
       external: false,
     },
+    {
+      id: 'legacy-container-component',
+      kind: 'component',
+      name: 'Legacy container component',
+      description: 'Makes the removal selectable.',
+      parentId: 'legacy-container',
+      external: false,
+    },
   ]
   const plannedElements = [
     ...shared.map(element => ({
       ...element,
+      ...(element.id === 'platform' ? {
+        description: 'Hosts planned architecture capabilities.',
+      } : {}),
       sourceFilename: `groma/plans/synthetic/${element.id}.md`,
       position: { x: 999, y: 999 },
       selected: true,
@@ -133,6 +172,14 @@ function syntheticComparisonModels() {
       name: 'Future component',
       description: 'Will be added.',
       parentId: 'platform',
+      external: false,
+    },
+    {
+      id: 'future-container-component',
+      kind: 'component',
+      name: 'Future container component',
+      description: 'Makes the addition selectable.',
+      parentId: 'future-container',
       external: false,
     },
   ]
@@ -365,8 +412,84 @@ test('comparison preserves planned and observed-only containment at container le
     nodeByElementId(view, 'legacy-container').data.comparisonStatus,
     'removal',
   )
+  assert.equal(
+    nodeByElementId(view, 'platform').data.comparisonStatus,
+    'modification',
+  )
+  assert.equal(
+    nodeByElementId(view, 'stable-peer').data.comparisonStatus,
+    'unchanged',
+  )
   assert.equal(nodeByElementId(view, 'future-container').parentId, boundary.id)
   assert.equal(nodeByElementId(view, 'legacy-container').parentId, boundary.id)
+})
+
+test('comparison boundaries contain every child without overlapping union peers', () => {
+  const { observed, planned } = syntheticComparisonModels()
+  const containerView = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma'],
+    { observedModel: observed },
+  )
+  const systemBoundary = nodeByElementId(containerView, 'groma')
+  const containers = containerView.nodes.filter(node => {
+    return node.parentId === systemBoundary.id
+  })
+
+  assert.equal(containers.length, 4)
+  for (const [index, container] of containers.entries()) {
+    assert.ok(
+      container.position.y + container.style.height <= systemBoundary.style.height,
+      `${container.data.elementId} must fit inside the system boundary`,
+    )
+    for (const peer of containers.slice(index + 1)) {
+      const separated = container.position.y + container.style.height <= peer.position.y
+        || peer.position.y + peer.style.height <= container.position.y
+      assert.ok(
+        separated,
+        `${container.data.elementId} must not overlap ${peer.data.elementId}`,
+      )
+    }
+  }
+
+  const componentView = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma', 'platform'],
+    { observedModel: observed },
+  )
+  const componentSystemBoundary = nodeByElementId(componentView, 'groma')
+  const platformBoundary = nodeByElementId(componentView, 'platform')
+  const components = componentView.nodes.filter(node => {
+    return node.parentId === platformBoundary.id
+  })
+  const siblingContainers = componentView.nodes.filter(node => {
+    return node.parentId === componentSystemBoundary.id
+      && node.type === 'c4'
+      && node.data.kind === 'container'
+  })
+
+  assert.equal(components.length, 7)
+  assert.equal(siblingContainers.length, 3)
+  assert.ok(
+    platformBoundary.position.y + platformBoundary.style.height
+      <= componentSystemBoundary.style.height,
+    'selected container boundary must fit inside the system boundary',
+  )
+  for (const component of components) {
+    assert.ok(
+      component.position.y + component.style.height <= platformBoundary.style.height,
+      `${component.data.elementId} must fit inside the selected container boundary`,
+    )
+  }
+  for (const sibling of siblingContainers) {
+    assert.ok(
+      sibling.position.y + sibling.style.height
+        <= componentSystemBoundary.style.height,
+      `${sibling.data.elementId} must fit inside the system boundary`,
+    )
+  }
 })
 
 test('comparison draws component additions, modifications, removals, and unchanged content', () => {

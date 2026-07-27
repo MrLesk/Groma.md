@@ -24,5 +24,11 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 30_000,
     },
+    {
+      command: 'bun run e2e/comparison-fixture-server.mjs --port 4179',
+      url: 'http://127.0.0.1:4179/api/model',
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
   ],
 })

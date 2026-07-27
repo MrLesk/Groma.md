@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:00'
+updated_date: '2026-07-27 23:14'
 labels: []
 milestone: m-1
 dependencies:
@@ -15,7 +15,9 @@ references:
   - groma/plans/02-live-viewer/README.md
 modified_files:
   - README.md
+  - e2e/comparison-fixture-server.mjs
   - e2e/viewer.spec.js
+  - playwright.config.mjs
   - src/architecture-comparison.mjs
   - src/viewer/projection.mjs
   - src/viewer/server.mjs
@@ -51,6 +53,14 @@ Groma plans are complete desired architecture snapshots under groma/plans/<revis
 4. Load observed and the selected plan in parallel at viewer startup, expose a read-only comparison payload, and retain the existing explicit plan selection without scanning or live reload.
 5. Extend the drafting-table UI with accessible addition/modification/removal treatments and a compact comparison legend while leaving unchanged elements visually neutral.
 6. Add browser assertions for comparison state at system, container, and component levels, then verify unit/architecture checks, Bun production build, browser flows, groma immutability, scoped diff, and Backlog criteria before committing main.
+
+7. Add a red pure geometry regression with a four-state union of at least four containers and enough components to overflow both fixed boundaries; assert every child rectangle fits its parent and peer rectangles are disjoint.
+
+8. Add a test-only temporary Markdown repository runner and guarded server-root hook, then add a red Playwright flow that renders all four comparison states, checks browser geometry for non-overlap, and opens every union container.
+
+9. Replace fixed container/component boundary heights with deterministic count-aware geometry while preserving the existing columns, peer parentage, fit behavior, and interaction contract.
+
+10. Verify the synthetic browser flow, the existing desktop/mobile and Plan 03 flows, full repository checks, Bun build, clean diff, and no canonical groma changes; inspect screenshots before refinalizing and committing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -61,10 +71,18 @@ Implemented a pure stable-ID comparison projection. Architecture equivalence is 
 UI direction extends the existing drafting table with green translucent/dashed ghost additions, amber modification outlines, red hatched/dashed removals, neutral unchanged elements, visible badges, and an accessible comparison key. The server loads observed plus the selected plan concurrently and exposes GET-only comparison data; no scanning, reload, or Markdown write path was added.
 
 Evidence: synthetic projection regressions cover all four states at system, container, and component levels, relationship-content changes, metadata equivalence, deterministic ordering, purity, and both-side containment. npm run check validated 4 revisions and passed 55/55 tests. npm run test:viewer:browser passed 2/2 flows, including exact comparison state and visible badge assertions across context/container/component at 1440x960 and 390x844, Plan 03 sibling navigation, screenshots, focus/geometry checks, and zero console/page errors. Bun production build bundled 147 modules. git diff --check passed and git diff --exit-code -- groma/ proved neither revision changed.
+
+Spec review reopened TASK-7: the container and component projections use fixed boundary dimensions while stacking a union of planned and observed children. With four or more containers, later nodes exceed the system boundary and React Flow extent clamping collapses them into overlapping positions, blocking distinct comparison states and interaction. Acceptance remains pending a count-aware layout plus pure geometry and real-browser fixture evidence.
+
+Correction completed with red/green evidence. The root cause was fixed boundary geometry: container children used a 220px vertical step inside a 610px system boundary, so the third and fourth union containers ended at 735px and 955px; React Flow then clamped them into collisions. Component rows and sibling containers had the same fixed-height risk. Projection now derives system/container boundary heights from deterministic node dimensions, row/peer counts, spacing, and bottom padding while retaining the existing columns and C4 parentage.
+
+The synthetic projection fixture now contains four union containers spanning addition, modification, removal, and unchanged, plus seven components. Its geometry regression failed before the fix and now proves all container/component children fit their parent and sibling peers remain disjoint. A test-only temporary Markdown repository runner and NODE_ENV=test-guarded server root feed the real viewer without touching canonical groma/. The Playwright regression failed before the fix with three collision pairs, then passed after the fix while asserting all four statuses, DOM non-overlap, and successful navigation into every container.
+
+Fresh correction verification: npm run check validated all 4 canonical revisions and passed 56/56 tests; npm run test:viewer:browser passed 3/3 flows covering the four-state fixture, Revision 02 desktop/mobile readability, and Plan 03 sibling navigation; Bun bundled 147 modules successfully; git diff --check passed; git diff --exit-code -- groma/ was empty. The in-app Browser connection was attempted first but returned “No browser is available” with an empty browser inventory, so the committed Playwright fallback supplied DOM, interaction, console, and screenshot evidence. Visual inspection confirmed four distinct peers and readable state treatments.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added a read-only observed-versus-selected-plan projection keyed by stable element ID, with deterministic architecture-content equivalence, unioned C4 containment, and distinct accessible treatments for additions, modifications, removals, and unchanged elements. Verified all states synthetically across three C4 levels, real desktop/mobile browser flows, 55/55 repository tests, 2/2 Playwright tests, a successful Bun build, and no groma/ changes.
+Added stable-ID observed-versus-plan comparison and corrected union layout sizing so arbitrary container peers and component rows remain inside count-aware C4 boundaries instead of being clamped into overlap. Verified all four states synthetically and in a temporary-repository browser fixture, every fixture container clickable, 56/56 tests, 3/3 Playwright flows including mobile, a successful Bun build, and no canonical groma/ changes.
 <!-- SECTION:FINAL_SUMMARY:END -->

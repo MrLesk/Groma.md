@@ -6,6 +6,27 @@ const nodeDimensions = {
   container: { width: 250, height: 150 },
   component: { width: 190, height: 132 },
 }
+const boundaryLayout = {
+  container: {
+    minimumHeight: 610,
+    childStartY: 145,
+    childStepY: 220,
+    bottomPadding: 80,
+  },
+  component: {
+    systemMinimumHeight: 690,
+    systemBottomPadding: 80,
+    siblingStartY: 190,
+    siblingStepY: 190,
+    containerY: 48,
+    containerMinimumHeight: 580,
+    componentStartY: 154,
+    componentStepY: 178,
+    componentColumns: 2,
+    componentBottomPadding: 70,
+    selectedContainerBottomPadding: 62,
+  },
+}
 
 function compareStrings(left, right) {
   return left < right ? -1 : left > right ? 1 : 0
@@ -67,6 +88,24 @@ function elementsOfKind(elements, kind) {
   return elements
     .filter(element => element.kind === kind)
     .sort((left, right) => compareStrings(left.id, right.id))
+}
+
+function stackedContentHeight({
+  count,
+  startY,
+  stepY,
+  itemHeight,
+  bottomPadding,
+  minimumHeight,
+}) {
+  if (count === 0) {
+    return minimumHeight
+  }
+
+  return Math.max(
+    minimumHeight,
+    startY + (count - 1) * stepY + itemHeight + bottomPadding,
+  )
 }
 
 function connectedContextIds(model, focalSystemId, elementsById) {
@@ -141,13 +180,24 @@ function containerNodes(
   childrenByParent,
   connectedRootIds,
 ) {
+  const containers = (childrenByParent.get(focalSystem.id) ?? [])
+    .filter(element => element.kind === 'container')
+  const layout = boundaryLayout.container
   const systemBoundary = boundaryNode(
     focalSystem,
     { x: 350, y: 46 },
-    { width: 570, height: 610 },
+    {
+      width: 570,
+      height: stackedContentHeight({
+        count: containers.length,
+        startY: layout.childStartY,
+        stepY: layout.childStepY,
+        itemHeight: nodeDimensions.container.height,
+        bottomPadding: layout.bottomPadding,
+        minimumHeight: layout.minimumHeight,
+      }),
+    },
   )
-  const containers = (childrenByParent.get(focalSystem.id) ?? [])
-    .filter(element => element.kind === 'container')
   const people = elementsOfKind(model.elements, 'person')
     .filter(element => connectedRootIds.has(element.id))
   const otherSystems = elementsOfKind(model.elements, 'system')
@@ -162,7 +212,10 @@ function containerNodes(
     systemBoundary,
     ...containers.map((container, index) => {
       const childCount = childrenByParent.get(container.id)?.length ?? 0
-      return elementNode(container, { x: 70, y: 145 + index * 220 }, {
+      return elementNode(container, {
+        x: 70,
+        y: layout.childStartY + index * layout.childStepY,
+      }, {
         parentId: systemBoundary.id,
         expandable: childCount > 0,
       })
@@ -180,23 +233,49 @@ function componentNodes(
   childrenByParent,
   connectedRootIds,
 ) {
-  const systemBoundary = boundaryNode(
-    focalSystem,
-    { x: 300, y: 34 },
-    { width: 850, height: 690 },
-  )
-  const containerBoundary = boundaryNode(
-    selectedContainer,
-    { x: 334, y: 48 },
-    { width: 470, height: 580 },
-    { parentId: systemBoundary.id },
-  )
+  const layout = boundaryLayout.component
   const siblingContainers = (childrenByParent.get(focalSystem.id) ?? [])
     .filter(element => {
       return element.kind === 'container' && element.id !== selectedContainer.id
     })
   const components = (childrenByParent.get(selectedContainer.id) ?? [])
     .filter(element => element.kind === 'component')
+  const componentRows = Math.ceil(
+    components.length / layout.componentColumns,
+  )
+  const containerHeight = stackedContentHeight({
+    count: componentRows,
+    startY: layout.componentStartY,
+    stepY: layout.componentStepY,
+    itemHeight: nodeDimensions.component.height,
+    bottomPadding: layout.componentBottomPadding,
+    minimumHeight: layout.containerMinimumHeight,
+  })
+  const siblingContentHeight = stackedContentHeight({
+    count: siblingContainers.length,
+    startY: layout.siblingStartY,
+    stepY: layout.siblingStepY,
+    itemHeight: nodeDimensions.container.height,
+    bottomPadding: layout.systemBottomPadding,
+    minimumHeight: layout.systemMinimumHeight,
+  })
+  const systemHeight = Math.max(
+    siblingContentHeight,
+    layout.containerY
+      + containerHeight
+      + layout.selectedContainerBottomPadding,
+  )
+  const systemBoundary = boundaryNode(
+    focalSystem,
+    { x: 300, y: 34 },
+    { width: 850, height: systemHeight },
+  )
+  const containerBoundary = boundaryNode(
+    selectedContainer,
+    { x: 334, y: layout.containerY },
+    { width: 470, height: containerHeight },
+    { parentId: systemBoundary.id },
+  )
   const people = elementsOfKind(model.elements, 'person')
     .filter(element => connectedRootIds.has(element.id))
   const otherSystems = elementsOfKind(model.elements, 'system')
@@ -210,7 +289,10 @@ function componentNodes(
     }),
     systemBoundary,
     ...siblingContainers.map((container, index) => {
-      return elementNode(container, { x: 38, y: 190 + index * 190 }, {
+      return elementNode(container, {
+        x: 38,
+        y: layout.siblingStartY + index * layout.siblingStepY,
+      }, {
         parentId: systemBoundary.id,
         expandable: (childrenByParent.get(container.id)?.length ?? 0) > 0,
       })
@@ -218,8 +300,9 @@ function componentNodes(
     containerBoundary,
     ...components.map((component, index) => {
       return elementNode(component, {
-        x: 28 + (index % 2) * 218,
-        y: 154 + Math.floor(index / 2) * 178,
+        x: 28 + (index % layout.componentColumns) * 218,
+        y: layout.componentStartY
+          + Math.floor(index / layout.componentColumns) * layout.componentStepY,
       }, {
         parentId: containerBoundary.id,
       })
