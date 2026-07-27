@@ -157,10 +157,10 @@ function documentToElement(document) {
   }
 }
 
-function validateContainment(elements, elementsById) {
+function validateContainment(elements, elementsById, declaredParentIds) {
   for (const element of elements) {
     if (rootKinds.has(element.kind)) {
-      if (element.parentId !== null) {
+      if (declaredParentIds.has(element.id)) {
         throw new ArchitectureModelError(
           'INVALID_PARENT',
           element.sourceFilename,
@@ -276,6 +276,7 @@ export function buildArchitectureModel(revisionRecord) {
   const elements = []
   const elementsById = new Map()
   const elementsBySourceFilename = new Map()
+  const declaredParentIds = new Set()
 
   for (const document of documents) {
     const element = documentToElement(document)
@@ -292,9 +293,12 @@ export function buildArchitectureModel(revisionRecord) {
     elements.push(element)
     elementsById.set(element.id, element)
     elementsBySourceFilename.set(element.sourceFilename, element)
+    if (Object.hasOwn(document.frontmatter, 'parent')) {
+      declaredParentIds.add(element.id)
+    }
   }
 
-  validateContainment(elements, elementsById)
+  validateContainment(elements, elementsById, declaredParentIds)
   elements.sort((left, right) => compareStrings(left.id, right.id))
 
   return deepFreeze({

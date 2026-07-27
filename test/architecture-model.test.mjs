@@ -325,6 +325,36 @@ for (const {
     message: /container "wrongly-contained" requires a system parent.*is a person/,
   },
   {
+    name: 'reports a root C4 element with an explicitly null parent',
+    documents: [
+      elementDocument({
+        id: 'null-parent-person',
+        kind: 'person',
+        parent: null,
+        sourceFilename: 'groma/plans/test-revision/people/null-parent-person.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename: 'groma/plans/test-revision/people/null-parent-person.md',
+    message: /person "null-parent-person" cannot declare a parent/,
+  },
+  {
+    name: 'reports a root C4 element with an empty parent',
+    documents: [
+      elementDocument({
+        id: 'empty-parent-system',
+        kind: 'system',
+        parent: '',
+        sourceFilename:
+          'groma/plans/test-revision/systems/empty-parent-system/system.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/empty-parent-system/system.md',
+    message: /system "empty-parent-system" cannot declare a parent/,
+  },
+  {
     name: 'reports a root C4 element that declares a parent',
     documents: [
       elementDocument({
@@ -337,6 +367,39 @@ for (const {
     code: 'INVALID_PARENT',
     sourceFilename: 'groma/plans/test-revision/people/nested-person.md',
     message: /person "nested-person" cannot declare a parent/,
+  },
+  {
+    name: 'reports a contained C4 element with an omitted parent',
+    documents: [
+      elementDocument({
+        id: 'missing-parent-container',
+        kind: 'container',
+        sourceFilename:
+          'groma/plans/test-revision/systems/groma/containers/missing/container.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/groma/containers/missing/container.md',
+    message: /container "missing-parent-container" requires a system parent id/,
+  },
+  {
+    name: 'reports a contained C4 element with an explicitly null parent',
+    documents: [
+      elementDocument({
+        id: 'null-parent-component',
+        kind: 'component',
+        parent: null,
+        sourceFilename:
+          'groma/plans/test-revision/systems/groma/containers/viewer/components/'
+          + 'null-parent-component.md',
+      }),
+    ],
+    code: 'INVALID_PARENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/groma/containers/viewer/components/'
+      + 'null-parent-component.md',
+    message: /component "null-parent-component" requires a container parent id/,
   },
   {
     name: 'reports an unresolved relationship link at its source document',
