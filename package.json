@@ -7,10 +7,14 @@
   },
   "scripts": {
     "validate:architecture": "node scripts/validate-architecture.mjs",
+    "viewer": "bun run src/viewer/server.mjs",
     "test": "node --test",
     "check": "npm run validate:architecture && npm test"
   },
   "dependencies": {
-    "comark": "0.5.1"
+    "@xyflow/react": "12.11.2",
+    "comark": "0.5.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   }
 }

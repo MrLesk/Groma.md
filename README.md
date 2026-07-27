@@ -20,3 +20,20 @@ Install the locked dependency and validate every observed and planned revision:
 npm ci
 npm run check
 ```
+
+## Open the local viewer
+
+Start the read-only Revision 02 viewer with Bun, then open
+`http://127.0.0.1:3000`:
+
+```sh
+npm run viewer
+```
+
+The server loads one revision at startup. Choose another complete revision without
+changing any Markdown:
+
+```sh
+npm run viewer -- --revision observed
+npm run viewer -- --revision plan:03-code-observation
+```
