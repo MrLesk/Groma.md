@@ -11,7 +11,8 @@
   --rule: #b8ac91;
   --accent: #c84f31;
   --person: #d8b64c;
-  --addition: #3d7864;
+  /* 4.81:1 against --paper for 7px comparison badge text. */
+  --addition: #3a735f;
   /* 7.18:1 against --paper for 7px comparison badge text. */
   --modification: #75420e;
   --removal: #9f3f3f;
@@ -393,6 +394,7 @@ button:focus-visible {
   margin: -4px 0 7px;
   padding: 3px 5px 2px;
   border: 1px solid currentColor;
+  background: var(--paper);
   color: var(--ink-soft);
   font: 700 7px/1 var(--mono);
   letter-spacing: 0.07em;

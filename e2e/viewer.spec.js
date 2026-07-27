@@ -414,12 +414,24 @@ test('keeps the comparison containment union distinct and selectable', async ({
       .getByTestId('c4-node-moved-out-container')
       .getByText('Moved from Groma to Other system'),
   ).toBeVisible()
-  const modificationContrast = await computedContrastRatio(
-    page,
-    '[data-testid="c4-node-modified-container"] .comparison-badge',
-    '[data-testid="c4-node-modified-container"]',
-  )
-  expect(modificationContrast).toBeGreaterThanOrEqual(4.5)
+  const comparisonBadgeElements = {
+    addition: 'added-container',
+    modification: 'modified-container',
+    removal: 'removed-container',
+  }
+  for (const [status, elementId] of Object.entries(comparisonBadgeElements)) {
+    const badgeSelector =
+      `[data-testid="c4-node-${elementId}"] .comparison-badge`
+    const contrast = await computedContrastRatio(
+      page,
+      badgeSelector,
+      badgeSelector,
+    )
+    expect(
+      contrast,
+      `${status} badge contrast must retain a safety margin above 4.5:1`,
+    ).toBeGreaterThanOrEqual(4.75)
+  }
   await page.screenshot({
     path: testInfo.outputPath('comparison-containers.png'),
     fullPage: true,

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:25'
+updated_date: '2026-07-27 23:30'
 labels: []
 milestone: m-1
 dependencies:
@@ -72,6 +72,12 @@ Groma plans are complete desired architecture snapshots under groma/plans/<revis
 14. Implement dual-containment comparison/projection, provenance-aware relationship contributions, accessible node/change descriptions, and a documented high-contrast modification token without changing canonical models or adding writes/watchers.
 
 15. Re-run synthetic model/projection checks, full desktop/mobile/move browser flows, Bun build, canonical groma hashes/diff, Backlog finalization, and direct commit.
+
+16. Add a red browser regression that computes contrast from rendered styles for addition, modification, and removal badges and requires a safety margin above 4.5:1.
+
+17. Minimally darken only the addition token, rerun the focused and full browser/unit/build checks, verify canonical groma immutability, refinalize TASK-7, and commit.
+
+18. Give comparison badges the existing paper backing so all browser-computed foreground/background pairs are deterministic even over the removal gradient.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -94,10 +100,16 @@ Fresh correction verification: npm run check validated all 4 canonical revisions
 Quality review reopened TASK-7. Shared-element comparison currently copies only planned parentId, so moves can vanish from the observed containment view; relationship union strips observed/planned provenance; expandable accessible names omit comparison state; and the small modification badge token lacks an objective 4.5:1 contrast guarantee. Acceptance remains pending dual-containment projection, relationship-state labels, accessible change/move intent, and contrast evidence.
 
 Final quality correction completed with red/green evidence. Shared elements now preserve observedParentId and plannedParentId plus resolved parent names, and union projection makes moved containers visible in both old/new system views and moved components visible in both container views while assigning valid current React Flow parents. Relationships are deterministically classified by directed endpoints and exact content: exact matches are unchanged, same-endpoint replacements are modifications with observed/planned provenance, and endpoint or direction changes are removals plus additions. Visible and accessible edge labels include state, description, technology, and direction context. Expandable accessible names include addition/modification/removal/unchanged status and move intent. The modification token is #75420e, documented at 7.18:1 against paper and verified from computed browser styles at >=4.5:1.\n\nFresh verification: npm run check validated 4 canonical revisions and passed 61/61 tests; npm run test:viewer:browser passed 3/3 desktop/mobile, Plan 03, and six-container comparison flows with zero console/page errors; Bun production build bundled 140 modules; git diff --check passed; git diff --exit-code -- groma/ was empty; canonical groma hash remained 2b3a7934275b7c19b25b7edf2c2cc55246d279106df4b0f02ed30a7769ebe53c. A rendered 1440x1000 fixture screenshot was inspected and showed distinct unclipped nodes, move text, and interpretable relationship labels. The in-app Browser remained unavailable, so the committed Playwright fallback supplied interaction, DOM, accessibility, computed-style, console, and screenshot evidence.
+
+Contrast review reopened TASK-7: the addition badge foreground #3d7864 computes to 4.487:1 against the paper background, below WCAG 4.5:1. Scope is limited to a safety-margin token adjustment and browser-computed assertions for all rendered comparison badge states.
+
+Contrast correction completed with red/green browser evidence. The new all-state regression initially failed on addition at 4.487:1 against a 4.75:1 safety floor. The addition token was minimally darkened from #3d7864 to #3a735f (4.81:1 against paper). Because removal nodes use a transparent repeating gradient whose computed backgroundColor is transparent, all 7px comparison badges now use the existing opaque paper backing; the browser test measures each badge’s own computed foreground/background for addition, modification, and removal. Focused Playwright passed after the correction, and screenshot inspection showed the badge treatment remained visually consistent.
+
+Fresh final verification: npm run check validated all 4 canonical revisions and passed 61/61 tests; npm run test:viewer:browser passed 3/3 flows; Bun production build bundled 140 modules; git diff --check passed; git diff --exit-code -- groma/ was empty; canonical groma hash remained 2b3a7934275b7c19b25b7edf2c2cc55246d279106df4b0f02ed30a7769ebe53c. The in-app Browser connection was unavailable with an empty browser inventory, so the repository Playwright suite supplied computed-style, interaction, console, and screenshot evidence.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented a read-only observed-versus-plan comparison across system, container, and component views. The final projection preserves both containment histories for moves, classifies relationship changes with deterministic observed/planned provenance, exposes status and move intent visually and accessibly, retains count-aware non-overlapping union layouts, and uses an objectively contrast-safe modification token. Verified by 61 unit/architecture tests, 3 browser flows, a successful Bun production build, screenshot inspection, and unchanged canonical groma content/hash.
+Completed TASK-7 with contrast-safe comparison badges: addition now measures 4.81:1 against the paper backing, and browser-computed assertions enforce at least 4.75:1 for addition, modification, and removal. Verified by 61 unit/architecture tests, 3 browser flows, successful Bun build, screenshot inspection, and unchanged canonical groma content/hash.
 <!-- SECTION:FINAL_SUMMARY:END -->
