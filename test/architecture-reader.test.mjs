@@ -23,23 +23,22 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
     revisions.map(({ revision }) => revision),
     [
       {
-        id: 'observed',
         kind: 'observed',
         sourceDirectory: 'groma/observed',
       },
       {
-        id: '01-markdown-foundation',
         kind: 'plan',
+        name: '01-markdown-foundation',
         sourceDirectory: 'groma/plans/01-markdown-foundation',
       },
       {
-        id: '02-live-viewer',
         kind: 'plan',
+        name: '02-live-viewer',
         sourceDirectory: 'groma/plans/02-live-viewer',
       },
       {
-        id: '03-code-observation',
         kind: 'plan',
+        name: '03-code-observation',
         sourceDirectory: 'groma/plans/03-code-observation',
       },
     ],
@@ -102,6 +101,54 @@ test('returns each plan README as revision context rather than a C4 document', a
   }))
 })
 
+test('loads a plan named observed independently from the observed revision', async t => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-reader-'))
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
+
+  const fixtures = [
+    ['groma/observed', 'observed-person'],
+    ['groma/plans/observed', 'planned-person'],
+  ]
+  for (const [relativeRoot, id] of fixtures) {
+    const revisionRoot = path.join(temporaryRoot, relativeRoot)
+    await mkdir(path.join(revisionRoot, 'people'), { recursive: true })
+    await writeFile(path.join(revisionRoot, 'README.md'), `# ${id}\n`)
+    await writeFile(
+      path.join(revisionRoot, 'people', `${id}.md`),
+      `---\nid: ${id}\nkind: person\n---\n\n# ${id}\n\nA person.\n`,
+    )
+  }
+
+  const revisions = await loadArchitecture(temporaryRoot)
+
+  assert.deepEqual(
+    revisions.map(({ revision, context, documents }) => ({
+      revision,
+      context: context.sourceFilename,
+      documentId: documents[0].frontmatter.id,
+    })),
+    [
+      {
+        revision: {
+          kind: 'observed',
+          sourceDirectory: 'groma/observed',
+        },
+        context: 'groma/observed/README.md',
+        documentId: 'observed-person',
+      },
+      {
+        revision: {
+          kind: 'plan',
+          name: 'observed',
+          sourceDirectory: 'groma/plans/observed',
+        },
+        context: 'groma/plans/observed/README.md',
+        documentId: 'planned-person',
+      },
+    ],
+  )
+})
+
 test('stops a revision load and identifies the repository-relative file Comark could not parse', async t => {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-reader-'))
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
@@ -115,12 +162,38 @@ test('stops a revision load and identifies the repository-relative file Comark c
   )
 
   await assert.rejects(
-    loadRevision(temporaryRoot, 'observed'),
+    loadRevision(temporaryRoot, { kind: 'observed' }),
     error => {
       assert.ok(error instanceof ArchitectureReadError)
       assert.equal(error.sourceFilename, 'groma/observed/people/broken.md')
-      assert.equal(error.revision.id, 'observed')
+      assert.equal(error.revision.kind, 'observed')
+      assert.equal(error.stage, 'parse')
       assert.match(error.message, /groma\/observed\/people\/broken\.md/)
+      return true
+    },
+  )
+})
+
+test('reports filesystem failures without labeling them as Comark parse failures', async t => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-reader-'))
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
+
+  const revisionRoot = path.join(temporaryRoot, 'groma', 'observed')
+  await mkdir(path.join(revisionRoot, 'people'), { recursive: true })
+  await writeFile(
+    path.join(revisionRoot, 'people', 'person.md'),
+    '---\nid: person\nkind: person\n---\n\n# Person\n\nA person.\n',
+  )
+
+  await assert.rejects(
+    loadRevision(temporaryRoot, { kind: 'observed' }),
+    error => {
+      assert.ok(error instanceof ArchitectureReadError)
+      assert.equal(error.sourceFilename, 'groma/observed/README.md')
+      assert.equal(error.stage, 'read')
+      assert.equal(error.cause.code, 'ENOENT')
+      assert.match(error.message, /Could not read architecture Markdown/)
+      assert.doesNotMatch(error.message, /Comark could not parse/)
       return true
     },
   )

@@ -10,7 +10,7 @@
     "test": "node --test",
     "check": "npm run validate:architecture && npm test"
   },
-  "devDependencies": {
+  "dependencies": {
     "comark": "0.5.1"
   }
 }

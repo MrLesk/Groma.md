@@ -4,11 +4,19 @@ import path from 'node:path'
 import { parse } from 'comark'
 
 export class ArchitectureReadError extends Error {
-  constructor(sourceFilename, revision, cause) {
-    super(`Comark could not parse ${sourceFilename}: ${cause.message}`, { cause })
+  constructor(sourceFilename, revision, stage, cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    const message = stage === 'parse'
+      ? `Comark could not parse ${sourceFilename}: ${detail}`
+      : stage === 'read'
+        ? `Could not read architecture Markdown ${sourceFilename}: ${detail}`
+        : `Could not serialize Comark data for ${sourceFilename}: ${detail}`
+
+    super(message, { cause })
     this.name = 'ArchitectureReadError'
     this.sourceFilename = sourceFilename
     this.revision = revision
+    this.stage = stage
   }
 }
 
@@ -46,54 +54,66 @@ async function listMarkdownFiles(directory) {
   return files.sort()
 }
 
-function identifyRevision(revisionId) {
-  if (revisionId === 'observed') {
+function identifyRevision(revision) {
+  if (revision?.kind === 'observed') {
     return {
-      id: revisionId,
       kind: 'observed',
       sourceDirectory: 'groma/observed',
     }
   }
 
   if (
-    typeof revisionId !== 'string'
-    || revisionId.length === 0
-    || revisionId === '.'
-    || revisionId === '..'
-    || revisionId.includes('/')
-    || revisionId.includes('\\')
+    revision?.kind !== 'plan'
+    || typeof revision.name !== 'string'
+    || revision.name.length === 0
+    || revision.name === '.'
+    || revision.name === '..'
+    || revision.name.includes('/')
+    || revision.name.includes('\\')
   ) {
-    throw new TypeError('A plan revision must be identified by its directory name')
+    throw new TypeError(
+      'A revision must be { kind: "observed" } or { kind: "plan", name: "<directory>" }',
+    )
   }
 
   return {
-    id: revisionId,
     kind: 'plan',
-    sourceDirectory: `groma/plans/${revisionId}`,
+    name: revision.name,
+    sourceDirectory: `groma/plans/${revision.name}`,
   }
 }
 
 async function parseDocument(repositoryRoot, revision, filename) {
   const sourceFilename = repositoryRelative(repositoryRoot, filename)
+  let source
 
   try {
-    const source = await readFile(filename, 'utf8')
-    const tree = await parse(source)
-    const data = JSON.parse(JSON.stringify({
+    source = await readFile(filename, 'utf8')
+  } catch (error) {
+    throw new ArchitectureReadError(sourceFilename, revision, 'read', error)
+  }
+
+  let tree
+  try {
+    tree = await parse(source)
+  } catch (error) {
+    throw new ArchitectureReadError(sourceFilename, revision, 'parse', error)
+  }
+
+  try {
+    return deepFreeze(JSON.parse(JSON.stringify({
       sourceFilename,
       nodes: tree.nodes,
       frontmatter: tree.frontmatter,
-    }))
-
-    return deepFreeze(data)
+    })))
   } catch (error) {
-    throw new ArchitectureReadError(sourceFilename, revision, error)
+    throw new ArchitectureReadError(sourceFilename, revision, 'serialize', error)
   }
 }
 
-export async function loadRevision(repositoryRoot, revisionId) {
+export async function loadRevision(repositoryRoot, revisionDescriptor) {
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
-  const revision = deepFreeze(identifyRevision(revisionId))
+  const revision = deepFreeze(identifyRevision(revisionDescriptor))
   const revisionRoot = path.join(absoluteRepositoryRoot, revision.sourceDirectory)
   const contextFile = path.join(revisionRoot, 'README.md')
   const markdownFiles = await listMarkdownFiles(revisionRoot)
@@ -117,17 +137,18 @@ export async function loadArchitecture(repositoryRoot) {
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const plansRoot = path.join(absoluteRepositoryRoot, 'groma', 'plans')
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
-  const revisionIds = [
-    'observed',
+  const revisionDescriptors = [
+    { kind: 'observed' },
     ...planEntries
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name)
-      .sort(),
+      .sort()
+      .map(name => ({ kind: 'plan', name })),
   ]
   const revisions = []
 
-  for (const revisionId of revisionIds) {
-    revisions.push(await loadRevision(absoluteRepositoryRoot, revisionId))
+  for (const revision of revisionDescriptors) {
+    revisions.push(await loadRevision(absoluteRepositoryRoot, revision))
   }
 
   return deepFreeze(revisions)
