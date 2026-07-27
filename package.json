@@ -1,0 +1,13 @@
+{
+  "name": "groma",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate:architecture": "node scripts/validate-architecture.mjs",
+    "test": "node --test",
+    "check": "npm run validate:architecture && npm test"
+  },
+  "devDependencies": {
+    "comark": "0.5.1"
+  }
+}

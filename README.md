@@ -8,3 +8,15 @@ The Markdown must remain useful even if Groma disappears.
 
 The [component Markdown contract](groma/README.md) defines the canonical architecture
 format.
+
+The [observed architecture](groma/observed/README.md) is the current materialized
+revision, and `groma/plans/` contains complete desired revisions.
+
+## Validate the Markdown
+
+Install the locked dependency and validate every observed and planned revision:
+
+```sh
+npm ci
+npm run check
+```
