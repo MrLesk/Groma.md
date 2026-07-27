@@ -27,9 +27,36 @@ const boundaryLayout = {
     selectedContainerBottomPadding: 62,
   },
 }
+const comparisonLabels = {
+  addition: 'Planned addition',
+  modification: 'Planned modification',
+  removal: 'Planned removal',
+  unchanged: 'Unchanged',
+}
 
 function compareStrings(left, right) {
   return left < right ? -1 : left > right ? 1 : 0
+}
+
+function comparisonData(element) {
+  if (!element.comparisonStatus) return {}
+
+  const comparisonLabel = comparisonLabels[element.comparisonStatus]
+  const moveDescription = element.comparisonMove
+    ? `Moved from ${element.comparisonMove.observedParentName} `
+      + `to ${element.comparisonMove.plannedParentName}.`
+    : null
+
+  return {
+    comparisonStatus: element.comparisonStatus,
+    comparisonLabel,
+    comparisonDescription: moveDescription
+      ? `${comparisonLabel}. ${moveDescription}`
+      : `${comparisonLabel}.`,
+    ...(element.comparisonMove ? {
+      comparisonMove: element.comparisonMove,
+    } : {}),
+  }
 }
 
 function elementNode(element, position, options = {}) {
@@ -51,9 +78,7 @@ function elementNode(element, position, options = {}) {
       description: element.description,
       external: element.external,
       expandable: options.expandable === true,
-      ...(element.comparisonStatus ? {
-        comparisonStatus: element.comparisonStatus,
-      } : {}),
+      ...comparisonData(element),
     },
   }
 }
@@ -77,9 +102,7 @@ function boundaryNode(element, position, dimensions, options = {}) {
       description: element.description,
       external: element.external,
       expandable: false,
-      ...(element.comparisonStatus ? {
-        comparisonStatus: element.comparisonStatus,
-      } : {}),
+      ...comparisonData(element),
     },
   }
 }
@@ -108,39 +131,147 @@ function stackedContentHeight({
   )
 }
 
+function elementParentId(element, containment) {
+  if (!element.comparisonStatus || containment === 'current') {
+    return element.parentId
+  }
+  if (containment === 'observed') {
+    return element.comparisonStatus === 'addition'
+      ? null
+      : element.observedParentId
+  }
+  return element.comparisonStatus === 'removal'
+    ? null
+    : element.plannedParentId
+}
+
+function elementParentIds(element) {
+  if (!element.comparisonStatus) {
+    return element.parentId ? [element.parentId] : []
+  }
+
+  const parentIds = element.comparisonStatus === 'addition'
+    ? [element.plannedParentId]
+    : element.comparisonStatus === 'removal'
+      ? [element.observedParentId]
+      : [element.observedParentId, element.plannedParentId]
+  return [...new Set(parentIds.filter(Boolean))]
+}
+
+function relationshipContributions(relationship) {
+  if (!relationship.comparisonStatus) {
+    return [{
+      relationship,
+      containment: 'current',
+      labelPrefix: null,
+      comparisonStatus: null,
+    }]
+  }
+  if (relationship.comparisonStatus === 'addition') {
+    return [{
+      relationship: relationship.planned,
+      containment: 'planned',
+      labelPrefix: comparisonLabels.addition,
+      comparisonStatus: 'addition',
+    }]
+  }
+  if (relationship.comparisonStatus === 'removal') {
+    return [{
+      relationship: relationship.observed,
+      containment: 'observed',
+      labelPrefix: comparisonLabels.removal,
+      comparisonStatus: 'removal',
+    }]
+  }
+  if (relationship.comparisonStatus === 'modification') {
+    return [
+      {
+        relationship: relationship.observed,
+        containment: 'observed',
+        labelPrefix: 'Observed',
+        comparisonStatus: 'modification',
+      },
+      {
+        relationship: relationship.planned,
+        containment: 'planned',
+        labelPrefix: comparisonLabels.modification,
+        comparisonStatus: 'modification',
+      },
+    ]
+  }
+
+  return [
+    {
+      relationship: relationship.observed,
+      containment: 'observed',
+      labelPrefix: comparisonLabels.unchanged,
+      comparisonStatus: 'unchanged',
+    },
+    {
+      relationship: relationship.planned,
+      containment: 'planned',
+      labelPrefix: comparisonLabels.unchanged,
+      comparisonStatus: 'unchanged',
+    },
+  ]
+}
+
 function connectedContextIds(model, focalSystemId, elementsById) {
   const rootIdByElementId = new Map()
 
-  function rootId(elementId) {
-    if (rootIdByElementId.has(elementId)) {
-      return rootIdByElementId.get(elementId)
+  function rootId(elementId, containment) {
+    const cacheKey = `${containment}\0${elementId}`
+    if (rootIdByElementId.has(cacheKey)) {
+      return rootIdByElementId.get(cacheKey)
     }
 
     const visited = []
     let element = elementsById.get(elementId)
-    while (element?.parentId) {
+    let parentId = element ? elementParentId(element, containment) : null
+    while (element && parentId) {
       visited.push(element.id)
-      element = elementsById.get(element.parentId)
+      element = elementsById.get(parentId)
+      parentId = element ? elementParentId(element, containment) : null
     }
 
     const id = element?.id ?? null
-    rootIdByElementId.set(elementId, id)
+    rootIdByElementId.set(cacheKey, id)
     for (const visitedId of visited) {
-      rootIdByElementId.set(visitedId, id)
+      rootIdByElementId.set(`${containment}\0${visitedId}`, id)
     }
     return id
   }
 
   const connectedIds = new Set()
   for (const relationship of model.relationships) {
-    const sourceRootId = rootId(relationship.sourceId)
-    const targetRootId = rootId(relationship.targetId)
+    for (const contribution of relationshipContributions(relationship)) {
+      const sourceRootId = rootId(
+        contribution.relationship.sourceId,
+        contribution.containment,
+      )
+      const targetRootId = rootId(
+        contribution.relationship.targetId,
+        contribution.containment,
+      )
 
-    if (sourceRootId === focalSystemId && targetRootId !== focalSystemId) {
-      connectedIds.add(targetRootId)
+      if (sourceRootId === focalSystemId && targetRootId !== focalSystemId) {
+        connectedIds.add(targetRootId)
+      }
+      if (targetRootId === focalSystemId && sourceRootId !== focalSystemId) {
+        connectedIds.add(sourceRootId)
+      }
     }
-    if (targetRootId === focalSystemId && sourceRootId !== focalSystemId) {
-      connectedIds.add(sourceRootId)
+  }
+  for (const element of model.elements) {
+    if (!element.comparisonMove) continue
+
+    const observedRootId = rootId(element.id, 'observed')
+    const plannedRootId = rootId(element.id, 'planned')
+    if (observedRootId === focalSystemId && plannedRootId !== focalSystemId) {
+      connectedIds.add(plannedRootId)
+    }
+    if (plannedRootId === focalSystemId && observedRootId !== focalSystemId) {
+      connectedIds.add(observedRootId)
     }
   }
 
@@ -320,37 +451,58 @@ function relationshipEdges(model, nodes, elementsById) {
   const nodeById = new Map(nodes.map(node => [node.id, node]))
   const grouped = new Map()
 
-  function displayedNodeId(elementId) {
+  function displayedNodeId(elementId, containment) {
     let element = elementsById.get(elementId)
     while (element) {
       const displayed = nodeIdByElementId.get(element.id)
       if (displayed) {
         return displayed
       }
-      element = element.parentId ? elementsById.get(element.parentId) : null
+      const parentId = elementParentId(element, containment)
+      element = parentId ? elementsById.get(parentId) : null
     }
     return null
   }
 
   for (const relationship of model.relationships) {
-    const source = displayedNodeId(relationship.sourceId)
-    const target = displayedNodeId(relationship.targetId)
-    if (!source || !target || source === target) {
-      continue
-    }
+    for (const contribution of relationshipContributions(relationship)) {
+      const source = displayedNodeId(
+        contribution.relationship.sourceId,
+        contribution.containment,
+      )
+      const target = displayedNodeId(
+        contribution.relationship.targetId,
+        contribution.containment,
+      )
+      if (!source || !target || source === target) {
+        continue
+      }
 
-    const key = `${source}\0${target}`
-    let group = grouped.get(key)
-    if (!group) {
-      group = { source, target, labels: [] }
-      grouped.set(key, group)
-    }
+      const key = `${source}\0${target}`
+      let group = grouped.get(key)
+      if (!group) {
+        group = {
+          source,
+          target,
+          labels: [],
+          comparisonStatuses: new Set(),
+        }
+        grouped.set(key, group)
+      }
 
-    const label = relationship.technology
-      ? `${relationship.description} · ${relationship.technology}`
-      : relationship.description
-    if (!group.labels.includes(label)) {
-      group.labels.push(label)
+      const contentLabel = contribution.relationship.technology
+        ? `${contribution.relationship.description} · `
+          + contribution.relationship.technology
+        : contribution.relationship.description
+      const label = contribution.labelPrefix
+        ? `${contribution.labelPrefix} · ${contentLabel}`
+        : contentLabel
+      if (!group.labels.includes(label)) {
+        group.labels.push(label)
+      }
+      if (contribution.comparisonStatus) {
+        group.comparisonStatuses.add(contribution.comparisonStatus)
+      }
     }
   }
 
@@ -378,6 +530,9 @@ function relationshipEdges(model, nodes, elementsById) {
           sourceName,
           targetName,
           labels: [...group.labels],
+          ...(group.comparisonStatuses.size > 0 ? {
+            comparisonStatuses: [...group.comparisonStatuses].sort(compareStrings),
+          } : {}),
           accessibleLabel,
         },
         markerEnd: { type: 'arrowclosed' },
@@ -414,12 +569,11 @@ export function projectArchitectureView(
   const childrenByParent = new Map()
 
   for (const element of projectedModel.elements) {
-    if (!element.parentId) {
-      continue
+    for (const parentId of elementParentIds(element)) {
+      const children = childrenByParent.get(parentId) ?? []
+      children.push(element)
+      childrenByParent.set(parentId, children)
     }
-    const children = childrenByParent.get(element.parentId) ?? []
-    children.push(element)
-    childrenByParent.set(element.parentId, children)
   }
   for (const children of childrenByParent.values()) {
     children.sort((left, right) => compareStrings(left.id, right.id))
@@ -456,7 +610,7 @@ export function projectArchitectureView(
     if (
       !selectedContainer
       || selectedContainer.kind !== 'container'
-      || selectedContainer.parentId !== focalSystemId
+      || !elementParentIds(selectedContainer).includes(focalSystemId)
     ) {
       throw new TypeError(
         `Focused element "${focusPath[1]}" must be a container of "${focalSystemId}"`,

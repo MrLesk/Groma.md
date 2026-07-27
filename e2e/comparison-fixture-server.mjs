@@ -21,6 +21,20 @@ function frontmatter(fields) {
   ].join('\n')
 }
 
+function relationshipTable(rows) {
+  if (rows.length === 0) return ''
+
+  return [
+    '\n## Relationships\n',
+    '| Target | Description | Technology |',
+    '| --- | --- | --- |',
+    ...rows.map(row => {
+      return `| [${row.target}](${row.href}) | ${row.description} | ${row.technology} |`
+    }),
+    '',
+  ].join('\n')
+}
+
 async function writeDocument(
   revisionRoot,
   relativeFilename,
@@ -50,13 +64,36 @@ async function writeRevision(kind) {
     { id: 'architect', kind: 'person' },
     'Architect',
     'Studies the comparison.',
-    [
-      '\n## Relationships\n',
-      '| Target | Description | Technology |',
-      '| --- | --- | --- |',
-      '| [Groma](../systems/groma/system.md) | Studies Groma | Browser |',
-      '',
-    ].join('\n'),
+    relationshipTable([
+      {
+        target: 'Groma',
+        href: '../systems/groma/system.md',
+        description: isPlan ? 'Studies planned Groma' : 'Studies current Groma',
+        technology: isPlan ? 'Events' : 'HTTP',
+      },
+      {
+        target: 'Stable container',
+        href: '../systems/groma/containers/stable-container/container.md',
+        description: 'Uses stable container',
+        technology: 'Browser',
+      },
+      ...(isPlan ? [{
+        target: 'Added container',
+        href: '../systems/groma/containers/added-container/container.md',
+        description: 'Uses planned container',
+        technology: 'Browser',
+      }] : [{
+        target: 'Removed container',
+        href: '../systems/groma/containers/removed-container/container.md',
+        description: 'Uses observed container',
+        technology: 'Browser',
+      }, {
+        target: 'Other system',
+        href: '../systems/other-system/system.md',
+        description: 'Sends current signal',
+        technology: 'Events',
+      }]),
+    ]),
   )
   await writeDocument(
     revisionRoot,
@@ -64,6 +101,19 @@ async function writeRevision(kind) {
     { id: 'groma', kind: 'system' },
     'Groma',
     'Keeps architecture readable.',
+  )
+  await writeDocument(
+    revisionRoot,
+    'systems/other-system/system.md',
+    { id: 'other-system', kind: 'system', external: true },
+    'Other system',
+    'Receives and sends moved architecture.',
+    relationshipTable(isPlan ? [{
+      target: 'Architect',
+      href: '../../people/architect.md',
+      description: 'Sends planned signal',
+      technology: 'Events',
+    }] : []),
   )
 
   const containers = [
@@ -93,14 +143,29 @@ async function writeRevision(kind) {
       description: 'Exists only in planned architecture.',
       include: isPlan,
     },
+    {
+      id: 'moved-out-container',
+      title: 'Moved out container',
+      description: 'Moves from Groma to the other system.',
+      parent: isPlan ? 'other-system' : 'groma',
+      include: true,
+    },
+    {
+      id: 'moved-in-container',
+      title: 'Moved in container',
+      description: 'Moves from the other system to Groma.',
+      parent: isPlan ? 'groma' : 'other-system',
+      include: true,
+    },
   ]
 
   for (const container of containers.filter(candidate => candidate.include)) {
-    const containerRoot = `systems/groma/containers/${container.id}`
+    const parent = container.parent ?? 'groma'
+    const containerRoot = `systems/${parent}/containers/${container.id}`
     await writeDocument(
       revisionRoot,
       `${containerRoot}/container.md`,
-      { id: container.id, kind: 'container', parent: 'groma' },
+      { id: container.id, kind: 'container', parent },
       container.title,
       container.description,
     )
@@ -116,6 +181,19 @@ async function writeRevision(kind) {
       `Makes ${container.title.toLowerCase()} selectable.`,
     )
   }
+
+  const travellingParent = isPlan ? 'modified-container' : 'stable-container'
+  await writeDocument(
+    revisionRoot,
+    `systems/groma/containers/${travellingParent}/components/travelling-worker.md`,
+    {
+      id: 'travelling-worker',
+      kind: 'component',
+      parent: travellingParent,
+    },
+    'Travelling worker',
+    'Moves between stable and modified containers.',
+  )
 }
 
 await Promise.all([writeRevision('observed'), writeRevision('plan')])

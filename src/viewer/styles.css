@@ -12,7 +12,8 @@
   --accent: #c84f31;
   --person: #d8b64c;
   --addition: #3d7864;
-  --modification: #b36a23;
+  /* 7.18:1 against --paper for 7px comparison badge text. */
+  --modification: #75420e;
   --removal: #9f3f3f;
   --mono: "Azeret Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
@@ -398,6 +399,22 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
+.comparison-detail {
+  display: block;
+  overflow: hidden;
+  width: 100%;
+  margin: -3px 0 6px;
+  color: var(--modification);
+  font: 700 7px/1.25 var(--mono);
+  letter-spacing: 0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c4-node:has(.comparison-detail) .node-description {
+  -webkit-line-clamp: 1;
+}
+
 .is-comparison-addition .comparison-badge {
   color: var(--addition);
 }
@@ -511,7 +528,7 @@ button:focus-visible {
   border-color: var(--modification);
   box-shadow:
     inset 0 0 0 4px rgba(244, 239, 223, 0.65),
-    inset 0 0 0 7px rgba(179, 106, 35, 0.12);
+    inset 0 0 0 7px rgba(117, 66, 14, 0.12);
 }
 
 .c4-boundary.is-comparison-removal {
@@ -529,6 +546,15 @@ button:focus-visible {
   position: absolute;
   top: 18px;
   right: 20px;
+  margin: 0;
+}
+
+.c4-boundary > .comparison-detail {
+  position: absolute;
+  top: 40px;
+  right: 20px;
+  width: auto;
+  max-width: 310px;
   margin: 0;
 }
 

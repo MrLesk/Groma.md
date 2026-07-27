@@ -27,6 +27,13 @@ function relationshipKey(relationship) {
   ].join('\0')
 }
 
+function relationshipEndpointKey(relationship) {
+  return [
+    relationship.sourceId,
+    relationship.targetId,
+  ].join('\0')
+}
+
 function outgoingRelationshipsByElement(model) {
   const outgoing = new Map()
 
@@ -73,6 +80,139 @@ function equivalentArchitectureContent(
   )
 }
 
+function comparisonMove(
+  observedElement,
+  plannedElement,
+  observedById,
+  plannedById,
+) {
+  if (observedElement.parentId === plannedElement.parentId) {
+    return null
+  }
+
+  return {
+    observedParentId: observedElement.parentId,
+    observedParentName: observedById.get(observedElement.parentId)?.name
+      ?? observedElement.parentId
+      ?? 'Top level',
+    plannedParentId: plannedElement.parentId,
+    plannedParentName: plannedById.get(plannedElement.parentId)?.name
+      ?? plannedElement.parentId
+      ?? 'Top level',
+  }
+}
+
+function groupedRelationships(model) {
+  const grouped = new Map()
+
+  for (const relationship of model.relationships) {
+    const content = relationshipContent(relationship)
+    const key = relationshipEndpointKey(content)
+    const relationships = grouped.get(key) ?? []
+    relationships.push(content)
+    grouped.set(key, relationships)
+  }
+  for (const relationships of grouped.values()) {
+    relationships.sort((left, right) => {
+      return compareStrings(relationshipKey(left), relationshipKey(right))
+    })
+  }
+
+  return grouped
+}
+
+function comparedRelationship(comparisonStatus, observed, planned) {
+  const displayed = planned ?? observed
+
+  return {
+    ...displayed,
+    comparisonStatus,
+    observed,
+    planned,
+  }
+}
+
+function compareRelationships(observedModel, plannedModel) {
+  const observedByEndpoint = groupedRelationships(observedModel)
+  const plannedByEndpoint = groupedRelationships(plannedModel)
+  const endpointKeys = new Set([
+    ...observedByEndpoint.keys(),
+    ...plannedByEndpoint.keys(),
+  ])
+  const relationships = []
+
+  for (const endpointKey of [...endpointKeys].sort(compareStrings)) {
+    const observed = [...(observedByEndpoint.get(endpointKey) ?? [])]
+    const planned = [...(plannedByEndpoint.get(endpointKey) ?? [])]
+    const unmatchedObserved = []
+    const unmatchedPlanned = [...planned]
+
+    for (const observedRelationship of observed) {
+      const exactIndex = unmatchedPlanned.findIndex(plannedRelationship => {
+        return relationshipKey(plannedRelationship)
+          === relationshipKey(observedRelationship)
+      })
+      if (exactIndex === -1) {
+        unmatchedObserved.push(observedRelationship)
+        continue
+      }
+
+      const [plannedRelationship] = unmatchedPlanned.splice(exactIndex, 1)
+      relationships.push(comparedRelationship(
+        comparisonStatuses.unchanged,
+        observedRelationship,
+        plannedRelationship,
+      ))
+    }
+
+    const replacementCount = Math.min(
+      unmatchedObserved.length,
+      unmatchedPlanned.length,
+    )
+    for (let index = 0; index < replacementCount; index += 1) {
+      relationships.push(comparedRelationship(
+        comparisonStatuses.modification,
+        unmatchedObserved[index],
+        unmatchedPlanned[index],
+      ))
+    }
+    for (const observedRelationship of unmatchedObserved.slice(replacementCount)) {
+      relationships.push(comparedRelationship(
+        comparisonStatuses.removal,
+        observedRelationship,
+        null,
+      ))
+    }
+    for (const plannedRelationship of unmatchedPlanned.slice(replacementCount)) {
+      relationships.push(comparedRelationship(
+        comparisonStatuses.addition,
+        null,
+        plannedRelationship,
+      ))
+    }
+  }
+
+  const statusOrder = new Map([
+    [comparisonStatuses.modification, 0],
+    [comparisonStatuses.unchanged, 1],
+    [comparisonStatuses.removal, 2],
+    [comparisonStatuses.addition, 3],
+  ])
+  return relationships.sort((left, right) => {
+    const endpointComparison = compareStrings(
+      relationshipEndpointKey(left),
+      relationshipEndpointKey(right),
+    )
+    if (endpointComparison !== 0) return endpointComparison
+
+    const statusComparison = statusOrder.get(left.comparisonStatus)
+      - statusOrder.get(right.comparisonStatus)
+    return statusComparison !== 0
+      ? statusComparison
+      : compareStrings(relationshipKey(left), relationshipKey(right))
+  })
+}
+
 export function compareArchitectureModels(observedModel, plannedModel) {
   const observedById = new Map(
     observedModel.elements.map(element => [element.id, element]),
@@ -93,17 +233,30 @@ export function compareArchitectureModels(observedModel, plannedModel) {
         return {
           ...plannedElement,
           comparisonStatus: comparisonStatuses.addition,
+          observedParentId: null,
+          plannedParentId: plannedElement.parentId,
         }
       }
       if (!plannedElement) {
         return {
           ...observedElement,
           comparisonStatus: comparisonStatuses.removal,
+          observedParentId: observedElement.parentId,
+          plannedParentId: null,
         }
       }
 
+      const move = comparisonMove(
+        observedElement,
+        plannedElement,
+        observedById,
+        plannedById,
+      )
       return {
         ...plannedElement,
+        observedParentId: observedElement.parentId,
+        plannedParentId: plannedElement.parentId,
+        ...(move ? { comparisonMove: move } : {}),
         comparisonStatus: equivalentArchitectureContent(
           observedElement,
           plannedElement,
@@ -115,20 +268,9 @@ export function compareArchitectureModels(observedModel, plannedModel) {
       }
     })
 
-  const relationshipsByKey = new Map()
-  for (const relationship of [
-    ...observedModel.relationships,
-    ...plannedModel.relationships,
-  ]) {
-    const content = relationshipContent(relationship)
-    relationshipsByKey.set(relationshipKey(content), content)
-  }
-
   return {
     revision: plannedModel.revision,
     elements,
-    relationships: [...relationshipsByKey.values()].sort((left, right) => {
-      return compareStrings(relationshipKey(left), relationshipKey(right))
-    }),
+    relationships: compareRelationships(observedModel, plannedModel),
   }
 }

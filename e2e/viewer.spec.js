@@ -141,6 +141,33 @@ async function expectNoOverlap(page, testIds) {
   expect(overlaps).toEqual([])
 }
 
+async function computedContrastRatio(page, foregroundSelector, backgroundSelector) {
+  return page.evaluate(({ foregroundSelector, backgroundSelector }) => {
+    function channels(color) {
+      return color.match(/[\d.]+/g).slice(0, 3).map(Number)
+    }
+    function luminance(color) {
+      const [red, green, blue] = channels(color).map(channel => {
+        const normalized = channel / 255
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    const foreground = getComputedStyle(
+      document.querySelector(foregroundSelector),
+    ).color
+    const background = getComputedStyle(
+      document.querySelector(backgroundSelector),
+    ).backgroundColor
+    const values = [luminance(foreground), luminance(background)]
+      .sort((left, right) => right - left)
+    return (values[0] + 0.05) / (values[1] + 0.05)
+  }, { foregroundSelector, backgroundSelector })
+}
+
 async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await page.setViewportSize(viewport)
   await page.goto('/')
@@ -178,8 +205,8 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   ).toHaveAttribute(
     'aria-label',
     'Relationship from Coding agent to Groma: '
-      + 'Reads plans and records materialized architecture · Markdown and Git; '
-      + 'Inspects architecture during implementation · Local web interface',
+      + 'Unchanged · Reads plans and records materialized architecture · Markdown and Git; '
+      + 'Planned addition · Inspects architecture during implementation · Local web interface',
   )
   if (viewport.name === 'mobile') {
     await expectReadableNode(page, 'groma', 145)
@@ -315,7 +342,7 @@ test('switches directly between component-bearing sibling containers in Plan 03'
   expect(browserErrors).toEqual([])
 })
 
-test('keeps a four-state union of containers distinct and selectable', async ({
+test('keeps the comparison containment union distinct and selectable', async ({
   page,
 }, testInfo) => {
   const browserMessages = []
@@ -330,12 +357,30 @@ test('keeps a four-state union of containers distinct and selectable', async ({
 
   await page.setViewportSize({ width: 1440, height: 960 })
   await page.goto('http://127.0.0.1:4179')
+  const relationshipEdges = page.locator('.react-flow__edge[role="group"]')
+  await expect(relationshipEdges).not.toHaveCount(0)
+  const relationshipNames = await relationshipEdges
+    .evaluateAll(edges => edges.map(edge => edge.getAttribute('aria-label')))
+  expect(relationshipNames.join('\n')).toContain(
+    'Observed · Studies current Groma · HTTP',
+  )
+  expect(relationshipNames.join('\n')).toContain(
+    'Planned modification · Studies planned Groma · Events',
+  )
+  expect(relationshipNames.join('\n')).toContain(
+    'Planned removal · Sends current signal · Events',
+  )
+  expect(relationshipNames.join('\n')).toContain(
+    'Planned addition · Sends planned signal · Events',
+  )
   await page.getByRole('button', { name: 'Open Groma system' }).click()
   await expect(page.getByTestId('view-container')).toBeVisible()
 
   const containers = [
     ['added-container', 'Added container', 'addition'],
     ['modified-container', 'Modified container', 'modification'],
+    ['moved-in-container', 'Moved in container', 'modification'],
+    ['moved-out-container', 'Moved out container', 'modification'],
     ['removed-container', 'Removed container', 'removal'],
     ['stable-container', 'Stable container', 'unchanged'],
   ]
@@ -349,15 +394,51 @@ test('keeps a four-state union of containers distinct and selectable', async ({
     page,
     containers.map(([elementId]) => `c4-node-${elementId}`),
   )
+  const accessibleContainerNames = [
+    'Open Added container container. Planned addition.',
+    'Open Modified container container. Planned modification.',
+    'Open Moved in container container. '
+      + 'Planned modification. Moved from Other system to Groma.',
+    'Open Moved out container container. '
+      + 'Planned modification. Moved from Groma to Other system.',
+    'Open Removed container container. Planned removal.',
+    'Open Stable container container. Unchanged.',
+  ]
+  for (const accessibleName of accessibleContainerNames) {
+    await expect(
+      page.getByRole('button', { name: accessibleName }),
+    ).toBeVisible()
+  }
+  await expect(
+    page
+      .getByTestId('c4-node-moved-out-container')
+      .getByText('Moved from Groma to Other system'),
+  ).toBeVisible()
+  const modificationContrast = await computedContrastRatio(
+    page,
+    '[data-testid="c4-node-modified-container"] .comparison-badge',
+    '[data-testid="c4-node-modified-container"]',
+  )
+  expect(modificationContrast).toBeGreaterThanOrEqual(4.5)
   await page.screenshot({
-    path: testInfo.outputPath('four-state-containers.png'),
+    path: testInfo.outputPath('comparison-containers.png'),
     fullPage: true,
   })
 
   for (const [elementId, name] of containers) {
-    await page.getByRole('button', { name: `Open ${name} container` }).click()
+    await page.getByRole('button', {
+      name: new RegExp(`^Open ${name} container`),
+    }).click()
     await expect(page.getByTestId(`c4-boundary-${elementId}`)).toBeVisible()
     await expect(page.getByTestId('view-component')).toBeVisible()
+    if (elementId === 'stable-container' || elementId === 'modified-container') {
+      await expect(page.getByTestId('c4-node-travelling-worker')).toBeVisible()
+      await expect(
+        page
+          .getByTestId('c4-node-travelling-worker')
+          .getByText('Moved from Stable container to Modified container'),
+      ).toBeVisible()
+    }
     await page.getByRole('button', { name: 'Previous level' }).click()
     await expect(page.getByTestId('view-container')).toBeVisible()
   }

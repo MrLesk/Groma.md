@@ -242,6 +242,93 @@ function syntheticComparisonModels() {
   }
 }
 
+function syntheticMoveModels() {
+  const roots = [
+    {
+      id: 'groma',
+      kind: 'system',
+      name: 'Groma',
+      description: 'Focal system.',
+      parentId: null,
+      external: false,
+    },
+    {
+      id: 'other-system',
+      kind: 'system',
+      name: 'Other system',
+      description: 'Neighboring system.',
+      parentId: null,
+      external: true,
+    },
+  ]
+  const stableContainers = [
+    {
+      id: 'container-a',
+      kind: 'container',
+      name: 'Container A',
+      description: 'First container.',
+      parentId: 'groma',
+      external: false,
+    },
+    {
+      id: 'container-b',
+      kind: 'container',
+      name: 'Container B',
+      description: 'Second container.',
+      parentId: 'groma',
+      external: false,
+    },
+  ]
+  const movedContainers = [
+    {
+      id: 'moved-out',
+      kind: 'container',
+      name: 'Moved out',
+      description: 'Moves out of Groma.',
+      external: false,
+    },
+    {
+      id: 'moved-in',
+      kind: 'container',
+      name: 'Moved in',
+      description: 'Moves into Groma.',
+      external: false,
+    },
+  ]
+  const travellingComponent = {
+    id: 'travelling-component',
+    kind: 'component',
+    name: 'Travelling component',
+    description: 'Moves between containers.',
+    external: false,
+  }
+
+  return {
+    observed: {
+      revision: { kind: 'observed' },
+      elements: [
+        ...roots,
+        ...stableContainers,
+        { ...movedContainers[0], parentId: 'groma' },
+        { ...movedContainers[1], parentId: 'other-system' },
+        { ...travellingComponent, parentId: 'container-a' },
+      ],
+      relationships: [],
+    },
+    planned: {
+      revision: { kind: 'plan', name: 'moves' },
+      elements: [
+        ...roots,
+        ...stableContainers,
+        { ...movedContainers[0], parentId: 'other-system' },
+        { ...movedContainers[1], parentId: 'groma' },
+        { ...travellingComponent, parentId: 'container-b' },
+      ],
+      relationships: [],
+    },
+  }
+}
+
 function modelWithSyntheticContext() {
   const elements = [
     {
@@ -492,6 +579,72 @@ test('comparison boundaries contain every child without overlapping union peers'
   }
 })
 
+test('comparison projects moved containers in both old and new system views', () => {
+  const { observed, planned } = syntheticMoveModels()
+  const groma = projectArchitectureView(
+    planned,
+    'groma',
+    ['groma'],
+    { observedModel: observed },
+  )
+  const otherSystem = projectArchitectureView(
+    planned,
+    'other-system',
+    ['other-system'],
+    { observedModel: observed },
+  )
+
+  for (const view of [groma, otherSystem]) {
+    const boundary = nodeByElementId(view, view.focusPath[0])
+    for (const elementId of ['moved-in', 'moved-out']) {
+      const moved = nodeByElementId(view, elementId)
+      assert.ok(moved, `${elementId} must remain visible in ${view.focusPath[0]}`)
+      assert.equal(moved.parentId, boundary.id)
+      assert.equal(moved.data.comparisonStatus, 'modification')
+    }
+  }
+
+  assert.deepEqual(nodeByElementId(groma, 'moved-out').data.comparisonMove, {
+    observedParentId: 'groma',
+    observedParentName: 'Groma',
+    plannedParentId: 'other-system',
+    plannedParentName: 'Other system',
+  })
+  assert.equal(
+    nodeByElementId(groma, 'moved-out').data.comparisonDescription,
+    'Planned modification. Moved from Groma to Other system.',
+  )
+  assert.equal(
+    nodeByElementId(groma, 'moved-in').data.comparisonDescription,
+    'Planned modification. Moved from Other system to Groma.',
+  )
+})
+
+test('comparison projects a moved component in both container views', () => {
+  const { observed, planned } = syntheticMoveModels()
+
+  for (const [containerId, expectedBoundaryId] of [
+    ['container-a', 'boundary:container-a'],
+    ['container-b', 'boundary:container-b'],
+  ]) {
+    const view = projectArchitectureView(
+      planned,
+      'groma',
+      ['groma', containerId],
+      { observedModel: observed },
+    )
+    const moved = nodeByElementId(view, 'travelling-component')
+
+    assert.ok(moved, `travelling component must remain visible in ${containerId}`)
+    assert.equal(moved.parentId, expectedBoundaryId)
+    assert.equal(moved.data.comparisonStatus, 'modification')
+    assert.equal(
+      moved.data.comparisonDescription,
+      'Planned modification. Moved from Container A to Container B.',
+    )
+  }
+})
+
 test('comparison draws component additions, modifications, removals, and unchanged content', () => {
   const { observed, planned } = syntheticComparisonModels()
   const view = projectArchitectureView(
@@ -580,6 +733,16 @@ test('comparison treats outgoing relationship content as source element architec
   assert.equal(
     nodeByElementId(view, 'groma').data.comparisonStatus,
     'unchanged',
+  )
+  assert.deepEqual(view.edges[0].data.labels, [
+    'Observed · Studies architecture · Browser',
+    'Planned modification · Studies architecture · Planned desktop app',
+  ])
+  assert.equal(
+    view.edges[0].data.accessibleLabel,
+    'Relationship from Architect to Groma: '
+      + 'Observed · Studies architecture · Browser; '
+      + 'Planned modification · Studies architecture · Planned desktop app',
   )
 })
 

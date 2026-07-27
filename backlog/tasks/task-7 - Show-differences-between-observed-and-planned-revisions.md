@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:14'
+updated_date: '2026-07-27 23:25'
 labels: []
 milestone: m-1
 dependencies:
@@ -23,6 +23,7 @@ modified_files:
   - src/viewer/server.mjs
   - src/viewer/styles.css
   - src/viewer/viewer-app.jsx
+  - test/architecture-comparison.test.mjs
   - test/viewer-projection.test.mjs
 priority: high
 type: feature
@@ -61,6 +62,16 @@ Groma plans are complete desired architecture snapshots under groma/plans/<revis
 9. Replace fixed container/component boundary heights with deterministic count-aware geometry while preserving the existing columns, peer parentage, fit behavior, and interaction contract.
 
 10. Verify the synthetic browser flow, the existing desktop/mobile and Plan 03 flows, full repository checks, Bun build, clean diff, and no canonical groma changes; inspect screenshots before refinalizing and committing.
+
+11. Add red model tests requiring observedParentId/plannedParentId and deterministic relationship provenance: exact directed endpoint/content matches unchanged, remaining rows on the same directed endpoint pair modifications, and endpoint/direction changes removals plus additions.
+
+12. Add red projection tests for containers moving into/out of the focal system and components moving between containers; require union membership in both relevant views, valid current React Flow parents, and resolved human move descriptions.
+
+13. Extend the temporary browser fixture with container and component moves plus changed/removed/added relationships; add red DOM assertions for visible move intent, status-bearing expandable names, interpretable accessible relationship labels, and computed modification-badge contrast >= 4.5:1.
+
+14. Implement dual-containment comparison/projection, provenance-aware relationship contributions, accessible node/change descriptions, and a documented high-contrast modification token without changing canonical models or adding writes/watchers.
+
+15. Re-run synthetic model/projection checks, full desktop/mobile/move browser flows, Bun build, canonical groma hashes/diff, Backlog finalization, and direct commit.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -79,10 +90,14 @@ Correction completed with red/green evidence. The root cause was fixed boundary 
 The synthetic projection fixture now contains four union containers spanning addition, modification, removal, and unchanged, plus seven components. Its geometry regression failed before the fix and now proves all container/component children fit their parent and sibling peers remain disjoint. A test-only temporary Markdown repository runner and NODE_ENV=test-guarded server root feed the real viewer without touching canonical groma/. The Playwright regression failed before the fix with three collision pairs, then passed after the fix while asserting all four statuses, DOM non-overlap, and successful navigation into every container.
 
 Fresh correction verification: npm run check validated all 4 canonical revisions and passed 56/56 tests; npm run test:viewer:browser passed 3/3 flows covering the four-state fixture, Revision 02 desktop/mobile readability, and Plan 03 sibling navigation; Bun bundled 147 modules successfully; git diff --check passed; git diff --exit-code -- groma/ was empty. The in-app Browser connection was attempted first but returned “No browser is available” with an empty browser inventory, so the committed Playwright fallback supplied DOM, interaction, console, and screenshot evidence. Visual inspection confirmed four distinct peers and readable state treatments.
+
+Quality review reopened TASK-7. Shared-element comparison currently copies only planned parentId, so moves can vanish from the observed containment view; relationship union strips observed/planned provenance; expandable accessible names omit comparison state; and the small modification badge token lacks an objective 4.5:1 contrast guarantee. Acceptance remains pending dual-containment projection, relationship-state labels, accessible change/move intent, and contrast evidence.
+
+Final quality correction completed with red/green evidence. Shared elements now preserve observedParentId and plannedParentId plus resolved parent names, and union projection makes moved containers visible in both old/new system views and moved components visible in both container views while assigning valid current React Flow parents. Relationships are deterministically classified by directed endpoints and exact content: exact matches are unchanged, same-endpoint replacements are modifications with observed/planned provenance, and endpoint or direction changes are removals plus additions. Visible and accessible edge labels include state, description, technology, and direction context. Expandable accessible names include addition/modification/removal/unchanged status and move intent. The modification token is #75420e, documented at 7.18:1 against paper and verified from computed browser styles at >=4.5:1.\n\nFresh verification: npm run check validated 4 canonical revisions and passed 61/61 tests; npm run test:viewer:browser passed 3/3 desktop/mobile, Plan 03, and six-container comparison flows with zero console/page errors; Bun production build bundled 140 modules; git diff --check passed; git diff --exit-code -- groma/ was empty; canonical groma hash remained 2b3a7934275b7c19b25b7edf2c2cc55246d279106df4b0f02ed30a7769ebe53c. A rendered 1440x1000 fixture screenshot was inspected and showed distinct unclipped nodes, move text, and interpretable relationship labels. The in-app Browser remained unavailable, so the committed Playwright fallback supplied interaction, DOM, accessibility, computed-style, console, and screenshot evidence.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added stable-ID observed-versus-plan comparison and corrected union layout sizing so arbitrary container peers and component rows remain inside count-aware C4 boundaries instead of being clamped into overlap. Verified all four states synthetically and in a temporary-repository browser fixture, every fixture container clickable, 56/56 tests, 3/3 Playwright flows including mobile, a successful Bun build, and no canonical groma/ changes.
+Implemented a read-only observed-versus-plan comparison across system, container, and component views. The final projection preserves both containment histories for moves, classifies relationship changes with deterministic observed/planned provenance, exposes status and move intent visually and accessibly, retains count-aware non-overlapping union layouts, and uses an objectively contrast-safe modification token. Verified by 61 unit/architecture tests, 3 browser flows, a successful Bun production build, screenshot inspection, and unchanged canonical groma content/hash.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -81,9 +81,20 @@ function TypeGlyph({ kind }) {
   )
 }
 
-function ComparisonBadge({ status }) {
+function ComparisonBadge({ status, move }) {
   const label = comparisonLabels[status]
-  return label ? <span className="comparison-badge">{label}</span> : null
+  if (!label) return null
+
+  return (
+    <>
+      <span className="comparison-badge">{label}</span>
+      {move ? (
+        <span className="comparison-detail">
+          Moved from {move.observedParentName} to {move.plannedParentName}
+        </span>
+      ) : null}
+    </>
+  )
 }
 
 function C4Node({ data }) {
@@ -93,7 +104,10 @@ function C4Node({ data }) {
         <TypeGlyph kind={data.kind} />
         {data.external ? `External ${data.kind}` : data.kind}
       </span>
-      <ComparisonBadge status={data.comparisonStatus} />
+      <ComparisonBadge
+        status={data.comparisonStatus}
+        move={data.comparisonMove}
+      />
       <strong>{data.name}</strong>
       <span className="node-description">{data.description}</span>
       {data.expandable ? (
@@ -123,7 +137,12 @@ function C4Node({ data }) {
           type="button"
           className="node-button nodrag nopan"
           onClick={data.onExpand}
-          aria-label={`Open ${data.name} ${data.kind}`}
+          aria-label={
+            `Open ${data.name} ${data.kind}`
+            + `${data.comparisonDescription
+              ? `. ${data.comparisonDescription}`
+              : ''}`
+          }
         >
           {content}
         </button>
@@ -145,11 +164,19 @@ function BoundaryNode({ data }) {
       data-element-id={data.elementId}
       data-kind={data.kind}
       data-comparison-status={data.comparisonStatus}
-      aria-label={`${data.name} ${data.kind} boundary`}
+      aria-label={
+        `${data.name} ${data.kind} boundary`
+        + `${data.comparisonDescription
+          ? `. ${data.comparisonDescription}`
+          : ''}`
+      }
     >
       <ElementHandles />
       <span className="boundary-index">C4 / {data.kind}</span>
-      <ComparisonBadge status={data.comparisonStatus} />
+      <ComparisonBadge
+        status={data.comparisonStatus}
+        move={data.comparisonMove}
+      />
       <strong>{data.name}</strong>
       <span>{data.description}</span>
     </section>
