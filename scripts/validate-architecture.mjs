@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { parse } from 'comark'
+import { parse, parseFrontmatter } from 'comark'
 
 const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external'])
 const allowedKinds = new Set(['person', 'system', 'container', 'component'])
@@ -95,11 +95,18 @@ function collectRelationshipTables(nodes) {
       continue
     }
 
-    if (!inRelationshipsSection || node[0] !== 'table') {
+    if (node[0] !== 'table') {
       continue
     }
 
-    tables.push(node)
+    const headerNames = tableHeaderNames(node)
+    const hasCanonicalHeader = relationshipColumns.every(
+      (column, index) => headerNames[index] === column,
+    ) && headerNames.length === relationshipColumns.length
+
+    if (inRelationshipsSection || hasCanonicalHeader) {
+      tables.push({ node, inRelationshipsSection })
+    }
   }
 
   return tables
@@ -117,6 +124,12 @@ function nodeText(node) {
   const isAstNode = typeof node[0] === 'string'
   const children = isAstNode ? node.slice(2) : node
   return children.map(nodeText).join('')
+}
+
+function tableHeaderNames(table) {
+  const headerRow = collectNodes(table, 'tr')[0]
+  const headerCells = headerRow?.slice(2).filter(child => child[0] === 'th') ?? []
+  return headerCells.map(cell => nodeText(cell).trim())
 }
 
 function isRelativeMarkdownLink(href) {
@@ -141,6 +154,26 @@ export async function validateRevision(revisionRoot) {
 
   if (elementFiles.length === 0) {
     errors.push('contains no element documents')
+  }
+
+  const unsupportedFiles = markdownFiles.filter(file => {
+    const relativeFile = path.relative(absoluteRoot, file).split(path.sep).join('/')
+    return relativeFile !== 'README.md' && !isElementPath(absoluteRoot, file)
+  })
+  for (const file of unsupportedFiles) {
+    const relativeFile = path.relative(absoluteRoot, file)
+    const source = await readFile(file, 'utf8')
+
+    try {
+      const { data } = parseFrontmatter(source)
+      if (Object.keys(data).length > 0) {
+        errors.push(
+          `${relativeFile}: frontmatter-bearing Markdown must use a supported element path`,
+        )
+      }
+    } catch (error) {
+      errors.push(`${relativeFile}: Comark could not parse frontmatter (${error.message})`)
+    }
   }
 
   for (const file of elementFiles) {
@@ -201,10 +234,14 @@ export async function validateRevision(revisionRoot) {
     }
 
     const relationshipTables = collectRelationshipTables(tree.nodes)
-    for (const table of relationshipTables) {
+    for (const relationshipTable of relationshipTables) {
+      const table = relationshipTable.node
+      if (!relationshipTable.inRelationshipsSection) {
+        errors.push(`${relativeFile}: relationship table must be under "## Relationships"`)
+      }
+
       const rows = collectNodes(table, 'tr')
-      const headerCells = rows[0]?.slice(2).filter(child => child[0] === 'th') ?? []
-      const headerNames = headerCells.map(cell => nodeText(cell).trim())
+      const headerNames = tableHeaderNames(table)
       if (
         headerNames.length !== relationshipColumns.length
         || relationshipColumns.some((column, index) => headerNames[index] !== column)
@@ -222,13 +259,18 @@ export async function validateRevision(revisionRoot) {
           errors.push(`${relativeFile}: relationship row must contain exactly three cells`)
         }
 
-        const href = collectLinks(cells[0])[0]
-        if (!isRelativeMarkdownLink(href)) {
+        const targetLinks = collectLinks(cells[0])
+        if (targetLinks.length !== 1) {
+          errors.push(`${relativeFile}: relationship target must contain exactly one link`)
+        }
+
+        const href = targetLinks[0]
+        if (targetLinks.length === 1 && !isRelativeMarkdownLink(href)) {
           errors.push(
             `${relativeFile}: relationship target must be a relative Markdown link `
             + `"${href ?? '(missing link)'}"`,
           )
-        } else {
+        } else if (targetLinks.length === 1) {
           const hrefPath = decodeURIComponent(href.split('#', 1)[0])
           const target = path.resolve(path.dirname(file), hrefPath)
 

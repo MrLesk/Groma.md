@@ -293,3 +293,71 @@ test('rejects a relationship with blank technology', async t => {
     /relationship technology must not be empty/,
   )
 })
+
+test('rejects more than one link in a relationship target cell', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '[Git](../../../git/system.md)',
+    '[Git](../../../git/system.md) and [Missing](../../../git/missing.md)',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship target must contain exactly one link/,
+  )
+})
+
+test('rejects and validates a relationship table under a renamed heading', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(workspaceFile, '## Relationships', '## Connections')
+  await replaceInFile(
+    workspaceFile,
+    '../../../git/system.md',
+    '../../../git/missing.md',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    error => {
+      assert.match(error.message, /relationship table must be under "## Relationships"/)
+      assert.match(error.message, /broken relationship link "\.\.\/\.\.\/\.\.\/git\/missing\.md"/)
+      return true
+    },
+  )
+})
+
+test('rejects a frontmatter-bearing element at an unsupported path', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const rogueFile = path.join(revisionRoot, 'systems', 'rogue.md')
+  await writeFile(
+    rogueFile,
+    '---\n'
+      + 'id: groma\n'
+      + 'kind: system\n'
+      + '---\n\n'
+      + '# Rogue duplicate\n\n'
+      + 'Duplicates an existing stable ID outside the canonical system path.\n',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /systems\/rogue\.md: frontmatter-bearing Markdown must use a supported element path/,
+  )
+})

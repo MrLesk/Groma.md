@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 21:56'
+updated_date: '2026-07-27 22:01'
 labels: []
 milestone: m-0
 dependencies:
@@ -57,6 +57,10 @@ Revision 01 is the gate that proves Groma architecture works as repository-owned
 8. Add failing regressions for a one-column relationship table, a blank Description cell, and a blank Technology cell using copied Revision 01 fixtures.
 9. Preserve each relationship row's three cells from the Comark AST, require the exact Target/Description/Technology header and exactly three body cells, then validate a relative target link plus non-empty description and technology text.
 10. Run focused RED/GREEN verification and the full repository check, re-verify all acceptance criteria and scope, finalize TASK-3 again, and commit only the validator, tests, and Backlog record.
+
+11. Add failing regressions for two links in one Target cell, a canonical relationship table under a renamed heading with a broken target, and a frontmatter-bearing duplicate-ID document at systems/rogue.md.
+12. Require exactly one link in each Target cell; detect canonical relationship-shaped tables outside ## Relationships and reject their placement while still validating/counting their rows; reject frontmatter-bearing Markdown outside supported element paths.
+13. Add a minimal Node >=20.19.0 engine declaration, refresh the lockfile, run focused RED/GREEN and full repository checks, re-verify all acceptance criteria and scope, finalize TASK-3, and commit only the correction.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -87,10 +91,18 @@ Second corrective TDD cycle: added three regressions first. The focused run repo
 Second corrective final verification: npm run check exited 0. Validation passed for groma/observed and all three plan revisions (4 revisions, 35 elements, 34 relationships). node:test reported 13 tests, 13 passed, 0 failed, including the one-column relationship table and blank Description/Technology regressions.
 
 The exact Target | Description | Technology header, exactly three body cells, non-empty human intent, and non-empty mechanism are now enforced directly on the Comark AST. A fresh representative description edit produced one changed line in one observed file and was restored. git diff --check and the unchanged-plans check exited 0; the diff remains limited to the Backlog record, validator, and tests.
+
+Code-quality review found three filter/truncation escapes. The written contract supports the requested fixes: each relationship row has one linked target, relationship tables belong under the exact ## Relationships section, and element documents use the documented canonical paths. Comark 0.5.1's dependency graph requires Node >=20.19.0, so the optional version note fits as one package engines field without affecting later Bun application plans.
+
+Third corrective TDD cycle: added three real-fixture regressions first. The focused run reported 16 tests: 13 passed and 3 failed with Missing expected rejection, reproducing multiple Target links, a canonical relationship table under ## Connections with a broken target, and systems/rogue.md carrying duplicate-id frontmatter. Minimal fixes now enforce one Target link, classify/validate misplaced canonical relationship tables while reporting placement, and reject frontmatter-bearing Markdown outside supported paths. The focused suite then passed 16/16. Added package engines.node >=20.19.0, matching the locked dependency floor; npm install --package-lock-only completed with 0 vulnerabilities on Node v24.13.0.
+
+Third corrective final verification: npm run check exited 0. Validation passed for groma/observed and all three planned revisions (4 revisions, 35 elements, 34 relationships). node:test reported 16 tests, 16 passed, 0 failed, including multiple Target links, renamed relationship-section placement plus its broken target, and frontmatter-bearing systems/rogue.md.
+
+npm install --package-lock-only exited 0 with 0 vulnerabilities and confirmed the Node >=20.19.0 engine metadata. A fresh representative description edit produced one changed line in one observed file and was restored. git diff --check and unchanged-plans checks exited 0. The change set is limited to the Backlog record, package metadata/lockfile, validator, and tests; no viewer/runtime machinery was added.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed and hardened the Markdown foundation validator. It now validates stable IDs, C4 containment, required H1/prose bodies, resolvable relative .md relationship targets, the exact Target | Description | Technology table structure, and non-empty relationship intent and mechanism. Regression-first evidence captured 3 expected failures before this correction and 13/13 passing tests afterward; all four revisions (35 elements, 34 relationships) validate, navigation links resolve, the focused Git diff remains one file/one line, plans are unchanged, and no runtime architecture machinery was introduced.
+Completed and hardened the Markdown foundation validator. It now validates canonical element paths, stable IDs, C4 containment, H1/prose bodies, exact relationship section/table placement and structure, one resolvable relative .md Target link, and non-empty relationship intent/mechanism. Regression-first evidence captured 3 expected failures before this correction and 16/16 passing tests afterward; all four revisions (35 elements, 34 relationships) validate, navigation links resolve, the representative Git diff remains one file/one line, plans are unchanged, and no runtime architecture machinery was introduced. Added an accurate Node >=20.19.0 engine floor for the validation tooling.
 <!-- SECTION:FINAL_SUMMARY:END -->
