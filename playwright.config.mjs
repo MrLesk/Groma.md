@@ -30,5 +30,11 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 30_000,
     },
+    {
+      command: 'bun run e2e/live-reload-fixture-server.mjs --port 4180',
+      url: 'http://127.0.0.1:4180/api/model',
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
   ],
 })

@@ -252,10 +252,29 @@ function ErrorState({ message }) {
   )
 }
 
+function recoverFocusPath(payload, focusPath) {
+  if (focusPath.length === 0) return focusPath
+  if (focusPath[0] !== payload.focalSystemId) return []
+  if (focusPath.length === 1) return focusPath
+
+  const focusedContainer = [
+    ...payload.model.elements,
+    ...payload.observedModel.elements,
+  ].find(element => {
+    return element.id === focusPath[1]
+      && element.kind === 'container'
+      && element.parentId === payload.focalSystemId
+  })
+
+  return focusedContainer ? focusPath : [payload.focalSystemId]
+}
+
 export function ViewerApp() {
   const [payload, setPayload] = useState(null)
   const [error, setError] = useState(null)
+  const [reloadError, setReloadError] = useState(null)
   const [focusPath, setFocusPath] = useState([])
+  const hasPayloadRef = useRef(false)
   const levelHeadingRef = useRef(null)
   const shouldFocusLevelRef = useRef(false)
   const isCompactViewport = useCompactViewport()
@@ -272,36 +291,65 @@ export function ViewerApp() {
           throw new Error(`The local viewer returned HTTP ${response.status}.`)
         }
         setPayload(await response.json())
+        hasPayloadRef.current = true
+        setError(null)
+        setReloadError(null)
       } catch (loadError) {
         if (loadError.name !== 'AbortError') {
-          setError(loadError.message)
+          if (hasPayloadRef.current) {
+            setReloadError(loadError.message)
+          } else {
+            setError(loadError.message)
+          }
         }
       }
     }
 
+    const events = new EventSource('/api/events')
+    events.addEventListener('architecture-changed', loadModel)
+    events.addEventListener('architecture-error', event => {
+      try {
+        setReloadError(JSON.parse(event.data).message)
+      } catch {
+        setReloadError('The changed Markdown is not a valid architecture revision.')
+      }
+    })
     loadModel()
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      events.close()
+    }
   }, [])
+
+  const displayFocusPath = useMemo(() => {
+    return payload ? recoverFocusPath(payload, focusPath) : focusPath
+  }, [focusPath, payload])
+
+  useEffect(() => {
+    if (displayFocusPath !== focusPath) {
+      setFocusPath(displayFocusPath)
+    }
+  }, [displayFocusPath, focusPath])
 
   const navigateToFocus = useCallback(nextPath => {
     if (
-      nextPath.length === focusPath.length
-      && nextPath.every((id, index) => id === focusPath[index])
+      nextPath.length === displayFocusPath.length
+      && nextPath.every((id, index) => id === displayFocusPath[index])
     ) {
       return
     }
 
     shouldFocusLevelRef.current = true
     setFocusPath(nextPath)
-  }, [focusPath])
+  }, [displayFocusPath])
 
   const expandElement = useCallback((elementId, kind) => {
-    navigateToFocus(nextFocusPath(focusPath, elementId, kind))
-  }, [focusPath, navigateToFocus])
+    navigateToFocus(nextFocusPath(displayFocusPath, elementId, kind))
+  }, [displayFocusPath, navigateToFocus])
 
   const goBack = useCallback(() => {
-    navigateToFocus(focusPath.slice(0, -1))
-  }, [focusPath, navigateToFocus])
+    navigateToFocus(displayFocusPath.slice(0, -1))
+  }, [displayFocusPath, navigateToFocus])
 
   const goToContext = useCallback(() => navigateToFocus([]), [navigateToFocus])
   const goToContainers = useCallback(() => {
@@ -313,7 +361,7 @@ export function ViewerApp() {
       levelHeadingRef.current?.focus()
       shouldFocusLevelRef.current = false
     }
-  }, [focusPath])
+  }, [displayFocusPath])
 
   const view = useMemo(() => {
     if (!payload) {
@@ -323,7 +371,7 @@ export function ViewerApp() {
     const projected = projectArchitectureView(
       payload.model,
       payload.focalSystemId,
-      focusPath,
+      displayFocusPath,
       { observedModel: payload.observedModel },
     )
 
@@ -352,7 +400,7 @@ export function ViewerApp() {
         },
       })),
     }
-  }, [expandElement, focusPath, payload])
+  }, [displayFocusPath, expandElement, payload])
 
   if (error) {
     return <ErrorState message={error} />
@@ -361,12 +409,12 @@ export function ViewerApp() {
     return <LoadingState />
   }
 
-  const focusNames = focusPath.map(id => {
+  const focusNames = displayFocusPath.map(id => {
     return payload.model.elements.find(element => element.id === id)?.name
       ?? payload.observedModel.elements.find(element => element.id === id)?.name
       ?? id
   })
-  const viewKey = focusPath.join('/') || 'context'
+  const viewKey = displayFocusPath.join('/') || 'context'
 
   return (
     <main className="viewer-shell">
@@ -404,15 +452,25 @@ export function ViewerApp() {
         </nav>
 
         <div className="revision-stamp">
-          <span>Plan comparison</span>
-          <strong>{payload.revisionLabel} ↔ observed</strong>
+          <span data-testid="revision-context-title">
+            {payload.revisionContext.title}
+          </span>
+          <strong data-testid="revision-context-description">
+            {payload.revisionContext.description || payload.revisionLabel}
+          </strong>
         </div>
       </header>
+
+      {reloadError ? (
+        <p className="reload-status" role="status">
+          Keeping the last valid architecture: {reloadError}
+        </p>
+      ) : null}
 
       <section className="viewer-stage" aria-label={levelLabels[view.level]}>
         <aside className="level-card">
           <div>
-            <span className="eyebrow">C4 / 0{focusPath.length + 1}</span>
+            <span className="eyebrow">C4 / 0{displayFocusPath.length + 1}</span>
             <h2 ref={levelHeadingRef} tabIndex={-1}>
               {levelLabels[view.level]}
             </h2>
@@ -432,7 +490,7 @@ export function ViewerApp() {
               ))}
             </ul>
           </div>
-          {focusPath.length > 0 ? (
+          {displayFocusPath.length > 0 ? (
             <button type="button" className="back-button" onClick={goBack}>
               <span aria-hidden="true">←</span>
               Previous level

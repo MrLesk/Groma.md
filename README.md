@@ -31,8 +31,15 @@ comparison, then open
 npm run viewer
 ```
 
-At startup the server reads `groma/observed` and one complete plan. Choose
-another plan without changing any Markdown:
+At startup the server reads `groma/observed` and one complete plan. It watches
+Markdown under `groma/observed` and `groma/plans`, then fully rereads both
+selected revisions after changes settle. An open browser updates over a local
+event stream without restarting the viewer. If a settled edit is temporarily
+invalid, the last valid model remains visible with a warning until a later
+Markdown change rebuilds successfully. Files outside those architecture
+directories are not watched.
+
+Choose another plan without changing any Markdown:
 
 ```sh
 npm run viewer -- --revision plan:03-code-observation

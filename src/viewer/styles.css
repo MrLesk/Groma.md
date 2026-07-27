@@ -156,7 +156,23 @@ button:focus-visible {
 }
 
 .revision-stamp strong {
+  max-width: 360px;
   font: 600 11px/1.25 var(--mono);
+}
+
+.reload-status {
+  position: fixed;
+  z-index: 20;
+  top: 72px;
+  right: 18px;
+  max-width: min(520px, calc(100vw - 36px));
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--accent);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgba(23, 50, 77, 0.18);
+  font: 600 10px/1.4 var(--mono);
 }
 
 .viewer-stage {
