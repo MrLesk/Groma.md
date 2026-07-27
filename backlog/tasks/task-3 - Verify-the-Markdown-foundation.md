@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 21:53'
+updated_date: '2026-07-27 21:56'
 labels: []
 milestone: m-0
 dependencies:
@@ -53,6 +53,10 @@ Revision 01 is the gate that proves Groma architecture works as repository-owned
 5. Add failing regressions for relationship targets that omit .md or use an absolute URL, and for documents missing the required H1 or immediate prose.
 6. Extend the existing Comark-AST validation to require relative .md targets for every declared relationship and require exactly one H1 followed immediately by at least one prose paragraph.
 7. Run the focused regressions and full repository check, re-verify all acceptance criteria and scope, finalize TASK-3 again, and commit the correction to main.
+
+8. Add failing regressions for a one-column relationship table, a blank Description cell, and a blank Technology cell using copied Revision 01 fixtures.
+9. Preserve each relationship row's three cells from the Comark AST, require the exact Target/Description/Technology header and exactly three body cells, then validate a relative target link plus non-empty description and technology text.
+10. Run focused RED/GREEN verification and the full repository check, re-verify all acceptance criteria and scope, finalize TASK-3 again, and commit only the validator, tests, and Backlog record.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -75,10 +79,18 @@ Corrective TDD cycle: added four focused regression tests first. The test file t
 Corrective final verification: npm run check exited 0. Validation passed for groma/observed and all three complete plan revisions (4 revisions, 35 elements, 34 relationships). node:test reported 10 tests, 10 passed, 0 failed, including explicit rejections for non-.md relationship targets, absolute relationship URLs, missing H1 headings, and missing immediate prose.
 
 A fresh representative description edit again produced exactly one changed prose line in one observed element and was restored; git diff --exit-code confirmed no retained mutation. git diff --check and the unchanged-plans check exited 0. The corrective diff is limited to the Backlog record, validator, and regression tests, with no runtime viewer/watcher/scanner/layout/reconciliation work.
+
+Second specification review found that collectRelationshipTargets reduced each relationship row to its first-cell href. Comark evidence shows malformed one-column and blank-cell tables remain distinguishable in the AST, so the focused correction will validate that existing row structure without adding a schema layer.
+
+Second corrective TDD cycle: added three regressions first. The focused run reported 13 tests: 10 passed and 3 failed with Missing expected rejection, reproducing a one-column relationship table, blank Description, and blank Technology. The minimal fix now validates the exact three table headers and three cells per row, retains target-link checks, and requires non-empty description and technology text. The focused suite then passed 13/13.
+
+Second corrective final verification: npm run check exited 0. Validation passed for groma/observed and all three plan revisions (4 revisions, 35 elements, 34 relationships). node:test reported 13 tests, 13 passed, 0 failed, including the one-column relationship table and blank Description/Technology regressions.
+
+The exact Target | Description | Technology header, exactly three body cells, non-empty human intent, and non-empty mechanism are now enforced directly on the Comark AST. A fresh representative description edit produced one changed line in one observed file and was restored. git diff --check and the unchanged-plans check exited 0; the diff remains limited to the Backlog record, validator, and tests.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed the Markdown foundation validator and corrected specification-review gaps. Relationship target cells now require resolvable relative .md links, and each element now requires one non-empty H1 followed immediately by non-empty prose. Regression-first verification observed 4 expected failures before the fix and 10/10 passing tests afterward; all four revisions (35 elements, 34 relationships) validate, navigation links resolve, the representative Git diff remains one file/one line, plan snapshots are unchanged, and no runtime architecture machinery was introduced.
+Completed and hardened the Markdown foundation validator. It now validates stable IDs, C4 containment, required H1/prose bodies, resolvable relative .md relationship targets, the exact Target | Description | Technology table structure, and non-empty relationship intent and mechanism. Regression-first evidence captured 3 expected failures before this correction and 13/13 passing tests afterward; all four revisions (35 elements, 34 relationships) validate, navigation links resolve, the focused Git diff remains one file/one line, plans are unchanged, and no runtime architecture machinery was introduced.
 <!-- SECTION:FINAL_SUMMARY:END -->

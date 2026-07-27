@@ -223,3 +223,73 @@ test('rejects an element without prose immediately after its heading', async t =
     /requires prose immediately after its level-one heading/,
   )
 })
+
+test('rejects a one-column relationship table', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '| Target | Description | Technology |\n'
+      + '| --- | --- | --- |\n'
+      + '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
+    '| Target |\n'
+      + '| --- |\n'
+      + '| [Git](../../../git/system.md) |',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship table must use columns "Target \| Description \| Technology"/,
+  )
+})
+
+test('rejects a relationship with a blank description', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
+    '| [Git](../../../git/system.md) | | Git |',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship description must not be empty/,
+  )
+})
+
+test('rejects a relationship with blank technology', async t => {
+  const revisionRoot = await createFoundationFixture(t)
+  const workspaceFile = path.join(
+    revisionRoot,
+    'systems',
+    'groma',
+    'containers',
+    'architecture-workspace',
+    'container.md',
+  )
+  await replaceInFile(
+    workspaceFile,
+    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
+    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | |',
+  )
+
+  await assert.rejects(
+    validateRevision(revisionRoot),
+    /relationship technology must not be empty/,
+  )
+})

@@ -10,6 +10,7 @@ const expectedParentKinds = new Map([
   ['container', 'system'],
   ['component', 'container'],
 ])
+const relationshipColumns = ['Target', 'Description', 'Technology']
 const elementPathPatterns = [
   /^people\/[^/]+\.md$/,
   /^systems\/[^/]+\/system\.md$/,
@@ -84,8 +85,8 @@ function collectNodes(node, tag, nodes = []) {
   return nodes
 }
 
-function collectRelationshipTargets(nodes) {
-  const targets = []
+function collectRelationshipTables(nodes) {
+  const tables = []
   let inRelationshipsSection = false
 
   for (const node of nodes) {
@@ -98,17 +99,10 @@ function collectRelationshipTargets(nodes) {
       continue
     }
 
-    for (const row of collectNodes(node, 'tr')) {
-      const cells = row.slice(2).filter(child => child[0] === 'td')
-      if (cells.length === 0) {
-        continue
-      }
-
-      targets.push(collectLinks(cells[0])[0])
-    }
+    tables.push(node)
   }
 
-  return targets
+  return tables
 }
 
 function nodeText(node) {
@@ -206,22 +200,50 @@ export async function validateRevision(revisionRoot) {
       }
     }
 
-    const relationshipTargets = collectRelationshipTargets(tree.nodes)
-    for (const href of relationshipTargets) {
-      relationshipCount += 1
-      if (!isRelativeMarkdownLink(href)) {
+    const relationshipTables = collectRelationshipTables(tree.nodes)
+    for (const table of relationshipTables) {
+      const rows = collectNodes(table, 'tr')
+      const headerCells = rows[0]?.slice(2).filter(child => child[0] === 'th') ?? []
+      const headerNames = headerCells.map(cell => nodeText(cell).trim())
+      if (
+        headerNames.length !== relationshipColumns.length
+        || relationshipColumns.some((column, index) => headerNames[index] !== column)
+      ) {
         errors.push(
-          `${relativeFile}: relationship target must be a relative Markdown link `
-          + `"${href ?? '(missing link)'}"`,
+          `${relativeFile}: relationship table must use columns `
+          + `"${relationshipColumns.join(' | ')}"`,
         )
-        continue
       }
 
-      const hrefPath = decodeURIComponent(href.split('#', 1)[0])
-      const target = path.resolve(path.dirname(file), hrefPath)
+      for (const row of rows.slice(1)) {
+        relationshipCount += 1
+        const cells = row.slice(2).filter(child => child[0] === 'td')
+        if (cells.length !== relationshipColumns.length) {
+          errors.push(`${relativeFile}: relationship row must contain exactly three cells`)
+        }
 
-      if (!elementFileSet.has(target)) {
-        errors.push(`${relativeFile}: broken relationship link "${href}"`)
+        const href = collectLinks(cells[0])[0]
+        if (!isRelativeMarkdownLink(href)) {
+          errors.push(
+            `${relativeFile}: relationship target must be a relative Markdown link `
+            + `"${href ?? '(missing link)'}"`,
+          )
+        } else {
+          const hrefPath = decodeURIComponent(href.split('#', 1)[0])
+          const target = path.resolve(path.dirname(file), hrefPath)
+
+          if (!elementFileSet.has(target)) {
+            errors.push(`${relativeFile}: broken relationship link "${href}"`)
+          }
+        }
+
+        if (nodeText(cells[1]).trim().length === 0) {
+          errors.push(`${relativeFile}: relationship description must not be empty`)
+        }
+
+        if (nodeText(cells[2]).trim().length === 0) {
+          errors.push(`${relativeFile}: relationship technology must not be empty`)
+        }
       }
     }
 
