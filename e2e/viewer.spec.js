@@ -66,6 +66,41 @@ async function expectMembership(page, expectedNodes, expectedEdges) {
   }).toEqual(expectedEdges)
 }
 
+async function expectAccessibleRelationships(page, expectedCount) {
+  const accessibleNames = await page
+    .locator('.react-flow__edge[role="group"]')
+    .evaluateAll(edges => edges.map(edge => edge.getAttribute('aria-label')))
+  const visibleLabels = await page.locator('.relationship-label').evaluateAll(
+    labels => labels.map(label => {
+      return [...label.querySelectorAll('span')].map(line => line.textContent)
+    }),
+  )
+
+  expect(accessibleNames).toHaveLength(expectedCount)
+  expect(visibleLabels).toHaveLength(expectedCount)
+  for (const [index, accessibleName] of accessibleNames.entries()) {
+    expect(accessibleName).toMatch(/^Relationship from .+ to .+: .+$/)
+    for (const visibleLabel of visibleLabels[index]) {
+      expect(accessibleName).toContain(visibleLabel)
+    }
+  }
+}
+
+async function expectReadableNode(page, elementId, minimumWidth) {
+  const geometry = await page.getByTestId(`c4-node-${elementId}`).evaluate(node => {
+    const nodeBox = node.getBoundingClientRect()
+    const titleBox = node.querySelector('strong').getBoundingClientRect()
+
+    return {
+      nodeWidth: nodeBox.width,
+      titleHeight: titleBox.height,
+    }
+  })
+
+  expect(geometry.nodeWidth).toBeGreaterThanOrEqual(minimumWidth)
+  expect(geometry.titleHeight).toBeGreaterThanOrEqual(9)
+}
+
 async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await page.setViewportSize(viewport)
   await page.goto('/')
@@ -79,6 +114,21 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
     'Versions and reviews architecture changes',
     'Authors current and planned architecture',
   ])
+  await expect(
+    page.locator('.react-flow__edge[role="group"]'),
+  ).toHaveCount(contextEdges.length)
+  await expectAccessibleRelationships(page, contextEdges.length)
+  await expect(
+    page.locator('.react-flow__edge[role="group"]').first(),
+  ).toHaveAttribute(
+    'aria-label',
+    'Relationship from Coding agent to Groma: '
+      + 'Reads plans and records materialized architecture · Markdown and Git; '
+      + 'Inspects architecture during implementation · Local web interface',
+  )
+  if (viewport.name === 'mobile') {
+    await expectReadableNode(page, 'groma', 145)
+  }
   await page.screenshot({
     path: testInfo.outputPath(`context-${viewport.name}.png`),
     fullPage: true,
@@ -86,11 +136,22 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
 
   await page.getByRole('button', { name: 'Open Groma system' }).click()
   await expect(page.getByTestId('view-container')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Container view' }),
+  ).toBeFocused()
   await expectMembership(page, containerNodes, containerEdges)
+  await expectAccessibleRelationships(page, containerEdges.length)
 
   await page.getByRole('button', { name: 'Open Viewer container' }).click()
   await expect(page.getByTestId('view-component')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Component view' }),
+  ).toBeFocused()
   await expectMembership(page, componentNodes, componentEdges)
+  await expectAccessibleRelationships(page, componentEdges.length)
+  if (viewport.name === 'mobile') {
+    await expectReadableNode(page, 'architecture-model', 100)
+  }
   await page.screenshot({
     path: testInfo.outputPath(`components-${viewport.name}.png`),
     fullPage: true,
@@ -98,9 +159,15 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
 
   await page.getByRole('button', { name: 'Previous level' }).click()
   await expect(page.getByTestId('view-container')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Container view' }),
+  ).toBeFocused()
   await expectMembership(page, containerNodes, containerEdges)
   await page.getByRole('button', { name: 'Previous level' }).click()
   await expect(page.getByTestId('view-context')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'System context' }),
+  ).toBeFocused()
   await expectMembership(page, contextNodes, contextEdges)
 }
 
@@ -136,4 +203,37 @@ test('navigates three C4 levels and returns on desktop and mobile', async ({
     mobileViewport.innerWidth,
   )
   expect(browserMessages).toEqual([])
+})
+
+test('switches directly between component-bearing sibling containers in Plan 03', async ({
+  page,
+}) => {
+  const browserErrors = []
+  page.on('console', message => {
+    if (message.type() === 'error') {
+      browserErrors.push(message.text())
+    }
+  })
+  page.on('pageerror', error => {
+    browserErrors.push(error.message)
+  })
+
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.goto('http://127.0.0.1:4178')
+  await page.getByRole('button', { name: 'Open Groma system' }).click()
+  await page.getByRole('button', { name: 'Open Viewer container' }).click()
+  await expect(page.getByTestId('c4-boundary-viewer')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Open Scanner container' }).click()
+  await expect(page.getByTestId('view-component')).toBeVisible()
+  await expect(page.getByTestId('c4-boundary-scanner')).toBeVisible()
+  await expect(page.getByTestId('c4-node-source-watcher')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Component view' }),
+  ).toBeFocused()
+
+  await page.getByRole('button', { name: 'Open Viewer container' }).click()
+  await expect(page.getByTestId('c4-boundary-viewer')).toBeVisible()
+  await expect(page.getByTestId('c4-node-markdown-reader')).toBeVisible()
+  expect(browserErrors).toEqual([])
 })

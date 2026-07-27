@@ -214,6 +214,11 @@ button:focus-visible {
   letter-spacing: -0.035em;
 }
 
+.level-card h2:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .level-card p {
   margin: 0;
   color: var(--ink-soft);
@@ -585,7 +590,7 @@ button:focus-visible {
     padding: 0 10px;
   }
 
-  .viewer-footer span:not(:first-child) {
+  .viewer-footer span:not(:last-child) {
     display: none;
   }
 }

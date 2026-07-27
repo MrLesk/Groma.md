@@ -17,6 +17,10 @@ const loadedRevision = await loadRevision(
   { kind: 'plan', name: '02-live-viewer' },
 )
 const model = buildArchitectureModel(loadedRevision)
+const plan03Model = buildArchitectureModel(await loadRevision(
+  repositoryRoot,
+  { kind: 'plan', name: '03-code-observation' },
+))
 
 function nodeByElementId(view, elementId) {
   return view.nodes.find(node => node.data.elementId === elementId)
@@ -100,6 +104,18 @@ test('projects the opening system context with promoted labeled relationships', 
   assert.ok(view.nodes.every(node => node.parentId === undefined))
   assert.ok(nodeByElementId(view, 'groma').data.expandable)
   assert.ok(view.edges.every(edge => edge.markerEnd?.type === 'arrowclosed'))
+  assert.deepEqual(view.edges[0].data, {
+    sourceName: 'Coding agent',
+    targetName: 'Groma',
+    labels: [
+      'Reads plans and records materialized architecture · Markdown and Git',
+      'Inspects architecture during implementation · Local web interface',
+    ],
+    accessibleLabel:
+      'Relationship from Coding agent to Groma: '
+      + 'Reads plans and records materialized architecture · Markdown and Git; '
+      + 'Inspects architecture during implementation · Local web interface',
+  })
 
   assert.deepEqual(
     view.edges.map(edge => [edge.source, edge.target, edge.label]),
@@ -123,6 +139,27 @@ test('projects the opening system context with promoted labeled relationships', 
       ],
     ],
   )
+})
+
+test('Plan 03 component projections keep component-bearing sibling containers expandable', () => {
+  const viewer = projectArchitectureView(
+    plan03Model,
+    'groma',
+    ['groma', 'viewer'],
+  )
+  const scanner = projectArchitectureView(
+    plan03Model,
+    'groma',
+    ['groma', 'scanner'],
+  )
+
+  assert.equal(viewer.level, 'component')
+  assert.equal(nodeByElementId(viewer, 'scanner').data.expandable, true)
+  assert.equal(scanner.level, 'component')
+  assert.equal(nodeByElementId(scanner, 'viewer').data.expandable, true)
+  assert.ok(nodeByElementId(scanner, 'source-watcher'))
+  assert.ok(nodeByElementId(scanner, 'typescript-observer'))
+  assert.ok(nodeByElementId(scanner, 'markdown-emitter'))
 })
 
 test('system context excludes roots without a relationship to the focal subtree', () => {

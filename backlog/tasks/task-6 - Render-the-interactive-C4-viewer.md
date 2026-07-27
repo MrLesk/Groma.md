@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 22:43'
+updated_date: '2026-07-27 22:54'
 labels: []
 milestone: m-1
 dependencies:
@@ -21,12 +21,14 @@ modified_files:
   - package-lock.json
   - playwright.config.mjs
   - e2e/viewer.spec.js
+  - src/viewer/focus.mjs
   - src/viewer/index.html
   - src/viewer/main.jsx
   - src/viewer/projection.mjs
   - src/viewer/server.mjs
   - src/viewer/styles.css
   - src/viewer/viewer-app.jsx
+  - test/viewer-focus.test.mjs
   - test/viewer-projection.test.mjs
 priority: high
 type: feature
@@ -67,6 +69,14 @@ Create Groma’s first read-only local viewer from the C4 model delivered by TAS
 10. Refactor the committed Playwright spec around a small reusable three-level flow that asserts exact visible node IDs and directed edge endpoint pairs for container and component views, then run it independently at desktop and mobile sizes including both back actions.
 
 11. Preserve context labels, screenshots, mobile width, and console-health checks; rerun the browser/full suites, correct the overstated Backlog evidence, finalize, and commit only test/evidence changes.
+
+12. Reproduce and lock the Plan 03 component-to-sibling-container transition with a pure focus-state regression and an independent browser flow; replace the selected container segment instead of extending the focus path.
+
+13. Add human-readable source, target, and relationship descriptions/technologies to each projected directed edge and expose them as one accessible semantic unit, with projection and browser assertions.
+
+14. Raise the compact-viewport fit floor so rendered nodes and labels remain readable while preserving React Flow pan/zoom navigation; assert effective node and title geometry at 390px in context and component views.
+
+15. Restore keyboard focus to the new level heading after navigation, declare the verified Bun runtime floor, then run targeted red/green tests, full browser/unit/build checks, groma/ cleanliness, Backlog finalization, and commit.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -95,10 +105,16 @@ Second spec review reopened TASK-6 for an evidence gap, not a runtime defect. Th
 Browser evidence gap corrected. e2e/viewer.spec.js now uses one small exerciseThreeLevelFlow helper for two independent viewports. At both 1440×960 and 390×844 it asserts exact context node/edge membership and labels, pointer-clicks Groma, asserts the exact 6 container-level nodes and 6 directed edge IDs, pointer-clicks Viewer, asserts the exact 10 component-level nodes and 10 directed edge IDs, then clicks Previous level twice and reasserts exact container/context membership after each return. It captures context and component screenshots for both sizes; the mobile branch also verifies document width, and the combined run asserts zero console warnings/errors. This supersedes the prior overstated mobile-flow claim.
 
 Fresh verification: npm run test:viewer:browser passed 1/1 in 1.8s with both complete viewport flows; npm run check validated 4 revisions (35 elements, 34 relationships) and passed 46/46 tests; git diff --check passed; git diff -- groma/ was empty. No runtime source or architecture Markdown changed in this correction.
+
+Quality review reopened TASK-6. Confirmed risks: container expansion appends to a two-segment component focus path and can produce an invalid third segment; compact fitView permits approximately 0.21–0.27 scale; projected edges carry only internal endpoint IDs plus a visual label. Acceptance criteria #1–#4 are unchecked until focused regressions, browser evidence, and full verification pass.
+
+Quality-review corrections completed with red/green coverage. Focus navigation is now a pure transition: selecting a container always produces [focal system, selected container], so Plan 03 Viewer → Scanner → Viewer remains at component level. Each projected edge carries displayed source/target names, all description/technology labels, and one combined accessible name on the React Flow edge; the duplicated visual label is aria-hidden. Compact viewports use a 0.55 zoom floor, remount fit behavior on breakpoint changes, drag/pinch navigation, and visible mobile instructions. Level headings receive focus after expansion, sibling switching, breadcrumb navigation, and back navigation. The verified Bun 1.3.14 floor is declared in package metadata and README.
+
+Fresh objective evidence: npm run check validated all 4 revisions (35 elements, 34 relationships) and passed 50/50 tests. npm run test:viewer:browser passed 2/2: the complete Revision 02 context → container → component → back flow at 1440×960 and 390×844, plus Plan 03 Viewer ↔ Scanner sibling switching. Browser assertions cover exact node/edge membership, every relationship accessible name and its visible label/technology, post-navigation heading focus, zero console/page errors, and mobile effective geometry of at least 145px for the focal system, 100px for a component, and 9px title height. Bun production build bundled 140 modules into a 0.60 MB entry plus CSS/HTML. git diff --check passed and groma/ remained clean.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Delivered the read-only Bun/React Flow C4 viewer and corrected its evidence suite. Connected context is relationship-driven with unrelated roots excluded; decomposition preserves promoted directed edges and sibling peers. The checked-in Playwright test now performs and exactly verifies context→container→component→back→back at both desktop and mobile sizes, including node and edge membership, screenshots, responsive width, and browser-console health. Final checks passed 46/46 repository tests and 1/1 dual-viewport browser test with no groma/ changes.
+Corrected the interactive viewer’s three quality-review issues: sibling container selection now replaces container focus without invalid paths; compact layouts keep nodes and titles readable with pan/pinch navigation; and each directed edge exposes one human-readable source → target + description/technology accessible name. Added pure focus, Plan 03 projection, dual-revision browser, accessibility, geometry, and keyboard-focus regressions. Verified 50/50 repository tests, 2/2 browser tests across desktop/mobile and Revision 02/Plan 03, a successful Bun production build, clean diffs, and no groma/ changes.
 <!-- SECTION:FINAL_SUMMARY:END -->

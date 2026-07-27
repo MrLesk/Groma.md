@@ -23,7 +23,8 @@ npm run check
 
 ## Open the local viewer
 
-Start the read-only Revision 02 viewer with Bun, then open
+The viewer requires Bun 1.3.14 or newer. Start the read-only Revision 02 viewer,
+then open
 `http://127.0.0.1:3000`:
 
 ```sh

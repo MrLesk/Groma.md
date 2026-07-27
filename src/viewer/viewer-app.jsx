@@ -10,14 +10,43 @@ import {
   ReactFlow,
   getSmoothStepPath,
 } from '@xyflow/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { nextFocusPath } from './focus.mjs'
 import { projectArchitectureView } from './projection.mjs'
 
 const levelLabels = {
   context: 'System context',
   container: 'Container view',
   component: 'Component view',
+}
+const compactViewportQuery = '(max-width: 760px)'
+const regularFitViewOptions = {
+  padding: 0.18,
+  minZoom: 0.15,
+  maxZoom: 1.1,
+}
+const compactFitViewOptions = {
+  padding: 0.12,
+  minZoom: 0.55,
+  maxZoom: 1.1,
+}
+
+function useCompactViewport() {
+  const [isCompact, setIsCompact] = useState(() => {
+    return window.matchMedia(compactViewportQuery).matches
+  })
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(compactViewportQuery)
+    const updateViewport = () => setIsCompact(mediaQuery.matches)
+
+    updateViewport()
+    mediaQuery.addEventListener('change', updateViewport)
+    return () => mediaQuery.removeEventListener('change', updateViewport)
+  }, [])
+
+  return isCompact
 }
 
 function ElementHandles() {
@@ -134,6 +163,7 @@ function RelationshipEdge({
       <EdgeLabelRenderer>
         <div
           className="relationship-label"
+          aria-hidden="true"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
           }}
@@ -178,6 +208,9 @@ export function ViewerApp() {
   const [payload, setPayload] = useState(null)
   const [error, setError] = useState(null)
   const [focusPath, setFocusPath] = useState([])
+  const levelHeadingRef = useRef(null)
+  const shouldFocusLevelRef = useRef(false)
+  const isCompactViewport = useCompactViewport()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -202,22 +235,37 @@ export function ViewerApp() {
     return () => controller.abort()
   }, [])
 
-  const expandElement = useCallback((elementId, kind) => {
-    if (kind === 'system') {
-      setFocusPath([elementId])
-    } else if (kind === 'container') {
-      setFocusPath(current => [...current, elementId])
+  const navigateToFocus = useCallback(nextPath => {
+    if (
+      nextPath.length === focusPath.length
+      && nextPath.every((id, index) => id === focusPath[index])
+    ) {
+      return
     }
-  }, [])
+
+    shouldFocusLevelRef.current = true
+    setFocusPath(nextPath)
+  }, [focusPath])
+
+  const expandElement = useCallback((elementId, kind) => {
+    navigateToFocus(nextFocusPath(focusPath, elementId, kind))
+  }, [focusPath, navigateToFocus])
 
   const goBack = useCallback(() => {
-    setFocusPath(current => current.slice(0, -1))
-  }, [])
+    navigateToFocus(focusPath.slice(0, -1))
+  }, [focusPath, navigateToFocus])
 
-  const goToContext = useCallback(() => setFocusPath([]), [])
+  const goToContext = useCallback(() => navigateToFocus([]), [navigateToFocus])
   const goToContainers = useCallback(() => {
-    setFocusPath(payload ? [payload.focalSystemId] : [])
-  }, [payload])
+    navigateToFocus(payload ? [payload.focalSystemId] : [])
+  }, [navigateToFocus, payload])
+
+  useEffect(() => {
+    if (shouldFocusLevelRef.current) {
+      levelHeadingRef.current?.focus()
+      shouldFocusLevelRef.current = false
+    }
+  }, [focusPath])
 
   const view = useMemo(() => {
     if (!payload) {
@@ -314,7 +362,9 @@ export function ViewerApp() {
         <aside className="level-card">
           <div>
             <span className="eyebrow">C4 / 0{focusPath.length + 1}</span>
-            <h2>{levelLabels[view.level]}</h2>
+            <h2 ref={levelHeadingRef} tabIndex={-1}>
+              {levelLabels[view.level]}
+            </h2>
             <p>
               {view.level === 'context'
                 ? 'People and neighboring systems around Groma.'
@@ -335,15 +385,19 @@ export function ViewerApp() {
 
         <div className="flow-frame" data-testid={`view-${view.level}`}>
           <ReactFlow
-            key={viewKey}
+            key={`${viewKey}:${isCompactViewport ? 'compact' : 'regular'}`}
             nodes={view.nodes}
             edges={view.edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
-            fitViewOptions={{ padding: 0.18, minZoom: 0.15, maxZoom: 1.1 }}
-            minZoom={0.15}
+            fitViewOptions={
+              isCompactViewport ? compactFitViewOptions : regularFitViewOptions
+            }
+            minZoom={isCompactViewport ? 0.55 : 0.15}
             maxZoom={1.5}
+            panOnScroll={isCompactViewport}
+            zoomOnScroll={!isCompactViewport}
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable={false}
@@ -384,7 +438,11 @@ export function ViewerApp() {
       <footer className="viewer-footer">
         <span>Read-only local view</span>
         <span>{view.nodes.length} elements · {view.edges.length} relationships</span>
-        <span>Pan to move · scroll to zoom</span>
+        <span>
+          {isCompactViewport
+            ? 'Drag to pan · pinch to zoom'
+            : 'Pan to move · scroll to zoom'}
+        </span>
       </footer>
     </main>
   )

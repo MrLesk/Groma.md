@@ -226,6 +226,7 @@ function relationshipEdges(model, nodes, elementsById) {
   const nodeIdByElementId = new Map(
     nodes.map(node => [node.data.elementId, node.id]),
   )
+  const nodeById = new Map(nodes.map(node => [node.id, node]))
   const grouped = new Map()
 
   function displayedNodeId(elementId) {
@@ -269,14 +270,28 @@ function relationshipEdges(model, nodes, elementsById) {
         `${right.source}\0${right.target}`,
       )
     })
-    .map((group, index) => ({
-      id: `relationship:${index}:${group.source}:${group.target}`,
-      source: group.source,
-      target: group.target,
-      type: 'relationship',
-      label: group.labels.join('\n'),
-      markerEnd: { type: 'arrowclosed' },
-    }))
+    .map((group, index) => {
+      const sourceName = nodeById.get(group.source).data.name
+      const targetName = nodeById.get(group.target).data.name
+      const accessibleLabel = `Relationship from ${sourceName} to ${targetName}: `
+        + group.labels.join('; ')
+
+      return {
+        id: `relationship:${index}:${group.source}:${group.target}`,
+        source: group.source,
+        target: group.target,
+        type: 'relationship',
+        label: group.labels.join('\n'),
+        ariaLabel: accessibleLabel,
+        data: {
+          sourceName,
+          targetName,
+          labels: [...group.labels],
+          accessibleLabel,
+        },
+        markerEnd: { type: 'arrowclosed' },
+      }
+    })
 }
 
 function focusLevel(focusPath, focalSystemId) {
