@@ -122,6 +122,7 @@ function relationshipTargetFilename(sourceFilename, href) {
 function documentToElement(document) {
   const { id, kind, parent, external } = document.frontmatter
   const { sourceFilename } = document
+  const declaresExternal = Object.hasOwn(document.frontmatter, 'external')
 
   if (typeof id !== 'string' || id.length === 0) {
     throw new ArchitectureModelError(
@@ -135,6 +136,20 @@ function documentToElement(document) {
       'INVALID_ELEMENT',
       sourceFilename,
       `element "${id}" has unsupported kind "${kind}"`,
+    )
+  }
+  if (declaresExternal && typeof external !== 'boolean') {
+    throw new ArchitectureModelError(
+      'INVALID_ELEMENT',
+      sourceFilename,
+      'external must be a boolean when present',
+    )
+  }
+  if (declaresExternal && external !== true) {
+    throw new ArchitectureModelError(
+      'INVALID_ELEMENT',
+      sourceFilename,
+      'external may only be present with the value true',
     )
   }
   if (external === true && kind !== 'system') {

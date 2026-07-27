@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 22:19'
+updated_date: '2026-07-27 22:23'
 labels: []
 milestone: m-1
 dependencies:
@@ -48,6 +48,10 @@ Consume the revision documents returned by TASK-4 and derive the deterministic a
 5. Add a regression proving an explicitly null root parent is invalid while omitted root parents and nested missing/null parents retain their intended semantics.
 6. Preserve whether frontmatter declared `parent` separately from the public normalized `parentId`, then validate field presence and parent value by C4 kind.
 7. Run focused and full checks, record correction evidence, re-finalize TASK-5, and commit the review correction.
+
+8. Add negative regressions for quoted `external: "true"`, other invalid declared values, and `external: true` on a non-system, all with deterministic filename-bearing model errors.
+9. Validate raw `external` field presence and contract value before normalizing the public boolean; preserve absent-as-false and system-only external semantics.
+10. Run focused and full checks, record quality-correction evidence, re-finalize TASK-5, and commit the scoped fix.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -62,10 +66,16 @@ Spec review reopened TASK-5: Comark preserves explicit YAML `parent: null`, but 
 Correction implemented with a focused red/green cycle. The new explicit-null root regression failed because no exception was raised; empty/non-null root parents and omitted/null nested parents already raised filename-bearing `INVALID_PARENT`. The builder now tracks parent field presence separately in a validation-only set while keeping the public normalized `parentId` shape unchanged. The focused model suite passes 14/14.
 
 Correction verification: fresh `npm run check` validated 4 revisions (35 elements, 34 relationships) and passed 35/35 tests; `git diff --check` passed. Regression coverage now distinguishes explicit null, empty, and non-null root parent declarations from an omitted root parent, and confirms omitted/null contained parents remain invalid with the offending filename.
+
+Quality review reopened TASK-5: Comark preserves quoted YAML `external: "true"` as a string, while `external === true` silently normalized it to internal `false`. Acceptance criterion #1 was unchecked pending strict raw-frontmatter presence/value validation and regression coverage.
+
+Quality correction implemented with a focused red/green cycle. Quoted true, explicit false, and null external values first failed because the builder raised no exception; literal true on a person already exercised the system-only branch. `documentToElement` now checks raw field presence, requires a boolean, enforces the contract’s true-only declaration, and only then normalizes absent to false. The focused model suite passes 18/18.
+
+Quality-correction verification: fresh `npm run check` validated 4 revisions (35 elements, 34 relationships) and passed 39/39 tests; `git diff --check` passed. Regression coverage proves quoted true, explicit false, and null external declarations raise deterministic filename-bearing `INVALID_ELEMENT`, while literal true remains restricted to systems and absence remains internal false.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Built the revision-local deterministic C4 graph model and corrected parent validation to preserve YAML field presence: people and systems now reject any declared parent, including explicit null, while containers/components still reject omitted or null parents. Markdown-link relationship resolution, stable IDs, filename-bearing errors, frozen serialization, and presentation-state exclusion remain intact. Verified by the focused 14-test model suite and `npm run check` with 4 revisions validated and 35/35 tests passing.
+Built the revision-local deterministic C4 graph model and hardened raw frontmatter validation. Parent field presence is preserved for containment rules, and external status is validated before normalization: absence means internal false, a declaration must be literal true, and only systems may be external. Invalid values and kinds raise deterministic filename-bearing errors. Verified by the focused 18-test model suite and `npm run check` with 4 revisions validated and 39/39 tests passing.
 <!-- SECTION:FINAL_SUMMARY:END -->

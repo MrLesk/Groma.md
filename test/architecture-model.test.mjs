@@ -270,6 +270,68 @@ for (const {
   message,
 } of [
   {
+    name: 'reports a quoted external true value instead of coercing it',
+    documents: [
+      elementDocument({
+        id: 'quoted-external-system',
+        kind: 'system',
+        external: 'true',
+        sourceFilename:
+          'groma/plans/test-revision/systems/quoted-external-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/quoted-external-system/system.md',
+    message: /external must be a boolean/,
+  },
+  {
+    name: 'reports an explicitly false external field',
+    documents: [
+      elementDocument({
+        id: 'false-external-system',
+        kind: 'system',
+        external: false,
+        sourceFilename:
+          'groma/plans/test-revision/systems/false-external-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/false-external-system/system.md',
+    message: /external may only be present with the value true/,
+  },
+  {
+    name: 'reports a null external value instead of coercing it',
+    documents: [
+      elementDocument({
+        id: 'null-external-system',
+        kind: 'system',
+        external: null,
+        sourceFilename:
+          'groma/plans/test-revision/systems/null-external-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/null-external-system/system.md',
+    message: /external must be a boolean/,
+  },
+  {
+    name: 'reports an external person',
+    documents: [
+      elementDocument({
+        id: 'external-person',
+        kind: 'person',
+        external: true,
+        sourceFilename: 'groma/plans/test-revision/people/external-person.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename: 'groma/plans/test-revision/people/external-person.md',
+    message: /only a system can be external.*"external-person" is a person/,
+  },
+  {
     name: 'reports a duplicate stable id at the second document',
     documents: [
       elementDocument({
