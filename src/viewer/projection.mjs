@@ -61,10 +61,58 @@ function elementsOfKind(elements, kind) {
     .sort((left, right) => compareStrings(left.id, right.id))
 }
 
-function contextNodes(model, focalSystem, childrenByParent) {
+function connectedContextIds(model, focalSystemId, elementsById) {
+  const rootIdByElementId = new Map()
+
+  function rootId(elementId) {
+    if (rootIdByElementId.has(elementId)) {
+      return rootIdByElementId.get(elementId)
+    }
+
+    const visited = []
+    let element = elementsById.get(elementId)
+    while (element?.parentId) {
+      visited.push(element.id)
+      element = elementsById.get(element.parentId)
+    }
+
+    const id = element?.id ?? null
+    rootIdByElementId.set(elementId, id)
+    for (const visitedId of visited) {
+      rootIdByElementId.set(visitedId, id)
+    }
+    return id
+  }
+
+  const connectedIds = new Set()
+  for (const relationship of model.relationships) {
+    const sourceRootId = rootId(relationship.sourceId)
+    const targetRootId = rootId(relationship.targetId)
+
+    if (sourceRootId === focalSystemId && targetRootId !== focalSystemId) {
+      connectedIds.add(targetRootId)
+    }
+    if (targetRootId === focalSystemId && sourceRootId !== focalSystemId) {
+      connectedIds.add(sourceRootId)
+    }
+  }
+
+  connectedIds.delete(null)
+  return connectedIds
+}
+
+function contextNodes(
+  model,
+  focalSystem,
+  childrenByParent,
+  connectedRootIds,
+) {
   const people = elementsOfKind(model.elements, 'person')
+    .filter(element => connectedRootIds.has(element.id))
   const externalSystems = elementsOfKind(model.elements, 'system')
-    .filter(element => element.id !== focalSystem.id)
+    .filter(element => {
+      return element.id !== focalSystem.id && connectedRootIds.has(element.id)
+    })
 
   return [
     ...people.map((person, index) => {
@@ -79,7 +127,12 @@ function contextNodes(model, focalSystem, childrenByParent) {
   ]
 }
 
-function containerNodes(model, focalSystem, childrenByParent) {
+function containerNodes(
+  model,
+  focalSystem,
+  childrenByParent,
+  connectedRootIds,
+) {
   const systemBoundary = boundaryNode(
     focalSystem,
     { x: 350, y: 46 },
@@ -88,8 +141,11 @@ function containerNodes(model, focalSystem, childrenByParent) {
   const containers = (childrenByParent.get(focalSystem.id) ?? [])
     .filter(element => element.kind === 'container')
   const people = elementsOfKind(model.elements, 'person')
+    .filter(element => connectedRootIds.has(element.id))
   const otherSystems = elementsOfKind(model.elements, 'system')
-    .filter(element => element.id !== focalSystem.id)
+    .filter(element => {
+      return element.id !== focalSystem.id && connectedRootIds.has(element.id)
+    })
 
   return [
     ...people.map((person, index) => {
@@ -109,7 +165,13 @@ function containerNodes(model, focalSystem, childrenByParent) {
   ]
 }
 
-function componentNodes(model, focalSystem, selectedContainer, childrenByParent) {
+function componentNodes(
+  model,
+  focalSystem,
+  selectedContainer,
+  childrenByParent,
+  connectedRootIds,
+) {
   const systemBoundary = boundaryNode(
     focalSystem,
     { x: 300, y: 34 },
@@ -128,8 +190,11 @@ function componentNodes(model, focalSystem, selectedContainer, childrenByParent)
   const components = (childrenByParent.get(selectedContainer.id) ?? [])
     .filter(element => element.kind === 'component')
   const people = elementsOfKind(model.elements, 'person')
+    .filter(element => connectedRootIds.has(element.id))
   const otherSystems = elementsOfKind(model.elements, 'system')
-    .filter(element => element.id !== focalSystem.id)
+    .filter(element => {
+      return element.id !== focalSystem.id && connectedRootIds.has(element.id)
+    })
 
   return [
     ...people.map((person, index) => {
@@ -250,13 +315,28 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
   if (!focalSystem || focalSystem.kind !== 'system') {
     throw new TypeError(`Focal element "${focalSystemId}" must be a software system`)
   }
+  const connectedRootIds = connectedContextIds(
+    model,
+    focalSystemId,
+    elementsById,
+  )
 
   const level = focusLevel(focusPath, focalSystemId)
   let nodes
   if (level === 'context') {
-    nodes = contextNodes(model, focalSystem, childrenByParent)
+    nodes = contextNodes(
+      model,
+      focalSystem,
+      childrenByParent,
+      connectedRootIds,
+    )
   } else if (level === 'container') {
-    nodes = containerNodes(model, focalSystem, childrenByParent)
+    nodes = containerNodes(
+      model,
+      focalSystem,
+      childrenByParent,
+      connectedRootIds,
+    )
   } else {
     const selectedContainer = elementsById.get(focusPath[1])
     if (
@@ -273,6 +353,7 @@ export function projectArchitectureView(model, focalSystemId, focusPath) {
       focalSystem,
       selectedContainer,
       childrenByParent,
+      connectedRootIds,
     )
   }
 

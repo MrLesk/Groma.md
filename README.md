@@ -37,3 +37,14 @@ changing any Markdown:
 npm run viewer -- --revision observed
 npm run viewer -- --revision plan:03-code-observation
 ```
+
+Run the interactive browser verification (Playwright starts and stops the local
+viewer):
+
+```sh
+npx playwright install chromium
+npm run test:viewer:browser
+```
+
+Screenshots and other browser-test artifacts stay outside the repository under
+`/tmp/groma-playwright-results`.

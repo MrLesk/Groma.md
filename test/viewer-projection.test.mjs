@@ -22,6 +22,73 @@ function nodeByElementId(view, elementId) {
   return view.nodes.find(node => node.data.elementId === elementId)
 }
 
+function modelWithSyntheticContext() {
+  const elements = [
+    {
+      id: 'connected-person',
+      kind: 'person',
+      name: 'Connected person',
+      description: 'Uses a focal component.',
+      parentId: null,
+      external: false,
+      sourceFilename: 'synthetic/connected-person.md',
+    },
+    {
+      id: 'connected-system',
+      kind: 'system',
+      name: 'Connected system',
+      description: 'Supplies a focal component.',
+      parentId: null,
+      external: true,
+      sourceFilename: 'synthetic/connected-system.md',
+    },
+    {
+      id: 'unrelated-person',
+      kind: 'person',
+      name: 'Unrelated person',
+      description: 'Uses only an unrelated system.',
+      parentId: null,
+      external: false,
+      sourceFilename: 'synthetic/unrelated-person.md',
+    },
+    {
+      id: 'unrelated-system',
+      kind: 'system',
+      name: 'Unrelated system',
+      description: 'Has no relationship with Groma.',
+      parentId: null,
+      external: true,
+      sourceFilename: 'synthetic/unrelated-system.md',
+    },
+  ]
+  const relationships = [
+    {
+      sourceId: 'connected-person',
+      targetId: 'canvas',
+      description: 'Uses the canvas',
+      technology: 'Browser',
+    },
+    {
+      sourceId: 'connected-system',
+      targetId: 'architecture-model',
+      description: 'Supplies architecture data',
+      technology: 'Local API',
+    },
+    {
+      sourceId: 'unrelated-person',
+      targetId: 'unrelated-system',
+      description: 'Uses an unrelated system',
+      technology: 'Browser',
+    },
+  ]
+
+  return {
+    ...model,
+    elements: [...model.elements, ...elements],
+    relationships: [...model.relationships, ...relationships],
+  }
+}
+
 test('projects the opening system context with promoted labeled relationships', () => {
   const view = projectArchitectureView(model, 'groma', [])
 
@@ -58,6 +125,24 @@ test('projects the opening system context with promoted labeled relationships', 
   )
 })
 
+test('system context excludes roots without a relationship to the focal subtree', () => {
+  const view = projectArchitectureView(modelWithSyntheticContext(), 'groma', [])
+  const elementIds = view.nodes.map(node => node.data.elementId)
+
+  assert.ok(elementIds.includes('connected-person'))
+  assert.ok(elementIds.includes('connected-system'))
+  assert.ok(!elementIds.includes('unrelated-person'))
+  assert.ok(!elementIds.includes('unrelated-system'))
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-person'
+      && edge.target === 'element:groma'
+  }))
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-system'
+      && edge.target === 'element:groma'
+  }))
+})
+
 test('replaces the focal system with its container boundary and preserves context', () => {
   const view = projectArchitectureView(model, 'groma', ['groma'])
   const systemBoundary = nodeByElementId(view, 'groma')
@@ -75,6 +160,28 @@ test('replaces the focal system with its container boundary and preserves contex
   assert.ok(nodeByElementId(view, 'git'))
   assert.ok(view.edges.some(edge => {
     return edge.source === workspace.id && edge.target === nodeByElementId(view, 'git').id
+  }))
+})
+
+test('container view preserves only root context connected to the focal subtree', () => {
+  const view = projectArchitectureView(
+    modelWithSyntheticContext(),
+    'groma',
+    ['groma'],
+  )
+  const elementIds = view.nodes.map(node => node.data.elementId)
+
+  assert.ok(elementIds.includes('connected-person'))
+  assert.ok(elementIds.includes('connected-system'))
+  assert.ok(!elementIds.includes('unrelated-person'))
+  assert.ok(!elementIds.includes('unrelated-system'))
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-person'
+      && edge.target === 'element:viewer'
+  }))
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-system'
+      && edge.target === 'element:viewer'
   }))
 })
 
@@ -103,6 +210,32 @@ test('reveals components without nesting collaborating containers or systems', (
   assert.ok(view.edges.some(edge => {
     return edge.source === nodeByElementId(view, 'markdown-watcher').id
       && edge.target === workspace.id
+  }))
+})
+
+test('component view preserves only root context connected to the focal subtree', () => {
+  const view = projectArchitectureView(
+    modelWithSyntheticContext(),
+    'groma',
+    ['groma', 'viewer'],
+  )
+  const elementIds = view.nodes.map(node => node.data.elementId)
+
+  assert.ok(elementIds.includes('connected-person'))
+  assert.ok(elementIds.includes('connected-system'))
+  assert.ok(!elementIds.includes('unrelated-person'))
+  assert.ok(!elementIds.includes('unrelated-system'))
+  assert.equal(
+    nodeByElementId(view, 'architecture-workspace').parentId,
+    nodeByElementId(view, 'viewer').parentId,
+  )
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-person'
+      && edge.target === 'element:canvas'
+  }))
+  assert.ok(view.edges.some(edge => {
+    return edge.source === 'element:connected-system'
+      && edge.target === 'element:architecture-model'
   }))
 })
 
