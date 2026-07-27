@@ -275,6 +275,9 @@ export function ViewerApp() {
   const [reloadError, setReloadError] = useState(null)
   const [focusPath, setFocusPath] = useState([])
   const hasPayloadRef = useRef(false)
+  const appliedGenerationRef = useRef(0)
+  const announcedGenerationRef = useRef(0)
+  const latestRequestRef = useRef(0)
   const levelHeadingRef = useRef(null)
   const shouldFocusLevelRef = useRef(false)
   const isCompactViewport = useCompactViewport()
@@ -282,7 +285,10 @@ export function ViewerApp() {
   useEffect(() => {
     const controller = new AbortController()
 
-    async function loadModel() {
+    async function loadModel(minimumGeneration = 0) {
+      const requestNumber = latestRequestRef.current + 1
+      latestRequestRef.current = requestNumber
+
       try {
         const response = await fetch('/api/model', {
           signal: controller.signal,
@@ -290,12 +296,29 @@ export function ViewerApp() {
         if (!response.ok) {
           throw new Error(`The local viewer returned HTTP ${response.status}.`)
         }
-        setPayload(await response.json())
+        const nextPayload = await response.json()
+        const requiredGeneration = Math.max(
+          minimumGeneration,
+          announcedGenerationRef.current,
+          appliedGenerationRef.current,
+        )
+        if (
+          requestNumber !== latestRequestRef.current
+          || nextPayload.generation < requiredGeneration
+        ) {
+          return
+        }
+
+        appliedGenerationRef.current = nextPayload.generation
+        setPayload(nextPayload)
         hasPayloadRef.current = true
         setError(null)
-        setReloadError(null)
+        setReloadError(nextPayload.reloadError)
       } catch (loadError) {
-        if (loadError.name !== 'AbortError') {
+        if (
+          loadError.name !== 'AbortError'
+          && requestNumber === latestRequestRef.current
+        ) {
           if (hasPayloadRef.current) {
             setReloadError(loadError.message)
           } else {
@@ -306,12 +329,30 @@ export function ViewerApp() {
     }
 
     const events = new EventSource('/api/events')
-    events.addEventListener('architecture-changed', loadModel)
+    events.addEventListener('architecture-changed', event => {
+      try {
+        const { generation } = JSON.parse(event.data)
+        announcedGenerationRef.current = Math.max(
+          announcedGenerationRef.current,
+          generation,
+        )
+        loadModel(generation)
+      } catch {
+        loadModel()
+      }
+    })
     events.addEventListener('architecture-error', event => {
       try {
-        setReloadError(JSON.parse(event.data).message)
+        const { generation, message } = JSON.parse(event.data)
+        announcedGenerationRef.current = Math.max(
+          announcedGenerationRef.current,
+          generation,
+        )
+        setReloadError(message)
+        loadModel(generation)
       } catch {
         setReloadError('The changed Markdown is not a valid architecture revision.')
+        loadModel()
       }
     })
     loadModel()

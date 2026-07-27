@@ -1,4 +1,5 @@
 import { watch } from 'node:fs'
+import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -101,6 +102,7 @@ async function buildPayload(generation) {
 }
 
 let payload = await buildPayload(1)
+let reloadError = null
 
 const port = Number(
   argumentValue('--port')
@@ -111,11 +113,14 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   throw new TypeError('Port must be an integer from 0 through 65535.')
 }
 
-function sendReloadEvent(event, data) {
-  const message = eventEncoder.encode(
+function reloadEventMessage(event, data) {
+  return eventEncoder.encode(
     `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
   )
+}
 
+function sendReloadEvent(event, data) {
+  const message = reloadEventMessage(event, data)
   for (const client of reloadClients) {
     try {
       client.enqueue(message)
@@ -133,7 +138,10 @@ const server = Bun.serve({
     '/': index,
     '/api/model': {
       GET() {
-        return Response.json(payload, {
+        return Response.json({
+          ...payload,
+          reloadError,
+        }, {
           headers: {
             'Cache-Control': 'no-store',
           },
@@ -147,7 +155,14 @@ const server = Bun.serve({
           start(streamController) {
             controller = streamController
             reloadClients.add(controller)
-            controller.enqueue(eventEncoder.encode(': connected\n\n'))
+            controller.enqueue(reloadError
+              ? reloadEventMessage('architecture-error', {
+                  generation: payload.generation,
+                  message: reloadError,
+                })
+              : reloadEventMessage('architecture-changed', {
+                  generation: payload.generation,
+                }))
           },
           cancel() {
             reloadClients.delete(controller)
@@ -175,34 +190,77 @@ const server = Bun.serve({
 
 let settleTimer
 let reloadQueue = Promise.resolve()
+let markdownEventSequence = 0
 function scheduleReload() {
   clearTimeout(settleTimer)
   settleTimer = setTimeout(() => {
     reloadQueue = reloadQueue.then(async () => {
       try {
         payload = await buildPayload(payload.generation + 1)
+        reloadError = null
         sendReloadEvent('architecture-changed', {
           generation: payload.generation,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        sendReloadEvent('architecture-error', { message })
+        reloadError = message
+        sendReloadEvent('architecture-error', {
+          generation: payload.generation,
+          message,
+        })
         console.error(`Groma reload kept generation ${payload.generation}: ${message}`)
       }
     })
   }, 120)
 }
 
+async function directoryContainsMarkdown(directory) {
+  const entries = await readdir(directory, { withFileTypes: true })
+  return entries.some(entry => {
+    return entry.isFile() && entry.name.endsWith('.md')
+  })
+}
+
+async function scheduleReloadForNewMarkdownDirectory(
+  watchRoot,
+  filename,
+  eventSequence,
+) {
+  await new Promise(resolve => setTimeout(resolve, 120))
+  if (eventSequence !== markdownEventSequence) return
+
+  const changedPath = path.join(watchRoot, filename)
+  try {
+    if (
+      (await stat(changedPath)).isDirectory()
+      && await directoryContainsMarkdown(changedPath)
+    ) {
+      scheduleReload()
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error(
+        `Groma could not inspect watched path ${changedPath}: ${error.message}`,
+      )
+    }
+  }
+}
+
 for (const relativeDirectory of ['groma/observed', 'groma/plans']) {
+  const watchRoot = path.join(repositoryRoot, relativeDirectory)
   watch(
-    path.join(repositoryRoot, relativeDirectory),
+    watchRoot,
     { recursive: true },
-    (_eventType, filename) => {
-      if (
-        typeof filename === 'string'
-        && (filename.endsWith('.md') || path.extname(filename) === '')
-      ) {
+    (eventType, filename) => {
+      if (typeof filename === 'string' && filename.endsWith('.md')) {
+        markdownEventSequence += 1
         scheduleReload()
+      } else if (eventType === 'rename' && typeof filename === 'string') {
+        void scheduleReloadForNewMarkdownDirectory(
+          watchRoot,
+          filename,
+          markdownEventSequence,
+        )
       }
     },
   )

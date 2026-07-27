@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:36'
+updated_date: '2026-07-27 23:44'
 labels: []
 milestone: m-1
 dependencies:
@@ -50,6 +50,8 @@ The viewer delivered by TASK-6 reads canonical architecture only from Markdown. 
 3. Subscribe the React viewer to reload notifications, preserve valid focus, fall back safely when a focused container disappears, and show non-blocking invalid-edit status while retaining the last valid model.
 4. Add disposable-repository browser coverage for add/change/remove, README context, outside-groma silence, transient invalid Markdown, focus recovery, process continuity, and read-only behavior; document live reload semantics.
 5. Run architecture validation, unit tests, browser tests, inspect the final diff, and finalize TASK-8.
+
+Corrective review: 6. Add deterministic browser coverage that delays an older model response past a newer generation and refuses stale payload application. 7. Persist last-good reload status/error server-side, replay status to late/reconnected clients, and clear it only after a successful full rebuild. 8. Restrict watcher scheduling to `.md` filenames for create/change/remove events and prove extensionless/non-Markdown changes inside watched roots do not advance generation. 9. Re-run disposable-fixture browser coverage, full reader/model validation, inspect canonical Markdown and worktree state, then re-finalize.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -58,10 +60,16 @@ The viewer delivered by TASK-6 reads canonical architecture only from Markdown. 
 Implemented recursive architecture-only watches on groma/observed and groma/plans, settled full TASK-4/TASK-5 rebuilds, SSE browser notification, README-derived revision context, last-valid handling for invalid edits, and focus recovery. Browser coverage uses a disposable /tmp repository copy and exercises planned and observed add/change/remove, removed-focus fallback, README context, outside-groma silence, and invalid-edit recovery.
 
 Verification: `npm run check` passed architecture validation plus 61 Node tests; `npm run test:viewer:browser` passed all 4 Playwright scenarios. The live-reload scenario ran against a disposable /tmp repository copy, left the project canonical Markdown untouched, and mutation-checked removed-focus recovery.
+
+Spec review reopened the task: concurrent client fetches can regress generations, invalid-edit state is not replayed to late/reconnected clients, and extensionless watched-root events currently trigger rebuilds.
+
+Corrective implementation: the client now rejects responses older than the latest request, announced generation, or applied generation. The server persists `reloadError`, returns it with the last-good payload, replays current status on each SSE connection, and clears it only after a successful full rebuild. Watch events schedule directly only for `.md`; rename events for possible new directories perform one delayed, single-directory Markdown check so immediate nested Markdown creation remains observable without treating known non-Markdown files as architecture. Focused Playwright tests were observed failing before each correction and passing afterward.
+
+Corrective verification: `npm run check` passed architecture validation and 61 Node tests; `npm run test:viewer:browser` passed 7 scenarios including deterministic stale-response ordering, invalid-before-connect/status replay/reload recovery, and watched-root non-Markdown silence; `bun build src/viewer/main.jsx --outdir /tmp/groma-task8-review-build-20260728 --target browser` bundled 146 modules. `git diff --exit-code HEAD -- groma` confirmed canonical architecture unchanged, and the disposable fixture directory was removed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added settled architecture Markdown live reload with recursive filesystem watches limited to observed/plans and SSE browser notification. Every successful change fully reloads TASK-4 records and rebuilds TASK-5 selected/observed models; invalid settled edits retain the last valid generation. Revision README context now renders without becoming a C4 element, valid focus survives updates, and removed focus safely falls back. Verified with architecture validation, 61 Node tests, and 4 Playwright browser tests using a disposable repository copy.
+Implemented architecture-only live reload plus spec-review corrections. The client enforces latest-request and generation ordering, the server persists/replays last-good invalid-edit status across late connections and reconnects, and watcher filtering ignores extensionless/non-Markdown files while handling immediate Markdown creation in new directories with a targeted delayed check. Verified with 61 Node tests, 7 Playwright browser scenarios, a 146-module Bun browser build, clean canonical groma diff, and cleaned temporary fixture.
 <!-- SECTION:FINAL_SUMMARY:END -->

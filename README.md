@@ -36,8 +36,9 @@ Markdown under `groma/observed` and `groma/plans`, then fully rereads both
 selected revisions after changes settle. An open browser updates over a local
 event stream without restarting the viewer. If a settled edit is temporarily
 invalid, the last valid model remains visible with a warning until a later
-Markdown change rebuilds successfully. Files outside those architecture
-directories are not watched.
+Markdown change rebuilds successfully; newly connected browsers receive the
+same current warning. Extensionless and non-Markdown files, plus files outside
+those architecture directories, are not watched.
 
 Choose another plan without changing any Markdown:
 

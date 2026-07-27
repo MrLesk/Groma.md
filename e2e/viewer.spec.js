@@ -479,6 +479,174 @@ test('reloads architecture Markdown while preserving the open viewer process', a
     await page.evaluate(() => window.__gromaLiveReloadSentinel),
   ).toBe('same-page')
   await writeFile(planReadme, originalPlanReadme)
+  await expect.poll(async () => {
+    const response = await page.request.get(
+      'http://127.0.0.1:4180/api/model',
+    )
+    return (await response.json()).revisionContext.title
+  }).toBe('Revision 02 — Live viewer')
+})
+
+test('never replaces a newer model with an older delayed generation', async ({
+  page,
+}) => {
+  const planReadme = path.join(
+    os.tmpdir(),
+    'groma-live-reload-browser-4180',
+    'groma/plans/02-live-viewer/README.md',
+  )
+  const originalPlanReadme = await readFile(planReadme, 'utf8')
+  let delayNextModel = false
+  let releaseDelayedResponse = () => {}
+  let delayedResponseStartedResolve
+  let delayedResponseFinishedResolve
+  const delayedResponseStarted = new Promise(resolve => {
+    delayedResponseStartedResolve = resolve
+  })
+  const delayedResponseFinished = new Promise(resolve => {
+    delayedResponseFinishedResolve = resolve
+  })
+  const releaseDelayed = new Promise(resolve => {
+    releaseDelayedResponse = resolve
+  })
+
+  await page.goto('http://127.0.0.1:4180')
+  await expect(page.getByTestId('revision-context-title')).toHaveText(
+    'Revision 02 — Live viewer',
+  )
+  await page.route('**/api/model', async route => {
+    const response = await route.fetch()
+    const body = await response.body()
+
+    if (delayNextModel) {
+      delayNextModel = false
+      delayedResponseStartedResolve()
+      await releaseDelayed
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body,
+      })
+      delayedResponseFinishedResolve()
+      return
+    }
+
+    await route.fulfill({
+      status: response.status(),
+      headers: response.headers(),
+      body,
+    })
+  })
+
+  try {
+    delayNextModel = true
+    await writeFile(
+      planReadme,
+      '# Delayed older revision\n\nThis response must not win.\n',
+    )
+    await delayedResponseStarted
+
+    await writeFile(
+      planReadme,
+      '# Newest revision\n\nThis response must remain visible.\n',
+    )
+    await expect(page.getByTestId('revision-context-title')).toHaveText(
+      'Newest revision',
+    )
+
+    releaseDelayedResponse()
+    await delayedResponseFinished
+    await page.waitForTimeout(100)
+    await expect(page.getByTestId('revision-context-title')).toHaveText(
+      'Newest revision',
+    )
+  } finally {
+    releaseDelayedResponse()
+    await writeFile(planReadme, originalPlanReadme)
+    await expect.poll(async () => {
+      const response = await page.request.get(
+        'http://127.0.0.1:4180/api/model',
+      )
+      return (await response.json()).revisionContext.title
+    }).toBe('Revision 02 — Live viewer')
+  }
+})
+
+test('replays an invalid-edit status to late and reconnected clients', async ({
+  page,
+}) => {
+  const invalidDocument = path.join(
+    os.tmpdir(),
+    'groma-live-reload-browser-4180',
+    'groma/plans/02-live-viewer/people/reconnect-invalid.md',
+  )
+
+  try {
+    await writeFile(
+      invalidDocument,
+      '---\nid: [invalid\n---\n\n# Invalid before connecting\n',
+    )
+    await expect.poll(async () => {
+      const response = await page.request.get(
+        'http://127.0.0.1:4180/api/model',
+      )
+      return (await response.json()).reloadError
+    }).toContain('reconnect-invalid.md')
+
+    const eventController = new AbortController()
+    const eventResponse = await fetch('http://127.0.0.1:4180/api/events', {
+      signal: eventController.signal,
+    })
+    const eventReader = eventResponse.body.getReader()
+    const firstEvent = await eventReader.read()
+    eventController.abort()
+    expect(new TextDecoder().decode(firstEvent.value)).toContain(
+      'reconnect-invalid.md',
+    )
+
+    await page.goto('http://127.0.0.1:4180')
+    await expect(page.getByRole('status')).toContainText(
+      'Keeping the last valid architecture',
+    )
+    await page.reload()
+    await expect(page.getByRole('status')).toContainText(
+      'reconnect-invalid.md',
+    )
+
+    await rm(invalidDocument)
+    await expect(page.getByRole('status')).toHaveCount(0)
+  } finally {
+    await rm(invalidDocument, { force: true })
+  }
+})
+
+test('ignores extensionless and non-Markdown files inside watched roots', async ({
+  page,
+}) => {
+  const planRoot = path.join(
+    os.tmpdir(),
+    'groma-live-reload-browser-4180',
+    'groma/plans/02-live-viewer',
+  )
+  const extensionless = path.join(planRoot, 'watcher-probe')
+  const nonMarkdown = path.join(planRoot, 'watcher-probe.txt')
+  const initialPayload = await (
+    await page.request.get('http://127.0.0.1:4180/api/model')
+  ).json()
+
+  try {
+    await writeFile(extensionless, 'not architecture\n')
+    await writeFile(nonMarkdown, 'not architecture\n')
+    await page.waitForTimeout(500)
+
+    const afterNonMarkdown = await (
+      await page.request.get('http://127.0.0.1:4180/api/model')
+    ).json()
+    expect(afterNonMarkdown.generation).toBe(initialPayload.generation)
+  } finally {
+    await rm(extensionless, { force: true })
+    await rm(nonMarkdown, { force: true })
+  }
 })
 
 test('navigates three C4 levels and returns on desktop and mobile', async ({
