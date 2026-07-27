@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 22:40'
+updated_date: '2026-07-27 22:43'
 labels: []
 milestone: m-1
 dependencies:
@@ -63,6 +63,10 @@ Create Groma’s first read-only local viewer from the C4 model delivered by TAS
 8. Derive connected root context IDs from relationship endpoints whose containment roots cross into the focal system subtree, and use that set in all three node projections without changing structural children, peer containment, edge promotion, or transient focus state.
 
 9. Commit a reproducible Playwright browser harness and pinned development dependency, then rerun desktop/mobile context → container → component → back verification, full checks, production bundle, groma/ immutability check, Backlog finalization, and direct commit.
+
+10. Refactor the committed Playwright spec around a small reusable three-level flow that asserts exact visible node IDs and directed edge endpoint pairs for container and component views, then run it independently at desktop and mobile sizes including both back actions.
+
+11. Preserve context labels, screenshots, mobile width, and console-health checks; rerun the browser/full suites, correct the overstated Backlog evidence, finalize, and commit only test/evidence changes.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -85,10 +89,16 @@ Connected-context correction completed with a red/green cycle. Three synthetic r
 Browser verification is now reproducible in-repo: pinned @playwright/test 1.62.0, playwright.config.mjs starts/stops the Bun viewer on 127.0.0.1:4177, and e2e/viewer.spec.js exercises the desktop/mobile pointer flow while writing artifacts only under /tmp/groma-playwright-results. The in-app Browser retry returned “No browser is available” and an empty browser inventory, so the permitted committed Playwright fallback was used.
 
 Correction verification: npm run check validated 4 revisions (35 elements, 34 relationships) and passed 46/46 tests; npm run test:viewer:browser passed 1/1 at 1440×960 and 390×844 with context node count, labeled edges, context→containers→components→back, collaborating Architecture workspace/Git visibility, mobile document width, screenshots, and zero console warnings/errors. Production Bun build bundled 221 modules into a 664K temporary artifact; git diff --check passed; git diff -- groma/ remained empty.
+
+Second spec review reopened TASK-6 for an evidence gap, not a runtime defect. The committed browser test title and Backlog note claimed context→container→component→back coverage at both 1440×960 and 390×844, but the mobile branch only reloaded context, checked document width, and captured a screenshot. Acceptance criteria #2–#4 are unchecked until the checked-in mobile flow actually pointer-navigates both expansions and both back steps with exact container/component node and edge membership assertions.
+
+Browser evidence gap corrected. e2e/viewer.spec.js now uses one small exerciseThreeLevelFlow helper for two independent viewports. At both 1440×960 and 390×844 it asserts exact context node/edge membership and labels, pointer-clicks Groma, asserts the exact 6 container-level nodes and 6 directed edge IDs, pointer-clicks Viewer, asserts the exact 10 component-level nodes and 10 directed edge IDs, then clicks Previous level twice and reasserts exact container/context membership after each return. It captures context and component screenshots for both sizes; the mobile branch also verifies document width, and the combined run asserts zero console warnings/errors. This supersedes the prior overstated mobile-flow claim.
+
+Fresh verification: npm run test:viewer:browser passed 1/1 in 1.8s with both complete viewport flows; npm run check validated 4 revisions (35 elements, 34 relationships) and passed 46/46 tests; git diff --check passed; git diff -- groma/ was empty. No runtime source or architecture Markdown changed in this correction.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Corrected C4 context selection so people and non-focal systems render only when an actual relationship crosses between their containment root and the focal Groma subtree, in either direction. Synthetic regressions cover connected and unrelated roots at context, container, and component levels while retaining promoted directed edges and sibling peers. Added a pinned, reproducible Playwright harness; full verification passed 46/46 unit/integration tests, 1/1 desktop/mobile browser flow, production Bun bundling, diff hygiene, and no groma/ changes.
+Delivered the read-only Bun/React Flow C4 viewer and corrected its evidence suite. Connected context is relationship-driven with unrelated roots excluded; decomposition preserves promoted directed edges and sibling peers. The checked-in Playwright test now performs and exactly verifies context→container→component→back→back at both desktop and mobile sizes, including node and edge membership, screenshots, responsive width, and browser-console health. Final checks passed 46/46 repository tests and 1/1 dual-viewport browser test with no groma/ changes.
 <!-- SECTION:FINAL_SUMMARY:END -->
