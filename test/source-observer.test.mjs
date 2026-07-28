@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -31,9 +32,19 @@ async function readJson(filename) {
   return JSON.parse(await readFile(filename, 'utf8'))
 }
 
-async function assertUnsupportedRoot(root) {
+async function createPhysicalProbe(t) {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'groma-observer-physical-'),
+  )
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
+  const repository = path.join(temporaryRoot, 'repository')
+  await cp(supportedRoot, repository, { recursive: true })
+  return { temporaryRoot, repository }
+}
+
+async function assertUnsupportedRoot(root, options) {
   await assert.rejects(
-    observeTypeScriptSource(root),
+    observeTypeScriptSource(root, options),
     error => {
       assert.ok(error instanceof UnsupportedSourceShapeError)
       assert.deepEqual(
@@ -145,13 +156,16 @@ test('reads only bounded source files and never executes project text', async t 
     path.join(temporaryRoot, 'groma', 'plans', 'must-not-be-read.md'),
     '# Sentinel\n',
   )
+  const physicalRoot = await realpath(temporaryRoot)
   const accesses = []
 
   const observation = await observeTypeScriptSource(temporaryRoot, {
     onFilesystemAccess(access) {
       accesses.push({
         operation: access.operation,
-        path: path.relative(temporaryRoot, access.filename),
+        path: access.filename === temporaryRoot
+          ? ''
+          : path.relative(physicalRoot, access.filename),
       })
     },
   })
@@ -160,10 +174,11 @@ test('reads only bounded source files and never executes project text', async t 
   assert.ok(accesses.length > 0)
   assert.deepEqual(
     [...new Set(accesses.map(({ operation }) => operation))].sort(),
-    ['read-directory', 'read-file'],
+    ['lstat', 'read-directory', 'read-file', 'realpath'],
   )
   assert.ok(accesses.every(access => {
-    return access.path === 'package.json'
+    return access.path === ''
+      || access.path === 'package.json'
       || access.path === 'src'
       || access.path.startsWith(`src${path.sep}`)
   }))
@@ -172,6 +187,121 @@ test('reads only bounded source files and never executes project text', async t 
 
 test('rejects the unsupported fixture with one exact all-or-nothing error', async () => {
   await assertUnsupportedRoot(unsupportedRoot)
+})
+
+test('allows exactly one caller-supplied repository root alias', async t => {
+  const { temporaryRoot, repository } = await createPhysicalProbe(t)
+  const rootAlias = path.join(temporaryRoot, 'repository-alias')
+  await symlink(repository, rootAlias, 'dir')
+  const expected = await readJson(path.join(
+    fixtureRoot,
+    'supported.expected.json',
+  ))
+
+  assert.deepEqual(await observeTypeScriptSource(rootAlias), expected)
+})
+
+test('rejects in-scope links before reading package or source bytes', async t => {
+  const cases = [
+    {
+      name: 'package file escaping outside',
+      mutate: async ({ temporaryRoot, repository }) => {
+        const target = path.join(temporaryRoot, 'outside-package.json')
+        await cp(path.join(repository, 'package.json'), target)
+        await rm(path.join(repository, 'package.json'))
+        await symlink(target, path.join(repository, 'package.json'), 'file')
+      },
+    },
+    {
+      name: 'source directory escaping outside',
+      mutate: async ({ temporaryRoot, repository }) => {
+        const target = path.join(temporaryRoot, 'outside-src')
+        await cp(path.join(repository, 'src'), target, { recursive: true })
+        await rm(path.join(repository, 'src'), { recursive: true })
+        await symlink(target, path.join(repository, 'src'), 'dir')
+      },
+    },
+    {
+      name: 'components ancestor escaping outside',
+      mutate: async ({ temporaryRoot, repository }) => {
+        const source = path.join(repository, 'src', 'components')
+        const target = path.join(temporaryRoot, 'outside-components')
+        await cp(source, target, { recursive: true })
+        await rm(source, { recursive: true })
+        await symlink(target, source, 'dir')
+      },
+    },
+    {
+      name: 'entry file linking inside',
+      mutate: async ({ repository }) => {
+        const entry = path.join(repository, 'src', 'index.ts')
+        await rm(entry)
+        await symlink(
+          path.join(repository, 'src', 'components', 'source-watcher.ts'),
+          entry,
+          'file',
+        )
+      },
+    },
+    {
+      name: 'component file escaping outside',
+      mutate: async ({ temporaryRoot, repository }) => {
+        const component = path.join(
+          repository,
+          'src',
+          'components',
+          'source-watcher.ts',
+        )
+        const target = path.join(temporaryRoot, 'outside-component.ts')
+        await cp(component, target)
+        await rm(component)
+        await symlink(target, component, 'file')
+      },
+    },
+    {
+      name: 'non-source link encountered beneath src',
+      mutate: async ({ temporaryRoot, repository }) => {
+        const target = path.join(temporaryRoot, 'outside-readme.txt')
+        await writeFile(target, 'outside\n')
+        await symlink(
+          target,
+          path.join(repository, 'src', 'ignored.txt'),
+          'file',
+        )
+      },
+    },
+    {
+      name: 'component source path with directory kind',
+      mutate: async ({ repository }) => {
+        const component = path.join(
+          repository,
+          'src',
+          'components',
+          'markdown-emitter.ts',
+        )
+        await rm(component)
+        await mkdir(component)
+      },
+    },
+  ]
+
+  for (const probeCase of cases) {
+    await t.test(probeCase.name, async subtest => {
+      const probe = await createPhysicalProbe(subtest)
+      await probeCase.mutate(probe)
+      const accesses = []
+
+      await assertUnsupportedRoot(probe.repository, {
+        onFilesystemAccess(access) {
+          accesses.push(access)
+        },
+      })
+      assert.equal(
+        accesses.some(access => access.operation === 'read-file'),
+        false,
+      )
+    })
+  }
 })
 
 test('rejects representative v1 violations without partial extraction', async t => {
@@ -307,6 +437,67 @@ test('rejects representative v1 violations without partial extraction', async t 
         )
         const source = await readFile(filename, 'utf8')
         await writeFile(filename, source.replaceAll('\n', '\r\n'))
+      },
+    },
+    {
+      name: 'BOM-prefixed package JSON',
+      mutate: async root => {
+        const filename = path.join(root, 'package.json')
+        const source = await readFile(filename)
+        await writeFile(filename, Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          source,
+        ]))
+      },
+    },
+    {
+      name: 'BOM-prefixed entry source',
+      mutate: async root => {
+        const filename = path.join(root, 'src', 'index.ts')
+        const source = await readFile(filename)
+        await writeFile(filename, Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          source,
+        ]))
+      },
+    },
+    {
+      name: 'BOM-prefixed component source',
+      mutate: async root => {
+        const filename = path.join(
+          root,
+          'src',
+          'components',
+          'markdown-emitter.ts',
+        )
+        const source = await readFile(filename)
+        await writeFile(filename, Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          source,
+        ]))
+      },
+    },
+    {
+      name: 'U+2028 line separator in opaque source',
+      mutate: async root => {
+        await appendFile(
+          path.join(root, 'src', 'index.ts'),
+          '\u2028\n',
+        )
+      },
+    },
+    {
+      name: 'U+2029 paragraph separator in opaque source',
+      mutate: async root => {
+        await appendFile(
+          path.join(
+            root,
+            'src',
+            'components',
+            'markdown-emitter.ts',
+          ),
+          '\u2029\n',
+        )
       },
     },
     {
