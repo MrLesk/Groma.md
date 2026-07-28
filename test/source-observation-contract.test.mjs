@@ -54,7 +54,9 @@ function isBeneath(root, candidate) {
     )
 }
 
-async function assertPhysicalFixture(suppliedRoot) {
+// This oracle validates one stable filesystem snapshot. It intentionally does
+// not model concurrent ancestor replacement during validation or byte reads.
+async function assertStableSnapshotPhysicalFixture(suppliedRoot) {
   let root
   try {
     root = await realpath(suppliedRoot)
@@ -589,11 +591,11 @@ test('readable text and bytewise ordering have explicit boundary behavior', () =
   )
 })
 
-test('physical repository boundary allows one root resolution and rejects inner links', async t => {
+test('physical boundary validates one stable snapshot and rejects static inner links', async t => {
   const rootAliasProbe = await createPhysicalProbe(t)
   const rootAlias = path.join(rootAliasProbe.temporaryRoot, 'repository-alias')
   await symlink(rootAliasProbe.repository, rootAlias, 'dir')
-  await assert.doesNotReject(assertPhysicalFixture(rootAlias))
+  await assert.doesNotReject(assertStableSnapshotPhysicalFixture(rootAlias))
   assert.equal(
     isBeneath(
       rootAliasProbe.repository,
@@ -612,7 +614,9 @@ test('physical repository boundary allows one root resolution and rejects inner 
     path.join(rootAliasProbe.repository, 'docs-link.txt'),
     'file',
   )
-  await assert.doesNotReject(assertPhysicalFixture(rootAliasProbe.repository))
+  await assert.doesNotReject(
+    assertStableSnapshotPhysicalFixture(rootAliasProbe.repository),
+  )
 
   const cases = [
     {
@@ -669,7 +673,7 @@ test('physical repository boundary allows one root resolution and rejects inner 
       : path.join(repository, probeCase.target)
     await symlink(symlinkTarget, linkPath, probeCase.type)
     await assert.rejects(
-      assertPhysicalFixture(repository),
+      assertStableSnapshotPhysicalFixture(repository),
       assertUnsupportedShape,
       probeCase.name,
     )
@@ -687,7 +691,7 @@ test('physical repository boundary allows one root resolution and rejects inner 
     'file',
   )
   await assert.rejects(
-    assertPhysicalFixture(nestedProbe.repository),
+    assertStableSnapshotPhysicalFixture(nestedProbe.repository),
     assertUnsupportedShape,
   )
 })

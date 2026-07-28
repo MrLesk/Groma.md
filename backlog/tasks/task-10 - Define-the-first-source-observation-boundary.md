@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 01:17'
+updated_date: '2026-07-28 01:34'
 labels: []
 milestone: m-2
 dependencies:
@@ -65,10 +65,7 @@ The specification must designate exactly one generated components directory bene
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Specify fail-closed physical repository confinement for groma.typescript-bun/v1: resolve the supplied root once, require every supported-layout ancestor/file to be a real directory/regular file beneath it, and reject all symbolic links or escapes with the one unsupported-shape error.
-2. Clarify byte-level source preconditions: no UTF-8 BOM and U+2028/U+2029 are forbidden line terminators in addition to exact LF-only physical lines.
-3. Add focused filesystem probes that construct valid real, symlinked-root, symlinked-ancestor/file, and escaping-target layouts without changing the TASK-11 observer implementation.
-4. Run focused/full checks, inspect the diff, refinalize TASK-10, and commit the specification correction.
+1. Narrow physical confinement to a local stable-snapshot threat model: validate required paths and ancestors before reads, retain static symlink/escape rejection, and require no-follow/same-descriptor final-file checks where available. 2. State explicitly that adversarial concurrent ancestor replacement is outside groma.typescript-bun/v1; ordinary source changes are settled by TASK-13 and trigger a fresh complete observation, without retry or weakened fallback. 3. Adjust TASK-10 contract probes to encode the stable-topology boundary while retaining static link/escape coverage, then run focused/full checks, finalize TASK-10, and commit only its contract, tests, and Backlog record.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -85,10 +82,14 @@ Quality correction after independent review: source-provided readable values are
 The supported markdown-emitter declaration now uses the exact one-line export type GromaRelationships = []; branch; the fixture test proves line placement and a deterministic empty relationship array. All ordering is unsigned UTF-8 bytewise tuple ordering with a non-ASCII boundary example and no localeCompare. Final independent re-review found no Critical, Important, or Minor issues and confirmed no observer/emitter implementation was added. Fresh verification: Bun 1.3.14 bundled all six fixture files, npm run check passed architecture validation plus 76/76 tests, npm run test:viewer:browser passed 11/11, and git diff --check passed.
 
 Task-spec defect correction: specified physical repository confinement for groma.typescript-bun/v1. The supplied root is resolved exactly once, so a root alias is permitted; after that, required paths and encountered src entries are inspected without following links, must be real directories or regular files beneath the resolved root, and any link, wrong kind, or physical escape fails with the exact UnsupportedSourceShapeError before source reads or partial extraction. Links elsewhere outside package.json and src remain outside source-observation scope. Clarified strict UTF-8 byte handling: UTF-8 BOM is rejected rather than stripped, and CR, U+2028, and U+2029 are forbidden source line terminators. Added dynamic filesystem probes for root aliases, linked required ancestors/files, internal and external link targets, ignored src links, outside-scope links, sibling-prefix confinement, BOM, malformed UTF-8, CRLF, U+2028, and U+2029. Narrowed the Revision 02 static release guard to viewer isolation now that TASK-11 legitimately supplies source-observer.mjs; no observer production code changed. Independent re-review found no remaining issues. Fresh verification: Bun 1.3.14 bundled all six fixture TypeScript files; npm run check passed architecture validation and 94/94 tests; npm run test:viewer:browser passed 11/11; git diff --check passed.
+
+Reopened after TASK-11 capability investigation proved that Node v24.13.0 and Bun 1.3.14 on macOS expose no usable descriptor-relative openat traversal for protecting every ancestor against concurrent replacement. Classification: task-spec defect introduced during hardening. This correction narrows the v1 contract rather than adding native code, an unsafe pathname fallback, or observer implementation changes.
+
+Stable-snapshot correction completed. The contract now requires pre-read physical validation of required paths and ancestors, retains exact rejection for static in-scope links/escapes, and records no-follow/type/identity checks on the same final-file descriptor where runtime primitives exist. It explicitly assumes stable directory topology during one local observation, excludes adversarial concurrent ancestor replacement and native descriptor-relative traversal, and identifies TASK-13 settled events as the trigger for a fresh complete observation after source changes. The TASK-10 filesystem oracle had no concurrent ancestor-swap behavior to remove; its helper, comment, and test name now explicitly scope it to one stable snapshot while preserving all static link/escape probes. No observer implementation or TASK-11 Backlog file was changed by this correction. Fresh verification: focused contract tests passed 8/8; npm run check passed architecture validation and 115/115 Node tests, including static-link rejection, exact unsupported errors, bounded reads/no execution, and direct final-file swap rejection; npm run test:viewer:browser passed 11/11; git diff --check passed. Classification: task-spec defect introduced during hardening.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Corrected the TASK-10 contract to make physical repository confinement and byte-level source rules unambiguous. A caller root may resolve once through an alias, but all supported-layout entries then fail closed on symbolic links, wrong file kinds, or physical escapes with the one documented unsupported-shape error and no partial extraction. BOM, CR, U+2028, and U+2029 handling is explicit and covered by dynamic probes. Updated the stale Revision 02 release guard only to preserve viewer isolation after TASK-11 landed; observer implementation remains unchanged. Classification: task-spec defect. Verified 94/94 Node tests, 11/11 browser tests, all six Bun fixture bundles, and clean diff checks; independent review found no remaining issues.
+Narrowed TASK-10 physical confinement to the intended local stable-snapshot threat model. Required paths and ancestors are validated before reads; static links/escapes and detectable direct final-file swaps still reject exactly, with no-follow and same-descriptor checks used where available. Adversarial concurrent ancestor replacement and native descriptor-relative traversal are explicit non-goals, while TASK-13 settled changes cause a fresh complete observation rather than a fallback or partial result. Rescoped the contract filesystem probe accordingly; no observer implementation or TASK-11 record was changed. Classification: task-spec defect introduced during hardening. Verified 8/8 focused contract tests, 115/115 full Node tests with architecture validation, 11/11 browser tests, and clean diff checks.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -45,8 +45,9 @@ exactly once. That resolved directory is the physical repository root for the
 entire invocation. A caller may therefore supply one root alias, but resolving
 that root is the only symbolic-link traversal permitted.
 
-Starting from the resolved root, the observer checks paths without following
-symbolic links:
+For the supplied repository snapshot, the observer validates physical paths
+before reading `package.json` or source bytes. Starting from the resolved root,
+it checks paths without following symbolic links:
 
 - the resolved root, `src`, and `src/components` are real directories;
 - `package.json`, `src/index.ts`, and every direct
@@ -65,9 +66,27 @@ it otherwise looks supported. Missing entries, wrong file kinds, any such
 encountered link, or any resolved escape returns the exact
 `UnsupportedSourceShapeError` with no partial observation. A link elsewhere
 beneath the repository, outside `package.json` and the enumerated `src` tree,
-is outside the source shape and is not inspected. These checks occur before
-reading `package.json` or source bytes, so an in-scope link cannot indirectly
-expose another repository, `groma/plans`, or any other outside file.
+is outside the source shape and is not inspected. Therefore, a static in-scope
+link cannot indirectly expose another repository, `groma/plans`, or any other
+outside file.
+
+Where the runtime exposes no-follow opens and descriptor metadata, each final
+regular file is opened without following a final symbolic link, its type and
+identity are checked on the same descriptor used to read its bytes, and a
+detected direct final-file swap returns the exact unsupported-shape error.
+
+This v1 contract is for a local, non-adversarial repository. It assumes the
+directory topology from the resolved root through `src/components` remains
+stable during one observation, from physical validation until all final
+descriptor reads complete. It does not claim security against an adversary
+concurrently replacing a previously validated ancestor directory. Native
+descriptor-relative traversal or equivalent protection against that ancestor
+race is an explicit non-goal, not a fallback: static links and escapes, plus
+direct final-file swaps detected by the checks above, remain unsupported and
+never permit partial extraction. TASK-13 owns change coordination; an in-scope
+source change during or after an observation settles into an event that starts
+a fresh complete observation rather than patching or reusing the in-flight
+result.
 
 The reserved declarations below are type-only TypeScript. They require no
 decorator, runtime helper, import, build step, type checker, or project code
@@ -340,4 +359,6 @@ package script. It never reads a plan or uses plan contents to choose IDs.
 
 This contract does not define plugins, a framework catalog, confidence scores,
 rename reconciliation, automatic plan promotion, generalized AST semantics,
-call-graph inference, or partial/fallback extraction.
+call-graph inference, native descriptor-relative ancestor traversal, security
+against adversarial concurrent directory-topology replacement, or
+partial/fallback extraction.
