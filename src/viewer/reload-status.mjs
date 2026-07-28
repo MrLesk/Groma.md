@@ -1,22 +1,15 @@
 export function createReloadStatus() {
-  let modelError = null
-  let watcherError = null
+  let error = null
 
   return {
     get error() {
-      return watcherError ?? modelError
+      return error
     },
     recordModelFailure(message) {
-      modelError = message
+      error = message
     },
     recordModelSuccess() {
-      modelError = null
-    },
-    recordWatcherFailure(detail) {
-      watcherError = [
-        `Architecture Markdown watcher failed: ${detail}.`,
-        'Restart the viewer.',
-      ].join(' ')
+      error = null
     },
   }
 }

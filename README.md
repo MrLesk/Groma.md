@@ -35,13 +35,13 @@ npm run viewer
 ```
 
 At startup the server reads `groma/observed` and one complete plan. It watches
-Markdown under `groma/observed` and `groma/plans`, then fully rereads both
-selected revisions after changes settle. An open browser updates over a local
-event stream without restarting the viewer. If a settled edit is temporarily
-invalid, the last valid model remains visible with a warning until a later
-Markdown change rebuilds successfully; newly connected browsers receive the
-same current warning. Extensionless and non-Markdown files, plus files outside
-those architecture directories, are not watched.
+named Markdown file events under `groma/observed` and `groma/plans`, then fully
+rereads both selected revisions after changes settle. An open browser updates
+over a local event stream without restarting the viewer. If a settled edit is
+temporarily invalid, the last valid model remains visible with a warning until
+a later Markdown change rebuilds successfully; newly connected browsers
+receive the same current warning. Extensionless and non-Markdown files, plus
+files outside those architecture directories, are not watched.
 
 Choose another plan without changing any Markdown:
 
@@ -62,12 +62,11 @@ The process watches only `package.json`, `src/index.ts`, and non-recursive
 `src/components/*.ts` events. After a short quiet period it performs one fresh
 complete observation and replaces only the scanner-owned generated component
 directory. A source event received during that run settles into a later complete
-refresh. Invalid settled source is reported by the source process and leaves the
-last-good generated Markdown untouched. Filename-less filesystem events are
-checked against a fingerprint containing only the supported source paths, so
-unrelated changes remain ignored. A failed watch handle or changed watched-directory
-topology is terminal: the process closes every watcher, reports that restart is
-required, and exits nonzero.
+refresh. The MVP assumes ordinary stable directories, string filenames on
+filesystem events, healthy watch handles, and successful direct writes to the
+owned directory. It does not fingerprint filename-less events, rebind replaced
+watch directories, stage or roll back output transactions, or provide
+filesystem recovery.
 
 This process is separate from the viewer. The viewer never reads or watches
 source; it updates through its existing `groma/observed` Markdown watcher.

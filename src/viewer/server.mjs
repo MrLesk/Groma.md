@@ -254,7 +254,9 @@ const markdownWatcher = await startMarkdownWatcher(repositoryRoot, {
   onMarkdownChange: scheduleReload,
   onError(error) {
     const detail = error instanceof Error ? error.message : String(error)
-    reloadStatus.recordWatcherFailure(detail)
+    reloadStatus.recordModelFailure(
+      `Architecture Markdown watcher failed: ${detail}.`,
+    )
     publishCurrentReloadError()
   },
 })

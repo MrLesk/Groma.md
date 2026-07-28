@@ -1,10 +1,4 @@
-import { constants } from 'node:fs'
-import {
-  lstat,
-  open,
-  readdir,
-  realpath,
-} from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { TextDecoder } from 'node:util'
 
@@ -16,13 +10,7 @@ const reservedIdentifierPattern =
 const sourceExtensionPattern = /\.(?:ts|tsx|mts|cts)$/
 const jsonStringPattern =
   String.raw`"(?:\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})|[^"\\\x00-\x1f])*"`
-const utf8Decoder = new TextDecoder('utf-8', {
-  fatal: true,
-  ignoreBOM: true,
-})
-const runtimeNoFollowFlag = typeof constants.O_NOFOLLOW === 'number'
-  ? constants.O_NOFOLLOW
-  : null
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
 
 class SourceShapeMismatch extends Error {}
 
@@ -46,70 +34,9 @@ function recordFilesystemAccess(
   onFilesystemAccess?.({ operation, filename })
 }
 
-function isSameFile(left, right) {
-  return left.dev === right.dev && left.ino === right.ino
-}
-
-async function verifyCurrentFile(
-  filename,
-  expectedStat,
-  onFilesystemAccess,
-) {
-  const stat = await inspectPath(filename, onFilesystemAccess)
-  if (
-    stat.isSymbolicLink()
-    || !stat.isFile()
-    || !isSameFile(stat, expectedStat)
-  ) {
-    mismatch()
-  }
-}
-
-async function readVerifiedFile(
-  filename,
-  expectedStat,
-  onFilesystemAccess,
-  noFollowFlag,
-) {
-  const readFlags = noFollowFlag === null
-    ? constants.O_RDONLY
-    : constants.O_RDONLY | noFollowFlag
-
-  recordFilesystemAccess(onFilesystemAccess, 'open-file', filename)
-  let handle
-  try {
-    handle = await open(filename, readFlags)
-    recordFilesystemAccess(onFilesystemAccess, 'fstat', filename)
-    const openedStat = await handle.stat({ bigint: true })
-    if (!openedStat.isFile() || !isSameFile(openedStat, expectedStat)) {
-      mismatch()
-    }
-
-    recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
-    await verifyCurrentFile(filename, expectedStat, onFilesystemAccess)
-    const bytes = await handle.readFile()
-    await verifyCurrentFile(filename, expectedStat, onFilesystemAccess)
-    return bytes
-  } finally {
-    if (handle !== undefined) {
-      await handle.close()
-      recordFilesystemAccess(onFilesystemAccess, 'close-file', filename)
-    }
-  }
-}
-
-async function readUtf8(
-  filename,
-  expectedStat,
-  onFilesystemAccess,
-  noFollowFlag,
-) {
-  const bytes = await readVerifiedFile(
-    filename,
-    expectedStat,
-    onFilesystemAccess,
-    noFollowFlag,
-  )
+async function readUtf8(filename, onFilesystemAccess) {
+  recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
+  const bytes = await readFile(filename)
   if (
     bytes.length >= 3
     && bytes[0] === 0xef
@@ -123,31 +50,11 @@ async function readUtf8(
 
 async function readDirectory(filename, onFilesystemAccess) {
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', filename)
-  return readdir(filename)
+  return readdir(filename, { withFileTypes: true })
 }
 
-async function inspectPath(filename, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'lstat', filename)
-  return lstat(filename, { bigint: true })
-}
-
-async function resolvePath(filename, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'realpath', filename)
-  return realpath(filename)
-}
-
-async function readSource(
-  filename,
-  expectedStat,
-  onFilesystemAccess,
-  noFollowFlag,
-) {
-  const source = await readUtf8(
-    filename,
-    expectedStat,
-    onFilesystemAccess,
-    noFollowFlag,
-  )
+async function readSource(filename, onFilesystemAccess) {
+  const source = await readUtf8(filename, onFilesystemAccess)
   if (
     !source.endsWith('\n')
     || /[\r\u2028\u2029]/.test(source)
@@ -345,90 +252,20 @@ function parseComponent(lines, sourceFilename, filenameId) {
   }
 }
 
-function isBeneath(repositoryRoot, filename) {
-  const relativePath = path.relative(repositoryRoot, filename)
-  return relativePath === ''
-    || (
-      relativePath !== '..'
-      && !relativePath.startsWith(`..${path.sep}`)
-      && !path.isAbsolute(relativePath)
-    )
-}
-
-async function validatePhysicalSourceLayout(
-  suppliedRoot,
-  onFilesystemAccess,
-) {
-  const repositoryRoot = await resolvePath(suppliedRoot, onFilesystemAccess)
-  const rootStat = await inspectPath(repositoryRoot, onFilesystemAccess)
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    mismatch()
-  }
-
-  const validatedEntries = new Map([[
-    repositoryRoot,
-    { kind: 'directory', stat: rootStat },
-  ]])
+async function listSourceDeclarations(repositoryRoot, onFilesystemAccess) {
   const declarationFiles = []
-
-  async function validateEntry(filename, expectedKind) {
-    let validatedEntry = validatedEntries.get(filename)
-    if (!validatedEntry) {
-      const stat = await inspectPath(filename, onFilesystemAccess)
-      if (stat.isSymbolicLink()) {
-        mismatch()
-      }
-      let kind
-      if (stat.isDirectory()) {
-        kind = 'directory'
-      } else if (stat.isFile()) {
-        kind = 'file'
-      } else {
-        mismatch()
-      }
-
-      const physicalPath = await resolvePath(filename, onFilesystemAccess)
-      if (
-        !isBeneath(repositoryRoot, physicalPath)
-        || physicalPath !== filename
-      ) {
-        mismatch()
-      }
-      validatedEntry = { kind, stat }
-      validatedEntries.set(filename, validatedEntry)
-    }
-
-    if (
-      expectedKind !== undefined
-      && validatedEntry.kind !== expectedKind
-    ) {
-      mismatch()
-    }
-    return validatedEntry
-  }
-
-  await validateEntry(path.join(repositoryRoot, 'package.json'), 'file')
-  const srcRoot = path.join(repositoryRoot, 'src')
-  await validateEntry(srcRoot, 'directory')
-  await validateEntry(path.join(srcRoot, 'index.ts'), 'file')
-  await validateEntry(path.join(srcRoot, 'components'), 'directory')
 
   async function walk(relativeDirectory) {
     const directory = path.join(repositoryRoot, ...relativeDirectory.split('/'))
     const entries = await readDirectory(directory, onFilesystemAccess)
-    entries.sort(bytewiseCompare)
+    entries.sort((left, right) => bytewiseCompare(left.name, right.name))
 
     for (const entry of entries) {
-      const relativePath = `${relativeDirectory}/${entry}`
-      const entryPath = path.join(repositoryRoot, ...relativePath.split('/'))
-      const { kind } = await validateEntry(entryPath)
-      const isSourcePath = sourceExtensionPattern.test(entry)
-      if (isSourcePath && kind !== 'file') {
-        mismatch()
-      }
-      if (kind === 'directory') {
+      const relativePath = `${relativeDirectory}/${entry.name}`
+      if (entry.isDirectory()) {
         await walk(relativePath)
-      } else if (isSourcePath) {
+      } else if (sourceExtensionPattern.test(entry.name)) {
+        if (!entry.isFile()) mismatch()
         declarationFiles.push(relativePath)
       }
     }
@@ -436,11 +273,7 @@ async function validatePhysicalSourceLayout(
 
   await walk('src')
   declarationFiles.sort(bytewiseCompare)
-  return {
-    repositoryRoot,
-    declarationFiles,
-    validatedEntries,
-  }
+  return declarationFiles
 }
 
 function validatePackageJson(packageJson) {
@@ -457,30 +290,11 @@ function validatePackageJson(packageJson) {
   }
 }
 
-function validatedFileStat(physicalLayout, filename) {
-  const entry = physicalLayout.validatedEntries.get(filename)
-  if (entry?.kind !== 'file') {
-    mismatch()
-  }
-  return entry.stat
-}
-
-async function observe(
-  repositoryRoot,
-  onFilesystemAccess,
-  noFollowFlag,
-) {
-  const physicalLayout = await validatePhysicalSourceLayout(
-    repositoryRoot,
-    onFilesystemAccess,
-  )
-  const absoluteRoot = physicalLayout.repositoryRoot
-  const packageFilename = path.join(absoluteRoot, 'package.json')
+async function observe(repositoryRoot, onFilesystemAccess) {
+  const absoluteRoot = path.resolve(repositoryRoot)
   const packageSource = await readUtf8(
-    packageFilename,
-    validatedFileStat(physicalLayout, packageFilename),
+    path.join(absoluteRoot, 'package.json'),
     onFilesystemAccess,
-    noFollowFlag,
   )
   let packageJson
   try {
@@ -490,7 +304,10 @@ async function observe(
   }
   validatePackageJson(packageJson)
 
-  const { declarationFiles } = physicalLayout
+  const declarationFiles = await listSourceDeclarations(
+    absoluteRoot,
+    onFilesystemAccess,
+  )
   const componentFiles = declarationFiles.filter(filename => {
     return /^src\/components\/[^/]+\.ts$/.test(filename)
   })
@@ -502,28 +319,19 @@ async function observe(
     mismatch()
   }
 
-  const entryFilename = path.join(absoluteRoot, 'src', 'index.ts')
   const entryPoint = parseEntryPoint(await readSource(
-    entryFilename,
-    validatedFileStat(physicalLayout, entryFilename),
+    path.join(absoluteRoot, 'src', 'index.ts'),
     onFilesystemAccess,
-    noFollowFlag,
   ))
   const components = []
   const componentIds = new Set()
 
   for (const sourceFilename of componentFiles) {
     const filenameId = path.posix.basename(sourceFilename, '.ts')
-    const componentFilename = path.join(
-      absoluteRoot,
-      ...sourceFilename.split('/'),
-    )
     const component = parseComponent(
       await readSource(
-        componentFilename,
-        validatedFileStat(physicalLayout, componentFilename),
+        path.join(absoluteRoot, ...sourceFilename.split('/')),
         onFilesystemAccess,
-        noFollowFlag,
       ),
       sourceFilename,
       filenameId,
@@ -550,14 +358,7 @@ async function observe(
 
 export async function observeTypeScriptSource(repositoryRoot, options = {}) {
   try {
-    const noFollowFlag = options.testNoFollowAvailable === false
-      ? null
-      : runtimeNoFollowFlag
-    return await observe(
-      repositoryRoot,
-      options.onFilesystemAccess,
-      noFollowFlag,
-    )
+    return await observe(repositoryRoot, options.onFilesystemAccess)
   } catch {
     throw new UnsupportedSourceShapeError()
   }

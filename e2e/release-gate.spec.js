@@ -11,7 +11,6 @@ import {
   readFile,
   readdir,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises'
 import os from 'node:os'
@@ -1014,9 +1013,6 @@ test('materializes one Plan 03 component through supported source', async ({
       'scanner',
     )
     const sourceHashBeforeRerun = await fileHash(componentSourceFilename)
-    const generatedInodeBeforeRerun = (
-      await stat(generatedComponentFilename)
-    ).ino
     const generationBeforeRerun = materializedPayload.generation
     await stopViewer(refresh)
     refresh = undefined
@@ -1033,10 +1029,9 @@ test('materializes one Plan 03 component through supported source', async ({
     )
     expect(await fileHash(componentSourceFilename)).toBe(sourceHashBeforeRerun)
     await expect.poll(async () => {
-      return (await stat(generatedComponentFilename)).ino
-    }).not.toBe(generatedInodeBeforeRerun)
+      return (await modelPayload(page, viewer.url)).generation
+    }).toBeGreaterThan(generationBeforeRerun)
     const rerunPayload = await modelPayload(page, viewer.url)
-    expect(rerunPayload.generation).toBe(generationBeforeRerun)
     expect(rerunPayload.reloadError).toBe(null)
     expect(
       comparisonElement(

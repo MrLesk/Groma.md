@@ -38,55 +38,15 @@ module. Component modules are direct children of `src/components/`. No other
 `.ts`, `.tsx`, `.mts`, or `.cts` file may occur beneath `src/`. Non-TypeScript
 files and directories outside this layout are not source declarations.
 
-### Physical repository confinement
+### Filesystem assumptions
 
-The observer resolves the caller-supplied repository root with `realpath`
-exactly once. That resolved directory is the physical repository root for the
-entire invocation. A caller may therefore supply one root alias, but resolving
-that root is the only symbolic-link traversal permitted.
-
-For the supplied repository snapshot, the observer validates physical paths
-before reading `package.json` or source bytes. Starting from the resolved root,
-it checks paths without following symbolic links:
-
-- the resolved root, `src`, and `src/components` are real directories;
-- `package.json`, `src/index.ts`, and every direct
-  `src/components/<component-id>.ts` entry are real regular files;
-- every ancestor between a supported file and the resolved root is a real
-  directory; and
-- every filesystem entry inspected while enumerating `src` is physically
-  beneath the resolved root and is not a symbolic link.
-
-“Beneath” is a path-component boundary, not a string-prefix test. The relative
-path from the resolved root to a candidate must be empty or must be neither
-absolute nor `..`/`../...`. The observer never follows a link at a required
-path or encountered while enumerating `src`, including a link whose target
-would remain inside the root, and never opens a link target to decide whether
-it otherwise looks supported. Missing entries, wrong file kinds, any such
-encountered link, or any resolved escape returns the exact
-`UnsupportedSourceShapeError` with no partial observation. A link elsewhere
-beneath the repository, outside `package.json` and the enumerated `src` tree,
-is outside the source shape and is not inspected. Therefore, a static in-scope
-link cannot indirectly expose another repository, `groma/plans`, or any other
-outside file.
-
-Where the runtime exposes no-follow opens and descriptor metadata, each final
-regular file is opened without following a final symbolic link, its type and
-identity are checked on the same descriptor used to read its bytes, and a
-detected direct final-file swap returns the exact unsupported-shape error.
-
-This v1 contract is for a local, non-adversarial repository. It assumes the
-directory topology from the resolved root through `src/components` remains
-stable during one observation, from physical validation until all final
-descriptor reads complete. It does not claim security against an adversary
-concurrently replacing a previously validated ancestor directory. Native
-descriptor-relative traversal or equivalent protection against that ancestor
-race is an explicit non-goal, not a fallback: static links and escapes, plus
-direct final-file swaps detected by the checks above, remain unsupported and
-never permit partial extraction. TASK-13 owns change coordination; an in-scope
-source change during or after an observation settles into an event that starts
-a fresh complete observation rather than patching or reusing the in-flight
-result.
+Revision 03 is demonstrated against a local, non-adversarial checkout whose
+repository root, `src`, `src/components`, and declared files are ordinary
+filesystem entries and remain stable during one observation. The observer uses
+`path.resolve`, `readdir`, and `readFile` directly. Symbolic links, concurrent
+path replacement, filesystem races, and confinement against hostile mutation
+are outside the supported MVP flow and have no compatibility or recovery
+guarantee.
 
 The reserved declarations below are type-only TypeScript. They require no
 decorator, runtime helper, import, build step, type checker, or project code
@@ -286,22 +246,16 @@ validation are separate boundaries.
 
 The standalone source-refresh process applies one short settle debounce to this
 exact scope. Each settled burst runs a fresh complete observation followed by
-one complete emitter replacement; it does not mutate an incremental graph,
+one complete emitter rebuild; it does not mutate an incremental graph,
 infer renames, or retry with a partial observation. If another admitted event
 arrives during a run, that event remains pending and causes a subsequent full
-refresh only after its own quiet period. Observer or emitter failure is visible
-on the source process, does not partially replace Markdown, and retains the
-last-good generated subtree for a later valid event.
+refresh only after its own quiet period.
 
-When the filesystem omits an event filename, the source process compares a
-fingerprint of only the supported paths above. It refreshes if that bounded
-snapshot changed and ignores the event otherwise. A temporary fingerprint read
-failure is reported and settles into a normal full observation while the
-last-good subtree and watcher remain available for recovery. A watch-handle
-failure or replacement/removal of a watched repository/source directory is
-terminal rather than leaving a partially blind process: all watch handles and
-pending work close, the failure requires a process restart, and the process
-exits nonzero.
+The MVP assumes the local runtime supplies a string filename for these events,
+the three watched directories remain in place, and watch handles stay healthy.
+Filename-less events are ignored. Fingerprint fallback, watcher rebinding,
+topology recovery, and retry after filesystem or emission failure are not part
+of the supported flow.
 
 The source-refresh process and architecture viewer are separate services. The
 viewer imports no source-observation code and continues to read and watch only
@@ -324,6 +278,12 @@ component`, and `parent: scanner` (with no `external` field). The container
 document itself, every person and system, every other container, every
 component outside this exact directory, all revision indexes, and all
 `groma/plans/**` files must remain byte-identical.
+
+The owned directory is assumed to exist and be writable. After observation,
+target resolution, rendering, and Comark validation succeed, the emitter
+directly removes its current entries and writes the complete generated set. It
+does not stage a transaction, roll back partial filesystem writes, or retry
+cleanup.
 
 Generated component documents use the existing canonical Markdown model. They
 add readable evidence only in the body:
@@ -382,6 +342,5 @@ package script. It never reads a plan or uses plan contents to choose IDs.
 
 This contract does not define plugins, a framework catalog, confidence scores,
 rename reconciliation, automatic plan promotion, generalized AST semantics,
-call-graph inference, native descriptor-relative ancestor traversal, security
-against adversarial concurrent directory-topology replacement, or
-partial/fallback extraction.
+call-graph inference, filesystem hardening or recovery, or partial/fallback
+extraction.

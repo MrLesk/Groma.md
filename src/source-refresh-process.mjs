@@ -25,8 +25,6 @@ async function main() {
   process.on('SIGINT', () => void close())
   process.on('SIGTERM', () => void close())
   process.stdout.write(`Source refresh watching ${repositoryRoot}\n`)
-  const failure = await refresh.done
-  if (failure !== null) process.exitCode = 1
 }
 
 main().catch(error => {

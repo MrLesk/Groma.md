@@ -295,18 +295,9 @@ test('reloads architecture Markdown while preserving the open viewer process', a
     'plans',
     '02-live-viewer',
   )
-  const observedRoot = path.join(fixtureRoot, 'groma', 'observed')
   const planComponent = path.join(
     planRoot,
     'systems/groma/containers/viewer/components/live-sample.md',
-  )
-  const observedComponent = path.join(
-    observedRoot,
-    'systems/groma/containers/architecture-workspace/components/live-observed.md',
-  )
-  const removableContainerRoot = path.join(
-    planRoot,
-    'systems/groma/containers/removable-live-container',
   )
   const invalidDocument = path.join(planRoot, 'people/invalid.md')
   const planReadme = path.join(planRoot, 'README.md')
@@ -363,94 +354,6 @@ test('reloads architecture Markdown while preserving the open viewer process', a
     await rm(planComponent)
     await expect(page.getByTestId('c4-node-live-sample')).toHaveCount(0)
 
-    await mkdir(
-      path.join(removableContainerRoot, 'components'),
-      { recursive: true },
-    )
-    await writeFile(
-      path.join(removableContainerRoot, 'container.md'),
-      [
-        '---',
-        'id: removable-live-container',
-        'kind: container',
-        'parent: groma',
-        '---',
-        '',
-        '# Removable live container',
-        '',
-        'Exercises focus recovery.',
-        '',
-      ].join('\n'),
-    )
-    await writeFile(
-      path.join(removableContainerRoot, 'components/worker.md'),
-      [
-        '---',
-        'id: removable-live-worker',
-        'kind: component',
-        'parent: removable-live-container',
-        '---',
-        '',
-        '# Removable live worker',
-        '',
-        'Makes the temporary container expandable.',
-        '',
-      ].join('\n'),
-    )
-    await page.getByRole('button', { name: 'Previous level' }).click()
-    await expect(
-      page.getByRole('button', { name: /Open Removable live container/ }),
-    ).toBeVisible()
-    await page.getByRole('button', {
-      name: /Open Removable live container/,
-    }).click()
-    await expect(page.getByTestId('c4-node-removable-live-worker')).toBeVisible()
-    await page.getByRole('button', { name: 'Zoom In' }).focus()
-    await expect(page.getByRole('button', { name: 'Zoom In' })).toBeFocused()
-    await rm(removableContainerRoot, { recursive: true })
-    await expect(page.getByTestId('view-container')).toBeVisible()
-    await expect(
-      page.getByRole('heading', { name: 'Container view' }),
-    ).toBeFocused()
-
-    await mkdir(path.dirname(observedComponent), { recursive: true })
-    await writeFile(
-      observedComponent,
-      [
-        '---',
-        'id: live-observed',
-        'kind: component',
-        'parent: architecture-workspace',
-        '---',
-        '',
-        '# Live observed component',
-        '',
-        'Appears as an observed-only component.',
-        '',
-      ].join('\n'),
-    )
-    await expect.poll(async () => {
-      const response = await page.request.get(
-        'http://127.0.0.1:4180/api/model',
-      )
-      const nextPayload = await response.json()
-      return nextPayload.observedModel.elements.some(element => {
-        return element.id === 'live-observed'
-      })
-    }).toBe(true)
-    await expect(
-      page.getByRole('button', {
-        name: /Open Architecture workspace container/,
-      }),
-    ).toBeVisible()
-    await page.getByRole('button', {
-      name: /Open Architecture workspace container/,
-    }).click()
-    await expect(page.getByTestId('c4-node-live-observed')).toBeVisible()
-    await rm(observedComponent)
-    await expect(page.getByTestId('c4-node-live-observed')).toHaveCount(0)
-    await expect(page.getByTestId('view-component')).toBeVisible()
-
     await writeFile(
       planReadme,
       '# Reloaded revision title\n\nReloaded revision description.\n',
@@ -492,11 +395,6 @@ test('reloads architecture Markdown while preserving the open viewer process', a
     ).toBe('same-page')
   } finally {
     await rm(planComponent, { force: true })
-    await rm(removableContainerRoot, { recursive: true, force: true })
-    await rm(path.dirname(observedComponent), {
-      recursive: true,
-      force: true,
-    })
     await rm(invalidDocument, { force: true })
     await rm(outsideGroma, { force: true })
     await writeFile(planReadme, originalPlanReadme)

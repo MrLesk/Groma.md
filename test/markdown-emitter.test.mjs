@@ -1,15 +1,12 @@
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
 import {
   chmod,
-  lstat,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
   realpath,
   rm,
-  symlink,
   writeFile,
 } from 'node:fs/promises'
 import os from 'node:os'
@@ -41,11 +38,7 @@ const ownedRelativePath = path.join(
   'components',
 )
 const mutationOperations = new Set([
-  'make-directory',
-  'make-temporary-directory',
   'remove',
-  'rename',
-  'rename-destination',
   'write-file',
 ])
 
@@ -264,6 +257,12 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
         && !access.path.startsWith(`${ownedRelativePath}${path.sep}`)
     })
   assert.deepEqual(mutationsOutsideOwned, [])
+  assert.deepEqual(
+    [...new Set(accesses
+      .filter(access => mutationOperations.has(access.operation))
+      .map(access => access.operation))].sort(),
+    ['remove', 'write-file'],
+  )
 
   const emitterSource = await readFile(
     path.join(root, ownedRelativePath, 'markdown-emitter.md'),
@@ -411,81 +410,6 @@ test('target-resolution failure leaves owned and unowned data unchanged', async 
   )
 })
 
-test('replacement failure rolls owned files back and preserves all observed data', async t => {
-  const root = await createRepository(t)
-  const observation = await readObservation()
-  const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
-  const failingDestination = path.join(
-    root,
-    ownedRelativePath,
-    'source-watcher.md',
-  )
-  const { emitObservedComponents } = await loadEmitter()
-  let injected = false
-
-  await assert.rejects(
-    emitObservedComponents(root, observation, {
-      onFilesystemAccess(access) {
-        if (
-          !injected
-          && access.operation === 'rename-destination'
-          && access.filename === failingDestination
-        ) {
-          injected = true
-          throw new Error('injected replacement failure')
-        }
-      },
-    }),
-    /could not replace the owned components directory/,
-  )
-
-  assert.equal(injected, true)
-  assert.deepEqual(
-    await snapshotDirectory(path.join(root, 'groma', 'observed')),
-    beforeObserved,
-  )
-})
-
-test('partial backup cleanup never rolls a committed replacement back', async t => {
-  const root = await createRepository(t)
-  const observation = await readObservation()
-  await writeDocument(
-    root,
-    `${ownedRelativePath.split(path.sep).join('/')}/second-stale.md`,
-    '# Second stale owned output\n',
-  )
-  const { emitObservedComponents } = await loadEmitter()
-  let injected = false
-
-  await emitObservedComponents(root, observation, {
-    onFilesystemAccess(access) {
-      if (
-        !injected
-        && access.operation === 'remove'
-        && path.basename(access.filename)
-          .startsWith('.groma-components-transaction-')
-      ) {
-        injected = true
-        rmSync(
-          path.join(access.filename, 'backup', 'second-stale.md'),
-          { force: true },
-        )
-        throw new Error('injected partial cleanup failure')
-      }
-    },
-  })
-
-  assert.equal(injected, true)
-  assert.deepEqual(
-    (await readdir(path.join(root, ownedRelativePath))).sort(),
-    [
-      'markdown-emitter.md',
-      'source-watcher.md',
-      'typescript-observer.md',
-    ],
-  )
-})
-
 test('generated IDs cannot duplicate canonical observed elements', async t => {
   const root = await createRepository(t)
   const observation = await readObservation()
@@ -630,25 +554,4 @@ Stores architecture files.
     false,
   )
   assert.deepEqual(afterObserved, beforeObserved)
-})
-
-test('rejects a linked owned target without changing its destination', async t => {
-  const root = await createRepository(t)
-  const observation = await readObservation()
-  const ownedRoot = path.join(root, ownedRelativePath)
-  const outsideOwned = path.join(root, 'outside-owned')
-  await mkdir(outsideOwned)
-  await writeFile(path.join(outsideOwned, 'sentinel.md'), '# Outside\n')
-  await rm(ownedRoot, { recursive: true })
-  await symlink(outsideOwned, ownedRoot, 'dir')
-  const beforeOutside = await snapshotDirectory(outsideOwned)
-  const { emitObservedComponents } = await loadEmitter()
-
-  await assert.rejects(
-    emitObservedComponents(root, observation),
-    /owned components path must be a real directory/,
-  )
-
-  assert.equal((await lstat(ownedRoot)).isSymbolicLink(), true)
-  assert.deepEqual(await snapshotDirectory(outsideOwned), beforeOutside)
 })

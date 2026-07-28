@@ -1,11 +1,6 @@
 import {
-  lstat,
-  mkdir,
-  mkdtemp,
   readFile,
   readdir,
-  realpath,
-  rename,
   rm,
   writeFile,
 } from 'node:fs/promises'
@@ -55,16 +50,6 @@ function recordFilesystemAccess(
   onFilesystemAccess?.({ operation, filename })
 }
 
-async function inspectPath(filename, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'lstat', filename)
-  return lstat(filename)
-}
-
-async function resolvePath(filename, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'realpath', filename)
-  return realpath(filename)
-}
-
 async function readDirectory(filename, onFilesystemAccess) {
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', filename)
   return readdir(filename, { withFileTypes: true })
@@ -75,28 +60,12 @@ async function readText(filename, onFilesystemAccess) {
   return readFile(filename, 'utf8')
 }
 
-async function makeDirectory(filename, options, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'make-directory', filename)
-  return mkdir(filename, options)
-}
-
-async function makeTemporaryDirectory(prefix, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'make-temporary-directory', prefix)
-  return mkdtemp(prefix)
-}
-
 async function writeText(filename, source, onFilesystemAccess) {
   recordFilesystemAccess(onFilesystemAccess, 'write-file', filename)
   return writeFile(filename, source, {
     encoding: 'utf8',
     flag: 'wx',
   })
-}
-
-async function movePath(source, destination, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'rename', source)
-  recordFilesystemAccess(onFilesystemAccess, 'rename-destination', destination)
-  return rename(source, destination)
 }
 
 async function removePath(filename, onFilesystemAccess) {
@@ -550,46 +519,6 @@ function validateObservedIndex(index) {
   }
 }
 
-async function validateOwnedDirectories(
-  repositoryRoot,
-  onFilesystemAccess,
-) {
-  const relativeDirectories = [
-    'groma',
-    'groma/observed',
-    'groma/observed/systems',
-    'groma/observed/systems/groma',
-    'groma/observed/systems/groma/containers',
-    scannerDirectory,
-    ownedOutputDirectory,
-  ]
-
-  for (const relativeDirectory of relativeDirectories) {
-    const filename = path.join(
-      repositoryRoot,
-      ...relativeDirectory.split('/'),
-    )
-    let stat
-    try {
-      stat = await inspectPath(filename, onFilesystemAccess)
-    } catch (error) {
-      fail(`owned components path must be a real directory: ${relativeDirectory}`, error)
-    }
-    if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      fail(`owned components path must be a real directory: ${relativeDirectory}`)
-    }
-    let physicalPath
-    try {
-      physicalPath = await resolvePath(filename, onFilesystemAccess)
-    } catch (error) {
-      fail(`owned components path must be a real directory: ${relativeDirectory}`, error)
-    }
-    if (physicalPath !== filename) {
-      fail(`owned components path must be a real directory: ${relativeDirectory}`)
-    }
-  }
-}
-
 async function buildTargetIndex(
   repositoryRoot,
   generatedComponents,
@@ -621,11 +550,6 @@ async function buildTargetIndex(
       const filename = path.join(directory, entry.name)
       if (filename === ownedRoot) {
         continue
-      }
-      if (entry.isSymbolicLink()) {
-        fail(`observed architecture contains a symbolic link: ${
-          repositoryRelative(repositoryRoot, filename)
-        }`)
       }
       if (entry.isDirectory()) {
         await walk(filename)
@@ -803,106 +727,17 @@ async function replaceOwnedDirectory(
     repositoryRoot,
     ...ownedOutputDirectory.split('/'),
   )
-  await validateOwnedDirectories(repositoryRoot, onFilesystemAccess)
-  const transactionRoot = await makeTemporaryDirectory(
-    path.join(ownedRoot, '.groma-components-transaction-'),
-    onFilesystemAccess,
-  )
-  const stageRoot = path.join(transactionRoot, 'stage')
-  const backupRoot = path.join(transactionRoot, 'backup')
-  const movedOriginalNames = []
-  const movedGeneratedNames = []
-
-  try {
-    await makeDirectory(stageRoot, undefined, onFilesystemAccess)
-    await makeDirectory(backupRoot, undefined, onFilesystemAccess)
-    for (const [id, source] of renderedComponents) {
-      await writeText(
-        path.join(stageRoot, `${id}.md`),
-        source,
-        onFilesystemAccess,
-      )
-    }
-
-    await validateOwnedDirectories(repositoryRoot, onFilesystemAccess)
-    const transactionName = path.basename(transactionRoot)
-    const originalEntries = await readDirectory(
-      ownedRoot,
+  const entries = await readDirectory(ownedRoot, onFilesystemAccess)
+  for (const entry of entries) {
+    await removePath(path.join(ownedRoot, entry.name), onFilesystemAccess)
+  }
+  for (const [id, source] of renderedComponents) {
+    await writeText(
+      path.join(ownedRoot, `${id}.md`),
+      source,
       onFilesystemAccess,
     )
-    const originalNames = originalEntries
-      .map(entry => entry.name)
-      .filter(name => name !== transactionName)
-      .sort(bytewiseCompare)
-
-    for (const name of originalNames) {
-      await movePath(
-        path.join(ownedRoot, name),
-        path.join(backupRoot, name),
-        onFilesystemAccess,
-      )
-      movedOriginalNames.push(name)
-    }
-    for (const [id] of renderedComponents) {
-      const name = `${id}.md`
-      await movePath(
-        path.join(stageRoot, name),
-        path.join(ownedRoot, name),
-        onFilesystemAccess,
-      )
-      movedGeneratedNames.push(name)
-    }
-  } catch (error) {
-    const rollbackErrors = []
-    for (const name of movedGeneratedNames.reverse()) {
-      try {
-        await movePath(
-          path.join(ownedRoot, name),
-          path.join(stageRoot, name),
-          onFilesystemAccess,
-        )
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError)
-      }
-    }
-    for (const name of movedOriginalNames.reverse()) {
-      try {
-        await movePath(
-          path.join(backupRoot, name),
-          path.join(ownedRoot, name),
-          onFilesystemAccess,
-        )
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError)
-      }
-    }
-    if (rollbackErrors.length === 0) {
-      await removePath(transactionRoot, onFilesystemAccess).catch(
-        rollbackError => rollbackErrors.push(rollbackError),
-      )
-    }
-    const cause = rollbackErrors.length === 0
-      ? error
-      : new AggregateError(
-          [error, ...rollbackErrors],
-          'owned components rollback failed',
-        )
-    fail('could not replace the owned components directory', cause)
   }
-
-  let cleanupError
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await removePath(transactionRoot, onFilesystemAccess)
-      return
-    } catch (error) {
-      cleanupError = error
-    }
-  }
-  fail(
-    'components were replaced but transaction cleanup failed',
-    cleanupError,
-  )
 }
 
 export async function emitObservedComponents(
@@ -911,22 +746,9 @@ export async function emitObservedComponents(
   options = {},
 ) {
   const { onFilesystemAccess } = options
-  let repositoryRoot
-  try {
-    repositoryRoot = await resolvePath(
-      path.resolve(suppliedRepositoryRoot),
-      onFilesystemAccess,
-    )
-  } catch (error) {
-    fail('repository root must be a real directory', error)
-  }
-  const repositoryStat = await inspectPath(repositoryRoot, onFilesystemAccess)
-  if (!repositoryStat.isDirectory() || repositoryStat.isSymbolicLink()) {
-    fail('repository root must be a real directory')
-  }
+  const repositoryRoot = path.resolve(suppliedRepositoryRoot)
 
   const { components, entryPoints } = validateObservation(observation)
-  await validateOwnedDirectories(repositoryRoot, onFilesystemAccess)
   const targetIndex = await buildTargetIndex(
     repositoryRoot,
     components,
