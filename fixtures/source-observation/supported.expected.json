@@ -1,0 +1,67 @@
+{
+  "contract": "groma.typescript-bun/v1",
+  "containerId": "scanner",
+  "entryPoints": [
+    {
+      "componentId": "source-watcher",
+      "sourceRange": "src/index.ts:1-3"
+    }
+  ],
+  "components": [
+    {
+      "id": "markdown-emitter",
+      "name": "Markdown emitter",
+      "description": "Writes bounded observations as canonical component Markdown.",
+      "technology": "TypeScript",
+      "sourceRange": "src/components/markdown-emitter.ts:1-6",
+      "relationships": [
+        {
+          "sourceId": "markdown-emitter",
+          "targetId": "architecture-workspace",
+          "description": "Writes generated observed component documents",
+          "technology": "Markdown",
+          "sourceRange": "src/components/markdown-emitter.ts:9-14"
+        }
+      ]
+    },
+    {
+      "id": "source-watcher",
+      "name": "Source watcher",
+      "description": "Requests a complete observation after supported source changes.",
+      "technology": "Bun filesystem events",
+      "sourceRange": "src/components/source-watcher.ts:1-6",
+      "relationships": [
+        {
+          "sourceId": "source-watcher",
+          "targetId": "architecture-workspace",
+          "description": "Limits refreshes to the owned component directory",
+          "technology": "Filesystem boundary",
+          "sourceRange": "src/components/source-watcher.ts:15-20"
+        },
+        {
+          "sourceId": "source-watcher",
+          "targetId": "typescript-observer",
+          "description": "Requests a fresh bounded observation",
+          "technology": "In-process event",
+          "sourceRange": "src/components/source-watcher.ts:9-14"
+        }
+      ]
+    },
+    {
+      "id": "typescript-observer",
+      "name": "TypeScript observer",
+      "description": "Reads the one supported declaration shape without executing code.",
+      "technology": "TypeScript text",
+      "sourceRange": "src/components/typescript-observer.ts:1-6",
+      "relationships": [
+        {
+          "sourceId": "typescript-observer",
+          "targetId": "markdown-emitter",
+          "description": "Supplies bounded source observations",
+          "technology": "In-process data",
+          "sourceRange": "src/components/typescript-observer.ts:9-14"
+        }
+      ]
+    }
+  ]
+}

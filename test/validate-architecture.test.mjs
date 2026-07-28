@@ -63,7 +63,7 @@ test('validates observed and every planned revision', async () => {
       'groma/plans/03-code-observation',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [5, 5, 10, 15])
+  assert.deepEqual(results.map(result => result.elementCount), [6, 5, 10, 15])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {
@@ -71,15 +71,16 @@ test('observed index links readers to the Markdown foundation', async () => {
   const indexFile = path.join(observedRoot, 'README.md')
   const tree = await parse(await readFile(indexFile, 'utf8'))
   const targets = new Set(collectLinkTargets(tree.nodes))
-  const foundationTargets = [
+  const observedTargets = [
     'systems/groma/system.md',
     'people/human-architect.md',
     'people/coding-agent.md',
     'systems/groma/containers/architecture-workspace/container.md',
+    'systems/groma/containers/scanner/container.md',
     'systems/git/system.md',
   ]
 
-  for (const target of foundationTargets) {
+  for (const target of observedTargets) {
     assert.ok(targets.has(target), `observed index is missing ${target}`)
     await access(path.resolve(observedRoot, target))
   }

@@ -9,6 +9,9 @@ The Markdown must remain useful even if Groma disappears.
 The [component Markdown contract](groma/README.md) defines the canonical architecture
 format.
 
+The [source-observation contract](groma/source-observation.md) defines the one
+TypeScript/Bun source shape supported by Revision 03.
+
 The [observed architecture](groma/observed/README.md) is the current materialized
 revision, and `groma/plans/` contains complete desired revisions.
 

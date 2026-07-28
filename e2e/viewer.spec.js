@@ -20,6 +20,7 @@ const containerNodes = [
   'element:coding-agent',
   'element:git',
   'element:human-architect',
+  'element:scanner',
   'element:viewer',
 ]
 const containerEdges = [
@@ -41,6 +42,7 @@ const componentNodes = [
   'element:human-architect',
   'element:markdown-reader',
   'element:markdown-watcher',
+  'element:scanner',
 ]
 const componentEdges = [
   'relationship:0:boundary:viewer:element:architecture-workspace',
@@ -228,6 +230,7 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await expectComparisonStates(page, {
     'architecture-workspace': 'unchanged',
     groma: 'modification',
+    scanner: 'removal',
     viewer: 'addition',
   })
   await expect(
@@ -253,6 +256,7 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
     groma: 'modification',
     'markdown-reader': 'addition',
     'markdown-watcher': 'addition',
+    scanner: 'removal',
     viewer: 'addition',
   })
   await expectAccessibleRelationships(page, componentEdges.length)

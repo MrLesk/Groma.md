@@ -66,6 +66,8 @@ These level-two sections are optional:
 - `## Technology` describes the implementation technology in prose.
 - `## Relationships` contains the outgoing directed relationships in the table
   format below.
+- `## Source evidence` lists repository-relative source files and inclusive line
+  ranges for generated observations.
 
 Other level-two sections may add human-readable explanation, such as `## Structure`.
 They remain prose and do not add model fields.

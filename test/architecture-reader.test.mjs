@@ -45,7 +45,7 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
   )
   assert.deepEqual(
     revisions.map(({ documents }) => documents.length),
-    [5, 5, 10, 15],
+    [6, 5, 10, 15],
   )
 
   for (const loadedRevision of revisions) {

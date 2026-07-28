@@ -11,6 +11,8 @@ C4-compatible Markdown owned by this repository.
 - The [architecture workspace](systems/groma/containers/architecture-workspace/container.md)
   keeps current and planned revisions in the repository and declares its relationship
   to [Git](systems/git/system.md), which supplies history, diffs, and collaboration.
+- The [scanner](systems/groma/containers/scanner/container.md) owns the one directory
+  reserved for generated observed components.
 
 The [component Markdown contract](../README.md) defines how these documents represent
 C4 elements, containment, and directed relationships.
