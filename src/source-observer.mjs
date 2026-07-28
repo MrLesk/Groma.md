@@ -1,6 +1,7 @@
+import { constants } from 'node:fs'
 import {
   lstat,
-  readFile,
+  open,
   readdir,
   realpath,
 } from 'node:fs/promises'
@@ -19,6 +20,9 @@ const utf8Decoder = new TextDecoder('utf-8', {
   fatal: true,
   ignoreBOM: true,
 })
+const noFollowReadFlags = typeof constants.O_NOFOLLOW === 'number'
+  ? constants.O_RDONLY | constants.O_NOFOLLOW
+  : null
 
 class SourceShapeMismatch extends Error {}
 
@@ -42,9 +46,63 @@ function recordFilesystemAccess(
   onFilesystemAccess?.({ operation, filename })
 }
 
-async function readUtf8(filename, onFilesystemAccess) {
-  recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
-  const bytes = await readFile(filename)
+function isSameFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+async function verifyCurrentFile(
+  filename,
+  expectedStat,
+  onFilesystemAccess,
+) {
+  const stat = await inspectPath(filename, onFilesystemAccess)
+  if (
+    stat.isSymbolicLink()
+    || !stat.isFile()
+    || !isSameFile(stat, expectedStat)
+  ) {
+    mismatch()
+  }
+}
+
+async function readVerifiedFile(
+  filename,
+  expectedStat,
+  onFilesystemAccess,
+) {
+  if (noFollowReadFlags === null) {
+    mismatch()
+  }
+
+  recordFilesystemAccess(onFilesystemAccess, 'open-file', filename)
+  let handle
+  try {
+    handle = await open(filename, noFollowReadFlags)
+    recordFilesystemAccess(onFilesystemAccess, 'fstat', filename)
+    const openedStat = await handle.stat({ bigint: true })
+    if (!openedStat.isFile() || !isSameFile(openedStat, expectedStat)) {
+      mismatch()
+    }
+
+    recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
+    await verifyCurrentFile(filename, expectedStat, onFilesystemAccess)
+    const bytes = await handle.readFile()
+    await verifyCurrentFile(filename, expectedStat, onFilesystemAccess)
+    return bytes
+  } finally {
+    if (handle !== undefined) {
+      await handle.close()
+      recordFilesystemAccess(onFilesystemAccess, 'close-file', filename)
+    }
+  }
+}
+
+async function readUtf8(filename, expectedStat, onFilesystemAccess) {
+  const bytes = await readVerifiedFile(
+    filename,
+    expectedStat,
+    onFilesystemAccess,
+  )
   if (
     bytes.length >= 3
     && bytes[0] === 0xef
@@ -63,7 +121,7 @@ async function readDirectory(filename, onFilesystemAccess) {
 
 async function inspectPath(filename, onFilesystemAccess) {
   recordFilesystemAccess(onFilesystemAccess, 'lstat', filename)
-  return lstat(filename)
+  return lstat(filename, { bigint: true })
 }
 
 async function resolvePath(filename, onFilesystemAccess) {
@@ -71,8 +129,12 @@ async function resolvePath(filename, onFilesystemAccess) {
   return realpath(filename)
 }
 
-async function readSource(filename, onFilesystemAccess) {
-  const source = await readUtf8(filename, onFilesystemAccess)
+async function readSource(filename, expectedStat, onFilesystemAccess) {
+  const source = await readUtf8(
+    filename,
+    expectedStat,
+    onFilesystemAccess,
+  )
   if (
     !source.endsWith('\n')
     || /[\r\u2028\u2029]/.test(source)
@@ -290,16 +352,20 @@ async function validatePhysicalSourceLayout(
     mismatch()
   }
 
-  const validatedKinds = new Map([[repositoryRoot, 'directory']])
+  const validatedEntries = new Map([[
+    repositoryRoot,
+    { kind: 'directory', stat: rootStat },
+  ]])
   const declarationFiles = []
 
   async function validateEntry(filename, expectedKind) {
-    let kind = validatedKinds.get(filename)
-    if (!kind) {
+    let validatedEntry = validatedEntries.get(filename)
+    if (!validatedEntry) {
       const stat = await inspectPath(filename, onFilesystemAccess)
       if (stat.isSymbolicLink()) {
         mismatch()
       }
+      let kind
       if (stat.isDirectory()) {
         kind = 'directory'
       } else if (stat.isFile()) {
@@ -315,13 +381,17 @@ async function validatePhysicalSourceLayout(
       ) {
         mismatch()
       }
-      validatedKinds.set(filename, kind)
+      validatedEntry = { kind, stat }
+      validatedEntries.set(filename, validatedEntry)
     }
 
-    if (expectedKind !== undefined && kind !== expectedKind) {
+    if (
+      expectedKind !== undefined
+      && validatedEntry.kind !== expectedKind
+    ) {
       mismatch()
     }
-    return kind
+    return validatedEntry
   }
 
   await validateEntry(path.join(repositoryRoot, 'package.json'), 'file')
@@ -338,7 +408,7 @@ async function validatePhysicalSourceLayout(
     for (const entry of entries) {
       const relativePath = `${relativeDirectory}/${entry}`
       const entryPath = path.join(repositoryRoot, ...relativePath.split('/'))
-      const kind = await validateEntry(entryPath)
+      const { kind } = await validateEntry(entryPath)
       const isSourcePath = sourceExtensionPattern.test(entry)
       if (isSourcePath && kind !== 'file') {
         mismatch()
@@ -356,6 +426,7 @@ async function validatePhysicalSourceLayout(
   return {
     repositoryRoot,
     declarationFiles,
+    validatedEntries,
   }
 }
 
@@ -373,14 +444,24 @@ function validatePackageJson(packageJson) {
   }
 }
 
+function validatedFileStat(physicalLayout, filename) {
+  const entry = physicalLayout.validatedEntries.get(filename)
+  if (entry?.kind !== 'file') {
+    mismatch()
+  }
+  return entry.stat
+}
+
 async function observe(repositoryRoot, onFilesystemAccess) {
   const physicalLayout = await validatePhysicalSourceLayout(
     repositoryRoot,
     onFilesystemAccess,
   )
   const absoluteRoot = physicalLayout.repositoryRoot
+  const packageFilename = path.join(absoluteRoot, 'package.json')
   const packageSource = await readUtf8(
-    path.join(absoluteRoot, 'package.json'),
+    packageFilename,
+    validatedFileStat(physicalLayout, packageFilename),
     onFilesystemAccess,
   )
   let packageJson
@@ -403,8 +484,10 @@ async function observe(repositoryRoot, onFilesystemAccess) {
     mismatch()
   }
 
+  const entryFilename = path.join(absoluteRoot, 'src', 'index.ts')
   const entryPoint = parseEntryPoint(await readSource(
-    path.join(absoluteRoot, 'src', 'index.ts'),
+    entryFilename,
+    validatedFileStat(physicalLayout, entryFilename),
     onFilesystemAccess,
   ))
   const components = []
@@ -412,9 +495,14 @@ async function observe(repositoryRoot, onFilesystemAccess) {
 
   for (const sourceFilename of componentFiles) {
     const filenameId = path.posix.basename(sourceFilename, '.ts')
+    const componentFilename = path.join(
+      absoluteRoot,
+      ...sourceFilename.split('/'),
+    )
     const component = parseComponent(
       await readSource(
-        path.join(absoluteRoot, ...sourceFilename.split('/')),
+        componentFilename,
+        validatedFileStat(physicalLayout, componentFilename),
         onFilesystemAccess,
       ),
       sourceFilename,

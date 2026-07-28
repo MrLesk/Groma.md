@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
 import {
+  renameSync,
+  symlinkSync,
+} from 'node:fs'
+import {
   appendFile,
   cp,
   mkdir,
@@ -174,7 +178,23 @@ test('reads only bounded source files and never executes project text', async t 
   assert.ok(accesses.length > 0)
   assert.deepEqual(
     [...new Set(accesses.map(({ operation }) => operation))].sort(),
-    ['lstat', 'read-directory', 'read-file', 'realpath'],
+    [
+      'close-file',
+      'fstat',
+      'lstat',
+      'open-file',
+      'read-directory',
+      'read-file',
+      'realpath',
+    ],
+  )
+  assert.equal(
+    accesses.filter(access => access.operation === 'open-file').length,
+    5,
+  )
+  assert.equal(
+    accesses.filter(access => access.operation === 'close-file').length,
+    5,
   )
   assert.ok(accesses.every(access => {
     return access.path === ''
@@ -301,6 +321,67 @@ test('rejects in-scope links before reading package or source bytes', async t =>
         false,
       )
     })
+  }
+})
+
+test('rejects required files swapped at open and read boundaries', async t => {
+  const roles = [
+    {
+      name: 'package',
+      relativePath: 'package.json',
+    },
+    {
+      name: 'entry',
+      relativePath: path.join('src', 'index.ts'),
+    },
+    {
+      name: 'component',
+      relativePath: path.join(
+        'src',
+        'components',
+        'markdown-emitter.ts',
+      ),
+    },
+  ]
+
+  for (const role of roles) {
+    for (const boundary of ['open-file', 'read-file']) {
+      await t.test(`${role.name} at ${boundary}`, async subtest => {
+        const { temporaryRoot, repository } = await createPhysicalProbe(subtest)
+        const physicalRepository = await realpath(repository)
+        const filename = path.join(physicalRepository, role.relativePath)
+        const outside = path.join(
+          temporaryRoot,
+          `outside-${role.name}${path.extname(filename)}`,
+        )
+        await cp(filename, outside)
+        const accesses = []
+        let swapped = false
+
+        await assertUnsupportedRoot(repository, {
+          onFilesystemAccess(access) {
+            accesses.push(access)
+            if (
+              !swapped
+              && access.operation === boundary
+              && access.filename === filename
+            ) {
+              renameSync(filename, `${filename}.validated`)
+              symlinkSync(outside, filename, 'file')
+              swapped = true
+            }
+          },
+        })
+
+        assert.equal(swapped, true)
+        if (boundary === 'read-file') {
+          assert.equal(
+            accesses.filter(access => access.operation === 'open-file').length,
+            accesses.filter(access => access.operation === 'close-file').length,
+          )
+        }
+      })
+    }
   }
 })
 
