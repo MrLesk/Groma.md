@@ -29,11 +29,8 @@ async function addFingerprintPath(hash, repositoryRoot, relativeFilename) {
   try {
     stat = await lstat(filename)
   } catch (error) {
-    hash.update(
-      error.code === 'ENOENT'
-        ? 'missing\0'
-        : `lstat-error:${error.code ?? error.name}\0`,
-    )
+    if (error.code !== 'ENOENT') throw error
+    hash.update('missing\0')
     return null
   }
 
@@ -43,7 +40,8 @@ async function addFingerprintPath(hash, repositoryRoot, relativeFilename) {
       hash.update(await readlink(filename))
       hash.update('\0')
     } catch (error) {
-      hash.update(`readlink-error:${error.code ?? error.name}\0`)
+      if (error.code !== 'ENOENT') throw error
+      hash.update('vanished\0')
     }
   } else if (stat.isFile()) {
     hash.update('file\0')
@@ -51,7 +49,8 @@ async function addFingerprintPath(hash, repositoryRoot, relativeFilename) {
       hash.update(await readFile(filename))
       hash.update('\0')
     } catch (error) {
-      hash.update(`read-error:${error.code ?? error.name}\0`)
+      if (error.code !== 'ENOENT') throw error
+      hash.update('vanished\0')
     }
   } else if (stat.isDirectory()) {
     hash.update('directory\0')
@@ -82,7 +81,8 @@ async function supportedSourceFingerprint(repositoryRoot) {
         .filter(name => /^[^/\\]+\.ts$/.test(name))
         .sort(bytewiseCompare)
     } catch (error) {
-      hash.update(`readdir-error:${error.code ?? error.name}\0`)
+      if (error.code !== 'ENOENT') throw error
+      hash.update('components-vanished\0')
       return hash.digest('hex')
     }
     for (const name of names) {
@@ -132,7 +132,15 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
     },
   ]
   const handles = []
-  let fingerprint = await fingerprintSource(repositoryRoot)
+  let fingerprint
+  let hasFingerprint = false
+  let initialFingerprintError
+  try {
+    fingerprint = await fingerprintSource(repositoryRoot)
+    hasFingerprint = true
+  } catch (error) {
+    initialFingerprintError = error
+  }
   let closed = false
   let pending = false
   let settleTimer
@@ -218,8 +226,9 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
       if (closed) return
       const nextFingerprint = await fingerprintSource(repositoryRoot)
       if (closed) return
-      const changed = nextFingerprint !== fingerprint
+      const changed = !hasFingerprint || nextFingerprint !== fingerprint
       fingerprint = nextFingerprint
+      hasFingerprint = true
       if (forceRefresh || changed) scheduleRefresh()
     }).catch(async error => {
       await reportError(error)
@@ -247,7 +256,12 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
       })
       handles.push(handle)
     }
-    await inspectSupportedSource(false)
+    if (initialFingerprintError === undefined) {
+      await inspectSupportedSource(false)
+    } else {
+      await reportError(initialFingerprintError)
+      if (!closed) scheduleRefresh()
+    }
   } catch (error) {
     closed = true
     for (const handle of handles) handle.close()

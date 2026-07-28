@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import {
+  chmod,
   cp,
   mkdir,
   mkdtemp,
@@ -341,6 +342,162 @@ test('a fingerprint read failure reports, observes, and remains recoverable', as
   fake.registrations[0].callback('change', 'package.json')
   await within(completed.promise, 500, 'fingerprint failure recovery')
   assert.ok(fake.registrations.every(({ handle }) => !handle.closed))
+})
+
+test('a real fingerprint permission failure reports and recovers without mutation', async t => {
+  const { startSourceRefresh } = await import('../src/source-refresh.mjs')
+  const repositoryRoot = await createSupportedRepository(t)
+  const fake = createFakeFilesystemWatcher()
+  const errors = createNotificationQueue()
+  const completed = waitForCompletion()
+  const ownedRoot = path.join(repositoryRoot, ownedRelativePath)
+  const before = await treeHash(ownedRoot)
+  const sourceFilename = path.join(
+    repositoryRoot,
+    'src',
+    'components',
+    'source-watcher.ts',
+  )
+  const refresh = await startSourceRefresh(repositoryRoot, {
+    settleMilliseconds: 5,
+    watchFileSystem: fake.watchFileSystem,
+    onError: error => errors.notify(error),
+    onRefreshComplete: completed.resolve,
+  })
+  t.after(() => refresh.close())
+  t.after(() => chmod(sourceFilename, 0o644).catch(() => {}))
+
+  await chmod(sourceFilename, 0o000)
+  fake.registrations[2].callback('change', undefined)
+  const fingerprintError = await within(
+    errors.next(),
+    500,
+    'real fingerprint permission report',
+  )
+  const observationError = await within(
+    errors.next(),
+    500,
+    'unsupported observation after permission failure',
+  )
+
+  assert.equal(fingerprintError.code, 'EACCES')
+  assert.equal(
+    observationError.code,
+    'GROMA_UNSUPPORTED_SOURCE_SHAPE',
+  )
+  assert.equal(await treeHash(ownedRoot), before)
+  assert.ok(fake.registrations.every(({ handle }) => !handle.closed))
+
+  await chmod(sourceFilename, 0o644)
+  fake.registrations[2].callback('change', 'source-watcher.ts')
+  await within(completed.promise, 1_000, 'permission failure recovery')
+  assert.ok(fake.registrations.every(({ handle }) => !handle.closed))
+  assert.match(
+    await readFile(path.join(ownedRoot, 'source-watcher.md'), 'utf8'),
+    /# Source watcher/,
+  )
+})
+
+test('an initial real fingerprint permission failure remains recoverable', async t => {
+  const { startSourceRefresh } = await import('../src/source-refresh.mjs')
+  const repositoryRoot = await createSupportedRepository(t)
+  const fake = createFakeFilesystemWatcher()
+  const errors = createNotificationQueue()
+  const completed = waitForCompletion()
+  const ownedRoot = path.join(repositoryRoot, ownedRelativePath)
+  const before = await treeHash(ownedRoot)
+  const sourceFilename = path.join(
+    repositoryRoot,
+    'src',
+    'components',
+    'source-watcher.ts',
+  )
+  await chmod(sourceFilename, 0o000)
+  t.after(() => chmod(sourceFilename, 0o644).catch(() => {}))
+
+  const refresh = await startSourceRefresh(repositoryRoot, {
+    settleMilliseconds: 5,
+    watchFileSystem: fake.watchFileSystem,
+    onError: error => errors.notify(error),
+    onRefreshComplete: completed.resolve,
+  })
+  t.after(() => refresh.close())
+  assert.equal(
+    (await within(
+      errors.next(),
+      500,
+      'initial fingerprint permission report',
+    )).code,
+    'EACCES',
+  )
+  assert.equal(
+    (await within(
+      errors.next(),
+      500,
+      'initial unsupported observation report',
+    )).code,
+    'GROMA_UNSUPPORTED_SOURCE_SHAPE',
+  )
+  assert.equal(await treeHash(ownedRoot), before)
+  assert.ok(fake.registrations.every(({ handle }) => !handle.closed))
+
+  await chmod(sourceFilename, 0o644)
+  fake.registrations[2].callback('change', 'source-watcher.ts')
+  await within(completed.promise, 1_000, 'initial permission recovery')
+  assert.ok(fake.registrations.every(({ handle }) => !handle.closed))
+  assert.match(
+    await readFile(path.join(ownedRoot, 'source-watcher.md'), 'utf8'),
+    /# Source watcher/,
+  )
+})
+
+test('a filename-less change during watcher startup is not lost', async t => {
+  const { startSourceRefresh } = await import('../src/source-refresh.mjs')
+  const repositoryRoot = path.resolve('/tmp/groma-source-refresh-startup-race')
+  const fake = createFakeFilesystemWatcher()
+  const secondFingerprintStarted = waitForCompletion()
+  const releaseSecondFingerprint = waitForCompletion()
+  const completed = waitForCompletion()
+  let fingerprintCalls = 0
+  let observations = 0
+  const startPromise = startSourceRefresh(repositoryRoot, {
+    fingerprintSource: async () => {
+      fingerprintCalls += 1
+      if (fingerprintCalls === 1) return 'before'
+      if (fingerprintCalls === 2) {
+        secondFingerprintStarted.resolve()
+        await releaseSecondFingerprint.promise
+      }
+      return 'after'
+    },
+    settleMilliseconds: 5,
+    watchFileSystem: fake.watchFileSystem,
+    observeSource() {
+      observations += 1
+      return {
+        contract: 'groma.typescript-bun/v1',
+        containerId: 'scanner',
+        entryPoints: [],
+        components: [],
+      }
+    },
+    async emitComponents() {},
+    onError: assert.fail,
+    onRefreshComplete: completed.resolve,
+  })
+
+  await within(
+    secondFingerprintStarted.promise,
+    500,
+    'post-watch fingerprint',
+  )
+  fake.registrations[2].callback('change', undefined)
+  releaseSecondFingerprint.resolve()
+  const refresh = await startPromise
+  t.after(() => refresh.close())
+  await within(completed.promise, 500, 'startup source refresh')
+
+  assert.equal(observations, 1)
 })
 
 test('real filename-less events fingerprint only supported source', async t => {

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 02:27'
+updated_date: '2026-07-28 02:36'
 labels: []
 milestone: m-2
 dependencies:
@@ -47,10 +47,9 @@ Connect the bounded TypeScript observer from TASK-11 and the Markdown emitter fr
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add a standalone source-refresh service and process entry point that watch only package.json, src/index.ts, and non-recursive src/components/*.ts, use a bounded fingerprint when fs.watch omits the filename, coalesce events with one short settle timer, and serialize full observer→emitter runs.
-2. Preserve last-good generated Markdown by invoking the emitter only after a successful full observation, keep observer/emitter/fingerprint-read failures visible and recoverable, and make only watch-handle failures terminal with clean handle and timer shutdown.
-3. Add disposable integration and contract tests for add/modify/remove, burst coalescing, filename-less events, exact out-of-scope filtering with zero observer/emitter calls, refresh failure recovery, byte-identical unowned observed/plans, viewer source isolation, and process shutdown.
-4. Document the separate command and stable-snapshot/last-good semantics, then run focused, full, browser, syntax, and diff verification before finalizing TASK-13.
+1. Add real filesystem regressions proving runtime and startup non-ENOENT fingerprint failures are reported, leave the last-good subtree unchanged, and recover on the next supported event; add a deferred startup probe for filename-less changes.
+2. Narrow production fingerprint catches so only expected ENOENT absence/races are encoded, route genuine failures through recoverable reporting and settled observation, and use a pre-watch baseline plus post-registration comparison so startup events cannot be lost.
+3. Run focused and full verification, record the implementation/test-seam defect correction, recheck AC #1, finalize TASK-13, and commit the focused change.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -63,10 +62,12 @@ Observer/emitter failures are nonterminal and preserve the last-good owned subtr
 Disposable tests cover burst coalescing, filename-less supported/out-of-scope events, add/modify/remove with real filesystem watches, follow-up refresh during a run, last-good recovery, terminal watcher lifecycle, byte hashes for every unowned observed path and all plans, process shutdown, and same-document browser refresh with viewer I/O confined to groma/observed and groma/plans. Independent review found and the implementation corrected filename-less event handling, terminal dead-watcher behavior, and recoverable fingerprint-read semantics. Classification: implementation defects caught and resolved before finalization.
 
 Fresh verification: syntax checks passed; npm run check passed architecture validation and 138/138 Node tests; npm run test:release-gate passed 5/5; npm run test:viewer:browser passed 12/12; git diff --check passed; no groma/observed or groma/plans file changed.
+
+External spec review found an implementation/test-seam defect: production fingerprinting encoded real non-ENOENT lstat/read/readlink/readdir failures while the regression exercised only an injected throwing seam. Corrected catches to encode only ENOENT absence/races and propagate genuine filesystem failures into the existing nonterminal report-and-observe path. Moved startup fingerprinting to a recoverable pre-watch baseline with a post-registration comparison, closing both initial-error recovery and filename-less registration races. Added real EACCES tests before and after startup plus a deferred startup fingerprint probe. Independent re-review found no remaining issues. Fresh verification: focused source-refresh tests 14/14; npm run check passed architecture validation and 141/141 Node tests; release gate 5/5; browser 12/12; syntax and diff checks passed; no observed or plan files changed. Classification: implementation/test-seam defect.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added the separate bounded source-refresh process that filters exact TASK-10 paths, fingerprints only supported source for filename-less events, coalesces settled changes, serializes complete observer→emitter refreshes, preserves last-good Markdown on invalid source, and terminates cleanly on watch failure. The viewer remains source-blind and updates through its existing observed-Markdown watcher. Verified with disposable add/modify/remove and byte-hash tests, 138/138 Node tests, 5/5 release-gate tests, 12/12 browser tests, syntax/diff hygiene, and independent review with no remaining findings.
+Corrected TASK-13 fingerprint error semantics and startup race handling. Only ENOENT absence/races are encoded; genuine filesystem failures are reported, preserve last-good output, settle into normal observation, and recover on later supported events. Pre-watch and post-registration snapshots prevent unnamed startup changes from being lost. Verified with real runtime/startup EACCES regressions, deferred startup coverage, 141/141 Node tests, 5/5 release-gate tests, 12/12 browser tests, and independent review.
 <!-- SECTION:FINAL_SUMMARY:END -->
