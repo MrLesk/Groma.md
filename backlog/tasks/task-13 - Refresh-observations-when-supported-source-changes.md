@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 02:36'
+updated_date: '2026-07-28 02:52'
 labels: []
 milestone: m-2
 dependencies:
@@ -47,9 +47,9 @@ Connect the bounded TypeScript observer from TASK-11 and the Markdown emitter fr
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add real filesystem regressions proving runtime and startup non-ENOENT fingerprint failures are reported, leave the last-good subtree unchanged, and recover on the next supported event; add a deferred startup probe for filename-less changes.
-2. Narrow production fingerprint catches so only expected ENOENT absence/races are encoded, route genuine failures through recoverable reporting and settled observation, and use a pre-watch baseline plus post-registration comparison so startup events cannot be lost.
-3. Run focused and full verification, record the implementation/test-seam defect correction, recheck AC #1, finalize TASK-13, and commit the focused change.
+1. Add deterministic real-filesystem regressions showing replacement or removal of the repository, src, and src/components watch directories produces one terminal restart-required watcher-health error, closes every handle/timer, and invokes neither observer nor emitter.
+2. Capture mandatory stable identities for the repository, src, and src/components watch directories; validate them after watch registration and before every event, terminating on absence or identity mismatch without rebinding or recovery machinery.
+3. Preserve normal supported child add/modify/remove and out-of-scope filtering, then run focused/full/release/browser verification, record the implementation coverage defect, recheck AC #1, finalize, and commit.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -64,10 +64,14 @@ Disposable tests cover burst coalescing, filename-less supported/out-of-scope ev
 Fresh verification: syntax checks passed; npm run check passed architecture validation and 138/138 Node tests; npm run test:release-gate passed 5/5; npm run test:viewer:browser passed 12/12; git diff --check passed; no groma/observed or groma/plans file changed.
 
 External spec review found an implementation/test-seam defect: production fingerprinting encoded real non-ENOENT lstat/read/readlink/readdir failures while the regression exercised only an injected throwing seam. Corrected catches to encode only ENOENT absence/races and propagate genuine filesystem failures into the existing nonterminal report-and-observe path. Moved startup fingerprinting to a recoverable pre-watch baseline with a post-registration comparison, closing both initial-error recovery and filename-less registration races. Added real EACCES tests before and after startup plus a deferred startup fingerprint probe. Independent re-review found no remaining issues. Fresh verification: focused source-refresh tests 14/14; npm run check passed architecture validation and 141/141 Node tests; release gate 5/5; browser 12/12; syntax and diff checks passed; no observed or plan files changed. Classification: implementation/test-seam defect.
+
+Quality review identified an implementation coverage defect: watched directories were registered once without validating that repository, src, and src/components still named the same inodes, so replacement could leave a healthy-looking watcher attached to stale topology. Corrected the lifecycle by capturing mandatory device/inode identities, validating after registration and before every filesystem event, normalizing missing/non-directory/identity-mismatch races to GROMA_SOURCE_WATCH_TOPOLOGY_CHANGED, and terminating once with all handles and timers closed. No rebinding or recovery engine was introduced. Fake-only tests now use an explicit stable identity seam; real disposable repositories cover replacement and removal of all three watched directories, while normal supported child add/modify/remove remains green.
+
+Fresh verification: focused source-refresh tests 22/22; npm run check passed architecture validation and 149/149 Node tests; npm run test:release-gate passed 5/5; npm run test:viewer:browser passed 12/12; syntax checks and git diff --check passed; no groma/observed or groma/plans file changed. Independent re-review found no Critical, Important, or Minor issues and marked the change Ready. Classification: implementation coverage defect.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Corrected TASK-13 fingerprint error semantics and startup race handling. Only ENOENT absence/races are encoded; genuine filesystem failures are reported, preserve last-good output, settle into normal observation, and recover on later supported events. Pre-watch and post-registration snapshots prevent unnamed startup changes from being lost. Verified with real runtime/startup EACCES regressions, deferred startup coverage, 141/141 Node tests, 5/5 release-gate tests, 12/12 browser tests, and independent review.
+Corrected TASK-13 watcher topology lifecycle so repository, src, and src/components removal or inode replacement is detected as one restart-required terminal failure; every handle/timer closes and the process exits nonzero without adding rebinding machinery. Mandatory production identities and explicit fake-test identities prevent missing startup topology from appearing healthy. Normal supported child refresh behavior remains intact. Verified with deterministic replacement/removal regressions for all three directories, focused tests 22/22, architecture validation plus 149/149 Node tests, release gate 5/5, browser tests 12/12, syntax/diff hygiene, and independent re-review with no findings. Classification: implementation coverage defect.
 <!-- SECTION:FINAL_SUMMARY:END -->

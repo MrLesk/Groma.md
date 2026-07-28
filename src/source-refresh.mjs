@@ -5,6 +5,7 @@ import {
   readFile,
   readdir,
   readlink,
+  stat,
 } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -12,6 +13,17 @@ import { emitObservedComponents } from './markdown-emitter.mjs'
 import { observeTypeScriptSource } from './source-observer.mjs'
 
 const defaultSettleMilliseconds = 120
+
+class SourceWatchTopologyError extends Error {
+  constructor(options) {
+    super(
+      'Supported source watch topology changed; restart required.',
+      options,
+    )
+    this.name = 'SourceWatchTopologyError'
+    this.code = 'GROMA_SOURCE_WATCH_TOPOLOGY_CHANGED'
+  }
+}
 
 function bytewiseCompare(left, right) {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
@@ -104,6 +116,21 @@ function isSupportedEvent(scope, filename) {
   return /^[^/\\]+\.ts$/.test(filename)
 }
 
+function sameDirectoryIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+async function readFilesystemDirectoryIdentity(directory) {
+  let identity
+  try {
+    identity = await stat(directory, { bigint: true })
+  } catch (error) {
+    throw new SourceWatchTopologyError({ cause: error })
+  }
+  if (!identity.isDirectory()) throw new SourceWatchTopologyError()
+  return identity
+}
+
 export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
   const repositoryRoot = path.resolve(suppliedRepositoryRoot)
   const {
@@ -114,6 +141,7 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
       console.error(`[groma source refresh] ${error.message}`)
     },
     onRefreshComplete = () => {},
+    readWatchDirectoryIdentity = readFilesystemDirectoryIdentity,
     settleMilliseconds = defaultSettleMilliseconds,
     watchFileSystem = watch,
   } = options
@@ -132,6 +160,13 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
     },
   ]
   const handles = []
+  const watchDirectoryIdentities = new Map()
+  for (const { directory } of watchScopes) {
+    watchDirectoryIdentities.set(
+      directory,
+      await readWatchDirectoryIdentity(directory),
+    )
+  }
   let fingerprint
   let hasFingerprint = false
   let initialFingerprintError
@@ -221,20 +256,58 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
     }, settleMilliseconds)
   }
 
-  function inspectSupportedSource(forceRefresh) {
+  async function validateWatchTopology() {
+    for (const { directory } of watchScopes) {
+      const expectedIdentity = watchDirectoryIdentities.get(directory)
+      const currentIdentity = await readWatchDirectoryIdentity(directory)
+      if (
+        !sameDirectoryIdentity(currentIdentity, expectedIdentity)
+      ) {
+        throw new SourceWatchTopologyError()
+      }
+    }
+  }
+
+  async function updateSupportedSourceFingerprint(forceRefresh) {
+    if (closed) return
+    const nextFingerprint = await fingerprintSource(repositoryRoot)
+    if (closed) return
+    const changed = !hasFingerprint || nextFingerprint !== fingerprint
+    fingerprint = nextFingerprint
+    hasFingerprint = true
+    if (forceRefresh || changed) scheduleRefresh()
+  }
+
+  function queueInspection(inspect) {
     fingerprintPromise = fingerprintPromise.then(async () => {
       if (closed) return
-      const nextFingerprint = await fingerprintSource(repositoryRoot)
-      if (closed) return
-      const changed = !hasFingerprint || nextFingerprint !== fingerprint
-      fingerprint = nextFingerprint
-      hasFingerprint = true
-      if (forceRefresh || changed) scheduleRefresh()
+      await inspect()
     }).catch(async error => {
+      if (error instanceof SourceWatchTopologyError) {
+        queueMicrotask(() => void terminate(error))
+        return
+      }
       await reportError(error)
       if (!closed) scheduleRefresh()
     })
     return fingerprintPromise
+  }
+
+  function inspectSupportedSource(forceRefresh) {
+    return queueInspection(
+      () => updateSupportedSourceFingerprint(forceRefresh),
+    )
+  }
+
+  function inspectFilesystemEvent(scope, filename) {
+    return queueInspection(async () => {
+      await validateWatchTopology()
+      if (typeof filename !== 'string') {
+        await updateSupportedSourceFingerprint(false)
+      } else if (isSupportedEvent(scope, filename)) {
+        await updateSupportedSourceFingerprint(true)
+      }
+    })
   }
 
   try {
@@ -244,11 +317,7 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
         { encoding: 'utf8', recursive: false },
         (_eventType, filename) => {
           if (closed) return
-          if (typeof filename !== 'string') {
-            void inspectSupportedSource(false)
-          } else if (isSupportedEvent(scope, filename)) {
-            void inspectSupportedSource(true)
-          }
+          void inspectFilesystemEvent(scope, filename)
         },
       )
       handle.on('error', error => {
@@ -256,6 +325,7 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
       })
       handles.push(handle)
     }
+    await validateWatchTopology()
     if (initialFingerprintError === undefined) {
       await inspectSupportedSource(false)
     } else {
@@ -265,6 +335,11 @@ export async function startSourceRefresh(suppliedRepositoryRoot, options = {}) {
   } catch (error) {
     closed = true
     for (const handle of handles) handle.close()
+    try {
+      await validateWatchTopology()
+    } catch (topologyError) {
+      throw topologyError
+    }
     throw error
   }
 

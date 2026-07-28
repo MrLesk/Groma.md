@@ -65,8 +65,9 @@ directory. A source event received during that run settles into a later complete
 refresh. Invalid settled source is reported by the source process and leaves the
 last-good generated Markdown untouched. Filename-less filesystem events are
 checked against a fingerprint containing only the supported source paths, so
-unrelated changes remain ignored. A failed watch handle is terminal: the process
-closes every watcher, reports the failure, and exits nonzero.
+unrelated changes remain ignored. A failed watch handle or changed watched-directory
+topology is terminal: the process closes every watcher, reports that restart is
+required, and exits nonzero.
 
 This process is separate from the viewer. The viewer never reads or watches
 source; it updates through its existing `groma/observed` Markdown watcher.

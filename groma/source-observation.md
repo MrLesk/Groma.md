@@ -298,9 +298,10 @@ fingerprint of only the supported paths above. It refreshes if that bounded
 snapshot changed and ignores the event otherwise. A temporary fingerprint read
 failure is reported and settles into a normal full observation while the
 last-good subtree and watcher remain available for recovery. A watch-handle
-failure is terminal rather than leaving a partially blind process: all watch
-handles and pending work close, the failure is reported, and the process exits
-nonzero.
+failure or replacement/removal of a watched repository/source directory is
+terminal rather than leaving a partially blind process: all watch handles and
+pending work close, the failure requires a process restart, and the process
+exits nonzero.
 
 The source-refresh process and architecture viewer are separate services. The
 viewer imports no source-observation code and continues to read and watch only

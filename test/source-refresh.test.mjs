@@ -9,6 +9,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   writeFile,
 } from 'node:fs/promises'
@@ -41,9 +42,19 @@ class FakeWatchHandle extends EventEmitter {
 
 function createFakeFilesystemWatcher() {
   const registrations = []
+  const directoryIdentities = new Map()
 
   return {
     registrations,
+    async readWatchDirectoryIdentity(directory) {
+      if (!directoryIdentities.has(directory)) {
+        directoryIdentities.set(directory, {
+          dev: 1n,
+          ino: BigInt(directoryIdentities.size + 1),
+        })
+      }
+      return directoryIdentities.get(directory)
+    },
     watchFileSystem(directory, options, callback) {
       const handle = new FakeWatchHandle()
       registrations.push({ callback, directory, handle, options })
@@ -167,6 +178,7 @@ test('one settled supported event burst runs one complete observation and emissi
   }
   const calls = []
   const refresh = await startSourceRefresh(repositoryRoot, {
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     async observeSource(root) {
@@ -207,6 +219,7 @@ test('out-of-scope events are ignored before observation without errors', async 
   const fake = createFakeFilesystemWatcher()
   const calls = []
   const refresh = await startSourceRefresh(repositoryRoot, {
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     observeSource() {
@@ -253,6 +266,7 @@ test('a filename-less event refreshes only when supported source changed', async
   let emissions = 0
   const refresh = await startSourceRefresh(repositoryRoot, {
     fingerprintSource: async () => fingerprint,
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     async observeSource() {
@@ -309,6 +323,7 @@ test('a fingerprint read failure reports, observes, and remains recoverable', as
       }
       return 'fingerprint'
     },
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     observeSource() {
@@ -470,6 +485,7 @@ test('a filename-less change during watcher startup is not lost', async t => {
       }
       return 'after'
     },
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     observeSource() {
@@ -554,6 +570,125 @@ test('real filename-less events fingerprint only supported source', async t => {
   assert.equal(emissions, 1)
 })
 
+test('missing watched directory topology rejects with restart required', async t => {
+  const { startSourceRefresh } = await import('../src/source-refresh.mjs')
+  const repositoryRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'groma-source-refresh-missing-topology-'),
+  )
+  t.after(() => rm(repositoryRoot, { recursive: true, force: true }))
+  const fake = createFakeFilesystemWatcher()
+  let refresh
+  let startupError
+
+  try {
+    refresh = await startSourceRefresh(repositoryRoot, {
+      watchFileSystem: fake.watchFileSystem,
+    })
+  } catch (error) {
+    startupError = error
+  } finally {
+    await refresh?.close()
+  }
+
+  assert.equal(
+    startupError?.code,
+    'GROMA_SOURCE_WATCH_TOPOLOGY_CHANGED',
+  )
+  assert.equal(
+    startupError?.message,
+    'Supported source watch topology changed; restart required.',
+  )
+  assert.ok(fake.registrations.every(({ handle }) => handle.closed))
+})
+
+test('watched directory replacement and removal are terminal', async t => {
+  const { startSourceRefresh } = await import('../src/source-refresh.mjs')
+
+  const cases = [
+    ['', 'replacement'],
+    ['', 'removal'],
+    ['src', 'replacement'],
+    ['src', 'removal'],
+    ['src/components', 'replacement'],
+    ['src/components', 'removal'],
+  ]
+  for (const [relativeDirectory, topologyChange] of cases) {
+    const label = relativeDirectory || 'repository root'
+    await t.test(`${label} ${topologyChange}`, async t => {
+      const repositoryRoot = await createSupportedRepository(t)
+      const fake = createFakeFilesystemWatcher()
+      const errors = []
+      let observations = 0
+      let emissions = 0
+      const refresh = await startSourceRefresh(repositoryRoot, {
+        settleMilliseconds: 5,
+        watchFileSystem: fake.watchFileSystem,
+        observeSource() {
+          observations += 1
+        },
+        emitComponents() {
+          emissions += 1
+        },
+        onError(error) {
+          errors.push(error)
+        },
+      })
+      t.after(() => refresh.close())
+      const watchedDirectory = relativeDirectory === ''
+        ? repositoryRoot
+        : path.join(repositoryRoot, ...relativeDirectory.split('/'))
+
+      if (topologyChange === 'replacement') {
+        const replacementDirectory = relativeDirectory === ''
+          ? `${repositoryRoot}-replaced`
+          : path.join(
+            path.dirname(watchedDirectory),
+            `${path.basename(watchedDirectory)}-replaced`,
+          )
+        t.after(() => {
+          return rm(replacementDirectory, { recursive: true, force: true })
+        })
+        await rename(
+          watchedDirectory,
+          replacementDirectory,
+        )
+        await mkdir(watchedDirectory)
+      } else {
+        await rm(watchedDirectory, { recursive: true })
+      }
+      const detectingRegistration = fake.registrations.find(registration => {
+        return registration.directory === (
+          relativeDirectory === ''
+            ? repositoryRoot
+            : path.dirname(watchedDirectory)
+        )
+      })
+      detectingRegistration.callback(
+        'rename',
+        relativeDirectory === '' ? undefined : path.basename(watchedDirectory),
+      )
+      const terminalError = await within(
+        refresh.done,
+        500,
+        `${topologyChange} watcher termination`,
+      )
+
+      assert.equal(
+        terminalError.code,
+        'GROMA_SOURCE_WATCH_TOPOLOGY_CHANGED',
+      )
+      assert.equal(
+        terminalError.message,
+        'Supported source watch topology changed; restart required.',
+      )
+      assert.deepEqual(errors, [terminalError])
+      assert.ok(fake.registrations.every(({ handle }) => handle.closed))
+      assert.equal(observations, 0)
+      assert.equal(emissions, 0)
+    })
+  }
+})
+
 test('watch failure closes every scope and terminates the service', async () => {
   const { startSourceRefresh } = await import('../src/source-refresh.mjs')
   const repositoryRoot = path.resolve('/tmp/groma-source-refresh-watch-failure')
@@ -562,6 +697,7 @@ test('watch failure closes every scope and terminates the service', async () => 
   let observations = 0
   const refresh = await startSourceRefresh(repositoryRoot, {
     fingerprintSource: async () => 'unchanged',
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     watchFileSystem: fake.watchFileSystem,
     observeSource() {
       observations += 1
@@ -598,6 +734,7 @@ test('a source event during observation waits for a second full refresh', async 
   let observations = 0
   let emissions = 0
   const refresh = await startSourceRefresh(repositoryRoot, {
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     async observeSource() {
@@ -654,6 +791,7 @@ test('observer failure retains the last-good owned subtree and can recover', asy
   let failObservation = true
   let emissions = 0
   const refresh = await startSourceRefresh(repositoryRoot, {
+    readWatchDirectoryIdentity: fake.readWatchDirectoryIdentity,
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
     observeSource() {
@@ -806,6 +944,7 @@ test('real add, modify, and remove events replace only the owned subtree', async
     beforeManualObserved,
   )
   assert.equal(await treeHash(plansRoot), beforePlans)
+  await refresh.close()
 })
 
 test('source refresh process closes its watchers on SIGTERM', async t => {
