@@ -20,8 +20,8 @@ const utf8Decoder = new TextDecoder('utf-8', {
   fatal: true,
   ignoreBOM: true,
 })
-const noFollowReadFlags = typeof constants.O_NOFOLLOW === 'number'
-  ? constants.O_RDONLY | constants.O_NOFOLLOW
+const runtimeNoFollowFlag = typeof constants.O_NOFOLLOW === 'number'
+  ? constants.O_NOFOLLOW
   : null
 
 class SourceShapeMismatch extends Error {}
@@ -69,15 +69,16 @@ async function readVerifiedFile(
   filename,
   expectedStat,
   onFilesystemAccess,
+  noFollowFlag,
 ) {
-  if (noFollowReadFlags === null) {
-    mismatch()
-  }
+  const readFlags = noFollowFlag === null
+    ? constants.O_RDONLY
+    : constants.O_RDONLY | noFollowFlag
 
   recordFilesystemAccess(onFilesystemAccess, 'open-file', filename)
   let handle
   try {
-    handle = await open(filename, noFollowReadFlags)
+    handle = await open(filename, readFlags)
     recordFilesystemAccess(onFilesystemAccess, 'fstat', filename)
     const openedStat = await handle.stat({ bigint: true })
     if (!openedStat.isFile() || !isSameFile(openedStat, expectedStat)) {
@@ -97,11 +98,17 @@ async function readVerifiedFile(
   }
 }
 
-async function readUtf8(filename, expectedStat, onFilesystemAccess) {
+async function readUtf8(
+  filename,
+  expectedStat,
+  onFilesystemAccess,
+  noFollowFlag,
+) {
   const bytes = await readVerifiedFile(
     filename,
     expectedStat,
     onFilesystemAccess,
+    noFollowFlag,
   )
   if (
     bytes.length >= 3
@@ -129,11 +136,17 @@ async function resolvePath(filename, onFilesystemAccess) {
   return realpath(filename)
 }
 
-async function readSource(filename, expectedStat, onFilesystemAccess) {
+async function readSource(
+  filename,
+  expectedStat,
+  onFilesystemAccess,
+  noFollowFlag,
+) {
   const source = await readUtf8(
     filename,
     expectedStat,
     onFilesystemAccess,
+    noFollowFlag,
   )
   if (
     !source.endsWith('\n')
@@ -452,7 +465,11 @@ function validatedFileStat(physicalLayout, filename) {
   return entry.stat
 }
 
-async function observe(repositoryRoot, onFilesystemAccess) {
+async function observe(
+  repositoryRoot,
+  onFilesystemAccess,
+  noFollowFlag,
+) {
   const physicalLayout = await validatePhysicalSourceLayout(
     repositoryRoot,
     onFilesystemAccess,
@@ -463,6 +480,7 @@ async function observe(repositoryRoot, onFilesystemAccess) {
     packageFilename,
     validatedFileStat(physicalLayout, packageFilename),
     onFilesystemAccess,
+    noFollowFlag,
   )
   let packageJson
   try {
@@ -489,6 +507,7 @@ async function observe(repositoryRoot, onFilesystemAccess) {
     entryFilename,
     validatedFileStat(physicalLayout, entryFilename),
     onFilesystemAccess,
+    noFollowFlag,
   ))
   const components = []
   const componentIds = new Set()
@@ -504,6 +523,7 @@ async function observe(repositoryRoot, onFilesystemAccess) {
         componentFilename,
         validatedFileStat(physicalLayout, componentFilename),
         onFilesystemAccess,
+        noFollowFlag,
       ),
       sourceFilename,
       filenameId,
@@ -530,7 +550,14 @@ async function observe(repositoryRoot, onFilesystemAccess) {
 
 export async function observeTypeScriptSource(repositoryRoot, options = {}) {
   try {
-    return await observe(repositoryRoot, options.onFilesystemAccess)
+    const noFollowFlag = options.testNoFollowAvailable === false
+      ? null
+      : runtimeNoFollowFlag
+    return await observe(
+      repositoryRoot,
+      options.onFilesystemAccess,
+      noFollowFlag,
+    )
   } catch {
     throw new UnsupportedSourceShapeError()
   }

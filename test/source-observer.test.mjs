@@ -132,6 +132,31 @@ test('observes the exact supported fixture with inclusive declaration evidence',
   )
 })
 
+test('observes validated files when O_NOFOLLOW is unavailable', async () => {
+  const expected = await readJson(path.join(
+    fixtureRoot,
+    'supported.expected.json',
+  ))
+  const accesses = []
+
+  const observation = await observeTypeScriptSource(supportedRoot, {
+    testNoFollowAvailable: false,
+    onFilesystemAccess(access) {
+      accesses.push(access)
+    },
+  })
+
+  assert.deepEqual(observation, expected)
+  assert.equal(
+    accesses.filter(access => access.operation === 'open-file').length,
+    5,
+  )
+  assert.equal(
+    accesses.filter(access => access.operation === 'close-file').length,
+    5,
+  )
+})
+
 test('returns equivalent bytewise-ordered observations on repeated reads', async () => {
   const first = await observeTypeScriptSource(supportedRoot)
   const second = await observeTypeScriptSource(supportedRoot)

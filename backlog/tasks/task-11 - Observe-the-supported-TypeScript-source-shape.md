@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 01:35'
+updated_date: '2026-07-28 01:42'
 labels: []
 milestone: m-2
 dependencies:
@@ -40,7 +40,7 @@ Implement the read-only observer defined by TASK-10 for its supported TypeScript
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reconcile TASK-11 with the corrected TASK-10 stable-snapshot contract: concurrent ancestor replacement and native descriptor-relative traversal are non-goals, while static links/escapes and direct final-file swaps remain rejected. 2. Keep the existing bb8502 observer behavior and focused regressions unchanged; verify exact output, evidence, determinism, bounded/no-execution behavior, exact unsupported rejection, static physical confinement, and direct final-file swap rejection. 3. Record objective focused/full evidence, recheck AC #5, finalize TASK-11 as Done, and commit only its Backlog record.
+1. Add a deterministic failing observer test that forces the runtime O_NOFOLLOW capability to unavailable and requires the exact supported observation plus balanced descriptor closure. 2. Replace the unconditional unavailable-flag rejection with O_RDONLY while retaining O_NOFOLLOW when numeric, and preserve all physical validation, fstat/path identity checks, same-descriptor reads, and finally closure. 3. Run focused/full verification, confirm prior static-link and direct swap regressions remain green, finalize TASK-11, and commit only task-owned source/test/Backlog changes.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,10 +69,16 @@ Capability result (BLOCKED): on Darwin with Node v24.13.0 and Bun 1.3.14, openin
 TASK-10 commit 875362a resolves the capability blocker by making stable local directory topology during one observation explicit. Concurrent ancestor replacement/native openat traversal is outside groma.typescript-bun/v1, so TASK-11 needs no native helper, generalized sandbox, fallback, production change, or test change. Classification: the blocker was an upstream task-spec defect introduced during hardening and is resolved by the corrected contract; existing bb8502 behavior remains the intended implementation.
 
 Stable-snapshot finalization evidence after TASK-10 875362a: node --test test/source-observer.test.mjs passed 37/37. The exact supported-fixture oracle and inclusive source ranges prove AC #1/#2; repeated bytewise ordering proves AC #3; the bounded-access/no-execution probe proves AC #4; the documented unsupported fixture, sixteen representative v1 violations, seven static link/wrong-kind cases, and six direct final-file open/read swaps prove AC #5 with exact all-or-nothing rejection. npm run check passed architecture validation and 115/115 Node tests; node --check src/source-observer.mjs and git diff --check passed. No source or test changes were required after the contract correction.
+
+Quality review found a bounded runtime-capability implementation defect: noFollowReadFlags becomes null when constants.O_NOFOLLOW is unavailable, and readVerifiedFile immediately mismatches before open/fstat/read. Under TASK-10's stable-snapshot contract, that runtime must use O_RDONLY after static physical validation while retaining descriptor fstat, pathname identity checks around the same-descriptor read, and closure. AC #1 reopened pending a deterministic unavailable-flag branch regression.
+
+TDD evidence: after a behavior-neutral boolean capability seam kept the original 37/37 focused suite green, the new unavailable-O_NOFOLLOW observer case failed with UnsupportedSourceShapeError (37 pass, 1 fail). The minimal correction selects O_RDONLY only when the flag is unavailable and otherwise retains O_RDONLY | O_NOFOLLOW. Focused green verification passed 38/38, including exact fallback output with five opens/five closes and all prior static-link/direct-swap regressions.
+
+Fresh final verification: node --test test/source-observer.test.mjs passed 38/38; npm run check passed architecture validation and 116/116 Node tests; node --check src/source-observer.mjs and git diff --check passed. The unavailable-flag test returns the exact supported observation and proves five opened descriptors are closed; shared direct-swap tests continue proving fstat/path identity checks and same-descriptor reads.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Restored TASK-11 under TASK-10's corrected stable-snapshot contract. Existing bb8502 behavior remains unchanged: the observer returns exact deterministic declaration evidence, reads only the bounded source shape without execution, rejects unsupported/static-linked inputs all-or-nothing, and protects direct final-file reads with no-follow descriptor identity checks. Concurrent ancestor replacement/native traversal is now an explicit upstream non-goal. Verified 37/37 focused tests, architecture validation plus 115/115 full Node tests, syntax, and diff hygiene. Classification: upstream task-spec defect resolved by TASK-10 commit 875362a.
+Corrected the TASK-11 runtime-capability mismatch. Required files now open with O_RDONLY when O_NOFOLLOW is unavailable and with O_RDONLY | O_NOFOLLOW when it is exposed, while pre-read static confinement, descriptor fstat identity, pathname identity checks, same-descriptor reads, and finally closure remain intact. Added a deterministic unavailable-capability observer regression through a narrow boolean test seam. Verified 38/38 focused tests, architecture validation plus 116/116 full Node tests, syntax, and diff hygiene. Classification: implementation defect.
 <!-- SECTION:FINAL_SUMMARY:END -->
