@@ -1,11 +1,11 @@
 ---
 id: TASK-13
 title: Refresh observations when supported source changes
-status: Done
+status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 02:52'
+updated_date: '2026-07-28 03:02'
 labels: []
 milestone: m-2
 dependencies:
@@ -40,16 +40,17 @@ Connect the bounded TypeScript observer from TASK-11 and the Markdown emitter fr
 - [x] #1 Adding, modifying, or removing a supported source element runs one complete TASK-11 observation and refreshes only the TASK-10-owned generated components subtree through TASK-12
 - [x] #2 One settled supported source change produces one complete generated subtree; no incremental graph mutation or rename reconciliation engine is introduced
 - [x] #3 A filesystem change outside the TASK-10 supported source scope is ignored without invoking the observer, refreshing Markdown, or reporting an observer error
-- [x] #4 The open viewer updates only because Markdown files under groma/observed changed and contains no source-observer integration
+- [ ] #4 The open viewer updates only because Markdown files under groma/observed changed and contains no source-observer integration
 - [x] #5 Hand-authored people, systems, containers, unrelated components, and every named plan directory remain byte-identical across source refreshes
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add deterministic real-filesystem regressions showing replacement or removal of the repository, src, and src/components watch directories produces one terminal restart-required watcher-health error, closes every handle/timer, and invokes neither observer nor emitter.
-2. Capture mandatory stable identities for the repository, src, and src/components watch directories; validate them after watch registration and before every event, terminating on absence or identity mismatch without rebinding or recovery machinery.
-3. Preserve normal supported child add/modify/remove and out-of-scope filtering, then run focused/full/release/browser verification, record the implementation coverage defect, recheck AC #1, finalize, and commit.
+1. Reproduce the intermittent release-gate generation stall under high repetition without changing production behavior, preserving failure artifacts and timing evidence.
+2. Trace the full boundary: source-refresh completion and emitter filesystem operations; TASK-8 watcher callbacks and bounded fingerprints; model reload outcomes; SSE generation publication and browser receipt. Compare failed and successful runs to locate the first missing transition.
+3. Build a deterministic reproducer at the owning boundary. If TASK-13/TASK-12 fails to produce a valid Markdown event, fix minimally with TDD; if TASK-8 misses a valid atomic replacement, record exact evidence as an upstream TASK-8 implementation defect and stop for routing. Do not add source-viewer coupling, polling, sleeps, or touch markers.
+4. Only after ownership is classified, run repeated no-event-loss integration and relevant full verification; do not finalize TASK-13 during investigation.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -68,10 +69,10 @@ External spec review found an implementation/test-seam defect: production finger
 Quality review identified an implementation coverage defect: watched directories were registered once without validating that repository, src, and src/components still named the same inodes, so replacement could leave a healthy-looking watcher attached to stale topology. Corrected the lifecycle by capturing mandatory device/inode identities, validating after registration and before every filesystem event, normalizing missing/non-directory/identity-mismatch races to GROMA_SOURCE_WATCH_TOPOLOGY_CHANGED, and terminating once with all handles and timers closed. No rebinding or recovery engine was introduced. Fake-only tests now use an explicit stable identity seam; real disposable repositories cover replacement and removal of all three watched directories, while normal supported child add/modify/remove remains green.
 
 Fresh verification: focused source-refresh tests 22/22; npm run check passed architecture validation and 149/149 Node tests; npm run test:release-gate passed 5/5; npm run test:viewer:browser passed 12/12; syntax checks and git diff --check passed; no groma/observed or groma/plans file changed. Independent re-review found no Critical, Important, or Minor issues and marked the change Ready. Classification: implementation coverage defect.
+
+Recurring viewer-generation stall investigation (not finalized): ownership is upstream TASK-8 Markdown watcher. Baseline repetition did not implicate TASK-13/TASK-12: the focused Playwright source→Markdown→viewer test completed the server-generation handoff 99/100 times; the one failure occurred later at SVG button rendering after the generated Markdown poll and generation poll had already passed. A separate real emitter + real recursive fs.watch harness alternated 1,000 complete component replacements and received 1,000/1,000 onMarkdownChange callbacks with zero watcher errors.
+
+A deterministic TASK-8 boundary reproducer fails 2/2. Case 1 removes a directory containing Markdown and delivers the valid recursive rename event for that directory; expected one fingerprint change, actual zero. Case 2 performs the real TASK-12 emitter transaction to final changed Markdown and delivers the coalesced rename event for the now-removed .groma-components-transaction-* directory; expected one fingerprint change, actual zero. Command: node --test /tmp/groma-task8-directory-removal-reproducer.test.mjs. Root cause: src/viewer/markdown-watcher.mjs waits 120 ms for non-.md rename events, then lines 132-146 require the changed path to still exist as a directory containing a directly nested .md file; ENOENT is silently ignored. A removed/replaced Markdown directory or a coalesced event for the emitter transaction therefore performs no bounded root fingerprint. With onMarkdownChange never called, server scheduleReload, buildPayload(generation + 1), and SSE publication are all downstream and never run, leaving generation 1 despite valid final Markdown. Node documents fs.watch as platform-dependent and does not guarantee callback filenames, so per-file .md callbacks cannot be the correctness boundary.
+
+Classification: upstream TASK-8 implementation/test-coverage defect, consistent with the recurring intermittent integration failure. TASK-13 remains In Progress with AC #4 unchecked pending TASK-8 routing and correction. No source, emitter, viewer, polling, sleeps, coupling, or touch markers were changed.
 <!-- SECTION:NOTES:END -->
-
-## Final Summary
-
-<!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Corrected TASK-13 watcher topology lifecycle so repository, src, and src/components removal or inode replacement is detected as one restart-required terminal failure; every handle/timer closes and the process exits nonzero without adding rebinding machinery. Mandatory production identities and explicit fake-test identities prevent missing startup topology from appearing healthy. Normal supported child refresh behavior remains intact. Verified with deterministic replacement/removal regressions for all three directories, focused tests 22/22, architecture validation plus 149/149 Node tests, release gate 5/5, browser tests 12/12, syntax/diff hygiene, and independent re-review with no findings. Classification: implementation coverage defect.
-<!-- SECTION:FINAL_SUMMARY:END -->
