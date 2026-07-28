@@ -2,6 +2,7 @@ project_name: "Groma"
 default_status: "To Do"
 statuses: ["To Do", "In Progress", "Done"]
 labels: []
+definition_of_done: ["Acceptance criteria have objective verification evidence.", "Relevant checks pass and changes remain task-scoped.", "Public contracts or documentation are updated when behavior changes.", "Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes."]
 date_format: yyyy-mm-dd
 max_column_width: 20
 auto_open_browser: true

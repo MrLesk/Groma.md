@@ -22,3 +22,37 @@ Do not edit Backlog task, draft, document, decision, or milestone markdown files
 
 </CRITICAL_INSTRUCTION>
 <!-- BACKLOG.MD GUIDELINES END -->
+
+## Groma delivery boundaries
+
+Groma is moving toward a model that is detached from the filesystem. Treat the
+current filesystem integration as temporary delivery plumbing, not as a
+foundation to generalize or harden for hypothetical futures.
+
+Before implementing any of the following, stop and report the proposal to the
+current orchestrator for explicit approval:
+
+- backward compatibility, migrations, or legacy behavior;
+- handling for an edge case not required by an acceptance criterion or a
+  reproduced failure in the supported product flow;
+- fallback, retry, recovery, or degraded-mode behavior;
+- filesystem or security hardening beyond the declared supported assumptions;
+- an abstraction or extension point justified only by possible future needs.
+
+The report must identify the triggering evidence, the authority that makes the
+work in scope, the smallest proposed behavior, and the cost of leaving it
+unsupported. Tests for unapproved behavior count as implementation and require
+the same approval.
+
+Review findings may block completion only when they cite an unmet acceptance
+criterion, an unmet Definition of Done item, or a reproducible failure in the
+declared supported product flow. Otherwise record them as non-blocking
+follow-ups.
+
+The first specification and quality reviews may inspect the complete change.
+Any re-review is limited to the previously reported findings and regressions
+caused by their fixes. Newly noticed non-critical improvements are follow-ups.
+
+Stop work when the supported product flow passes, the task acceptance criteria
+and Definition of Done are satisfied with evidence, and no authority-backed
+blocking finding remains.
