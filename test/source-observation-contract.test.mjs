@@ -1,5 +1,16 @@
 import assert from 'node:assert/strict'
-import { readdir, readFile } from 'node:fs/promises'
+import {
+  cp,
+  lstat,
+  mkdtemp,
+  realpath,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -16,9 +27,142 @@ const fixtureRoot = path.join(
   'source-observation',
 )
 const supportedRoot = path.join(fixtureRoot, 'supported')
+const unsupportedShapeError = {
+  name: 'UnsupportedSourceShapeError',
+  code: 'GROMA_UNSUPPORTED_SOURCE_SHAPE',
+  message: 'Repository does not match groma.typescript-bun/v1.',
+}
 
 async function readJson(filename) {
   return JSON.parse(await readFile(filename, 'utf8'))
+}
+
+function throwUnsupportedShape() {
+  const error = new Error(unsupportedShapeError.message)
+  error.name = unsupportedShapeError.name
+  error.code = unsupportedShapeError.code
+  throw error
+}
+
+function isBeneath(root, candidate) {
+  const relativePath = path.relative(root, candidate)
+  return relativePath === ''
+    || (
+      relativePath !== '..'
+      && !relativePath.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relativePath)
+    )
+}
+
+async function assertPhysicalFixture(suppliedRoot) {
+  let root
+  try {
+    root = await realpath(suppliedRoot)
+    const rootStat = await lstat(root)
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      throwUnsupportedShape()
+    }
+
+    async function requireEntry(relativePath, kind) {
+      const filename = path.join(root, relativePath)
+      const stat = await lstat(filename)
+      if (
+        stat.isSymbolicLink()
+        || (kind === 'directory' && !stat.isDirectory())
+        || (kind === 'file' && !stat.isFile())
+      ) {
+        throwUnsupportedShape()
+      }
+      const physicalPath = await realpath(filename)
+      if (!isBeneath(root, physicalPath) || physicalPath !== filename) {
+        throwUnsupportedShape()
+      }
+      return filename
+    }
+
+    await requireEntry('package.json', 'file')
+    const srcRoot = await requireEntry('src', 'directory')
+    await requireEntry('src/index.ts', 'file')
+    await requireEntry('src/components', 'directory')
+
+    async function inspectDirectory(directory) {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const entryPath = path.join(directory, entry.name)
+        const relativePath = path.relative(root, entryPath)
+        const stat = await lstat(entryPath)
+        if (stat.isSymbolicLink()) {
+          throwUnsupportedShape()
+        }
+        const physicalPath = await realpath(entryPath)
+        if (!isBeneath(root, physicalPath) || physicalPath !== entryPath) {
+          throwUnsupportedShape()
+        }
+        if (stat.isDirectory()) {
+          await inspectDirectory(entryPath)
+        } else if (
+          path.dirname(relativePath) === path.join('src', 'components')
+          && entry.name.endsWith('.ts')
+        ) {
+          await requireEntry(relativePath, 'file')
+        }
+      }
+    }
+
+    await inspectDirectory(srcRoot)
+  } catch (error) {
+    if (
+      error?.name === unsupportedShapeError.name
+      && error?.code === unsupportedShapeError.code
+    ) {
+      throw error
+    }
+    throwUnsupportedShape()
+  }
+}
+
+async function createPhysicalProbe(t) {
+  const temporaryRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'groma-source-contract-'),
+  )
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
+  const repository = path.join(temporaryRoot, 'repository')
+  await cp(supportedRoot, repository, { recursive: true })
+  return { temporaryRoot, repository }
+}
+
+function assertUnsupportedShape(error) {
+  assert.equal(error?.name, unsupportedShapeError.name)
+  assert.equal(error?.code, unsupportedShapeError.code)
+  assert.equal(error?.message, unsupportedShapeError.message)
+  return true
+}
+
+function isStrictUtf8WithoutBom(bytes) {
+  if (
+    bytes.length >= 3
+    && bytes[0] === 0xef
+    && bytes[1] === 0xbb
+    && bytes[2] === 0xbf
+  ) {
+    return false
+  }
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isExactSourceBytes(bytes) {
+  if (!isStrictUtf8WithoutBom(bytes)) {
+    return false
+  }
+  const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  return source.endsWith('\n')
+    && !source.includes('\r')
+    && !source.includes('\u2028')
+    && !source.includes('\u2029')
 }
 
 async function sourceRangeText(root, sourceRange) {
@@ -442,6 +586,153 @@ test('readable text and bytewise ordering have explicit boundary behavior', () =
   assert.deepEqual(
     ['ä', 'z', 'a', 'aa'].sort(bytewiseCompare),
     ['a', 'aa', 'z', 'ä'],
+  )
+})
+
+test('physical repository boundary allows one root resolution and rejects inner links', async t => {
+  const rootAliasProbe = await createPhysicalProbe(t)
+  const rootAlias = path.join(rootAliasProbe.temporaryRoot, 'repository-alias')
+  await symlink(rootAliasProbe.repository, rootAlias, 'dir')
+  await assert.doesNotReject(assertPhysicalFixture(rootAlias))
+  assert.equal(
+    isBeneath(
+      rootAliasProbe.repository,
+      `${rootAliasProbe.repository}-other${path.sep}file.ts`,
+    ),
+    false,
+  )
+
+  const outsideScopeTarget = path.join(
+    rootAliasProbe.temporaryRoot,
+    'outside-scope.txt',
+  )
+  await writeFile(outsideScopeTarget, 'outside scope\n')
+  await symlink(
+    outsideScopeTarget,
+    path.join(rootAliasProbe.repository, 'docs-link.txt'),
+    'file',
+  )
+  await assert.doesNotReject(assertPhysicalFixture(rootAliasProbe.repository))
+
+  const cases = [
+    {
+      name: 'package file escaping outside',
+      path: 'package.json',
+      target: 'outside-package.json',
+      type: 'file',
+    },
+    {
+      name: 'source directory escaping outside',
+      path: 'src',
+      target: 'outside-src',
+      type: 'dir',
+    },
+    {
+      name: 'components ancestor escaping outside',
+      path: 'src/components',
+      target: 'outside-components',
+      type: 'dir',
+    },
+    {
+      name: 'entry file linking inside',
+      path: 'src/index.ts',
+      target: 'src/components/source-watcher.ts',
+      type: 'file',
+    },
+    {
+      name: 'component file escaping outside',
+      path: 'src/components/source-watcher.ts',
+      target: 'outside-component.ts',
+      type: 'file',
+    },
+  ]
+
+  for (const probeCase of cases) {
+    const { temporaryRoot, repository } = await createPhysicalProbe(t)
+    const linkPath = path.join(repository, probeCase.path)
+    const targetPath = path.join(temporaryRoot, probeCase.target)
+    const original = await lstat(linkPath)
+    await rm(linkPath, { recursive: original.isDirectory(), force: true })
+
+    if (probeCase.type === 'dir') {
+      await cp(
+        path.join(rootAliasProbe.repository, 'src'),
+        targetPath,
+        { recursive: true },
+      )
+    } else if (probeCase.target.startsWith('outside-')) {
+      await writeFile(targetPath, '{}\n')
+    }
+
+    const symlinkTarget = probeCase.target.startsWith('outside-')
+      ? targetPath
+      : path.join(repository, probeCase.target)
+    await symlink(symlinkTarget, linkPath, probeCase.type)
+    await assert.rejects(
+      assertPhysicalFixture(repository),
+      assertUnsupportedShape,
+      probeCase.name,
+    )
+  }
+
+  const nestedProbe = await createPhysicalProbe(t)
+  const outsideIgnored = path.join(
+    nestedProbe.temporaryRoot,
+    'outside-readme.txt',
+  )
+  await writeFile(outsideIgnored, 'outside\n')
+  await symlink(
+    outsideIgnored,
+    path.join(nestedProbe.repository, 'src', 'ignored.txt'),
+    'file',
+  )
+  await assert.rejects(
+    assertPhysicalFixture(nestedProbe.repository),
+    assertUnsupportedShape,
+  )
+})
+
+test('source bytes reject BOM, non-LF separators, and malformed UTF-8', async () => {
+  const packageBytes = await readFile(path.join(supportedRoot, 'package.json'))
+  assert.equal(isStrictUtf8WithoutBom(packageBytes), true)
+
+  const sourceBytes = await readFile(path.join(supportedRoot, 'src', 'index.ts'))
+  assert.equal(isExactSourceBytes(sourceBytes), true)
+  assert.equal(
+    isStrictUtf8WithoutBom(Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      packageBytes,
+    ])),
+    false,
+  )
+  assert.equal(
+    isExactSourceBytes(Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      sourceBytes,
+    ])),
+    false,
+  )
+  assert.equal(
+    isExactSourceBytes(Buffer.from(
+      sourceBytes.toString('utf8').replace('\n', '\r\n'),
+    )),
+    false,
+  )
+  assert.equal(
+    isExactSourceBytes(Buffer.from(
+      `${sourceBytes.toString('utf8').slice(0, -1)}\u2028\n`,
+    )),
+    false,
+  )
+  assert.equal(
+    isExactSourceBytes(Buffer.from(
+      `${sourceBytes.toString('utf8').slice(0, -1)}\u2029\n`,
+    )),
+    false,
+  )
+  assert.equal(
+    isExactSourceBytes(Buffer.from([0x66, 0x6f, 0x80, 0x0a])),
+    false,
   )
 })
 

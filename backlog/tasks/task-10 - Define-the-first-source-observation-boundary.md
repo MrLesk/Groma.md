@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 00:59'
+updated_date: '2026-07-28 01:17'
 labels: []
 milestone: m-2
 dependencies:
@@ -18,6 +18,7 @@ references:
 modified_files:
   - README.md
   - e2e/viewer.spec.js
+  - e2e/release-gate.spec.js
   - fixtures/source-observation/supported.expected.json
   - fixtures/source-observation/supported.expected-markdown-text.json
   - fixtures/source-observation/supported/package.json
@@ -64,10 +65,10 @@ The specification must designate exactly one generated components directory bene
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Tighten groma.typescript-bun/v1 readable string values and specify locale-independent bytewise ordering plus deterministic canonical Markdown escaping.
-2. Extend the supported fixture with an exact empty GromaRelationships tuple and boundary text that exercises the escaping contract; update deterministic expected evidence.
-3. Strengthen contract tests for empty tuples, accepted/rejected text boundaries, exact escaped Markdown, and bytewise ordering without implementing the observer or emitter.
-4. Run fixture syntax, focused/full architecture and browser checks, review the diff, refinalize TASK-10, and commit the focused correction.
+1. Specify fail-closed physical repository confinement for groma.typescript-bun/v1: resolve the supplied root once, require every supported-layout ancestor/file to be a real directory/regular file beneath it, and reject all symbolic links or escapes with the one unsupported-shape error.
+2. Clarify byte-level source preconditions: no UTF-8 BOM and U+2028/U+2029 are forbidden line terminators in addition to exact LF-only physical lines.
+3. Add focused filesystem probes that construct valid real, symlinked-root, symlinked-ancestor/file, and escaping-target layouts without changing the TASK-11 observer implementation.
+4. Run focused/full checks, inspect the diff, refinalize TASK-10, and commit the specification correction.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -82,10 +83,12 @@ Added supported, unsupported, and deterministic expected-observation fixtures. C
 Quality correction after independent review: source-provided readable values are now version-independent printable ASCII U+0020-U+007E with at least one character and no leading/trailing space. The emitter contract escapes every ASCII punctuation character exactly once before any heading, prose, link-label, or GFM table-cell placement. A checked-in Markdown-text oracle exercises pipe, backslash, brackets, emphasis, code, same-directory link labels, hrefs, and exact three-cell Comark parsing.
 
 The supported markdown-emitter declaration now uses the exact one-line export type GromaRelationships = []; branch; the fixture test proves line placement and a deterministic empty relationship array. All ordering is unsigned UTF-8 bytewise tuple ordering with a non-ASCII boundary example and no localeCompare. Final independent re-review found no Critical, Important, or Minor issues and confirmed no observer/emitter implementation was added. Fresh verification: Bun 1.3.14 bundled all six fixture files, npm run check passed architecture validation plus 76/76 tests, npm run test:viewer:browser passed 11/11, and git diff --check passed.
+
+Task-spec defect correction: specified physical repository confinement for groma.typescript-bun/v1. The supplied root is resolved exactly once, so a root alias is permitted; after that, required paths and encountered src entries are inspected without following links, must be real directories or regular files beneath the resolved root, and any link, wrong kind, or physical escape fails with the exact UnsupportedSourceShapeError before source reads or partial extraction. Links elsewhere outside package.json and src remain outside source-observation scope. Clarified strict UTF-8 byte handling: UTF-8 BOM is rejected rather than stripped, and CR, U+2028, and U+2029 are forbidden source line terminators. Added dynamic filesystem probes for root aliases, linked required ancestors/files, internal and external link targets, ignored src links, outside-scope links, sibling-prefix confinement, BOM, malformed UTF-8, CRLF, U+2028, and U+2029. Narrowed the Revision 02 static release guard to viewer isolation now that TASK-11 legitimately supplies source-observer.mjs; no observer production code changed. Independent re-review found no remaining issues. Fresh verification: Bun 1.3.14 bundled all six fixture TypeScript files; npm run check passed architecture validation and 94/94 tests; npm run test:viewer:browser passed 11/11; git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Defined and verified the complete groma.typescript-bun/v1 handoff contract. The quality correction constrains all declaration-supplied readable text to version-independent printable ASCII with no edge spaces, specifies exact once-only Markdown/GFM punctuation escaping, adds a parsed link/table escaping oracle, covers the accepted one-line empty relationships tuple, and makes deterministic ordering unsigned UTF-8 bytewise rather than locale-dependent. No observer or emitter implementation was added. Final evidence: Bun 1.3.14 syntax builds for all six fixture files, architecture validation and 76/76 Node tests, 11/11 Playwright flows, clean diff hygiene, and independent review with no remaining findings. Friction classification: implementation defect.
+Corrected the TASK-10 contract to make physical repository confinement and byte-level source rules unambiguous. A caller root may resolve once through an alias, but all supported-layout entries then fail closed on symbolic links, wrong file kinds, or physical escapes with the one documented unsupported-shape error and no partial extraction. BOM, CR, U+2028, and U+2029 handling is explicit and covered by dynamic probes. Updated the stale Revision 02 release guard only to preserve viewer isolation after TASK-11 landed; observer implementation remains unchanged. Classification: task-spec defect. Verified 94/94 Node tests, 11/11 browser tests, all six Bun fixture bundles, and clean diff checks; independent review found no remaining issues.
 <!-- SECTION:FINAL_SUMMARY:END -->

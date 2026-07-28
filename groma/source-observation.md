@@ -38,18 +38,52 @@ module. Component modules are direct children of `src/components/`. No other
 `.ts`, `.tsx`, `.mts`, or `.cts` file may occur beneath `src/`. Non-TypeScript
 files and directories outside this layout are not source declarations.
 
+### Physical repository confinement
+
+The observer resolves the caller-supplied repository root with `realpath`
+exactly once. That resolved directory is the physical repository root for the
+entire invocation. A caller may therefore supply one root alias, but resolving
+that root is the only symbolic-link traversal permitted.
+
+Starting from the resolved root, the observer checks paths without following
+symbolic links:
+
+- the resolved root, `src`, and `src/components` are real directories;
+- `package.json`, `src/index.ts`, and every direct
+  `src/components/<component-id>.ts` entry are real regular files;
+- every ancestor between a supported file and the resolved root is a real
+  directory; and
+- every filesystem entry inspected while enumerating `src` is physically
+  beneath the resolved root and is not a symbolic link.
+
+“Beneath” is a path-component boundary, not a string-prefix test. The relative
+path from the resolved root to a candidate must be empty or must be neither
+absolute nor `..`/`../...`. The observer never follows a link at a required
+path or encountered while enumerating `src`, including a link whose target
+would remain inside the root, and never opens a link target to decide whether
+it otherwise looks supported. Missing entries, wrong file kinds, any such
+encountered link, or any resolved escape returns the exact
+`UnsupportedSourceShapeError` with no partial observation. A link elsewhere
+beneath the repository, outside `package.json` and the enumerated `src` tree,
+is outside the source shape and is not inspected. These checks occur before
+reading `package.json` or source bytes, so an in-scope link cannot indirectly
+expose another repository, `groma/plans`, or any other outside file.
+
 The reserved declarations below are type-only TypeScript. They require no
 decorator, runtime helper, import, build step, type checker, or project code
 execution. The observer reads their literal text and treats all later,
 non-reserved TypeScript statements as opaque.
 
-Source files are UTF-8 text with LF line endings and a final LF. The reserved
-declaration starts on line 1. Within a reserved declaration, every keyword,
-space, indentation level, colon, semicolon, comma, bracket, and blank line
-shown below is literal and required. Metavariables inside angle brackets are
-the only replaceable text. Their values use JSON double-quoted string syntax
-on one physical line. Comments and extra blank lines are not permitted before
-or inside a reserved declaration.
+`package.json` and every source file must be strictly decodable UTF-8. A
+leading UTF-8 BOM (`EF BB BF`) is unsupported and is not stripped. Source files
+use U+000A LF line endings, contain no U+000D CR, U+2028 LINE SEPARATOR, or
+U+2029 PARAGRAPH SEPARATOR anywhere, and end with one LF. The reserved
+declaration therefore starts at byte zero on physical line 1. Within a reserved
+declaration, every keyword, space, indentation level, colon, semicolon, comma,
+bracket, and blank line shown below is literal and required. Metavariables
+inside angle brackets are the only replaceable text. Their values use JSON
+double-quoted string syntax on one physical LF-delimited line. Comments and
+extra blank lines are not permitted before or inside a reserved declaration.
 
 ## Entry-point declaration
 

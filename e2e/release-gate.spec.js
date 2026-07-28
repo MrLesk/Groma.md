@@ -418,7 +418,7 @@ async function listFiles(directory) {
   return files.sort()
 }
 
-test('contains no source scanner implementation', async () => {
+test('keeps the Revision 02 viewer isolated from source observation', async () => {
   const sourceRoot = path.join(projectRoot, 'src')
   const sourceFiles = await listFiles(sourceRoot)
   const scannerPaths = sourceFiles
@@ -426,12 +426,20 @@ test('contains no source scanner implementation', async () => {
     .filter(filename => /scanner/i.test(filename))
   const scannerSymbols = []
   const filesystemReaders = []
+  const viewerObserverReferences = []
 
   for (const filename of sourceFiles.filter(candidate => {
     return /\.(?:js|jsx|mjs)$/.test(candidate)
   })) {
     const source = await readFile(filename, 'utf8')
     const relativeFilename = path.relative(sourceRoot, filename)
+    if (
+      relativeFilename.startsWith(`viewer${path.sep}`)
+      && /source-observer|observeSourceRepository|UnsupportedSourceShapeError/
+        .test(source)
+    ) {
+      viewerObserverReferences.push(relativeFilename)
+    }
     if (
       /source[-_\s]?scanner|project[-_\s]?scanner|scanProjectSource|scanSourceTree/i
         .test(source)
@@ -448,8 +456,10 @@ test('contains no source scanner implementation', async () => {
 
   expect(scannerPaths).toEqual([])
   expect(scannerSymbols).toEqual([])
+  expect(viewerObserverReferences).toEqual([])
   expect(filesystemReaders.sort()).toEqual([
     'architecture-reader.mjs',
+    'source-observer.mjs',
     path.join('viewer', 'markdown-watcher.mjs'),
   ])
 })
