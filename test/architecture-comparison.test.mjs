@@ -24,6 +24,33 @@ function model(kind, elements, relationships) {
   }
 }
 
+test('treats soft-wrapped descriptions as equivalent without hiding text changes', () => {
+  const observedElement = {
+    ...system('groma'),
+    description: 'Reports supported source without executing code.',
+  }
+  const softWrappedPlanElement = {
+    ...observedElement,
+    description: 'Reports supported source without\nexecuting code.',
+  }
+  const changedPlanElement = {
+    ...observedElement,
+    description: 'Reports generalized source without\nexecuting code.',
+  }
+
+  const equivalent = compareArchitectureModels(
+    model('observed', [observedElement], []),
+    model('plan', [softWrappedPlanElement], []),
+  )
+  const changed = compareArchitectureModels(
+    model('observed', [observedElement], []),
+    model('plan', [changedPlanElement], []),
+  )
+
+  assert.equal(equivalent.elements[0].comparisonStatus, 'unchanged')
+  assert.equal(changed.elements[0].comparisonStatus, 'modification')
+})
+
 test('preserves both containment histories for a moved shared element', () => {
   const observed = model('observed', [
     system('old-system'),

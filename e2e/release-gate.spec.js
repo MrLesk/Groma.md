@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import {
   access,
@@ -10,6 +11,7 @@ import {
   readFile,
   readdir,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises'
 import os from 'node:os'
@@ -17,7 +19,11 @@ import path from 'node:path'
 import { finished } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
+import { parse } from 'comark'
+
 import { compareArchitectureModels } from '../src/architecture-comparison.mjs'
+import { buildArchitectureModel } from '../src/architecture-model.mjs'
+import { loadRevision } from '../src/architecture-reader.mjs'
 import { projectArchitectureView } from '../src/viewer/projection.mjs'
 
 const projectRoot = path.resolve(
@@ -27,6 +33,83 @@ const projectRoot = path.resolve(
 const gracefulStopTimeoutMs = 3_000
 const forcedStopTimeoutMs = 3_000
 const stdioCloseTimeoutMs = 1_000
+const ownedComponentsPath = path.join(
+  'groma',
+  'observed',
+  'systems',
+  'groma',
+  'containers',
+  'scanner',
+  'components',
+)
+const materializedComponentId = 'typescript-observer'
+
+const baselineSources = {
+  index: `export type GromaEntryPoint = {
+  componentId: "source-watcher";
+};
+
+export function startFixture(): string {
+  return "source-watcher";
+}
+`,
+  markdownEmitter: `export type GromaComponent = {
+  id: "markdown-emitter";
+  name: "Markdown emitter";
+  description: "Writes observations using the same component document format used by hand-authored plans.";
+  technology: "TypeScript text";
+};
+
+export type GromaRelationships = [
+  {
+    sourceId: "markdown-emitter";
+    targetId: "architecture-workspace";
+    description: "Writes files under \`groma/observed\`";
+    technology: "Markdown";
+  },
+];
+
+export function emitMarkdown(): string {
+  return "canonical Markdown";
+}
+`,
+  sourceWatcher: `export type GromaComponent = {
+  id: "source-watcher";
+  name: "Source watcher";
+  description: "Watches supported source files and requests a fresh bounded observation when they change.";
+  technology: "Bun filesystem events";
+};
+
+export type GromaRelationships = [];
+
+export function settleSourceChange(): string {
+  return "observe";
+}
+`,
+}
+
+function typeScriptObserverSource(description) {
+  return `export type GromaComponent = {
+  id: "typescript-observer";
+  name: "TypeScript observer";
+  description: "${description}";
+  technology: "TypeScript text";
+};
+
+export type GromaRelationships = [
+  {
+    sourceId: "typescript-observer";
+    targetId: "markdown-emitter";
+    description: "Supplies bounded source observations";
+    technology: "In-process data";
+  },
+];
+
+export function observeDeclarations(): string {
+  return "read only";
+}
+`
+}
 
 function frontmatter(fields) {
   return [
@@ -380,17 +463,85 @@ async function createSourceRefreshFixture() {
         path.join(repositoryRoot, 'package.json'),
       ),
       cp(
-        path.join(sourceFixtureRoot, 'src'),
-        path.join(repositoryRoot, 'src'),
-        { recursive: true },
-      ),
-      cp(
         path.join(projectRoot, 'groma'),
         path.join(repositoryRoot, 'groma'),
         { recursive: true },
       ),
+      mkdir(path.join(repositoryRoot, 'src', 'components'), {
+        recursive: true,
+      }),
     ])
-    return repositoryRoot
+    await Promise.all([
+      writeFile(
+        path.join(repositoryRoot, 'src', 'index.ts'),
+        baselineSources.index,
+      ),
+      writeFile(
+        path.join(
+          repositoryRoot,
+          'src',
+          'components',
+          'markdown-emitter.ts',
+        ),
+        baselineSources.markdownEmitter,
+      ),
+      writeFile(
+        path.join(
+          repositoryRoot,
+          'src',
+          'components',
+          'source-watcher.ts',
+        ),
+        baselineSources.sourceWatcher,
+      ),
+      writeDocument(
+        path.join(repositoryRoot, 'groma', 'observed'),
+        'systems/groma/containers/architecture-workspace/'
+          + 'components/release-gate-unrelated.md',
+        {
+          id: 'release-gate-unrelated',
+          kind: 'component',
+          parent: 'architecture-workspace',
+        },
+        'Unrelated observed component',
+        'Must remain byte-identical through source refreshes.',
+      ),
+    ])
+    return {
+      repositoryRoot,
+      componentSourceFilename: path.join(
+        repositoryRoot,
+        'src',
+        'components',
+        `${materializedComponentId}.ts`,
+      ),
+      generatedComponentFilename: path.join(
+        repositoryRoot,
+        ownedComponentsPath,
+        `${materializedComponentId}.md`,
+      ),
+      manualObservedFilename: path.join(
+        repositoryRoot,
+        'groma',
+        'observed',
+        'systems',
+        'groma',
+        'containers',
+        'scanner',
+        'container.md',
+      ),
+      unrelatedObservedFilename: path.join(
+        repositoryRoot,
+        'groma',
+        'observed',
+        'systems',
+        'groma',
+        'containers',
+        'architecture-workspace',
+        'components',
+        'release-gate-unrelated.md',
+      ),
+    }
   } catch (error) {
     await rm(repositoryRoot, { recursive: true, force: true })
     throw error
@@ -456,14 +607,17 @@ async function modelPayload(page, viewerUrl) {
   return response.json()
 }
 
-function structuralSnapshot(payload) {
+function structuralSnapshot(
+  payload,
+  componentContainerId = 'architecture-workspace',
+) {
   const projectionOptions = {
     observedModel: payload.observedModel,
   }
   const focusPaths = {
     context: [],
     container: [payload.focalSystemId],
-    component: [payload.focalSystemId, 'architecture-workspace'],
+    component: [payload.focalSystemId, componentContainerId],
   }
 
   return {
@@ -503,6 +657,110 @@ async function listFiles(directory) {
     }
   }
   return files.sort()
+}
+
+async function byteSnapshot(directory, options = {}) {
+  const { exclude = () => false } = options
+  const snapshot = {}
+
+  for (const filename of await listFiles(directory)) {
+    const relativeFilename = path.relative(directory, filename)
+    if (!exclude(relativeFilename)) {
+      snapshot[relativeFilename] = (await readFile(filename)).toString('base64')
+    }
+  }
+  return snapshot
+}
+
+function snapshotHash(snapshot) {
+  const hash = createHash('sha256')
+  for (const [filename, bytes] of Object.entries(snapshot).sort()) {
+    hash.update(filename)
+    hash.update('\0')
+    hash.update(Buffer.from(bytes, 'base64'))
+    hash.update('\0')
+  }
+  return hash.digest('hex')
+}
+
+async function fileHash(filename) {
+  return createHash('sha256').update(await readFile(filename)).digest('hex')
+}
+
+function comparisonElement(payload, elementId) {
+  return compareArchitectureModels(
+    payload.observedModel,
+    payload.model,
+  ).elements.find(element => element.id === elementId)
+}
+
+function observedScannerComponentIds(payload) {
+  return payload.observedModel.elements
+    .filter(element => {
+      return element.kind === 'component' && element.parentId === 'scanner'
+    })
+    .map(element => element.id)
+    .sort()
+}
+
+async function expectComponentComparison(
+  page,
+  status,
+  badge,
+  description,
+) {
+  const node = page.getByTestId(`c4-node-${materializedComponentId}`)
+  await expect(node).toBeVisible()
+  await expect(node).toHaveRole('article')
+  await expect(node).toHaveAttribute('data-element-id', materializedComponentId)
+  await expect(node).toHaveAttribute('data-comparison-status', status)
+  await expect(node).toContainText('TypeScript observer')
+  await expect(node).toContainText(description)
+
+  if (badge === null) {
+    await expect(node.locator('.comparison-badge')).toHaveCount(0)
+  } else {
+    await expect(node.locator('.comparison-badge')).toHaveText(badge)
+  }
+}
+
+async function expectSettledComparison(
+  page,
+  viewerUrl,
+  status,
+  previousGeneration,
+) {
+  let payload
+  await expect.poll(async () => {
+    payload = await modelPayload(page, viewerUrl)
+    return {
+      comparisonStatus:
+        comparisonElement(payload, materializedComponentId)?.comparisonStatus,
+      generationAdvanced: payload.generation > previousGeneration,
+      reloadError: payload.reloadError,
+    }
+  }).toEqual({
+    comparisonStatus: status,
+    generationAdvanced: true,
+    reloadError: null,
+  })
+  return payload
+}
+
+async function expectProcessAlive(pid) {
+  expect(() => process.kill(pid, 0)).not.toThrow()
+}
+
+async function expectProcessStopped(pid) {
+  const state = (() => {
+    try {
+      process.kill(pid, 0)
+      return 'running'
+    } catch (error) {
+      return error.code
+    }
+  })()
+  expect(state).toBe('ESRCH')
 }
 
 test('keeps the Revision 02 viewer isolated from source observation', async () => {
@@ -553,88 +811,378 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
   ])
 })
 
-test('refreshes one open source-blind viewer through observed Markdown', async ({
+test('materializes one Plan 03 component through supported source', async ({
   page,
-}) => {
-  test.setTimeout(30_000)
-  const repositoryRoot = await createSourceRefreshFixture()
+}, testInfo) => {
+  test.setTimeout(90_000)
+  const fixture = await createSourceRefreshFixture()
+  const {
+    componentSourceFilename,
+    generatedComponentFilename,
+    manualObservedFilename,
+    repositoryRoot,
+    unrelatedObservedFilename,
+  } = fixture
+  const ownedDirectory = path.join(repositoryRoot, ownedComponentsPath)
+  const observedDirectory = path.join(repositoryRoot, 'groma', 'observed')
+  const plansDirectory = path.join(repositoryRoot, 'groma', 'plans')
+  const manualObservedHash = await fileHash(manualObservedFilename)
+  const unrelatedObservedHash = await fileHash(unrelatedObservedFilename)
+  const plansHash = snapshotHash(await byteSnapshot(plansDirectory))
+  const unownedObservedHash = snapshotHash(await byteSnapshot(
+    observedDirectory,
+    {
+      exclude(relativeFilename) {
+        return relativeFilename === path.relative(
+          observedDirectory,
+          ownedDirectory,
+        ) || relativeFilename.startsWith(
+          `${path.relative(observedDirectory, ownedDirectory)}${path.sep}`,
+        )
+      },
+    },
+  ))
+  const plannedDescription =
+    'Reports only the entry points, components, and relationships supported '
+    + 'by the first TypeScript convention.'
+  const modifiedDescription =
+    'Reports the exact supported TypeScript convention after implementation.'
+  const browserMessages = []
   let refresh
   let viewer
+  let viewerPid
+  const refreshPids = []
+
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      browserMessages.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('pageerror', error => {
+    browserMessages.push(`pageerror: ${error.message}`)
+  })
 
   try {
     refresh = await startSourceRefreshProcess(repositoryRoot)
-    viewer = await startViewer(repositoryRoot, 'observed')
+    const firstRefreshPid = refresh.child.pid
+    refreshPids.push(firstRefreshPid)
+    expect(firstRefreshPid).toBeGreaterThan(0)
+    await writeFile(
+      path.join(
+        repositoryRoot,
+        'src',
+        'components',
+        'source-watcher.ts',
+      ),
+      baselineSources.sourceWatcher,
+    )
+    await expect.poll(async () => {
+      return (await readdir(ownedDirectory)).sort()
+    }).toEqual([
+      'markdown-emitter.md',
+      'source-watcher.md',
+    ])
+
+    viewer = await startViewer(repositoryRoot, 'plan:03-code-observation')
+    viewerPid = viewer.child.pid
+    expect(viewerPid).toBeGreaterThan(0)
+    await page.setViewportSize({ width: 1440, height: 960 })
     await page.goto(viewer.url)
+    await expect(page).toHaveTitle('Groma · Architecture viewer')
     await expect(page.locator('.status-page')).toHaveCount(0)
-    const documentSentinel = `source-refresh-${Date.now()}-${process.pid}`
+    await expect(page.getByTestId('revision-context-title')).toHaveText(
+      'Revision 03 — Code observation',
+    )
+    await page.getByRole('button', { name: 'Open Groma system' }).click()
+    await expect(page.getByTestId('view-container')).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /^Open Scanner container/ }),
+    ).toBeVisible()
+    await page.getByRole('button', {
+      name: /^Open Scanner container/,
+    }).click()
+    await expect(page.getByTestId('view-component')).toBeVisible()
+
+    const documentSentinel =
+      `plan-03-materialization-${Date.now()}-${process.pid}`
     await page.evaluate(sentinel => {
       window.__gromaSourceRefreshDocumentSentinel = sentinel
     }, documentSentinel)
-    const before = await modelPayload(page, viewer.url)
-
-    const sourceWatcherFilename = path.join(
-      repositoryRoot,
-      'src',
-      'components',
-      'source-watcher.ts',
+    const ghostPayload = await modelPayload(page, viewer.url)
+    expect(
+      comparisonElement(ghostPayload, materializedComponentId).comparisonStatus,
+    ).toBe('addition')
+    expect(
+      ghostPayload.observedModel.elements.some(element => {
+        return element.id === materializedComponentId
+      }),
+    ).toBe(false)
+    expect(observedScannerComponentIds(ghostPayload)).toEqual([
+      'markdown-emitter',
+      'source-watcher',
+    ])
+    await expect(access(generatedComponentFilename)).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+    await expectComponentComparison(
+      page,
+      'addition',
+      'Planned addition',
+      plannedDescription,
     )
-    const source = await readFile(sourceWatcherFilename, 'utf8')
+    await page.screenshot({
+      path: testInfo.outputPath('plan-03-ghost.png'),
+      fullPage: true,
+    })
+
     await writeFile(
-      sourceWatcherFilename,
-      source.replace(
-        'Requests a complete observation after supported source changes.',
-        'Requests one settled complete observation after source changes.',
-      ),
+      componentSourceFilename,
+      typeScriptObserverSource(plannedDescription),
     )
-    const generatedWatcherFilename = path.join(
+    const materializedPayload = await expectSettledComparison(
+      page,
+      viewer.url,
+      'unchanged',
+      ghostPayload.generation,
+    )
+    expect(observedScannerComponentIds(materializedPayload)).toEqual([
+      'markdown-emitter',
+      'source-watcher',
+      'typescript-observer',
+    ])
+    const generatedMarkdown = await readFile(
+      generatedComponentFilename,
+      'utf8',
+    )
+    expect(generatedMarkdown).toContain('## Source evidence')
+    expect(generatedMarkdown).toContain(
+      '- Component: `src/components/typescript-observer.ts:1-6`',
+    )
+    expect(generatedMarkdown).toContain(
+      '- Relationship to `markdown-emitter`: '
+        + '`src/components/typescript-observer.ts:9-14`',
+    )
+    const parsedMarkdown = await parse(generatedMarkdown)
+    expect(parsedMarkdown.frontmatter).toEqual({
+      id: materializedComponentId,
+      kind: 'component',
+      parent: 'scanner',
+    })
+    expect(parsedMarkdown.nodes.some(node => {
+      return node[0] === 'h2' && node[2] === 'Source evidence'
+    })).toBe(true)
+    const diskObservedModel = buildArchitectureModel(await loadRevision(
       repositoryRoot,
-      'groma',
-      'observed',
-      'systems',
-      'groma',
-      'containers',
-      'scanner',
-      'components',
-      'source-watcher.md',
+      { kind: 'observed' },
+    ))
+    expect(
+      diskObservedModel.elements.find(element => {
+        return element.id === materializedComponentId
+      }),
+    ).toMatchObject({
+      description: plannedDescription,
+      id: materializedComponentId,
+      kind: 'component',
+      name: 'TypeScript observer',
+      parentId: 'scanner',
+    })
+    expect(
+      diskObservedModel.relationships.find(relationship => {
+        return relationship.sourceId === materializedComponentId
+      }),
+    ).toMatchObject({
+      description: 'Supplies bounded source observations',
+      sourceId: materializedComponentId,
+      targetId: 'markdown-emitter',
+      technology: 'In-process data',
+    })
+    await expectComponentComparison(
+      page,
+      'unchanged',
+      null,
+      plannedDescription,
     )
-    await expect.poll(async () => {
-      return readFile(generatedWatcherFilename, 'utf8').catch(() => '')
-    }).toContain('Requests one settled complete observation')
-    await expect.poll(async () => {
-      return (await modelPayload(page, viewer.url)).generation
-    }).toBeGreaterThan(before.generation)
+    await page.screenshot({
+      path: testInfo.outputPath('plan-03-materialized.png'),
+      fullPage: true,
+    })
 
+    const ownedBytesBeforeRerun = await byteSnapshot(ownedDirectory)
+    const ownedHashBeforeRerun = snapshotHash(ownedBytesBeforeRerun)
+    const graphBeforeRerun = structuralSnapshot(
+      materializedPayload,
+      'scanner',
+    )
+    const sourceHashBeforeRerun = await fileHash(componentSourceFilename)
+    const generatedInodeBeforeRerun = (
+      await stat(generatedComponentFilename)
+    ).ino
+    const generationBeforeRerun = materializedPayload.generation
+    await stopViewer(refresh)
+    refresh = undefined
+    await expectProcessStopped(firstRefreshPid)
+
+    refresh = await startSourceRefreshProcess(repositoryRoot)
+    const restartedRefreshPid = refresh.child.pid
+    refreshPids.push(restartedRefreshPid)
+    expect(restartedRefreshPid).toBeGreaterThan(0)
+    expect(restartedRefreshPid).not.toBe(firstRefreshPid)
+    await writeFile(
+      componentSourceFilename,
+      typeScriptObserverSource(plannedDescription),
+    )
+    expect(await fileHash(componentSourceFilename)).toBe(sourceHashBeforeRerun)
+    await expect.poll(async () => {
+      return (await stat(generatedComponentFilename)).ino
+    }).not.toBe(generatedInodeBeforeRerun)
+    const rerunPayload = await modelPayload(page, viewer.url)
+    expect(rerunPayload.generation).toBe(generationBeforeRerun)
+    expect(rerunPayload.reloadError).toBe(null)
+    expect(
+      comparisonElement(
+        rerunPayload,
+        materializedComponentId,
+      ).comparisonStatus,
+    ).toBe('unchanged')
+    expect(await byteSnapshot(ownedDirectory)).toEqual(ownedBytesBeforeRerun)
+    expect(snapshotHash(await byteSnapshot(ownedDirectory))).toBe(
+      ownedHashBeforeRerun,
+    )
+    expect(structuralSnapshot(rerunPayload, 'scanner')).toEqual(
+      graphBeforeRerun,
+    )
+    await expectProcessAlive(viewerPid)
+    await expectProcessAlive(restartedRefreshPid)
     expect(
       await page.evaluate(() => {
         return window.__gromaSourceRefreshDocumentSentinel
       }),
     ).toBe(documentSentinel)
-    await page.getByRole('button', { name: 'Open Groma system' }).click()
-    await page.getByRole('button', {
-      name: /^Open Scanner container/,
-    }).click()
-    await expect(page.getByTestId('c4-node-source-watcher')).toContainText(
-      'Requests one settled complete observation after source changes.',
-    )
 
-    const after = await modelPayload(page, viewer.url)
+    await writeFile(
+      componentSourceFilename,
+      typeScriptObserverSource(modifiedDescription),
+    )
+    const modifiedPayload = await expectSettledComparison(
+      page,
+      viewer.url,
+      'modification',
+      rerunPayload.generation,
+    )
+    expect(observedScannerComponentIds(modifiedPayload)).toEqual([
+      'markdown-emitter',
+      'source-watcher',
+      'typescript-observer',
+    ])
+    const modifiedMarkdown = await readFile(
+      generatedComponentFilename,
+      'utf8',
+    )
+    expect(modifiedMarkdown).toContain('## Source evidence')
+    const modifiedTree = await parse(modifiedMarkdown)
+    expect(modifiedTree.frontmatter.id).toBe(materializedComponentId)
+    expect(
+      modifiedPayload.observedModel.elements.find(element => {
+        return element.id === materializedComponentId
+      }).description,
+    ).toBe(modifiedDescription)
+    await expectComponentComparison(
+      page,
+      'modification',
+      'Planned modification',
+      plannedDescription,
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('plan-03-modified.png'),
+      fullPage: true,
+    })
+
+    await rm(componentSourceFilename)
+    const removedPayload = await expectSettledComparison(
+      page,
+      viewer.url,
+      'addition',
+      modifiedPayload.generation,
+    )
+    await expect(access(generatedComponentFilename)).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+    expect(
+      removedPayload.observedModel.elements.some(element => {
+        return element.id === materializedComponentId
+      }),
+    ).toBe(false)
+    expect(observedScannerComponentIds(removedPayload)).toEqual([
+      'markdown-emitter',
+      'source-watcher',
+    ])
+    await expectComponentComparison(
+      page,
+      'addition',
+      'Planned addition',
+      plannedDescription,
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('plan-03-removed.png'),
+      fullPage: true,
+    })
+
+    await expectProcessAlive(viewerPid)
+    expect(
+      await page.evaluate(() => {
+        return window.__gromaSourceRefreshDocumentSentinel
+      }),
+    ).toBe(documentSentinel)
+    expect(viewer.child.pid).toBe(viewerPid)
+    expect(await fileHash(manualObservedFilename)).toBe(manualObservedHash)
+    expect(await fileHash(unrelatedObservedFilename)).toBe(
+      unrelatedObservedHash,
+    )
+    expect(snapshotHash(await byteSnapshot(plansDirectory))).toBe(plansHash)
+    expect(snapshotHash(await byteSnapshot(
+      observedDirectory,
+      {
+        exclude(relativeFilename) {
+          return relativeFilename === path.relative(
+            observedDirectory,
+            ownedDirectory,
+          ) || relativeFilename.startsWith(
+            `${path.relative(observedDirectory, ownedDirectory)}${path.sep}`,
+          )
+        },
+      },
+    ))).toBe(unownedObservedHash)
+
+    expect(removedPayload.testIoAudit).not.toHaveLength(0)
     expect(
       [...new Set(
-        after.testIoAudit
+        removedPayload.testIoAudit
           .filter(entry => entry.operation === 'watch')
           .map(entry => entry.path),
       )].sort(),
     ).toEqual(['groma/observed', 'groma/plans'])
     expect(
-      after.testIoAudit.filter(entry => {
+      removedPayload.testIoAudit.filter(entry => {
         return !/^groma\/(?:observed|plans)(?:\/|$)/.test(entry.path)
       }),
     ).toEqual([])
+    expect(browserMessages).toEqual([])
   } finally {
-    await page.goto('about:blank').catch(() => {})
-    if (viewer !== undefined) await stopViewer(viewer)
-    if (refresh !== undefined) await stopViewer(refresh)
-    await rm(repositoryRoot, { recursive: true, force: true })
+    try {
+      await page.goto('about:blank').catch(() => {})
+      if (viewer !== undefined) await stopViewer(viewer)
+    } finally {
+      try {
+        if (refresh !== undefined) await stopViewer(refresh)
+      } finally {
+        await rm(repositoryRoot, { recursive: true, force: true })
+      }
+    }
+  }
+  await expect(access(repositoryRoot)).rejects.toMatchObject({ code: 'ENOENT' })
+  await expectProcessStopped(viewerPid)
+  for (const refreshPid of refreshPids) {
+    await expectProcessStopped(refreshPid)
   }
 })
 

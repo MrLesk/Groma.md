@@ -86,10 +86,14 @@ npm run test:release-gate
 npm run test:viewer:browser
 ```
 
-`test:release-gate` uses a disposable controlled Markdown repository to prove
-observed system-to-container-to-component navigation, all four plan comparison
-states, same-document component reloads, source-file silence, and deterministic
-C4 graph and projected-view equivalence across distinct viewer processes.
+`test:release-gate` uses disposable controlled repositories to prove observed
+system-to-container-to-component navigation, all four plan comparison states,
+and the complete Plan 03 materialization story. One exact planned component
+moves from ghost to observed, modified, and ghost again as supported source is
+added, changed, and removed in the same open source-blind viewer. An unchanged
+source-refresh restart must reproduce byte-identical generated Markdown and an
+equivalent C4 graph and projection while manual architecture and every named
+plan remain byte-identical.
 Its dedicated Playwright configuration starts only disposable viewers on
 dynamic ports, so unrelated local services do not block the release gate.
 

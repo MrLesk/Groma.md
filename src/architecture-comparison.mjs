@@ -34,6 +34,10 @@ function relationshipEndpointKey(relationship) {
   ].join('\0')
 }
 
+function comparisonDescription(description) {
+  return description.replace(/\r?\n/g, ' ')
+}
+
 function outgoingRelationshipsByElement(model) {
   const outgoing = new Map()
 
@@ -60,7 +64,7 @@ function architectureContent(element, outgoingRelationships) {
   return {
     kind: element.kind,
     name: element.name,
-    description: element.description,
+    description: comparisonDescription(element.description),
     parentId: element.parentId,
     external: element.external,
     relationships: outgoingRelationships.get(element.id) ?? [],
