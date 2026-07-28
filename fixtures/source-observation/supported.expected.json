@@ -10,19 +10,11 @@
   "components": [
     {
       "id": "markdown-emitter",
-      "name": "Markdown emitter",
-      "description": "Writes bounded observations as canonical component Markdown.",
-      "technology": "TypeScript",
+      "name": "Markdown | emitter \\ [safe]",
+      "description": "Writes *bounded* observations _without_ ambiguity.",
+      "technology": "TypeScript | Bun `text`",
       "sourceRange": "src/components/markdown-emitter.ts:1-6",
-      "relationships": [
-        {
-          "sourceId": "markdown-emitter",
-          "targetId": "architecture-workspace",
-          "description": "Writes generated observed component documents",
-          "technology": "Markdown",
-          "sourceRange": "src/components/markdown-emitter.ts:9-14"
-        }
-      ]
+      "relationships": []
     },
     {
       "id": "source-watcher",
@@ -34,8 +26,8 @@
         {
           "sourceId": "source-watcher",
           "targetId": "architecture-workspace",
-          "description": "Limits refreshes to the owned component directory",
-          "technology": "Filesystem boundary",
+          "description": "Limits refreshes | preserves *other* files",
+          "technology": "Filesystem \\ boundary",
           "sourceRange": "src/components/source-watcher.ts:15-20"
         },
         {

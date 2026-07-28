@@ -4,7 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { parseFrontmatter } from 'comark'
+import { parse, parseFrontmatter } from 'comark'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,10 +38,10 @@ async function sourceRangeText(root, sourceRange) {
 function componentDeclaration(component) {
   return [
     'export type GromaComponent = {',
-    `  id: "${component.id}";`,
-    `  name: "${component.name}";`,
-    `  description: "${component.description}";`,
-    `  technology: "${component.technology}";`,
+    `  id: ${JSON.stringify(component.id)};`,
+    `  name: ${JSON.stringify(component.name)};`,
+    `  description: ${JSON.stringify(component.description)};`,
+    `  technology: ${JSON.stringify(component.technology)};`,
     '};',
   ].join('\n')
 }
@@ -49,16 +49,68 @@ function componentDeclaration(component) {
 function relationshipDeclaration(relationship) {
   return [
     '  {',
-    `    sourceId: "${relationship.sourceId}";`,
-    `    targetId: "${relationship.targetId}";`,
-    `    description: "${relationship.description}";`,
-    `    technology: "${relationship.technology}";`,
+    `    sourceId: ${JSON.stringify(relationship.sourceId)};`,
+    `    targetId: ${JSON.stringify(relationship.targetId)};`,
+    `    description: ${JSON.stringify(relationship.description)};`,
+    `    technology: ${JSON.stringify(relationship.technology)};`,
     '  },',
   ].join('\n')
 }
 
 function sourceRangeStart(sourceRange) {
   return Number(/:(\d+)-\d+$/.exec(sourceRange)?.[1])
+}
+
+function bytewiseCompare(left, right) {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
+}
+
+function isReadableText(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && /^[\x20-\x7e]+$/.test(value)
+    && value[0] !== ' '
+    && value.at(-1) !== ' '
+}
+
+function escapeMarkdownText(value) {
+  return [...value].map(character => {
+    const codePoint = character.codePointAt(0)
+    const isAsciiPunctuation = (
+      (codePoint >= 0x21 && codePoint <= 0x2f)
+      || (codePoint >= 0x3a && codePoint <= 0x40)
+      || (codePoint >= 0x5b && codePoint <= 0x60)
+      || (codePoint >= 0x7b && codePoint <= 0x7e)
+    )
+    return isAsciiPunctuation ? `\\${character}` : character
+  }).join('')
+}
+
+function collectNodes(node, tag, nodes = []) {
+  if (!Array.isArray(node)) {
+    return nodes
+  }
+
+  const isAstNode = typeof node[0] === 'string'
+  if (isAstNode && node[0] === tag) {
+    nodes.push(node)
+  }
+
+  for (const child of isAstNode ? node.slice(2) : node) {
+    collectNodes(child, tag, nodes)
+  }
+  return nodes
+}
+
+function nodeText(node) {
+  if (typeof node === 'string') {
+    return node
+  }
+  if (!Array.isArray(node)) {
+    return ''
+  }
+  const children = typeof node[0] === 'string' ? node.slice(2) : node
+  return children.map(nodeText).join('')
 }
 
 test('supported fixture has exact Bun markers and deterministic declaration evidence', async () => {
@@ -87,7 +139,8 @@ test('supported fixture has exact Bun markers and deterministic declaration evid
     expected.components.map(component => component.id),
   )
   assert.deepEqual(
-    (await readdir(path.join(supportedRoot, 'src', 'components'))).sort(),
+    (await readdir(path.join(supportedRoot, 'src', 'components')))
+      .sort(bytewiseCompare),
     expected.components.map(component => `${component.id}.ts`),
   )
 
@@ -139,11 +192,18 @@ test('supported fixture has exact Bun markers and deterministic declaration evid
     const declaration = await sourceRangeText(supportedRoot, component.sourceRange)
     assert.equal(declaration, componentDeclaration(component))
     assert.match(component.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    for (const field of ['name', 'description', 'technology']) {
+      assert.equal(
+        isReadableText(component[field]),
+        true,
+        `${component.id}.${field} must be readable text`,
+      )
+    }
     assert.deepEqual(
       [...component.relationships].sort((left, right) => {
-        return left.sourceId.localeCompare(right.sourceId)
-          || left.targetId.localeCompare(right.targetId)
-          || left.sourceRange.localeCompare(right.sourceRange)
+        return bytewiseCompare(left.sourceId, right.sourceId)
+          || bytewiseCompare(left.targetId, right.targetId)
+          || bytewiseCompare(left.sourceRange, right.sourceRange)
       }),
       component.relationships,
     )
@@ -170,6 +230,8 @@ test('supported fixture has exact Bun markers and deterministic declaration evid
       assert.equal(evidence, relationshipDeclaration(relationship))
       assert.equal(relationship.sourceId, component.id)
       assert.match(relationship.targetId, /^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      assert.equal(isReadableText(relationship.description), true)
+      assert.equal(isReadableText(relationship.technology), true)
     }
 
     const componentSource = await readFile(
@@ -181,12 +243,17 @@ test('supported fixture has exact Bun markers and deterministic declaration evid
         return sourceRangeStart(left.sourceRange)
           - sourceRangeStart(right.sourceRange)
       })
+    const relationshipsDeclaration = component.relationships.length === 0
+      ? 'export type GromaRelationships = [];'
+      : [
+          'export type GromaRelationships = [',
+          ...sourceOrderedRelationships.map(relationshipDeclaration),
+          '];',
+        ].join('\n')
     const reservedPrefix = [
       componentDeclaration(component),
       '',
-      'export type GromaRelationships = [',
-      ...sourceOrderedRelationships.map(relationshipDeclaration),
-      '];',
+      relationshipsDeclaration,
     ].join('\n')
     assert.ok(
       componentSource.startsWith(`${reservedPrefix}\n`),
@@ -203,6 +270,179 @@ test('supported fixture has exact Bun markers and deterministic declaration evid
     assert.ok(componentSource.endsWith('\n'))
     assert.doesNotMatch(componentSource, /\r/)
   }
+})
+
+test('supported fixture covers empty relationships and deterministic Markdown escaping', async () => {
+  const expected = await readJson(path.join(
+    fixtureRoot,
+    'supported.expected.json',
+  ))
+  const markdownText = await readJson(path.join(
+    fixtureRoot,
+    'supported.expected-markdown-text.json',
+  ))
+  const component = expected.components.find(candidate => {
+    return candidate.id === markdownText.componentId
+  })
+  assert.ok(component)
+  assert.deepEqual(component.relationships, [])
+
+  const emptyTupleSource = await readFile(
+    path.join(
+      supportedRoot,
+      'src',
+      'components',
+      `${component.id}.ts`,
+    ),
+    'utf8',
+  )
+  assert.equal(
+    emptyTupleSource.split('\n')[7],
+    'export type GromaRelationships = [];',
+  )
+
+  assert.equal(escapeMarkdownText(component.name), markdownText.escapedName)
+  assert.equal(markdownText.heading, `# ${markdownText.escapedName}`)
+  assert.equal(
+    escapeMarkdownText(component.description),
+    markdownText.escapedDescription,
+  )
+  assert.equal(
+    escapeMarkdownText(component.technology),
+    markdownText.escapedTechnology,
+  )
+
+  const relationshipSource = expected.components.find(candidate => {
+    return candidate.id === markdownText.relationshipSourceId
+  })
+  const relationship = relationshipSource.relationships.find(candidate => {
+    return candidate.targetId === markdownText.relationshipTargetId
+  })
+  assert.ok(relationship)
+  assert.equal(
+    escapeMarkdownText(relationship.description),
+    markdownText.escapedRelationshipDescription,
+  )
+  assert.equal(
+    escapeMarkdownText(relationship.technology),
+    markdownText.escapedRelationshipTechnology,
+  )
+  assert.equal(
+    markdownText.relationshipTableRow,
+    '| [Architecture workspace](../../architecture-workspace/container.md) '
+      + `| ${markdownText.escapedRelationshipDescription} `
+      + `| ${markdownText.escapedRelationshipTechnology} |`,
+  )
+
+  const linkLabelSource = expected.components.find(candidate => {
+    return candidate.id === markdownText.linkLabelSourceId
+  })
+  const linkLabelTarget = expected.components.find(candidate => {
+    return candidate.id === markdownText.linkLabelTargetId
+  })
+  const linkLabelRelationship = linkLabelSource.relationships.find(candidate => {
+    return candidate.targetId === markdownText.linkLabelTargetId
+  })
+  assert.ok(linkLabelTarget)
+  assert.ok(linkLabelRelationship)
+  assert.equal(
+    escapeMarkdownText(linkLabelTarget.name),
+    markdownText.escapedLinkLabel,
+  )
+  assert.equal(
+    markdownText.linkLabelTableRow,
+    `| [${markdownText.escapedLinkLabel}](${markdownText.linkLabelHref}) `
+      + `| ${escapeMarkdownText(linkLabelRelationship.description)} `
+      + `| ${escapeMarkdownText(linkLabelRelationship.technology)} |`,
+  )
+
+  const markdown = [
+    markdownText.heading,
+    '',
+    markdownText.escapedDescription,
+    '',
+    '## Technology',
+    '',
+    markdownText.escapedTechnology,
+    '',
+    '## Relationships',
+    '',
+    '| Target | Description | Technology |',
+    '| --- | --- | --- |',
+    markdownText.relationshipTableRow,
+    markdownText.linkLabelTableRow,
+  ].join('\n')
+  const tree = await parse(markdown)
+  assert.equal(nodeText(collectNodes(tree.nodes, 'h1')[0]), component.name)
+  assert.deepEqual(
+    collectNodes(tree.nodes, 'p').map(nodeText),
+    [component.description, component.technology],
+  )
+  const tableRows = collectNodes(tree.nodes, 'tr')
+  assert.equal(tableRows.length, 3)
+  const relationshipCells = tableRows[1]
+    .slice(2)
+    .filter(child => child[0] === 'td')
+  assert.equal(relationshipCells.length, 3)
+  assert.equal(nodeText(relationshipCells[1]), relationship.description)
+  assert.equal(nodeText(relationshipCells[2]), relationship.technology)
+
+  const linkLabelCells = tableRows[2]
+    .slice(2)
+    .filter(child => child[0] === 'td')
+  assert.equal(linkLabelCells.length, 3)
+  const targetLink = collectNodes(linkLabelCells[0], 'a')[0]
+  assert.equal(nodeText(targetLink), linkLabelTarget.name)
+  assert.equal(targetLink[1].href, markdownText.linkLabelHref)
+  assert.equal(
+    nodeText(linkLabelCells[1]),
+    linkLabelRelationship.description,
+  )
+  assert.equal(
+    nodeText(linkLabelCells[2]),
+    linkLabelRelationship.technology,
+  )
+})
+
+test('readable text and bytewise ordering have explicit boundary behavior', () => {
+  for (const accepted of [
+    'Readable',
+    'two words',
+    'Markdown | \\ ` * _ [ ] ( ) < >',
+  ]) {
+    assert.equal(isReadableText(accepted), true, `expected accepted: ${accepted}`)
+  }
+
+  for (const rejected of [
+    '',
+    ' ',
+    ' leading',
+    'trailing ',
+    '\u00a0leading',
+    'trailing\u2003',
+    'line\nbreak',
+    'carriage\rreturn',
+    'tab\ttext',
+    'null\u0000text',
+    'delete\u007ftext',
+    'next\u0085line',
+    'zero\u200bwidth',
+    'bidi\u202econtrol',
+    'line\u2028separator',
+    'paragraph\u2029separator',
+    'byte\uFEFForder',
+    'private\ue000use',
+    'München',
+    '⭐️',
+    '\ud800',
+  ]) {
+    assert.equal(isReadableText(rejected), false, `expected rejected: ${rejected}`)
+  }
+
+  assert.deepEqual(
+    ['ä', 'z', 'a', 'aa'].sort(bytewiseCompare),
+    ['a', 'aa', 'z', 'ä'],
+  )
 })
 
 test('fixture IDs exactly match the plan-03 scanner components', async () => {
@@ -233,7 +473,7 @@ test('fixture IDs exactly match the plan-03 scanner components', async () => {
 
   assert.deepEqual(
     expected.components.map(component => component.id),
-    planIds.sort(),
+    planIds.sort(bytewiseCompare),
   )
 })
 

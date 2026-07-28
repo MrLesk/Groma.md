@@ -15,8 +15,8 @@ export type GromaRelationships = [
   {
     sourceId: "source-watcher";
     targetId: "architecture-workspace";
-    description: "Limits refreshes to the owned component directory";
-    technology: "Filesystem boundary";
+    description: "Limits refreshes | preserves *other* files";
+    technology: "Filesystem \\ boundary";
   },
 ];
 

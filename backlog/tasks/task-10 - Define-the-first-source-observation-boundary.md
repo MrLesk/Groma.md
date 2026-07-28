@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 00:47'
+updated_date: '2026-07-28 00:59'
 labels: []
 milestone: m-2
 dependencies:
@@ -19,6 +19,7 @@ modified_files:
   - README.md
   - e2e/viewer.spec.js
   - fixtures/source-observation/supported.expected.json
+  - fixtures/source-observation/supported.expected-markdown-text.json
   - fixtures/source-observation/supported/package.json
   - fixtures/source-observation/supported/src/index.ts
   - fixtures/source-observation/supported/src/components/markdown-emitter.ts
@@ -63,10 +64,10 @@ The specification must designate exactly one generated components directory bene
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add groma/source-observation.md defining the single TypeScript/Bun v1 layout, type-only declaration grammar, transient observation record, exact unsupported error, watch filter, generated subtree ownership, source evidence rendering, and explicit non-goals.
-2. Add supported and directly unsupported source fixtures plus deterministic expected transient observation evidence whose IDs align with the three plan-03 scanner components.
-3. Establish the hand-authored observed scanner container and its otherwise-empty owned components directory without changing any unrelated observed element.
-4. Add focused contract tests for fixture/range/plan-ID/ownership consistency, then run TypeScript syntax checks, focused and full repository validation, inspect the diff, finalize TASK-10, and commit on main.
+1. Tighten groma.typescript-bun/v1 readable string values and specify locale-independent bytewise ordering plus deterministic canonical Markdown escaping.
+2. Extend the supported fixture with an exact empty GromaRelationships tuple and boundary text that exercises the escaping contract; update deterministic expected evidence.
+3. Strengthen contract tests for empty tuples, accepted/rejected text boundaries, exact escaped Markdown, and bytewise ordering without implementing the observer or emitter.
+4. Run fixture syntax, focused/full architecture and browser checks, review the diff, refinalize TASK-10, and commit the focused correction.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -77,10 +78,14 @@ Defined groma.typescript-bun/v1 as an exact UTF-8/LF, line-oriented, type-only l
 Reserved groma/observed/systems/groma/containers/scanner/components/ as the only generated subtree beneath a hand-authored scanner container. Emission resolves relationship targets from the complete observation set plus canonical observed elements outside the owned subtree, fails before writes on missing/duplicate targets, never reads plans, and records evidence only in a readable ## Source evidence body section.
 
 Added supported, unsupported, and deterministic expected-observation fixtures. Contract tests prove exact declaration slices/ranges/schema/order, entry-point resolution, exact plan-03 scanner component IDs, and ownership. Independent review found no Critical or Important issues after grammar and target-resolution clarification. Fresh verification: Bun 1.3.14 bundled all six fixture TypeScript files; npm run check passed architecture validation and 74/74 tests; npm run test:viewer:browser passed 11/11; git diff --check passed.
+
+Quality correction after independent review: source-provided readable values are now version-independent printable ASCII U+0020-U+007E with at least one character and no leading/trailing space. The emitter contract escapes every ASCII punctuation character exactly once before any heading, prose, link-label, or GFM table-cell placement. A checked-in Markdown-text oracle exercises pipe, backslash, brackets, emphasis, code, same-directory link labels, hrefs, and exact three-cell Comark parsing.
+
+The supported markdown-emitter declaration now uses the exact one-line export type GromaRelationships = []; branch; the fixture test proves line placement and a deterministic empty relationship array. All ordering is unsigned UTF-8 bytewise tuple ordering with a non-ASCII boundary example and no localeCompare. Final independent re-review found no Critical, Important, or Minor issues and confirmed no observer/emitter implementation was added. Fresh verification: Bun 1.3.14 bundled all six fixture files, npm run check passed architecture validation plus 76/76 tests, npm run test:viewer:browser passed 11/11, and git diff --check passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Defined the single groma.typescript-bun/v1 source-observation boundary and deterministic contract fixtures, including exact type-only declarations, stable IDs and evidence ranges, one unsupported-shape error, a pre-observation watch filter, one owned observed scanner components subtree, observed-only target resolution, readable ## Source evidence, and strict read-only/non-goals. Established the hand-authored scanner parent and updated architecture/viewer expectations. Verified all fixture TypeScript with Bun 1.3.14, architecture and 74 Node tests, 11 Playwright flows, diff hygiene, and an independent review with no Critical or Important findings. Friction classification: none.
+Defined and verified the complete groma.typescript-bun/v1 handoff contract. The quality correction constrains all declaration-supplied readable text to version-independent printable ASCII with no edge spaces, specifies exact once-only Markdown/GFM punctuation escaping, adds a parsed link/table escaping oracle, covers the accepted one-line empty relationships tuple, and makes deterministic ordering unsigned UTF-8 bytewise rather than locale-dependent. No observer or emitter implementation was added. Final evidence: Bun 1.3.14 syntax builds for all six fixture files, architecture validation and 76/76 Node tests, 11/11 Playwright flows, clean diff hygiene, and independent review with no remaining findings. Friction classification: implementation defect.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -95,7 +95,7 @@ export type GromaRelationships = [
 
 The `GromaComponent` declaration defines one C4 component boundary. Its `id`
 must equal the module's filename and is emitted unchanged. `name`,
-`description`, and `technology` are non-empty JSON string literals on one line.
+`description`, and `technology` use the readable-text rules below.
 An empty relationship tuple, `export type GromaRelationships = [];`, is valid.
 Otherwise each tuple item has exactly the four shown fields in the shown order.
 Its `sourceId` must equal the enclosing component ID. `targetId` is emitted
@@ -111,6 +111,26 @@ TypeScript text, but it must not contain another `GromaComponent`,
 `GromaRelationships`, or `GromaEntryPoint` identifier. Any CRLF input,
 different trivia, omitted or additional field, reordered field, alternate
 quote, optional punctuation, or duplicate reserved identifier is outside v1.
+
+### Readable text values
+
+The observer JSON-decodes every component `name`, `description`, and
+`technology`, plus every relationship `description` and `technology`, before
+validation. Each decoded value must:
+
+- contain one or more code points;
+- contain only printable ASCII U+0020–U+007E; and
+- start and end with U+0021–U+007E, so whitespace-only values and leading or
+  trailing spaces are rejected.
+
+Internal U+0020 spaces are allowed. Every control, line break, non-ASCII code
+point, unpaired surrogate, format control, private-use value, and unassigned
+value is outside v1. JSON escapes do not bypass validation: `"\u0041"` decodes
+to supported `A`, while values such as `"\n"`, `"\t"`, `"\u0000"`,
+`"\u0085"`, `"\u200b"`, `"\u2028"`, `"\u2029"`, and `"\ufeff"` decode
+to unsupported text. Markdown punctuation, including `|`, `\`, `` ` ``, `*`,
+`_`, `[`, `]`, `(`, `)`, `<`, and `>`, is printable ASCII and is allowed
+because emission escapes it deterministically.
 
 Every component ID, entry-point `componentId`, relationship `sourceId`, and
 relationship `targetId` uses the canonical stable C4 ID syntax:
@@ -139,13 +159,17 @@ not Markdown and not a second architecture model. It contains the fixed
 `containerId` `scanner`, entry points, components, outgoing relationships, and
 the source range for each declaration. Components are ordered by ID;
 relationships are ordered by `(sourceId, targetId, sourceRange)`; entry points
-are ordered by source range. The supported fixture's exact record is
+are ordered by source range. Every comparison is lexicographic over the UTF-8
+bytes of each field: compare the first differing unsigned byte, with a shorter
+prefix ordered first. Locale collation is never used. The supported fixture's exact record is
 `fixtures/source-observation/supported.expected.json`.
 
 The fixture declares the exact plan-03 component IDs `markdown-emitter`,
 `source-watcher`, and `typescript-observer`. It also demonstrates relationships
-whose source and target IDs are supplied literally. The observer does not read
-`groma/observed` or `groma/plans` to create or reconcile that record.
+whose source and target IDs are supplied literally, an exact empty
+`GromaRelationships` tuple, and readable text containing Markdown punctuation.
+The observer does not read `groma/observed` or `groma/plans` to create or
+reconcile that record.
 
 ## Relationship target resolution
 
@@ -238,6 +262,40 @@ add readable evidence only in the body:
 
 There is no `claim`, lifecycle, confidence, source, or range frontmatter.
 Evidence is not stored in a sidecar or alternate model.
+
+### Deterministic Markdown escaping
+
+Before placing any readable text in a heading, prose paragraph, technology
+section, relationship link label, or relationship table cell, the emitter
+applies one `escapeMarkdownText` operation. It iterates Unicode scalars without
+normalizing them (v1 readable inputs are printable ASCII). For every ASCII
+punctuation scalar in `U+0021–U+002F`,
+`U+003A–U+0040`, `U+005B–U+0060`, or `U+007B–U+007E`, it emits U+005C
+backslash followed by that scalar. Every other scalar is emitted unchanged.
+Escaping is performed once, left-to-right, on the decoded value; inserted
+backslashes are not processed again.
+
+This rule makes a source `|` become `\|`, a source `\` become `\\`, and
+Markdown delimiters such as `` ` ``, `*`, `_`, `[`, and `]` become escaped
+literal text. The same operation is used in GFM table cells, so a declared pipe
+cannot create a column and a declared backslash cannot consume the pipe escape.
+Static Markdown syntax—heading markers, table separators, link destinations,
+and evidence code-span delimiters—is not passed through this operation.
+
+For example, the supported fixture's decoded values and emitted text include:
+
+```text
+name input:       Markdown | emitter \ [safe]
+heading output:  # Markdown \| emitter \\ \[safe\]
+
+description input:  Writes *bounded* observations _without_ ambiguity.
+prose output:       Writes \*bounded\* observations \_without\_ ambiguity\.
+```
+
+`fixtures/source-observation/supported.expected-markdown-text.json` is the
+deterministic escaping oracle for both component prose and a relationship table
+row. Applying the readable-text validation or escaping rules differently is
+outside this contract.
 
 ## Read-only and non-goals
 

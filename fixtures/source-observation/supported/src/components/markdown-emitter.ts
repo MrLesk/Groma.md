@@ -1,18 +1,11 @@
 export type GromaComponent = {
   id: "markdown-emitter";
-  name: "Markdown emitter";
-  description: "Writes bounded observations as canonical component Markdown.";
-  technology: "TypeScript";
+  name: "Markdown | emitter \\ [safe]";
+  description: "Writes *bounded* observations _without_ ambiguity.";
+  technology: "TypeScript | Bun `text`";
 };
 
-export type GromaRelationships = [
-  {
-    sourceId: "markdown-emitter";
-    targetId: "architecture-workspace";
-    description: "Writes generated observed component documents";
-    technology: "Markdown";
-  },
-];
+export type GromaRelationships = [];
 
 export function emitMarkdown(): string {
   return "canonical Markdown";
