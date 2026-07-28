@@ -1,11 +1,26 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
+import { emitObservedComponents } from '../src/markdown-emitter.mjs'
 import { startMarkdownWatcher } from '../src/viewer/markdown-watcher.mjs'
+
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+)
 
 class FakeWatcher extends EventEmitter {
   closed = false
@@ -139,6 +154,119 @@ test('ignores a filename-less event when only non-Markdown changed', async t => 
   await plansRegistration.callback('change', undefined)
 
   assert.equal(changes, 0)
+})
+
+test('detects Markdown removed with its containing directory', async t => {
+  const fixture = await createFixture(t)
+  const fake = fakeWatchers()
+  let changes = 0
+  const watcher = await startMarkdownWatcher(fixture.repositoryRoot, {
+    onError: error => assert.fail(error),
+    onMarkdownChange: () => {
+      changes += 1
+    },
+    watchFileSystem: fake.watchFileSystem,
+  })
+  t.after(() => watcher.close())
+
+  await rm(fixture.planRoot, { recursive: true })
+  const plansRegistration = fake.registrations.find(registration => {
+    return registration.root.endsWith(path.join('groma', 'plans'))
+  })
+  await plansRegistration.callback('rename', 'test-plan')
+
+  assert.equal(changes, 1)
+})
+
+test('ignores a removed directory that contained no Markdown', async t => {
+  const fixture = await createFixture(t)
+  const notesRoot = path.join(fixture.observedRoot, 'notes')
+  await mkdir(notesRoot)
+  await writeFile(path.join(notesRoot, 'details.txt'), 'not architecture\n')
+  const fake = fakeWatchers()
+  let changes = 0
+  const watcher = await startMarkdownWatcher(fixture.repositoryRoot, {
+    onError: error => assert.fail(error),
+    onMarkdownChange: () => {
+      changes += 1
+    },
+    watchFileSystem: fake.watchFileSystem,
+  })
+  t.after(() => watcher.close())
+
+  await rm(notesRoot, { recursive: true })
+  const observedRegistration = fake.registrations.find(registration => {
+    return registration.root.endsWith(path.join('groma', 'observed'))
+  })
+  await observedRegistration.callback('rename', 'notes')
+
+  assert.equal(changes, 0)
+})
+
+test('detects a real emitter transaction from its coalesced vanished-directory event', async t => {
+  const repositoryRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'groma-markdown-watcher-emitter-'),
+  )
+  t.after(() => rm(repositoryRoot, { recursive: true, force: true }))
+  await cp(
+    path.join(projectRoot, 'groma'),
+    path.join(repositoryRoot, 'groma'),
+    { recursive: true },
+  )
+  const fake = fakeWatchers()
+  let changes = 0
+  const watcher = await startMarkdownWatcher(repositoryRoot, {
+    onError: error => assert.fail(error),
+    onMarkdownChange: () => {
+      changes += 1
+    },
+    watchFileSystem: fake.watchFileSystem,
+  })
+  t.after(() => watcher.close())
+
+  const observation = JSON.parse(await readFile(
+    path.join(
+      projectRoot,
+      'fixtures',
+      'source-observation',
+      'supported.expected.json',
+    ),
+    'utf8',
+  ))
+  let transactionPath
+  await emitObservedComponents(repositoryRoot, observation, {
+    onFilesystemAccess(access) {
+      if (
+        transactionPath === undefined
+        && access.operation === 'rename-destination'
+        && access.filename.includes('.groma-components-transaction-')
+      ) {
+        const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
+        const relativeParts = path
+          .relative(observedRoot, access.filename)
+          .split(path.sep)
+        const transactionIndex = relativeParts.findIndex(name => {
+          return name.startsWith('.groma-components-transaction-')
+        })
+        transactionPath = relativeParts
+          .slice(0, transactionIndex + 1)
+          .join(path.sep)
+      }
+    },
+  })
+
+  assert.match(transactionPath, /\.groma-components-transaction-/)
+  const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
+  await assert.rejects(
+    lstat(path.join(observedRoot, transactionPath)),
+    error => error.code === 'ENOENT',
+  )
+  const observedRegistration = fake.registrations.find(registration => {
+    return registration.root === observedRoot
+  })
+  await observedRegistration.callback('rename', transactionPath)
+
+  assert.equal(changes, 1)
 })
 
 test('reports watcher errors and closes every retained handle', async t => {

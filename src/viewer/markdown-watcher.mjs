@@ -142,7 +142,11 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
         await refreshFingerprint()
       }
     } catch (error) {
-      if (error.code !== 'ENOENT' && !closed) onError(error)
+      if (error.code === 'ENOENT') {
+        await refreshFingerprint()
+      } else if (!closed) {
+        onError(error)
+      }
     }
   }
 

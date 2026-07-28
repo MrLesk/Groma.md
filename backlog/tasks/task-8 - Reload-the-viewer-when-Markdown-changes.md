@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-28 00:03'
+updated_date: '2026-07-28 03:07'
 labels: []
 milestone: m-1
 dependencies:
@@ -61,6 +61,8 @@ Corrective review: 6. Add deterministic browser coverage that delays an older mo
 Quality review: 10. Extract the narrow filesystem-event filter into a lifecycle-owned Markdown watcher that fingerprints only `.md` files when `fs.watch` omits a filename, suppressing filename-less non-Markdown events. 11. Retain watcher handles, surface watcher errors as persistent last-valid viewer status, and close watcher handles, pending debounce/reload work, SSE streams, and the Bun server on shutdown. 12. Add deterministic watcher snapshot/error/close tests, automatic-focus browser assertion, and failure-safe fixture cleanup; repeat live-reload and full browser runs before finalization.
 
 Final quality correction: 13. Separate terminal watcher-handle health from recoverable model reload errors so a watcher failure remains restart-required across later successful queued rebuilds and is replayed to current/reconnected clients. 14. Recheck watcher closure after an awaited Markdown fingerprint scan so shutdown cannot invoke change handling or re-arm reload debounce. 15. Add deterministic error-then-success and close-during-scan regressions, then run focused Node, full check, browser, SIGTERM, build, canonical-Markdown, and fixture-cleanliness verification before re-finalizing.
+
+Upstream integration correction: 16. Treat a vanished candidate during delayed non-Markdown rename inspection as an ambiguous recursive event and run the existing Markdown-only root fingerprint comparison. 17. Add deterministic TASK-8 tests for Markdown-directory removal, silent non-Markdown-directory removal, and a real TASK-12 emitter transaction whose coalesced event names the vanished transaction directory. 18. Repeat focused TASK-8 browser/live reload and TASK-13 source-to-viewer integration sufficiently to establish no missed generation, then run full checks, finalize, and commit only TASK-8-owned files.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -87,10 +89,16 @@ Final quality review reopened TASK-8: successful queued rebuilds currently clear
 Final quality correction: model reload failures and terminal watcher-handle failures now have separate state. Successful queued rebuilds clear only the transient model failure; watcher failure remains the effective API/SSE warning, explicitly requires viewer restart, and has no auto-recovery path. Fingerprint refresh rechecks closure after its awaited scan, preventing shutdown from invoking change handling or re-arming server debounce.
 
 Final quality verification: deterministic watcher-error-then-model-success and close-during-scan regressions passed; focused reload/race/reconnect/filter Playwright passed 8/8 across two repetitions; npm run check passed all four architecture revisions and 68 Node tests; full Playwright passed 7/7; standalone SIGTERM passed; Bun bundled 146 modules. git diff --check, canonical groma invariance, and disposable fixture cleanup checks passed.
+
+TASK-13 integration proved an upstream TASK-8 implementation/test-coverage defect: delayed directory rename inspection silently ignores ENOENT, so a removed Markdown directory or coalesced event naming TASK-12's vanished transaction directory never compares the watched-root Markdown fingerprint and can miss the viewer generation.
+
+Upstream integration correction: delayed non-Markdown rename inspection now treats ENOENT as an ambiguous recursive event and runs the existing watched-root Markdown fingerprint. Removing a directory that contained Markdown therefore reloads, while removing a directory containing only non-Markdown remains silent. No polling, source integration, touch marker, or new watcher path was added.
+
+Regression evidence was red before the fix: Markdown-directory removal and the real TASK-12 emitter transaction's coalesced vanished-directory event each produced 0 changes instead of 1; both passed after the one-branch correction, alongside the non-Markdown silence case. Verification: TASK-13 source-to-viewer integration passed 50/50, TASK-8 focused browser reload/race/reconnect/filter passed 20/20 across five repetitions, npm run check passed four architecture revisions and 152/152 Node tests, full browser passed 12/12, Bun bundled 146 modules, canonical groma remained unchanged, and fixtures/diff were clean. Classification: TASK-8 implementation/test-coverage defect discovered by TASK-13 integration.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented Revision 02 live viewer reloads and all review corrections. Watcher-handle failure is terminal and restart-required while model reload errors remain recoverable; later successful rebuilds cannot clear watcher health, and current/reconnected clients receive the durable status. Closing during an in-flight Markdown fingerprint scan cannot schedule more work. Verified with deterministic regressions, 68 Node tests, repeated 8/8 focused browser cases, full 7/7 Playwright, standalone SIGTERM, a 146-module Bun build, unchanged canonical groma Markdown, and clean fixtures.
+Corrected the TASK-8 recursive Markdown watcher so a delayed rename candidate that vanished before inspection triggers the existing Markdown-only root fingerprint comparison. This detects removed Markdown directories and real atomic emitter replacements without breaking non-Markdown silence or adding polling/source coupling. Classification: TASK-8 implementation/test-coverage defect discovered by TASK-13 integration. Verified deterministic red/green regressions, 50/50 source-to-viewer integration repetitions, 20/20 focused browser repetitions, 152/152 Node tests, full 12/12 browser, a 146-module Bun build, unchanged canonical groma, and clean fixtures.
 <!-- SECTION:FINAL_SUMMARY:END -->
