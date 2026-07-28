@@ -284,6 +284,28 @@ does not refresh generated Markdown. Direct invocation remains free to reject
 a root that contains an unsupported shape; the watch filter and direct input
 validation are separate boundaries.
 
+The standalone source-refresh process applies one short settle debounce to this
+exact scope. Each settled burst runs a fresh complete observation followed by
+one complete emitter replacement; it does not mutate an incremental graph,
+infer renames, or retry with a partial observation. If another admitted event
+arrives during a run, that event remains pending and causes a subsequent full
+refresh only after its own quiet period. Observer or emitter failure is visible
+on the source process, does not partially replace Markdown, and retains the
+last-good generated subtree for a later valid event.
+
+When the filesystem omits an event filename, the source process compares a
+fingerprint of only the supported paths above. It refreshes if that bounded
+snapshot changed and ignores the event otherwise. A temporary fingerprint read
+failure is reported and settles into a normal full observation while the
+last-good subtree and watcher remain available for recovery. A watch-handle
+failure is terminal rather than leaving a partially blind process: all watch
+handles and pending work close, the failure is reported, and the process exits
+nonzero.
+
+The source-refresh process and architecture viewer are separate services. The
+viewer imports no source-observation code and continues to read and watch only
+canonical Markdown beneath `groma/observed` and `groma/plans`.
+
 ## Generated Markdown ownership
 
 The named observed parent is the hand-authored `scanner` container at

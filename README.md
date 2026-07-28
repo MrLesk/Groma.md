@@ -49,6 +49,28 @@ Choose another plan without changing any Markdown:
 npm run viewer -- --revision plan:03-code-observation
 ```
 
+## Refresh observed components from supported source
+
+Run the Revision 03 source process against a repository that matches
+`groma.typescript-bun/v1` and contains the Groma architecture scaffold:
+
+```sh
+npm run source:refresh -- --repository /path/to/supported-repository
+```
+
+The process watches only `package.json`, `src/index.ts`, and non-recursive
+`src/components/*.ts` events. After a short quiet period it performs one fresh
+complete observation and replaces only the scanner-owned generated component
+directory. A source event received during that run settles into a later complete
+refresh. Invalid settled source is reported by the source process and leaves the
+last-good generated Markdown untouched. Filename-less filesystem events are
+checked against a fingerprint containing only the supported source paths, so
+unrelated changes remain ignored. A failed watch handle is terminal: the process
+closes every watcher, reports the failure, and exits nonzero.
+
+This process is separate from the viewer. The viewer never reads or watches
+source; it updates through its existing `groma/observed` Markdown watcher.
+
 Elements are matched by stable ID. A plan-only element is a ghost addition, an
 observed-only element is a planned removal, and a shared element is modified
 when its C4 properties or outgoing relationships differ. Revision names,

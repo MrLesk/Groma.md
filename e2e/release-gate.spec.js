@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import {
   access,
   chmod,
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -310,6 +311,92 @@ async function startViewer(repositoryRoot, revision) {
   }
 }
 
+async function startSourceRefreshProcess(repositoryRoot) {
+  const stderr = { value: '' }
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => {
+      return name !== 'FORCE_COLOR' && name !== 'NO_COLOR'
+    }),
+  )
+  const child = spawn(
+    process.execPath,
+    [
+      'src/source-refresh-process.mjs',
+      '--repository',
+      repositoryRoot,
+    ],
+    {
+      cwd: projectRoot,
+      env: environment,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  const refresh = trackProcess(child, stderr)
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', chunk => {
+    stderr.value += chunk
+  })
+  child.stdout.setEncoding('utf8')
+
+  try {
+    await within(new Promise((resolve, reject) => {
+      let stdout = ''
+      child.stdout.on('data', chunk => {
+        stdout += chunk
+        if (stdout.includes('Source refresh watching')) resolve()
+      })
+      child.once('exit', (code, signal) => {
+        reject(new Error(
+          `Source refresh exited before startup: code=${code} signal=${signal}`
+            + `\n${stderr.value}`,
+        ))
+      })
+    }), 10_000, 'source refresh startup')
+    return refresh
+  } catch (error) {
+    child.kill('SIGKILL')
+    await within(refresh.exit, forcedStopTimeoutMs, 'source refresh SIGKILL')
+      .catch(() => {})
+    await closeProcessStdio(refresh, stdioCloseTimeoutMs).catch(() => {})
+    throw error
+  }
+}
+
+async function createSourceRefreshFixture() {
+  const repositoryRoot = await mkdtemp(
+    path.join(os.tmpdir(), 'groma-source-refresh-gate-'),
+  )
+  const sourceFixtureRoot = path.join(
+    projectRoot,
+    'fixtures',
+    'source-observation',
+    'supported',
+  )
+
+  try {
+    await Promise.all([
+      cp(
+        path.join(sourceFixtureRoot, 'package.json'),
+        path.join(repositoryRoot, 'package.json'),
+      ),
+      cp(
+        path.join(sourceFixtureRoot, 'src'),
+        path.join(repositoryRoot, 'src'),
+        { recursive: true },
+      ),
+      cp(
+        path.join(projectRoot, 'groma'),
+        path.join(repositoryRoot, 'groma'),
+        { recursive: true },
+      ),
+    ])
+    return repositoryRoot
+  } catch (error) {
+    await rm(repositoryRoot, { recursive: true, force: true })
+    throw error
+  }
+}
+
 async function stopViewer(viewer, options = {}) {
   const {
     expectedShutdown = 'graceful',
@@ -435,7 +522,7 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
     const relativeFilename = path.relative(sourceRoot, filename)
     if (
       relativeFilename.startsWith(`viewer${path.sep}`)
-      && /source-observer|observeSourceRepository|UnsupportedSourceShapeError/
+      && /source-(?:observer|refresh)|markdown-emitter|observeTypeScriptSource|emitObservedComponents|UnsupportedSourceShapeError/
         .test(source)
     ) {
       viewerObserverReferences.push(relativeFilename)
@@ -461,8 +548,94 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
     'architecture-reader.mjs',
     'markdown-emitter.mjs',
     'source-observer.mjs',
+    'source-refresh.mjs',
     path.join('viewer', 'markdown-watcher.mjs'),
   ])
+})
+
+test('refreshes one open source-blind viewer through observed Markdown', async ({
+  page,
+}) => {
+  test.setTimeout(30_000)
+  const repositoryRoot = await createSourceRefreshFixture()
+  let refresh
+  let viewer
+
+  try {
+    refresh = await startSourceRefreshProcess(repositoryRoot)
+    viewer = await startViewer(repositoryRoot, 'observed')
+    await page.goto(viewer.url)
+    await expect(page.locator('.status-page')).toHaveCount(0)
+    const documentSentinel = `source-refresh-${Date.now()}-${process.pid}`
+    await page.evaluate(sentinel => {
+      window.__gromaSourceRefreshDocumentSentinel = sentinel
+    }, documentSentinel)
+    const before = await modelPayload(page, viewer.url)
+
+    const sourceWatcherFilename = path.join(
+      repositoryRoot,
+      'src',
+      'components',
+      'source-watcher.ts',
+    )
+    const source = await readFile(sourceWatcherFilename, 'utf8')
+    await writeFile(
+      sourceWatcherFilename,
+      source.replace(
+        'Requests a complete observation after supported source changes.',
+        'Requests one settled complete observation after source changes.',
+      ),
+    )
+    const generatedWatcherFilename = path.join(
+      repositoryRoot,
+      'groma',
+      'observed',
+      'systems',
+      'groma',
+      'containers',
+      'scanner',
+      'components',
+      'source-watcher.md',
+    )
+    await expect.poll(async () => {
+      return readFile(generatedWatcherFilename, 'utf8').catch(() => '')
+    }).toContain('Requests one settled complete observation')
+    await expect.poll(async () => {
+      return (await modelPayload(page, viewer.url)).generation
+    }).toBeGreaterThan(before.generation)
+
+    expect(
+      await page.evaluate(() => {
+        return window.__gromaSourceRefreshDocumentSentinel
+      }),
+    ).toBe(documentSentinel)
+    await page.getByRole('button', { name: 'Open Groma system' }).click()
+    await page.getByRole('button', {
+      name: /^Open Scanner container/,
+    }).click()
+    await expect(page.getByTestId('c4-node-source-watcher')).toContainText(
+      'Requests one settled complete observation after source changes.',
+    )
+
+    const after = await modelPayload(page, viewer.url)
+    expect(
+      [...new Set(
+        after.testIoAudit
+          .filter(entry => entry.operation === 'watch')
+          .map(entry => entry.path),
+      )].sort(),
+    ).toEqual(['groma/observed', 'groma/plans'])
+    expect(
+      after.testIoAudit.filter(entry => {
+        return !/^groma\/(?:observed|plans)(?:\/|$)/.test(entry.path)
+      }),
+    ).toEqual([])
+  } finally {
+    await page.goto('about:blank').catch(() => {})
+    if (viewer !== undefined) await stopViewer(viewer)
+    if (refresh !== undefined) await stopViewer(refresh)
+    await rm(repositoryRoot, { recursive: true, force: true })
+  }
 })
 
 test('removes a partial fixture when setup fails', async () => {

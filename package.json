@@ -8,6 +8,7 @@
   },
   "scripts": {
     "validate:architecture": "node scripts/validate-architecture.mjs",
+    "source:refresh": "node src/source-refresh-process.mjs",
     "viewer": "bun run src/viewer/server.mjs",
     "test:release-gate": "playwright test --config playwright.release-gate.config.mjs",
     "test:viewer:browser": "playwright test",
