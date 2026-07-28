@@ -312,10 +312,21 @@ async function startViewer(repositoryRoot, revision) {
 
 async function stopViewer(viewer, options = {}) {
   const {
+    expectedShutdown = 'graceful',
     termTimeoutMs = gracefulStopTimeoutMs,
     killTimeoutMs = forcedStopTimeoutMs,
     stdioTimeoutMs = stdioCloseTimeoutMs,
   } = options
+  const expectedResult = expectedShutdown === 'graceful'
+    ? { code: 0, escalated: false, signal: null }
+    : expectedShutdown === 'forced'
+      ? { code: null, escalated: true, signal: 'SIGKILL' }
+      : null
+  if (!expectedResult) {
+    throw new TypeError(
+      'expectedShutdown must be "graceful" or "forced"',
+    )
+  }
   let escalated = false
   let exitResult
 
@@ -343,17 +354,11 @@ async function stopViewer(viewer, options = {}) {
   }
 
   const [code, signal] = exitResult
-  expect({
-    code,
-    signal,
-    stderr: viewer.stderr.value,
-  }).toEqual({
-    code: escalated ? null : 0,
-    signal: escalated ? 'SIGKILL' : null,
-    stderr: '',
-  })
+  const result = { code, escalated, signal }
+  expect(result).toEqual(expectedResult)
+  expect(viewer.stderr.value).toBe('')
 
-  return { code, escalated, signal }
+  return result
 }
 
 async function modelPayload(page, viewerUrl) {
@@ -505,6 +510,7 @@ test('escalates a stalled viewer and closes its stdio', async () => {
   try {
     await within(ready, 1_000, 'stalled viewer startup')
     result = await stopViewer(stalledViewer, {
+      expectedShutdown: 'forced',
       termTimeoutMs: 50,
       killTimeoutMs: 1_000,
       stdioTimeoutMs: 1_000,
@@ -582,7 +588,12 @@ test('verifies the complete Markdown-to-view release gate', async ({
     await page.getByRole('button', { name: 'Previous level' }).click()
     await expect(page.getByTestId('view-context')).toBeVisible()
     await page.goto('about:blank')
-    await stopViewer(viewer)
+    const observedShutdown = await stopViewer(viewer)
+    expect(observedShutdown).toEqual({
+      code: 0,
+      escalated: false,
+      signal: null,
+    })
     viewer = undefined
 
     viewer = await startViewer(repositoryRoot, 'plan:02-live-viewer')
@@ -741,7 +752,12 @@ test('verifies the complete Markdown-to-view release gate', async ({
     const beforeRestartPid = viewer.child.pid
     expect(beforeRestartPid).toBeGreaterThan(0)
     await page.goto('about:blank')
-    await stopViewer(viewer)
+    const preRestartShutdown = await stopViewer(viewer)
+    expect(preRestartShutdown).toEqual({
+      code: 0,
+      escalated: false,
+      signal: null,
+    })
     viewer = undefined
 
     viewer = await startViewer(repositoryRoot, 'plan:02-live-viewer')

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-28 00:27'
+updated_date: '2026-07-28 00:30'
 labels: []
 milestone: m-1
 dependencies:
@@ -71,6 +71,8 @@ Revision 02 is the release gate for the complete Markdown-to-view workflow. Usin
 12. Add a NODE_ENV=test-gated filesystem access audit threaded through the real Comark reader and Markdown watcher, expose it only in test payloads, fence a source mutation with a completed known Markdown generation, assert every read/watch stayed under groma, and add a static no-scanner guard.
 
 13. Repeat the isolated gate, occupied-port gate, full browser suite, unit/architecture checks, production build, intentional teardown/setup probes, canonical Markdown and residue checks; then refinalize and commit.
+
+14. Replace outcome-derived shutdown expectations with an explicit expected mode: every real viewer stop defaults to and asserts graceful SIGTERM/no escalation, while only the deliberately stalled child declares forced SIGKILL as expected. Add visible returned-result assertions at real restart boundaries, repeat isolated/full verification, and refinalize.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -91,10 +93,14 @@ Quality review reopened TASK-9: the release command inherits unrelated fixed-por
 Implemented the deterministic harness corrections. test:release-gate now uses playwright.release-gate.config.mjs with no webServer or baseURL and passed 4/4 while a real TCP listener occupied 127.0.0.1:4177. stopViewer has bounded SIGTERM, bounded SIGKILL escalation, and bounded stdout/stderr completion; a SIGTERM-ignoring child probe escalates to SIGKILL and confirms ESRCH afterward. createFixture owns cleanup from immediately after mkdtemp; a forced setup hook failure proves ENOENT. A NODE_ENV=test/GROMA_TEST_IO_AUDIT seam records actual reader/watcher read-directory/read-file/watch paths in the test API only. Source mutation is followed by a known README generation fence, then full model/projection equality and an all-access-under-groma assertion; the fixed 500ms delay is removed. A static production-src scanner guard and focused reader/watcher audit tests are included. Current isolated gate passes repeatedly at 4/4; focused audit tests pass 11/11.
 
 Fresh final quality verification: the isolated release command passed 4/4 repeatedly, including once with 127.0.0.1:4177 actively occupied; the full Playwright suite passed 11/11; npm run check validated all four revisions and passed 70/70 Node tests; Bun bundled 146 modules. The SIGTERM-stall probe exercised bounded SIGKILL and awaited stdio, the forced partial-setup probe removed its root, the source mutation was fenced by a completed Markdown generation with structural equality and audited groma-only read/watch scope, and the static guard found no scanner or unexpected production filesystem reader. Fresh screenshot inspection remained readable. git diff --check and canonical groma/ invariance passed; no port listener, viewer/stall process, or disposable release fixture remained.
+
+Final quality review reopened TASK-9: stopViewer currently derives its expected exit from whether escalation happened, allowing an unexpectedly hung real viewer to pass after SIGKILL. Acceptance criterion 4 is unchecked until real restart boundaries require graceful SIGTERM and the forced path is confined to the stalled-child probe.
+
+Final quality correction: stopViewer now takes an explicit expectedShutdown contract. All real viewer stop/restart paths use the default graceful contract and assert exit code 0, no signal, and no escalation; only the deliberately stalled-child regression declares forced shutdown and asserts SIGKILL escalation. A controlled negative regression (temporarily omitting the forced declaration) failed as intended when escalation occurred, proving escalation is not dynamically accepted. Verification after restoration: isolated release gate 4/4, full browser suite 11/11, npm run check 70/70 Node tests with all revisions validated, Bun production build 146 modules, canonical groma tree unchanged, and no temporary fixture or viewer-process residue.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed TASK-9 with an isolated and deterministic Revision 02 release harness. The release command owns dynamic ports, survives unrelated port 4177 use, bounds and escalates process teardown while awaiting stdio, owns partial-fixture cleanup, and proves application read/watch scope through a test-only audit plus Markdown generation fence and static no-scanner guard. Verified by repeated 4/4 isolated gates, 11/11 full browser flows, 70 Node tests, a 146-module build, unchanged canonical Markdown, and clean process/fixture residue checks.
+Separated shutdown expectations in the Revision 02 release gate: normal real-viewer stop and restart operations are required to complete gracefully under SIGTERM without escalation, while only the explicit stalled-child probe opts into and verifies SIGKILL escalation. Added returned-result assertions and a negative regression proving unexpected escalation fails. Reverified the isolated release gate, full browser suite, complete check suite, production build, canonical fixture integrity, and cleanup hygiene.
 <!-- SECTION:FINAL_SUMMARY:END -->
