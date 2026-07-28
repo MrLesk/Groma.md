@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 01:27'
+updated_date: '2026-07-28 01:35'
 labels: []
 milestone: m-2
 dependencies:
@@ -40,9 +40,7 @@ Implement the read-only observer defined by TASK-10 for its supported TypeScript
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add failing deterministic regressions that replace validated package, entry, and component paths with external symlinks at both the open-file and read-file access boundaries; each invocation must return the exact unsupported-shape error.
-2. Retain bigint device/inode metadata from physical validation, open each required file with platform O_NOFOLLOW and no fallback, fstat the descriptor as a matching regular file, recheck path identity around descriptor reads, and close every handle in finally.
-3. Preserve exact ordinary output, determinism, byte validation, no-plan/no-execution scope, and all prior confinement behavior; run focused/full verification, inspect the staged diff, finalize TASK-11, and commit.
+1. Reconcile TASK-11 with the corrected TASK-10 stable-snapshot contract: concurrent ancestor replacement and native descriptor-relative traversal are non-goals, while static links/escapes and direct final-file swaps remain rejected. 2. Keep the existing bb8502 observer behavior and focused regressions unchanged; verify exact output, evidence, determinism, bounded/no-execution behavior, exact unsupported rejection, static physical confinement, and direct final-file swap rejection. 3. Record objective focused/full evidence, recheck AC #5, finalize TASK-11 as Done, and commit only its Backlog record.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -63,10 +61,18 @@ TOCTOU investigation: physical validation retained only file kind strings. After
 TOCTOU correction implemented: physical validation now retains bigint device/inode metadata. Every package/entry/component read uses O_RDONLY|O_NOFOLLOW with no fallback, validates descriptor fstat regular type and identity, rechecks the pathname identity around reading bytes from that same descriptor, and closes the handle in finally. Six deterministic swap cases cover package, entry, and component at both open-file and read-file boundaries; valid outside bytes are rejected with the exact unsupported error. Normal access proves five successful opens and five closes, and read-boundary rejection cases prove every opened handle closes. Focused verification: 37/37.
 
 TOCTOU regression mutation evidence: removing O_NOFOLLOW, descriptor identity comparison, and path identity checks caused all six open/read swap cases to fail with missing expected rejection while unrelated cases remained green; restoring the fix returned focused verification to 37/37. Fresh final verification: npm run check passed architecture validation and 115/115 Node tests; node --check and git diff --check passed.
+
+Remaining ancestor TOCTOU investigation reopened AC #5. The final-file O_NOFOLLOW correction still resolves package/src/component pathnames through mutable src and src/components ancestors after validation; deterministic ancestor replacement can therefore redirect later opens to an external tree. Before implementation, capability is gated on a descriptor-anchored, single-child traversal supported by this Node/Bun POSIX runtime; no pathname fallback or generalized sandbox will be introduced.
+
+Capability result (BLOCKED): on Darwin with Node v24.13.0 and Bun 1.3.14, opening /dev/fd/<open-directory-fd>/child.txt returns ENOENT after the directory pathname is replaced; the same probe fails in both runtimes. Node's exposed fs binding lists open/openFileHandle but no openat equivalent. Bun's documented directory APIs delegate to node:fs and its identical probe also returns ENOENT. Therefore the required single-child descriptor-relative traversal cannot be implemented through the supported JS filesystem surfaces on this platform. TASK-11 remains In Progress with AC #5 unchecked; no production/test change or unsafe fallback was made.
+
+TASK-10 commit 875362a resolves the capability blocker by making stable local directory topology during one observation explicit. Concurrent ancestor replacement/native openat traversal is outside groma.typescript-bun/v1, so TASK-11 needs no native helper, generalized sandbox, fallback, production change, or test change. Classification: the blocker was an upstream task-spec defect introduced during hardening and is resolved by the corrected contract; existing bb8502 behavior remains the intended implementation.
+
+Stable-snapshot finalization evidence after TASK-10 875362a: node --test test/source-observer.test.mjs passed 37/37. The exact supported-fixture oracle and inclusive source ranges prove AC #1/#2; repeated bytewise ordering proves AC #3; the bounded-access/no-execution probe proves AC #4; the documented unsupported fixture, sixteen representative v1 violations, seven static link/wrong-kind cases, and six direct final-file open/read swaps prove AC #5 with exact all-or-nothing rejection. npm run check passed architecture validation and 115/115 Node tests; node --check src/source-observer.mjs and git diff --check passed. No source or test changes were required after the contract correction.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Closed the remaining TASK-11 TOCTOU implementation defect. Validated bigint device/inode identity now survives physical discovery; required bytes are read only from O_NOFOLLOW descriptors whose fstat matches the validated regular file, with path identity checked around the same-descriptor read and handles closed in finally. Deterministic external-symlink swaps at open and read boundaries for package, entry, and component all return the exact unsupported error, while ordinary output, determinism, strict bytes, no-plan scope, and no execution remain unchanged. Verified with 37 focused tests, a failing security mutation, 115/115 full Node tests, architecture validation, syntax checking, and diff hygiene. Classification: implementation defect.
+Restored TASK-11 under TASK-10's corrected stable-snapshot contract. Existing bb8502 behavior remains unchanged: the observer returns exact deterministic declaration evidence, reads only the bounded source shape without execution, rejects unsupported/static-linked inputs all-or-nothing, and protects direct final-file reads with no-follow descriptor identity checks. Concurrent ancestor replacement/native traversal is now an explicit upstream non-goal. Verified 37/37 focused tests, architecture validation plus 115/115 full Node tests, syntax, and diff hygiene. Classification: upstream task-spec defect resolved by TASK-10 commit 875362a.
 <!-- SECTION:FINAL_SUMMARY:END -->
