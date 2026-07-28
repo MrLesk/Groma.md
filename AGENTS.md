@@ -56,3 +56,26 @@ caused by their fixes. Newly noticed non-critical improvements are follow-ups.
 Stop work when the supported product flow passes, the task acceptance criteria
 and Definition of Done are satisfied with evidence, and no authority-backed
 blocking finding remains.
+
+## Simplicity review
+
+After implementation and its focused checks pass, but before specification,
+quality, and finalization reviews, run one cold simplicity review.
+
+Give the reviewer the task, the diff, and the repository without conversation
+history. The reviewer must briefly explain the implemented flow from its entry
+point through its work to its result, then answer:
+
+1. Is this the simplest implementation that satisfies the acceptance criteria?
+2. What code, concepts, indirection, or tests can be deleted or collapsed?
+3. Can someone unfamiliar with the codebase quickly understand the flow?
+
+Findings may recommend deletion, consolidation, naming improvements, or
+clarification within the accepted scope. They may not introduce behavior,
+requirements, edge cases, compatibility, fallback, recovery, hardening, or
+future abstractions.
+
+The implementer applies accepted simplifications and reruns focused checks.
+There may be at most one targeted re-review, limited to the original simplicity
+findings and regressions caused by their fixes. The normal specification and
+quality reviews follow only after this gate passes.
