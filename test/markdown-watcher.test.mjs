@@ -59,6 +59,41 @@ function deferred() {
   return { promise, resolve }
 }
 
+test('reports only architecture fingerprint and watch scope', async t => {
+  const fixture = await createFixture(t)
+  const fake = fakeWatchers()
+  const accesses = []
+  const watcher = await startMarkdownWatcher(fixture.repositoryRoot, {
+    onError: error => assert.fail(error),
+    onFilesystemAccess(access) {
+      accesses.push({
+        operation: access.operation,
+        path: path.relative(fixture.repositoryRoot, access.filename),
+      })
+    },
+    onMarkdownChange: () => {},
+    watchFileSystem: fake.watchFileSystem,
+  })
+  t.after(() => watcher.close())
+
+  assert.deepEqual(
+    accesses
+      .filter(access => access.operation === 'watch')
+      .map(access => access.path)
+      .sort(),
+    [
+      path.join('groma', 'observed'),
+      path.join('groma', 'plans'),
+    ],
+  )
+  assert.ok(accesses.every(access => {
+    return access.path === path.join('groma', 'observed')
+      || access.path.startsWith(path.join('groma', 'observed', path.sep))
+      || access.path === path.join('groma', 'plans')
+      || access.path.startsWith(path.join('groma', 'plans', path.sep))
+  }))
+})
+
 test('detects a Markdown change when fs.watch omits the filename', async t => {
   const fixture = await createFixture(t)
   const fake = fakeWatchers()

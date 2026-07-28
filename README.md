@@ -64,6 +64,9 @@ npm run test:viewer:browser
 observed system-to-container-to-component navigation, all four plan comparison
 states, same-document component reloads, source-file silence, and deterministic
 C4 graph and projected-view equivalence across distinct viewer processes.
+Its dedicated Playwright configuration starts only disposable viewers on
+dynamic ports, so unrelated local services do not block the release gate.
 
 Screenshots and other browser-test artifacts stay outside the repository under
-`/tmp/groma-playwright-results`.
+`/tmp/groma-release-gate-playwright-results` for the isolated gate and
+`/tmp/groma-playwright-results` for the full browser suite.

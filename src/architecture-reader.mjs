@@ -37,7 +37,16 @@ function repositoryRelative(repositoryRoot, filename) {
   return path.relative(repositoryRoot, filename).split(path.sep).join('/')
 }
 
-async function listMarkdownFiles(directory) {
+function recordFilesystemAccess(
+  onFilesystemAccess,
+  operation,
+  filename,
+) {
+  onFilesystemAccess?.({ operation, filename })
+}
+
+async function listMarkdownFiles(directory, onFilesystemAccess) {
+  recordFilesystemAccess(onFilesystemAccess, 'read-directory', directory)
   const entries = await readdir(directory, { withFileTypes: true })
   const files = []
 
@@ -45,7 +54,7 @@ async function listMarkdownFiles(directory) {
     const entryPath = path.join(directory, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...await listMarkdownFiles(entryPath))
+      files.push(...await listMarkdownFiles(entryPath, onFilesystemAccess))
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       files.push(entryPath)
     }
@@ -83,11 +92,17 @@ function identifyRevision(revision) {
   }
 }
 
-async function parseDocument(repositoryRoot, revision, filename) {
+async function parseDocument(
+  repositoryRoot,
+  revision,
+  filename,
+  onFilesystemAccess,
+) {
   const sourceFilename = repositoryRelative(repositoryRoot, filename)
   let source
 
   try {
+    recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
     source = await readFile(filename, 'utf8')
   } catch (error) {
     throw new ArchitectureReadError(sourceFilename, revision, 'read', error)
@@ -111,19 +126,37 @@ async function parseDocument(repositoryRoot, revision, filename) {
   }
 }
 
-export async function loadRevision(repositoryRoot, revisionDescriptor) {
+export async function loadRevision(
+  repositoryRoot,
+  revisionDescriptor,
+  options = {},
+) {
+  const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const revision = deepFreeze(identifyRevision(revisionDescriptor))
   const revisionRoot = path.join(absoluteRepositoryRoot, revision.sourceDirectory)
   const contextFile = path.join(revisionRoot, 'README.md')
-  const markdownFiles = await listMarkdownFiles(revisionRoot)
+  const markdownFiles = await listMarkdownFiles(
+    revisionRoot,
+    onFilesystemAccess,
+  )
   const documentFiles = markdownFiles.filter(filename => filename !== contextFile)
 
-  const context = await parseDocument(absoluteRepositoryRoot, revision, contextFile)
+  const context = await parseDocument(
+    absoluteRepositoryRoot,
+    revision,
+    contextFile,
+    onFilesystemAccess,
+  )
   const documents = []
 
   for (const filename of documentFiles) {
-    documents.push(await parseDocument(absoluteRepositoryRoot, revision, filename))
+    documents.push(await parseDocument(
+      absoluteRepositoryRoot,
+      revision,
+      filename,
+      onFilesystemAccess,
+    ))
   }
 
   return deepFreeze({
@@ -133,9 +166,11 @@ export async function loadRevision(repositoryRoot, revisionDescriptor) {
   })
 }
 
-export async function loadArchitecture(repositoryRoot) {
+export async function loadArchitecture(repositoryRoot, options = {}) {
+  const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const plansRoot = path.join(absoluteRepositoryRoot, 'groma', 'plans')
+  recordFilesystemAccess(onFilesystemAccess, 'read-directory', plansRoot)
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
   const revisionDescriptors = [
     { kind: 'observed' },
@@ -148,7 +183,11 @@ export async function loadArchitecture(repositoryRoot) {
   const revisions = []
 
   for (const revision of revisionDescriptors) {
-    revisions.push(await loadRevision(absoluteRepositoryRoot, revision))
+    revisions.push(await loadRevision(
+      absoluteRepositoryRoot,
+      revision,
+      options,
+    ))
   }
 
   return deepFreeze(revisions)

@@ -17,8 +17,23 @@ const testRepositoryRoot = process.env.NODE_ENV === 'test'
 const repositoryRoot = testRepositoryRoot
   ? path.resolve(testRepositoryRoot)
   : defaultRepositoryRoot
+const testIoAudit = process.env.NODE_ENV === 'test'
+  && process.env.GROMA_TEST_IO_AUDIT === '1'
+  ? []
+  : null
 const eventEncoder = new TextEncoder()
 const reloadClients = new Set()
+
+function recordFilesystemAccess({ operation, filename }) {
+  if (!testIoAudit) return
+
+  testIoAudit.push({
+    operation,
+    path: path.relative(repositoryRoot, path.resolve(filename))
+      .split(path.sep)
+      .join('/'),
+  })
+}
 
 function argumentValue(name) {
   const index = Bun.argv.indexOf(name)
@@ -75,9 +90,20 @@ function revisionContext(contextDocument) {
 }
 
 async function buildPayload(generation) {
+  const readOptions = testIoAudit
+    ? { onFilesystemAccess: recordFilesystemAccess }
+    : undefined
   const [loadedRevision, loadedObservedRevision] = await Promise.all([
-    loadRevision(repositoryRoot, selectedRevision.descriptor),
-    loadRevision(repositoryRoot, { kind: 'observed' }),
+    loadRevision(
+      repositoryRoot,
+      selectedRevision.descriptor,
+      readOptions,
+    ),
+    loadRevision(
+      repositoryRoot,
+      { kind: 'observed' },
+      readOptions,
+    ),
   ])
   const model = buildArchitectureModel(loadedRevision)
   const observedModel = buildArchitectureModel(loadedObservedRevision)
@@ -150,6 +176,9 @@ const server = Bun.serve({
         return Response.json({
           ...payload,
           reloadError: reloadStatus.error,
+          ...(testIoAudit ? {
+            testIoAudit: [...testIoAudit],
+          } : {}),
         }, {
           headers: {
             'Cache-Control': 'no-store',
@@ -219,6 +248,9 @@ function scheduleReload() {
 }
 
 const markdownWatcher = await startMarkdownWatcher(repositoryRoot, {
+  ...(testIoAudit ? {
+    onFilesystemAccess: recordFilesystemAccess,
+  } : {}),
   onMarkdownChange: scheduleReload,
   onError(error) {
     const detail = error instanceof Error ? error.message : String(error)

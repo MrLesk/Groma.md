@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-28 00:15'
+updated_date: '2026-07-28 00:27'
 labels: []
 milestone: m-1
 dependencies:
@@ -19,7 +19,13 @@ references:
 modified_files:
   - README.md
   - package.json
+  - playwright.release-gate.config.mjs
   - e2e/release-gate.spec.js
+  - src/architecture-reader.mjs
+  - src/viewer/markdown-watcher.mjs
+  - src/viewer/server.mjs
+  - test/architecture-reader.test.mjs
+  - test/markdown-watcher.test.mjs
 priority: high
 type: task
 ordinal: 9000
@@ -55,6 +61,16 @@ Revision 02 is the release gate for the complete Markdown-to-view workflow. Usin
 7. Refactor viewer teardown and outer cleanup so exit assertions are collected without preventing process termination, permission restoration, or fixture removal, even when teardown itself fails.
 
 8. Run focused intentional assertion sanity checks where feasible, then focused/full Playwright, unit/architecture checks, production build, canonical Markdown/process/fixture hygiene, Backlog finalization, and direct commit.
+
+9. Give test:release-gate a dedicated Playwright config with no webServer entries, then prove it remains green while port 4177 is occupied.
+
+10. Bound viewer termination: await SIGTERM for a fixed interval, escalate to SIGKILL with another bound, and close/await stdout and stderr; add a deliberately SIGTERM-stalled child probe.
+
+11. Move partial-fixture cleanup into createFixture and add a forced post-mkdtemp setup-failure probe that requires the directory to be gone.
+
+12. Add a NODE_ENV=test-gated filesystem access audit threaded through the real Comark reader and Markdown watcher, expose it only in test payloads, fence a source mutation with a completed known Markdown generation, assert every read/watch stayed under groma, and add a static no-scanner guard.
+
+13. Repeat the isolated gate, occupied-port gate, full browser suite, unit/architecture checks, production build, intentional teardown/setup probes, canonical Markdown and residue checks; then refinalize and commit.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -69,10 +85,16 @@ Spec review reopened TASK-9: the initial gate did not prove same-document contin
 Review corrections implemented in the release gate only; no runtime defect was found. A unique window sentinel is set before the Markdown addition and remains identical after both add and edit DOM updates. The observed, pre-restart plan, and restarted child PIDs are validated, with the restart required to use a distinct PID. Structural snapshots now include full deterministic projectArchitectureView results for context, container, and Architecture workspace component focus paths, including comparison-status node data and relationship status/label projection. Startup failure terminates its child, and nested final cleanup restores permissions/removes the fixture even if stopViewer assertions throw. Controlled negative runs proved a forced page reload returns an undefined sentinel, an inverted PID expectation reports the real distinct PIDs, and an intentionally wrong exit-code expectation still leaves no viewer process or fixture. Restored focused gate passes 1/1.
 
 Fresh correction verification: npm run test:release-gate passed 1/1 after all controlled negative checks were reverted; npm run test:viewer:browser passed 8/8 flows; npm run check validated all four revisions and passed 68/68 Node tests; Bun production build bundled 146 modules. The fresh screenshot shows all four comparison states, both projected relationships, and the renamed live component. git diff --check and canonical groma/ invariance passed, with no disposable fixture or viewer process remaining.
+
+Quality review reopened TASK-9: the release command inherits unrelated fixed-port webServers, viewer teardown is unbounded and does not await stdio, createFixture can leak after partial setup, and source silence uses a fixed delay rather than auditable read/watch scope plus a generation fence. Acceptance criteria 3–5 are unchecked until the isolated deterministic harness is verified.
+
+Implemented the deterministic harness corrections. test:release-gate now uses playwright.release-gate.config.mjs with no webServer or baseURL and passed 4/4 while a real TCP listener occupied 127.0.0.1:4177. stopViewer has bounded SIGTERM, bounded SIGKILL escalation, and bounded stdout/stderr completion; a SIGTERM-ignoring child probe escalates to SIGKILL and confirms ESRCH afterward. createFixture owns cleanup from immediately after mkdtemp; a forced setup hook failure proves ENOENT. A NODE_ENV=test/GROMA_TEST_IO_AUDIT seam records actual reader/watcher read-directory/read-file/watch paths in the test API only. Source mutation is followed by a known README generation fence, then full model/projection equality and an all-access-under-groma assertion; the fixed 500ms delay is removed. A static production-src scanner guard and focused reader/watcher audit tests are included. Current isolated gate passes repeatedly at 4/4; focused audit tests pass 11/11.
+
+Fresh final quality verification: the isolated release command passed 4/4 repeatedly, including once with 127.0.0.1:4177 actively occupied; the full Playwright suite passed 11/11; npm run check validated all four revisions and passed 70/70 Node tests; Bun bundled 146 modules. The SIGTERM-stall probe exercised bounded SIGKILL and awaited stdio, the forced partial-setup probe removed its root, the source mutation was fenced by a completed Markdown generation with structural equality and audited groma-only read/watch scope, and the static guard found no scanner or unexpected production filesystem reader. Fresh screenshot inspection remained readable. git diff --check and canonical groma/ invariance passed; no port listener, viewer/stall process, or disposable release fixture remained.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed TASK-9 and its rigor correction. The controlled release gate now proves live Markdown updates preserve the exact browser document, restart uses a distinct process, and full deterministic context/container/component projections—including comparison statuses and relationships—are structurally identical after restart. Teardown remains fixture/process-safe even when its own assertions fail. Verified by deliberate negative checks, 1/1 focused gate, 8/8 browser flows, 68 Node tests, successful 146-module build, unchanged canonical Markdown, and clean process/fixture hygiene.
+Completed TASK-9 with an isolated and deterministic Revision 02 release harness. The release command owns dynamic ports, survives unrelated port 4177 use, bounds and escalates process teardown while awaiting stdio, owns partial-fixture cleanup, and proves application read/watch scope through a test-only audit plus Markdown generation fence and static no-scanner guard. Verified by repeated 4/4 isolated gates, 11/11 full browser flows, 70 Node tests, a 146-module build, unchanged canonical Markdown, and clean process/fixture residue checks.
 <!-- SECTION:FINAL_SUMMARY:END -->

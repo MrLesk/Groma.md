@@ -1,9 +1,19 @@
 import { expect, test } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { finished } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
 import { compareArchitectureModels } from '../src/architecture-comparison.mjs'
@@ -13,6 +23,9 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
+const gracefulStopTimeoutMs = 3_000
+const forcedStopTimeoutMs = 3_000
+const stdioCloseTimeoutMs = 1_000
 
 function frontmatter(fields) {
   return [
@@ -153,24 +166,77 @@ async function writeRevision(repositoryRoot, revision) {
   }
 }
 
-async function createFixture() {
+async function createFixture(options = {}) {
+  const { afterRootCreated } = options
   const repositoryRoot = await mkdtemp(
     path.join(os.tmpdir(), 'groma-release-gate-'),
   )
-  await Promise.all([
-    writeRevision(repositoryRoot, 'observed'),
-    writeRevision(repositoryRoot, 'plan'),
-  ])
-
   const sourceRoot = path.join(repositoryRoot, 'src')
-  await mkdir(sourceRoot)
-  await writeFile(
-    path.join(sourceRoot, 'must-not-be-read.ts'),
-    'throw new Error("architecture workflow read project source")\n',
-  )
-  await chmod(sourceRoot, 0o000)
 
-  return { repositoryRoot, sourceRoot }
+  try {
+    await afterRootCreated?.(repositoryRoot)
+    await Promise.all([
+      writeRevision(repositoryRoot, 'observed'),
+      writeRevision(repositoryRoot, 'plan'),
+    ])
+
+    await mkdir(sourceRoot)
+    await writeFile(
+      path.join(sourceRoot, 'must-not-be-read.ts'),
+      'throw new Error("architecture workflow read project source")\n',
+    )
+    await chmod(sourceRoot, 0o000)
+
+    return { repositoryRoot, sourceRoot }
+  } catch (error) {
+    await chmod(sourceRoot, 0o755).catch(() => {})
+    await rm(repositoryRoot, { recursive: true, force: true })
+    throw error
+  }
+}
+
+class ProcessTimeoutError extends Error {
+  constructor(label, timeoutMs) {
+    super(`${label} did not complete within ${timeoutMs}ms`)
+    this.name = 'ProcessTimeoutError'
+  }
+}
+
+function within(promise, timeoutMs, label) {
+  let timer
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new ProcessTimeoutError(label, timeoutMs))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => {
+    clearTimeout(timer)
+  })
+}
+
+function trackProcess(child, stderr) {
+  return {
+    child,
+    exit: once(child, 'exit'),
+    stderr,
+    stdio: Promise.allSettled([
+      finished(child.stdout),
+      finished(child.stderr),
+    ]),
+  }
+}
+
+async function closeProcessStdio(viewer, timeoutMs) {
+  try {
+    await within(viewer.stdio, timeoutMs, 'process stdio closure')
+  } catch (error) {
+    if (!(error instanceof ProcessTimeoutError)) throw error
+
+    viewer.child.stdout.destroy()
+    viewer.child.stderr.destroy()
+    await within(viewer.stdio, timeoutMs, 'forced process stdio closure')
+  }
 }
 
 function waitForViewerUrl(child, stderr) {
@@ -222,30 +288,72 @@ async function startViewer(repositoryRoot, revision) {
       env: {
         ...process.env,
         GROMA_TEST_REPOSITORY_ROOT: repositoryRoot,
+        GROMA_TEST_IO_AUDIT: '1',
         NODE_ENV: 'test',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   )
-  const exit = once(child, 'exit')
+  const viewer = trackProcess(child, stderr)
   try {
     const url = await waitForViewerUrl(child, stderr)
-    return { child, exit, stderr, url }
+    return { ...viewer, url }
   } catch (error) {
     child.kill('SIGKILL')
-    await exit.catch(() => {})
+    await within(
+      viewer.exit,
+      forcedStopTimeoutMs,
+      'viewer startup SIGKILL',
+    ).catch(() => {})
+    await closeProcessStdio(viewer, stdioCloseTimeoutMs).catch(() => {})
     throw error
   }
 }
 
-async function stopViewer(viewer) {
-  viewer.child.kill('SIGTERM')
-  const [code, signal] = await viewer.exit
-  expect({ code, signal, stderr: viewer.stderr.value }).toEqual({
-    code: 0,
-    signal: null,
+async function stopViewer(viewer, options = {}) {
+  const {
+    termTimeoutMs = gracefulStopTimeoutMs,
+    killTimeoutMs = forcedStopTimeoutMs,
+    stdioTimeoutMs = stdioCloseTimeoutMs,
+  } = options
+  let escalated = false
+  let exitResult
+
+  try {
+    viewer.child.kill('SIGTERM')
+    try {
+      exitResult = await within(
+        viewer.exit,
+        termTimeoutMs,
+        'viewer SIGTERM',
+      )
+    } catch (error) {
+      if (!(error instanceof ProcessTimeoutError)) throw error
+
+      escalated = true
+      viewer.child.kill('SIGKILL')
+      exitResult = await within(
+        viewer.exit,
+        killTimeoutMs,
+        'viewer SIGKILL',
+      )
+    }
+  } finally {
+    await closeProcessStdio(viewer, stdioTimeoutMs)
+  }
+
+  const [code, signal] = exitResult
+  expect({
+    code,
+    signal,
+    stderr: viewer.stderr.value,
+  }).toEqual({
+    code: escalated ? null : 0,
+    signal: escalated ? 'SIGKILL' : null,
     stderr: '',
   })
+
+  return { code, escalated, signal }
 }
 
 async function modelPayload(page, viewerUrl) {
@@ -289,6 +397,146 @@ function structuralSnapshot(payload) {
     ),
   }
 }
+
+async function listFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const files = []
+
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...await listFiles(entryPath))
+    } else if (entry.isFile()) {
+      files.push(entryPath)
+    }
+  }
+  return files.sort()
+}
+
+test('contains no source scanner implementation', async () => {
+  const sourceRoot = path.join(projectRoot, 'src')
+  const sourceFiles = await listFiles(sourceRoot)
+  const scannerPaths = sourceFiles
+    .map(filename => path.relative(sourceRoot, filename))
+    .filter(filename => /scanner/i.test(filename))
+  const scannerSymbols = []
+  const filesystemReaders = []
+
+  for (const filename of sourceFiles.filter(candidate => {
+    return /\.(?:js|jsx|mjs)$/.test(candidate)
+  })) {
+    const source = await readFile(filename, 'utf8')
+    const relativeFilename = path.relative(sourceRoot, filename)
+    if (
+      /source[-_\s]?scanner|project[-_\s]?scanner|scanProjectSource|scanSourceTree/i
+        .test(source)
+    ) {
+      scannerSymbols.push(relativeFilename)
+    }
+    if (
+      /from ['"]node:fs(?:\/promises)?['"]|Bun\.(?:file|Glob)\b/
+        .test(source)
+    ) {
+      filesystemReaders.push(relativeFilename)
+    }
+  }
+
+  expect(scannerPaths).toEqual([])
+  expect(scannerSymbols).toEqual([])
+  expect(filesystemReaders.sort()).toEqual([
+    'architecture-reader.mjs',
+    path.join('viewer', 'markdown-watcher.mjs'),
+  ])
+})
+
+test('removes a partial fixture when setup fails', async () => {
+  let partialRoot
+  let setupError
+
+  try {
+    await createFixture({
+      afterRootCreated(repositoryRoot) {
+        partialRoot = repositoryRoot
+        throw new Error('forced fixture setup failure')
+      },
+    })
+  } catch (error) {
+    setupError = error
+  }
+
+  expect(setupError?.message).toBe('forced fixture setup failure')
+  const accessResult = await access(partialRoot).then(
+    () => 'exists',
+    error => error.code,
+  )
+  expect(accessResult).toBe('ENOENT')
+})
+
+test('escalates a stalled viewer and closes its stdio', async () => {
+  const stderr = { value: '' }
+  const child = spawn(
+    process.execPath,
+    [
+      '-e',
+      [
+        "process.on('SIGTERM', () => {})",
+        "process.stdout.write('ready\\n')",
+        'setInterval(() => {}, 1_000)',
+      ].join(';'),
+    ],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', chunk => {
+    stderr.value += chunk
+  })
+  const ready = new Promise(resolve => {
+    child.stdout.on('data', chunk => {
+      if (chunk.includes('ready')) resolve()
+    })
+  })
+  const stalledViewer = trackProcess(child, stderr)
+  let stopped = false
+  let result
+
+  try {
+    await within(ready, 1_000, 'stalled viewer startup')
+    result = await stopViewer(stalledViewer, {
+      termTimeoutMs: 50,
+      killTimeoutMs: 1_000,
+      stdioTimeoutMs: 1_000,
+    })
+    stopped = true
+  } finally {
+    if (!stopped) {
+      child.kill('SIGKILL')
+      await within(
+        stalledViewer.exit,
+        1_000,
+        'stalled viewer probe cleanup',
+      ).catch(() => {})
+      await closeProcessStdio(stalledViewer, 1_000).catch(() => {})
+    }
+  }
+
+  expect(result).toEqual({
+    code: null,
+    escalated: true,
+    signal: 'SIGKILL',
+  })
+  const processState = (() => {
+    try {
+      process.kill(child.pid, 0)
+      return 'running'
+    } catch (error) {
+      return error.code
+    }
+  })()
+  expect(processState).toBe('ESRCH')
+})
 
 test('verifies the complete Markdown-to-view release gate', async ({
   page,
@@ -424,18 +672,51 @@ test('verifies the complete Markdown-to-view release gate', async ({
       path.join(sourceRoot, 'must-not-be-read.ts'),
       'export const sourceChangeMustStayInvisible = true\n',
     )
-    await page.waitForTimeout(500)
-    const afterSourceChange = await modelPayload(page, viewer.url)
-    expect(afterSourceChange.generation).toBe(beforeSourceChange.generation)
-    expect(structuralSnapshot(afterSourceChange)).toEqual(
+    await writeFile(
+      path.join(
+        repositoryRoot,
+        'groma/plans/02-live-viewer/README.md',
+      ),
+      [
+        '# Revision 02 — Controlled live viewer',
+        '',
+        'Named release-gate plan.',
+        '',
+        '<!-- source-silence generation fence -->',
+        '',
+      ].join('\n'),
+    )
+    await expect.poll(async () => {
+      return (await modelPayload(page, viewer.url)).generation
+    }).toBeGreaterThan(beforeSourceChange.generation)
+    const afterSourceFence = await modelPayload(page, viewer.url)
+    expect(structuralSnapshot(afterSourceFence)).toEqual(
       structuralSnapshot(beforeSourceChange),
     )
+    expect(afterSourceFence.testIoAudit).not.toHaveLength(0)
+    expect(
+      [...new Set(
+        afterSourceFence.testIoAudit
+          .filter(entry => entry.operation === 'watch')
+          .map(entry => entry.path),
+      )].sort(),
+    ).toEqual(['groma/observed', 'groma/plans'])
+    expect(
+      afterSourceFence.testIoAudit.filter(entry => {
+        return !/^groma\/(?:observed|plans)(?:\/|$)/.test(entry.path)
+      }),
+    ).toEqual([])
+    expect(
+      [...new Set(
+        afterSourceFence.testIoAudit.map(entry => entry.operation),
+      )].sort(),
+    ).toEqual(['read-directory', 'read-file', 'watch'])
 
     await page.screenshot({
       path: testInfo.outputPath('release-gate-live-component.png'),
       fullPage: true,
     })
-    const beforeRestart = structuralSnapshot(afterSourceChange)
+    const beforeRestart = structuralSnapshot(afterSourceFence)
     expect(beforeRestart.projections.context.level).toBe('context')
     expect(beforeRestart.projections.container.level).toBe('container')
     expect(beforeRestart.projections.component.level).toBe('component')

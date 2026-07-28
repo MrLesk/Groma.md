@@ -101,6 +101,32 @@ test('returns each plan README as revision context rather than a C4 document', a
   }))
 })
 
+test('reports the selected revision filesystem read scope', async () => {
+  const accesses = []
+  await loadRevision(
+    repositoryRoot,
+    { kind: 'observed' },
+    {
+      onFilesystemAccess(access) {
+        accesses.push({
+          operation: access.operation,
+          path: path.relative(repositoryRoot, access.filename),
+        })
+      },
+    },
+  )
+
+  assert.ok(accesses.length > 0)
+  assert.deepEqual(
+    [...new Set(accesses.map(access => access.operation))].sort(),
+    ['read-directory', 'read-file'],
+  )
+  assert.ok(accesses.every(access => {
+    return access.path === path.join('groma', 'observed')
+      || access.path.startsWith(path.join('groma', 'observed', path.sep))
+  }))
+})
+
 test('loads a plan named observed independently from the observed revision', async t => {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-reader-'))
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))

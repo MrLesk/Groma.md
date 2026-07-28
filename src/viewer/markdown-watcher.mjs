@@ -5,32 +5,62 @@ import path from 'node:path'
 
 const watchedDirectories = ['groma/observed', 'groma/plans']
 
-async function addMarkdownToFingerprint(hash, directory, repositoryRoot) {
+function recordFilesystemAccess(
+  onFilesystemAccess,
+  operation,
+  filename,
+) {
+  onFilesystemAccess?.({ operation, filename })
+}
+
+async function addMarkdownToFingerprint(
+  hash,
+  directory,
+  repositoryRoot,
+  onFilesystemAccess,
+) {
+  recordFilesystemAccess(onFilesystemAccess, 'read-directory', directory)
   const entries = await readdir(directory, { withFileTypes: true })
   entries.sort((left, right) => left.name.localeCompare(right.name))
 
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
-      await addMarkdownToFingerprint(hash, entryPath, repositoryRoot)
+      await addMarkdownToFingerprint(
+        hash,
+        entryPath,
+        repositoryRoot,
+        onFilesystemAccess,
+      )
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       hash.update(path.relative(repositoryRoot, entryPath))
       hash.update('\0')
+      recordFilesystemAccess(onFilesystemAccess, 'read-file', entryPath)
       hash.update(await readFile(entryPath))
       hash.update('\0')
     }
   }
 }
 
-async function markdownFingerprint(repositoryRoot, watchRoots) {
+async function markdownFingerprint(
+  repositoryRoot,
+  watchRoots,
+  onFilesystemAccess,
+) {
   const hash = createHash('sha256')
   for (const watchRoot of watchRoots) {
-    await addMarkdownToFingerprint(hash, watchRoot, repositoryRoot)
+    await addMarkdownToFingerprint(
+      hash,
+      watchRoot,
+      repositoryRoot,
+      onFilesystemAccess,
+    )
   }
   return hash.digest('hex')
 }
 
-async function directoryContainsMarkdown(directory) {
+async function directoryContainsMarkdown(directory, onFilesystemAccess) {
+  recordFilesystemAccess(onFilesystemAccess, 'read-directory', directory)
   const entries = await readdir(directory, { withFileTypes: true })
   return entries.some(entry => {
     return entry.isFile() && entry.name.endsWith('.md')
@@ -40,6 +70,7 @@ async function directoryContainsMarkdown(directory) {
 export async function startMarkdownWatcher(repositoryRoot, options) {
   const {
     fingerprintMarkdown = markdownFingerprint,
+    onFilesystemAccess,
     onError,
     onMarkdownChange,
     watchFileSystem = watch,
@@ -47,7 +78,11 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
   const watchRoots = watchedDirectories.map(relativeDirectory => {
     return path.join(repositoryRoot, relativeDirectory)
   })
-  let fingerprint = await fingerprintMarkdown(repositoryRoot, watchRoots)
+  let fingerprint = await fingerprintMarkdown(
+    repositoryRoot,
+    watchRoots,
+    onFilesystemAccess,
+  )
   let eventSequence = 0
   let closed = false
   let fingerprintQueue = Promise.resolve()
@@ -74,6 +109,7 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
       const nextFingerprint = await fingerprintMarkdown(
         repositoryRoot,
         watchRoots,
+        onFilesystemAccess,
       )
       if (closed || nextFingerprint === fingerprint) return
 
@@ -95,9 +131,13 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
 
     const changedPath = path.join(watchRoot, filename)
     try {
+      recordFilesystemAccess(onFilesystemAccess, 'stat', changedPath)
       if (
         (await stat(changedPath)).isDirectory()
-        && await directoryContainsMarkdown(changedPath)
+        && await directoryContainsMarkdown(
+          changedPath,
+          onFilesystemAccess,
+        )
       ) {
         await refreshFingerprint()
       }
@@ -107,6 +147,7 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
   }
 
   for (const watchRoot of watchRoots) {
+    recordFilesystemAccess(onFilesystemAccess, 'watch', watchRoot)
     const handle = watchFileSystem(
       watchRoot,
       { recursive: true },
