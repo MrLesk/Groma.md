@@ -357,6 +357,13 @@ function collectRelationshipTables(nodes) {
   return tables
 }
 
+function isSingleLineReadableName(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value === value.trim()
+    && !/[\p{C}\p{Zl}\p{Zp}]/u.test(value)
+}
+
 async function parseObservedDocument(
   repositoryRoot,
   filename,
@@ -388,9 +395,12 @@ async function parseObservedDocument(
   const headings = tree.nodes
     .map((node, index) => ({ index, node }))
     .filter(({ node }) => node[0] === 'h1')
-  const name = textFromNode(headings[0]?.node).trim()
-  if (headings.length !== 1 || name.length === 0) {
+  if (headings.length !== 1) {
     fail(`${sourceFilename} requires one level-one heading with a readable name`)
+  }
+  const name = textFromNode(headings[0].node)
+  if (!isSingleLineReadableName(name)) {
+    fail(`${sourceFilename} requires a single-line readable name`)
   }
   const prose = tree.nodes[headings[0].index + 1]
   if (prose?.[0] !== 'p' || textFromNode(prose).trim().length === 0) {
@@ -714,7 +724,7 @@ function renderComponent(component, entryPoints, targetIndex) {
   return sections.join('\n')
 }
 
-async function validateRenderedDocument(component, source) {
+async function validateRenderedDocument(component, source, targetIndex) {
   let tree
   try {
     tree = await parse(source)
@@ -729,6 +739,58 @@ async function validateRenderedDocument(component, source) {
     })
   ) {
     fail(`generated component ${component.id} has invalid frontmatter`)
+  }
+
+  const relationshipTables = collectRelationshipTables(tree.nodes)
+  if (component.relationships.length === 0) {
+    if (relationshipTables.length !== 0) {
+      fail(`generated component ${component.id} has unexpected relationships`)
+    }
+    return
+  }
+  if (
+    relationshipTables.length !== 1
+    || !relationshipTables[0].inRelationshipsSection
+  ) {
+    fail(`generated component ${component.id} has invalid relationships`)
+  }
+  const table = relationshipTables[0].node
+  const headers = tableHeaderNames(table)
+  if (
+    headers.length !== relationshipColumns.length
+    || relationshipColumns.some((column, index) => headers[index] !== column)
+  ) {
+    fail(`generated component ${component.id} has invalid relationship columns`)
+  }
+  const rows = collectNodes(table, 'tr').slice(1)
+  if (rows.length !== component.relationships.length) {
+    fail(`generated component ${component.id} has invalid relationship rows`)
+  }
+  const sourceFilename = `${ownedOutputDirectory}/${component.id}.md`
+  for (const [index, relationship] of component.relationships.entries()) {
+    const cells = rows[index].slice(2).filter(node => node[0] === 'td')
+    if (cells.length !== relationshipColumns.length) {
+      fail(`generated component ${component.id} has invalid relationship cells`)
+    }
+    const links = collectNodes(cells[0], 'a')
+    const target = targetIndex.get(relationship.targetId)
+    if (
+      links.length !== 1
+      || target === undefined
+      || relationshipTargetFilename(
+        sourceFilename,
+        links[0][1]?.href,
+      ) !== target.sourceFilename
+      || textFromNode(links[0]) !== target.name
+    ) {
+      fail(`generated component ${component.id} has invalid relationship target`)
+    }
+    if (
+      textFromNode(cells[1]) !== relationship.description
+      || textFromNode(cells[2]) !== relationship.technology
+    ) {
+      fail(`generated component ${component.id} has invalid relationship text`)
+    }
   }
 }
 
@@ -874,7 +936,7 @@ export async function emitObservedComponents(
 
   for (const component of components) {
     const source = renderComponent(component, entryPoints, targetIndex)
-    await validateRenderedDocument(component, source)
+    await validateRenderedDocument(component, source, targetIndex)
     renderedComponents.push([component.id, source])
   }
 

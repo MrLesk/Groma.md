@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 01:57'
+updated_date: '2026-07-28 02:09'
 labels: []
 milestone: m-2
 dependencies:
@@ -46,11 +46,10 @@ Build the separate Markdown emitter shown in the Revision 03 architecture plan. 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Add disposable-repository tests first for canonical rendering from the TASK-10 observation fixture, exact escaping/link/evidence text, stale owned-file replacement, byte-identical repeats, preservation of observed sentinels, inaccessible-plan isolation, Comark parsing, and TASK-4 loading.
-2. Add failure-first tests for missing/duplicate relationship targets and unsafe owned-directory preconditions, proving validation completes before replacement and unrelated data remains byte-identical.
-3. Implement a standalone Markdown emitter that validates the bounded observation record, builds a Comark-derived observed target index outside the fixed owned subtree, applies TASK-10 unsigned UTF-8 bytewise ordering and single-pass punctuation escaping, renders canonical component documents, and validates staged Markdown.
-4. Replace only groma/observed/systems/groma/containers/scanner/components/ using an in-subtree staged transaction and backup/rollback after real-directory ownership checks; do not import the observer or inspect source/plans.
-5. Run focused tests, architecture validation, the full Node and browser suites, inspect diff/ownership/read-scope evidence, finalize TASK-12 through Backlog, and commit the scoped change on main.
+1. Add a disposable-repository regression whose canonical target H1 uses a decoded newline entity; assert emission rejects before mutation and the complete observed tree stays byte-identical.
+2. Reject observed target display names unless the Comark-derived text is a non-empty single-line printable value suitable for deterministic Markdown link-label rendering.
+3. Extend generated-document validation to inspect the Comark relationship AST: exact canonical columns, one link per row, three cells, and the expected resolved target for every emitted relationship.
+4. Run focused and full verification, record the implementation-defect correction, recheck the affected acceptance criteria, finalize TASK-12, and commit the focused change on main.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -63,10 +62,14 @@ Replacement uses a staged transaction wholly inside groma/observed/systems/groma
 Review corrections: separated replacement commit from cleanup so a partial backup cleanup cannot trigger destructive rollback; cleanup retries without disturbing installed output. Canonical target indexing now validates TASK-1 paths, frontmatter, heading/prose, C4 containment, external semantics, and relationship tables/links before accepting an observed element. Red/green regressions cover partial cleanup and noncanonical targets. Independent re-review found no remaining Critical, Important, or Minor issues.
 
 Final verification: focused emitter tests passed 9/9; npm run check passed architecture validation and 125/125 Node tests; npm run test:viewer:browser passed 11/11 after adding the emitter to the explicit filesystem-reader isolation inventory; node syntax and git diff checks passed.
+
+Reopened after quality review found an implementation defect: Comark can decode an entity such as &#10; inside an observed H1 into a newline. The target index accepted that name, escaping did not remove the control, and rendered validation checked only frontmatter, so a generated relationship row could be split before replacement.
+
+Correction implemented with TDD. Comark-derived observed display names now retain their exact text and reject Unicode category C controls/formats plus line and paragraph separators, covering decoded newline, bidi/zero-width format controls, emptiness, and edge whitespace before any staging. Generated Markdown is re-parsed and every relationship table is validated for canonical headers, exact row/cell counts, one link, exact decoded text, and the expected revision-local target path. Disposable regressions for &#10; and &#8203; both prove zero mutation operations and byte-identical observed trees on rejection. Independent re-review found no remaining Critical, Important, or Minor issues. Classification: implementation defect.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the separate deterministic Markdown emitter for groma.typescript-bun/v1 observations. It emits Comark-loadable canonical scanner components with bytewise ordering, exact TASK-10 escaping, readable relative relationships, and source evidence; validates canonical observed relationship targets; and confines staged replacement, stale removal, retry, and rollback to the exact owned subtree while never reading plans or source. Disposable-repository tests prove preservation, plan isolation, preflight failure safety, rollback/cleanup behavior, Comark/TASK-4 loading, and byte-identical repeats. Verified 9/9 focused, 125/125 full Node, 11/11 browser, syntax/diff hygiene, and independent review with no remaining findings.
+Implemented and corrected the deterministic groma.typescript-bun/v1 Markdown emitter. Canonical scanner components use TASK-10 bytewise ordering/escaping, readable relative links, and source evidence; canonical observed targets are validated before rendering; unsafe decoded target names are rejected before mutation; and generated relationship ASTs are checked against exact targets after Comark parsing. Replacement remains confined to the owned subtree with rollback/cleanup safeguards and no source or plan reads. Verified through disposable red/green regressions, focused/full/browser suites, syntax/diff hygiene, and independent review.
 <!-- SECTION:FINAL_SUMMARY:END -->

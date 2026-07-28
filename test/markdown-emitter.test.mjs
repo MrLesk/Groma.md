@@ -40,6 +40,14 @@ const ownedRelativePath = path.join(
   'scanner',
   'components',
 )
+const mutationOperations = new Set([
+  'make-directory',
+  'make-temporary-directory',
+  'remove',
+  'rename',
+  'rename-destination',
+  'write-file',
+])
 
 const documents = {
   observedReadme: '# Observed architecture\n',
@@ -249,14 +257,6 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
       && !access.path.startsWith(`fixtures${path.sep}`)
       && !access.path.startsWith(`src${path.sep}`)
   }))
-  const mutationOperations = new Set([
-    'make-directory',
-    'make-temporary-directory',
-    'remove',
-    'rename',
-    'rename-destination',
-    'write-file',
-  ])
   const mutationsOutsideOwned = accesses
     .filter(access => mutationOperations.has(access.operation))
     .filter(access => {
@@ -546,6 +546,90 @@ Markdown.
     await snapshotDirectory(path.join(root, 'groma', 'observed')),
     beforeObserved,
   )
+})
+
+test('a decoded newline in a target heading rejects before any mutation', async t => {
+  const root = await createRepository(t)
+  const observation = await readObservation()
+  await writeDocument(
+    root,
+    'groma/observed/systems/groma/containers/architecture-workspace/container.md',
+    `---
+id: architecture-workspace
+kind: container
+parent: groma
+---
+
+# Architecture &#10; workspace
+
+Stores architecture files.
+`,
+  )
+  const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
+  const { emitObservedComponents } = await loadEmitter()
+  const accesses = []
+
+  const error = await emitObservedComponents(root, observation, {
+    onFilesystemAccess(access) {
+      accesses.push(access)
+    },
+  }).then(
+    () => null,
+    emissionError => emissionError,
+  )
+  const afterObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
+
+  assert.match(
+    error?.message ?? '',
+    /requires a single-line readable name/,
+  )
+  assert.equal(
+    accesses.some(access => mutationOperations.has(access.operation)),
+    false,
+  )
+  assert.deepEqual(afterObserved, beforeObserved)
+})
+
+test('an invisible format control target heading rejects before any mutation', async t => {
+  const root = await createRepository(t)
+  const observation = await readObservation()
+  await writeDocument(
+    root,
+    'groma/observed/systems/groma/containers/architecture-workspace/container.md',
+    `---
+id: architecture-workspace
+kind: container
+parent: groma
+---
+
+# &#8203;
+
+Stores architecture files.
+`,
+  )
+  const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
+  const { emitObservedComponents } = await loadEmitter()
+  const accesses = []
+
+  const error = await emitObservedComponents(root, observation, {
+    onFilesystemAccess(access) {
+      accesses.push(access)
+    },
+  }).then(
+    () => null,
+    emissionError => emissionError,
+  )
+  const afterObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
+
+  assert.match(
+    error?.message ?? '',
+    /requires a single-line readable name/,
+  )
+  assert.equal(
+    accesses.some(access => mutationOperations.has(access.operation)),
+    false,
+  )
+  assert.deepEqual(afterObserved, beforeObserved)
 })
 
 test('rejects a linked owned target without changing its destination', async t => {
