@@ -62,8 +62,8 @@ npm run test:viewer:browser
 
 `test:release-gate` uses a disposable controlled Markdown repository to prove
 observed system-to-container-to-component navigation, all four plan comparison
-states, same-page component reloads, source-file silence, and structural
-equivalence after a viewer restart.
+states, same-document component reloads, source-file silence, and deterministic
+C4 graph and projected-view equivalence across distinct viewer processes.
 
 Screenshots and other browser-test artifacts stay outside the repository under
 `/tmp/groma-playwright-results`.

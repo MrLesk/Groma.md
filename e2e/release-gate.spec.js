@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compareArchitectureModels } from '../src/architecture-comparison.mjs'
+import { projectArchitectureView } from '../src/viewer/projection.mjs'
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -21,18 +22,36 @@ function frontmatter(fields) {
   ].join('\n')
 }
 
+function relationshipTable(rows) {
+  if (rows.length === 0) return ''
+
+  return [
+    '',
+    '## Relationships',
+    '',
+    '| Target | Description | Technology |',
+    '| --- | --- | --- |',
+    ...rows.map(row => {
+      return `| [${row.target}](${row.href}) | ${row.description} | ${row.technology} |`
+    }),
+    '',
+  ].join('\n')
+}
+
 async function writeDocument(
   revisionRoot,
   relativeFilename,
   fields,
   title,
   description,
+  relationships = [],
 ) {
   const filename = path.join(revisionRoot, relativeFilename)
   await mkdir(path.dirname(filename), { recursive: true })
   await writeFile(
     filename,
-    `${frontmatter(fields)}\n\n# ${title}\n\n${description}\n`,
+    `${frontmatter(fields)}\n\n# ${title}\n\n${description}\n`
+      + relationshipTable(relationships),
   )
 }
 
@@ -55,6 +74,23 @@ async function writeRevision(repositoryRoot, revision) {
     { id: 'architect', kind: 'person' },
     'Architect',
     'Reads the controlled architecture.',
+    [
+      {
+        target: 'Groma',
+        href: '../systems/groma/system.md',
+        description: isPlan
+          ? 'Reviews planned Groma'
+          : 'Reviews current Groma',
+        technology: isPlan ? 'Browser' : 'Markdown',
+      },
+      {
+        target: 'Architecture workspace',
+        href:
+          '../systems/groma/containers/architecture-workspace/container.md',
+        description: 'Reads architecture revisions',
+        technology: 'Markdown',
+      },
+    ],
   )
   await writeDocument(
     revisionRoot,
@@ -192,8 +228,14 @@ async function startViewer(repositoryRoot, revision) {
     },
   )
   const exit = once(child, 'exit')
-  const url = await waitForViewerUrl(child, stderr)
-  return { child, exit, stderr, url }
+  try {
+    const url = await waitForViewerUrl(child, stderr)
+    return { child, exit, stderr, url }
+  } catch (error) {
+    child.kill('SIGKILL')
+    await exit.catch(() => {})
+    throw error
+  }
 }
 
 async function stopViewer(viewer) {
@@ -215,6 +257,15 @@ async function modelPayload(page, viewerUrl) {
 }
 
 function structuralSnapshot(payload) {
+  const projectionOptions = {
+    observedModel: payload.observedModel,
+  }
+  const focusPaths = {
+    context: [],
+    container: [payload.focalSystemId],
+    component: [payload.focalSystemId, 'architecture-workspace'],
+  }
+
   return {
     focalSystemId: payload.focalSystemId,
     model: payload.model,
@@ -222,6 +273,19 @@ function structuralSnapshot(payload) {
     comparison: compareArchitectureModels(
       payload.observedModel,
       payload.model,
+    ),
+    projections: Object.fromEntries(
+      Object.entries(focusPaths).map(([name, focusPath]) => {
+        return [
+          name,
+          projectArchitectureView(
+            payload.model,
+            payload.focalSystemId,
+            focusPath,
+            projectionOptions,
+          ),
+        ]
+      }),
     ),
   }
 }
@@ -245,6 +309,8 @@ test('verifies the complete Markdown-to-view release gate', async ({
 
   try {
     viewer = await startViewer(repositoryRoot, 'observed')
+    const firstViewerPid = viewer.child.pid
+    expect(firstViewerPid).toBeGreaterThan(0)
     await page.setViewportSize({ width: 1440, height: 960 })
     await page.goto(viewer.url)
     await expect(page).toHaveTitle('Groma · Architecture viewer')
@@ -272,6 +338,8 @@ test('verifies the complete Markdown-to-view release gate', async ({
     viewer = undefined
 
     viewer = await startViewer(repositoryRoot, 'plan:02-live-viewer')
+    expect(viewer.child.pid).toBeGreaterThan(0)
+    expect(viewer.child.pid).not.toBe(firstViewerPid)
     await page.goto(viewer.url)
     await expect(page.locator('.status-page')).toHaveCount(0)
     await expect(page.getByTestId('revision-context-title')).toHaveText(
@@ -308,6 +376,11 @@ test('verifies the complete Markdown-to-view release gate', async ({
     await page.getByRole('button', {
       name: /^Open Architecture workspace container/,
     }).click()
+    const liveDocumentSentinel =
+      `release-gate-document-${Date.now()}-${process.pid}`
+    await page.evaluate(sentinel => {
+      window.__gromaReleaseGateDocumentSentinel = sentinel
+    }, liveDocumentSentinel)
     await writeDocument(
       path.join(repositoryRoot, 'groma/plans/02-live-viewer'),
       'systems/groma/containers/architecture-workspace/'
@@ -323,6 +396,9 @@ test('verifies the complete Markdown-to-view release gate', async ({
     await expect(page.getByTestId('c4-node-live-gate')).toContainText(
       'Live gate component',
     )
+    expect(
+      await page.evaluate(() => window.__gromaReleaseGateDocumentSentinel),
+    ).toBe(liveDocumentSentinel)
     await writeDocument(
       path.join(repositoryRoot, 'groma/plans/02-live-viewer'),
       'systems/groma/containers/architecture-workspace/'
@@ -338,6 +414,9 @@ test('verifies the complete Markdown-to-view release gate', async ({
     await expect(page.getByTestId('c4-node-live-gate')).toContainText(
       'Renamed live gate component',
     )
+    expect(
+      await page.evaluate(() => window.__gromaReleaseGateDocumentSentinel),
+    ).toBe(liveDocumentSentinel)
 
     const beforeSourceChange = await modelPayload(page, viewer.url)
     await chmod(sourceRoot, 0o755)
@@ -357,11 +436,37 @@ test('verifies the complete Markdown-to-view release gate', async ({
       fullPage: true,
     })
     const beforeRestart = structuralSnapshot(afterSourceChange)
+    expect(beforeRestart.projections.context.level).toBe('context')
+    expect(beforeRestart.projections.container.level).toBe('container')
+    expect(beforeRestart.projections.component.level).toBe('component')
+    for (const projection of Object.values(beforeRestart.projections)) {
+      expect(projection.edges).not.toHaveLength(0)
+      expect(
+        projection.edges.flatMap(edge => {
+          return edge.data.comparisonStatuses ?? []
+        }),
+      ).toContain('modification')
+    }
+    expect(
+      beforeRestart.projections.container.nodes.find(node => {
+        return node.data.elementId === 'viewer'
+      }).data.comparisonStatus,
+    ).toBe('addition')
+    expect(
+      beforeRestart.projections.component.nodes.find(node => {
+        return node.data.elementId === 'live-gate'
+      }).data.comparisonStatus,
+    ).toBe('addition')
+    const beforeRestartPid = viewer.child.pid
+    expect(beforeRestartPid).toBeGreaterThan(0)
     await page.goto('about:blank')
     await stopViewer(viewer)
     viewer = undefined
 
     viewer = await startViewer(repositoryRoot, 'plan:02-live-viewer')
+    const restartedPid = viewer.child.pid
+    expect(restartedPid).toBeGreaterThan(0)
+    expect(restartedPid).not.toBe(beforeRestartPid)
     const restartedPayload = await modelPayload(page, viewer.url)
     expect(structuralSnapshot(restartedPayload)).toEqual(beforeRestart)
     await page.goto(viewer.url)
@@ -375,11 +480,14 @@ test('verifies the complete Markdown-to-view release gate', async ({
 
     expect(browserMessages).toEqual([])
   } finally {
-    if (viewer) {
-      await page.goto('about:blank').catch(() => {})
-      await stopViewer(viewer)
+    try {
+      if (viewer) {
+        await page.goto('about:blank').catch(() => {})
+        await stopViewer(viewer)
+      }
+    } finally {
+      await chmod(sourceRoot, 0o755).catch(() => {})
+      await rm(repositoryRoot, { recursive: true, force: true })
     }
-    await chmod(sourceRoot, 0o755).catch(() => {})
-    await rm(repositoryRoot, { recursive: true, force: true })
   }
 })
