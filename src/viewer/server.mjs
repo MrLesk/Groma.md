@@ -5,7 +5,6 @@ import { buildArchitectureModel } from '../architecture-model.mjs'
 import { loadRevision } from '../architecture-reader.mjs'
 import index from './index.html'
 import { startMarkdownWatcher } from './markdown-watcher.mjs'
-import { createReloadStatus } from './reload-status.mjs'
 
 const defaultRepositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -62,12 +61,8 @@ function revisionDescriptor(value) {
 
 const selectedRevision = revisionDescriptor(
   argumentValue('--revision')
-    ?? process.env.GROMA_REVISION
     ?? 'plan:02-live-viewer',
 )
-const requestedSystemId = argumentValue('--system')
-  ?? process.env.GROMA_SYSTEM_ID
-  ?? 'groma'
 
 function nodeText(node) {
   if (typeof node === 'string') return node
@@ -108,12 +103,12 @@ async function buildPayload(generation) {
   const model = buildArchitectureModel(loadedRevision)
   const observedModel = buildArchitectureModel(loadedObservedRevision)
   const focalSystem = model.elements.find(element => {
-    return element.id === requestedSystemId && element.kind === 'system'
+    return element.id === 'groma' && element.kind === 'system'
   })
 
   if (!focalSystem) {
     throw new TypeError(
-      `Focal system "${requestedSystemId}" does not exist in ${selectedRevision.label}.`,
+      `Focal system "groma" does not exist in ${selectedRevision.label}.`,
     )
   }
 
@@ -128,11 +123,10 @@ async function buildPayload(generation) {
 }
 
 let payload = await buildPayload(1)
-const reloadStatus = createReloadStatus()
+let reloadError = null
 
 const port = Number(
   argumentValue('--port')
-    ?? process.env.GROMA_PORT
     ?? 3000,
 )
 if (!Number.isInteger(port) || port < 0 || port > 65_535) {
@@ -157,12 +151,11 @@ function sendReloadEvent(event, data) {
 }
 
 function publishCurrentReloadError() {
-  const message = reloadStatus.error
   sendReloadEvent('architecture-error', {
     generation: payload.generation,
-    message,
+    message: reloadError,
   })
-  console.error(`Groma kept generation ${payload.generation}: ${message}`)
+  console.error(`Groma kept generation ${payload.generation}: ${reloadError}`)
 }
 
 const server = Bun.serve({
@@ -175,7 +168,7 @@ const server = Bun.serve({
       GET() {
         return Response.json({
           ...payload,
-          reloadError: reloadStatus.error,
+          reloadError,
           ...(testIoAudit ? {
             testIoAudit: [...testIoAudit],
           } : {}),
@@ -193,10 +186,10 @@ const server = Bun.serve({
           start(streamController) {
             controller = streamController
             reloadClients.add(controller)
-            controller.enqueue(reloadStatus.error
+            controller.enqueue(reloadError
               ? reloadEventMessage('architecture-error', {
                   generation: payload.generation,
-                  message: reloadStatus.error,
+                  message: reloadError,
                 })
               : reloadEventMessage('architecture-changed', {
                   generation: payload.generation,
@@ -234,13 +227,13 @@ function scheduleReload() {
     reloadQueue = reloadQueue.then(async () => {
       try {
         payload = await buildPayload(payload.generation + 1)
-        reloadStatus.recordModelSuccess()
+        reloadError = null
         sendReloadEvent('architecture-changed', {
           generation: payload.generation,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        reloadStatus.recordModelFailure(message)
+        reloadError = message
         publishCurrentReloadError()
       }
     })
@@ -254,9 +247,7 @@ const markdownWatcher = await startMarkdownWatcher(repositoryRoot, {
   onMarkdownChange: scheduleReload,
   onError(error) {
     const detail = error instanceof Error ? error.message : String(error)
-    reloadStatus.recordModelFailure(
-      `Architecture Markdown watcher failed: ${detail}.`,
-    )
+    reloadError = `Architecture Markdown watcher failed: ${detail}.`
     publishCurrentReloadError()
   },
 })

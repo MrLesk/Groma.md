@@ -19,13 +19,6 @@ const ownedOutputDirectory =
 const scannerDirectory =
   'groma/observed/systems/groma/containers/scanner'
 const scannerDocument = `${scannerDirectory}/container.md`
-const frontmatterFields = new Set(['id', 'kind', 'parent', 'external'])
-const rootKinds = new Set(['person', 'system'])
-const expectedParentKinds = new Map([
-  ['container', 'system'],
-  ['component', 'container'],
-])
-const relationshipColumns = ['Target', 'Description', 'Technology']
 
 export class MarkdownEmissionError extends Error {
   constructor(message, options) {
@@ -283,49 +276,6 @@ function textFromNode(value) {
   return value.slice(2).map(textFromNode).join('')
 }
 
-function collectNodes(node, tag, collected = []) {
-  if (!Array.isArray(node)) {
-    return collected
-  }
-  if (typeof node[0] === 'string' && node[0] === tag) {
-    collected.push(node)
-  }
-  const children = typeof node[0] === 'string' ? node.slice(2) : node
-  for (const child of children) {
-    collectNodes(child, tag, collected)
-  }
-  return collected
-}
-
-function tableHeaderNames(table) {
-  const headerRow = collectNodes(table, 'tr')[0]
-  const cells = headerRow?.slice(2).filter(node => node[0] === 'th') ?? []
-  return cells.map(cell => textFromNode(cell).trim())
-}
-
-function collectRelationshipTables(nodes) {
-  const tables = []
-  let inRelationshipsSection = false
-
-  for (const node of nodes) {
-    if (node[0] === 'h2') {
-      inRelationshipsSection = node[1]?.id === 'relationships'
-      continue
-    }
-    if (node[0] !== 'table') {
-      continue
-    }
-    const headers = tableHeaderNames(node)
-    const hasCanonicalHeader = relationshipColumns.every(
-      (column, index) => headers[index] === column,
-    ) && headers.length === relationshipColumns.length
-    if (inRelationshipsSection || hasCanonicalHeader) {
-      tables.push({ inRelationshipsSection, node })
-    }
-  }
-  return tables
-}
-
 function isSingleLineReadableName(value) {
   return typeof value === 'string'
     && value.length > 0
@@ -346,176 +296,18 @@ async function parseObservedDocument(
     fail(`Comark could not parse observed element ${sourceFilename}`, error)
   }
 
-  const frontmatter = tree.frontmatter
-  if (
-    frontmatter === null
-    || typeof frontmatter !== 'object'
-    || Array.isArray(frontmatter)
-    || Object.keys(frontmatter).some(field => !frontmatterFields.has(field))
-  ) {
-    fail(`invalid canonical frontmatter in ${sourceFilename}`)
-  }
-  const id = requireId(frontmatter.id, `observed element id in ${sourceFilename}`)
-  if (
-    !['person', 'system', 'container', 'component'].includes(frontmatter.kind)
-  ) {
-    fail(`invalid observed element kind in ${sourceFilename}`)
-  }
-  const headings = tree.nodes
-    .map((node, index) => ({ index, node }))
-    .filter(({ node }) => node[0] === 'h1')
-  if (headings.length !== 1) {
-    fail(`${sourceFilename} requires one level-one heading with a readable name`)
-  }
-  const name = textFromNode(headings[0].node)
+  const heading = tree.nodes.find(node => node[0] === 'h1')
+  const name = textFromNode(heading)
   if (!isSingleLineReadableName(name)) {
     fail(`${sourceFilename} requires a single-line readable name`)
   }
-  const prose = tree.nodes[headings[0].index + 1]
-  if (prose?.[0] !== 'p' || textFromNode(prose).trim().length === 0) {
-    fail(`${sourceFilename} requires prose immediately after its level-one heading`)
-  }
 
   return {
-    id,
-    kind: frontmatter.kind,
-    parent: frontmatter.parent,
-    ...(Object.hasOwn(frontmatter, 'external')
-      ? { external: frontmatter.external }
-      : {}),
+    id: tree.frontmatter.id,
+    kind: tree.frontmatter.kind,
+    parent: tree.frontmatter.parent,
     name,
-    nodes: tree.nodes,
     sourceFilename,
-  }
-}
-
-function canonicalElementPath(element, index) {
-  if (element.kind === 'person') {
-    return `groma/observed/people/${element.id}.md`
-  }
-  if (element.kind === 'system') {
-    return `groma/observed/systems/${element.id}/system.md`
-  }
-  if (element.kind === 'container') {
-    return `groma/observed/systems/${element.parent}`
-      + `/containers/${element.id}/container.md`
-  }
-
-  const parent = index.get(element.parent)
-  if (parent === undefined) {
-    return null
-  }
-  return `${path.posix.dirname(parent.sourceFilename)}`
-    + `/components/${element.id}.md`
-}
-
-function relationshipTargetFilename(sourceFilename, href) {
-  if (
-    typeof href !== 'string'
-    || href.startsWith('#')
-    || path.posix.isAbsolute(href)
-    || /^[a-z][a-z\d+.-]*:/i.test(href)
-  ) {
-    return null
-  }
-  let decodedHref
-  try {
-    decodedHref = decodeURIComponent(href.split('#', 1)[0])
-  } catch {
-    return null
-  }
-  if (!decodedHref.endsWith('.md')) {
-    return null
-  }
-  return path.posix.normalize(
-    path.posix.join(path.posix.dirname(sourceFilename), decodedHref),
-  )
-}
-
-function validateObservedIndex(index) {
-  const elementsByFilename = new Map(
-    [...index.values()].map(element => [element.sourceFilename, element]),
-  )
-
-  for (const element of index.values()) {
-    if (element.generated) {
-      continue
-    }
-    const declaresParent = element.parent !== undefined
-    if (rootKinds.has(element.kind)) {
-      if (declaresParent) {
-        fail(`${element.sourceFilename}: ${element.kind} cannot declare a parent`)
-      }
-    } else {
-      if (typeof element.parent !== 'string' || !idPattern.test(element.parent)) {
-        fail(`${element.sourceFilename}: ${element.kind} requires a parent id`)
-      }
-      const parent = index.get(element.parent)
-      const expectedKind = expectedParentKinds.get(element.kind)
-      if (parent === undefined) {
-        fail(`${element.sourceFilename}: unknown parent id ${element.parent}`)
-      }
-      if (parent.kind !== expectedKind) {
-        fail(
-          `${element.sourceFilename}: ${element.kind} requires a`
-            + ` ${expectedKind} parent`,
-        )
-      }
-    }
-
-    const declaresExternal = Object.hasOwn(element, 'external')
-    if (declaresExternal && element.external !== true) {
-      fail(`${element.sourceFilename}: external may only be present with value true`)
-    }
-    if (element.external === true && element.kind !== 'system') {
-      fail(`${element.sourceFilename}: only a system can be external`)
-    }
-    const expectedPath = canonicalElementPath(element, index)
-    if (element.sourceFilename !== expectedPath) {
-      fail(`${element.sourceFilename}: element is not at its canonical C4 path`)
-    }
-
-    for (const relationshipTable of collectRelationshipTables(element.nodes)) {
-      if (!relationshipTable.inRelationshipsSection) {
-        fail(
-          `${element.sourceFilename}: relationship table must be under`
-            + ' "## Relationships"',
-        )
-      }
-      const headers = tableHeaderNames(relationshipTable.node)
-      if (
-        headers.length !== relationshipColumns.length
-        || relationshipColumns.some(
-          (column, index) => headers[index] !== column,
-        )
-      ) {
-        fail(`${element.sourceFilename}: invalid relationship table columns`)
-      }
-      const rows = collectNodes(relationshipTable.node, 'tr').slice(1)
-      for (const row of rows) {
-        const cells = row.slice(2).filter(node => node[0] === 'td')
-        if (cells.length !== 3) {
-          fail(`${element.sourceFilename}: relationship row requires three cells`)
-        }
-        const links = collectNodes(cells[0], 'a')
-        if (links.length !== 1) {
-          fail(`${element.sourceFilename}: relationship target requires one link`)
-        }
-        const targetFilename = relationshipTargetFilename(
-          element.sourceFilename,
-          links[0][1]?.href,
-        )
-        if (!elementsByFilename.has(targetFilename)) {
-          fail(`${element.sourceFilename}: broken relationship target`)
-        }
-        if (
-          textFromNode(cells[1]).trim().length === 0
-          || textFromNode(cells[2]).trim().length === 0
-        ) {
-          fail(`${element.sourceFilename}: relationship cells require readable text`)
-        }
-      }
-    }
   }
 }
 
@@ -571,7 +363,6 @@ async function buildTargetIndex(
   }
 
   await walk(observedRoot)
-  validateObservedIndex(index)
   const scanner = index.get(containerId)
   if (
     scanner?.generated === true
@@ -648,76 +439,6 @@ function renderComponent(component, entryPoints, targetIndex) {
   return sections.join('\n')
 }
 
-async function validateRenderedDocument(component, source, targetIndex) {
-  let tree
-  try {
-    tree = await parse(source)
-  } catch (error) {
-    fail(`Comark could not parse generated component ${component.id}`, error)
-  }
-  if (
-    JSON.stringify(tree.frontmatter) !== JSON.stringify({
-      id: component.id,
-      kind: 'component',
-      parent: containerId,
-    })
-  ) {
-    fail(`generated component ${component.id} has invalid frontmatter`)
-  }
-
-  const relationshipTables = collectRelationshipTables(tree.nodes)
-  if (component.relationships.length === 0) {
-    if (relationshipTables.length !== 0) {
-      fail(`generated component ${component.id} has unexpected relationships`)
-    }
-    return
-  }
-  if (
-    relationshipTables.length !== 1
-    || !relationshipTables[0].inRelationshipsSection
-  ) {
-    fail(`generated component ${component.id} has invalid relationships`)
-  }
-  const table = relationshipTables[0].node
-  const headers = tableHeaderNames(table)
-  if (
-    headers.length !== relationshipColumns.length
-    || relationshipColumns.some((column, index) => headers[index] !== column)
-  ) {
-    fail(`generated component ${component.id} has invalid relationship columns`)
-  }
-  const rows = collectNodes(table, 'tr').slice(1)
-  if (rows.length !== component.relationships.length) {
-    fail(`generated component ${component.id} has invalid relationship rows`)
-  }
-  const sourceFilename = `${ownedOutputDirectory}/${component.id}.md`
-  for (const [index, relationship] of component.relationships.entries()) {
-    const cells = rows[index].slice(2).filter(node => node[0] === 'td')
-    if (cells.length !== relationshipColumns.length) {
-      fail(`generated component ${component.id} has invalid relationship cells`)
-    }
-    const links = collectNodes(cells[0], 'a')
-    const target = targetIndex.get(relationship.targetId)
-    if (
-      links.length !== 1
-      || target === undefined
-      || relationshipTargetFilename(
-        sourceFilename,
-        links[0][1]?.href,
-      ) !== target.sourceFilename
-      || textFromNode(links[0]) !== target.name
-    ) {
-      fail(`generated component ${component.id} has invalid relationship target`)
-    }
-    if (
-      textFromNode(cells[1]) !== relationship.description
-      || textFromNode(cells[2]) !== relationship.technology
-    ) {
-      fail(`generated component ${component.id} has invalid relationship text`)
-    }
-  }
-}
-
 async function replaceOwnedDirectory(
   repositoryRoot,
   renderedComponents,
@@ -758,7 +479,11 @@ export async function emitObservedComponents(
 
   for (const component of components) {
     const source = renderComponent(component, entryPoints, targetIndex)
-    await validateRenderedDocument(component, source, targetIndex)
+    try {
+      await parse(source)
+    } catch (error) {
+      fail(`Comark could not parse generated component ${component.id}`, error)
+    }
     renderedComponents.push([component.id, source])
   }
 

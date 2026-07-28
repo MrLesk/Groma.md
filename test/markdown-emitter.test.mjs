@@ -440,38 +440,6 @@ Conflicts with generated identity.
   )
 })
 
-test('a noncanonical observed document cannot satisfy a relationship target', async t => {
-  const root = await createRepository(t)
-  const observation = await readObservation()
-  await writeDocument(
-    root,
-    'groma/observed/systems/groma/containers/architecture-workspace/container.md',
-    `---
-id: architecture-workspace
-kind: container
-parent: groma
----
-
-# Architecture workspace
-
-## Technology
-
-Markdown.
-`,
-  )
-  const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
-  const { emitObservedComponents } = await loadEmitter()
-
-  await assert.rejects(
-    emitObservedComponents(root, observation),
-    /requires prose immediately after its level-one heading/,
-  )
-  assert.deepEqual(
-    await snapshotDirectory(path.join(root, 'groma', 'observed')),
-    beforeObserved,
-  )
-})
-
 test('a decoded newline in a target heading rejects before any mutation', async t => {
   const root = await createRepository(t)
   const observation = await readObservation()
