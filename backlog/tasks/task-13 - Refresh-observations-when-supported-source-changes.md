@@ -1,11 +1,11 @@
 ---
 id: TASK-13
 title: Refresh observations when supported source changes
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:56'
-updated_date: '2026-07-28 03:02'
+updated_date: '2026-07-28 03:11'
 labels: []
 milestone: m-2
 dependencies:
@@ -40,17 +40,17 @@ Connect the bounded TypeScript observer from TASK-11 and the Markdown emitter fr
 - [x] #1 Adding, modifying, or removing a supported source element runs one complete TASK-11 observation and refreshes only the TASK-10-owned generated components subtree through TASK-12
 - [x] #2 One settled supported source change produces one complete generated subtree; no incremental graph mutation or rename reconciliation engine is introduced
 - [x] #3 A filesystem change outside the TASK-10 supported source scope is ignored without invoking the observer, refreshing Markdown, or reporting an observer error
-- [ ] #4 The open viewer updates only because Markdown files under groma/observed changed and contains no source-observer integration
+- [x] #4 The open viewer updates only because Markdown files under groma/observed changed and contains no source-observer integration
 - [x] #5 Hand-authored people, systems, containers, unrelated components, and every named plan directory remain byte-identical across source refreshes
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Reproduce the intermittent release-gate generation stall under high repetition without changing production behavior, preserving failure artifacts and timing evidence.
-2. Trace the full boundary: source-refresh completion and emitter filesystem operations; TASK-8 watcher callbacks and bounded fingerprints; model reload outcomes; SSE generation publication and browser receipt. Compare failed and successful runs to locate the first missing transition.
-3. Build a deterministic reproducer at the owning boundary. If TASK-13/TASK-12 fails to produce a valid Markdown event, fix minimally with TDD; if TASK-8 misses a valid atomic replacement, record exact evidence as an upstream TASK-8 implementation defect and stop for routing. Do not add source-viewer coupling, polling, sleeps, or touch markers.
-4. Only after ownership is classified, run repeated no-event-loss integration and relevant full verification; do not finalize TASK-13 during investigation.
+1. Reproduce and trace the intermittent source→Markdown→viewer generation stall to its owning boundary without changing TASK-13 production behavior.
+2. Classify the deterministic vanished-directory/coalesced-transaction miss as an upstream TASK-8 Markdown-watcher defect and keep TASK-13 open with AC #4 unchecked.
+3. After TASK-8 correction d547981, rerun the deterministic regressions, TASK-13 focused lifecycle suite, repeated two-process source→Markdown→viewer handoff, full architecture/Node checks, release gate, and browser suite.
+4. Record upstream resolution evidence, recheck AC #4, finalize TASK-13, and commit only its Backlog record.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -75,4 +75,14 @@ Recurring viewer-generation stall investigation (not finalized): ownership is up
 A deterministic TASK-8 boundary reproducer fails 2/2. Case 1 removes a directory containing Markdown and delivers the valid recursive rename event for that directory; expected one fingerprint change, actual zero. Case 2 performs the real TASK-12 emitter transaction to final changed Markdown and delivers the coalesced rename event for the now-removed .groma-components-transaction-* directory; expected one fingerprint change, actual zero. Command: node --test /tmp/groma-task8-directory-removal-reproducer.test.mjs. Root cause: src/viewer/markdown-watcher.mjs waits 120 ms for non-.md rename events, then lines 132-146 require the changed path to still exist as a directory containing a directly nested .md file; ENOENT is silently ignored. A removed/replaced Markdown directory or a coalesced event for the emitter transaction therefore performs no bounded root fingerprint. With onMarkdownChange never called, server scheduleReload, buildPayload(generation + 1), and SSE publication are all downstream and never run, leaving generation 1 despite valid final Markdown. Node documents fs.watch as platform-dependent and does not guarantee callback filenames, so per-file .md callbacks cannot be the correctness boundary.
 
 Classification: upstream TASK-8 implementation/test-coverage defect, consistent with the recurring intermittent integration failure. TASK-13 remains In Progress with AC #4 unchecked pending TASK-8 routing and correction. No source, emitter, viewer, polling, sleeps, coupling, or touch markers were changed.
+
+Upstream TASK-8 defect resolved by d547981 (Detect vanished Markdown directories). The watcher now fingerprints bounded watch roots when settled directory inspection finds ENOENT, covering removed Markdown directories and coalesced events for the emitter transaction without polling, source coupling, sleeps, or touch markers. Fresh verification on current main: the two prior deterministic red reproducers pass 2/2; combined Markdown-watcher and source-refresh focused tests pass 30/30; npm run check passes architecture validation and 152/152 Node tests; npm run test:release-gate passes 5/5; npm run test:viewer:browser passes 12/12; diff hygiene is clean and no observed/plan material changed.
+
+A fresh 50-repeat two-process source→Markdown→viewer run advanced generated Markdown and server generation in all 50 iterations, directly proving AC #4 and no watcher-event loss. Two iterations subsequently hit the separately observed React Flow button-render timeout after both handoff assertions had passed; the complete release and browser suites then passed cleanly. Classification: upstream TASK-8 implementation/test-coverage defect resolved; no further TASK-13 code change required.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Completed TASK-13 after resolving the final integration blocker in upstream TASK-8. Source refresh still performs one bounded complete observation and owned-subtree replacement, while the source-blind viewer now reliably fingerprints valid Markdown changes even when fs.watch reports a vanished directory or coalesced emitter-transaction event. Verified the upstream correction with 2/2 deterministic regressions, 30/30 focused watcher/refresh tests, 50/50 repeated generated-Markdown-to-server-generation handoffs, architecture validation and 152/152 Node tests, release gate 5/5, and browser suite 12/12. All acceptance criteria are checked. Classification: upstream TASK-8 implementation/test-coverage defect resolved; no additional TASK-13 code change was needed.
+<!-- SECTION:FINAL_SUMMARY:END -->
