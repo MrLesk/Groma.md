@@ -51,6 +51,14 @@ function fakeWatchers() {
   }
 }
 
+function deferred() {
+  let resolve
+  const promise = new Promise(resolvePromise => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 test('detects a Markdown change when fs.watch omits the filename', async t => {
   const fixture = await createFixture(t)
   const fake = fakeWatchers()
@@ -126,5 +134,45 @@ test('reports watcher errors and closes every retained handle', async t => {
 
   assert.equal(fake.registrations.length, 2)
   assert.ok(fake.registrations.every(({ handle }) => handle.closed))
+  assert.equal(changes, 0)
+})
+
+test('does not report an in-flight fingerprint change after close', async t => {
+  const fixture = await createFixture(t)
+  const fake = fakeWatchers()
+  const scanStarted = deferred()
+  const scanFinished = deferred()
+  let scans = 0
+  let changes = 0
+  const watcher = await startMarkdownWatcher(fixture.repositoryRoot, {
+    fingerprintMarkdown: async () => {
+      scans += 1
+      if (scans === 1) return 'initial'
+
+      scanStarted.resolve()
+      return scanFinished.promise
+    },
+    onError: error => assert.fail(error),
+    onMarkdownChange: () => {
+      changes += 1
+    },
+    watchFileSystem: fake.watchFileSystem,
+  })
+
+  const pendingEvent = fake.registrations[0].callback('change', undefined)
+  let scanTimeout
+  await Promise.race([
+    scanStarted.promise,
+    new Promise((_, reject) => {
+      scanTimeout = setTimeout(() => {
+        reject(new Error('fingerprint scan did not start'))
+      }, 200)
+    }),
+  ])
+  clearTimeout(scanTimeout)
+  const pendingClose = watcher.close()
+  scanFinished.resolve('changed')
+  await Promise.all([pendingEvent, pendingClose])
+
   assert.equal(changes, 0)
 })

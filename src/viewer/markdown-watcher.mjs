@@ -39,6 +39,7 @@ async function directoryContainsMarkdown(directory) {
 
 export async function startMarkdownWatcher(repositoryRoot, options) {
   const {
+    fingerprintMarkdown = markdownFingerprint,
     onError,
     onMarkdownChange,
     watchFileSystem = watch,
@@ -46,7 +47,7 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
   const watchRoots = watchedDirectories.map(relativeDirectory => {
     return path.join(repositoryRoot, relativeDirectory)
   })
-  let fingerprint = await markdownFingerprint(repositoryRoot, watchRoots)
+  let fingerprint = await fingerprintMarkdown(repositoryRoot, watchRoots)
   let eventSequence = 0
   let closed = false
   let fingerprintQueue = Promise.resolve()
@@ -70,11 +71,11 @@ export async function startMarkdownWatcher(repositoryRoot, options) {
     fingerprintQueue = fingerprintQueue.then(async () => {
       if (closed) return
 
-      const nextFingerprint = await markdownFingerprint(
+      const nextFingerprint = await fingerprintMarkdown(
         repositoryRoot,
         watchRoots,
       )
-      if (nextFingerprint === fingerprint) return
+      if (closed || nextFingerprint === fingerprint) return
 
       fingerprint = nextFingerprint
       await onMarkdownChange()

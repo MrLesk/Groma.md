@@ -5,6 +5,7 @@ import { buildArchitectureModel } from '../architecture-model.mjs'
 import { loadRevision } from '../architecture-reader.mjs'
 import index from './index.html'
 import { startMarkdownWatcher } from './markdown-watcher.mjs'
+import { createReloadStatus } from './reload-status.mjs'
 
 const defaultRepositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -101,7 +102,7 @@ async function buildPayload(generation) {
 }
 
 let payload = await buildPayload(1)
-let reloadError = null
+const reloadStatus = createReloadStatus()
 
 const port = Number(
   argumentValue('--port')
@@ -129,8 +130,8 @@ function sendReloadEvent(event, data) {
   }
 }
 
-function publishReloadError(message) {
-  reloadError = message
+function publishCurrentReloadError() {
+  const message = reloadStatus.error
   sendReloadEvent('architecture-error', {
     generation: payload.generation,
     message,
@@ -148,7 +149,7 @@ const server = Bun.serve({
       GET() {
         return Response.json({
           ...payload,
-          reloadError,
+          reloadError: reloadStatus.error,
         }, {
           headers: {
             'Cache-Control': 'no-store',
@@ -163,10 +164,10 @@ const server = Bun.serve({
           start(streamController) {
             controller = streamController
             reloadClients.add(controller)
-            controller.enqueue(reloadError
+            controller.enqueue(reloadStatus.error
               ? reloadEventMessage('architecture-error', {
                   generation: payload.generation,
-                  message: reloadError,
+                  message: reloadStatus.error,
                 })
               : reloadEventMessage('architecture-changed', {
                   generation: payload.generation,
@@ -204,13 +205,14 @@ function scheduleReload() {
     reloadQueue = reloadQueue.then(async () => {
       try {
         payload = await buildPayload(payload.generation + 1)
-        reloadError = null
+        reloadStatus.recordModelSuccess()
         sendReloadEvent('architecture-changed', {
           generation: payload.generation,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        publishReloadError(message)
+        reloadStatus.recordModelFailure(message)
+        publishCurrentReloadError()
       }
     })
   }, 120)
@@ -220,7 +222,8 @@ const markdownWatcher = await startMarkdownWatcher(repositoryRoot, {
   onMarkdownChange: scheduleReload,
   onError(error) {
     const detail = error instanceof Error ? error.message : String(error)
-    publishReloadError(`Architecture Markdown watcher failed: ${detail}`)
+    reloadStatus.recordWatcherFailure(detail)
+    publishCurrentReloadError()
   },
 })
 

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-07-27 20:55'
-updated_date: '2026-07-27 23:57'
+updated_date: '2026-07-28 00:03'
 labels: []
 milestone: m-1
 dependencies:
@@ -20,10 +20,12 @@ modified_files:
   - e2e/viewer.spec.js
   - playwright.config.mjs
   - src/viewer/markdown-watcher.mjs
+  - src/viewer/reload-status.mjs
   - src/viewer/server.mjs
   - src/viewer/styles.css
   - src/viewer/viewer-app.jsx
   - test/markdown-watcher.test.mjs
+  - test/reload-status.test.mjs
   - test/viewer-server-lifecycle.test.mjs
 priority: high
 type: feature
@@ -57,6 +59,8 @@ The viewer delivered by TASK-6 reads canonical architecture only from Markdown. 
 Corrective review: 6. Add deterministic browser coverage that delays an older model response past a newer generation and refuses stale payload application. 7. Persist last-good reload status/error server-side, replay status to late/reconnected clients, and clear it only after a successful full rebuild. 8. Restrict watcher scheduling to `.md` filenames for create/change/remove events and prove extensionless/non-Markdown changes inside watched roots do not advance generation. 9. Re-run disposable-fixture browser coverage, full reader/model validation, inspect canonical Markdown and worktree state, then re-finalize.
 
 Quality review: 10. Extract the narrow filesystem-event filter into a lifecycle-owned Markdown watcher that fingerprints only `.md` files when `fs.watch` omits a filename, suppressing filename-less non-Markdown events. 11. Retain watcher handles, surface watcher errors as persistent last-valid viewer status, and close watcher handles, pending debounce/reload work, SSE streams, and the Bun server on shutdown. 12. Add deterministic watcher snapshot/error/close tests, automatic-focus browser assertion, and failure-safe fixture cleanup; repeat live-reload and full browser runs before finalization.
+
+Final quality correction: 13. Separate terminal watcher-handle health from recoverable model reload errors so a watcher failure remains restart-required across later successful queued rebuilds and is replayed to current/reconnected clients. 14. Recheck watcher closure after an awaited Markdown fingerprint scan so shutdown cannot invoke change handling or re-arm reload debounce. 15. Add deterministic error-then-success and close-during-scan regressions, then run focused Node, full check, browser, SIGTERM, build, canonical-Markdown, and fixture-cleanliness verification before re-finalizing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -77,10 +81,16 @@ Quality review reopened TASK-8: filename-less `fs.watch` events are currently di
 Quality correction: extracted a narrow lifecycle-owned Markdown watcher. Filename-less events recompute a SHA-256 fingerprint of only `.md` paths/content under observed/plans and notify only on fingerprint change; named non-Markdown events remain filtered. Two retained FSWatcher handles report errors without throwing, and close cancels handles, queued checks, and pending directory settlement. Server SIGINT/SIGTERM cleanup clears debounce, awaits reload work, closes SSE controllers/watchers/server, and watcher errors reuse persistent last-valid status. Automatic focus fallback now focuses the new level heading; the mutation-heavy browser scenario restores every fixture path in `finally`.
 
 Quality verification: filename-less Markdown and non-Markdown watcher tests passed; watcher error/handle/pending-timer close test passed; real SIGTERM lifecycle test with an active SSE stream passed after mutation-checking the absent-handler failure. Live-reload/race/reconnect/filter browser scenarios passed 8/8 across two repetitions, then the full suite passed 7/7. `npm run check` passed 65 Node tests and all four architecture revisions; Bun bundled 146 modules. Canonical `groma/` remained unchanged, `git diff --check` passed, and the disposable browser fixture was removed.
+
+Final quality review reopened TASK-8: successful queued rebuilds currently clear a prior watcher-handle failure even though no watcher recreation exists; a concurrent watcher close can also complete an in-flight fingerprint scan and call the Markdown-change callback after closure.
+
+Final quality correction: model reload failures and terminal watcher-handle failures now have separate state. Successful queued rebuilds clear only the transient model failure; watcher failure remains the effective API/SSE warning, explicitly requires viewer restart, and has no auto-recovery path. Fingerprint refresh rechecks closure after its awaited scan, preventing shutdown from invoking change handling or re-arming server debounce.
+
+Final quality verification: deterministic watcher-error-then-model-success and close-during-scan regressions passed; focused reload/race/reconnect/filter Playwright passed 8/8 across two repetitions; npm run check passed all four architecture revisions and 68 Node tests; full Playwright passed 7/7; standalone SIGTERM passed; Bun bundled 146 modules. git diff --check, canonical groma invariance, and disposable fixture cleanup checks passed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the Revision 02 live viewer and all review corrections. Architecture changes are fully reread/rebuilt and generation-ordered; invalid edits and watcher errors preserve and replay last-valid status. A lifecycle-owned Markdown watcher fingerprints only `.md` files for filename-less events, filters non-Markdown changes, retains/error-handles/closes both filesystem handles, and participates in graceful server/SSE/debounce shutdown. Automatic focus recovery is accessible and browser fixture mutations always restore. Verified with 65 Node tests, repeated 8/8 focused browser cases, full 7/7 Playwright, a 146-module Bun build, clean canonical architecture, and cleaned fixtures.
+Implemented Revision 02 live viewer reloads and all review corrections. Watcher-handle failure is terminal and restart-required while model reload errors remain recoverable; later successful rebuilds cannot clear watcher health, and current/reconnected clients receive the durable status. Closing during an in-flight Markdown fingerprint scan cannot schedule more work. Verified with deterministic regressions, 68 Node tests, repeated 8/8 focused browser cases, full 7/7 Playwright, standalone SIGTERM, a 146-module Bun build, unchanged canonical groma Markdown, and clean fixtures.
 <!-- SECTION:FINAL_SUMMARY:END -->
