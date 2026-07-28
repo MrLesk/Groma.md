@@ -459,6 +459,7 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
   expect(viewerObserverReferences).toEqual([])
   expect(filesystemReaders.sort()).toEqual([
     'architecture-reader.mjs',
+    'markdown-emitter.mjs',
     'source-observer.mjs',
     path.join('viewer', 'markdown-watcher.mjs'),
   ])
