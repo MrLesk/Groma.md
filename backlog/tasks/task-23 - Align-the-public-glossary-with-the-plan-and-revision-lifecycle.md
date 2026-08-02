@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-08-02 19:53'
-updated_date: '2026-08-02 20:08'
+updated_date: '2026-08-02 20:25'
 labels: []
 milestone: m-4
 dependencies: []
@@ -57,6 +57,8 @@ Rewrote the glossary and naming across README.md, groma/README.md, groma/plans/R
 Correction history: the cold simplicity review returned five findings (a leftover "one complete plan", a three-sentence completeness digression, a missing README-and-elements formula, "selected architecture models", and the last step-style "Plan 03" name); all five were applied. Its two out-of-scope observations were applied as well because acceptance criterion 2 is blanket: groma/observed/README.md and groma/source-observation.md still taught plans-as-revisions. The single targeted re-review confirmed all five fixes, found no substantive regressions, and caught one residual: the observed architecture-workspace container doc still said "named plan revisions" with a <revision-name> layout snippet; fixed to "feature plans" and <plan-name> (prose and fence only, frontmatter and relationships untouched). Plan-directory copies of that doc were deliberately left byte-identical as pre-contract states.
 
 Verification: old-sense revision sweep clean across all current-intent docs and groma/observed (exemptions: the shipped --revision CLI flag and the emitter-internal revision-local index wording, both left for the TASK-24 code alignment); the three added contract links resolve; git diff --check clean; bun run check exited 0 on the final state. bun run check flaked twice during the task on the pre-existing test/source-refresh.test.mjs settle assertion, which passes alone (5/5) and is now tracked as TASK-27. Out-of-scope observation for the orchestrator: AGENTS.md line 63 still says "one approved revision" in the old sense; AGENTS.md is process instruction with unrelated uncommitted edits, so it was not touched.
+
+Clean-main follow-up: committing the glossary work and detaching the in-flight semantic-zoom worktree exposed that the earlier bun run check evidence had run against in-flight test files. Three content-coupled expectations were stale on committed main (architecture-reader and validate-architecture tests missing plans 04 and 05) and the observed architecture-workspace wording change legitimately turned that element into a comparison modification against the frozen default plan, breaking one viewer e2e assertion. Fixed on main by commits 8b8f1c5 (repository content test coverage for plans 04 and 05) and aefb3db (viewer e2e expects the workspace modification and its Planned modification badge; the unchanged-element-has-no-badge intent stays covered by the git node). Final clean-main verification: git status empty, bun run check exit 0, release gate 5/5, viewer browser suite 12/12.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
