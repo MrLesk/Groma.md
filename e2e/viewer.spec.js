@@ -228,7 +228,7 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   ).toBeFocused()
   await expectMembership(page, containerNodes, containerEdges)
   await expectComparisonStates(page, {
-    'architecture-workspace': 'unchanged',
+    'architecture-workspace': 'modification',
     groma: 'modification',
     scanner: 'removal',
     viewer: 'addition',
@@ -239,8 +239,8 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await expect(
     page
       .getByTestId('c4-node-architecture-workspace')
-      .locator('.comparison-badge'),
-  ).toHaveCount(0)
+      .getByText('Planned modification'),
+  ).toBeVisible()
   await expectAccessibleRelationships(page, containerEdges.length)
 
   await page.getByRole('button', { name: 'Open Viewer container' }).click()
@@ -251,7 +251,7 @@ async function exerciseThreeLevelFlow(page, testInfo, viewport) {
   await expectMembership(page, componentNodes, componentEdges)
   await expectComparisonStates(page, {
     'architecture-model': 'addition',
-    'architecture-workspace': 'unchanged',
+    'architecture-workspace': 'modification',
     canvas: 'addition',
     groma: 'modification',
     'markdown-reader': 'addition',
