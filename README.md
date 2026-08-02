@@ -13,7 +13,18 @@ The [source-observation contract](groma/source-observation.md) defines the one
 TypeScript/Bun source shape supported by Revision 03.
 
 The [observed architecture](groma/observed/README.md) is the current materialized
-revision, and `groma/plans/` contains complete desired revisions.
+state, and `groma/plans/` contains complete desired revisions.
+
+## Groma glossary
+
+| Term | Meaning in Groma |
+| --- | --- |
+| **Observed architecture** | The complete architecture currently known to exist. It lives in `groma/observed/` and may combine hand-authored elements with scanner-generated observations. |
+| **Revision** | The final known desired architecture. It is a complete state, not a diff, implementation step, or chronology entry. |
+| **Plan** | The Markdown directory under `groma/plans/` that records one revision. It may change as our understanding of the desired architecture improves. |
+
+Observed architecture and every revision are complete models. Groma derives
+their differences; the Markdown does not store comparison state.
 
 ## Historical investigations
 
