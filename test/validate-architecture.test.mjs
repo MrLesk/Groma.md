@@ -61,9 +61,11 @@ test('validates observed and every planned revision', async () => {
       'groma/plans/01-markdown-foundation',
       'groma/plans/02-live-viewer',
       'groma/plans/03-code-observation',
+      'groma/plans/04-semantic-zoom-viewer',
+      'groma/plans/05-tui-viewer',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [6, 5, 10, 15])
+  assert.deepEqual(results.map(result => result.elementCount), [6, 5, 10, 15, 15, 19])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {

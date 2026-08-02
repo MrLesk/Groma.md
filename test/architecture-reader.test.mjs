@@ -41,11 +41,21 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
         name: '03-code-observation',
         sourceDirectory: 'groma/plans/03-code-observation',
       },
+      {
+        kind: 'plan',
+        name: '04-semantic-zoom-viewer',
+        sourceDirectory: 'groma/plans/04-semantic-zoom-viewer',
+      },
+      {
+        kind: 'plan',
+        name: '05-tui-viewer',
+        sourceDirectory: 'groma/plans/05-tui-viewer',
+      },
     ],
   )
   assert.deepEqual(
     revisions.map(({ documents }) => documents.length),
-    [6, 5, 10, 15],
+    [6, 5, 10, 15, 15, 19],
   )
 
   for (const loadedRevision of revisions) {
@@ -94,6 +104,8 @@ test('returns each plan README as revision context rather than a C4 document', a
       'groma/plans/01-markdown-foundation/README.md',
       'groma/plans/02-live-viewer/README.md',
       'groma/plans/03-code-observation/README.md',
+      'groma/plans/04-semantic-zoom-viewer/README.md',
+      'groma/plans/05-tui-viewer/README.md',
     ],
   )
   assert.ok(plans.every(({ documents }) => {
