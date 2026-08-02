@@ -5,9 +5,8 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-08-02 19:53'
-updated_date: '2026-08-02 20:25'
+updated_date: '2026-08-02 21:26'
 labels: []
-milestone: m-4
 dependencies: []
 references:
   - docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md
