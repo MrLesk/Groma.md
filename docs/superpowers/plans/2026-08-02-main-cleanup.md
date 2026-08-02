@@ -24,6 +24,7 @@
 **Files:**
 - Create: `docs/historical-investigations.md`
 - Modify: `README.md`
+- Modify: `groma/plans/README.md`
 - Modify: `groma/plans/04-semantic-zoom-viewer/README.md`
 - Modify: `groma/plans/04-semantic-zoom-viewer/systems/groma/containers/viewer/container.md`
 - Modify: `groma/plans/04-semantic-zoom-viewer/systems/groma/containers/viewer/components/canvas.md`
@@ -55,7 +56,7 @@ Create `docs/historical-investigations.md` with:
 
 - [ ] **Step 3: Link the index from the root README**
 
-Add one short “Historical investigations” section after the architecture-format links. Link to `docs/historical-investigations.md`; do not copy the investigation chronology into the README.
+Add one short “Historical investigations” section after the architecture-format links. Link to `docs/historical-investigations.md`; do not copy the investigation chronology into the README. Keep `groma/plans/README.md` as the concise index naming Revisions 04 and 05.
 
 - [ ] **Step 4: Reduce Revision 04 to current intent**
 
@@ -63,7 +64,7 @@ Keep its Outcome, Approved interaction, current React Flow foundation, final Fie
 
 - [ ] **Step 5: Correct Revision 04 renderer names**
 
-Set the Viewer technology to `Bun, React, and React Flow.` and the Semantic zoom map technology to `React Flow.` No other C4 component meaning changes.
+Set the Viewer technology to `Bun, React, and React Flow.` and the Semantic zoom map technology to `React Flow.` Align the component page with the approved four landmarks and fixed slider breakpoints. No other C4 component meaning changes.
 
 - [ ] **Step 6: Point Revision 05 at its evidence**
 

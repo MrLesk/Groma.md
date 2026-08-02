@@ -15,13 +15,19 @@ TypeScript/Bun source shape supported by Revision 03.
 The [observed architecture](groma/observed/README.md) is the current materialized
 revision, and `groma/plans/` contains complete desired revisions.
 
+## Historical investigations
+
+The [historical investigation index](docs/historical-investigations.md) points
+to disposable spike branches that informed current plans but must never be
+merged into `main`.
+
 ## Validate the Markdown
 
-Install the locked dependency and validate every observed and planned revision:
+Install the locked dependencies and validate every observed and planned revision:
 
 ```sh
-npm ci
-npm run check
+bun install --frozen-lockfile
+bun run check
 ```
 
 ## Compare a plan with observed architecture

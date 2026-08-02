@@ -8,4 +8,5 @@ provides the time context, so components do not carry plan or observation state.
 - `01-markdown-foundation` defines the repository-owned Markdown model.
 - `02-live-viewer` adds the local visual viewer and Markdown file watching.
 - `03-code-observation` adds source observation that produces the same Markdown.
-
+- `04-semantic-zoom-viewer` rebuilds the viewer as one global, zoomable C4 map.
+- `05-tui-viewer` adds a keyboard-driven terminal viewer of the same map.
