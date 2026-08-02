@@ -6,6 +6,9 @@ Groma stores architecture, not diagrams.
 
 The Markdown must remain useful even if Groma disappears.
 
+The [Groma manifesto](MANIFESTO.md) states the essential model, lifecycle, and
+boundaries.
+
 The [component Markdown contract](groma/README.md) defines the canonical architecture
 format.
 
@@ -17,8 +20,8 @@ to exist, and `groma/plans/` holds one directory per planned feature.
 
 ## Groma glossary
 
-The [plan and revision lifecycle](docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md)
-is the full contract behind these terms.
+The [manifesto](MANIFESTO.md) carries the full model and lifecycle behind
+these terms.
 
 | Term | Meaning in Groma |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 Each directory under `groma/plans/` is one planned feature: an independent,
 mutable description of a desired outcome. Per the
-[plan and revision lifecycle](../../docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md),
+[manifesto](../../MANIFESTO.md),
 a plan holds a README and only the element Markdown not yet implemented.
 Implementing an element moves its file into `groma/observed/`; a plan with no
 element Markdown left is complete and its directory disappears. Git history is

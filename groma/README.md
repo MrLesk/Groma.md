@@ -9,10 +9,9 @@ The same document format is used in both architecture locations:
 
 - `groma/observed/` is the architecture currently known to exist.
 - Each directory directly under `groma/plans/` is one planned feature. Per the
-  [plan and revision lifecycle](../docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md),
-  a plan holds a README and only the element Markdown not yet implemented; the
-  existing numbered directories predate that contract and stay cumulative
-  complete states until they are migrated.
+  [manifesto](../MANIFESTO.md), a plan holds a README and only the element
+  Markdown not yet implemented; the existing numbered directories predate that
+  lifecycle and stay cumulative complete states until they are migrated.
 
 The containing directory supplies all lifecycle context. Element documents do not
 declare a plan, claim, status, lifecycle phase, diagram coordinates, or other
