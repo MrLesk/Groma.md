@@ -23,6 +23,52 @@ Do not edit Backlog task, draft, document, decision, or milestone markdown files
 </CRITICAL_INSTRUCTION>
 <!-- BACKLOG.MD GUIDELINES END -->
 
+## Product-first scope
+
+Treat the explicit request and current task as the scope. Background, examples,
+and product vision help explain that scope but do not expand it. Only the
+explicitly requested outcome, task acceptance criteria, project Definition of
+Done, a documented contract or named invariant, a reproduced failure in the
+supported product flow, and an explicitly approved example authorize
+implementation.
+
+A request to investigate, explain, review, propose, or design does not authorize
+implementation or file changes. If reasonable interpretations would materially
+change behavior, scope, cost, or complexity, report the difference to the
+orchestrator and wait for direction.
+
+Before implementing, the task must make this sentence answerable:
+
+> When `<actor>` uses `<entry point>`, Groma shows `<observable result>`,
+> matching `<approved example>`.
+
+If the actor, entry point, result, or example cannot be identified, report the
+ambiguity to the orchestrator before designing a solution.
+
+For architecture, scanner, and rendering work, approved hand-authored Markdown
+and its rendered view are the semantic authority. The scanner exists to
+reproduce that meaning from code. Files, directories, imports, line counts,
+framework internals, and containment are evidence; they are not architecture
+components or collaborations unless the approved example requires them.
+
+Every new behavior, output, artifact, concept, abstraction, module, dependency,
+or test must answer:
+
+> Which current user action or visible result requires this to exist?
+
+Availability, implementation convenience, completeness, convention, best
+practice, future flexibility, large scale, generic support, production safety,
+compatibility, and possible edge cases are not sufficient answers.
+
+Implement one approved revision and one supported example at a time. Do not
+generalize to another repository, language, framework, scale, or delivery model
+until the current result has been used and approved by a human.
+
+A task is not complete merely because its tests pass. Someone unfamiliar with
+the implementation must be able to explain the path from entry point through
+responsibilities and state to the result, and understand why each visible
+concept exists.
+
 ## Groma delivery boundaries
 
 Groma is moving toward a model that is detached from the filesystem. Treat the
