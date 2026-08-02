@@ -5,19 +5,22 @@ architecture record and ordinary documentation: YAML frontmatter carries the min
 machine-readable identity and containment data, while the body explains the element
 and its outgoing relationships to a reader.
 
-The same document format is used in both revision locations:
+The same document format is used in both architecture locations:
 
-- `groma/observed/` is the current materialized architecture.
-- Each directory directly under `groma/plans/` is one complete desired architecture
-  revision.
+- `groma/observed/` is the architecture currently known to exist.
+- Each directory directly under `groma/plans/` is one planned feature. Per the
+  [plan and revision lifecycle](../docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md),
+  a plan holds a README and only the element Markdown not yet implemented; the
+  existing numbered directories predate that contract and stay cumulative
+  complete states until they are migrated.
 
-The containing directory supplies all revision context. Element documents do not
-declare a revision, claim, status, lifecycle phase, diagram coordinates, or other
+The containing directory supplies all lifecycle context. Element documents do not
+declare a plan, claim, status, lifecycle phase, diagram coordinates, or other
 layout state.
 
 ## Files and containment
 
-A revision follows the C4 ownership hierarchy:
+Both locations follow the C4 ownership hierarchy:
 
 ```text
 people/<person-id>.md
@@ -27,8 +30,11 @@ systems/<system-id>/containers/<container-id>/components/<component-id>.md
 ```
 
 The path makes the architecture easy to browse, but frontmatter is authoritative.
-Within a revision, every `id` must be unique and every `parent` must resolve to an
-element in that revision. Containment is limited to:
+Within one complete architecture model, every `id` must be unique and every
+`parent` must resolve to an element in that model. Observed architecture and
+each numbered pre-contract plan directory are complete on their own; a plan
+forms its complete model together with observed architecture. Containment is
+limited to:
 
 | Kind | Parent |
 | --- | --- |
@@ -44,14 +50,14 @@ fields:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Stable, revision-wide unique identifier in lowercase kebab-case. |
+| `id` | yes | Stable identifier in lowercase kebab-case, unique within its complete architecture model. |
 | `kind` | yes | One of `person`, `system`, `container`, or `component`. |
 | `parent` | for containers and components | The stable `id` of the containing system or container. |
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
 
 No other frontmatter field is part of the contract. In particular, there is no
 `claim` field: observed versus planned meaning comes only from the containing
-revision directory.
+directory.
 
 ## Markdown body
 
@@ -89,8 +95,8 @@ rather than model syntax.
 
 ## Complete example
 
-[Revision 02 — Live viewer](plans/02-live-viewer/README.md) is a complete example of
-the contract:
+The pre-contract [`02-live-viewer` plan directory](plans/02-live-viewer/README.md)
+is a complete example of the document format:
 
 - [Human architect](plans/02-live-viewer/people/human-architect.md) and
   [Coding agent](plans/02-live-viewer/people/coding-agent.md) are people.

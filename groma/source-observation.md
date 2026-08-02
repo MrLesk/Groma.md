@@ -1,6 +1,6 @@
 # TypeScript/Bun source-observation contract
 
-Revision 03 supports exactly one source shape, named
+Source observation supports exactly one source shape, named
 `groma.typescript-bun/v1`. It is a deliberately small declaration protocol for
 a Bun repository, not TypeScript program analysis. The complete supported and
 unsupported fixtures live under `fixtures/source-observation/`.
@@ -40,7 +40,7 @@ files and directories outside this layout are not source declarations.
 
 ### Filesystem assumptions
 
-Revision 03 is demonstrated against a local, non-adversarial checkout whose
+Source observation is demonstrated against a local, non-adversarial checkout whose
 repository root, `src`, `src/components`, and declared files are ordinary
 filesystem entries and remain stable during one observation. The observer uses
 `path.resolve`, `readdir`, and `readFile` directly. Symbolic links, concurrent

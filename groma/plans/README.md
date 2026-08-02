@@ -1,9 +1,21 @@
 # Groma plans
 
-Each directory is a complete desired architecture revision.
+Each directory under `groma/plans/` is one planned feature: an independent,
+mutable description of a desired outcome. Per the
+[plan and revision lifecycle](../../docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md),
+a plan holds a README and only the element Markdown not yet implemented.
+Implementing an element moves its file into `groma/observed/`; a plan with no
+element Markdown left is complete and its directory disappears. Git history is
+the archive, and revisions are commits.
 
-Component files use the same Markdown structure in every revision. Their directory
-provides the time context, so components do not carry plan or observation state.
+Plans do not build on each other and have no order.
+
+## Transition
+
+The numbered directories below predate the lifecycle contract. Each is a
+cumulative complete architecture state, not a scoped feature plan. They remain
+the shipped viewer's valid input until implemented architecture is materialized
+into `groma/observed/` and the open work is rewritten as scoped plans.
 
 - `01-markdown-foundation` defines the repository-owned Markdown model.
 - `02-live-viewer` adds the local visual viewer and Markdown file watching.

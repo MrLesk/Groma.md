@@ -6,7 +6,7 @@ parent: groma
 
 # Architecture workspace
 
-Keeps the current architecture and named plan revisions as ordinary Markdown files
+Keeps observed architecture and feature plans as ordinary Markdown files
 inside the repository.
 
 ## Structure
@@ -15,7 +15,7 @@ inside the repository.
 groma/
   observed/
   plans/
-    <revision-name>/
+    <plan-name>/
 ```
 
 ## Technology

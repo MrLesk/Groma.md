@@ -10,21 +10,30 @@ The [component Markdown contract](groma/README.md) defines the canonical archite
 format.
 
 The [source-observation contract](groma/source-observation.md) defines the one
-TypeScript/Bun source shape supported by Revision 03.
+TypeScript/Bun source shape supported by source observation.
 
-The [observed architecture](groma/observed/README.md) is the current materialized
-state, and `groma/plans/` contains complete desired revisions.
+The [observed architecture](groma/observed/README.md) is the architecture known
+to exist, and `groma/plans/` holds one directory per planned feature.
 
 ## Groma glossary
 
+The [plan and revision lifecycle](docs/superpowers/specs/2026-08-02-plan-revision-lifecycle-design.md)
+is the full contract behind these terms.
+
 | Term | Meaning in Groma |
 | --- | --- |
-| **Observed architecture** | The complete architecture currently known to exist. It lives in `groma/observed/` and may combine hand-authored elements with scanner-generated observations. |
-| **Revision** | The final known desired architecture. It is a complete state, not a diff, implementation step, or chronology entry. |
-| **Plan** | The Markdown directory under `groma/plans/` that records one revision. It may change as our understanding of the desired architecture improves. |
+| **Plan** | An independent, mutable description of one desired feature: a directory under `groma/plans/` holding a README and only the element Markdown not yet implemented. It is not a complete architecture, a numbered step, or the successor of another plan. |
+| **Observed architecture** | The architecture currently known to exist. Its canonical Markdown lives under `groma/observed/` and may combine hand-authored elements with scanner-generated observations. |
+| **Revision** | The immutable architecture state represented by a Git commit, identified by its SHA. Revisions are never stored as directories; a plan may materialize across any number of revisions, and Git history is the only archive. |
 
-Observed architecture and every revision are complete models. Groma derives
-their differences; the Markdown does not store comparison state.
+Observed architecture and every revision are complete models; a plan is a
+partial overlay, not a complete model and not a cumulative step. Groma composes
+a selected plan with observed architecture and derives their differences; the
+Markdown stores no comparison or lifecycle state.
+
+The numbered directories currently under `groma/plans/` predate this contract:
+each is a cumulative complete state, and they remain the shipped viewer's valid
+input until they are migrated to scoped feature plans.
 
 ## Historical investigations
 
@@ -34,7 +43,8 @@ merged into `main`.
 
 ## Validate the Markdown
 
-Install the locked dependencies and validate every observed and planned revision:
+Install the locked dependencies and validate the observed architecture and
+every plan directory:
 
 ```sh
 bun install --frozen-lockfile
@@ -43,17 +53,17 @@ bun run check
 
 ## Compare a plan with observed architecture
 
-The viewer requires Bun 1.3.14 or newer. Start the read-only Revision 02
-comparison, then open
+The viewer requires Bun 1.3.14 or newer. Start the read-only comparison with
+the default plan directory (`02-live-viewer`), then open
 `http://127.0.0.1:3000`:
 
 ```sh
 npm run viewer
 ```
 
-At startup the server reads `groma/observed` and one complete plan. It watches
+At startup the server reads `groma/observed` and one plan directory. It watches
 named Markdown file events under `groma/observed` and `groma/plans`, then fully
-rereads both selected revisions after changes settle. An open browser updates
+rereads both models after changes settle. An open browser updates
 over a local event stream without restarting the viewer. If a settled edit is
 temporarily invalid, the last valid model remains visible with a warning until
 a later Markdown change rebuilds successfully; newly connected browsers
@@ -68,7 +78,7 @@ npm run viewer -- --revision plan:03-code-observation
 
 ## Refresh observed components from supported source
 
-Run the Revision 03 source process against a repository that matches
+Run the source observation process against a repository that matches
 `groma.typescript-bun/v1` and contains the Groma architecture scaffold:
 
 ```sh
@@ -90,7 +100,7 @@ source; it updates through its existing `groma/observed` Markdown watcher.
 
 Elements are matched by stable ID. A plan-only element is a ghost addition, an
 observed-only element is a planned removal, and a shared element is modified
-when its C4 properties or outgoing relationships differ. Revision names,
+when its C4 properties or outgoing relationships differ. Directory names,
 Markdown paths, and transient viewer state do not affect this comparison.
 
 Run the interactive browser verification (Playwright starts and stops the local
@@ -104,9 +114,10 @@ npm run test:viewer:browser
 
 `test:release-gate` uses disposable controlled repositories to prove observed
 system-to-container-to-component navigation, all four plan comparison states,
-and the complete Plan 03 materialization story. One exact planned component
-moves from ghost to observed, modified, and ghost again as supported source is
-added, changed, and removed in the same open source-blind viewer. An unchanged
+and the complete `03-code-observation` materialization story. One exact
+planned component moves from ghost to observed, modified, and ghost again as
+supported source is added, changed, and removed in the same open source-blind
+viewer. An unchanged
 source-refresh restart must reproduce byte-identical generated Markdown and an
 equivalent C4 graph and projection while manual architecture and every named
 plan remain byte-identical.
