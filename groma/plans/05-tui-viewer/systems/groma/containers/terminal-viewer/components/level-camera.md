@@ -1,7 +1,7 @@
 ---
 id: level-camera
 kind: component
-parent: tui
+parent: terminal-viewer
 ---
 
 # Level camera

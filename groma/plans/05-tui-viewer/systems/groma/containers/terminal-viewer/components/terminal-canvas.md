@@ -1,7 +1,7 @@
 ---
 id: terminal-canvas
 kind: component
-parent: tui
+parent: terminal-viewer
 ---
 
 # Terminal canvas
@@ -28,5 +28,5 @@ OpenTUI frame buffer.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Viewer](../../viewer/container.md) | Renders the same projected fixed world | Shared world model |
+| [Web viewer](../../viewer/container.md) | Renders the same projected fixed world | Shared world model |
 | [Level camera](level-camera.md) | Reads the derived camera each frame | In-process |

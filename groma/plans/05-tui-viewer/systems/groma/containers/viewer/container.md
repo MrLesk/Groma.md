@@ -4,7 +4,7 @@ kind: container
 parent: groma
 ---
 
-# Viewer
+# Web viewer
 
 Turns the Markdown architecture into one explorable local map whose C4 detail changes
 with camera zoom.

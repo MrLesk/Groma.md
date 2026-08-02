@@ -1,9 +1,9 @@
-# Revision 05 — TUI viewer
+# Revision 05 — Terminal viewer
 
 ## Outcome
 
-When a human architect runs the Groma TUI in any terminal, Groma presents the
-same fixed, nested C4 world the browser viewer shows, navigated entirely from
+When a human architect runs the Groma terminal viewer, Groma presents the same
+fixed, nested C4 world the web viewer shows, navigated entirely from
 the keyboard across the four pre-configured levels — Context, Containers,
 Components, and Code. The terminal's own theme supplies every color; the
 architecture, not the camera, is what the keys operate on.
@@ -71,15 +71,15 @@ and no mouse — the keyboard's discrete traversal is the interface.
 
 ## Shared world model
 
-The TUI is a second renderer of the same world: it consumes
+The terminal viewer is a second renderer of the same world: it consumes
 `loadRevision` → `buildArchitectureModel` → `projectArchitectureMap` and the
 `emphasisAt` / `levelAt` / `hasCodeLevel` contract unmodified. Landmark
 scales are derived for the terminal viewport with the production rules
 (fit-derived Context and Containers, absolute Components and Code, minimum
 adjacent-ratio spacing), with the cell grid's ~1:2 aspect corrected in the
-projection. Whatever the production projection keeps private that the TUI
-needs — the zoom-derivation constants, code items on component nodes — is
-exposed, not duplicated.
+projection. Whatever the production projection keeps private that the terminal
+viewer needs — the zoom-derivation constants, code items on component nodes —
+is exposed, not duplicated.
 
 ## Deliberately absent
 

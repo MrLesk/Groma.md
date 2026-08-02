@@ -6,7 +6,7 @@ parent: viewer
 
 # Markdown watcher
 
-Watches the Groma directory and asks the viewer to reload when architecture files
+Watches the Groma directory and asks the web viewer to reload when architecture files
 change.
 
 ## Relationships

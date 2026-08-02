@@ -1,7 +1,7 @@
 ---
 id: selection-navigator
 kind: component
-parent: tui
+parent: terminal-viewer
 ---
 
 # Selection navigator
@@ -29,5 +29,5 @@ OpenTUI keyboard input.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Viewer](../../viewer/container.md) | Traverses the same projected geometry and containment | Shared world model |
+| [Web viewer](../../viewer/container.md) | Traverses the same projected geometry and containment | Shared world model |
 | [Level camera](level-camera.md) | Derives the camera from level and selection | In-process |
