@@ -6,7 +6,7 @@ parent: scanner
 
 # Source watcher
 
-Watches supported source files and requests a fresh bounded observation when they
+Watches supported source files and requests a fresh bounded scan when they
 change.
 
 ## Relationships
@@ -14,4 +14,4 @@ change.
 | Target | Description | Technology |
 | --- | --- | --- |
 | [Source project](../../../../source-project/system.md) | Watches supported source files | Filesystem events |
-| [TypeScript observer](typescript-observer.md) | Requests a fresh observation | In-process event |
+| [Scanner plugin](scanner-plugin.md) | Requests a fresh scan | In-process event |

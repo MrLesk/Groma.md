@@ -1,0 +1,59 @@
+{
+  "contract": "groma.scanner.typescript-bun/v1",
+  "containerId": "scanner",
+  "entryPoints": [
+    {
+      "componentId": "source-watcher",
+      "sourceRange": "src/index.ts:1-3"
+    }
+  ],
+  "components": [
+    {
+      "id": "markdown-emitter",
+      "name": "Markdown | emitter \\ [safe]",
+      "description": "Writes *bounded* scan results _without_ ambiguity.",
+      "technology": "TypeScript | Bun `text`",
+      "sourceRange": "src/components/markdown-emitter.ts:1-6",
+      "relationships": []
+    },
+    {
+      "id": "scanner-plugin",
+      "name": "Scanner plugin",
+      "description": "Reads the one supported declaration shape without executing code.",
+      "technology": "TypeScript text",
+      "sourceRange": "src/components/scanner-plugin.ts:1-6",
+      "relationships": [
+        {
+          "sourceId": "scanner-plugin",
+          "targetId": "markdown-emitter",
+          "description": "Supplies bounded scan results",
+          "technology": "In-process data",
+          "sourceRange": "src/components/scanner-plugin.ts:9-14"
+        }
+      ]
+    },
+    {
+      "id": "source-watcher",
+      "name": "Source watcher",
+      "description": "Requests a complete scan after supported source changes.",
+      "technology": "Bun filesystem events",
+      "sourceRange": "src/components/source-watcher.ts:1-6",
+      "relationships": [
+        {
+          "sourceId": "source-watcher",
+          "targetId": "architecture-workspace",
+          "description": "Limits scanner output | preserves *other* files",
+          "technology": "Filesystem \\ boundary",
+          "sourceRange": "src/components/source-watcher.ts:15-20"
+        },
+        {
+          "sourceId": "source-watcher",
+          "targetId": "scanner-plugin",
+          "description": "Requests a fresh bounded scan result",
+          "technology": "In-process event",
+          "sourceRange": "src/components/source-watcher.ts:9-14"
+        }
+      ]
+    }
+  ]
+}

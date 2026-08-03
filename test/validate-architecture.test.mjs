@@ -60,7 +60,7 @@ test('validates observed and every planned revision', async () => {
       'groma/observed',
       'groma/plans/01-markdown-foundation',
       'groma/plans/02-live-viewer',
-      'groma/plans/03-code-observation',
+      'groma/plans/03-code-scanning',
       'groma/plans/04-semantic-zoom-viewer',
       'groma/plans/05-tui-viewer',
     ],

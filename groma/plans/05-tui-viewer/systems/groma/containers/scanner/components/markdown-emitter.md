@@ -6,7 +6,7 @@ parent: scanner
 
 # Markdown emitter
 
-Writes observations using the same component document format used by hand-authored
+Writes scan results using the same component document format used by hand-authored
 plans.
 
 ## Relationships

@@ -38,7 +38,7 @@ and no mouse — the keyboard's discrete traversal is the interface.
 - **`1..4`** jump straight to a level: shallower jumps select the ancestor,
   deeper jumps descend the first-child chain, so jumps and single steps
   compose deterministically. Code stays honestly disabled while the model
-  carries no code observations.
+  carries no code scan results.
 - Level changes animate with a 750 ms ease-in-out-cubic camera tween in
   log-scale space; the camera only ever rests at a level. The camera is fully
   derived state — the current level's scale, positioned by a minimal-reveal

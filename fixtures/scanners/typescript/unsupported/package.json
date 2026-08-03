@@ -1,0 +1,11 @@
+{
+  "name": "groma-typescript-scanner-unsupported",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bun": ">=1.3.14"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts"
+  }
+}

@@ -19,7 +19,7 @@ export default defineConfig({
     },
     {
       command:
-        'npm run viewer -- --port 4178 --revision plan:03-code-observation',
+        'npm run viewer -- --port 4178 --revision plan:03-code-scanning',
       url: 'http://127.0.0.1:4178/api/model',
       reuseExistingServer: false,
       timeout: 30_000,

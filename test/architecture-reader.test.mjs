@@ -38,8 +38,8 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
       },
       {
         kind: 'plan',
-        name: '03-code-observation',
-        sourceDirectory: 'groma/plans/03-code-observation',
+        name: '03-code-scanning',
+        sourceDirectory: 'groma/plans/03-code-scanning',
       },
       {
         kind: 'plan',
@@ -103,7 +103,7 @@ test('returns each plan README as revision context rather than a C4 document', a
     [
       'groma/plans/01-markdown-foundation/README.md',
       'groma/plans/02-live-viewer/README.md',
-      'groma/plans/03-code-observation/README.md',
+      'groma/plans/03-code-scanning/README.md',
       'groma/plans/04-semantic-zoom-viewer/README.md',
       'groma/plans/05-tui-viewer/README.md',
     ],

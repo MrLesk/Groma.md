@@ -19,7 +19,7 @@ const loadedRevision = await loadRevision(
 const model = buildArchitectureModel(loadedRevision)
 const plan03Model = buildArchitectureModel(await loadRevision(
   repositoryRoot,
-  { kind: 'plan', name: '03-code-observation' },
+  { kind: 'plan', name: '03-code-scanning' },
 ))
 
 function nodeByElementId(view, elementId) {
@@ -461,7 +461,7 @@ test('Plan 03 component projections keep component-bearing sibling containers ex
   assert.equal(scanner.level, 'component')
   assert.equal(nodeByElementId(scanner, 'viewer').data.expandable, true)
   assert.ok(nodeByElementId(scanner, 'source-watcher'))
-  assert.ok(nodeByElementId(scanner, 'typescript-observer'))
+  assert.ok(nodeByElementId(scanner, 'scanner-plugin'))
   assert.ok(nodeByElementId(scanner, 'markdown-emitter'))
 })
 

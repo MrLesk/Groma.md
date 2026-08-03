@@ -1,75 +1,40 @@
 # The Groma Manifesto
 
-Groma is a living, Git-native, C4-compatible architecture model compiled from
-Markdown, continuously reconciled with code, and animated as agents change the
-system. It stores architecture, not diagrams.
+Groma exists to keep software architecture understandable, current, and useful while people and agents change a system.
+These principles guide product and contribution decisions. Detailed product documentation starts at the
+[documentation index](docs/index.md).
 
-The Markdown must remain useful even if Groma disappears.
+## Architecture must outlive Groma
 
-## The model
+Groma stores architecture information in ordinary Markdown so it remains readable, useful, and version-controlled
+without Groma. Prefer durable, local documents over data that requires a proprietary service, database, or renderer to
+understand.
 
-- One C4 element per Markdown file: person, system, container, or component.
-  Frontmatter carries the stable identity (`id`, `kind`, `parent`, `external`);
-  the body explains the element and its outgoing relationships to a reader.
-- Elements are matched by stable ID. Paths make the architecture browsable;
-  frontmatter is authoritative.
-- Approved hand-authored Markdown and its rendered view are the semantic
-  authority. The scanner exists to reproduce that meaning from code: files,
-  directories, and imports are evidence, not architecture.
+## Store architecture, not diagrams
 
-## Observed, plans, revisions
+Groma uses the C4 model to separate architecture into progressively detailed layers. Diagrams are projections of that
+layered model. Layout, visual state, and the needs of one renderer must not become the source of architectural meaning.
 
-- **Observed architecture** (`groma/observed/`) is the architecture currently
-  known to exist: the only authored complete state.
-- **A plan** (`groma/plans/<feature>/`) is one independent desired feature: a
-  README plus only the element Markdown not yet implemented, at paths mirroring
-  their eventual place under observed. A plan is a partial overlay, not a
-  complete model and not a cumulative step. Plans do not build on each other
-  and have no order.
-- **A revision** is the immutable architecture state a Git commit represents.
-  Revisions are never stored as directories, and Groma records no
-  plan-to-revision mapping.
+## Human meaning is authoritative
 
-## The lifecycle
+Approved hand-authored architecture and its rendered meaning define the system. Stable conceptual identity matters more
+than filenames or directory layout. Preserve explanations of responsibilities and collaborations that a reader can
+understand; do not reduce architecture to machine-oriented structure.
 
-Implementation is a file move:
+## Code is evidence, not architecture
 
-```text
-groma/plans/<feature>/<element>.md
-                ↓ implemented
-groma/observed/<element>.md
-```
+Source files, imports, directories, and framework conventions may provide evidence to a scanner, but they do not become
+architecture merely because they exist. Scanning should reproduce approved architectural meaning rather than
+invent it from implementation details.
 
-- A planned change to an existing element is the desired version at the same
-  relative path; implementing it replaces the observed file and removes it
-  from the plan in the same commit.
-- The plan drains as work lands, so its remaining content is its progress.
-- A plan with no element Markdown left is complete: its README and directory
-  are deleted. The README never moves into observed.
-- There is no archive folder, status field, lock file, or lifecycle metadata.
-  Git history retains every plan, its progression, and its completion.
+## Keep reality, intent, and history distinct
 
-## Display
+Groma must distinguish the architecture known to exist from a desired architectural outcome. Git is the history of how
+those states change. Avoid parallel archives, lifecycle metadata, or comparison state when the model and its history can
+provide the answer.
 
-Groma composes a selected plan with observed architecture and derives their
-differences; the Markdown stores no comparison state. Observed elements are
-the implemented foundation, remaining plan elements are the desired additions
-and changes, and moving through revisions shows planned Markdown
-materializing into observed architecture.
+## Plans describe outcomes, not work
 
-## Boundaries
-
-Groma is not:
-
-- a diagram store or a source-code browser;
-- a task manager: Backlog.md coordinates the implementation work between
-  architectural states;
-- a plan executor: plans describe outcomes, never implementation steps;
-- dependent on any hosted service.
-
-Deliberately undefined until an approved example requires them: planned
-removal syntax, concurrent plans changing the same element, and non-Git
-revision providers.
-
-If a proposed change conflicts with this manifesto, surface the conflict and
-request an explicit product decision.
+An architecture plan describes one independent, final desired architectural outcome for an idea, expansion, or change.
+It is not a revision in history, an iteration of another plan, a stage in an ordered roadmap, or a list of implementation
+steps. Task management belongs to a task manager; execution orchestration does not belong in the architecture model.

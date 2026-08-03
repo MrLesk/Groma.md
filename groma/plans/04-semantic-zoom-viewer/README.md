@@ -103,7 +103,7 @@ the aesthetic.
 - **Code level is a reserved layer**: the model carries no code items yet, so
   component code chips render only when the scanner provides them; until
   then the Code level deepens focus and the level card states plainly that no
-  code-level observations exist in the revision. No placeholder data is
+  code-level scan results exist in the revision. No placeholder data is
   fabricated.
 - **Everything behavioral is preserved**: the `/api/model` and `/api/events`
   contracts, watcher scope, plan-vs-observed comparison rendering, and live

@@ -1,0 +1,17 @@
+{
+  "componentId": "markdown-emitter",
+  "escapedName": "Markdown \\| emitter \\\\ \\[safe\\]",
+  "heading": "# Markdown \\| emitter \\\\ \\[safe\\]",
+  "escapedDescription": "Writes \\*bounded\\* scan results \\_without\\_ ambiguity\\.",
+  "escapedTechnology": "TypeScript \\| Bun \\`text\\`",
+  "relationshipSourceId": "source-watcher",
+  "relationshipTargetId": "architecture-workspace",
+  "escapedRelationshipDescription": "Limits scanner output \\| preserves \\*other\\* files",
+  "escapedRelationshipTechnology": "Filesystem \\\\ boundary",
+  "relationshipTableRow": "| [Architecture workspace](../../architecture-workspace/container.md) | Limits scanner output \\| preserves \\*other\\* files | Filesystem \\\\ boundary |",
+  "linkLabelSourceId": "scanner-plugin",
+  "linkLabelTargetId": "markdown-emitter",
+  "escapedLinkLabel": "Markdown \\| emitter \\\\ \\[safe\\]",
+  "linkLabelHref": "markdown-emitter.md",
+  "linkLabelTableRow": "| [Markdown \\| emitter \\\\ \\[safe\\]](markdown-emitter.md) | Supplies bounded scan results | In\\-process data |"
+}

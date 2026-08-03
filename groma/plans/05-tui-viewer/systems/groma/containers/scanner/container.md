@@ -6,11 +6,11 @@ parent: groma
 
 # Scanner
 
-Observes a bounded source shape and writes observed architecture as component Markdown.
+Scans a bounded source shape and writes observed architecture as component Markdown.
 
 ## Technology
 
-Bun and TypeScript.
+Local scanner runtime and plugins.
 
 ## Relationships
 

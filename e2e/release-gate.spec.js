@@ -41,7 +41,7 @@ const ownedComponentsPath = path.join(
   'scanner',
   'components',
 )
-const materializedComponentId = 'typescript-observer'
+const materializedComponentId = 'scanner-plugin'
 
 const baselineSources = {
   index: `export type GromaEntryPoint = {
@@ -55,7 +55,7 @@ export function startFixture(): string {
   markdownEmitter: `export type GromaComponent = {
   id: "markdown-emitter";
   name: "Markdown emitter";
-  description: "Writes observations using the same component document format used by hand-authored plans.";
+  description: "Writes scan results using the same component document format used by hand-authored plans.";
   technology: "TypeScript text";
 };
 
@@ -75,36 +75,36 @@ export function emitMarkdown(): string {
   sourceWatcher: `export type GromaComponent = {
   id: "source-watcher";
   name: "Source watcher";
-  description: "Watches supported source files and requests a fresh bounded observation when they change.";
+  description: "Watches supported source files and requests a fresh bounded scan when they change.";
   technology: "Bun filesystem events";
 };
 
 export type GromaRelationships = [];
 
 export function settleSourceChange(): string {
-  return "observe";
+  return "scan";
 }
 `,
 }
 
-function typeScriptObserverSource(description) {
+function scannerPluginSource(description) {
   return `export type GromaComponent = {
-  id: "typescript-observer";
-  name: "TypeScript observer";
+  id: "scanner-plugin";
+  name: "Scanner plugin";
   description: "${description}";
   technology: "TypeScript text";
 };
 
 export type GromaRelationships = [
   {
-    sourceId: "typescript-observer";
+    sourceId: "scanner-plugin";
     targetId: "markdown-emitter";
-    description: "Supplies bounded source observations";
+    description: "Supplies bounded scan results";
     technology: "In-process data";
   },
 ];
 
-export function observeDeclarations(): string {
+export function scanDeclarations(): string {
   return "read only";
 }
 `
@@ -393,7 +393,7 @@ async function startViewer(repositoryRoot, revision) {
   }
 }
 
-async function startSourceRefreshProcess(repositoryRoot) {
+async function startScannerProcess(repositoryRoot) {
   const stderr = { value: '' }
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => {
@@ -403,7 +403,7 @@ async function startSourceRefreshProcess(repositoryRoot) {
   const child = spawn(
     process.execPath,
     [
-      'src/source-refresh-process.mjs',
+      'src/scanner-process.mjs',
       '--repository',
       repositoryRoot,
     ],
@@ -413,7 +413,7 @@ async function startSourceRefreshProcess(repositoryRoot) {
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   )
-  const refresh = trackProcess(child, stderr)
+  const scanner = trackProcess(child, stderr)
   child.stderr.setEncoding('utf8')
   child.stderr.on('data', chunk => {
     stderr.value += chunk
@@ -425,33 +425,34 @@ async function startSourceRefreshProcess(repositoryRoot) {
       let stdout = ''
       child.stdout.on('data', chunk => {
         stdout += chunk
-        if (stdout.includes('Source refresh watching')) resolve()
+        if (stdout.includes('Scanner watching')) resolve()
       })
       child.once('exit', (code, signal) => {
         reject(new Error(
-          `Source refresh exited before startup: code=${code} signal=${signal}`
+          `Scanner exited before startup: code=${code} signal=${signal}`
             + `\n${stderr.value}`,
         ))
       })
-    }), 10_000, 'source refresh startup')
-    return refresh
+    }), 10_000, 'scanner startup')
+    return scanner
   } catch (error) {
     child.kill('SIGKILL')
-    await within(refresh.exit, forcedStopTimeoutMs, 'source refresh SIGKILL')
+    await within(scanner.exit, forcedStopTimeoutMs, 'scanner SIGKILL')
       .catch(() => {})
-    await closeProcessStdio(refresh, stdioCloseTimeoutMs).catch(() => {})
+    await closeProcessStdio(scanner, stdioCloseTimeoutMs).catch(() => {})
     throw error
   }
 }
 
-async function createSourceRefreshFixture() {
+async function createScannerFixture() {
   const repositoryRoot = await mkdtemp(
-    path.join(os.tmpdir(), 'groma-source-refresh-gate-'),
+    path.join(os.tmpdir(), 'groma-scanner-gate-'),
   )
   const sourceFixtureRoot = path.join(
     projectRoot,
     'fixtures',
-    'source-observation',
+    'scanners',
+    'typescript',
     'supported',
   )
 
@@ -503,7 +504,7 @@ async function createSourceRefreshFixture() {
           parent: 'architecture-workspace',
         },
         'Unrelated observed component',
-        'Must remain byte-identical through source refreshes.',
+        'Must remain byte-identical through scans.',
       ),
     ])
     return {
@@ -713,7 +714,7 @@ async function expectComponentComparison(
   await expect(node).toHaveRole('article')
   await expect(node).toHaveAttribute('data-element-id', materializedComponentId)
   await expect(node).toHaveAttribute('data-comparison-status', status)
-  await expect(node).toContainText('TypeScript observer')
+  await expect(node).toContainText('Scanner plugin')
   await expect(node).toContainText(description)
 
   if (badge === null) {
@@ -762,15 +763,18 @@ async function expectProcessStopped(pid) {
   expect(state).toBe('ESRCH')
 }
 
-test('keeps the Revision 02 viewer isolated from source observation', async () => {
+test('keeps the Revision 02 viewer isolated from source scanning', async () => {
   const sourceRoot = path.join(projectRoot, 'src')
   const sourceFiles = await listFiles(sourceRoot)
-  const scannerPaths = sourceFiles
+  const viewerScannerPaths = sourceFiles
     .map(filename => path.relative(sourceRoot, filename))
-    .filter(filename => /scanner/i.test(filename))
+    .filter(filename => {
+      return filename.startsWith(`viewer${path.sep}`)
+        && /scanner/i.test(filename)
+    })
   const scannerSymbols = []
   const filesystemReaders = []
-  const viewerObserverReferences = []
+  const viewerScannerReferences = []
 
   for (const filename of sourceFiles.filter(candidate => {
     return /\.(?:js|jsx|mjs)$/.test(candidate)
@@ -779,10 +783,10 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
     const relativeFilename = path.relative(sourceRoot, filename)
     if (
       relativeFilename.startsWith(`viewer${path.sep}`)
-      && /source-(?:observer|refresh)|markdown-emitter|observeTypeScriptSource|emitObservedComponents|UnsupportedSourceShapeError/
+      && /(?:typescript-)?scanner\.mjs|markdown-emitter|scanTypeScriptSource|emitObservedComponents|UnsupportedSourceShapeError/
         .test(source)
     ) {
-      viewerObserverReferences.push(relativeFilename)
+      viewerScannerReferences.push(relativeFilename)
     }
     if (
       /source[-_\s]?scanner|project[-_\s]?scanner|scanProjectSource|scanSourceTree/i
@@ -798,14 +802,14 @@ test('keeps the Revision 02 viewer isolated from source observation', async () =
     }
   }
 
-  expect(scannerPaths).toEqual([])
+  expect(viewerScannerPaths).toEqual([])
   expect(scannerSymbols).toEqual([])
-  expect(viewerObserverReferences).toEqual([])
+  expect(viewerScannerReferences).toEqual([])
   expect(filesystemReaders.sort()).toEqual([
     'architecture-reader.mjs',
     'markdown-emitter.mjs',
-    'source-observer.mjs',
-    'source-refresh.mjs',
+    'scanner.mjs',
+    'typescript-scanner.mjs',
     path.join('viewer', 'markdown-watcher.mjs'),
   ])
 })
@@ -814,7 +818,7 @@ test('materializes one Plan 03 component through supported source', async ({
   page,
 }, testInfo) => {
   test.setTimeout(90_000)
-  const fixture = await createSourceRefreshFixture()
+  const fixture = await createScannerFixture()
   const {
     componentSourceFilename,
     generatedComponentFilename,
@@ -843,14 +847,14 @@ test('materializes one Plan 03 component through supported source', async ({
   ))
   const plannedDescription =
     'Reports only the entry points, components, and relationships supported '
-    + 'by the first TypeScript convention.'
+    + 'by its scanner contract.'
   const modifiedDescription =
-    'Reports the exact supported TypeScript convention after implementation.'
+    'Reports the exact supported scanner contract after implementation.'
   const browserMessages = []
-  let refresh
+  let scanner
   let viewer
   let viewerPid
-  const refreshPids = []
+  const scannerPids = []
 
   page.on('console', message => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -862,10 +866,10 @@ test('materializes one Plan 03 component through supported source', async ({
   })
 
   try {
-    refresh = await startSourceRefreshProcess(repositoryRoot)
-    const firstRefreshPid = refresh.child.pid
-    refreshPids.push(firstRefreshPid)
-    expect(firstRefreshPid).toBeGreaterThan(0)
+    scanner = await startScannerProcess(repositoryRoot)
+    const firstScannerPid = scanner.child.pid
+    scannerPids.push(firstScannerPid)
+    expect(firstScannerPid).toBeGreaterThan(0)
     await writeFile(
       path.join(
         repositoryRoot,
@@ -882,7 +886,7 @@ test('materializes one Plan 03 component through supported source', async ({
       'source-watcher.md',
     ])
 
-    viewer = await startViewer(repositoryRoot, 'plan:03-code-observation')
+    viewer = await startViewer(repositoryRoot, 'plan:03-code-scanning')
     viewerPid = viewer.child.pid
     expect(viewerPid).toBeGreaterThan(0)
     await page.setViewportSize({ width: 1440, height: 960 })
@@ -890,7 +894,7 @@ test('materializes one Plan 03 component through supported source', async ({
     await expect(page).toHaveTitle('Groma · Architecture viewer')
     await expect(page.locator('.status-page')).toHaveCount(0)
     await expect(page.getByTestId('revision-context-title')).toHaveText(
-      'Revision 03 — Code observation',
+      'Revision 03 — Code scanning',
     )
     await page.getByRole('button', { name: 'Open Groma system' }).click()
     await expect(page.getByTestId('view-container')).toBeVisible()
@@ -905,7 +909,7 @@ test('materializes one Plan 03 component through supported source', async ({
     const documentSentinel =
       `plan-03-materialization-${Date.now()}-${process.pid}`
     await page.evaluate(sentinel => {
-      window.__gromaSourceRefreshDocumentSentinel = sentinel
+      window.__gromaScannerDocumentSentinel = sentinel
     }, documentSentinel)
     const ghostPayload = await modelPayload(page, viewer.url)
     expect(
@@ -936,7 +940,7 @@ test('materializes one Plan 03 component through supported source', async ({
 
     await writeFile(
       componentSourceFilename,
-      typeScriptObserverSource(plannedDescription),
+      scannerPluginSource(plannedDescription),
     )
     const materializedPayload = await expectSettledComparison(
       page,
@@ -946,8 +950,8 @@ test('materializes one Plan 03 component through supported source', async ({
     )
     expect(observedScannerComponentIds(materializedPayload)).toEqual([
       'markdown-emitter',
+      'scanner-plugin',
       'source-watcher',
-      'typescript-observer',
     ])
     const generatedMarkdown = await readFile(
       generatedComponentFilename,
@@ -955,11 +959,11 @@ test('materializes one Plan 03 component through supported source', async ({
     )
     expect(generatedMarkdown).toContain('## Source evidence')
     expect(generatedMarkdown).toContain(
-      '- Component: `src/components/typescript-observer.ts:1-6`',
+      '- Component: `src/components/scanner-plugin.ts:1-6`',
     )
     expect(generatedMarkdown).toContain(
       '- Relationship to `markdown-emitter`: '
-        + '`src/components/typescript-observer.ts:9-14`',
+        + '`src/components/scanner-plugin.ts:9-14`',
     )
     const parsedMarkdown = await parse(generatedMarkdown)
     expect(parsedMarkdown.frontmatter).toEqual({
@@ -982,7 +986,7 @@ test('materializes one Plan 03 component through supported source', async ({
       description: plannedDescription,
       id: materializedComponentId,
       kind: 'component',
-      name: 'TypeScript observer',
+      name: 'Scanner plugin',
       parentId: 'scanner',
     })
     expect(
@@ -990,7 +994,7 @@ test('materializes one Plan 03 component through supported source', async ({
         return relationship.sourceId === materializedComponentId
       }),
     ).toMatchObject({
-      description: 'Supplies bounded source observations',
+      description: 'Supplies bounded scan results',
       sourceId: materializedComponentId,
       targetId: 'markdown-emitter',
       technology: 'In-process data',
@@ -1014,18 +1018,18 @@ test('materializes one Plan 03 component through supported source', async ({
     )
     const sourceHashBeforeRerun = await fileHash(componentSourceFilename)
     const generationBeforeRerun = materializedPayload.generation
-    await stopViewer(refresh)
-    refresh = undefined
-    await expectProcessStopped(firstRefreshPid)
+    await stopViewer(scanner)
+    scanner = undefined
+    await expectProcessStopped(firstScannerPid)
 
-    refresh = await startSourceRefreshProcess(repositoryRoot)
-    const restartedRefreshPid = refresh.child.pid
-    refreshPids.push(restartedRefreshPid)
-    expect(restartedRefreshPid).toBeGreaterThan(0)
-    expect(restartedRefreshPid).not.toBe(firstRefreshPid)
+    scanner = await startScannerProcess(repositoryRoot)
+    const restartedScannerPid = scanner.child.pid
+    scannerPids.push(restartedScannerPid)
+    expect(restartedScannerPid).toBeGreaterThan(0)
+    expect(restartedScannerPid).not.toBe(firstScannerPid)
     await writeFile(
       componentSourceFilename,
-      typeScriptObserverSource(plannedDescription),
+      scannerPluginSource(plannedDescription),
     )
     expect(await fileHash(componentSourceFilename)).toBe(sourceHashBeforeRerun)
     await expect.poll(async () => {
@@ -1047,16 +1051,16 @@ test('materializes one Plan 03 component through supported source', async ({
       graphBeforeRerun,
     )
     await expectProcessAlive(viewerPid)
-    await expectProcessAlive(restartedRefreshPid)
+    await expectProcessAlive(restartedScannerPid)
     expect(
       await page.evaluate(() => {
-        return window.__gromaSourceRefreshDocumentSentinel
+        return window.__gromaScannerDocumentSentinel
       }),
     ).toBe(documentSentinel)
 
     await writeFile(
       componentSourceFilename,
-      typeScriptObserverSource(modifiedDescription),
+      scannerPluginSource(modifiedDescription),
     )
     const modifiedPayload = await expectSettledComparison(
       page,
@@ -1066,8 +1070,8 @@ test('materializes one Plan 03 component through supported source', async ({
     )
     expect(observedScannerComponentIds(modifiedPayload)).toEqual([
       'markdown-emitter',
+      'scanner-plugin',
       'source-watcher',
-      'typescript-observer',
     ])
     const modifiedMarkdown = await readFile(
       generatedComponentFilename,
@@ -1125,7 +1129,7 @@ test('materializes one Plan 03 component through supported source', async ({
     await expectProcessAlive(viewerPid)
     expect(
       await page.evaluate(() => {
-        return window.__gromaSourceRefreshDocumentSentinel
+        return window.__gromaScannerDocumentSentinel
       }),
     ).toBe(documentSentinel)
     expect(viewer.child.pid).toBe(viewerPid)
@@ -1168,7 +1172,7 @@ test('materializes one Plan 03 component through supported source', async ({
       if (viewer !== undefined) await stopViewer(viewer)
     } finally {
       try {
-        if (refresh !== undefined) await stopViewer(refresh)
+        if (scanner !== undefined) await stopViewer(scanner)
       } finally {
         await rm(repositoryRoot, { recursive: true, force: true })
       }
@@ -1176,8 +1180,8 @@ test('materializes one Plan 03 component through supported source', async ({
   }
   await expect(access(repositoryRoot)).rejects.toMatchObject({ code: 'ENOENT' })
   await expectProcessStopped(viewerPid)
-  for (const refreshPid of refreshPids) {
-    await expectProcessStopped(refreshPid)
+  for (const scannerPid of scannerPids) {
+    await expectProcessStopped(scannerPid)
   }
 })
 

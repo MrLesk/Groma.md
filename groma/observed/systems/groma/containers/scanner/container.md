@@ -7,7 +7,7 @@ parent: groma
 # Scanner
 
 Owns the single generated component directory reserved for bounded source
-observations.
+scan results.
 
 ## Structure
 
@@ -19,4 +19,4 @@ groma/observed/systems/groma/containers/scanner/
 
 ## Technology
 
-Canonical component Markdown generated from the source-observation contract.
+Local scanner runtime, language plugins, and canonical Markdown emission.

@@ -9,7 +9,7 @@ The same document format is used in both architecture locations:
 
 - `groma/observed/` is the architecture currently known to exist.
 - Each directory directly under `groma/plans/` is one planned feature. Per the
-  [manifesto](../MANIFESTO.md), a plan holds a README and only the element
+  [product model](../docs/product-model.md), a plan holds a README and only the element
   Markdown not yet implemented; the existing numbered directories predate that
   lifecycle and stay cumulative complete states until they are migrated.
 
@@ -72,7 +72,7 @@ These level-two sections are optional:
 - `## Relationships` contains the outgoing directed relationships in the table
   format below.
 - `## Source evidence` lists repository-relative source files and inclusive line
-  ranges for generated observations.
+  ranges for scanner-generated elements.
 
 Other level-two sections may add human-readable explanation, such as `## Structure`.
 They remain prose and do not add model fields.

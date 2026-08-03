@@ -8,7 +8,7 @@ import path from 'node:path'
 
 import { parse } from 'comark'
 
-const observationContract = 'groma.typescript-bun/v1'
+const scannerContract = 'groma.scanner.typescript-bun/v1'
 const containerId = 'scanner'
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const readableTextPattern = /^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/
@@ -131,25 +131,25 @@ function requireSourceRange(value, label) {
   return value
 }
 
-function validateObservation(observation) {
+function validateScanResult(scanResult) {
   requireExactKeys(
-    observation,
+    scanResult,
     ['contract', 'containerId', 'entryPoints', 'components'],
-    'observation record',
+    'scan result',
   )
   if (
-    observation.contract !== observationContract
-    || observation.containerId !== containerId
-    || !Array.isArray(observation.entryPoints)
-    || observation.entryPoints.length !== 1
-    || !Array.isArray(observation.components)
-    || observation.components.length === 0
+    scanResult.contract !== scannerContract
+    || scanResult.containerId !== containerId
+    || !Array.isArray(scanResult.entryPoints)
+    || scanResult.entryPoints.length !== 1
+    || !Array.isArray(scanResult.components)
+    || scanResult.components.length === 0
   ) {
-    fail(`observation must match ${observationContract}`)
+    fail(`scan result must match ${scannerContract}`)
   }
 
   const componentIds = new Set()
-  const components = observation.components.map((component, componentIndex) => {
+  const components = scanResult.components.map((component, componentIndex) => {
     requireExactKeys(
       component,
       [
@@ -164,7 +164,7 @@ function validateObservation(observation) {
     )
     const id = requireId(component.id, `component ${componentIndex} id`)
     if (componentIds.has(id)) {
-      fail(`duplicate observation component id ${id}`)
+      fail(`duplicate scan result component id ${id}`)
     }
     componentIds.add(id)
     if (!Array.isArray(component.relationships)) {
@@ -232,7 +232,7 @@ function validateObservation(observation) {
     }
   }).sort((left, right) => bytewiseCompare(left.id, right.id))
 
-  const entryPoints = observation.entryPoints.map((entryPoint, index) => {
+  const entryPoints = scanResult.entryPoints.map((entryPoint, index) => {
     requireExactKeys(
       entryPoint,
       ['componentId', 'sourceRange'],
@@ -463,13 +463,13 @@ async function replaceOwnedDirectory(
 
 export async function emitObservedComponents(
   suppliedRepositoryRoot,
-  observation,
+  scanResult,
   options = {},
 ) {
   const { onFilesystemAccess } = options
   const repositoryRoot = path.resolve(suppliedRepositoryRoot)
 
-  const { components, entryPoints } = validateObservation(observation)
+  const { components, entryPoints } = validateScanResult(scanResult)
   const targetIndex = await buildTargetIndex(
     repositoryRoot,
     components,

@@ -22,10 +22,11 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
-const observationFixture = path.join(
+const scanResultFixture = path.join(
   repositoryRoot,
   'fixtures',
-  'source-observation',
+  'scanners',
+  'typescript',
   'supported.expected.json',
 )
 const ownedRelativePath = path.join(
@@ -70,7 +71,7 @@ parent: groma
 
 # Scanner
 
-Owns generated observations.
+Owns scanner-generated components.
 `,
   workspace: `---
 id: architecture-workspace
@@ -104,8 +105,8 @@ Must remain byte-identical.
 `,
 }
 
-async function readObservation() {
-  return JSON.parse(await readFile(observationFixture, 'utf8'))
+async function readScanResult() {
+  return JSON.parse(await readFile(scanResultFixture, 'utf8'))
 }
 
 async function writeDocument(root, relativePath, source) {
@@ -210,12 +211,12 @@ async function snapshotUnownedObserved(root) {
 
 test('emits canonical fixture Markdown while preserving every unowned path', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
+  const scanResult = await readScanResult()
   const beforeUnowned = await snapshotUnownedObserved(root)
   const accesses = []
   const { emitObservedComponents } = await loadEmitter()
 
-  const result = await emitObservedComponents(root, observation, {
+  const result = await emitObservedComponents(root, scanResult, {
     onFilesystemAccess(access) {
       accesses.push({
         operation: access.operation,
@@ -227,8 +228,8 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
   assert.deepEqual(result, {
     componentIds: [
       'markdown-emitter',
+      'scanner-plugin',
       'source-watcher',
-      'typescript-observer',
     ],
     outputDirectory: ownedRelativePath.split(path.sep).join('/'),
   })
@@ -238,8 +239,8 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
     }),
     [
       'markdown-emitter.md',
+      'scanner-plugin.md',
       'source-watcher.md',
-      'typescript-observer.md',
     ],
   )
   assert.deepEqual(await snapshotUnownedObserved(root), beforeUnowned)
@@ -277,7 +278,7 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
     '',
     '# Markdown \\| emitter \\\\ \\[safe\\]',
     '',
-    'Writes \\*bounded\\* observations \\_without\\_ ambiguity\\.',
+    'Writes \\*bounded\\* scan results \\_without\\_ ambiguity\\.',
     '',
     '## Technology',
     '',
@@ -295,11 +296,11 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
   )
   assert.match(
     watcherSource,
-    /\| \[Architecture workspace\]\(\.\.\/\.\.\/architecture-workspace\/container\.md\) \| Limits refreshes \\\| preserves \\\*other\\\* files \| Filesystem \\\\ boundary \|/,
+    /\| \[Architecture workspace\]\(\.\.\/\.\.\/architecture-workspace\/container\.md\) \| Limits scanner output \\\| preserves \\\*other\\\* files \| Filesystem \\\\ boundary \|/,
   )
   assert.match(
     watcherSource,
-    /\| \[TypeScript observer\]\(typescript-observer\.md\) \| Requests a fresh bounded observation \| In\\-process event \|/,
+    /\| \[Scanner plugin\]\(scanner-plugin\.md\) \| Requests a fresh bounded scan result \| In\\-process event \|/,
   )
   assert.match(
     watcherSource,
@@ -307,7 +308,7 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
   )
   assert.match(
     watcherSource,
-    /- Relationship to `architecture-workspace`: `src\/components\/source-watcher\.ts:15-20`[\s\S]*- Relationship to `typescript-observer`: `src\/components\/source-watcher\.ts:9-14`/,
+    /- Relationship to `architecture-workspace`: `src\/components\/source-watcher\.ts:15-20`[\s\S]*- Relationship to `scanner-plugin`: `src\/components\/source-watcher\.ts:9-14`/,
   )
 
   for (const filename of await readdir(path.join(root, ownedRelativePath))) {
@@ -344,20 +345,20 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
     generatedDocuments.map(document => document.frontmatter.id),
     [
       'markdown-emitter',
+      'scanner-plugin',
       'source-watcher',
-      'typescript-observer',
     ],
   )
 })
 
 test('repeated emission is byte-identical and removes stale owned files', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
+  const scanResult = await readScanResult()
   const { emitObservedComponents } = await loadEmitter()
 
-  await emitObservedComponents(root, observation)
+  await emitObservedComponents(root, scanResult)
   const first = await snapshotDirectory(path.join(root, ownedRelativePath))
-  await emitObservedComponents(root, observation)
+  await emitObservedComponents(root, scanResult)
   const second = await snapshotDirectory(path.join(root, ownedRelativePath))
 
   assert.deepEqual(second, first)
@@ -366,8 +367,8 @@ test('repeated emission is byte-identical and removes stale owned files', async 
 
 test('renders a self-relationship as a resolvable Markdown file link', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
-  observation.components[0].relationships.push({
+  const scanResult = await readScanResult()
+  scanResult.components[0].relationships.push({
     sourceId: 'markdown-emitter',
     targetId: 'markdown-emitter',
     description: 'Checks its own output',
@@ -376,7 +377,7 @@ test('renders a self-relationship as a resolvable Markdown file link', async t =
   })
   const { emitObservedComponents } = await loadEmitter()
 
-  await emitObservedComponents(root, observation)
+  await emitObservedComponents(root, scanResult)
 
   const source = await readFile(
     path.join(root, ownedRelativePath, 'markdown-emitter.md'),
@@ -394,13 +395,13 @@ test('renders a self-relationship as a resolvable Markdown file link', async t =
 
 test('target-resolution failure leaves owned and unowned data unchanged', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
-  observation.components[1].relationships[0].targetId = 'missing-target'
+  const scanResult = await readScanResult()
+  scanResult.components[1].relationships[0].targetId = 'missing-target'
   const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
   const { emitObservedComponents } = await loadEmitter()
 
   await assert.rejects(
-    emitObservedComponents(root, observation),
+    emitObservedComponents(root, scanResult),
     /missing relationship target missing-target/,
   )
 
@@ -412,7 +413,7 @@ test('target-resolution failure leaves owned and unowned data unchanged', async 
 
 test('generated IDs cannot duplicate canonical observed elements', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
+  const scanResult = await readScanResult()
   await writeDocument(
     root,
     'groma/observed/systems/groma/containers/viewer/components/duplicate.md',
@@ -431,7 +432,7 @@ Conflicts with generated identity.
   const { emitObservedComponents } = await loadEmitter()
 
   await assert.rejects(
-    emitObservedComponents(root, observation),
+    emitObservedComponents(root, scanResult),
     /duplicate observed element id markdown-emitter/,
   )
   assert.deepEqual(
@@ -442,7 +443,7 @@ Conflicts with generated identity.
 
 test('a decoded newline in a target heading rejects before any mutation', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
+  const scanResult = await readScanResult()
   await writeDocument(
     root,
     'groma/observed/systems/groma/containers/architecture-workspace/container.md',
@@ -461,7 +462,7 @@ Stores architecture files.
   const { emitObservedComponents } = await loadEmitter()
   const accesses = []
 
-  const error = await emitObservedComponents(root, observation, {
+  const error = await emitObservedComponents(root, scanResult, {
     onFilesystemAccess(access) {
       accesses.push(access)
     },
@@ -484,7 +485,7 @@ Stores architecture files.
 
 test('an invisible format control target heading rejects before any mutation', async t => {
   const root = await createRepository(t)
-  const observation = await readObservation()
+  const scanResult = await readScanResult()
   await writeDocument(
     root,
     'groma/observed/systems/groma/containers/architecture-workspace/container.md',
@@ -503,7 +504,7 @@ Stores architecture files.
   const { emitObservedComponents } = await loadEmitter()
   const accesses = []
 
-  const error = await emitObservedComponents(root, observation, {
+  const error = await emitObservedComponents(root, scanResult, {
     onFilesystemAccess(access) {
       accesses.push(access)
     },
