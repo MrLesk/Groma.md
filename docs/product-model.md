@@ -1,14 +1,23 @@
 # Product model
 
-Groma stores a C4-compatible architecture model in Markdown. This document defines how observed architecture, plans,
-and revisions relate to one another. The [component Markdown contract](../groma/README.md) defines the exact document
-format.
+Groma stores a C4-compatible architecture model in Markdown. This document defines how observed architecture, missing
+architecture, plans, and revisions relate to one another. The [component Markdown contract](../groma/README.md) defines
+the exact document format.
 
 ## Observed architecture
 
 Observed architecture is the architecture currently known to exist. Its canonical Markdown lives under
-`groma/observed/` and may combine hand-authored elements with scanner-generated elements. It is the only authored
+`groma/observed/` and may combine hand-authored elements with source-derived elements accepted by Groma core. It is the only authored
 complete state.
+
+## Missing architecture
+
+Missing architecture contains source-backed elements that previously existed in observed architecture and whose stable
+IDs are absent from the latest complete results of every applicable scanner. Groma core moves their Markdown from
+`groma/observed/` to `groma/missing/`, preserving the last known architectural meaning while intent is clarified.
+
+An accidental source deletion turns the missing element into planned restoration by moving its Markdown into a plan. An
+acknowledged deletion removes the missing Markdown. Git preserves the element and its removal in revision history.
 
 ## Plans
 
@@ -17,8 +26,8 @@ contains a README plus only the element Markdown not yet implemented. Element pa
 observed architecture.
 
 A plan is a partial overlay, not a complete architecture, a numbered step, or the successor of another plan. Plans do
-not build on one another and have no order. Groma composes one selected plan with observed architecture to produce a
-complete model.
+not build on one another and have no order. Groma loads every plan alongside observed architecture while preserving each
+plan as an independent expression of intent.
 
 The numbered directories currently under `groma/plans/` predate this contract. Each is a cumulative complete state and
 remains a valid input to the shipped viewer until it is migrated to a scoped feature plan.
@@ -50,15 +59,12 @@ There is no archive directory, status field, lock file, or lifecycle metadata.
 
 Groma matches elements by stable ID and derives comparison state rather than storing it in Markdown:
 
-- an element present only in the plan is a ghost addition;
-- an element present only in observed architecture is a planned removal;
-- a shared element is modified when its C4 properties or outgoing relationships differ; and
-- a shared element with no such differences is unchanged.
+- An element present only in the plan is a ghost addition.
+- A shared element is modified when its C4 properties or outgoing relationships differ.
+- A shared element with no such differences is unchanged.
+- An element under `groma/missing/` is missing from the current source-backed architecture.
 
 Directory names, Markdown paths, and transient viewer state do not affect the comparison.
 
 Observed elements provide the implemented foundation. Remaining plan elements provide desired additions and changes.
 Moving through Git revisions shows planned Markdown materializing into observed architecture.
-
-Planned removal syntax, concurrent plans changing the same element, and non-Git revision providers remain deliberately
-undefined until an approved example requires them.

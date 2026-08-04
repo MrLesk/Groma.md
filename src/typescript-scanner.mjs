@@ -283,7 +283,6 @@ function validatePackageJson(packageJson) {
     || Array.isArray(packageJson)
     || packageJson.private !== true
     || packageJson.type !== 'module'
-    || packageJson.engines?.bun !== '>=1.3.14'
     || packageJson.scripts?.start !== 'bun run src/index.ts'
   ) {
     mismatch()

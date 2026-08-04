@@ -34,6 +34,12 @@ administration, such as relabeling, status corrections, or metadata maintenance.
 in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
 request.
 
+## UI descriptions
+
+Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer
+one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it
+is necessary to prevent misunderstanding or error, and never use it to restate the heading.
+
 ## Product-first scope
 
 Treat the explicit request and current task as the scope. Background, examples, and product vision help explain that

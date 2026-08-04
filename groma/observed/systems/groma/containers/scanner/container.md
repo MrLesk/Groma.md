@@ -6,17 +6,15 @@ parent: groma
 
 # Scanner
 
-Owns the single generated component directory reserved for bounded source
-scan results.
-
-## Structure
-
-```text
-groma/observed/systems/groma/containers/scanner/
-  container.md
-  components/  # generated; scanner/emitter-owned
-```
+Produces bounded source-derived information for Groma core. It does not decide
+what becomes observed architecture or write architecture Markdown.
 
 ## Technology
 
-Local scanner runtime, language plugins, and canonical Markdown emission.
+Local scanner runtime and language plugins.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Architecture workspace](../architecture-workspace/container.md) | Supplies scan results for domain evaluation | In-process data |

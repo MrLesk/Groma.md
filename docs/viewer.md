@@ -1,32 +1,20 @@
 # Viewer
 
-The Groma viewer is a read-only, local comparison of observed architecture and one selected plan. It requires Bun 1.3.14
-or newer.
-
-## Start the viewer
-
-Start with the default plan directory, `02-live-viewer`, then open `http://127.0.0.1:3000`:
-
-```sh
-npm run viewer
-```
-
-Select another plan without changing any Markdown:
-
-```sh
-npm run viewer -- --revision plan:03-code-scanning
-```
+The Groma viewer makes architectural intent visible without adding presentation state to the architecture model. It is
+a read-only view of observed architecture, missing architecture, and every plan. Planned additions appear as ghosts and
+missing elements remain visible while their deletion intent is resolved.
 
 ## Model and comparison
 
-At startup, the server reads `groma/observed` and the selected plan directory. It composes them according to the
-[product model](product-model.md) and displays the derived comparison states. The viewer does not write comparison or
-lifecycle state into the Markdown.
+The viewer loads `groma/observed`, `groma/missing`, and all plans according to the [product model](product-model.md). It
+preserves which plan each desired element belongs to and displays the lifecycle state supplied by each Markdown
+location.
 
 ## Live updates
 
-The server watches named Markdown file events under `groma/observed` and `groma/plans`. After changes settle, it fully
-rereads both models. An open browser updates over a local event stream without restarting the viewer.
+The server watches named Markdown file events under `groma/observed`, `groma/missing`, and `groma/plans`. After changes
+settle, it fully rereads the architecture model. An open browser updates over a local event stream without restarting the
+viewer.
 
 If a settled edit is temporarily invalid, the last valid model remains visible with a warning until a later Markdown
 change rebuilds successfully. Newly connected browsers receive the same current warning.
@@ -35,5 +23,6 @@ Extensionless files, non-Markdown files, and files outside the two architecture 
 
 ## Source boundary
 
-The viewer never reads or watches source code and imports no scanner code. Source changes reach it only after the
-separate scanner process updates canonical Markdown under `groma/observed`. See [Scanners](scanners/index.md).
+The viewer reads architecture Markdown. Scanners send source-derived information to Groma core, which reconciles stable
+IDs and persists elements as observed or missing. Plans express intended additions, changes, and restorations. See
+[Scanners](scanners/index.md).

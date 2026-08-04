@@ -11,10 +11,10 @@ Markdown remains useful even if you stop using Groma.
 
 Groma is designed for teams and coding agents that want to:
 
-- describe people, systems, containers, components, and their relationships in ordinary Markdown;
-- distinguish the architecture that exists from a planned architectural change;
-- compare a plan with the observed system in a live, navigable C4 view; and
-- review architectural changes alongside the code in Git.
+- Describe people, systems, containers, components, and their relationships in ordinary Markdown.
+- Distinguish observed, missing, and planned architecture.
+- Compare all plans with the observed system in a live, navigable C4 view.
+- Review architectural changes alongside the code in Git.
 
 ## The C4 layers
 
@@ -29,9 +29,9 @@ C4 explains a software architecture by progressively revealing more detail:
 
 Groma has three main flows:
 
-1. **Scan:** Run the scanner to turn source code into a basic C4 model in local Markdown. Language and ecosystem plugins
-   analyze the supported source and return scan results for the scanner to emit.
-2. **View:** Explore the current architecture in terminal or web viewers.
+1. **Scan:** Run a scanner to derive architectural information from supported source code. Groma core applies its domain
+   rules to the scan result and decides what becomes observed architecture.
+2. **View:** Explore observed, missing, and planned architecture in terminal or web viewers.
 3. **Plan:** Describe the intended architecture by adding blueprints for new components, then watch the plan become
    reality as agents implement the code.
 

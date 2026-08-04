@@ -187,10 +187,10 @@ test('rejects the unsupported fixture with one exact all-or-nothing error', asyn
 test('rejects representative v1 violations without partial extraction', async t => {
   const cases = [
     {
-      name: 'mismatched Bun package marker',
+      name: 'mismatched package type marker',
       mutate: async root => {
         const packageJson = await readJson(path.join(root, 'package.json'))
-        packageJson.engines.bun = '>=1.3.13'
+        packageJson.type = 'commonjs'
         await writeFile(
           path.join(root, 'package.json'),
           `${JSON.stringify(packageJson, null, 2)}\n`,

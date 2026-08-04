@@ -1,346 +1,46 @@
-# TypeScript/Bun scanner contract
+# TypeScript scanner contract
 
-Source scanning supports exactly one source shape, named
-`groma.scanner.typescript-bun/v1`. It is a deliberately small declaration protocol for
-a Bun repository, not TypeScript program analysis. The complete supported and
-unsupported fixtures live under `fixtures/scanners/typescript/`.
+The TypeScript scanner plugin adapts TypeScript projects to Groma's scanner-plugin interface. It receives a project
+root, interprets the source using TypeScript and ecosystem knowledge, and returns Groma's shared scan-result model.
 
-## Supported repository shape
+## Project compatibility
 
-The TypeScript scanner plugin receives a repository root. A supported root has this layout:
+The plugin discovers the organization chosen by the project, including applications, packages, features, layers, and
+framework conventions. Project configuration, package metadata, source declarations, imports, and call relationships
+provide evidence for that discovery.
 
-```text
-package.json
-src/
-  index.ts
-  components/
-    <component-id>.ts
-```
+Architectural meaning comes from responsibilities, boundaries, entry points, and collaborations expressed by the
+project. The plugin maps that meaning into Groma concepts independently of the project's package manager, module system,
+scripts, directory names, and file boundaries.
 
-`package.json` must contain all of these exact markers (other JSON fields are
-allowed):
+## Architectural interpretation
 
-```json
-{
-  "private": true,
-  "type": "module",
-  "engines": {
-    "bun": ">=1.3.14"
-  },
-  "scripts": {
-    "start": "bun run src/index.ts"
-  }
-}
-```
+The plugin translates source evidence into architectural meaning that can be explained in the language of the project.
+Files and symbols support the identification of cohesive C4 boundaries and collaborations.
 
-There is exactly one entry point, `src/index.ts`, and at least one component
-module. Component modules are direct children of `src/components/`. No other
-`.ts`, `.tsx`, `.mts`, or `.cts` file may occur beneath `src/`. Non-TypeScript
-files and directories outside this layout are not source declarations.
+Every reported element has a stable conceptual identity and a human-readable responsibility. Every reported relationship
+expresses architectural intent. Source locations connect those concepts to their implementation evidence.
 
-### Filesystem assumptions
+The plugin reports architectural interpretations supported by the source patterns it understands.
 
-Source scanning is demonstrated against a local, non-adversarial checkout whose
-repository root, `src`, `src/components`, and declared files are ordinary
-filesystem entries and remain stable during one scan. The TypeScript scanner plugin uses
-`path.resolve`, `readdir`, and `readFile` directly. Symbolic links, concurrent
-path replacement, filesystem races, and confinement against hostile mutation
-are outside the supported MVP flow and have no compatibility or recovery
-guarantee.
+## Groma interface
 
-The reserved declarations below are type-only TypeScript. They require no
-decorator, runtime helper, import, build step, type checker, or project code
-execution. The TypeScript scanner plugin reads their literal text and treats all later,
-non-reserved TypeScript statements as opaque.
+The plugin returns one complete result through
+Groma's [shared scanner-plugin interface](../creating-a-plugin.md#the-shared-interface). Every reported element is typed
+as a C4 `system`, `container`, `component`, or `code` element. A result may also include
+`person` elements identified from project evidence.
 
-`package.json` and every source file must be strictly decodable UTF-8. A
-leading UTF-8 BOM (`EF BB BF`) is unsupported and is not stripped. Source files
-use U+000A LF line endings, contain no U+000D CR, U+2028 LINE SEPARATOR, or
-U+2029 PARAGRAPH SEPARATOR anywhere, and end with one LF. The reserved
-declaration therefore starts at byte zero on physical line 1. Within a reserved
-declaration, every keyword, space, indentation level, colon, semicolon, comma,
-bracket, and blank line shown below is literal and required. Metavariables
-inside angle brackets are the only replaceable text. Their values use JSON
-double-quoted string syntax on one physical LF-delimited line. Comments and
-extra blank lines are not permitted before or inside a reserved declaration.
+The result supplies stable IDs, C4 containment, human-readable responsibilities, technologies, relationships, entry
+points, and project-relative source evidence through Groma-owned types. TypeScript syntax trees, compiler objects, and
+framework metadata remain internal evidence used to produce those C4 concepts.
 
-## Entry-point declaration
+The result is deterministic for the same project state. Stable architectural identity follows the project concepts that
+the plugin recognizes across source organization changes.
 
-The first statement in `src/index.ts` is exactly one type-literal declaration
-with this shape:
+## Core handoff
 
-```ts
-export type GromaEntryPoint = {
-  componentId: "<component-id>";
-};
-```
+A scan result is transient input to Groma core. The plugin owns TypeScript source interpretation. Groma core owns domain
+evaluation, reconciliation with observed and missing architecture, storage decisions, and Markdown representation.
 
-`componentId` is the exact stable ID of the component that owns the entry
-point. It must name one component module in the same repository. The entry
-point's evidence range is lines 1–3, the whole `GromaEntryPoint` declaration.
-After line 3, a file may contain arbitrary TypeScript text, but it must not
-contain another `GromaEntryPoint`, `GromaComponent`, or
-`GromaRelationships` identifier.
-
-## Component boundary
-
-Every `src/components/<component-id>.ts` begins with exactly one
-`GromaComponent` declaration followed by exactly one
-`GromaRelationships` declaration:
-
-```ts
-export type GromaComponent = {
-  id: "<component-id>";
-  name: "<readable name>";
-  description: "<readable responsibility>";
-  technology: "<readable technology>";
-};
-
-export type GromaRelationships = [
-  {
-    sourceId: "<component-id>";
-    targetId: "<target-id>";
-    description: "<readable intent>";
-    technology: "<readable mechanism>";
-  },
-];
-```
-
-The `GromaComponent` declaration defines one C4 component boundary. Its `id`
-must equal the module's filename and is emitted unchanged. `name`,
-`description`, and `technology` use the readable-text rules below.
-An empty relationship tuple, `export type GromaRelationships = [];`, is valid.
-Otherwise each tuple item has exactly the four shown fields in the shown order.
-Its `sourceId` must equal the enclosing component ID. `targetId` is emitted
-unchanged and may name a component or another existing C4 element.
-
-The component declaration occupies lines 1–6. Line 7 is empty. For an empty
-tuple, line 8 is the complete `GromaRelationships` declaration. For a
-non-empty tuple, line 8 is `export type GromaRelationships = [`, each item is
-six consecutive lines in the exact shown form (including its trailing comma),
-and `];` immediately follows the last item. No blank or comment line may occur
-inside the tuple. After that declaration, a file may contain arbitrary
-TypeScript text, but it must not contain another `GromaComponent`,
-`GromaRelationships`, or `GromaEntryPoint` identifier. Any CRLF input,
-different trivia, omitted or additional field, reordered field, alternate
-quote, optional punctuation, or duplicate reserved identifier is outside v1.
-
-### Readable text values
-
-The TypeScript scanner plugin JSON-decodes every component `name`, `description`, and
-`technology`, plus every relationship `description` and `technology`, before
-validation. Each decoded value must:
-
-- contain one or more code points;
-- contain only printable ASCII U+0020–U+007E; and
-- start and end with U+0021–U+007E, so whitespace-only values and leading or
-  trailing spaces are rejected.
-
-Internal U+0020 spaces are allowed. Every control, line break, non-ASCII code
-point, unpaired surrogate, format control, private-use value, and unassigned
-value is outside v1. JSON escapes do not bypass validation: `"\u0041"` decodes
-to supported `A`, while values such as `"\n"`, `"\t"`, `"\u0000"`,
-`"\u0085"`, `"\u200b"`, `"\u2028"`, `"\u2029"`, and `"\ufeff"` decode
-to unsupported text. Markdown punctuation, including `|`, `\`, `` ` ``, `*`,
-`_`, `[`, `]`, `(`, `)`, `<`, and `>`, is printable ASCII and is allowed
-because emission escapes it deterministically.
-
-Every component ID, entry-point `componentId`, relationship `sourceId`, and
-relationship `targetId` uses the canonical stable C4 ID syntax:
-
-```regex
-^[a-z0-9]+(?:-[a-z0-9]+)*$
-```
-
-IDs are declaration-supplied. The TypeScript scanner plugin never derives an ID from a symbol,
-filename change, plan, or previous scan result, and never infers a rename.
-Component IDs are unique within one scan result. Relationship targets need
-only satisfy the ID syntax during scanning: the scanner plugin does not
-read architecture Markdown and does not decide whether an external target
-exists.
-
-## Source ranges and transient scan result
-
-A source range is repository-relative POSIX text in the form
-`<path>:<start-line>-<end-line>`. Lines are one-based and both endpoints are
-inclusive. A component range covers its complete `GromaComponent` declaration;
-a relationship range covers its complete tuple item; and an entry-point range
-covers its complete `GromaEntryPoint` declaration.
-
-The TypeScript scanner plugin returns a transient `groma.scanner.typescript-bun/v1` scan result,
-not Markdown and not a second architecture model. It contains the fixed
-`containerId` `scanner`, entry points, components, outgoing relationships, and
-the source range for each declaration. Components are ordered by ID;
-relationships are ordered by `(sourceId, targetId, sourceRange)`; entry points
-are ordered by source range. Every comparison is lexicographic over the UTF-8
-bytes of each field: compare the first differing unsigned byte, with a shorter
-prefix ordered first. Locale collation is never used. The supported fixture's exact record is
-`fixtures/scanners/typescript/supported.expected.json`.
-
-The fixture declares the exact plan-03 component IDs `markdown-emitter`,
-`source-watcher`, and `scanner-plugin`. It also demonstrates relationships
-whose source and target IDs are supplied literally, an exact empty
-`GromaRelationships` tuple, and readable text containing Markdown punctuation.
-The TypeScript scanner plugin does not read `groma/observed` or `groma/plans` to create or
-reconcile that record.
-
-## Relationship target resolution
-
-Target resolution belongs to Markdown emission, not source scanning. For a
-relationship `targetId`, the emitter builds one revision-local index from:
-
-1. the complete transient scan result, where each component's generated
-   path is `<owned-components-directory>/<id>.md` and its readable name is the
-   declared `name`; and
-2. canonical element documents beneath `groma/observed` but outside the owned
-   components directory, where the frontmatter `id`, level-one heading, and
-   document path supply the target ID, readable name, and link destination.
-
-Exactly one indexed element must own each target ID. The emitter computes a
-relative Markdown link from the generated source document to that target. A
-missing target or an ID present in both index sources rejects the complete
-emission before any file is written or replaced. The previous generated
-subtree remains unchanged. The emitter never consults `groma/plans` for target
-names, paths, or existence.
-
-## Unsupported direct input
-
-Direct invocation is all-or-nothing. Its promise rejects with one error object
-for any root that does not meet every rule above:
-
-```text
-name: UnsupportedSourceShapeError
-code: GROMA_UNSUPPORTED_SOURCE_SHAPE
-message: Repository does not match groma.scanner.typescript-bun/v1.
-```
-
-The TypeScript scanner plugin returns no partial components, relationships, entry points, or
-fallback extraction with that error. Missing or mismatched package markers,
-unsupported source paths or extensions, absent or malformed reserved
-declarations, duplicate IDs, filename/ID mismatches, unresolved entry-point
-component IDs, and invalid relationship IDs are all the same unsupported
-shape. No other error name, code, or message represents an unsupported
-root. `fixtures/scanners/typescript/unsupported/` is a Bun-shaped project
-with ordinary TypeScript classes but no reserved declarations; invoking the
-scanner plugin directly on it must return the exact error above rather than infer a
-component from its class.
-
-## Filesystem-watch scope
-
-The source watcher admits events only for these repository-relative paths:
-
-```text
-package.json
-src/index.ts
-src/components/*.ts
-```
-
-The glob is non-recursive. Create, modify, and remove events inside this exact
-set settle into one fresh complete scan. Every other path—including
-`bun.lock`, `src/components/**` below the first level, other `src/**` files,
-`groma/**`, tests, documentation, and editor metadata—is ignored before the
-scanner plugin is invoked. An ignored event is not an unsupported-shape error and
-does not rebuild generated Markdown. Direct invocation remains free to reject
-a root that contains an unsupported shape; the watch filter and direct input
-validation are separate boundaries.
-
-The standalone scanner process applies one short settle debounce to this
-exact scope. Each settled burst runs a fresh complete scan followed by
-one complete emitter rebuild; it does not mutate an incremental graph,
-infer renames, or retry with a partial scan result. If another admitted event
-arrives during a run, that event remains pending and causes a subsequent full
-scan only after its own quiet period.
-
-The MVP assumes the local runtime supplies a string filename for these events,
-the three watched directories remain in place, and watch handles stay healthy.
-Filename-less events are ignored. Fingerprint fallback, watcher rebinding,
-topology recovery, and retry after filesystem or emission failure are not part
-of the supported flow.
-
-The scanner process and architecture viewer are separate services. The
-viewer imports no scanner code and continues to read and watch only
-canonical Markdown beneath `groma/observed` and `groma/plans`.
-
-## Generated Markdown ownership
-
-The named observed parent is the hand-authored `scanner` container at
-`groma/observed/systems/groma/containers/scanner/container.md`. Exactly one
-directory is scanner/emitter-owned:
-
-```text
-groma/observed/systems/groma/containers/scanner/components/
-```
-
-A complete scan may replace the contents of that directory and no other
-path. Generated component filenames are `<component-id>.md` and their
-frontmatter remains the canonical four-field contract: `id`, `kind:
-component`, and `parent: scanner` (with no `external` field). The container
-document itself, every person and system, every other container, every
-component outside this exact directory, all revision indexes, and all
-`groma/plans/**` files must remain byte-identical.
-
-The owned directory is assumed to exist and be writable. After scanning,
-target resolution, rendering, and Comark validation succeed, the emitter
-directly removes its current entries and writes the complete generated set. It
-does not stage a transaction, roll back partial filesystem writes, or retry
-cleanup.
-
-Generated component documents use the existing canonical Markdown model. They
-add readable evidence only in the body:
-
-```markdown
-## Source evidence
-
-- Component: `src/components/source-watcher.ts:1-6`
-- Entry point: `src/index.ts:1-3`
-- Relationship to `scanner-plugin`: `src/components/source-watcher.ts:9-14`
-```
-
-There is no `claim`, lifecycle, confidence, source, or range frontmatter.
-Evidence is not stored in a sidecar or alternate model.
-
-### Deterministic Markdown escaping
-
-Before placing any readable text in a heading, prose paragraph, technology
-section, relationship link label, or relationship table cell, the emitter
-applies one `escapeMarkdownText` operation. It iterates Unicode scalars without
-normalizing them (v1 readable inputs are printable ASCII). For every ASCII
-punctuation scalar in `U+0021–U+002F`,
-`U+003A–U+0040`, `U+005B–U+0060`, or `U+007B–U+007E`, it emits U+005C
-backslash followed by that scalar. Every other scalar is emitted unchanged.
-Escaping is performed once, left-to-right, on the decoded value; inserted
-backslashes are not processed again.
-
-This rule makes a source `|` become `\|`, a source `\` become `\\`, and
-Markdown delimiters such as `` ` ``, `*`, `_`, `[`, and `]` become escaped
-literal text. The same operation is used in GFM table cells, so a declared pipe
-cannot create a column and a declared backslash cannot consume the pipe escape.
-Static Markdown syntax—heading markers, table separators, link destinations,
-and evidence code-span delimiters—is not passed through this operation.
-
-For example, the supported fixture's decoded values and emitted text include:
-
-```text
-name input:       Markdown | emitter \ [safe]
-heading output:  # Markdown \| emitter \\ \[safe\]
-
-description input:  Writes *bounded* scan results _without_ ambiguity.
-prose output:       Writes \*bounded\* scan results \_without\_ ambiguity\.
-```
-
-`fixtures/scanners/typescript/supported.expected-markdown-text.json` is the
-deterministic escaping oracle for both component prose and a relationship table
-row. Applying the readable-text validation or escaping rules differently is
-outside this contract.
-
-## Read-only and non-goals
-
-The TypeScript scanner plugin opens only `package.json`, `src/index.ts`, and direct
-`src/components/*.ts` declaration files for reading. It never imports,
-evaluates, transpiles, type-checks, or executes project code and never runs a
-package script. It never reads a plan or uses plan contents to choose IDs.
-
-This contract does not define plugin discovery or registration, a framework catalog, confidence scores,
-rename reconciliation, automatic plan promotion, generalized AST semantics,
-call-graph inference, filesystem hardening or recovery, or partial/fallback
-extraction.
+The scanner surrounding the plugin owns source watching and decides when another scan is needed. The viewer remains
+separated from source scanning and consumes only the architecture exposed by Groma core.

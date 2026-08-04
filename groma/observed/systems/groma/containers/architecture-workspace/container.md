@@ -6,14 +6,14 @@ parent: groma
 
 # Architecture workspace
 
-Keeps observed architecture and feature plans as ordinary Markdown files
-inside the repository.
+Keeps observed, missing, and planned architecture as ordinary Markdown files inside the repository.
 
 ## Structure
 
 ```text
 groma/
   observed/
+  missing/
   plans/
     <plan-name>/
 ```

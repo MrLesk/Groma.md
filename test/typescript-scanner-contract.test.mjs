@@ -144,11 +144,11 @@ function nodeText(node) {
   return children.map(nodeText).join('')
 }
 
-test('supported fixture has exact Bun markers and deterministic declaration evidence', async () => {
+test('supported fixture has exact package markers and deterministic declaration evidence', async () => {
   const packageJson = await readJson(path.join(supportedRoot, 'package.json'))
   assert.equal(packageJson.private, true)
   assert.equal(packageJson.type, 'module')
-  assert.equal(packageJson.engines.bun, '>=1.3.14')
+  assert.equal(Object.hasOwn(packageJson, 'engines'), false)
   assert.equal(packageJson.scripts.start, 'bun run src/index.ts')
 
   const expected = await readJson(path.join(

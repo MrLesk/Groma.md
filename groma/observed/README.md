@@ -9,10 +9,9 @@ C4-compatible Markdown owned by this repository.
 - Its users are the [human architect](people/human-architect.md) and
   [coding agent](people/coding-agent.md).
 - The [architecture workspace](systems/groma/containers/architecture-workspace/container.md)
-  keeps observed architecture and feature plans in the repository and declares its relationship
+  keeps observed, missing, and planned architecture in the repository and declares its relationship
   to [Git](systems/git/system.md), which supplies history, diffs, and collaboration.
-- The [scanner](systems/groma/containers/scanner/container.md) owns the one directory
-  reserved for generated observed components.
+- The [scanner](systems/groma/containers/scanner/container.md) supplies bounded source-derived information to Groma core.
 
 The [component Markdown contract](../README.md) defines how these documents represent
 C4 elements, containment, and directed relationships.

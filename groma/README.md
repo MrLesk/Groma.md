@@ -5,21 +5,22 @@ architecture record and ordinary documentation: YAML frontmatter carries the min
 machine-readable identity and containment data, while the body explains the element
 and its outgoing relationships to a reader.
 
-The same document format is used in both architecture locations:
+The same document format is used across architecture locations:
 
 - `groma/observed/` is the architecture currently known to exist.
+- `groma/missing/` contains source-backed elements absent from complete scanner results while deletion intent is
+  resolved.
 - Each directory directly under `groma/plans/` is one planned feature. Per the
   [product model](../docs/product-model.md), a plan holds a README and only the element
   Markdown not yet implemented; the existing numbered directories predate that
   lifecycle and stay cumulative complete states until they are migrated.
 
-The containing directory supplies all lifecycle context. Element documents do not
-declare a plan, claim, status, lifecycle phase, diagram coordinates, or other
-layout state.
+The containing directory supplies lifecycle context. Element documents carry architectural meaning while observed,
+missing, and planned locations express their relationship to the product lifecycle.
 
 ## Files and containment
 
-Both locations follow the C4 ownership hierarchy:
+All architecture locations follow the C4 ownership hierarchy:
 
 ```text
 people/<person-id>.md
