@@ -22,7 +22,7 @@ Groma is designed for teams and coding agents that want to:
 - Describe people, systems, containers, components, and their relationships in ordinary Markdown.
 - Preserve human and agent annotations while source observations change.
 - Distinguish observed, missing, and planned architecture.
-- Compare all plans with the observed system in a live, navigable C4 view.
+- Compare plans with the observed system in a navigable terminal C4 view.
 - Review architectural changes alongside the code in Git.
 
 ## The C4 layers
@@ -32,7 +32,8 @@ C4 explains a software architecture by progressively revealing more detail:
 - **System Context** shows the people and software systems involved and how they interact.
 - **Container** opens one system to show the applications and data stores that make it work.
 - **Component** opens one container to show its cohesive responsibilities and their collaborations.
-- **Code** shows the scanner, exact file, and optional symbol behind a component.
+- Component details show the scanner, exact file, and optional symbol behind that component; Code is not a separate
+  viewer level.
 
 ## How it works
 
@@ -41,7 +42,8 @@ Groma has three main flows:
 1. **Scan:** Run scanners to produce a recognizable architecture from supported source shapes. Groma core reconciles
    their results into components. Each component may list high-level Code references in frontmatter using the scanner,
    exact source file, and optional symbol. Multiple scanners may contribute to the same component.
-2. **View:** Explore observed, missing, and planned architecture in terminal or web viewers.
+2. **View:** Ask Groma core for observed, missing, and planned architecture, then explore its fixed-world projection in
+   the terminal viewer. The viewer never reads Markdown directly.
 3. **Plan:** Describe the intended architecture by adding blueprints for new components, then watch the plan become
    reality as agents implement the code.
 
@@ -54,13 +56,7 @@ Install Groma and start it:
 
 ```sh
 npm install groma.md
-groma
-```
-
-Or start the web interface:
-
-```sh
-groma web
+groma view
 ```
 
 For product guides, technical references, and contributor resources, see the

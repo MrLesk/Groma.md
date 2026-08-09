@@ -36,10 +36,26 @@ observed architecture.
 
 A plan is a partial overlay, not a complete architecture, a numbered step, or the successor of another plan. Plans do
 not build on one another and have no order. Groma loads every plan alongside observed architecture while preserving each
-plan as an independent expression of intent.
+plan as an independent expression of intent. The MVP does not reconcile or merge overlapping plans: core returns each
+planned representation independently with its plan identity.
 
-The numbered directories currently under `groma/plans/` predate this contract. Each is a cumulative complete state and
-remains a valid input to the shipped viewer until it is migrated to a scoped feature plan.
+## Core view model
+
+Groma core is the only runtime boundary that reads architecture Markdown. For a viewer request, core loads
+every C4 element document under `groma/observed/`, `groma/missing/`, and every directory under `groma/plans/`. README
+files and other prose documents without C4 element frontmatter are not architecture items. Core resolves each element's
+stable ID, kind, name, description, containment, direct children, plan identity, annotations, and Code references, plus
+each relationship's source, target, description, and technology. It calculates the fixed world with ELK and returns the
+annotated model and ELK layout objects. A viewer never reads those directories itself.
+
+Core adds small runtime annotations for review:
+
+- `observed` marks an item supplied by observed architecture.
+- `planned` marks an item supplied by a plan whose desired result is not yet implemented.
+- `missing` marks an item supplied by missing architecture.
+
+The origin annotations `observed`, `planned`, and `missing` are mutually exclusive for one returned representation.
+These annotations are derived response data. They are never written into architecture frontmatter or Markdown bodies.
 
 ## Revisions
 

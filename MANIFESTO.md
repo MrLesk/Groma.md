@@ -25,6 +25,12 @@ Visual understanding is still part of the core product loop. Architecture that c
 be meaningfully planned or reviewed. The viewer is how people judge whether a scan is recognizable and whether a plan
 expresses the result they want.
 
+## Core owns runtime interpretation
+
+Scanners return source observations to Groma core. Core reconciles those observations and owns architecture Markdown.
+For viewing, core reads observed, missing, and planned Markdown and returns an annotated architecture model. Viewers
+render that model; they never read architecture files or scanner data directly.
+
 ## Human meaning is authoritative
 
 Approved architecture Markdown and its rendered meaning define the system. Stable conceptual identity matters more than

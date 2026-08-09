@@ -12,11 +12,13 @@ The same document format is used across architecture locations:
   resolved.
 - Each directory directly under `groma/plans/` is one planned feature. Per the
   [product model](../docs/product-model.md), a plan holds a README and only the element
-  Markdown not yet implemented; the existing numbered directories predate that
-  lifecycle and stay cumulative complete states until they are migrated.
+  Markdown not yet implemented.
 
 The containing directory supplies lifecycle context. Element documents carry architectural meaning while observed,
 missing, and planned locations express their relationship to the product lifecycle.
+
+Only documents with the C4 frontmatter below are element documents. Architecture README files and other prose Markdown
+are not elements and Groma core does not return them as C4 items.
 
 ## Files and containment
 
@@ -31,10 +33,8 @@ systems/<system-id>/containers/<container-id>/components/<component-id>.md
 
 The path makes the architecture easy to browse, but frontmatter is authoritative.
 Within one complete architecture model, every `id` must be unique and every
-`parent` must resolve to an element in that model. Observed architecture and
-each numbered pre-contract plan directory are complete on their own; a plan
-forms its complete model together with observed architecture. Containment is
-limited to:
+`parent` must resolve to an element in that model. A plan forms its complete
+model together with observed architecture. Containment is limited to:
 
 | Kind | Parent |
 | --- | --- |
@@ -70,11 +70,14 @@ directory.
 | `file` | yes | The exact repository-relative source file. |
 | `symbol` | no | The relevant symbol or entry point; omit it when the complete file is the useful reference. |
 
-Multiple scanners may contribute references to the same component. Code references provide the viewer's Code-level
-overview; they are not separate architecture elements and do not affect C4 containment.
+Multiple scanners may contribute references to the same component. Code references appear in component details; they
+are not separate architecture elements, a fourth viewer level, or part of C4 containment.
 
 Groma core may create a recognizable component document from an initial scan result. After a person or coding agent
 curates it, core may refresh `code` from later scan results but must not rewrite the Markdown body.
+
+Runtime viewer annotations such as `observed`, `planned`, and `missing` are also not frontmatter fields. Groma core
+derives them from architecture location when it builds a viewer model.
 
 ## Markdown body
 
@@ -142,22 +145,11 @@ TypeScript, NestJS, and PostgreSQL.
 
 ## Complete example
 
-The pre-contract [`02-live-viewer` plan directory](plans/02-live-viewer/README.md)
-is a complete example of the document format:
+The [observed architecture](observed/README.md) combined with the
+[MVP plan](plans/mvp/README.md) is a complete example of the document format.
+It includes people, internal and external systems, containers, components,
+containment, and directed relationships with working relative links.
 
-- [Human architect](plans/02-live-viewer/people/human-architect.md) and
-  [Coding agent](plans/02-live-viewer/people/coding-agent.md) are people.
-- [Groma](plans/02-live-viewer/systems/groma/system.md) is the internal software
-  system, while [Git](plans/02-live-viewer/systems/git/system.md) is an external
-  system.
-- [Viewer](plans/02-live-viewer/systems/groma/containers/viewer/container.md) and
-  [Architecture workspace](plans/02-live-viewer/systems/groma/containers/architecture-workspace/container.md)
-  are containers parented by `groma`.
-- [Markdown reader](plans/02-live-viewer/systems/groma/containers/viewer/components/markdown-reader.md)
-  and its peers are components parented by `viewer`.
-- The relationship tables are readable source-to-target statements and use working
-  relative links.
-
-All element documents in that directory are valid CommonMark/GFM with YAML
-frontmatter and can be parsed directly by the `comark` npm package. Groma does not
-require a second Markdown parser or a second canonical model format.
+All element documents are valid CommonMark/GFM with YAML frontmatter and can
+be parsed directly by the `comark` npm package. Groma does not require a second
+Markdown parser or a second canonical model format.

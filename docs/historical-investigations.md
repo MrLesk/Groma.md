@@ -24,9 +24,9 @@ Its durable conclusions are:
   supported path from the existing viewer.
 
 The branch retains the candidate inventory, comparison implementations,
-benchmarks, withdrawn decisions, and disposable proof applications. The
-`04-semantic-zoom-viewer` plan contains the current intended viewer; none of
-the branch contents are merge material.
+benchmarks, withdrawn decisions, and disposable proof applications. It records
+an abandoned web-viewer direction; none of the branch contents are merge
+material.
 
 ## OpenTUI viewer
 
@@ -48,6 +48,6 @@ Its durable conclusions are:
   the browser palette.
 
 The branch retains the disposable OpenTUI implementation, verified API notes,
-and design learnings. The `05-tui-viewer` plan contains the current intended
-terminal viewer; the spike must be consulted as evidence and rebuilt rather
-than merged.
+and design learnings. The current [MVP plan](../groma/plans/mvp/README.md)
+keeps only the interaction that survived review; the spike must be consulted
+as evidence and rebuilt rather than merged.

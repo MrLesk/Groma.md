@@ -13,7 +13,7 @@ Scan source code into a recognizable C4 starting point, then preserve its curate
 
 Explore observed and missing architecture alongside every plan.
 
-- [Viewer](viewer.md): observed, missing, and planned architecture with live updates
+- [Viewer](viewer.md): one fixed-world view of observed, missing, and planned architecture
 - [Observed architecture](../groma/observed/README.md): the architecture currently represented by this repository
 
 ## Plan
