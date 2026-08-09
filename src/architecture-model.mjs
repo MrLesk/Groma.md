@@ -120,7 +120,7 @@ function relationshipTargetFilename(sourceFilename, href) {
 }
 
 function documentToElement(document) {
-  const { id, kind, parent, external } = document.frontmatter
+  const { id, kind, parent, external, code } = document.frontmatter
   const { sourceFilename } = document
   const declaresExternal = Object.hasOwn(document.frontmatter, 'external')
 
@@ -161,6 +161,14 @@ function documentToElement(document) {
   }
 
   const { name, description } = elementNameAndDescription(document.nodes)
+  const codeReferences = Array.isArray(code)
+    ? code.map(reference => ({
+        scanner: reference.scanner,
+        file: reference.file,
+        ...(Object.hasOwn(reference, 'symbol') ? { symbol: reference.symbol } : {}),
+      }))
+    : []
+
   return {
     id,
     kind,
@@ -168,6 +176,7 @@ function documentToElement(document) {
     description,
     parentId: parent ?? null,
     external: external === true,
+    code: codeReferences,
     sourceFilename,
   }
 }

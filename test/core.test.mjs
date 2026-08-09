@@ -1,0 +1,225 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+import { loadArchitectureViewModel } from '../src/core.mjs'
+import { requestArchitectureModel } from '../src/viewer/model-request.mjs'
+
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+)
+const fixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'core-view')
+
+function elementByRepresentation(model, representationId) {
+  return model.elements.find(element => {
+    return element.representationId === representationId
+  })
+}
+
+test('returns every independently annotated architecture representation', async () => {
+  const model = await loadArchitectureViewModel(fixtureRoot)
+
+  assert.deepEqual(model.plans, ['checkout', 'inventory'])
+  assert.equal(model.elements.length, 9)
+  assert.deepEqual(
+    model.elements.map(element => element.representationId),
+    [
+      'observed:api',
+      'observed:orders',
+      'observed:payments',
+      'observed:shop',
+      'missing:legacy',
+      'planned:checkout:orders',
+      'planned:inventory:api',
+      'planned:inventory:inventory',
+      'planned:inventory:orders',
+    ],
+  )
+
+  assert.deepEqual(elementByRepresentation(model, 'observed:shop'), {
+    representationId: 'observed:shop',
+    id: 'shop',
+    kind: 'system',
+    name: 'Shop',
+    description: 'Lets customers place orders.',
+    parent: null,
+    children: ['observed:api', 'planned:inventory:api'],
+    external: false,
+    code: [],
+    origin: 'observed',
+  })
+  assert.deepEqual(elementByRepresentation(model, 'observed:orders').code, [
+    {
+      scanner: 'typescript',
+      file: 'src/orders.ts',
+      symbol: 'placeOrder',
+    },
+    {
+      scanner: 'routes',
+      file: 'src/routes/orders.ts',
+    },
+  ])
+  assert.deepEqual(
+    elementByRepresentation(model, 'observed:api').children,
+    [
+      'missing:legacy',
+      'observed:orders',
+      'planned:checkout:orders',
+    ],
+  )
+  assert.deepEqual(elementByRepresentation(model, 'missing:legacy'), {
+    representationId: 'missing:legacy',
+    id: 'legacy',
+    kind: 'component',
+    name: 'Legacy ordering',
+    description: 'Retains the last known legacy ordering responsibility.',
+    parent: 'observed:api',
+    children: [],
+    external: false,
+    code: [{ scanner: 'typescript', file: 'src/legacy.ts' }],
+    origin: 'missing',
+  })
+  assert.deepEqual(elementByRepresentation(model, 'planned:checkout:orders'), {
+    representationId: 'planned:checkout:orders',
+    id: 'orders',
+    kind: 'component',
+    name: 'Checkout orders',
+    description: 'Places an order through a guided checkout.',
+    parent: 'observed:api',
+    children: [],
+    external: false,
+    code: [{
+      scanner: 'typescript',
+      file: 'src/checkout-orders.ts',
+      symbol: 'checkout',
+    }],
+    origin: 'planned',
+    plan: 'checkout',
+  })
+  assert.deepEqual(elementByRepresentation(model, 'planned:inventory:api'), {
+    representationId: 'planned:inventory:api',
+    id: 'api',
+    kind: 'container',
+    name: 'Inventory-aware API',
+    description: 'Coordinates ordering and inventory operations.',
+    parent: 'observed:shop',
+    children: [
+      'planned:inventory:inventory',
+      'planned:inventory:orders',
+    ],
+    external: false,
+    code: [],
+    origin: 'planned',
+    plan: 'inventory',
+  })
+
+  const plannedOrders = model.elements.filter(element => element.id === 'orders')
+  assert.deepEqual(
+    plannedOrders.map(element => ({
+      representationId: element.representationId,
+      name: element.name,
+      origin: element.origin,
+      plan: element.plan,
+    })),
+    [
+      {
+        representationId: 'observed:orders',
+        name: 'Orders',
+        origin: 'observed',
+        plan: undefined,
+      },
+      {
+        representationId: 'planned:checkout:orders',
+        name: 'Checkout orders',
+        origin: 'planned',
+        plan: 'checkout',
+      },
+      {
+        representationId: 'planned:inventory:orders',
+        name: 'Inventory-aware orders',
+        origin: 'planned',
+        plan: 'inventory',
+      },
+    ],
+  )
+  assert.ok(model.elements.every(element => {
+    return ['observed', 'planned', 'missing'].includes(element.origin)
+      && !Object.hasOwn(element, 'annotations')
+  }))
+
+  assert.deepEqual(model.relationships, [
+    {
+      source: 'observed:orders',
+      target: 'observed:payments',
+      description: 'Requests payment authorization',
+      technology: 'HTTPS',
+      origin: 'observed',
+    },
+    {
+      source: 'missing:legacy',
+      target: 'observed:orders',
+      description: 'Delegates current orders',
+      technology: 'Function call',
+      origin: 'missing',
+    },
+    {
+      source: 'planned:checkout:orders',
+      target: 'observed:payments',
+      description: 'Authorizes checkout payment',
+      technology: 'HTTPS',
+      origin: 'planned',
+      plan: 'checkout',
+    },
+    {
+      source: 'planned:inventory:inventory',
+      target: 'planned:inventory:orders',
+      description: 'Reports reserved stock',
+      technology: 'Function call',
+      origin: 'planned',
+      plan: 'inventory',
+    },
+    {
+      source: 'planned:inventory:orders',
+      target: 'observed:payments',
+      description: 'Authorizes reserved orders',
+      technology: 'HTTPS',
+      origin: 'planned',
+      plan: 'inventory',
+    },
+  ])
+  assert.doesNotThrow(() => JSON.stringify(model))
+})
+
+test('viewer request delegates architecture I/O to the core boundary', async () => {
+  const viewerSource = await readFile(
+    path.join(repositoryRoot, 'src', 'viewer', 'model-request.mjs'),
+    'utf8',
+  )
+  assert.doesNotMatch(viewerSource, /node:fs|architecture-reader|groma\/(?:observed|missing|plans)/)
+
+  const accesses = []
+  const model = await requestArchitectureModel(fixtureRoot, {
+    onFilesystemAccess(access) {
+      accesses.push({
+        operation: access.operation,
+        path: path.relative(fixtureRoot, access.filename).split(path.sep).join('/'),
+      })
+    },
+  })
+
+  assert.deepEqual(model.plans, ['checkout', 'inventory'])
+  assert.deepEqual(
+    [...new Set(accesses.map(access => access.operation))].sort(),
+    ['read-directory', 'read-file'],
+  )
+  assert.ok(accesses.every(access => {
+    return access.path === 'groma/plans'
+      || access.path.startsWith('groma/observed')
+      || access.path.startsWith('groma/missing')
+      || access.path.startsWith('groma/plans/checkout')
+      || access.path.startsWith('groma/plans/inventory')
+  }))
+})

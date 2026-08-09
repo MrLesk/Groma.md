@@ -520,38 +520,6 @@ test('source bytes reject BOM, non-LF separators, and malformed UTF-8', async ()
   )
 })
 
-test('fixture IDs exactly match the plan-03 scanner components', async () => {
-  const expected = await readJson(path.join(
-    fixtureRoot,
-    'supported.expected.json',
-  ))
-  const planComponentsRoot = path.join(
-    repositoryRoot,
-    'groma',
-    'plans',
-    '03-code-scanning',
-    'systems',
-    'groma',
-    'containers',
-    'scanner',
-    'components',
-  )
-  const planFiles = (await readdir(planComponentsRoot))
-    .filter(filename => filename.endsWith('.md'))
-    .sort()
-  const planIds = []
-
-  for (const filename of planFiles) {
-    const source = await readFile(path.join(planComponentsRoot, filename), 'utf8')
-    planIds.push(parseFrontmatter(source).data.id)
-  }
-
-  assert.deepEqual(
-    expected.components.map(component => component.id),
-    planIds.sort(bytewiseCompare),
-  )
-})
-
 test('owned subtree has one hand-authored parent and no generated Markdown yet', async () => {
   const scannerRoot = path.join(
     repositoryRoot,

@@ -9,19 +9,10 @@
   "scripts": {
     "validate:architecture": "node scripts/validate-architecture.mjs",
     "scanner": "node src/scanner-process.mjs",
-    "viewer": "bun run src/viewer/server.mjs",
-    "test:release-gate": "playwright test --config playwright.release-gate.config.mjs",
-    "test:viewer:browser": "playwright test",
     "test": "node --test",
     "check": "bun run validate:architecture && bun run test"
   },
   "dependencies": {
-    "@xyflow/react": "12.11.2",
-    "comark": "0.5.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
-  },
-  "devDependencies": {
-    "@playwright/test": "1.62.0"
+    "comark": "0.5.1"
   }
 }

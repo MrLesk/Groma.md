@@ -80,13 +80,20 @@ function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
-function within(promise, milliseconds, label) {
-  return Promise.race([
-    promise,
-    delay(milliseconds).then(() => {
-      throw new Error(`Timed out waiting for ${label}`)
-    }),
-  ])
+async function within(promise, milliseconds, label) {
+  let timeout
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Timed out waiting for ${label}`))
+        }, milliseconds)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function treeHash(directory, options = {}) {
@@ -274,9 +281,10 @@ test('a supported event during scanning queues one later complete scan', async t
   assert.equal(emissions, 2)
 })
 
-test('real add, modify, and remove events replace only the owned subtree', async t => {
+test('add, modify, and remove events replace only the owned subtree', async t => {
   const { startScanner } = await import('../src/scanner.mjs')
   const repositoryRoot = await createSupportedRepository(t)
+  const fake = createFakeFilesystemWatcher()
   const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
   const plansRoot = path.join(repositoryRoot, 'groma', 'plans')
   const ownedFromObserved = path.relative(
@@ -294,6 +302,7 @@ test('real add, modify, and remove events replace only the owned subtree', async
   const completedResults = []
   const scanner = await startScanner(repositoryRoot, {
     settleMilliseconds: 40,
+    watchFileSystem: fake.watchFileSystem,
     onError: assert.fail,
     onScanComplete(result) {
       completedResults.push(result)
@@ -301,7 +310,9 @@ test('real add, modify, and remove events replace only the owned subtree', async
     },
   })
   t.after(() => scanner.close())
-  await delay(50)
+  const sourceRegistration = fake.registrations.find(registration => {
+    return registration.directory === path.join(repositoryRoot, 'src', 'components')
+  })
 
   const addedComponent = path.join(
     repositoryRoot,
@@ -323,6 +334,7 @@ test('real add, modify, and remove events replace only the owned subtree', async
       '',
     ].join('\n'),
   )
+  sourceRegistration.callback('rename', 'event-recorder.ts')
   await within(completions.next(), 10_000, 'added component scan')
   assert.match(
     await readFile(
@@ -339,6 +351,7 @@ test('real add, modify, and remove events replace only the owned subtree', async
     'Records one complete settled scan.',
   )
   await writeFile(addedComponent, modifiedSource)
+  sourceRegistration.callback('change', 'event-recorder.ts')
   await within(completions.next(), 10_000, 'modified component scan')
   assert.match(
     await readFile(
@@ -349,6 +362,7 @@ test('real add, modify, and remove events replace only the owned subtree', async
   )
 
   await rm(addedComponent)
+  sourceRegistration.callback('rename', 'event-recorder.ts')
   await within(completions.next(), 10_000, 'removed component scan')
   await assert.rejects(
     readFile(

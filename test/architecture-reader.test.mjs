@@ -15,9 +15,10 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
+const fixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'core-view')
 
-test('loads observed and planned Markdown as deterministic Comark-derived data', async () => {
-  const revisions = await loadArchitecture(repositoryRoot)
+test('loads observed, missing, and every plan as deterministic Comark-derived data', async () => {
+  const revisions = await loadArchitecture(fixtureRoot)
 
   assert.deepEqual(
     revisions.map(({ revision }) => revision),
@@ -27,35 +28,24 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
         sourceDirectory: 'groma/observed',
       },
       {
-        kind: 'plan',
-        name: '01-markdown-foundation',
-        sourceDirectory: 'groma/plans/01-markdown-foundation',
+        kind: 'missing',
+        sourceDirectory: 'groma/missing',
       },
       {
         kind: 'plan',
-        name: '02-live-viewer',
-        sourceDirectory: 'groma/plans/02-live-viewer',
+        name: 'checkout',
+        sourceDirectory: 'groma/plans/checkout',
       },
       {
         kind: 'plan',
-        name: '03-code-scanning',
-        sourceDirectory: 'groma/plans/03-code-scanning',
-      },
-      {
-        kind: 'plan',
-        name: '04-semantic-zoom-viewer',
-        sourceDirectory: 'groma/plans/04-semantic-zoom-viewer',
-      },
-      {
-        kind: 'plan',
-        name: '05-tui-viewer',
-        sourceDirectory: 'groma/plans/05-tui-viewer',
+        name: 'inventory',
+        sourceDirectory: 'groma/plans/inventory',
       },
     ],
   )
   assert.deepEqual(
     revisions.map(({ documents }) => documents.length),
-    [6, 5, 10, 15, 15, 19],
+    [4, 1, 1, 3],
   )
 
   for (const loadedRevision of revisions) {
@@ -94,22 +84,23 @@ test('loads observed and planned Markdown as deterministic Comark-derived data',
   assert.ok(Object.isFrozen(revisions[0].documents[0].frontmatter))
 })
 
-test('returns each plan README as revision context rather than a C4 document', async () => {
-  const revisions = await loadArchitecture(repositoryRoot)
-  const plans = revisions.filter(({ revision }) => revision.kind === 'plan')
+test('keeps README and other prose as context rather than C4 documents', async () => {
+  const revisions = await loadArchitecture(fixtureRoot)
 
   assert.deepEqual(
-    plans.map(({ context }) => context.sourceFilename),
+    revisions.map(({ context }) => context.sourceFilename),
     [
-      'groma/plans/01-markdown-foundation/README.md',
-      'groma/plans/02-live-viewer/README.md',
-      'groma/plans/03-code-scanning/README.md',
-      'groma/plans/04-semantic-zoom-viewer/README.md',
-      'groma/plans/05-tui-viewer/README.md',
+      'groma/observed/README.md',
+      'groma/missing/README.md',
+      'groma/plans/checkout/README.md',
+      'groma/plans/inventory/README.md',
     ],
   )
-  assert.ok(plans.every(({ documents }) => {
-    return documents.every(document => !document.sourceFilename.endsWith('/README.md'))
+  assert.ok(revisions.every(({ documents }) => {
+    return documents.every(document => {
+      return !document.sourceFilename.endsWith('/README.md')
+        && !document.sourceFilename.endsWith('/notes.md')
+    })
   }))
 })
 
@@ -156,6 +147,11 @@ test('loads a plan named observed independently from the observed revision', asy
       `---\nid: ${id}\nkind: person\n---\n\n# ${id}\n\nA person.\n`,
     )
   }
+  await mkdir(path.join(temporaryRoot, 'groma', 'missing'), { recursive: true })
+  await writeFile(
+    path.join(temporaryRoot, 'groma', 'missing', 'README.md'),
+    '# Missing\n',
+  )
 
   const revisions = await loadArchitecture(temporaryRoot)
 
@@ -163,7 +159,7 @@ test('loads a plan named observed independently from the observed revision', asy
     revisions.map(({ revision, context, documents }) => ({
       revision,
       context: context.sourceFilename,
-      documentId: documents[0].frontmatter.id,
+      documentId: documents[0]?.frontmatter.id,
     })),
     [
       {
@@ -173,6 +169,14 @@ test('loads a plan named observed independently from the observed revision', asy
         },
         context: 'groma/observed/README.md',
         documentId: 'observed-person',
+      },
+      {
+        revision: {
+          kind: 'missing',
+          sourceDirectory: 'groma/missing',
+        },
+        context: 'groma/missing/README.md',
+        documentId: undefined,
       },
       {
         revision: {

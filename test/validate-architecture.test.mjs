@@ -16,8 +16,7 @@ const repositoryRoot = path.resolve(
 const foundationRoot = path.join(
   repositoryRoot,
   'groma',
-  'plans',
-  '01-markdown-foundation',
+  'observed',
 )
 
 async function createFoundationFixture(t) {
@@ -58,14 +57,10 @@ test('validates observed and every planned revision', async () => {
     results.map(result => path.relative(repositoryRoot, result.revisionRoot)),
     [
       'groma/observed',
-      'groma/plans/01-markdown-foundation',
-      'groma/plans/02-live-viewer',
-      'groma/plans/03-code-scanning',
-      'groma/plans/04-semantic-zoom-viewer',
-      'groma/plans/05-tui-viewer',
+      'groma/plans/mvp',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [6, 5, 10, 15, 15, 19])
+  assert.deepEqual(results.map(result => result.elementCount), [6, 14])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {

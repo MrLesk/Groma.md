@@ -85,107 +85,63 @@ test('exports a revision model builder', () => {
   assert.equal(typeof buildArchitectureModel, 'function')
 })
 
-test('builds a serializable revision-local C4 graph from TASK-4 documents', async () => {
+test('builds a serializable revision-local C4 graph with Code references', async () => {
   const loadedRevision = await loadRevision(
-    repositoryRoot,
-    { kind: 'plan', name: '02-live-viewer' },
+    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
+    { kind: 'observed' },
   )
   const model = buildArchitectureModel(loadedRevision)
   const reloadedModel = buildArchitectureModel(await loadRevision(
-    repositoryRoot,
-    { kind: 'plan', name: '02-live-viewer' },
+    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
+    { kind: 'observed' },
   ))
 
   assert.deepEqual(model, reloadedModel)
   assert.deepEqual(Object.keys(model), ['revision', 'elements', 'relationships'])
   assert.deepEqual(model.revision, {
-    kind: 'plan',
-    name: '02-live-viewer',
-    sourceDirectory: 'groma/plans/02-live-viewer',
+    kind: 'observed',
+    sourceDirectory: 'groma/observed',
   })
   assert.deepEqual(
     model.elements.map(element => element.id),
-    [
-      'architecture-model',
-      'architecture-workspace',
-      'canvas',
-      'coding-agent',
-      'git',
-      'groma',
-      'human-architect',
-      'markdown-reader',
-      'markdown-watcher',
-      'viewer',
-    ],
+    ['api', 'orders', 'payments', 'shop'],
   )
   assert.deepEqual(
-    model.elements.find(element => element.id === 'human-architect'),
+    model.elements.find(element => element.id === 'orders'),
     {
-      id: 'human-architect',
-      kind: 'person',
-      name: 'Human architect',
-      description: 'Understands, plans, and reviews the architecture of a software system.',
-      parentId: null,
-      external: false,
-      sourceFilename: 'groma/plans/02-live-viewer/people/human-architect.md',
-    },
-  )
-  assert.deepEqual(
-    model.elements.find(element => element.id === 'git'),
-    {
-      id: 'git',
-      kind: 'system',
-      name: 'Git',
-      description: 'Keeps history, diffs, and collaboration for the architecture files.',
-      parentId: null,
-      external: true,
-      sourceFilename: 'groma/plans/02-live-viewer/systems/git/system.md',
-    },
-  )
-  assert.deepEqual(
-    model.elements.find(element => element.id === 'viewer'),
-    {
-      id: 'viewer',
-      kind: 'container',
-      name: 'Viewer',
-      description: 'Turns the Markdown architecture into an explorable local visual map.',
-      parentId: 'groma',
-      external: false,
-      sourceFilename:
-        'groma/plans/02-live-viewer/systems/groma/containers/viewer/container.md',
-    },
-  )
-  assert.deepEqual(
-    model.elements.find(element => element.id === 'markdown-reader'),
-    {
-      id: 'markdown-reader',
+      id: 'orders',
       kind: 'component',
-      name: 'Markdown reader',
-      description: 'Reads component documents into a portable syntax tree.',
-      parentId: 'viewer',
+      name: 'Orders',
+      description: 'Places and tracks customer orders.',
+      parentId: 'api',
       external: false,
+      code: [
+        {
+          scanner: 'typescript',
+          file: 'src/orders.ts',
+          symbol: 'placeOrder',
+        },
+        {
+          scanner: 'routes',
+          file: 'src/routes/orders.ts',
+        },
+      ],
       sourceFilename:
-        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
-        + 'markdown-reader.md',
+        'groma/observed/systems/shop/containers/api/components/orders.md',
     },
   )
-  assert.equal(model.relationships.length, 10)
+  assert.equal(model.relationships.length, 1)
   assert.deepEqual(
-    model.relationships.find(relationship => {
-      return relationship.sourceId === 'markdown-reader'
-        && relationship.targetId === 'architecture-model'
-    }),
+    model.relationships[0],
     {
-      sourceId: 'markdown-reader',
-      targetId: 'architecture-model',
-      description: 'Supplies parsed component documents',
-      technology: 'In-process data',
+      sourceId: 'orders',
+      targetId: 'payments',
+      description: 'Requests payment authorization',
+      technology: 'HTTPS',
       sourceFilename:
-        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
-        + 'markdown-reader.md',
+        'groma/observed/systems/shop/containers/api/components/orders.md',
       targetSourceFilename:
-        'groma/plans/02-live-viewer/systems/groma/containers/viewer/components/'
-        + 'architecture-model.md',
+        'groma/observed/systems/payments/system.md',
     },
   )
   assert.doesNotThrow(() => JSON.stringify(model))
@@ -499,7 +455,7 @@ for (const {
 test('contains no presentation state', async () => {
   const loadedRevision = await loadRevision(
     repositoryRoot,
-    { kind: 'plan', name: '02-live-viewer' },
+    { kind: 'plan', name: 'mvp' },
   )
 
   const model = buildArchitectureModel(loadedRevision)

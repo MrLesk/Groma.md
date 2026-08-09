@@ -20,14 +20,11 @@ bun install
 bun run check
 ```
 
-Start the web viewer with `bun run viewer`. The command prints the local URL to open.
-
 ## Before starting a feature
 
 Describe every new supported product flow as a Gherkin scenario before implementation. The scenario is the semantic
-authority: it names the user action and observable outcome without specifying DOM interactions, terminal keystrokes, or
-implementation details. Do not create Gherkin scenarios solely to test UI rendering. When web and terminal viewers
-provide the same behavior, they share the same scenario.
+authority: it names the user action and observable outcome without specifying terminal keystrokes or implementation
+details. Do not create Gherkin scenarios solely to test UI rendering.
 
 Confirm that the actor, entry point, observable result, and approved example are clear before changing code.
 
@@ -44,13 +41,10 @@ Run the checks relevant to the change:
 
 ```sh
 bun run check
-bun run test:viewer:browser
-bun run test:release-gate
 ```
 
-For a feature, finish by running its Gherkin scenario through the applicable Playwright BDD drivers and confirming the
-same semantic outcome on every supported surface. The terminal driver must exercise the real TUI through a PTY. Any
-browser-hosted terminal is test infrastructure, not a user-visible Groma surface.
+For a terminal feature, finish by running its approved scenario through the real TUI in a PTY when the task requires a
+terminal walkthrough.
 
 Before handing off the change, review the diff, remove unnecessary complexity, and report which checks passed or could
 not be run.

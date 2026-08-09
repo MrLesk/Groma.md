@@ -71,6 +71,13 @@ function identifyRevision(revision) {
     }
   }
 
+  if (revision?.kind === 'missing') {
+    return {
+      kind: 'missing',
+      sourceDirectory: 'groma/missing',
+    }
+  }
+
   if (
     revision?.kind !== 'plan'
     || typeof revision.name !== 'string'
@@ -81,7 +88,8 @@ function identifyRevision(revision) {
     || revision.name.includes('\\')
   ) {
     throw new TypeError(
-      'A revision must be { kind: "observed" } or { kind: "plan", name: "<directory>" }',
+      'A revision must be { kind: "observed" }, { kind: "missing" }, '
+      + 'or { kind: "plan", name: "<directory>" }',
     )
   }
 
@@ -90,6 +98,11 @@ function identifyRevision(revision) {
     name: revision.name,
     sourceDirectory: `groma/plans/${revision.name}`,
   }
+}
+
+function isElementDocument(document) {
+  return Object.hasOwn(document.frontmatter, 'id')
+    && Object.hasOwn(document.frontmatter, 'kind')
 }
 
 async function parseDocument(
@@ -140,23 +153,31 @@ export async function loadRevision(
     revisionRoot,
     onFilesystemAccess,
   )
-  const documentFiles = markdownFiles.filter(filename => filename !== contextFile)
-
-  const context = await parseDocument(
-    absoluteRepositoryRoot,
-    revision,
-    contextFile,
-    onFilesystemAccess,
-  )
+  let context
   const documents = []
 
-  for (const filename of documentFiles) {
-    documents.push(await parseDocument(
+  for (const filename of markdownFiles) {
+    const document = await parseDocument(
       absoluteRepositoryRoot,
       revision,
       filename,
       onFilesystemAccess,
-    ))
+    )
+
+    if (filename === contextFile) {
+      context = document
+    } else if (isElementDocument(document)) {
+      documents.push(document)
+    }
+  }
+
+  if (!context) {
+    context = await parseDocument(
+      absoluteRepositoryRoot,
+      revision,
+      contextFile,
+      onFilesystemAccess,
+    )
   }
 
   return deepFreeze({
@@ -174,6 +195,7 @@ export async function loadArchitecture(repositoryRoot, options = {}) {
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
   const revisionDescriptors = [
     { kind: 'observed' },
+    { kind: 'missing' },
     ...planEntries
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name)
