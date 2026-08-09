@@ -2,8 +2,8 @@
 
 Groma stores one C4 element per Markdown file. The document is both the canonical
 architecture record and ordinary documentation: YAML frontmatter carries the minimum
-machine-readable identity and containment data, while the body explains the element
-and its outgoing relationships to a reader.
+machine-readable identity, containment, and high-level Code references, while the body
+explains the element and its outgoing relationships to a reader.
 
 The same document format is used across architecture locations:
 
@@ -54,10 +54,27 @@ fields:
 | `kind` | yes | One of `person`, `system`, `container`, or `component`. |
 | `parent` | for containers and components | The stable `id` of the containing system or container. |
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
+| `code` | no | High-level scanner-produced source references for a component. |
 
 No other frontmatter field is part of the contract. In particular, there is no
 `claim` field: observed versus planned meaning comes only from the containing
 directory.
+
+### Code references
+
+`code` is a list on a component document. Each entry contains only:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `scanner` | yes | The scanner that found the reference. |
+| `file` | yes | The exact repository-relative source file. |
+| `symbol` | no | The relevant symbol or entry point; omit it when the complete file is the useful reference. |
+
+Multiple scanners may contribute references to the same component. Code references provide the viewer's Code-level
+overview; they are not separate architecture elements and do not affect C4 containment.
+
+Groma core may create a recognizable component document from an initial scan result. After a person or coding agent
+curates it, core may refresh `code` from later scan results but must not rewrite the Markdown body.
 
 ## Markdown body
 
@@ -72,8 +89,6 @@ These level-two sections are optional:
 - `## Technology` describes the implementation technology in prose.
 - `## Relationships` contains the outgoing directed relationships in the table
   format below.
-- `## Source evidence` lists repository-relative source files and inclusive line
-  ranges for scanner-generated elements.
 
 Other level-two sections may add human-readable explanation, such as `## Structure`.
 They remain prose and do not add model fields.
@@ -92,6 +107,38 @@ source file; the target document's `id` identifies the target. A reverse relatio
 exists only when the target document declares its own row. `Description` states the
 intent of the interaction. `Technology` states its mechanism; use plain language
 rather than model syntax.
+
+## Component example
+
+```markdown
+---
+id: ordering
+kind: component
+parent: commerce-api
+code:
+  - scanner: typescript
+    file: packages/orders/src/orders-service.ts
+    symbol: OrdersService
+  - scanner: nestjs
+    file: apps/api/src/orders/orders.controller.ts
+    symbol: OrdersController.create
+---
+
+# Ordering
+
+Owns the lifecycle of an order from placement through completion.
+
+## Technology
+
+TypeScript, NestJS, and PostgreSQL.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Payments](../payments.md) | Requests payment authorization | Internal API |
+| [Inventory](../inventory.md) | Reserves ordered products | Internal API |
+```
 
 ## Complete example
 

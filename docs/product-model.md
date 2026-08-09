@@ -7,8 +7,17 @@ the exact document format.
 ## Observed architecture
 
 Observed architecture is the architecture currently known to exist. Its canonical Markdown lives under
-`groma/observed/` and may combine hand-authored elements with source-derived elements accepted by Groma core. It is the only authored
-complete state.
+`groma/observed/` and may combine hand-authored elements with source-derived elements accepted by Groma core. It is the
+only authored complete state.
+
+## Scanning and curation
+
+An initial scan may materialize a recognizable component as a starting point. A person or coding agent then improves its
+name, responsibility, relationships, and other Markdown prose. That body becomes authoritative.
+
+Scanners send later results to Groma core. Core reconciles them against the stable component and refreshes only its
+`code` frontmatter. Core does not rewrite the Markdown body. Multiple scanners may contribute Code references to the
+same component.
 
 ## Missing architecture
 
@@ -35,8 +44,8 @@ remains a valid input to the shipped viewer until it is migrated to a scoped fea
 ## Revisions
 
 A revision is the immutable architecture state represented by a Git commit and identified by its SHA. Revisions are not
-stored as directories. A plan may materialize across any number of revisions. Git history is the only archive, and Groma
-records no plan-to-revision mapping.
+stored as directories. A plan may materialize across any number of revisions. For the MVP, Git history is the only
+archive and Groma records no plan-to-revision mapping. More direct traceability is deferred until after the MVP.
 
 ## Implementation lifecycle
 

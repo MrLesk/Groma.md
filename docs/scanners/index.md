@@ -1,15 +1,20 @@
 # Scanners
 
-Groma scanners turn supported source code into architectural information. A scanner coordinates source watching and
-invokes the plugin for the project's language or ecosystem. Groma core owns the resulting architecture model.
+Groma scanners turn supported source code into a recognizable architectural starting point. A scanner coordinates
+source watching and invokes the plugin for the project's language or ecosystem. Groma core owns the resulting
+architecture model.
 
 ```text
-source watcher → scanner plugin → scan result → Groma core
+scan → recognizable architecture → human or agent curation → rescan without lost annotations
 ```
 
 Every scanner plugin implements Groma's scanner-plugin interface. Each plugin defines the source shapes it supports and
-translates them into a shared C4 scan result containing systems, containers, components, code, relationships, evidence,
-and optional people. Core applies domain rules to that canonical result and reconciles observed and missing architecture.
+translates them into a shared C4 scan result containing systems, containers, components, relationships, optional people,
+and high-level Code references. A Code reference contains the scanner, exact repository-relative file, and optional
+symbol. Multiple scanners may contribute references to one component.
+
+Core reconciles the result with observed and missing architecture. It may create the initial component Markdown, but a
+later scanner still only returns data. Core updates `code` frontmatter from that result and preserves the curated body.
 
 See [Creating a scanner plugin](creating-a-plugin.md) for the shared interface, source-contract responsibilities, and
 the boundary with Groma core.

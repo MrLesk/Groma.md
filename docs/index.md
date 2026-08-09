@@ -5,7 +5,7 @@ plan a desired architectural change.
 
 ## Scan
 
-Scan source code and produce a C4 model in local Markdown files.
+Scan source code into a recognizable C4 starting point, then preserve its curated meaning across later scans.
 
 - [Scanners](scanners/index.md): the shared scanning flow and available language or ecosystem plugins
 

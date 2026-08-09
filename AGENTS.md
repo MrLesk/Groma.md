@@ -26,6 +26,19 @@ metadata, relationships, and history stay consistent.
 </CRITICAL_INSTRUCTION>
 <!-- BACKLOG.MD GUIDELINES END -->
 
+## IMPORTANT: Experimental prototype
+
+Groma is an early experimental prototype used only by its developers. It has no external users and no released data,
+storage, CLI, or API contracts that must remain compatible.
+
+Do not preserve previous versions. Do not add backward compatibility, migrations, legacy formats, compatibility adapters,
+or deprecation paths unless the current user explicitly requests one. When the product direction changes, replace the old
+behavior directly and delete obsolete code, documentation, tests, and prototype data.
+
+It is acceptable to wipe and recreate all Groma-owned prototype state required by the current task instead of migrating
+it. This permission applies only to explicitly scoped Groma artifacts and never to unrelated developer files or systems.
+
+
 ## Backlog task scope
 
 As a project-specific override to the overview's general task-creation guidance, create Backlog tasks only when the
@@ -33,6 +46,19 @@ requested work includes code changes. Do not create a task for standalone docume
 administration, such as relabeling, status corrections, or metadata maintenance. Documentation required to deliver an
 in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
 request.
+
+## Minimum sufficient product
+
+Build the simplest real result that matches the approved example. Prefer the fewest concepts, fields, files, dependencies,
+and lines of code or documentation that make the requested observable result work.
+
+Simplicity means minimum sufficient information, not vague placeholders or toy behavior. Keep concrete data the supported
+flow actually needs, such as an exact source file when a code reference must be useful, and omit everything the current
+result does not require. Add another field, layer, abstraction, rule, or explanation only when the approved example cannot
+work without it.
+
+When multiple approaches produce the same result, choose the one that is shortest and easiest to explain. Do not import
+complexity from an earlier Groma implementation, a generic architecture, or a hypothetical future requirement.
 
 ## UI descriptions
 

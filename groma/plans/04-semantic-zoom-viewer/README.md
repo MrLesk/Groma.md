@@ -70,8 +70,9 @@ the aesthetic.
   focal system as the inked `C4 / SYSTEM` boundary folio, container
   boundaries nested inside it, component cards nested inside containers,
   persons in a left rail and external systems in a right rail. Layout derives
-  deterministically from the model with stable-id ordering, so unchanged
-  elements never move across live reloads.
+  deterministically from the complete model with stable-id ordering. Reloading
+  an unchanged model reproduces the same geometry; when components or
+  relationships change, the viewer may recompute a deterministic best fit.
 - **Four landmarks** — Context, Containers, Components, Code. Context and
   Containers are fit-derived from the world size; Components and Code are
   absolute because card size is constant. Level boundaries sit at geometric
@@ -100,11 +101,11 @@ the aesthetic.
   ease-in-out-cubic landmark animation interpolated in log space, and the
   CSS-custom-property emphasis mechanism that crossfades with zero React
   re-renders (~80 fps at 1,000 components in the selection evidence).
-- **Code level is a reserved layer**: the model carries no code items yet, so
-  component code chips render only when the scanner provides them; until
-  then the Code level deepens focus and the level card states plainly that no
-  code-level scan results exist in the revision. No placeholder data is
-  fabricated.
+- **Code level reads component frontmatter**: each code chip shows the scanner,
+  exact repository-relative file, and optional symbol from a component's
+  `code` list. The current model carries no entries yet, so until a scanner
+  provides them the Code level states plainly that no code-level scan results
+  exist. No placeholder data is fabricated.
 - **Everything behavioral is preserved**: the `/api/model` and `/api/events`
   contracts, watcher scope, plan-vs-observed comparison rendering, and live
   reloads as data refreshes that keep the camera where the architect left it.

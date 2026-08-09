@@ -4,11 +4,14 @@ The Groma viewer makes architectural intent visible without adding presentation 
 a read-only view of observed architecture, missing architecture, and every plan. Planned additions appear as ghosts and
 missing elements remain visible while their deletion intent is resolved.
 
+The viewer is part of the product's core loop, not a presentation step after scanning. It lets a person decide whether
+the first scanned architecture is recognizable, improve its meaning, and review later observed or planned changes.
+
 ## Model and comparison
 
 The viewer loads `groma/observed`, `groma/missing`, and all plans according to the [product model](product-model.md). It
 preserves which plan each desired element belongs to and displays the lifecycle state supplied by each Markdown
-location.
+location. At Code detail, it shows the scanner, exact file, and optional symbol recorded in component frontmatter.
 
 ## Live updates
 
