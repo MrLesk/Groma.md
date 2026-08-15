@@ -14,8 +14,9 @@ Groma core → world → viewer plugin
 ```
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or
-lays the world out. It asks core for the world and projects it. When
-someone changes architecture in a viewer, Groma writes the Markdown.
+lays the world out. It asks core for the world and projects it. The world
+is a map: selecting an item or opening details does not lay it out again.
+When someone changes architecture in a viewer, Groma writes the Markdown.
 
 See [Creating a viewer plugin](creating-a-plugin.md) for the shared
 boundary.

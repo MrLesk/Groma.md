@@ -169,9 +169,20 @@ The implementer applies accepted simplifications and reruns focused checks. Ther
 limited to the original simplicity findings and regressions caused by their fixes. The normal specification and quality
 reviews follow only after this gate passes.
 
-## TUI checks
+## TUI map
 
-Drive `groma view` with `agent-tty`. Snapshot the screen, send keys, screenshot. Do not wait for a human screenshot.
+The TUI world is a map. Do not reflow it for selection or details.
+
+- Details overlay the world. They do not reserve width or change scale.
+- Arrowing only changes which item is selected. If that item would leave
+  the screen, pan just enough to keep it visible. Do not follow every
+  selection.
+- Cards, routes, and relationship labels stay on the same cells while
+  the selection stays on screen.
+
+Drive `groma view` with `agent-tty`. Snapshot, send keys, screenshot.
+Compare frames after arrows between visible items. If a card or label
+jumped, the map moved. Do not wait for a human screenshot.
 
 ```bash
 SID=$(agent-tty create --json --cols 120 --rows 36 -- bun src/cli.ts view | jq -r '.result.sessionId')

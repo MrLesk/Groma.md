@@ -12,8 +12,16 @@ System Context, Containers, and Components are three levels over one
 geometry. Observed items exist. Planned items are ghosts. Off-level
 internals collapse so the current level stays the subject.
 
-Changing level, selection, details, or terminal size never lays the
-architecture out again.
+The world is a map. Cards, routes, and relationship labels have places
+on that map. Changing selection, details, or terminal size never lays
+the architecture out again.
+
+Details overlay the map. They do not take space from it.
+
+Arrows change which item is selected. The camera stays unless that item
+would leave the visible area; then it pans just enough to keep the
+selection on screen. `+` and Enter on a system or container are what
+change which part of the map is in view.
 
 ## What you can do
 
