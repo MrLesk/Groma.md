@@ -57,7 +57,8 @@ function cameraBounds(
       const child = elementsById.get(id)
       return child ? [child.bounds] : []
     })
-    return padded(unionBounds(children) ?? selected.bounds)
+    const framed = unionBounds(children)
+    if (framed) return padded(framed)
   }
   return padded(focusElement(level, selected, elementsById)?.bounds ?? world.bounds)
 }
@@ -123,19 +124,8 @@ function centeredBounds(bounds: Bounds, width: number, height: number): Bounds {
 }
 
 function titledCardBounds(bounds: Bounds, element: WorldElement): Bounds {
-  const width = Math.max(
-    titledCard.width,
-    element.name.length + 4,
-    element.origin.length + 4,
-  )
-  const compound = element.children.length > 0
-  if (compound) return centeredBounds(bounds, width, titledCard.height)
-
-  return centeredBounds(
-    bounds,
-    Math.max(bounds.width, width),
-    Math.max(bounds.height, titledCard.height),
-  )
+  const width = Math.max(titledCard.width, element.name.length + 4)
+  return centeredBounds(bounds, width, titledCard.height)
 }
 
 function compactBounds(bounds: Bounds, element: WorldElement): Bounds {
@@ -473,15 +463,39 @@ function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
     && bounds.y + bounds.height > viewport.y
 }
 
+function labelHits(
+  label: Pick<Bounds, 'x' | 'y' | 'width'>,
+  obstacles: Bounds[],
+): boolean {
+  const box = {
+    x: label.x - 1,
+    y: label.y,
+    width: label.width + 2,
+    height: 1,
+  }
+  return obstacles.some(obstacle => boundsOverlap(box, obstacle))
+}
+
 function compactRouteLabel(
   route: Point[],
   description: string,
   preferred: Pick<Bounds, 'x' | 'y' | 'width'>,
   viewport: Bounds,
-  endpoints: Bounds[],
+  obstacles: Bounds[],
 ): Pick<Bounds, 'x' | 'y' | 'width'> {
   const width = description.split(' ', 1)[0].length
   const candidates: Array<Pick<Bounds, 'x' | 'y' | 'width'> & { distance: number }> = []
+  function consider(label: Pick<Bounds, 'x' | 'y' | 'width'>, distance: number): void {
+    const placed = {
+      x: clamp(label.x, viewport.x, viewport.x + viewport.width - width),
+      y: clamp(label.y, viewport.y, viewport.y + viewport.height - 1),
+      width,
+    }
+    if (!labelHits(placed, obstacles)) {
+      candidates.push({ ...placed, distance })
+    }
+  }
+
   for (let index = 1; index < route.length; index += 1) {
     const from = route[index - 1]
     const to = route[index]
@@ -489,33 +503,63 @@ function compactRouteLabel(
     const left = Math.min(from.x, to.x) + 1
     const right = Math.max(from.x, to.x) - 1
     if (right - left + 1 < width) continue
-    const candidate = {
-      x: Math.round((left + right - width + 1) / 2),
-      y: from.y,
-      width,
-      distance: Math.abs((left + right) / 2 - (preferred.x + preferred.width / 2)),
-    }
-    if (!endpoints.some(endpoint => boundsOverlap(
-      { ...candidate, width, height: 1 },
-      endpoint,
-    ))) candidates.push(candidate)
+    consider(
+      {
+        x: Math.round((left + right - width + 1) / 2),
+        y: from.y,
+        width,
+      },
+      Math.abs((left + right) / 2 - (preferred.x + preferred.width / 2)),
+    )
+  }
+  consider(preferred, 0)
+  for (const point of route) {
+    consider({ x: point.x, y: point.y, width }, 20)
+  }
+  for (let y = viewport.y; y < viewport.y + viewport.height; y += 1) {
+    consider({ x: preferred.x, y, width }, 30 + Math.abs(y - preferred.y))
   }
   candidates.sort((left, right) => left.distance - right.distance)
-  const candidate = candidates[0]
-  if (!candidate) return preferred
+  if (candidates[0]) {
+    return {
+      x: candidates[0].x,
+      y: candidates[0].y,
+      width: candidates[0].width,
+    }
+  }
   return {
-    x: clamp(
-      candidate.x,
-      viewport.x,
-      viewport.x + viewport.width - width,
-    ),
-    y: clamp(
-      candidate.y,
-      viewport.y,
-      viewport.y + viewport.height - 1,
-    ),
+    x: clamp(preferred.x, viewport.x, viewport.x + viewport.width - width),
+    y: clamp(preferred.y, viewport.y, viewport.y + viewport.height - 1),
     width,
   }
+}
+
+function separateOverlappingCards<T extends { display: DisplayRole; cellBounds: Bounds }>(
+  elements: T[],
+  viewport: Bounds,
+): T[] {
+  const next = elements.map(element => ({
+    ...element,
+    cellBounds: { ...element.cellBounds },
+  }))
+  const cards = next.filter(element => element.display === 'card')
+  cards.sort((left, right) => {
+    return left.cellBounds.y - right.cellBounds.y
+      || left.cellBounds.x - right.cellBounds.x
+  })
+  for (let pass = 0; pass < cards.length; pass += 1) {
+    for (let index = 1; index < cards.length; index += 1) {
+      const previous = cards[index - 1]!.cellBounds
+      const current = cards[index]!.cellBounds
+      if (!boundsOverlap(previous, current)) continue
+      current.y = previous.y + previous.height
+      if (current.y + current.height > viewport.y + viewport.height) {
+        current.y = viewport.y + viewport.height - current.height
+        previous.y = Math.max(viewport.y, current.y - previous.height)
+      }
+    }
+  }
+  return next
 }
 
 export function projectWorld(
@@ -561,20 +605,26 @@ export function projectWorld(
     element,
   ]))
   const cardBoundary = focus === null ? null : initialById.get(focus.representationId)
-  const fittedElements = projectedElements.map(element => {
-    if (element.display !== 'card') return element
-    const available = cardBoundary == null
-      ? viewport
-      : inset(cardBoundary.cellBounds, 2)
-    return {
-      ...element,
-      cellBounds: fitWithin(fitWithin(element.cellBounds, available), viewport),
-    }
-  })
+  const fittedElements = separateOverlappingCards(
+    projectedElements.map(element => {
+      if (element.display !== 'card') return element
+      const available = cardBoundary == null
+        ? viewport
+        : inset(cardBoundary.cellBounds, 2)
+      return {
+        ...element,
+        cellBounds: fitWithin(fitWithin(element.cellBounds, available), viewport),
+      }
+    }),
+    viewport,
+  )
   const projectedById = new Map(fittedElements.map(element => [
     element.representationId,
     element,
   ]))
+  const cardBounds = fittedElements
+    .filter(element => element.display === 'card')
+    .map(element => element.cellBounds)
 
   return {
     level,
@@ -635,7 +685,7 @@ export function projectWorld(
                 relationship.description,
                 cellLabel,
                 viewport,
-                [sourceBounds, targetBounds],
+                cardBounds,
               ),
           displaySource: source.representationId,
           displayTarget: target.representationId,

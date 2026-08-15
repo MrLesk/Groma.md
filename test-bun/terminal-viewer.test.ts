@@ -586,6 +586,9 @@ test('headless keys navigate, inspect, and leave world coordinates unchanged', a
   await setup.renderOnce()
   let frame = setup.captureCharFrame()
   assert.match(frame, /System Context · Groma/)
+  assert.match(frame, /Coding agent/)
+  assert.match(frame, /Human architect/)
+  assert.doesNotMatch(frame, /PER Reads/)
   assert.match(frame, new RegExp(footerHints('architecture', 'closed')))
 
   frame = await press(setup, '+')
@@ -638,9 +641,55 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(frame, /PERSON/)
   assert.match(frame, /Understands/)
   assert.match(frame, /Reads/)
+  assert.match(frame, /Coding agent/)
+  assert.match(frame, /Groma/)
+  assert.match(frame, /Git/)
+  assert.doesNotMatch(frame, /PER Reads/)
   assert.match(frame, new RegExp(footerHints('architecture', 'side')))
   assert.match(frame, /[▶◀▲▼]/)
   assert.match(frame, /▌/)
+  const personSide = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:human-architect',
+    panel: 'side',
+  })
+  const contextCards = personSide.elements.filter(element => {
+    return element.display === 'card' && visible(element.cellBounds, personSide.viewport)
+  })
+  assert.deepEqual(
+    contextCards.map(element => element.id).sort(),
+    ['coding-agent', 'git', 'groma', 'human-architect'],
+  )
+  for (let leftIndex = 0; leftIndex < contextCards.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < contextCards.length; rightIndex += 1) {
+      assert.equal(
+        overlaps(contextCards[leftIndex]!.cellBounds, contextCards[rightIndex]!.cellBounds),
+        false,
+      )
+    }
+  }
+  for (const relationship of personSide.relationships) {
+    if (!relationship.cellLabel) continue
+    const label = {
+      x: relationship.cellLabel.x,
+      y: relationship.cellLabel.y,
+      width: relationship.cellLabel.width,
+      height: 1,
+    }
+    for (const card of contextCards) {
+      const nameLine = {
+        x: card.cellBounds.x + 3,
+        y: card.cellBounds.y + 1,
+        width: Math.max(0, card.cellBounds.width - 5),
+        height: 1,
+      }
+      const kindLine = { ...nameLine, y: card.cellBounds.y + 2 }
+      assert.equal(overlaps(label, nameLine), false, `${relationship.id} covers ${card.id} name`)
+      assert.equal(overlaps(label, kindLine), false, `${relationship.id} covers ${card.id} kind`)
+    }
+  }
 
   frame = await press(setup, 'f')
   assert.match(frame, /System Context · Human architect/)
