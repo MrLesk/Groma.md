@@ -14,6 +14,7 @@ import type { CapturedFrame, CapturedSpan } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
+import { createCamera } from '../src/viewers/tui/camera.ts'
 import {
   mountTerminalViewer,
   startTerminalViewer,
@@ -30,6 +31,7 @@ import type {
   ArchitectureWorld,
   Bounds,
   C4Kind,
+  MapCamera,
   Point,
   ProjectedElement,
   SemanticLevel,
@@ -59,24 +61,24 @@ const views: ViewFixture[] = [
     level: 'context',
     currentId: 'observed:groma',
     header: 'System Context · Groma',
-    labels: [/Reads/, /Curates/, /Versions/],
-    visual: [/PERSON/, /SYSTEM/, /EXTERNAL SYSTEM/],
-    absent: [/CONTAINER/, /COMPONENT/],
+    labels: [],
+    visual: [/SYSTEM · Groma/, /CONTAINER/],
+    absent: [],
   },
   {
     level: 'containers',
     currentId: 'observed:core',
     header: 'Containers · Core',
-    labels: [/Supplies/, /Requests/],
-    visual: [/SYSTEM · Groma/, /Terminal viewer/, /CONTAINER/],
-    absent: [/COMPONENT/],
+    labels: [],
+    visual: [/SYSTEM · Groma/],
+    absent: [],
   },
   {
     level: 'components',
     currentId: 'observed:architecture-model',
     header: 'Components · Architecture model',
-    labels: [/Supplies/],
-    visual: [/SYSTEM · Groma/, /CONTAINER · Core/, /COMPONENT/],
+    labels: [],
+    visual: [/Architecture model/],
     absent: [/PERSON/],
   },
 ]
@@ -146,18 +148,20 @@ test('renders stable MVP frames at every semantic level and representative size'
 
       assert.equal(setup.captureCharFrame(), first)
       assert.match(first, new RegExp(view.header.replace('·', '\\·')))
-      assert.match(first, /- context \| containers \| components \+\s+z zoom\s+R refresh\s+Esc exit/)
-      assert.match(first, /[▶◀▲▼]/)
-      assert.match(first, /▌/)
+      assert.match(first, /- context \| containers \| components \+\s+\+ in\s+- out\s+z zoom\s+R refresh\s+Ctrl\+C exit/)
+      if (view.level === 'context') assert.match(first, /▌/)
       assert.doesNotMatch(first, /C4 \//)
       assert.doesNotMatch(first, / › /)
       assert.ok((first.match(/[┌┐└┘]/g) ?? []).length >= 8)
       assert.match(first, /(observed|planned)/)
+      const projection = projectWorld(response.world, { ...size, ...view })
+      if (projection.relationships.length > 0) {
+        assert.match(first, /[▶◀▲▼]/)
+      }
       for (const label of view.labels) assert.match(first, label)
       for (const visual of view.visual) assert.match(first, visual)
       for (const absent of view.absent) assert.doesNotMatch(first, absent)
 
-      const projection = projectWorld(response.world, { ...size, ...view })
       const kinds = levelKind(view.level)
       const cards = projection.elements.filter(element => {
         return kinds.has(element.kind)
@@ -180,30 +184,64 @@ test('renders stable MVP frames at every semantic level and representative size'
         }
       }
 
-      assert.ok(projection.elements.some(element => element.display === 'hidden'))
-      assert.ok(projection.elements
-        .filter(element => element.display === 'card')
-        .every(element => element.cellBounds.width >= 21
-          && element.cellBounds.height >= 5))
-      if (view.level !== 'context') {
-        assert.ok(projection.elements.some(element => element.display === 'compact'))
-        const boundary = projection.elements.find(element => {
-          return element.display === `${view.level === 'containers' ? 'system' : 'container'}-boundary`
-        })
-        assert.ok(boundary)
-        for (const card of cards) {
-          assert.ok(card.cellBounds.x >= boundary.cellBounds.x + 2)
-          assert.ok(card.cellBounds.y >= boundary.cellBounds.y + 2)
-          assert.ok(card.cellBounds.x + card.cellBounds.width
-            <= boundary.cellBounds.x + boundary.cellBounds.width - 2)
-          assert.ok(card.cellBounds.y + card.cellBounds.height
-            <= boundary.cellBounds.y + boundary.cellBounds.height - 2)
-        }
-      }
       const projectedById = new Map(projection.elements.map(element => [
         element.representationId,
         element,
       ]))
+      assert.equal(projection.camera.zoom, projection.fitZoom)
+      assert.ok(projection.camera.zoom <= 1)
+      const selected = requiredElement(projectedById, view.currentId)
+      assert.ok(
+        selected.display === 'hidden'
+          || visible(selected.cellBounds, projection.viewport),
+      )
+      const groma = requiredElement(projectedById, 'observed:groma')
+      const person = requiredElement(projectedById, 'observed:human-architect')
+      if (view.level === 'context') {
+        assert.equal(groma.display, 'system-boundary')
+        assert.ok(
+          groma.cellBounds.width * groma.cellBounds.height
+            > person.cellBounds.width * person.cellBounds.height,
+        )
+        assert.ok(visible(person.cellBounds, projection.viewport))
+        assert.ok(visible(
+          requiredElement(projectedById, 'observed:coding-agent').cellBounds,
+          projection.viewport,
+        ))
+        assert.ok(visible(
+          requiredElement(projectedById, 'observed:git').cellBounds,
+          projection.viewport,
+        ))
+        assert.ok(projection.elements.some(element => {
+          return element.kind === 'container'
+            && element.display === 'container-boundary'
+            && element.cellBounds.x >= groma.cellBounds.x
+            && element.cellBounds.y >= groma.cellBounds.y
+            && element.cellBounds.x + element.cellBounds.width
+              <= groma.cellBounds.x + groma.cellBounds.width
+            && element.cellBounds.y + element.cellBounds.height
+              <= groma.cellBounds.y + groma.cellBounds.height
+        }))
+      }
+      if (projection.camera.zoom === 1) {
+        assert.ok(projection.elements
+          .filter(element => {
+            return element.display === 'card'
+              && (element.kind === 'person' || element.external)
+          })
+          .every(element => element.cellBounds.width >= 21
+            && element.cellBounds.height >= 5))
+      }
+      for (const card of cards) {
+        if (card.parent === null) continue
+        const parent = requiredElement(projectedById, card.parent)
+        assert.ok(card.cellBounds.x >= parent.cellBounds.x)
+        assert.ok(card.cellBounds.y >= parent.cellBounds.y)
+        assert.ok(card.cellBounds.x + card.cellBounds.width
+          <= parent.cellBounds.x + parent.cellBounds.width)
+        assert.ok(card.cellBounds.y + card.cellBounds.height
+          <= parent.cellBounds.y + parent.cellBounds.height)
+      }
       for (const relationship of projection.relationships) {
         const source = requiredElement(projectedById, relationship.displaySource).cellBounds
         const target = requiredElement(projectedById, relationship.displayTarget).cellBounds
@@ -289,6 +327,10 @@ test('headless groma view startup releases its renderer and input handler', asyn
   await setup.renderOnce()
   assert.match(setup.captureCharFrame(), /System Context · Shop/)
   setup.mockInput.pressEscape()
+  await setup.renderOnce()
+  assert.equal(setup.renderer.isDestroyed, false)
+  assert.match(setup.captureCharFrame(), /System Context · Shop/)
+  setup.mockInput.pressCtrlC()
   await app.closed
   assert.equal(setup.renderer.isDestroyed, true)
   assert.equal(setup.renderer.root.getChildrenCount(), 0)
@@ -449,13 +491,35 @@ async function press(
     if (key === 'enter') setup.mockInput.pressEnter()
     else if (key === 'escape') {
       setup.mockInput.pressEscape()
+      // ESC starts CSI sequences; OpenTUI waits before treating it as Escape.
       await new Promise(resolve => setTimeout(resolve, 50))
     } else if (key === 'up' || key === 'down' || key === 'left' || key === 'right') {
       setup.mockInput.pressArrow(key)
     } else setup.mockInput.pressKey(key)
     await setup.renderOnce()
+    if (setup.renderer.isRunning) {
+      const deadline = Date.now() + 2000
+      while (setup.renderer.isRunning && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 16))
+      }
+      await setup.renderOnce()
+    }
   }
   return setup.captureCharFrame()
+}
+
+function cameraOn(
+  world: ArchitectureWorld,
+  id: string,
+  zoom: number,
+): MapCamera {
+  const element = world.elements.find(item => item.representationId === id)
+  assert.ok(element)
+  return {
+    zoom,
+    centerX: element.bounds.x + element.bounds.width / 2,
+    centerY: element.bounds.y + element.bounds.height / 2,
+  }
 }
 
 test('unit navigation covers selection, zoom, and spatial movement', () => {
@@ -469,6 +533,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
     currentId: 'observed:alpha',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'context',
   })
 
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
@@ -493,6 +558,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
       currentId: 'observed:pleft',
       focus: 'architecture',
       panel: 'closed',
+      zoomSlot: 'components',
     }, 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
@@ -520,16 +586,55 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
   const selected = state.currentId
   state = reduceViewer(world, state, 'zoom')
   assert.equal(state.focus, 'zoom')
+  assert.equal(state.zoomSlot, 'context')
   assert.equal(state.currentId, selected)
+  state = reduceViewer(world, state, 'left')
+  assert.equal(state.zoomSlot, 'leave')
+  assert.equal(state.level, 'context')
+  state = reduceViewer(world, state, 'right')
+  assert.equal(state.zoomSlot, 'context')
+  state = reduceViewer(world, state, 'right')
+  assert.equal(state.zoomSlot, 'containers')
+  state = reduceViewer(world, state, 'inspect')
+  assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:alpha' })
+  assert.equal(state.focus, 'architecture')
+
+  state = reduceViewer(world, state, 'zoom')
+  state = reduceViewer(world, state, 'right')
+  assert.equal(state.zoomSlot, 'components')
+  state = reduceViewer(world, state, 'inspect')
+  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:cleft' })
+
+  state = reduceViewer(world, state, 'zoom')
+  state = reduceViewer(world, state, 'left')
+  state = reduceViewer(world, state, 'left')
+  state = reduceViewer(world, state, 'left')
+  assert.equal(state.zoomSlot, 'leave')
+  state = reduceViewer(world, state, 'inspect')
+  assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:cleft' })
+
+  state = reduceViewer(world, { ...state, currentId: 'observed:cleft', zoomSlot: 'enter' }, 'zoom')
+  state = reduceViewer(world, { ...state, zoomSlot: 'enter' }, 'inspect')
+  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:cleft' })
+
+  state = reduceViewer(world, state, 'zoom')
+  assert.equal(state.focus, 'zoom')
+  state = reduceViewer(world, state, 'dismiss')
+  assert.equal(state.focus, 'architecture')
+  assert.equal(state.level, 'components')
+
+  state = reduceViewer(world, state, 'zoom')
+  assert.equal(state.focus, 'zoom')
   state = reduceViewer(world, state, 'zoom')
   assert.equal(state.focus, 'architecture')
-  assert.equal(state.currentId, selected)
+  assert.equal(state.currentId, 'observed:cleft')
 
   state = {
     level: 'containers',
     currentId: 'observed:cleft',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'containers',
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
@@ -538,6 +643,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
     currentId: 'observed:pright',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'components',
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
@@ -549,6 +655,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
     currentId: 'observed:pfar',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'components',
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'context',
@@ -560,6 +667,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
     currentId: 'observed:pleft',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'components',
   }
   const escaped = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
@@ -571,6 +679,7 @@ test('unit navigation covers selection, zoom, and spatial movement', () => {
     currentId: 'observed:ann',
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'context',
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'left')), {
     level: 'context',
@@ -586,17 +695,32 @@ test('headless keys navigate, inspect, and leave world coordinates unchanged', a
   await setup.renderOnce()
   let frame = setup.captureCharFrame()
   assert.match(frame, /System Context · Groma/)
-  assert.match(frame, /Coding agent/)
-  assert.match(frame, /Human architect/)
+  assert.match(frame, /SYSTEM · Groma/)
   assert.doesNotMatch(frame, /PER Reads/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'closed')))
+  assert.ok(frame.includes(footerHints('architecture', 'closed')))
 
   frame = await press(setup, '+')
-  assert.match(frame, /Containers · Groma/)
+  assert.match(frame, /System Context · Groma/)
   assert.doesNotMatch(frame, /Keeps software architecture/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'closed')))
+  assert.ok(frame.includes(footerHints('architecture', 'closed')))
 
   frame = await press(setup, '-')
+  assert.match(frame, /System Context · Groma/)
+  assert.equal(setup.renderer.isDestroyed, false)
+
+  frame = await press(setup, '_')
+  assert.match(frame, /System Context · Groma/)
+  assert.equal(setup.renderer.isDestroyed, false)
+
+  frame = await press(setup, '=')
+  assert.match(frame, /System Context · Groma/)
+  frame = await press(setup, '_')
+  assert.match(frame, /System Context · Groma/)
+
+  frame = await press(setup, 'z', '+')
+  assert.match(frame, /Containers · Groma/)
+  assert.doesNotMatch(frame, /Keeps software architecture/)
+  frame = await press(setup, 'escape', 'z', '-', 'escape')
   assert.match(frame, /System Context · Groma/)
 
   frame = await press(setup, 'enter')
@@ -605,14 +729,14 @@ test('headless keys navigate, inspect, and leave world coordinates unchanged', a
   assert.match(frame, /SYSTEM/)
   assert.match(frame, /Versions architecture/)
   assert.match(frame, /Architecture workspace/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'side')))
+  assert.ok(frame.includes(footerHints('architecture', 'side')))
 
   frame = await press(setup, 'z')
   assert.match(frame, /Containers · Groma/)
-  assert.match(frame, new RegExp(footerHints('zoom', 'side')))
+  assert.ok(frame.includes(footerHints('zoom', 'side')))
   frame = await press(setup, 'z')
   assert.match(frame, /Containers · Groma/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'side')))
+  assert.ok(frame.includes(footerHints('architecture', 'side')))
 
   frame = await press(setup, 'escape')
   assert.match(frame, /Containers · Groma/)
@@ -623,6 +747,26 @@ test('headless keys navigate, inspect, and leave world coordinates unchanged', a
 
   frame = await press(setup, 'z', 'right', 'z')
   assert.match(frame, /Containers · Core/)
+
+  frame = await press(setup, 'z')
+  assert.ok(frame.includes(footerHints('zoom', 'closed')))
+  frame = await press(setup, 'left')
+  assert.match(frame, /Containers · Core/)
+  frame = await press(setup, 'enter')
+  assert.match(frame, /System Context · Groma/)
+  assert.ok(frame.includes(footerHints('architecture', 'closed')))
+
+  frame = await press(setup, 'z', 'right', 'enter')
+  assert.match(frame, /Containers · Groma/)
+
+  frame = await press(setup, 'z', 'right', 'enter')
+  assert.match(frame, /Components · Architecture workspace/)
+
+  frame = await press(setup, 'z')
+  assert.ok(frame.includes(footerHints('zoom', 'closed')))
+  frame = await press(setup, 'escape')
+  assert.ok(frame.includes(footerHints('architecture', 'closed')))
+  assert.match(frame, /Components · Architecture workspace/)
 
   assert.deepEqual(geometry(response.world), before)
   app.destroy()
@@ -643,8 +787,7 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(frame, /Reads/)
   assert.match(frame, /Groma/)
   assert.doesNotMatch(frame, /PER Reads/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'side')))
-  assert.match(frame, /▌/)
+  assert.ok(frame.includes(footerHints('architecture', 'side')))
   const personView = projectWorld(response.world, {
     width: 120,
     height: 36,
@@ -653,32 +796,63 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   })
   assert.equal(personView.viewport.width, 118)
   const contextCards = personView.elements.filter(element => {
-    return element.display === 'card' && visible(element.cellBounds, personView.viewport)
+    return element.display === 'card'
+      && (element.kind === 'person' || element.external)
+      && visible(element.cellBounds, personView.viewport)
   })
   assert.ok(contextCards.some(element => element.id === 'human-architect'))
-  assert.ok(contextCards.some(element => element.id === 'groma'))
+  const gromaBox = personView.elements.find(element => element.id === 'groma')
+  assert.ok(gromaBox)
+  assert.equal(gromaBox.display, 'system-boundary')
+  assert.ok(
+    gromaBox.cellBounds.width * gromaBox.cellBounds.height
+      > contextCards[0]!.cellBounds.width * contextCards[0]!.cellBounds.height,
+  )
   const gromaView = projectWorld(response.world, {
     width: 120,
     height: 36,
     level: 'context',
     currentId: 'observed:groma',
   })
-  assert.equal(personView.scale, gromaView.scale)
+  const codingView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:coding-agent',
+  })
+  assert.deepEqual(codingView.camera, gromaView.camera)
+  assert.deepEqual(personView.camera, gromaView.camera)
+  assert.ok(visible(
+    requiredElement(
+      new Map(personView.elements.map(element => [element.representationId, element])),
+      'observed:human-architect',
+    ).cellBounds,
+    personView.viewport,
+  ))
+  assert.ok(visible(
+    requiredElement(
+      new Map(codingView.elements.map(element => [element.representationId, element])),
+      'observed:coding-agent',
+    ).cellBounds,
+    codingView.viewport,
+  ))
+  const modelView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'components',
+    currentId: 'observed:architecture-model',
+  })
+  const scanView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'components',
+    currentId: 'planned:mvp:scan-reconciler',
+    camera: modelView.camera,
+  })
+  assert.deepEqual(scanView.camera, modelView.camera)
   assert.deepEqual(
-    personView.elements.map(element => [element.representationId, element.cellBounds]),
-    gromaView.elements.map(element => [element.representationId, element.cellBounds]),
-  )
-  assert.deepEqual(
-    personView.relationships.map(relationship => [
-      relationship.id,
-      relationship.cellRoute,
-      relationship.cellLabel,
-    ]),
-    gromaView.relationships.map(relationship => [
-      relationship.id,
-      relationship.cellRoute,
-      relationship.cellLabel,
-    ]),
+    scanView.elements.map(element => [element.representationId, element.cellBounds]),
+    modelView.elements.map(element => [element.representationId, element.cellBounds]),
   )
   for (let leftIndex = 0; leftIndex < contextCards.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < contextCards.length; rightIndex += 1) {
@@ -715,16 +889,16 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(frame, /Understands/)
   assert.doesNotMatch(frame, /[▶◀▲▼]/)
   assert.doesNotMatch(frame, /▌/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'full')))
+  assert.ok(frame.includes(footerHints('architecture', 'full')))
 
   frame = await press(setup, 'f')
-  assert.match(frame, /▌/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'side')))
+  assert.match(frame, /SYSTEM · Groma/)
+  assert.ok(frame.includes(footerHints('architecture', 'side')))
 
   frame = await press(setup, 'escape')
   assert.match(frame, /System Context · Human architect/)
   assert.doesNotMatch(frame, /Understands/)
-  assert.match(frame, new RegExp(footerHints('architecture', 'closed')))
+  assert.ok(frame.includes(footerHints('architecture', 'closed')))
 
   app.setView({ level: 'context', currentId: 'observed:groma' })
   frame = await press(setup, 'enter')
@@ -778,11 +952,12 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
     currentId: 'observed:api',
   })
   assert.equal(projection.viewport.width, 118)
-  const cards = projection.elements.filter(element => element.display === 'card')
+  const cards = projection.elements.filter(element => {
+    return element.display === 'card' && element.kind === 'component'
+  })
   assert.ok(cards.length > 0)
-  assert.ok(cards.every(element => {
-    return element.parent === 'observed:api' && visible(element.cellBounds, projection.viewport)
-  }))
+  assert.ok(cards.every(element => element.parent === 'observed:api'))
+  assert.ok(cards.some(element => visible(element.cellBounds, projection.viewport)))
   assert.ok(projection.elements.every(element => {
     return element.parent !== 'planned:inventory:api' || element.display === 'hidden'
   }))
@@ -799,7 +974,230 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   const closed = await press(shop, 'escape')
   assert.match(closed, /Components · Orders/)
   assert.doesNotMatch(closed, /Places and tracks customer orders/)
-  shop.mockInput.pressEscape()
-  await shopApp.closed
-  assert.equal(shop.renderer.isDestroyed, true)
+  shopApp.destroy()
 })
+
+test('readable boxes pan just enough for an off-screen selection', async () => {
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const start = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:groma',
+    camera: cameraOn(response.world, 'observed:groma', 1),
+  })
+  assert.equal(start.camera.zoom, 1)
+  const person = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:human-architect',
+    camera: start.camera,
+  })
+  assert.notDeepEqual(person.camera, start.camera)
+  assert.equal(
+    visible(
+      requiredElement(
+        new Map(person.elements.map(element => [element.representationId, element])),
+        'observed:human-architect',
+      ).cellBounds,
+      person.viewport,
+    ),
+    true,
+  )
+
+  const coding = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:coding-agent',
+    camera: start.camera,
+  })
+  assert.notDeepEqual(coding.camera, start.camera)
+  assert.equal(
+    visible(
+      requiredElement(
+        new Map(coding.elements.map(element => [element.representationId, element])),
+        'observed:coding-agent',
+      ).cellBounds,
+      coding.viewport,
+    ),
+    true,
+  )
+
+  const git = requiredElement(
+    new Map(start.elements.map(element => [element.representationId, element])),
+    'observed:git',
+  )
+  assert.equal(visible(git.cellBounds, start.viewport), false)
+  assert.ok(start.elements
+    .filter(element => {
+      return element.display === 'card'
+        && (element.kind === 'person' || element.external)
+        && visible(element.cellBounds, start.viewport)
+    })
+    .every(element => element.cellBounds.width >= 21
+      && element.cellBounds.height >= 5))
+
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const app = mountTerminalViewer(setup.renderer, response)
+  await setup.renderOnce()
+  app.setView({
+    level: 'components',
+    currentId: 'observed:architecture-model',
+    camera: cameraOn(response.world, 'observed:architecture-model', 1),
+  })
+  let frame = await press(setup, 'enter')
+  assert.match(frame, /Architecture model/)
+  assert.doesNotMatch(frame, /Architectu[^r]/)
+
+  app.setView({ level: 'components', currentId: 'observed:world-layout' })
+  frame = await press(setup, 'escape')
+  assert.match(frame, /World layout/)
+
+  app.setView({ level: 'components', currentId: 'planned:mvp:scan-reconciler' })
+  await setup.renderOnce()
+  frame = setup.captureCharFrame()
+  assert.match(frame, /Scan reconciler/)
+
+  app.setView({ level: 'context', currentId: 'observed:git' })
+  await setup.renderOnce()
+  frame = setup.captureCharFrame()
+  assert.match(frame, /System Context · Git/)
+  assert.match(frame, /EXTERNAL SYSTEM/)
+  assert.match(frame, /Git/)
+  const gitView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:git',
+    camera: start.camera,
+  })
+  assert.notDeepEqual(gitView.camera, start.camera)
+  const gitOnScreen = requiredElement(
+    new Map(gitView.elements.map(element => [element.representationId, element])),
+    'observed:git',
+  )
+  assert.equal(visible(gitOnScreen.cellBounds, gitView.viewport), true)
+  app.destroy()
+})
+
+test('camera tweens zoom in log space with ease-in-out cubic', () => {
+  const camera = createCamera({ zoom: 1, centerX: 0, centerY: 0 })
+  camera.startTween({ zoom: Math.E, centerX: 10, centerY: 4 }, 1000)
+  camera.update(250)
+  assert.equal(camera.isAnimating(), true)
+  assert.equal(camera.zoom, Math.exp(0.0625))
+  assert.equal(camera.centerX, 0.625)
+  assert.equal(camera.centerY, 0.25)
+  camera.update(750)
+  assert.equal(camera.zoom, Math.E)
+  assert.equal(camera.centerX, 10)
+  assert.equal(camera.isAnimating(), false)
+  camera.startTween({ zoom: 1, centerX: 0, centerY: 0 }, 1000)
+  camera.snapTo({ zoom: 2, centerX: 1, centerY: 1 })
+  assert.equal(camera.isAnimating(), false)
+  assert.equal(camera.zoom, 2)
+})
+
+test('opening map fits everyone and plus zooms without changing level', async () => {
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const start = projectWorld(response.world, { width: 120, height: 36 })
+  assert.equal(start.camera.zoom, start.fitZoom)
+  assert.ok(start.camera.zoom < 1)
+  for (const id of [
+    'observed:groma',
+    'observed:git',
+    'observed:human-architect',
+    'observed:coding-agent',
+  ]) {
+    assert.equal(
+      visible(
+        requiredElement(
+          new Map(start.elements.map(element => [element.representationId, element])),
+          id,
+        ).cellBounds,
+        start.viewport,
+      ),
+      true,
+      id,
+    )
+  }
+  const closer = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    camera: {
+      ...start.camera,
+      zoom: Math.min(1, start.camera.zoom * 1.25),
+    },
+  })
+  assert.ok(closer.camera.zoom > start.camera.zoom)
+  assert.equal(closer.level, 'context')
+  assert.ok(closer.camera.zoom <= 1)
+
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const app = mountTerminalViewer(setup.renderer, response)
+  await setup.renderOnce()
+  const first = setup.captureCharFrame()
+  assert.match(first, /System Context · Groma/)
+  assert.match(first, /SYSTEM · Groma/)
+  const zoomed = await press(setup, '+')
+  assert.match(zoomed, /System Context · Groma/)
+  assert.notEqual(zoomed, first)
+  const out = await press(setup, '-')
+  assert.match(out, /System Context · Groma/)
+  app.destroy()
+})
+
+test('person cards use full names when the map has room', async () => {
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const coding = response.world.elements.find(element => {
+    return element.id === 'coding-agent'
+  })
+  const human = response.world.elements.find(element => {
+    return element.id === 'human-architect'
+  })
+  assert.ok(coding)
+  assert.ok(human)
+  const camera = {
+    zoom: 0.5,
+    centerX: (coding.bounds.x + human.bounds.x + human.bounds.width) / 2,
+    centerY: (coding.bounds.y + human.bounds.y + human.bounds.height) / 2,
+  }
+  const view = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    camera,
+  })
+  const byId = new Map(view.elements.map(element => [
+    element.representationId,
+    element,
+  ]))
+  const people = [
+    requiredElement(byId, 'observed:coding-agent'),
+    requiredElement(byId, 'observed:human-architect'),
+  ]
+  for (const person of people) {
+    assert.equal(visible(person.cellBounds, view.viewport), true, person.name)
+    assert.ok(
+      person.cellBounds.width >= person.name.length + 5,
+      `${person.name} is ${person.cellBounds.width} cells`,
+    )
+  }
+  const groma = requiredElement(byId, 'observed:groma')
+  const git = requiredElement(byId, 'observed:git')
+  assert.equal(overlaps(people[0]!.cellBounds, people[1]!.cellBounds), false)
+  for (const person of people) {
+    assert.equal(overlaps(person.cellBounds, groma.cellBounds), false)
+    assert.equal(overlaps(person.cellBounds, git.cellBounds), false)
+  }
+
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const app = mountTerminalViewer(setup.renderer, response, { camera })
+  await setup.renderOnce()
+  const frame = setup.captureCharFrame()
+  assert.match(frame, /Coding agent/)
+  assert.match(frame, /Human architect/)
+  app.destroy()
+})
+

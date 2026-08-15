@@ -4,7 +4,6 @@ import type { ViewerTheme } from '../atoms/theme.ts'
 import { visible } from '../atoms/visible.ts'
 import { drawBoundary } from '../molecules/boundary.ts'
 import { drawCard } from '../molecules/card.ts'
-import { drawCompact } from '../molecules/compact.ts'
 import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts'
 import { drawSelection } from '../molecules/selection.ts'
 import type { WorldProjection } from '../../../types.ts'
@@ -13,7 +12,6 @@ export function drawWorld(
   buffer: OptimizedBuffer,
   projection: WorldProjection,
   theme: ViewerTheme,
-  options: { showSelection?: boolean } = {},
 ): void {
   buffer.pushScissorRect(
     projection.viewport.x,
@@ -21,35 +19,40 @@ export function drawWorld(
     projection.viewport.width,
     projection.viewport.height,
   )
-  const elements = [...projection.elements].sort((left, right) => {
-    return right.cellBounds.width * right.cellBounds.height
-      - left.cellBounds.width * left.cellBounds.height
-  })
+  function shown(
+    match: (element: (typeof projection.elements)[number]) => boolean,
+  ): typeof projection.elements {
+    return projection.elements.filter(element => {
+      return match(element) && visible(element.cellBounds, projection.viewport)
+    })
+  }
   for (const relationship of projection.relationships) {
     drawRoute(buffer, relationship, theme)
   }
-  for (const element of elements) {
-    if (element.display === 'hidden' || !visible(element.cellBounds, projection.viewport)) {
-      continue
-    }
-    if (element.display === 'compact') {
-      drawCompact(buffer, element, theme)
-      continue
-    }
-    if (element.display.endsWith('-boundary')) {
-      drawBoundary(buffer, element, projection, theme)
-      continue
-    }
+  for (const element of shown(element => {
+    return element.display === 'card' && element.kind === 'component'
+  })) {
     drawCard(buffer, element, projection, theme)
   }
-  if (options.showSelection !== false) {
-    drawSelection(
-      buffer,
-      projection.elements.find(element => {
-        return element.representationId === projection.currentId
-      }),
-      theme,
-    )
+  for (const element of shown(element => element.display === 'container-boundary')) {
+    drawBoundary(buffer, element, projection, theme)
+  }
+  for (const element of shown(element => element.display === 'system-boundary')) {
+    drawBoundary(buffer, element, projection, theme)
+  }
+  const selected = projection.elements.find(element => {
+    return element.representationId === projection.currentId
+  })
+  if (selected?.display.endsWith('-boundary')) {
+    drawSelection(buffer, selected, theme)
+  }
+  for (const element of shown(element => {
+    return element.display === 'card' && element.kind !== 'component'
+  })) {
+    drawCard(buffer, element, projection, theme)
+  }
+  if (selected?.display === 'card') {
+    drawSelection(buffer, selected, theme)
   }
   for (const relationship of projection.relationships) {
     drawRouteLabel(buffer, relationship, projection, theme)

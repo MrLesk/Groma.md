@@ -10,21 +10,26 @@ import type {
 } from '@opentui/core'
 
 import { loadArchitectureViewModel } from '../../core.ts'
+import { createCamera } from './camera.ts'
 import {
   initialState,
   reduceViewer,
 } from './navigation.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
-import { projectWorld } from './projection.ts'
+import { fitView, projectWorld } from './projection.ts'
 import type {
   ArchitectureViewModel,
+  MapCamera,
   SemanticLevel,
 } from '../../types.ts'
+
+const ZOOM_STEP = 1.25
 
 interface ViewerOptions {
   level?: SemanticLevel
   currentId?: string
+  camera?: MapCamera
   palette?: NormalizedTerminalPalette
   repositoryRoot?: string
 }
@@ -38,7 +43,11 @@ export interface TerminalViewer {
   closed: Promise<void>
   destroy(): void
   refresh(): Promise<void>
-  setView(next: { level?: SemanticLevel; currentId?: string }): void
+  setView(next: {
+    level?: SemanticLevel
+    currentId?: string
+    camera?: MapCamera
+  }): void
 }
 
 export function mountTerminalViewer(
@@ -61,11 +70,21 @@ export function mountTerminalViewer(
   const theme = themeFromPalette(
     options.palette ?? normalizeTerminalPalette(),
   )
+  const camera = createCamera(
+    options.camera ?? fitView(
+      viewModel.world,
+      Math.max(1, renderer.width),
+      Math.max(1, renderer.height),
+    ),
+  )
+  let live = false
   const frame = new FrameBufferRenderable(renderer, {
     id: 'architecture-world',
     width: Math.max(1, renderer.width),
     height: Math.max(1, renderer.height),
     onSizeChange() {
+      camera.snapTo(snapshot())
+      releaseLive()
       repaint()
     },
   })
@@ -73,24 +92,90 @@ export function mountTerminalViewer(
   frame.height = '100%'
   renderer.root.add(frame)
 
-  function repaint(): void {
-    if (closed || frame.isDestroyed) return
-    const projection = projectWorld(viewModel.world, {
+  function snapshot(): MapCamera {
+    return {
+      zoom: camera.zoom,
+      centerX: camera.centerX,
+      centerY: camera.centerY,
+    }
+  }
+
+  function releaseLive(): void {
+    if (!live) return
+    live = false
+    renderer.dropLive()
+  }
+
+  function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
+    return projectWorld(viewModel.world, {
       width: frame.frameBuffer.width,
       height: frame.frameBuffer.height,
       level: state.level,
       currentId: state.currentId,
+      camera: next ?? snapshot(),
+      lockCamera,
     })
-    state = { ...state, currentId: projection.currentId ?? undefined }
+  }
+
+  function repaint(): void {
+    if (closed || frame.isDestroyed) return
+    const projection = project()
+    if (!camera.isAnimating()) camera.snapTo(projection.camera)
+    state = {
+      ...state,
+      currentId: projection.currentId ?? undefined,
+    }
     paintWorld(frame.frameBuffer, projection, theme, {
       focus: state.focus,
       panel: state.panel,
+      zoomSlot: state.zoomSlot,
       world: viewModel.world,
     })
     frame.requestRender()
   }
 
+  function animateTo(target: MapCamera): void {
+    if (
+      Math.abs(target.zoom - camera.zoom) < 1e-6
+      && Math.abs(target.centerX - camera.centerX) < 1e-6
+      && Math.abs(target.centerY - camera.centerY) < 1e-6
+    ) return
+    const wasAnimating = camera.isAnimating()
+    camera.startTween(target)
+    if (!wasAnimating) {
+      live = true
+      renderer.requestLive()
+    }
+  }
+
+  function zoomBy(factor: number): void {
+    const fitted = fitView(
+      viewModel.world,
+      frame.frameBuffer.width,
+      frame.frameBuffer.height,
+    )
+    const nextZoom = factor > 1
+      ? Math.min(1, camera.zoom * factor)
+      : Math.max(fitted.zoom, camera.zoom * factor)
+    const target = nextZoom <= fitted.zoom + 1e-6
+      ? fitted
+      : project({
+          zoom: nextZoom,
+          centerX: camera.centerX,
+          centerY: camera.centerY,
+        }, false).camera
+    animateTo(target)
+  }
+
+  async function onFrame(deltaTime: number): Promise<void> {
+    if (closed) return
+    if (camera.update(deltaTime)) repaint()
+    if (!camera.isAnimating()) releaseLive()
+  }
+
   function release(): void {
+    renderer.removeFrameCallback(onFrame)
+    releaseLive()
     renderer.keyInput.off('keypress', onKeypress)
     renderer.off('destroy', onRendererDestroy)
     resolveClosed()
@@ -115,6 +200,8 @@ export function mountTerminalViewer(
       .then(next => {
         if (closed) return
         viewModel = next
+        camera.snapTo(snapshot())
+        releaseLive()
         repaint()
       })
       .catch(() => {})
@@ -126,8 +213,8 @@ export function mountTerminalViewer(
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
     if (key.ctrl) return undefined
-    if (key.name === '+') return 'enter'
-    if (key.name === '-') return 'leave'
+    if (key.name === '+' || key.name === '=') return 'enter'
+    if (key.name === '-' || key.name === '_') return 'leave'
     if (key.name === 'return') return 'inspect'
     if (key.name === 'z') return 'zoom'
     if (key.name === 'f') return 'flip'
@@ -147,16 +234,27 @@ export function mountTerminalViewer(
       return
     }
     if (key.name === 'escape') {
-      if (state.panel !== 'closed') {
-        state = reduceViewer(viewModel.world, state, 'dismiss')
-        repaint()
-        return
-      }
-      destroy()
+      if (state.panel === 'closed' && state.focus !== 'zoom') return
+      state = reduceViewer(viewModel.world, state, 'dismiss')
+      repaint()
       return
     }
     if (key.name === 'r' && !key.ctrl) {
       void refresh()
+      return
+    }
+    if (
+      state.focus === 'architecture'
+      && (key.name === '+' || key.name === '=')
+    ) {
+      zoomBy(ZOOM_STEP)
+      return
+    }
+    if (
+      state.focus === 'architecture'
+      && (key.name === '-' || key.name === '_')
+    ) {
+      zoomBy(1 / ZOOM_STEP)
       return
     }
     const action = actionFor(key)
@@ -165,6 +263,7 @@ export function mountTerminalViewer(
     repaint()
   }
 
+  renderer.setFrameCallback(onFrame)
   renderer.keyInput.on('keypress', onKeypress)
   renderer.once('destroy', onRendererDestroy)
   repaint()
@@ -173,7 +272,15 @@ export function mountTerminalViewer(
     closed: closedPromise,
     destroy,
     refresh,
-    setView(next: { level?: SemanticLevel; currentId?: string }) {
+    setView(next: {
+      level?: SemanticLevel
+      currentId?: string
+      camera?: MapCamera
+    }) {
+      if (next.camera) {
+        camera.snapTo(next.camera)
+        releaseLive()
+      }
       state = {
         ...state,
         level: next.level ?? state.level,

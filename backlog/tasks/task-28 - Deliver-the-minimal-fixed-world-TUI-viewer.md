@@ -4,7 +4,7 @@ title: Deliver the minimal fixed-world TUI viewer
 status: To Do
 assignee: []
 created_date: '2026-08-09 19:07'
-updated_date: '2026-08-09 20:37'
+updated_date: '2026-08-15 16:11'
 labels: []
 dependencies: []
 references:
@@ -32,7 +32,7 @@ Give the human architect a terminal interface for reviewing the annotated archit
 - [ ] #5 Arrow navigation can cross parent boundaries at the current level and escape to a higher level when no same-level destination exists
 - [ ] #6 Enter opens an overlay side panel and frames as many direct children as possible without showing children of sibling containers; full-screen details hide the world
 - [ ] #7 Observed, planned, and missing annotations are visible as compact chips, with terminal-theme-compatible presentation
-- [ ] #8 Esc closes details and, when no details remain, exits Groma and restores the terminal
+- [ ] #8 Esc closes details and does not exit; Ctrl+C exits Groma and restores the terminal
 <!-- AC:END -->
 
 ## Definition of Done

@@ -172,6 +172,9 @@ reviews follow only after this gate passes.
 ## TUI map
 
 The TUI world is a map. Do not reflow it for selection or details.
+The first view fits the whole map. `+` and `-` zoom the camera. At the
+closest zoom, names stay readable and the map may be larger than the
+screen.
 
 - Details overlay the world. They do not reserve width or change scale.
 - Arrowing only changes which item is selected. If that item would leave

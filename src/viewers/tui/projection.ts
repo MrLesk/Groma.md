@@ -3,6 +3,7 @@ import type {
   ArchitectureWorld,
   Bounds,
   DisplayRole,
+  MapCamera,
   Point,
   ProjectedRelationship,
   ProjectionOptions,
@@ -52,21 +53,77 @@ interface Transform {
   y: number
 }
 
-function transformFor(camera: Bounds, viewport: Bounds): Transform {
-  const scale = Math.min(
-    viewport.width / camera.width,
-    viewport.height / (camera.height * CELL_ASPECT),
-  )
-  const renderedWidth = camera.width * scale
-  const renderedHeight = camera.height * scale * CELL_ASPECT
-
+function viewportFor(width: number, height: number): Bounds {
   return {
-    xScale: scale,
-    yScale: scale * CELL_ASPECT,
-    x: viewport.x + (viewport.width - renderedWidth) / 2 - camera.x * scale,
-    y: viewport.y + (viewport.height - renderedHeight) / 2
-      - camera.y * scale * CELL_ASPECT,
+    x: 1,
+    y: 3,
+    width: Math.max(1, width - 2),
+    height: Math.max(1, height - 4),
   }
+}
+
+function fitZoomFor(subject: Bounds, viewport: Bounds): number {
+  return Math.min(
+    viewport.width / Math.max(1, subject.width),
+    viewport.height / Math.max(1, subject.height * CELL_ASPECT),
+    1,
+  )
+}
+
+function overviewCamera(subject: Bounds, viewport: Bounds): MapCamera {
+  return {
+    zoom: fitZoomFor(subject, viewport),
+    centerX: subject.x + subject.width / 2,
+    centerY: subject.y + subject.height / 2,
+  }
+}
+
+export function fitView(
+  world: ArchitectureWorld,
+  width: number,
+  height: number,
+): MapCamera {
+  return overviewCamera(padded(world.bounds), viewportFor(width, height))
+}
+
+function transformFor(camera: MapCamera, viewport: Bounds): Transform {
+  const xScale = camera.zoom
+  const yScale = camera.zoom * CELL_ASPECT
+  return {
+    xScale,
+    yScale,
+    x: viewport.x + viewport.width / 2 - camera.centerX * xScale,
+    y: viewport.y + viewport.height / 2 - camera.centerY * yScale,
+  }
+}
+
+function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
+  return bounds.x < viewport.x + viewport.width
+    && bounds.x + bounds.width > viewport.x
+    && bounds.y < viewport.y + viewport.height
+    && bounds.y + bounds.height > viewport.y
+}
+
+function panCells(bounds: Bounds, viewport: Bounds): Point {
+  let x = 0
+  let y = 0
+  if (bounds.width <= viewport.width) {
+    if (bounds.x < viewport.x) x = viewport.x - bounds.x
+    else if (bounds.x + bounds.width > viewport.x + viewport.width) {
+      x = viewport.x + viewport.width - bounds.x - bounds.width
+    }
+  } else if (!visibleIn(bounds, viewport)) {
+    x = viewport.x - bounds.x
+  }
+  if (bounds.height <= viewport.height) {
+    if (bounds.y < viewport.y) y = viewport.y - bounds.y
+    else if (bounds.y + bounds.height > viewport.y + viewport.height) {
+      y = viewport.y + viewport.height - bounds.y - bounds.height
+    }
+  } else if (!visibleIn(bounds, viewport)) {
+    y = viewport.y - bounds.y
+  }
+  return { x, y }
 }
 
 function projectPoint(point: Point, transform: Transform): Point {
@@ -86,38 +143,22 @@ function centeredBounds(bounds: Bounds, width: number, height: number): Bounds {
 }
 
 function titledCardBounds(bounds: Bounds, element: WorldElement): Bounds {
-  const width = Math.max(titledCard.width, element.name.length + 4)
+  const width = Math.max(titledCard.width, element.name.length + 5)
   return centeredBounds(bounds, width, titledCard.height)
 }
 
-function compactBounds(bounds: Bounds, element: WorldElement): Bounds {
-  const width = Math.max(6, Math.min(18, element.name.length + 2))
-  return centeredBounds(bounds, width, 1)
-}
-
-function fitWithin(bounds: Bounds, viewport: Bounds): Bounds {
-  return {
-    ...bounds,
-    x: clamp(
-      bounds.x,
-      viewport.x,
-      Math.max(viewport.x, viewport.x + viewport.width - bounds.width),
-    ),
-    y: clamp(
-      bounds.y,
-      viewport.y,
-      Math.max(viewport.y, viewport.y + viewport.height - bounds.height),
-    ),
+function keepTitledCardInView(bounds: Bounds, viewport: Bounds): Bounds {
+  let x = bounds.x
+  let y = bounds.y
+  if (x < viewport.x) x = viewport.x
+  if (y < viewport.y) y = viewport.y
+  if (x + bounds.width > viewport.x + viewport.width) {
+    x = viewport.x + viewport.width - bounds.width
   }
-}
-
-function inset(bounds: Bounds, amount: number): Bounds {
-  return {
-    x: bounds.x + amount,
-    y: bounds.y + amount,
-    width: Math.max(1, bounds.width - amount * 2),
-    height: Math.max(1, bounds.height - amount * 2),
+  if (y + bounds.height > viewport.y + viewport.height) {
+    y = viewport.y + viewport.height - bounds.height
   }
+  return { ...bounds, x, y }
 }
 
 function projectBounds(bounds: Bounds, transform: Transform): Bounds {
@@ -151,37 +192,26 @@ function within(
   return false
 }
 
+function leafCard(element: WorldElement): boolean {
+  return element.kind === 'person' || element.external
+}
+
 function displayRole(
   element: WorldElement,
   level: SemanticLevel,
   focus: WorldElement | null,
-  elementsById: Map<string, WorldElement>,
 ): DisplayRole {
-  if (level === 'context') return element.parent === null ? 'card' : 'hidden'
-  if (!focus) return 'hidden'
-
-  if (level === 'containers') {
-    if (element.representationId === focus.representationId) return 'system-boundary'
-    if (element.parent === focus.representationId && element.kind === 'container') {
-      return 'card'
-    }
-    return element.parent === null ? 'compact' : 'hidden'
-  }
-
-  const system = ancestorOfKind(focus, 'system', elementsById)
-  if (system && element.representationId === system.representationId) {
-    return 'system-boundary'
-  }
-  if (element.representationId === focus.representationId) {
-    return 'container-boundary'
-  }
-  if (element.parent === focus.representationId && element.kind === 'component') {
-    return 'card'
-  }
-  if (system && element.parent === system.representationId && element.kind === 'container') {
-    return 'compact'
-  }
-  return element.parent === null ? 'compact' : 'hidden'
+  if (leafCard(element) && level !== 'context') return 'hidden'
+  if (
+    level === 'components'
+    && focus
+    && element.kind === 'component'
+    && element.parent !== focus.representationId
+  ) return 'hidden'
+  if (element.kind === 'component') return 'card'
+  if (element.kind === 'container') return 'container-boundary'
+  if (element.kind === 'system' && !element.external) return 'system-boundary'
+  return 'card'
 }
 
 function displayEndpoint(
@@ -384,29 +414,17 @@ function attachRouteToBounds(route: Point[], source: Bounds, target: Bounds): Po
 function projectLabel(
   label: Bounds,
   transform: Transform,
-  viewport: Bounds,
 ): Pick<Bounds, 'x' | 'y' | 'width'> {
   const topLeft = projectPoint(label, transform)
   const bottomRight = projectPoint({
     x: label.x + label.width,
     y: label.y + label.height,
   }, transform)
-  const width = Math.min(
-    viewport.width,
-    Math.max(10, bottomRight.x - topLeft.x),
-  )
+  const width = Math.max(10, bottomRight.x - topLeft.x)
   const center = (topLeft.x + bottomRight.x) / 2
   return {
-    x: clamp(
-      Math.round(center - width / 2),
-      viewport.x,
-      viewport.x + viewport.width - width,
-    ),
-    y: clamp(
-      topLeft.y,
-      viewport.y,
-      viewport.y + viewport.height - 1,
-    ),
+    x: Math.round(center - width / 2),
+    y: topLeft.y,
     width,
   }
 }
@@ -416,13 +434,6 @@ function boundsOverlap(left: Bounds, right: Bounds): boolean {
     && left.x + left.width > right.x
     && left.y < right.y + right.height
     && left.y + left.height > right.y
-}
-
-function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
-  return bounds.x < viewport.x + viewport.width
-    && bounds.x + bounds.width > viewport.x
-    && bounds.y < viewport.y + viewport.height
-    && bounds.y + bounds.height > viewport.y
 }
 
 function labelHits(
@@ -442,18 +453,19 @@ function compactRouteLabel(
   route: Point[],
   description: string,
   preferred: Pick<Bounds, 'x' | 'y' | 'width'>,
-  viewport: Bounds,
   obstacles: Bounds[],
 ): Pick<Bounds, 'x' | 'y' | 'width'> {
   const width = description.split(' ', 1)[0].length
+  const blocked = [
+    ...obstacles,
+    ...[route[0], route.at(-1)].flatMap(point => {
+      return point === undefined ? [] : [{ x: point.x, y: point.y, width: 1, height: 1 }]
+    }),
+  ]
   const candidates: Array<Pick<Bounds, 'x' | 'y' | 'width'> & { distance: number }> = []
   function consider(label: Pick<Bounds, 'x' | 'y' | 'width'>, distance: number): void {
-    const placed = {
-      x: clamp(label.x, viewport.x, viewport.x + viewport.width - width),
-      y: clamp(label.y, viewport.y, viewport.y + viewport.height - 1),
-      width,
-    }
-    if (!labelHits(placed, obstacles)) {
+    const placed = { ...label, width }
+    if (!labelHits(placed, blocked)) {
       candidates.push({ ...placed, distance })
     }
   }
@@ -476,10 +488,7 @@ function compactRouteLabel(
   }
   consider(preferred, 0)
   for (const point of route) {
-    consider({ x: point.x, y: point.y, width }, 20)
-  }
-  for (let y = viewport.y; y < viewport.y + viewport.height; y += 1) {
-    consider({ x: preferred.x, y, width }, 30 + Math.abs(y - preferred.y))
+    consider({ x: point.x, y: point.y - 1, width }, 20)
   }
   candidates.sort((left, right) => left.distance - right.distance)
   if (candidates[0]) {
@@ -489,39 +498,126 @@ function compactRouteLabel(
       width: candidates[0].width,
     }
   }
-  return {
-    x: clamp(preferred.x, viewport.x, viewport.x + viewport.width - width),
-    y: clamp(preferred.y, viewport.y, viewport.y + viewport.height - 1),
-    width,
-  }
+  return { x: preferred.x, y: preferred.y, width }
 }
 
-function separateOverlappingCards<T extends { display: DisplayRole; cellBounds: Bounds }>(
-  elements: T[],
+function projectElements(
+  world: ArchitectureWorld,
+  level: SemanticLevel,
+  focus: WorldElement | null,
+  transform: Transform,
   viewport: Bounds,
-): T[] {
-  const next = elements.map(element => ({
-    ...element,
-    cellBounds: { ...element.cellBounds },
-  }))
-  const cards = next.filter(element => element.display === 'card')
-  cards.sort((left, right) => {
-    return left.cellBounds.y - right.cellBounds.y
-      || left.cellBounds.x - right.cellBounds.x
+) {
+  const elements = world.elements.map(element => {
+    const display = displayRole(element, level, focus)
+    const projected = projectBounds(element.bounds, transform)
+    return { ...element, display, cellBounds: projected }
   })
-  for (let pass = 0; pass < cards.length; pass += 1) {
-    for (let index = 1; index < cards.length; index += 1) {
-      const previous = cards[index - 1]!.cellBounds
-      const current = cards[index]!.cellBounds
-      if (!boundsOverlap(previous, current)) continue
-      current.y = previous.y + previous.height
-      if (current.y + current.height > viewport.y + viewport.height) {
-        current.y = viewport.y + viewport.height - current.height
-        previous.y = Math.max(viewport.y, current.y - previous.height)
-      }
+  for (const element of elements) {
+    if (element.display !== 'card' || !leafCard(element)) continue
+    const desired = titledCardBounds(element.cellBounds, element)
+    const growing = desired.width > element.cellBounds.width
+      || desired.height > element.cellBounds.height
+    if (!growing) {
+      element.cellBounds = desired
+      continue
     }
+    const placed = keepTitledCardInView(desired, viewport)
+    const origin = {
+      x: element.cellBounds.x + element.cellBounds.width / 2,
+      y: element.cellBounds.y + element.cellBounds.height / 2,
+    }
+    if (!pointInside(origin, placed)) continue
+    const blocked = elements.some(other => {
+      return other !== element
+        && other.display !== 'hidden'
+        && boundsOverlap(placed, other.cellBounds)
+    })
+    if (!blocked) element.cellBounds = placed
   }
-  return next
+  return elements
+}
+
+function projectRelationships(
+  world: ArchitectureWorld,
+  level: SemanticLevel,
+  focus: WorldElement | null,
+  elementsById: Map<string, WorldElement>,
+  projectedElements: ReturnType<typeof projectElements>,
+  transform: Transform,
+  viewport: Bounds,
+): ProjectedRelationship[] {
+  const projectedById = new Map(projectedElements.map(element => [
+    element.representationId,
+    element,
+  ]))
+  const cardBounds = projectedElements
+    .filter(element => element.display === 'card')
+    .map(element => ({
+      x: element.cellBounds.x - 1,
+      y: element.cellBounds.y - 1,
+      width: element.cellBounds.width + 2,
+      height: element.cellBounds.height + 2,
+    }))
+  return visibleRelationships(world, level, focus, elementsById)
+    .map(relationship => {
+      const sourceElement = elementsById.get(relationship.source)
+      const targetElement = elementsById.get(relationship.target)
+      if (!sourceElement || !targetElement) return null
+      const source = displayEndpoint(
+        sourceElement,
+        level,
+        focus,
+        elementsById,
+      )
+      const target = displayEndpoint(
+        targetElement,
+        level,
+        focus,
+        elementsById,
+      )
+      if (source.representationId === target.representationId) return null
+      const projectedSource = projectedById.get(source.representationId)
+      const projectedTarget = projectedById.get(target.representationId)
+      if (!projectedSource || !projectedTarget) return null
+      const sourceBounds = projectedSource.cellBounds
+      const targetBounds = projectedTarget.cellBounds
+      if (!visibleIn(sourceBounds, viewport) || !visibleIn(targetBounds, viewport)) {
+        return null
+      }
+      const projectedRoute = trimRouteToDisplayedEndpoints(
+        orthogonalRoute(
+          relationship.route.map(point => projectPoint(point, transform)),
+        ),
+        sourceBounds,
+        targetBounds,
+      )
+      const cellRoute = orthogonalRoute(attachRouteToBounds(
+        projectedRoute,
+        sourceBounds,
+        targetBounds,
+      ))
+      const cellLabel = relationship.label === null
+        ? null
+        : projectLabel(relationship.label, transform)
+      return {
+        ...relationship,
+        cellRoute,
+        cellLabel: cellLabel === null || level === 'components'
+          ? cellLabel
+          : compactRouteLabel(
+              cellRoute,
+              relationship.description,
+              cellLabel,
+              cardBounds,
+            ),
+        displaySource: source.representationId,
+        displayTarget: target.representationId,
+      }
+    })
+    .filter((relationship): relationship is ProjectedRelationship => {
+      return relationship !== null
+    })
 }
 
 export function projectWorld(
@@ -533,12 +629,7 @@ export function projectWorld(
     throw new Error(`Unsupported semantic level: ${level}`)
   }
 
-  const viewport = {
-    x: 1,
-    y: 3,
-    width: Math.max(1, width - 2),
-    height: Math.max(1, height - 4),
-  }
+  const viewport = viewportFor(width, height)
   const elementsById = new Map(world.elements.map(element => [
     element.representationId,
     element,
@@ -547,118 +638,54 @@ export function projectWorld(
     ? defaultSelection(world, level)
     : elementsById.get(currentId) ?? defaultSelection(world, level)
   const focus = focusElement(level, selected, elementsById)
-  const transform = transformFor(
-    padded(focus?.bounds ?? world.bounds),
-    viewport,
-  )
-  const projectedElements = world.elements.map(element => {
-    const display = displayRole(element, level, focus, elementsById)
-    const projected = projectBounds(element.bounds, transform)
-    const cellBounds = display === 'card'
-      ? titledCardBounds(projected, element)
-      : display === 'compact'
-        ? compactBounds(projected, element)
-        : projected
-    return { ...element, display, cellBounds }
+  const overview = padded(world.bounds)
+  const fitZoom = fitZoomFor(overview, viewport)
+  let camera = options.camera ?? overviewCamera(overview, viewport)
+  if (!options.lockCamera) {
+    camera = {
+      ...camera,
+      zoom: clamp(camera.zoom, fitZoom, 1),
+    }
+  }
+  let transform = transformFor(camera, viewport)
+  let elements = projectElements(world, level, focus, transform, viewport)
+  const selectedElement = elements.find(element => {
+    return element.representationId === selected?.representationId
   })
-  const initialById = new Map(projectedElements.map(element => [
-    element.representationId,
-    element,
-  ]))
-  const cardBoundary = focus === null ? null : initialById.get(focus.representationId)
-  const fittedElements = separateOverlappingCards(
-    projectedElements.map(element => {
-      if (element.display !== 'card') return element
-      const available = cardBoundary == null
-        ? viewport
-        : inset(cardBoundary.cellBounds, 2)
-      return {
-        ...element,
-        cellBounds: fitWithin(fitWithin(element.cellBounds, available), viewport),
+  if (
+    !options.lockCamera
+    && selectedElement
+    && selectedElement.display !== 'hidden'
+  ) {
+    const nudge = panCells(selectedElement.cellBounds, viewport)
+    if (nudge.x !== 0 || nudge.y !== 0) {
+      camera = {
+        ...camera,
+        centerX: camera.centerX - nudge.x / transform.xScale,
+        centerY: camera.centerY - nudge.y / transform.yScale,
       }
-    }),
-    viewport,
-  )
-  const projectedById = new Map(fittedElements.map(element => [
-    element.representationId,
-    element,
-  ]))
-  const cardBounds = fittedElements
-    .filter(element => element.display === 'card')
-    .map(element => ({
-      x: element.cellBounds.x - 1,
-      y: element.cellBounds.y - 1,
-      width: element.cellBounds.width + 2,
-      height: element.cellBounds.height + 2,
-    }))
+      transform = transformFor(camera, viewport)
+      elements = projectElements(world, level, focus, transform, viewport)
+    }
+  }
 
   return {
     level,
     levelName: levelNames[level],
     currentId: selected?.representationId ?? null,
     currentName: selected?.name ?? 'Architecture',
-    scale: transform.xScale,
+    fitZoom,
+    camera,
     viewport,
-    elements: fittedElements,
-    relationships: visibleRelationships(world, level, focus, elementsById)
-      .map(relationship => {
-        const sourceElement = elementsById.get(relationship.source)
-        const targetElement = elementsById.get(relationship.target)
-        if (!sourceElement || !targetElement) return null
-        const source = displayEndpoint(
-          sourceElement,
-          level,
-          focus,
-          elementsById,
-        )
-        const target = displayEndpoint(
-          targetElement,
-          level,
-          focus,
-          elementsById,
-        )
-        if (source.representationId === target.representationId) return null
-        const projectedSource = projectedById.get(source.representationId)
-        const projectedTarget = projectedById.get(target.representationId)
-        if (!projectedSource || !projectedTarget) return null
-        const sourceBounds = projectedSource.cellBounds
-        const targetBounds = projectedTarget.cellBounds
-        if (!visibleIn(sourceBounds, viewport) || !visibleIn(targetBounds, viewport)) {
-          return null
-        }
-        const projectedRoute = trimRouteToDisplayedEndpoints(
-          orthogonalRoute(
-            relationship.route.map(point => projectPoint(point, transform)),
-          ),
-          sourceBounds,
-          targetBounds,
-        )
-        const cellRoute = orthogonalRoute(attachRouteToBounds(
-          projectedRoute,
-          sourceBounds,
-          targetBounds,
-        ))
-        const cellLabel = relationship.label === null
-          ? null
-          : projectLabel(relationship.label, transform, viewport)
-        return {
-          ...relationship,
-          cellRoute,
-          cellLabel: cellLabel === null || level === 'components'
-            ? cellLabel
-            : compactRouteLabel(
-                cellRoute,
-                relationship.description,
-                cellLabel,
-                viewport,
-                cardBounds,
-              ),
-          displaySource: source.representationId,
-          displayTarget: target.representationId,
-        }
-      })
-      .filter((relationship): relationship is ProjectedRelationship => {
-        return relationship !== null
-      }),
+    elements,
+    relationships: projectRelationships(
+      world,
+      level,
+      focus,
+      elementsById,
+      elements,
+      transform,
+      viewport,
+    ),
   }
 }

@@ -5,14 +5,29 @@ import { drawBorder } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import type { ViewerFocus, ViewerPanel } from '../navigation.ts'
+import type { ViewerFocus, ViewerPanel, ZoomSlot } from '../navigation.ts'
 import type { WorldProjection } from '../../../types.ts'
 
+const zoomControl = '- context | containers | components +'
+
+const zoomSlotLabel: Record<ZoomSlot, string> = {
+  leave: '-',
+  context: 'context',
+  containers: 'containers',
+  components: 'components',
+  enter: '+',
+}
+
 export function footerHints(focus: ViewerFocus, panel: ViewerPanel): string {
-  const hints = [focus === 'zoom' ? 'z item' : 'z zoom']
+  const hints = []
+  if (focus === 'architecture') {
+    hints.push('+ in', '- out')
+  }
+  hints.push(focus === 'zoom' ? 'z item' : 'z zoom')
   if (panel !== 'closed') hints.push(panel === 'full' ? 'f side' : 'f full')
   hints.push('R refresh')
-  hints.push(panel === 'closed' ? 'Esc exit' : 'Esc close')
+  if (panel !== 'closed') hints.push('Esc close')
+  hints.push('Ctrl+C exit')
   return hints.join('   ')
 }
 
@@ -20,7 +35,7 @@ export function drawChrome(
   buffer: OptimizedBuffer,
   projection: WorldProjection,
   theme: ViewerTheme,
-  chrome: { focus?: ViewerFocus; panel?: ViewerPanel } = {},
+  chrome: { focus?: ViewerFocus; panel?: ViewerPanel; zoomSlot?: ZoomSlot } = {},
 ): void {
   const focus = chrome.focus ?? 'architecture'
   const panel = chrome.panel ?? 'closed'
@@ -51,8 +66,7 @@ export function drawChrome(
     cell(buffer, column, 2, '━', theme.selected, theme.background)
   }
 
-  const control = '- context | containers | components +'
-  const footer = `${control}   ${footerHints(focus, panel)}`
+  const footer = `${zoomControl}   ${footerHints(focus, panel)}`
   text(
     buffer,
     footer,
@@ -62,25 +76,16 @@ export function drawChrome(
     theme.foreground,
     theme.background,
   )
-  if (focus === 'zoom') {
-    text(
-      buffer,
-      control,
-      1,
-      buffer.height - 1,
-      control.length,
-      theme.selected,
-      theme.background,
-      TextAttributes.BOLD,
-    )
-    return
-  }
+  const slot = focus === 'zoom'
+    ? chrome.zoomSlot ?? projection.level
+    : projection.level
+  const token = zoomSlotLabel[slot]
   text(
     buffer,
-    projection.level,
-    1 + control.indexOf(projection.level),
+    token,
+    1 + zoomControl.indexOf(token),
     buffer.height - 1,
-    projection.level.length,
+    token.length,
     theme.selected,
     theme.background,
     TextAttributes.BOLD,

@@ -9,6 +9,14 @@ import type {
 
 export type ViewerFocus = 'architecture' | 'zoom'
 export type ViewerPanel = 'closed' | 'side' | 'full'
+const zoomSlots = [
+  'leave',
+  'context',
+  'containers',
+  'components',
+  'enter',
+] as const
+export type ZoomSlot = (typeof zoomSlots)[number]
 export type ViewerAction =
   | 'enter'
   | 'leave'
@@ -26,6 +34,7 @@ export interface ViewerState {
   currentId?: string
   focus: ViewerFocus
   panel: ViewerPanel
+  zoomSlot: ZoomSlot
 }
 
 function compareStrings(left: string, right: string): number {
@@ -71,6 +80,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
     panel: 'closed',
+    zoomSlot: 'context',
   }
 }
 
@@ -98,6 +108,56 @@ function enterView(
     level: element.kind === 'system' ? 'containers' : 'components',
     currentId: element.representationId,
   }
+}
+
+function firstChildOfKind(
+  element: WorldElement | undefined,
+  kind: C4Kind,
+  byId: Map<string, WorldElement>,
+): WorldElement | undefined {
+  if (!element) return undefined
+  const children = element.children
+    .map(id => byId.get(id))
+    .filter((child): child is WorldElement => child !== undefined)
+    .sort((left, right) => {
+      return compareStrings(left.id, right.id)
+        || compareStrings(left.representationId, right.representationId)
+    })
+  return children.find(child => child.kind === kind)
+}
+
+function jumpView(
+  world: ArchitectureWorld,
+  selected: WorldElement | undefined,
+  target: SemanticLevel,
+): Pick<ViewerState, 'level' | 'currentId'> {
+  const byId = elementsById(world)
+  if (target === 'context') {
+    let top = selected
+    while (top && top.parent !== null) {
+      const parent = byId.get(top.parent)
+      if (!parent) break
+      top = parent
+    }
+    return { level: 'context', currentId: top?.representationId }
+  }
+  if (target === 'containers') {
+    const system = ancestorOfKind(selected, 'system', byId)
+    if (!system || system.external) {
+      return { level: 'context', currentId: selected?.representationId }
+    }
+    return { level: 'containers', currentId: system.representationId }
+  }
+  const container = ancestorOfKind(selected, 'container', byId)
+    ?? firstChildOfKind(ancestorOfKind(selected, 'system', byId), 'container', byId)
+  if (!container) return { level: 'context', currentId: selected?.representationId }
+  return { level: 'components', currentId: container.representationId }
+}
+
+function moveZoomSlot(slot: ZoomSlot, direction: 'left' | 'right'): ZoomSlot {
+  const index = zoomSlots.indexOf(slot)
+  const next = direction === 'right' ? index + 1 : index - 1
+  return zoomSlots[Math.max(0, Math.min(zoomSlots.length - 1, next))]!
 }
 
 function leaveView(
@@ -241,6 +301,7 @@ export function reduceViewer(
     return {
       ...current,
       focus: current.focus === 'zoom' ? 'architecture' : 'zoom',
+      zoomSlot: current.level,
     }
   }
   if (action === 'flip') {
@@ -248,8 +309,28 @@ export function reduceViewer(
     return { ...current, panel: current.panel === 'full' ? 'side' : 'full' }
   }
   if (action === 'dismiss') {
-    if (current.panel === 'closed') return current
-    return { ...current, panel: 'closed' }
+    if (current.panel !== 'closed') return { ...current, panel: 'closed' }
+    if (current.focus === 'zoom') return { ...current, focus: 'architecture' }
+    return current
+  }
+  if (current.focus === 'zoom' && (action === 'left' || action === 'right')) {
+    return { ...current, zoomSlot: moveZoomSlot(current.zoomSlot, action) }
+  }
+  if (current.focus === 'zoom' && action === 'inspect') {
+    if (current.zoomSlot === 'leave') {
+      return { ...current, ...leaveView(world, current, resolved.selected), focus: 'architecture' }
+    }
+    if (current.zoomSlot === 'enter') {
+      const next = resolved.selected && canEnter(resolved.selected)
+        ? enterView(resolved.selected)
+        : { level: current.level, currentId: current.currentId }
+      return { ...current, ...next, focus: 'architecture' }
+    }
+    return {
+      ...current,
+      ...jumpView(world, resolved.selected, current.zoomSlot),
+      focus: 'architecture',
+    }
   }
   if (action === 'enter' || action === 'inspect') {
     const next = resolved.selected && canEnter(resolved.selected)
