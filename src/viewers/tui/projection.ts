@@ -1,7 +1,7 @@
+import { ancestorOfKind, defaultSelection } from './navigation.ts'
 import type {
   ArchitectureWorld,
   Bounds,
-  C4Kind,
   DisplayRole,
   Point,
   ProjectedRelationship,
@@ -10,7 +10,7 @@ import type {
   WorldElement,
   WorldProjection,
   WorldRelationship,
-} from '../types.ts'
+} from '../../types.ts'
 
 const levelNames: Record<SemanticLevel, string> = {
   components: 'Components',
@@ -25,33 +25,41 @@ const titledCard = {
   width: 21,
 }
 
-function defaultElement(
-  world: ArchitectureWorld,
-  level: SemanticLevel,
-): WorldElement | undefined {
-  if (level === 'context') {
-    return world.elements.find(element => {
-      return element.kind === 'system' && !element.external
-    })
-  }
-  if (level === 'containers') {
-    return world.elements.find(element => element.kind === 'container')
-  }
-  return world.elements.find(element => element.kind === 'component')
+export function sidePanelWidth(totalWidth: number): number {
+  return Math.max(24, Math.floor(totalWidth / 3))
 }
 
-function ancestorOfKind(
-  element: WorldElement | undefined,
-  kind: C4Kind,
-  elementsById: Map<string, WorldElement>,
-): WorldElement | undefined {
-  let current = element
-  while (current && current.kind !== kind) {
-    current = current.parent === null
-      ? undefined
-      : elementsById.get(current.parent)
+function unionBounds(boxes: Bounds[]): Bounds | undefined {
+  const first = boxes[0]
+  if (!first) return undefined
+  let x = first.x
+  let y = first.y
+  let right = first.x + first.width
+  let bottom = first.y + first.height
+  for (const box of boxes.slice(1)) {
+    x = Math.min(x, box.x)
+    y = Math.min(y, box.y)
+    right = Math.max(right, box.x + box.width)
+    bottom = Math.max(bottom, box.y + box.height)
   }
-  return current
+  return { x, y, width: right - x, height: bottom - y }
+}
+
+function cameraBounds(
+  world: ArchitectureWorld,
+  level: SemanticLevel,
+  selected: WorldElement | undefined,
+  panel: ProjectionOptions['panel'],
+  elementsById: Map<string, WorldElement>,
+): Bounds {
+  if (panel === 'side' && selected) {
+    const children = selected.children.flatMap(id => {
+      const child = elementsById.get(id)
+      return child ? [child.bounds] : []
+    })
+    return padded(unionBounds(children) ?? selected.bounds)
+  }
+  return padded(focusElement(level, selected, elementsById)?.bounds ?? world.bounds)
 }
 
 function focusElement(
@@ -514,27 +522,28 @@ export function projectWorld(
   world: ArchitectureWorld,
   options: ProjectionOptions,
 ): WorldProjection {
-  const { width, height, level = 'context', currentId } = options
+  const { width, height, level = 'context', currentId, panel } = options
   if (!Object.hasOwn(levelNames, level)) {
     throw new Error(`Unsupported semantic level: ${level}`)
   }
 
+  const reserved = panel === 'side' ? sidePanelWidth(width) : 0
   const viewport = {
     x: 1,
     y: 3,
-    width: Math.max(1, width - 2),
-    height: Math.max(1, height - 6),
+    width: Math.max(1, width - 2 - reserved),
+    height: Math.max(1, height - 4),
   }
   const elementsById = new Map(world.elements.map(element => [
     element.representationId,
     element,
   ]))
   const selected = currentId === undefined
-    ? defaultElement(world, level)
-    : elementsById.get(currentId) ?? defaultElement(world, level)
+    ? defaultSelection(world, level)
+    : elementsById.get(currentId) ?? defaultSelection(world, level)
   const focus = focusElement(level, selected, elementsById)
   const transform = transformFor(
-    padded(focus?.bounds ?? world.bounds),
+    cameraBounds(world, level, selected, panel, elementsById),
     viewport,
   )
   const projectedElements = world.elements.map(element => {
