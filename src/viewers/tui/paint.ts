@@ -1,7 +1,7 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from './atoms/theme.ts'
-import type { ViewerFocus, ViewerPanel } from './navigation.ts'
+import type { ViewerFocus, ViewerPanel, ZoomSlot } from './navigation.ts'
 import { drawChrome } from './organisms/chrome.ts'
 import { detailsBounds, drawDetails } from './organisms/details.ts'
 import { drawWorld } from './organisms/world.ts'
@@ -16,6 +16,7 @@ export function paintWorld(
   options: {
     focus?: ViewerFocus
     panel?: ViewerPanel
+    zoomSlot?: ZoomSlot
     world?: ArchitectureWorld
   } = {},
 ): void {
@@ -23,7 +24,7 @@ export function paintWorld(
   const panel = options.panel ?? 'closed'
   buffer.clear(theme.background)
   if (panel !== 'full') {
-    drawWorld(buffer, projection, theme, { showSelection: focus === 'architecture' })
+    drawWorld(buffer, projection, theme)
   }
   if (panel !== 'closed' && options.world && projection.currentId) {
     const selected = options.world.elements.find(element => {
@@ -39,5 +40,9 @@ export function paintWorld(
       )
     }
   }
-  drawChrome(buffer, projection, theme, { focus, panel })
+  drawChrome(buffer, projection, theme, {
+    focus,
+    panel,
+    zoomSlot: options.zoomSlot,
+  })
 }

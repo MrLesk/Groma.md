@@ -3,7 +3,6 @@ export type Origin = 'observed' | 'planned' | 'missing'
 export type SemanticLevel = 'context' | 'containers' | 'components'
 export type DisplayRole =
   | 'card'
-  | 'compact'
   | 'hidden'
   | 'system-boundary'
   | 'container-boundary'
@@ -173,12 +172,19 @@ export interface ProjectedRelationship extends WorldRelationship {
   displayTarget: string
 }
 
+export interface MapCamera {
+  zoom: number
+  centerX: number
+  centerY: number
+}
+
 export interface WorldProjection {
   level: SemanticLevel
   levelName: string
   currentId: string | null
   currentName: string
-  scale: number
+  fitZoom: number
+  camera: MapCamera
   viewport: Bounds
   elements: ProjectedElement[]
   relationships: ProjectedRelationship[]
@@ -189,4 +195,6 @@ export interface ProjectionOptions {
   height: number
   level?: SemanticLevel
   currentId?: string
+  camera?: MapCamera
+  lockCamera?: boolean
 }
