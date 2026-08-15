@@ -168,3 +168,18 @@ abstractions.
 The implementer applies accepted simplifications and reruns focused checks. There may be at most one targeted re-review,
 limited to the original simplicity findings and regressions caused by their fixes. The normal specification and quality
 reviews follow only after this gate passes.
+
+## TUI checks
+
+Drive `groma view` with `agent-tty`. Snapshot the screen, send keys, screenshot. Do not wait for a human screenshot.
+
+```bash
+SID=$(agent-tty create --json --cols 120 --rows 36 -- bun src/cli.ts view | jq -r '.result.sessionId')
+agent-tty wait "$SID" --text 'System Context' --json
+agent-tty snapshot "$SID" --format text --json
+agent-tty send-keys "$SID" Enter --json
+agent-tty screenshot "$SID" --json
+agent-tty destroy "$SID"
+```
+
+Look at the start view, details, each level, and a large size such as 200x60.
