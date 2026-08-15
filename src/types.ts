@@ -68,33 +68,22 @@ export interface FilesystemAccess {
 
 export type FilesystemAccessHandler = (access: FilesystemAccess) => void
 
-export interface ScannerRelationship {
-  sourceId: string
-  targetId: string
-  description: string
-  technology: string
-  sourceRange: string
-}
-
-export interface ScannedComponent {
-  id: string
+export interface ScanCandidate {
+  kind: C4Kind
   name: string
-  description: string
-  technology: string
-  sourceRange: string
-  relationships: ScannerRelationship[]
+  responsibility: string
+  parent?: string
+  code?: CodeReference[]
 }
 
-export interface ScannerEntryPoint {
-  componentId: string
-  sourceRange: string
+export interface ScanResult {
+  candidates: ScanCandidate[]
 }
 
-export interface TypeScriptScanResult {
-  contract: string
-  containerId: string
-  entryPoints: ScannerEntryPoint[]
-  components: ScannedComponent[]
+export interface ScanSummary {
+  created: number
+  refreshed: number
+  matched: number
 }
 
 export interface ArchitectureElement {
@@ -200,4 +189,5 @@ export interface ProjectionOptions {
   height: number
   level?: SemanticLevel
   currentId?: string
+  panel?: 'side' | 'full'
 }

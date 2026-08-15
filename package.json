@@ -13,7 +13,6 @@
   "scripts": {
     "cli": "bun src/cli.ts",
     "validate:architecture": "node --import=tsx scripts/validate-architecture.ts",
-    "scanner": "node --import=tsx src/scanner-process.ts",
     "typecheck": "tsc --version && tsc --noEmit",
     "test": "bun run test:node && bun run test:viewer",
     "test:node": "node --import=tsx --test test/*.test.ts",
