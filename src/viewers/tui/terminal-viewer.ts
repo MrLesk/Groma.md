@@ -80,7 +80,6 @@ export function mountTerminalViewer(
       height: frame.frameBuffer.height,
       level: state.level,
       currentId: state.currentId,
-      panel: state.panel === 'side' ? 'side' : undefined,
     })
     state = { ...state, currentId: projection.currentId ?? undefined }
     paintWorld(frame.frameBuffer, projection, theme, {

@@ -6,12 +6,15 @@ import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { drawChip } from '../molecules/chip.ts'
 import { kindLabel } from '../molecules/kind-label.ts'
-import { sidePanelWidth } from '../projection.ts'
 import type {
   ArchitectureWorld,
   Bounds,
   WorldElement,
 } from '../../../types.ts'
+
+function sidePanelWidth(totalWidth: number): number {
+  return Math.max(24, Math.floor(totalWidth / 3))
+}
 
 export function detailsBounds(
   width: number,

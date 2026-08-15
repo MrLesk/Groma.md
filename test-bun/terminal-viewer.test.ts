@@ -641,26 +641,48 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(frame, /PERSON/)
   assert.match(frame, /Understands/)
   assert.match(frame, /Reads/)
-  assert.match(frame, /Coding agent/)
   assert.match(frame, /Groma/)
-  assert.match(frame, /Git/)
   assert.doesNotMatch(frame, /PER Reads/)
   assert.match(frame, new RegExp(footerHints('architecture', 'side')))
-  assert.match(frame, /[▶◀▲▼]/)
   assert.match(frame, /▌/)
-  const personSide = projectWorld(response.world, {
+  const personView = projectWorld(response.world, {
     width: 120,
     height: 36,
     level: 'context',
     currentId: 'observed:human-architect',
-    panel: 'side',
   })
-  const contextCards = personSide.elements.filter(element => {
-    return element.display === 'card' && visible(element.cellBounds, personSide.viewport)
+  assert.equal(personView.viewport.width, 118)
+  const contextCards = personView.elements.filter(element => {
+    return element.display === 'card' && visible(element.cellBounds, personView.viewport)
   })
-  assert.deepEqual(
-    contextCards.map(element => element.id).sort(),
-    ['coding-agent', 'git', 'groma', 'human-architect'],
+  assert.ok(contextCards.some(element => element.id === 'human-architect'))
+  assert.ok(contextCards.some(element => element.id === 'groma'))
+  const gromaView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:groma',
+  })
+  const agentView = projectWorld(response.world, {
+    width: 120,
+    height: 36,
+    level: 'context',
+    currentId: 'observed:coding-agent',
+  })
+  assert.ok(agentView.scale > gromaView.scale)
+  assert.ok(
+    agentView.elements.some(element => {
+      return element.id === 'coding-agent'
+        && element.display === 'card'
+        && visible(element.cellBounds, agentView.viewport)
+    }),
+  )
+  assert.ok(
+    agentView.elements.some(element => {
+      return element.id === 'groma'
+        && element.display === 'card'
+        && visible(element.cellBounds, agentView.viewport)
+    }),
   )
   for (let leftIndex = 0; leftIndex < contextCards.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < contextCards.length; rightIndex += 1) {
@@ -670,7 +692,7 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
       )
     }
   }
-  for (const relationship of personSide.relationships) {
+  for (const relationship of personView.relationships) {
     if (!relationship.cellLabel) continue
     const label = {
       x: relationship.cellLabel.x,
@@ -700,7 +722,7 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(frame, new RegExp(footerHints('architecture', 'full')))
 
   frame = await press(setup, 'f')
-  assert.match(frame, /[▶◀▲▼]/)
+  assert.match(frame, /▌/)
   assert.match(frame, new RegExp(footerHints('architecture', 'side')))
 
   frame = await press(setup, 'escape')
@@ -751,16 +773,15 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
   assert.match(side, /Legacy ordering/)
   assert.doesNotMatch(side, /Inventory-aware orders/)
   assert.doesNotMatch(side, /Reserves stock/)
-  assert.match(side, /[▶◀▲▼]/)
+  assert.match(side, /▌/)
 
   const projection = projectWorld(fixture.world, {
     width: 120,
     height: 36,
     level: 'components',
     currentId: 'observed:api',
-    panel: 'side',
   })
-  assert.ok(projection.viewport.width < 118)
+  assert.equal(projection.viewport.width, 118)
   const cards = projection.elements.filter(element => element.display === 'card')
   assert.ok(cards.length > 0)
   assert.ok(cards.every(element => {

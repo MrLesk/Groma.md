@@ -25,10 +25,6 @@ const titledCard = {
   width: 21,
 }
 
-export function sidePanelWidth(totalWidth: number): number {
-  return Math.max(24, Math.floor(totalWidth / 3))
-}
-
 function unionBounds(boxes: Bounds[]): Bounds | undefined {
   const first = boxes[0]
   if (!first) return undefined
@@ -49,18 +45,22 @@ function cameraBounds(
   world: ArchitectureWorld,
   level: SemanticLevel,
   selected: WorldElement | undefined,
-  panel: ProjectionOptions['panel'],
   elementsById: Map<string, WorldElement>,
 ): Bounds {
-  if (panel === 'side' && selected) {
-    const children = selected.children.flatMap(id => {
-      const child = elementsById.get(id)
-      return child ? [child.bounds] : []
-    })
-    const framed = unionBounds(children)
-    if (framed) return padded(framed)
+  const focus = focusElement(level, selected, elementsById)
+  if (focus) return padded(focus.bounds)
+  if (!selected) return padded(world.bounds)
+  const boxes = [selected.bounds]
+  for (const relationship of visibleRelationships(world, level, focus, elementsById)) {
+    const sourceElement = elementsById.get(relationship.source)
+    const targetElement = elementsById.get(relationship.target)
+    if (!sourceElement || !targetElement) continue
+    const source = displayEndpoint(sourceElement, level, focus, elementsById)
+    const target = displayEndpoint(targetElement, level, focus, elementsById)
+    if (source.representationId === selected.representationId) boxes.push(target.bounds)
+    if (target.representationId === selected.representationId) boxes.push(source.bounds)
   }
-  return padded(focusElement(level, selected, elementsById)?.bounds ?? world.bounds)
+  return padded(unionBounds(boxes)!)
 }
 
 function focusElement(
@@ -566,16 +566,15 @@ export function projectWorld(
   world: ArchitectureWorld,
   options: ProjectionOptions,
 ): WorldProjection {
-  const { width, height, level = 'context', currentId, panel } = options
+  const { width, height, level = 'context', currentId } = options
   if (!Object.hasOwn(levelNames, level)) {
     throw new Error(`Unsupported semantic level: ${level}`)
   }
 
-  const reserved = panel === 'side' ? sidePanelWidth(width) : 0
   const viewport = {
     x: 1,
     y: 3,
-    width: Math.max(1, width - 2 - reserved),
+    width: Math.max(1, width - 2),
     height: Math.max(1, height - 4),
   }
   const elementsById = new Map(world.elements.map(element => [
@@ -587,7 +586,7 @@ export function projectWorld(
     : elementsById.get(currentId) ?? defaultSelection(world, level)
   const focus = focusElement(level, selected, elementsById)
   const transform = transformFor(
-    cameraBounds(world, level, selected, panel, elementsById),
+    cameraBounds(world, level, selected, elementsById),
     viewport,
   )
   const projectedElements = world.elements.map(element => {

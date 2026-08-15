@@ -189,5 +189,4 @@ export interface ProjectionOptions {
   height: number
   level?: SemanticLevel
   currentId?: string
-  panel?: 'side' | 'full'
 }
