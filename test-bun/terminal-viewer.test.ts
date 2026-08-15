@@ -663,26 +663,22 @@ test('headless details cover kinds, code, camera, overlay, and Esc', async () =>
     level: 'context',
     currentId: 'observed:groma',
   })
-  const agentView = projectWorld(response.world, {
-    width: 120,
-    height: 36,
-    level: 'context',
-    currentId: 'observed:coding-agent',
-  })
-  assert.ok(agentView.scale > gromaView.scale)
-  assert.ok(
-    agentView.elements.some(element => {
-      return element.id === 'coding-agent'
-        && element.display === 'card'
-        && visible(element.cellBounds, agentView.viewport)
-    }),
+  assert.equal(personView.scale, gromaView.scale)
+  assert.deepEqual(
+    personView.elements.map(element => [element.representationId, element.cellBounds]),
+    gromaView.elements.map(element => [element.representationId, element.cellBounds]),
   )
-  assert.ok(
-    agentView.elements.some(element => {
-      return element.id === 'groma'
-        && element.display === 'card'
-        && visible(element.cellBounds, agentView.viewport)
-    }),
+  assert.deepEqual(
+    personView.relationships.map(relationship => [
+      relationship.id,
+      relationship.cellRoute,
+      relationship.cellLabel,
+    ]),
+    gromaView.relationships.map(relationship => [
+      relationship.id,
+      relationship.cellRoute,
+      relationship.cellLabel,
+    ]),
   )
   for (let leftIndex = 0; leftIndex < contextCards.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < contextCards.length; rightIndex += 1) {

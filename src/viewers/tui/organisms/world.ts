@@ -42,9 +42,6 @@ export function drawWorld(
     }
     drawCard(buffer, element, projection, theme)
   }
-  for (const relationship of projection.relationships) {
-    drawRouteLabel(buffer, relationship, projection, theme)
-  }
   if (options.showSelection !== false) {
     drawSelection(
       buffer,
@@ -53,6 +50,9 @@ export function drawWorld(
       }),
       theme,
     )
+  }
+  for (const relationship of projection.relationships) {
+    drawRouteLabel(buffer, relationship, projection, theme)
   }
   for (const relationship of projection.relationships) {
     drawRouteArrow(buffer, relationship, projection, theme)

@@ -25,44 +25,6 @@ const titledCard = {
   width: 21,
 }
 
-function unionBounds(boxes: Bounds[]): Bounds | undefined {
-  const first = boxes[0]
-  if (!first) return undefined
-  let x = first.x
-  let y = first.y
-  let right = first.x + first.width
-  let bottom = first.y + first.height
-  for (const box of boxes.slice(1)) {
-    x = Math.min(x, box.x)
-    y = Math.min(y, box.y)
-    right = Math.max(right, box.x + box.width)
-    bottom = Math.max(bottom, box.y + box.height)
-  }
-  return { x, y, width: right - x, height: bottom - y }
-}
-
-function cameraBounds(
-  world: ArchitectureWorld,
-  level: SemanticLevel,
-  selected: WorldElement | undefined,
-  elementsById: Map<string, WorldElement>,
-): Bounds {
-  const focus = focusElement(level, selected, elementsById)
-  if (focus) return padded(focus.bounds)
-  if (!selected) return padded(world.bounds)
-  const boxes = [selected.bounds]
-  for (const relationship of visibleRelationships(world, level, focus, elementsById)) {
-    const sourceElement = elementsById.get(relationship.source)
-    const targetElement = elementsById.get(relationship.target)
-    if (!sourceElement || !targetElement) continue
-    const source = displayEndpoint(sourceElement, level, focus, elementsById)
-    const target = displayEndpoint(targetElement, level, focus, elementsById)
-    if (source.representationId === selected.representationId) boxes.push(target.bounds)
-    if (target.representationId === selected.representationId) boxes.push(source.bounds)
-  }
-  return padded(unionBounds(boxes)!)
-}
-
 function focusElement(
   level: SemanticLevel,
   selected: WorldElement | undefined,
@@ -586,7 +548,7 @@ export function projectWorld(
     : elementsById.get(currentId) ?? defaultSelection(world, level)
   const focus = focusElement(level, selected, elementsById)
   const transform = transformFor(
-    cameraBounds(world, level, selected, elementsById),
+    padded(focus?.bounds ?? world.bounds),
     viewport,
   )
   const projectedElements = world.elements.map(element => {
@@ -623,7 +585,12 @@ export function projectWorld(
   ]))
   const cardBounds = fittedElements
     .filter(element => element.display === 'card')
-    .map(element => element.cellBounds)
+    .map(element => ({
+      x: element.cellBounds.x - 1,
+      y: element.cellBounds.y - 1,
+      width: element.cellBounds.width + 2,
+      height: element.cellBounds.height + 2,
+    }))
 
   return {
     level,
