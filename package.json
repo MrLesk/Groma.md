@@ -2,17 +2,33 @@
   "name": "groma",
   "private": true,
   "type": "module",
+  "bin": {
+    "groma": "src/cli.ts"
+  },
   "packageManager": "bun@1.3.14",
   "engines": {
+    "bun": ">=1.3.14",
     "node": ">=20.19.0"
   },
   "scripts": {
-    "validate:architecture": "node scripts/validate-architecture.mjs",
-    "scanner": "node src/scanner-process.mjs",
-    "test": "node --test",
-    "check": "bun run validate:architecture && bun run test"
+    "cli": "bun src/cli.ts",
+    "validate:architecture": "node --import=tsx scripts/validate-architecture.ts",
+    "scanner": "node --import=tsx src/scanner-process.ts",
+    "typecheck": "tsc --version && tsc --noEmit",
+    "test": "bun run test:node && bun run test:viewer",
+    "test:node": "node --import=tsx --test test/*.test.ts",
+    "test:viewer": "bun test test-bun/terminal-viewer.test.ts",
+    "check": "bun run typecheck && bun run validate:architecture && bun run test"
   },
   "dependencies": {
-    "comark": "0.5.1"
+    "@opentui/core": "0.5.1",
+    "elkjs": "0.12.0",
+    "comark": "0.5.1",
+    "web-worker": "1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "20",
+    "tsx": "^4.23.12",
+    "typescript": "7.0.2"
   }
 }

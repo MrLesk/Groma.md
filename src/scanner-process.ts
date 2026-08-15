@@ -1,8 +1,8 @@
 import path from 'node:path'
 
-import { startScanner } from './scanner.mjs'
+import { startScanner } from './scanner.ts'
 
-function repositoryArgument(arguments_) {
+function repositoryArgument(arguments_: string[]): string {
   const repositoryIndex = arguments_.indexOf('--repository')
   if (repositoryIndex === -1) return process.cwd()
   if (repositoryIndex === arguments_.length - 1) {
@@ -11,12 +11,12 @@ function repositoryArgument(arguments_) {
   return path.resolve(arguments_[repositoryIndex + 1])
 }
 
-async function main() {
+async function main(): Promise<void> {
   const repositoryRoot = repositoryArgument(process.argv.slice(2))
   const scanner = await startScanner(repositoryRoot)
   let closing = false
 
-  async function close() {
+  async function close(): Promise<void> {
     if (closing) return
     closing = true
     await scanner.close()
@@ -27,7 +27,8 @@ async function main() {
   process.stdout.write(`Scanner watching ${repositoryRoot}\n`)
 }
 
-main().catch(error => {
-  process.stderr.write(`[groma scanner] ${error.message}\n`)
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  process.stderr.write(`[groma scanner] ${message}\n`)
   process.exitCode = 1
 })

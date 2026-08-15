@@ -9,7 +9,8 @@ import {
   ArchitectureReadError,
   loadArchitecture,
   loadRevision,
-} from '../src/architecture-reader.mjs'
+} from '../src/architecture-reader.ts'
+import type { FilesystemAccess } from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -105,7 +106,7 @@ test('keeps README and other prose as context rather than C4 documents', async (
 })
 
 test('reports the selected revision filesystem read scope', async () => {
-  const accesses = []
+  const accesses: Array<{ operation: FilesystemAccess['operation']; path: string }> = []
   await loadRevision(
     repositoryRoot,
     { kind: 'observed' },
@@ -233,6 +234,7 @@ test('reports filesystem failures without labeling them as Comark parse failures
       assert.ok(error instanceof ArchitectureReadError)
       assert.equal(error.sourceFilename, 'groma/observed/README.md')
       assert.equal(error.stage, 'read')
+      assert.ok(error.cause instanceof Error && 'code' in error.cause)
       assert.equal(error.cause.code, 'ENOENT')
       assert.match(error.message, /Could not read architecture Markdown/)
       assert.doesNotMatch(error.message, /Comark could not parse/)

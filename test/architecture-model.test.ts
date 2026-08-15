@@ -6,15 +6,25 @@ import { fileURLToPath } from 'node:url'
 import {
   ArchitectureModelError,
   buildArchitectureModel,
-} from '../src/architecture-model.mjs'
-import { loadRevision } from '../src/architecture-reader.mjs'
+} from '../src/architecture-model.ts'
+import { loadRevision } from '../src/architecture-reader.ts'
+import type {
+  ArchitectureDocument,
+  ArchitectureFrontmatter,
+  C4Kind,
+  MarkdownElement,
+  MarkdownNode,
+  RevisionRecord,
+} from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
 
-function revisionRecord(documents) {
+function revisionRecord(
+  documents: ArchitectureDocument[],
+): Pick<RevisionRecord, 'revision' | 'documents'> {
   return {
     revision: {
       kind: 'plan',
@@ -25,6 +35,22 @@ function revisionRecord(documents) {
   }
 }
 
+interface RelationshipFixture {
+  href: string
+  label?: string
+  description: string
+  technology: string
+}
+
+interface ElementDocumentFixture {
+  id: string
+  kind: C4Kind
+  sourceFilename: string
+  parent?: string | null
+  external?: unknown
+  relationships?: RelationshipFixture[]
+}
+
 function elementDocument({
   id,
   kind,
@@ -32,8 +58,8 @@ function elementDocument({
   parent,
   external,
   relationships = [],
-}) {
-  const frontmatter = { id, kind }
+}: ElementDocumentFixture): ArchitectureDocument {
+  const frontmatter: ArchitectureFrontmatter = { id, kind }
   if (parent !== undefined) {
     frontmatter.parent = parent
   }
@@ -41,7 +67,7 @@ function elementDocument({
     frontmatter.external = external
   }
 
-  const nodes = [
+  const nodes: MarkdownNode[] = [
     ['h1', { id }, id],
     ['p', {}, `${id} responsibility`],
   ]
@@ -66,7 +92,7 @@ function elementDocument({
         [
           'tbody',
           {},
-          ...relationships.map(relationship => [
+          ...relationships.map((relationship): MarkdownElement => [
             'tr',
             {},
             ['td', {}, ['a', { href: relationship.href }, relationship.label ?? 'Target']],
@@ -74,7 +100,7 @@ function elementDocument({
             ['td', {}, relationship.technology],
           ]),
         ],
-      ],
+      ] as MarkdownElement,
     )
   }
 
@@ -472,7 +498,7 @@ test('contains no presentation state', async () => {
     'layout',
   ])
 
-  function assertNoPresentationState(value) {
+  function assertNoPresentationState(value: unknown): void {
     if (value === null || typeof value !== 'object') {
       return
     }

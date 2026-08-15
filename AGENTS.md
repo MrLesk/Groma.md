@@ -26,6 +26,12 @@ metadata, relationships, and history stay consistent.
 </CRITICAL_INSTRUCTION>
 <!-- BACKLOG.MD GUIDELINES END -->
 
+## IMPORTANT: Point of view
+
+Whenever you are writing documentation or code, think from the pov of someone that is not aware of the current conversation
+and needs to understand what you wrote without extra context. Is the code clearly legible, are the docs explaining only
+what is relevant without mentioning transitions between approaches that happen during this conversation?
+
 ## IMPORTANT: Experimental prototype
 
 Groma is an early experimental prototype used only by its developers. It has no external users and no released data,
@@ -46,6 +52,16 @@ requested work includes code changes. Do not create a task for standalone docume
 administration, such as relabeling, status corrections, or metadata maintenance. Documentation required to deliver an
 in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
 request.
+
+## Commit messages
+
+For work associated with a Backlog task, use the exact task ID and title as the commit subject:
+
+```text
+<TASK-ID> - <task title>
+```
+
+For example: `TASK-28.3 - Supply annotated architecture through Groma core`.
 
 ## Minimum sufficient product
 

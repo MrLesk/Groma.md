@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { loadArchitectureViewModel } from '../src/core.mjs'
-import { requestArchitectureModel } from '../src/viewer/model-request.mjs'
+import { loadArchitectureViewModel } from '../src/core.ts'
+import type {
+  AnnotatedElement,
+  ArchitectureViewModel,
+} from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -13,10 +15,15 @@ const repositoryRoot = path.resolve(
 )
 const fixtureRoot = path.join(repositoryRoot, 'test', 'fixtures', 'core-view')
 
-function elementByRepresentation(model, representationId) {
-  return model.elements.find(element => {
+function elementByRepresentation(
+  model: ArchitectureViewModel,
+  representationId: string,
+): AnnotatedElement {
+  const element = model.elements.find(element => {
     return element.representationId === representationId
   })
+  assert.ok(element)
+  return element
 }
 
 test('returns every independently annotated architecture representation', async () => {
@@ -191,35 +198,4 @@ test('returns every independently annotated architecture representation', async 
     },
   ])
   assert.doesNotThrow(() => JSON.stringify(model))
-})
-
-test('viewer request delegates architecture I/O to the core boundary', async () => {
-  const viewerSource = await readFile(
-    path.join(repositoryRoot, 'src', 'viewer', 'model-request.mjs'),
-    'utf8',
-  )
-  assert.doesNotMatch(viewerSource, /node:fs|architecture-reader|groma\/(?:observed|missing|plans)/)
-
-  const accesses = []
-  const model = await requestArchitectureModel(fixtureRoot, {
-    onFilesystemAccess(access) {
-      accesses.push({
-        operation: access.operation,
-        path: path.relative(fixtureRoot, access.filename).split(path.sep).join('/'),
-      })
-    },
-  })
-
-  assert.deepEqual(model.plans, ['checkout', 'inventory'])
-  assert.deepEqual(
-    [...new Set(accesses.map(access => access.operation))].sort(),
-    ['read-directory', 'read-file'],
-  )
-  assert.ok(accesses.every(access => {
-    return access.path === 'groma/plans'
-      || access.path.startsWith('groma/observed')
-      || access.path.startsWith('groma/missing')
-      || access.path.startsWith('groma/plans/checkout')
-      || access.path.startsWith('groma/plans/inventory')
-  }))
 })

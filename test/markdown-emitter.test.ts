@@ -12,11 +12,17 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { parse } from 'comark'
 
-import { loadRevision } from '../src/architecture-reader.mjs'
+import { loadRevision } from '../src/architecture-reader.ts'
+import type {
+  FilesystemAccess,
+  MarkdownElement,
+  TypeScriptScanResult,
+} from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,7 +44,7 @@ const ownedRelativePath = path.join(
   'scanner',
   'components',
 )
-const mutationOperations = new Set([
+const mutationOperations = new Set<FilesystemAccess['operation']>([
   'remove',
   'write-file',
 ])
@@ -105,17 +111,20 @@ Must remain byte-identical.
 `,
 }
 
-async function readScanResult() {
-  return JSON.parse(await readFile(scanResultFixture, 'utf8'))
+async function readScanResult(): Promise<TypeScriptScanResult> {
+  return JSON.parse(await readFile(scanResultFixture, 'utf8')) as TypeScriptScanResult
 }
 
-async function writeDocument(root, relativePath, source) {
+async function writeDocument(root: string, relativePath: string, source: string): Promise<void> {
   const filename = path.join(root, ...relativePath.split('/'))
   await mkdir(path.dirname(filename), { recursive: true })
   await writeFile(filename, source)
 }
 
-async function createRepository(t, { lockPlans = true } = {}) {
+async function createRepository(
+  t: TestContext,
+  { lockPlans = true }: { lockPlans?: boolean } = {},
+): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'groma-emitter-'))
   const plansRoot = path.join(root, 'groma', 'plans')
   t.after(async () => {
@@ -172,12 +181,12 @@ async function createRepository(t, { lockPlans = true } = {}) {
 }
 
 async function loadEmitter() {
-  return import('../src/markdown-emitter.mjs')
+  return import('../src/markdown-emitter.ts')
 }
 
-async function snapshotDirectory(directory) {
+async function snapshotDirectory(directory: string): Promise<Record<string, Buffer>> {
   const entries = await readdir(directory, { withFileTypes: true })
-  const snapshot = {}
+  const snapshot: Record<string, Buffer> = {}
 
   for (const entry of entries.sort((left, right) => {
     return Buffer.compare(Buffer.from(left.name), Buffer.from(right.name))
@@ -195,7 +204,7 @@ async function snapshotDirectory(directory) {
   return snapshot
 }
 
-async function snapshotUnownedObserved(root) {
+async function snapshotUnownedObserved(root: string): Promise<Record<string, Buffer>> {
   const observedRoot = path.join(root, 'groma', 'observed')
   const snapshot = await snapshotDirectory(observedRoot)
   const ownedPrefix = `${ownedRelativePath
@@ -213,7 +222,7 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
   const root = await createRepository(t)
   const scanResult = await readScanResult()
   const beforeUnowned = await snapshotUnownedObserved(root)
-  const accesses = []
+  const accesses: Array<{ operation: FilesystemAccess['operation']; path: string }> = []
   const { emitObservedComponents } = await loadEmitter()
 
   const result = await emitObservedComponents(root, scanResult, {
@@ -323,10 +332,16 @@ test('emits canonical fixture Markdown while preserving every unowned path', asy
     assert.equal(tree.frontmatter.parent, 'scanner')
     assert.ok(tree.nodes.some(node => node[0] === 'h2' && node[2] === 'Source evidence'))
     if (filename === 'source-watcher.md') {
-      const table = tree.nodes.find(node => node[0] === 'table')
-      const body = table.find(node => Array.isArray(node) && node[0] === 'tbody')
+      const nodes = tree.nodes as unknown as MarkdownElement[]
+      const table = nodes.find(node => node[0] === 'table')
+      assert.ok(table)
+      const body = (table.slice(2) as MarkdownElement[])
+        .find(node => node[0] === 'tbody')
+      assert.ok(body)
       assert.deepEqual(
-        body.slice(2).map(row => row.slice(2).map(cell => cell[0])),
+        (body.slice(2) as MarkdownElement[]).map(row => {
+          return (row.slice(2) as MarkdownElement[]).map(cell => cell[0])
+        }),
         [
           ['td', 'td', 'td'],
           ['td', 'td', 'td'],
@@ -460,7 +475,7 @@ Stores architecture files.
   )
   const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
   const { emitObservedComponents } = await loadEmitter()
-  const accesses = []
+  const accesses: FilesystemAccess[] = []
 
   const error = await emitObservedComponents(root, scanResult, {
     onFilesystemAccess(access) {
@@ -502,7 +517,7 @@ Stores architecture files.
   )
   const beforeObserved = await snapshotDirectory(path.join(root, 'groma', 'observed'))
   const { emitObservedComponents } = await loadEmitter()
-  const accesses = []
+  const accesses: FilesystemAccess[] = []
 
   const error = await emitObservedComponents(root, scanResult, {
     onFilesystemAccess(access) {

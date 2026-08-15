@@ -3,8 +3,25 @@ import path from 'node:path'
 
 import { parse } from 'comark'
 
+import type {
+  ArchitectureDocument,
+  FilesystemAccessHandler,
+  Revision,
+  RevisionDescriptor,
+  RevisionRecord,
+} from './types.ts'
+
 export class ArchitectureReadError extends Error {
-  constructor(sourceFilename, revision, stage, cause) {
+  readonly sourceFilename: string
+  readonly revision: Revision
+  readonly stage: 'read' | 'parse' | 'serialize'
+
+  constructor(
+    sourceFilename: string,
+    revision: Revision,
+    stage: 'read' | 'parse' | 'serialize',
+    cause: unknown,
+  ) {
     const detail = cause instanceof Error ? cause.message : String(cause)
     const message = stage === 'parse'
       ? `Comark could not parse ${sourceFilename}: ${detail}`
@@ -20,35 +37,38 @@ export class ArchitectureReadError extends Error {
   }
 }
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
     return value
   }
 
   Object.freeze(value)
-  for (const child of Object.values(value)) {
+  for (const child of Object.values(value as Record<string, unknown>)) {
     deepFreeze(child)
   }
 
   return value
 }
 
-function repositoryRelative(repositoryRoot, filename) {
+function repositoryRelative(repositoryRoot: string, filename: string): string {
   return path.relative(repositoryRoot, filename).split(path.sep).join('/')
 }
 
 function recordFilesystemAccess(
-  onFilesystemAccess,
-  operation,
-  filename,
+  onFilesystemAccess: FilesystemAccessHandler | undefined,
+  operation: 'read-directory' | 'read-file',
+  filename: string,
 ) {
   onFilesystemAccess?.({ operation, filename })
 }
 
-async function listMarkdownFiles(directory, onFilesystemAccess) {
+async function listMarkdownFiles(
+  directory: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<string[]> {
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', directory)
   const entries = await readdir(directory, { withFileTypes: true })
-  const files = []
+  const files: string[] = []
 
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name)
@@ -63,7 +83,8 @@ async function listMarkdownFiles(directory, onFilesystemAccess) {
   return files.sort()
 }
 
-function identifyRevision(revision) {
+function identifyRevision(descriptor: unknown): Revision {
+  const revision = descriptor as Partial<RevisionDescriptor> | null
   if (revision?.kind === 'observed') {
     return {
       kind: 'observed',
@@ -100,17 +121,17 @@ function identifyRevision(revision) {
   }
 }
 
-function isElementDocument(document) {
+function isElementDocument(document: ArchitectureDocument): boolean {
   return Object.hasOwn(document.frontmatter, 'id')
     && Object.hasOwn(document.frontmatter, 'kind')
 }
 
 async function parseDocument(
-  repositoryRoot,
-  revision,
-  filename,
-  onFilesystemAccess,
-) {
+  repositoryRoot: string,
+  revision: Revision,
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<ArchitectureDocument> {
   const sourceFilename = repositoryRelative(repositoryRoot, filename)
   let source
 
@@ -133,17 +154,17 @@ async function parseDocument(
       sourceFilename,
       nodes: tree.nodes,
       frontmatter: tree.frontmatter,
-    })))
+    })) as ArchitectureDocument)
   } catch (error) {
     throw new ArchitectureReadError(sourceFilename, revision, 'serialize', error)
   }
 }
 
 export async function loadRevision(
-  repositoryRoot,
-  revisionDescriptor,
-  options = {},
-) {
+  repositoryRoot: string,
+  revisionDescriptor: unknown,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<RevisionRecord> {
   const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const revision = deepFreeze(identifyRevision(revisionDescriptor))
@@ -153,8 +174,8 @@ export async function loadRevision(
     revisionRoot,
     onFilesystemAccess,
   )
-  let context
-  const documents = []
+  let context: ArchitectureDocument | undefined
+  const documents: ArchitectureDocument[] = []
 
   for (const filename of markdownFiles) {
     const document = await parseDocument(
@@ -187,22 +208,25 @@ export async function loadRevision(
   })
 }
 
-export async function loadArchitecture(repositoryRoot, options = {}) {
+export async function loadArchitecture(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<RevisionRecord[]> {
   const { onFilesystemAccess } = options
   const absoluteRepositoryRoot = path.resolve(repositoryRoot)
   const plansRoot = path.join(absoluteRepositoryRoot, 'groma', 'plans')
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', plansRoot)
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
-  const revisionDescriptors = [
+  const revisionDescriptors: RevisionDescriptor[] = [
     { kind: 'observed' },
     { kind: 'missing' },
     ...planEntries
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name)
       .sort()
-      .map(name => ({ kind: 'plan', name })),
+      .map(name => ({ kind: 'plan' as const, name })),
   ]
-  const revisions = []
+  const revisions: RevisionRecord[] = []
 
   for (const revision of revisionDescriptors) {
     revisions.push(await loadRevision(

@@ -2,6 +2,14 @@ import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { TextDecoder } from 'node:util'
 
+import type {
+  FilesystemAccessHandler,
+  ScannedComponent,
+  ScannerEntryPoint,
+  ScannerRelationship,
+  TypeScriptScanResult,
+} from './types.ts'
+
 const contract = 'groma.scanner.typescript-bun/v1'
 const containerId = 'scanner'
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -15,26 +23,30 @@ const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
 class SourceShapeMismatch extends Error {}
 
 export class UnsupportedSourceShapeError extends Error {
+  readonly code = 'GROMA_UNSUPPORTED_SOURCE_SHAPE'
+
   constructor() {
     super(`Repository does not match ${contract}.`)
     this.name = 'UnsupportedSourceShapeError'
-    this.code = 'GROMA_UNSUPPORTED_SOURCE_SHAPE'
   }
 }
 
-function mismatch() {
+function mismatch(): never {
   throw new SourceShapeMismatch()
 }
 
 function recordFilesystemAccess(
-  onFilesystemAccess,
-  operation,
-  filename,
-) {
+  onFilesystemAccess: FilesystemAccessHandler | undefined,
+  operation: 'read-file' | 'read-directory',
+  filename: string,
+): void {
   onFilesystemAccess?.({ operation, filename })
 }
 
-async function readUtf8(filename, onFilesystemAccess) {
+async function readUtf8(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<string> {
   recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
   const bytes = await readFile(filename)
   if (
@@ -48,12 +60,18 @@ async function readUtf8(filename, onFilesystemAccess) {
   return utf8Decoder.decode(bytes)
 }
 
-async function readDirectory(filename, onFilesystemAccess) {
+async function readDirectory(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+) {
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', filename)
   return readdir(filename, { withFileTypes: true })
 }
 
-async function readSource(filename, onFilesystemAccess) {
+async function readSource(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<string[]> {
   const source = await readUtf8(filename, onFilesystemAccess)
   if (
     !source.endsWith('\n')
@@ -64,18 +82,21 @@ async function readSource(filename, onFilesystemAccess) {
   return source.slice(0, -1).split('\n')
 }
 
-function bytewiseCompare(left, right) {
+function bytewiseCompare(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
-function compareRelationships(left, right) {
+function compareRelationships(
+  left: ScannerRelationship,
+  right: ScannerRelationship,
+): number {
   return bytewiseCompare(left.sourceId, right.sourceId)
     || bytewiseCompare(left.targetId, right.targetId)
     || bytewiseCompare(left.sourceRange, right.sourceRange)
 }
 
-function decodeJsonString(token) {
-  let value
+function decodeJsonString(token: string): string {
+  let value: unknown
   try {
     value = JSON.parse(token)
   } catch {
@@ -87,7 +108,7 @@ function decodeJsonString(token) {
   return value
 }
 
-function parseLiteralField(line, indentation, field) {
+function parseLiteralField(line: string, indentation: number, field: string): string {
   const fieldPattern = new RegExp(
     `^${' '.repeat(indentation)}${field}: (${jsonStringPattern});$`,
   )
@@ -95,30 +116,30 @@ function parseLiteralField(line, indentation, field) {
   if (!match) {
     mismatch()
   }
-  return decodeJsonString(match[1])
+  return decodeJsonString(match[1]!)
 }
 
-function validateId(value) {
+function validateId(value: string): string {
   if (!idPattern.test(value)) {
     mismatch()
   }
   return value
 }
 
-function validateReadableText(value) {
+function validateReadableText(value: string): string {
   if (!/^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/.test(value)) {
     mismatch()
   }
   return value
 }
 
-function rejectReservedIdentifiers(lines) {
+function rejectReservedIdentifiers(lines: string[]): void {
   if (reservedIdentifierPattern.test(lines.join('\n'))) {
     mismatch()
   }
 }
 
-function parseEntryPoint(lines) {
+function parseEntryPoint(lines: string[]): ScannerEntryPoint {
   if (
     lines[0] !== 'export type GromaEntryPoint = {'
     || lines[2] !== '};'
@@ -137,7 +158,11 @@ function parseEntryPoint(lines) {
   }
 }
 
-function parseComponentDeclaration(lines, sourceFilename, filenameId) {
+function parseComponentDeclaration(
+  lines: string[],
+  sourceFilename: string,
+  filenameId: string,
+): Omit<ScannedComponent, 'relationships'> {
   if (
     lines[0] !== 'export type GromaComponent = {'
     || lines[5] !== '};'
@@ -165,11 +190,11 @@ function parseComponentDeclaration(lines, sourceFilename, filenameId) {
 }
 
 function parseRelationship(
-  lines,
-  startIndex,
-  sourceFilename,
-  componentId,
-) {
+  lines: string[],
+  startIndex: number,
+  sourceFilename: string,
+  componentId: string,
+): ScannerRelationship {
   if (
     lines[startIndex] !== '  {'
     || lines[startIndex + 5] !== '  },'
@@ -200,7 +225,11 @@ function parseRelationship(
   }
 }
 
-function parseRelationships(lines, sourceFilename, componentId) {
+function parseRelationships(
+  lines: string[],
+  sourceFilename: string,
+  componentId: string,
+): { declarationEnd: number; relationships: ScannerRelationship[] } {
   if (lines[7] === 'export type GromaRelationships = [];') {
     return {
       declarationEnd: 8,
@@ -211,7 +240,7 @@ function parseRelationships(lines, sourceFilename, componentId) {
     mismatch()
   }
 
-  const relationships = []
+  const relationships: ScannerRelationship[] = []
   let cursor = 8
   while (lines[cursor] === '  {') {
     relationships.push(parseRelationship(
@@ -233,7 +262,11 @@ function parseRelationships(lines, sourceFilename, componentId) {
   }
 }
 
-function parseComponent(lines, sourceFilename, filenameId) {
+function parseComponent(
+  lines: string[],
+  sourceFilename: string,
+  filenameId: string,
+): ScannedComponent {
   const component = parseComponentDeclaration(
     lines,
     sourceFilename,
@@ -252,10 +285,13 @@ function parseComponent(lines, sourceFilename, filenameId) {
   }
 }
 
-async function listSourceDeclarations(repositoryRoot, onFilesystemAccess) {
-  const declarationFiles = []
+async function listSourceDeclarations(
+  repositoryRoot: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<string[]> {
+  const declarationFiles: string[] = []
 
-  async function walk(relativeDirectory) {
+  async function walk(relativeDirectory: string): Promise<void> {
     const directory = path.join(repositoryRoot, ...relativeDirectory.split('/'))
     const entries = await readDirectory(directory, onFilesystemAccess)
     entries.sort((left, right) => bytewiseCompare(left.name, right.name))
@@ -276,26 +312,34 @@ async function listSourceDeclarations(repositoryRoot, onFilesystemAccess) {
   return declarationFiles
 }
 
-function validatePackageJson(packageJson) {
+function validatePackageJson(packageJson: unknown): void {
+  const candidate = packageJson as {
+    private?: unknown
+    type?: unknown
+    scripts?: { start?: unknown }
+  } | null
   if (
-    packageJson === null
-    || typeof packageJson !== 'object'
-    || Array.isArray(packageJson)
-    || packageJson.private !== true
-    || packageJson.type !== 'module'
-    || packageJson.scripts?.start !== 'bun run src/index.ts'
+    candidate === null
+    || typeof candidate !== 'object'
+    || Array.isArray(candidate)
+    || candidate.private !== true
+    || candidate.type !== 'module'
+    || candidate.scripts?.start !== 'bun run src/index.ts'
   ) {
     mismatch()
   }
 }
 
-async function scan(repositoryRoot, onFilesystemAccess) {
+async function scan(
+  repositoryRoot: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<TypeScriptScanResult> {
   const absoluteRoot = path.resolve(repositoryRoot)
   const packageSource = await readUtf8(
     path.join(absoluteRoot, 'package.json'),
     onFilesystemAccess,
   )
-  let packageJson
+  let packageJson: unknown
   try {
     packageJson = JSON.parse(packageSource)
   } catch {
@@ -322,8 +366,8 @@ async function scan(repositoryRoot, onFilesystemAccess) {
     path.join(absoluteRoot, 'src', 'index.ts'),
     onFilesystemAccess,
   ))
-  const components = []
-  const componentIds = new Set()
+  const components: ScannedComponent[] = []
+  const componentIds = new Set<string>()
 
   for (const sourceFilename of componentFiles) {
     const filenameId = path.posix.basename(sourceFilename, '.ts')
@@ -355,7 +399,10 @@ async function scan(repositoryRoot, onFilesystemAccess) {
   }
 }
 
-export async function scanTypeScriptSource(repositoryRoot, options = {}) {
+export async function scanTypeScriptSource(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<TypeScriptScanResult> {
   try {
     return await scan(repositoryRoot, options.onFilesystemAccess)
   } catch {

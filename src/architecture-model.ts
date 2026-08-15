@@ -1,14 +1,29 @@
 import path from 'node:path'
 
-const expectedParentKinds = new Map([
+import type {
+  ArchitectureDocument,
+  ArchitectureElement,
+  ArchitectureModel,
+  ArchitectureRelationship,
+  C4Kind,
+  MarkdownElement,
+  MarkdownNode,
+  Revision,
+  RevisionRecord,
+} from './types.ts'
+
+const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
   ['component', 'container'],
 ])
-const rootKinds = new Set(['person', 'system'])
-const supportedKinds = new Set([...rootKinds, ...expectedParentKinds.keys()])
+const rootKinds = new Set<C4Kind>(['person', 'system'])
+const supportedKinds = new Set<C4Kind>([...rootKinds, ...expectedParentKinds.keys()])
 
 export class ArchitectureModelError extends Error {
-  constructor(code, sourceFilename, message) {
+  readonly code: string
+  readonly sourceFilename: string
+
+  constructor(code: string, sourceFilename: string, message: string) {
     super(`${sourceFilename}: ${message}`)
     this.name = 'ArchitectureModelError'
     this.code = code
@@ -16,24 +31,24 @@ export class ArchitectureModelError extends Error {
   }
 }
 
-function deepFreeze(value) {
+function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
     return value
   }
 
   Object.freeze(value)
-  for (const child of Object.values(value)) {
+  for (const child of Object.values(value as Record<string, unknown>)) {
     deepFreeze(child)
   }
 
   return value
 }
 
-function compareStrings(left, right) {
+function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
-function nodeText(node) {
+function nodeText(node: MarkdownNode | undefined): string {
   if (typeof node === 'string') {
     return node
   }
@@ -41,21 +56,26 @@ function nodeText(node) {
     return ''
   }
 
-  const children = typeof node[0] === 'string' ? node.slice(2) : node
+  const children = node.slice(2) as MarkdownNode[]
   return children.map(nodeText).join('')
 }
 
-function collectNodes(node, tag, collected = []) {
+function collectNodes(
+  node: MarkdownNode | MarkdownNode[] | undefined,
+  tag: string,
+  collected: MarkdownElement[] = [],
+): MarkdownElement[] {
   if (!Array.isArray(node)) {
     return collected
   }
 
-  const isAstNode = typeof node[0] === 'string'
+  const values = node as unknown[]
+  const isAstNode = typeof values[0] === 'string'
   if (isAstNode && node[0] === tag) {
-    collected.push(node)
+    collected.push(node as MarkdownElement)
   }
 
-  const children = isAstNode ? node.slice(2) : node
+  const children = (isAstNode ? values.slice(2) : values) as MarkdownNode[]
   for (const child of children) {
     collectNodes(child, tag, collected)
   }
@@ -63,8 +83,8 @@ function collectNodes(node, tag, collected = []) {
   return collected
 }
 
-function elementNameAndDescription(nodes) {
-  const headingIndex = nodes.findIndex(node => node[0] === 'h1')
+function elementNameAndDescription(nodes: MarkdownNode[]) {
+  const headingIndex = nodes.findIndex(node => Array.isArray(node) && node[0] === 'h1')
   const heading = nodes[headingIndex]
   const description = nodes[headingIndex + 1]
 
@@ -74,11 +94,12 @@ function elementNameAndDescription(nodes) {
   }
 }
 
-function relationshipRows(nodes) {
-  const rows = []
+function relationshipRows(nodes: MarkdownNode[]): MarkdownElement[] {
+  const rows: MarkdownElement[] = []
   let inRelationshipsSection = false
 
   for (const node of nodes) {
+    if (!Array.isArray(node)) continue
     if (node[0] === 'h2') {
       inRelationshipsSection = node[1]?.id === 'relationships'
       continue
@@ -94,7 +115,10 @@ function relationshipRows(nodes) {
   return rows
 }
 
-function relationshipTargetFilename(sourceFilename, href) {
+function relationshipTargetFilename(
+  sourceFilename: string,
+  href: unknown,
+): string | null {
   if (typeof href !== 'string') {
     return null
   }
@@ -119,7 +143,7 @@ function relationshipTargetFilename(sourceFilename, href) {
   )
 }
 
-function documentToElement(document) {
+function documentToElement(document: ArchitectureDocument): ArchitectureElement {
   const { id, kind, parent, external, code } = document.frontmatter
   const { sourceFilename } = document
   const declaresExternal = Object.hasOwn(document.frontmatter, 'external')
@@ -131,7 +155,7 @@ function documentToElement(document) {
       'element requires a stable id',
     )
   }
-  if (!supportedKinds.has(kind)) {
+  if (typeof kind !== 'string' || !supportedKinds.has(kind as C4Kind)) {
     throw new ArchitectureModelError(
       'INVALID_ELEMENT',
       sourceFilename,
@@ -171,7 +195,7 @@ function documentToElement(document) {
 
   return {
     id,
-    kind,
+    kind: kind as C4Kind,
     name,
     description,
     parentId: parent ?? null,
@@ -181,7 +205,11 @@ function documentToElement(document) {
   }
 }
 
-function validateContainment(elements, elementsById, declaredParentIds) {
+function validateContainment(
+  elements: ArchitectureElement[],
+  elementsById: Map<string, ArchitectureElement>,
+  declaredParentIds: Set<string>,
+): void {
   for (const element of elements) {
     if (rootKinds.has(element.kind)) {
       if (declaredParentIds.has(element.id)) {
@@ -222,12 +250,18 @@ function validateContainment(elements, elementsById, declaredParentIds) {
   }
 }
 
-function extractRelationships(documents, elementsBySourceFilename) {
-  const relationships = []
+function extractRelationships(
+  documents: ArchitectureDocument[],
+  elementsBySourceFilename: Map<string, ArchitectureElement>,
+): ArchitectureRelationship[] {
+  const relationships: ArchitectureRelationship[] = []
 
   for (const document of documents) {
     for (const row of relationshipRows(document.nodes)) {
-      const cells = row.slice(2).filter(child => child[0] === 'td')
+      const cells = (row.slice(2) as MarkdownNode[])
+        .filter((child): child is MarkdownElement => {
+          return Array.isArray(child) && child[0] === 'td'
+        })
       const links = collectNodes(cells[0], 'a')
       const href = links[0]?.[1]?.href
       const targetSourceFilename = relationshipTargetFilename(
@@ -248,7 +282,7 @@ function extractRelationships(documents, elementsBySourceFilename) {
       }
 
       relationships.push({
-        sourceId: document.frontmatter.id,
+        sourceId: document.frontmatter.id as string,
         targetId: target.id,
         description: nodeText(cells[1]).trim(),
         technology: nodeText(cells[2]).trim(),
@@ -279,7 +313,7 @@ function extractRelationships(documents, elementsBySourceFilename) {
   })
 }
 
-function canonicalRevision(revision) {
+function canonicalRevision(revision: Revision): Revision {
   if (revision.kind === 'plan') {
     return {
       kind: 'plan',
@@ -294,13 +328,15 @@ function canonicalRevision(revision) {
   }
 }
 
-export function buildArchitectureModel(revisionRecord) {
+export function buildArchitectureModel(
+  revisionRecord: Pick<RevisionRecord, 'revision' | 'documents'>,
+): ArchitectureModel {
   const documents = [...revisionRecord.documents]
     .sort((left, right) => compareStrings(left.sourceFilename, right.sourceFilename))
-  const elements = []
-  const elementsById = new Map()
-  const elementsBySourceFilename = new Map()
-  const declaredParentIds = new Set()
+  const elements: ArchitectureElement[] = []
+  const elementsById = new Map<string, ArchitectureElement>()
+  const elementsBySourceFilename = new Map<string, ArchitectureElement>()
+  const declaredParentIds = new Set<string>()
 
   for (const document of documents) {
     const element = documentToElement(document)

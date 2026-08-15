@@ -8,6 +8,12 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { parse, parseFrontmatter } from 'comark'
+import type {
+  MarkdownElement,
+  ScannedComponent,
+  ScannerRelationship,
+  TypeScriptScanResult,
+} from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -20,11 +26,11 @@ const fixtureRoot = path.join(
   'typescript',
 )
 const supportedRoot = path.join(fixtureRoot, 'supported')
-async function readJson(filename) {
-  return JSON.parse(await readFile(filename, 'utf8'))
+async function readJson<T>(filename: string): Promise<T> {
+  return JSON.parse(await readFile(filename, 'utf8')) as T
 }
 
-function isStrictUtf8WithoutBom(bytes) {
+function isStrictUtf8WithoutBom(bytes: Uint8Array): boolean {
   if (
     bytes.length >= 3
     && bytes[0] === 0xef
@@ -41,7 +47,7 @@ function isStrictUtf8WithoutBom(bytes) {
   }
 }
 
-function isExactSourceBytes(bytes) {
+function isExactSourceBytes(bytes: Uint8Array): boolean {
   if (!isStrictUtf8WithoutBom(bytes)) {
     return false
   }
@@ -52,10 +58,11 @@ function isExactSourceBytes(bytes) {
     && !source.includes('\u2029')
 }
 
-async function sourceRangeText(root, sourceRange) {
+async function sourceRangeText(root: string, sourceRange: string): Promise<string> {
   const match = /^(?<filename>.+):(?<start>\d+)-(?<end>\d+)$/.exec(sourceRange)
   assert.ok(match, `invalid source range: ${sourceRange}`)
 
+  assert.ok(match.groups)
   const start = Number(match.groups.start)
   const end = Number(match.groups.end)
   assert.ok(start > 0 && end >= start, `invalid source lines: ${sourceRange}`)
@@ -66,7 +73,7 @@ async function sourceRangeText(root, sourceRange) {
   return lines.slice(start - 1, end).join('\n')
 }
 
-function componentDeclaration(component) {
+function componentDeclaration(component: ScannedComponent): string {
   return [
     'export type GromaComponent = {',
     `  id: ${JSON.stringify(component.id)};`,
@@ -77,7 +84,7 @@ function componentDeclaration(component) {
   ].join('\n')
 }
 
-function relationshipDeclaration(relationship) {
+function relationshipDeclaration(relationship: ScannerRelationship): string {
   return [
     '  {',
     `    sourceId: ${JSON.stringify(relationship.sourceId)};`,
@@ -88,15 +95,15 @@ function relationshipDeclaration(relationship) {
   ].join('\n')
 }
 
-function sourceRangeStart(sourceRange) {
+function sourceRangeStart(sourceRange: string): number {
   return Number(/:(\d+)-\d+$/.exec(sourceRange)?.[1])
 }
 
-function bytewiseCompare(left, right) {
+function bytewiseCompare(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
-function isReadableText(value) {
+function isReadableText(value: unknown): value is string {
   return typeof value === 'string'
     && value.length > 0
     && /^[\x20-\x7e]+$/.test(value)
@@ -104,9 +111,9 @@ function isReadableText(value) {
     && value.at(-1) !== ' '
 }
 
-function escapeMarkdownText(value) {
+function escapeMarkdownText(value: string): string {
   return [...value].map(character => {
-    const codePoint = character.codePointAt(0)
+    const codePoint = character.codePointAt(0) ?? 0
     const isAsciiPunctuation = (
       (codePoint >= 0x21 && codePoint <= 0x2f)
       || (codePoint >= 0x3a && codePoint <= 0x40)
@@ -117,12 +124,24 @@ function escapeMarkdownText(value) {
   }).join('')
 }
 
-function collectNodes(node, tag, nodes = []) {
+function isMarkdownElement(node: unknown): node is MarkdownElement {
+  return Array.isArray(node)
+    && typeof node[0] === 'string'
+    && typeof node[1] === 'object'
+    && node[1] !== null
+    && !Array.isArray(node[1])
+}
+
+function collectNodes(
+  node: unknown,
+  tag: string,
+  nodes: MarkdownElement[] = [],
+): MarkdownElement[] {
   if (!Array.isArray(node)) {
     return nodes
   }
 
-  const isAstNode = typeof node[0] === 'string'
+  const isAstNode = isMarkdownElement(node)
   if (isAstNode && node[0] === tag) {
     nodes.push(node)
   }
@@ -133,25 +152,29 @@ function collectNodes(node, tag, nodes = []) {
   return nodes
 }
 
-function nodeText(node) {
+function nodeText(node: unknown): string {
   if (typeof node === 'string') {
     return node
   }
   if (!Array.isArray(node)) {
     return ''
   }
-  const children = typeof node[0] === 'string' ? node.slice(2) : node
+  const children = isMarkdownElement(node) ? node.slice(2) : node
   return children.map(nodeText).join('')
 }
 
 test('supported fixture has exact package markers and deterministic declaration evidence', async () => {
-  const packageJson = await readJson(path.join(supportedRoot, 'package.json'))
+  const packageJson = await readJson<{
+    private: boolean
+    type: string
+    scripts: Record<string, string>
+  }>(path.join(supportedRoot, 'package.json'))
   assert.equal(packageJson.private, true)
   assert.equal(packageJson.type, 'module')
   assert.equal(Object.hasOwn(packageJson, 'engines'), false)
   assert.equal(packageJson.scripts.start, 'bun run src/index.ts')
 
-  const expected = await readJson(path.join(
+  const expected = await readJson<TypeScriptScanResult>(path.join(
     fixtureRoot,
     'supported.expected.json',
   ))
@@ -223,7 +246,7 @@ test('supported fixture has exact package markers and deterministic declaration 
     const declaration = await sourceRangeText(supportedRoot, component.sourceRange)
     assert.equal(declaration, componentDeclaration(component))
     assert.match(component.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    for (const field of ['name', 'description', 'technology']) {
+    for (const field of ['name', 'description', 'technology'] as const) {
       assert.equal(
         isReadableText(component[field]),
         true,
@@ -304,11 +327,28 @@ test('supported fixture has exact package markers and deterministic declaration 
 })
 
 test('supported fixture covers empty relationships and deterministic Markdown escaping', async () => {
-  const expected = await readJson(path.join(
+  const expected = await readJson<TypeScriptScanResult>(path.join(
     fixtureRoot,
     'supported.expected.json',
   ))
-  const markdownText = await readJson(path.join(
+  const markdownText = await readJson<Record<
+    | 'componentId'
+    | 'escapedDescription'
+    | 'escapedLinkLabel'
+    | 'escapedName'
+    | 'escapedRelationshipDescription'
+    | 'escapedRelationshipTechnology'
+    | 'escapedTechnology'
+    | 'heading'
+    | 'linkLabelHref'
+    | 'linkLabelSourceId'
+    | 'linkLabelTableRow'
+    | 'linkLabelTargetId'
+    | 'relationshipSourceId'
+    | 'relationshipTableRow'
+    | 'relationshipTargetId',
+    string
+  >>(path.join(
     fixtureRoot,
     'supported.expected-markdown-text.json',
   ))
@@ -346,6 +386,7 @@ test('supported fixture covers empty relationships and deterministic Markdown es
   const relationshipSource = expected.components.find(candidate => {
     return candidate.id === markdownText.relationshipSourceId
   })
+  assert.ok(relationshipSource)
   const relationship = relationshipSource.relationships.find(candidate => {
     return candidate.targetId === markdownText.relationshipTargetId
   })
@@ -371,6 +412,7 @@ test('supported fixture covers empty relationships and deterministic Markdown es
   const linkLabelTarget = expected.components.find(candidate => {
     return candidate.id === markdownText.linkLabelTargetId
   })
+  assert.ok(linkLabelSource)
   const linkLabelRelationship = linkLabelSource.relationships.find(candidate => {
     return candidate.targetId === markdownText.linkLabelTargetId
   })

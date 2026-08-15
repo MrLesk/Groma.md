@@ -8,6 +8,15 @@ import path from 'node:path'
 
 import { parse } from 'comark'
 
+import type {
+  FilesystemAccessHandler,
+  MarkdownNode,
+  ScannedComponent,
+  ScannerEntryPoint,
+  ScannerRelationship,
+  TypeScriptScanResult,
+} from './types.ts'
+
 const scannerContract = 'groma.scanner.typescript-bun/v1'
 const containerId = 'scanner'
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -21,14 +30,15 @@ const scannerDirectory =
 const scannerDocument = `${scannerDirectory}/container.md`
 
 export class MarkdownEmissionError extends Error {
-  constructor(message, options) {
+  readonly code = 'GROMA_MARKDOWN_EMISSION_FAILED'
+
+  constructor(message: string, options?: ErrorOptions) {
     super(message, options)
     this.name = 'MarkdownEmissionError'
-    this.code = 'GROMA_MARKDOWN_EMISSION_FAILED'
   }
 }
 
-function fail(message, cause) {
+function fail(message: string, cause?: unknown): never {
   throw new MarkdownEmissionError(
     message,
     cause === undefined ? undefined : { cause },
@@ -36,24 +46,34 @@ function fail(message, cause) {
 }
 
 function recordFilesystemAccess(
-  onFilesystemAccess,
-  operation,
-  filename,
-) {
+  onFilesystemAccess: FilesystemAccessHandler | undefined,
+  operation: 'read-directory' | 'read-file' | 'write-file' | 'remove',
+  filename: string,
+): void {
   onFilesystemAccess?.({ operation, filename })
 }
 
-async function readDirectory(filename, onFilesystemAccess) {
+async function readDirectory(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+) {
   recordFilesystemAccess(onFilesystemAccess, 'read-directory', filename)
   return readdir(filename, { withFileTypes: true })
 }
 
-async function readText(filename, onFilesystemAccess) {
+async function readText(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<string> {
   recordFilesystemAccess(onFilesystemAccess, 'read-file', filename)
   return readFile(filename, 'utf8')
 }
 
-async function writeText(filename, source, onFilesystemAccess) {
+async function writeText(
+  filename: string,
+  source: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<void> {
   recordFilesystemAccess(onFilesystemAccess, 'write-file', filename)
   return writeFile(filename, source, {
     encoding: 'utf8',
@@ -61,24 +81,30 @@ async function writeText(filename, source, onFilesystemAccess) {
   })
 }
 
-async function removePath(filename, onFilesystemAccess) {
+async function removePath(
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<void> {
   recordFilesystemAccess(onFilesystemAccess, 'remove', filename)
   return rm(filename, { recursive: true, force: true })
 }
 
-function bytewiseCompare(left, right) {
+function bytewiseCompare(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
-function compareRelationships(left, right) {
+function compareRelationships(
+  left: ScannerRelationship,
+  right: ScannerRelationship,
+): number {
   return bytewiseCompare(left.sourceId, right.sourceId)
     || bytewiseCompare(left.targetId, right.targetId)
     || bytewiseCompare(left.sourceRange, right.sourceRange)
 }
 
-function escapeMarkdownText(value) {
+function escapeMarkdownText(value: string): string {
   return [...value].map(character => {
-    const codePoint = character.codePointAt(0)
+    const codePoint = character.codePointAt(0)!
     const isAsciiPunctuation = (
       (codePoint >= 0x21 && codePoint <= 0x2f)
       || (codePoint >= 0x3a && codePoint <= 0x40)
@@ -89,7 +115,11 @@ function escapeMarkdownText(value) {
   }).join('')
 }
 
-function requireExactKeys(value, keys, label) {
+function requireExactKeys(
+  value: unknown,
+  keys: string[],
+  label: string,
+): asserts value is Record<string, unknown> {
   if (
     value === null
     || typeof value !== 'object'
@@ -101,29 +131,30 @@ function requireExactKeys(value, keys, label) {
   }
 }
 
-function requireId(value, label) {
+function requireId(value: unknown, label: string): string {
   if (typeof value !== 'string' || !idPattern.test(value)) {
     fail(`invalid ${label}`)
   }
   return value
 }
 
-function requireReadableText(value, label) {
+function requireReadableText(value: unknown, label: string): string {
   if (typeof value !== 'string' || !readableTextPattern.test(value)) {
     fail(`invalid ${label}`)
   }
   return value
 }
 
-function requireSourceRange(value, label) {
+function requireSourceRange(value: unknown, label: string): string {
   if (typeof value !== 'string') {
     fail(`invalid ${label}`)
   }
   const match = sourceRangePattern.exec(value)
   if (
     !match
-    || match.groups.filename.startsWith('/')
-    || match.groups.filename.split('/').includes('..')
+    || !match.groups
+    || match.groups.filename!.startsWith('/')
+    || match.groups.filename!.split('/').includes('..')
     || Number(match.groups.end) < Number(match.groups.start)
   ) {
     fail(`invalid ${label}`)
@@ -131,7 +162,9 @@ function requireSourceRange(value, label) {
   return value
 }
 
-function validateScanResult(scanResult) {
+function validateScanResult(
+  scanResult: unknown,
+): Pick<TypeScriptScanResult, 'components' | 'entryPoints'> {
   requireExactKeys(
     scanResult,
     ['contract', 'containerId', 'entryPoints', 'components'],
@@ -148,7 +181,7 @@ function validateScanResult(scanResult) {
     fail(`scan result must match ${scannerContract}`)
   }
 
-  const componentIds = new Set()
+  const componentIds = new Set<string>()
   const components = scanResult.components.map((component, componentIndex) => {
     requireExactKeys(
       component,
@@ -262,21 +295,21 @@ function validateScanResult(scanResult) {
   return { components, entryPoints }
 }
 
-function repositoryRelative(repositoryRoot, filename) {
+function repositoryRelative(repositoryRoot: string, filename: string): string {
   return path.relative(repositoryRoot, filename).split(path.sep).join('/')
 }
 
-function textFromNode(value) {
+function textFromNode(value: MarkdownNode | undefined): string {
   if (typeof value === 'string') {
     return value
   }
   if (!Array.isArray(value)) {
     return ''
   }
-  return value.slice(2).map(textFromNode).join('')
+  return (value.slice(2) as MarkdownNode[]).map(textFromNode).join('')
 }
 
-function isSingleLineReadableName(value) {
+function isSingleLineReadableName(value: unknown): value is string {
   return typeof value === 'string'
     && value.length > 0
     && value === value.trim()
@@ -284,44 +317,55 @@ function isSingleLineReadableName(value) {
 }
 
 async function parseObservedDocument(
-  repositoryRoot,
-  filename,
-  onFilesystemAccess,
-) {
+  repositoryRoot: string,
+  filename: string,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<ObservedElement> {
   const sourceFilename = repositoryRelative(repositoryRoot, filename)
-  let tree
+  let tree: Awaited<ReturnType<typeof parse>> | undefined
   try {
     tree = await parse(await readText(filename, onFilesystemAccess))
   } catch (error) {
     fail(`Comark could not parse observed element ${sourceFilename}`, error)
   }
 
-  const heading = tree.nodes.find(node => node[0] === 'h1')
-  const name = textFromNode(heading)
+  const heading = tree.nodes.find(node => Array.isArray(node) && node[0] === 'h1')
+  const name = textFromNode(heading as MarkdownNode | undefined)
   if (!isSingleLineReadableName(name)) {
     fail(`${sourceFilename} requires a single-line readable name`)
   }
 
   return {
-    id: tree.frontmatter.id,
-    kind: tree.frontmatter.kind,
-    parent: tree.frontmatter.parent,
+    id: requireId(tree.frontmatter.id, `${sourceFilename} id`),
+    kind: String(tree.frontmatter.kind),
+    parent: typeof tree.frontmatter.parent === 'string'
+      ? tree.frontmatter.parent
+      : null,
     name,
     sourceFilename,
   }
 }
 
+interface ObservedElement {
+  id: string
+  kind: string
+  parent: string | null
+  name: string
+  sourceFilename: string
+  generated?: boolean
+}
+
 async function buildTargetIndex(
-  repositoryRoot,
-  generatedComponents,
-  onFilesystemAccess,
-) {
+  repositoryRoot: string,
+  generatedComponents: ScannedComponent[],
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<Map<string, ObservedElement>> {
   const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
   const ownedRoot = path.join(
     repositoryRoot,
     ...ownedOutputDirectory.split('/'),
   )
-  const index = new Map()
+  const index = new Map<string, ObservedElement>()
 
   for (const component of generatedComponents) {
     index.set(component.id, {
@@ -334,7 +378,7 @@ async function buildTargetIndex(
     })
   }
 
-  async function walk(directory) {
+  async function walk(directory: string): Promise<void> {
     const entries = await readDirectory(directory, onFilesystemAccess)
     entries.sort((left, right) => bytewiseCompare(left.name, right.name))
 
@@ -375,9 +419,13 @@ async function buildTargetIndex(
   return index
 }
 
-function renderComponent(component, entryPoints, targetIndex) {
+function renderComponent(
+  component: ScannedComponent,
+  entryPoints: ScannerEntryPoint[],
+  targetIndex: Map<string, ObservedElement>,
+): string {
   const sourceFilename = `${ownedOutputDirectory}/${component.id}.md`
-  const sections = [
+  const sections: string[] = [
     '---',
     `id: ${component.id}`,
     'kind: component',
@@ -440,10 +488,10 @@ function renderComponent(component, entryPoints, targetIndex) {
 }
 
 async function replaceOwnedDirectory(
-  repositoryRoot,
-  renderedComponents,
-  onFilesystemAccess,
-) {
+  repositoryRoot: string,
+  renderedComponents: Array<[string, string]>,
+  onFilesystemAccess?: FilesystemAccessHandler,
+): Promise<void> {
   const ownedRoot = path.join(
     repositoryRoot,
     ...ownedOutputDirectory.split('/'),
@@ -462,10 +510,10 @@ async function replaceOwnedDirectory(
 }
 
 export async function emitObservedComponents(
-  suppliedRepositoryRoot,
-  scanResult,
-  options = {},
-) {
+  suppliedRepositoryRoot: string,
+  scanResult: unknown,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<{ componentIds: string[]; outputDirectory: string }> {
   const { onFilesystemAccess } = options
   const repositoryRoot = path.resolve(suppliedRepositoryRoot)
 
@@ -475,7 +523,7 @@ export async function emitObservedComponents(
     components,
     onFilesystemAccess,
   )
-  const renderedComponents = []
+  const renderedComponents: Array<[string, string]> = []
 
   for (const component of components) {
     const source = renderComponent(component, entryPoints, targetIndex)

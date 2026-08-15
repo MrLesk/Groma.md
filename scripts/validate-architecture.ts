@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url'
 
 import { parse, parseFrontmatter } from 'comark'
 
+import type { C4Kind, MarkdownElement } from '../src/types.ts'
+
 const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external', 'code'])
 const allowedKinds = new Set(['person', 'system', 'container', 'component'])
-const expectedParentKinds = new Map([
+const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
   ['component', 'container'],
 ])
@@ -19,7 +21,9 @@ const elementPathPatterns = [
 ]
 
 export class ArchitectureValidationError extends Error {
-  constructor(revisionRoot, errors) {
+  readonly errors: string[]
+
+  constructor(revisionRoot: string, errors: string[]) {
     const details = errors.map(error => `- ${error}`).join('\n')
     super(`${revisionRoot} is invalid:\n${details}`)
     this.name = 'ArchitectureValidationError'
@@ -27,9 +31,9 @@ export class ArchitectureValidationError extends Error {
   }
 }
 
-async function listMarkdownFiles(directory) {
+async function listMarkdownFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true })
-  const files = []
+  const files: string[] = []
 
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name)
@@ -44,18 +48,26 @@ async function listMarkdownFiles(directory) {
   return files.sort()
 }
 
-function isElementPath(revisionRoot, file) {
+function isElementPath(revisionRoot: string, file: string): boolean {
   const relativePath = path.relative(revisionRoot, file).split(path.sep).join('/')
   return elementPathPatterns.some(pattern => pattern.test(relativePath))
 }
 
-function collectLinks(node, links = []) {
+function isMarkdownElement(node: unknown): node is MarkdownElement {
+  return Array.isArray(node)
+    && typeof node[0] === 'string'
+    && typeof node[1] === 'object'
+    && node[1] !== null
+    && !Array.isArray(node[1])
+}
+
+function collectLinks(node: unknown, links: string[] = []): string[] {
   if (!Array.isArray(node)) {
     return links
   }
 
-  const isAstNode = typeof node[0] === 'string'
-  if (isAstNode && node[0] === 'a' && node[1]?.href) {
+  const isAstNode = isMarkdownElement(node)
+  if (isAstNode && node[0] === 'a' && typeof node[1].href === 'string') {
     links.push(node[1].href)
   }
 
@@ -67,12 +79,16 @@ function collectLinks(node, links = []) {
   return links
 }
 
-function collectNodes(node, tag, nodes = []) {
+function collectNodes(
+  node: unknown,
+  tag: string,
+  nodes: MarkdownElement[] = [],
+): MarkdownElement[] {
   if (!Array.isArray(node)) {
     return nodes
   }
 
-  const isAstNode = typeof node[0] === 'string'
+  const isAstNode = isMarkdownElement(node)
   if (isAstNode && node[0] === tag) {
     nodes.push(node)
   }
@@ -85,8 +101,13 @@ function collectNodes(node, tag, nodes = []) {
   return nodes
 }
 
-function collectRelationshipTables(nodes) {
-  const tables = []
+interface RelationshipTable {
+  node: MarkdownElement
+  inRelationshipsSection: boolean
+}
+
+function collectRelationshipTables(nodes: MarkdownElement[]): RelationshipTable[] {
+  const tables: RelationshipTable[] = []
   let inRelationshipsSection = false
 
   for (const node of nodes) {
@@ -112,7 +133,7 @@ function collectRelationshipTables(nodes) {
   return tables
 }
 
-function nodeText(node) {
+function nodeText(node: unknown): string {
   if (typeof node === 'string') {
     return node
   }
@@ -121,18 +142,18 @@ function nodeText(node) {
     return ''
   }
 
-  const isAstNode = typeof node[0] === 'string'
+  const isAstNode = isMarkdownElement(node)
   const children = isAstNode ? node.slice(2) : node
   return children.map(nodeText).join('')
 }
 
-function tableHeaderNames(table) {
+function tableHeaderNames(table: MarkdownElement): string[] {
   const headerRow = collectNodes(table, 'tr')[0]
   const headerCells = headerRow?.slice(2).filter(child => child[0] === 'th') ?? []
   return headerCells.map(cell => nodeText(cell).trim())
 }
 
-function isRelativeMarkdownLink(href) {
+function isRelativeMarkdownLink(href: unknown): href is string {
   if (typeof href !== 'string') {
     return false
   }
@@ -143,17 +164,44 @@ function isRelativeMarkdownLink(href) {
     && href.split('#', 1)[0].endsWith('.md')
 }
 
-export async function validateRevision(revisionRoot, options = {}) {
+interface ParsedDocument {
+  frontmatter?: Record<string, unknown>
+  nodes: MarkdownElement[]
+}
+
+export interface ValidatedElement {
+  file: string
+  relativeFile: string
+  id: unknown
+  kind: unknown
+  parent: unknown
+}
+
+export interface RevisionValidationResult {
+  revisionRoot: string
+  elementCount: number
+  relationshipCount: number
+  elements: ValidatedElement[]
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export async function validateRevision(
+  revisionRoot: string,
+  options: { knownElements?: ReadonlyMap<string, ValidatedElement> } = {},
+): Promise<RevisionValidationResult> {
   const absoluteRoot = path.resolve(revisionRoot)
-  const knownElements = options.knownElements ?? new Map()
+  const knownElements = options.knownElements ?? new Map<string, ValidatedElement>()
   const markdownFiles = await listMarkdownFiles(absoluteRoot)
   const elementFiles = markdownFiles.filter(file => isElementPath(absoluteRoot, file))
   const elementFileSet = new Set([
     ...elementFiles.map(file => path.resolve(file)),
     ...[...knownElements.values()].map(element => path.resolve(element.file)),
   ])
-  const elements = []
-  const errors = []
+  const elements: ValidatedElement[] = []
+  const errors: string[] = []
   let relationshipCount = 0
 
   if (elementFiles.length === 0) {
@@ -176,20 +224,20 @@ export async function validateRevision(revisionRoot, options = {}) {
         )
       }
     } catch (error) {
-      errors.push(`${relativeFile}: Comark could not parse frontmatter (${error.message})`)
+      errors.push(`${relativeFile}: Comark could not parse frontmatter (${errorMessage(error)})`)
     }
   }
 
   for (const file of elementFiles) {
     const relativeFile = path.relative(absoluteRoot, file)
     const source = await readFile(file, 'utf8')
-    let tree
+    let tree: ParsedDocument
 
     try {
-      tree = await parse(source)
+      tree = await parse(source) as ParsedDocument
       JSON.stringify(tree)
     } catch (error) {
-      errors.push(`${relativeFile}: Comark could not parse the document (${error.message})`)
+      errors.push(`${relativeFile}: Comark could not parse the document (${errorMessage(error)})`)
       continue
     }
 
@@ -205,11 +253,11 @@ export async function validateRevision(revisionRoot, options = {}) {
       errors.push(`${relativeFile}: id must be lowercase kebab-case`)
     }
 
-    if (!allowedKinds.has(frontmatter.kind)) {
+    if (typeof frontmatter.kind !== 'string' || !allowedKinds.has(frontmatter.kind)) {
       errors.push(`${relativeFile}: kind must be person, system, container, or component`)
     }
 
-    if (expectedParentKinds.has(frontmatter.kind)) {
+    if (typeof frontmatter.kind === 'string' && expectedParentKinds.has(frontmatter.kind as C4Kind)) {
       if (typeof frontmatter.parent !== 'string' || frontmatter.parent.length === 0) {
         errors.push(`${relativeFile}: ${frontmatter.kind} requires a parent id`)
       }
@@ -236,7 +284,8 @@ export async function validateRevision(revisionRoot, options = {}) {
             errors.push(`${relativeFile}: code[${index}] must be an object`)
             continue
           }
-          const extra = Object.keys(entry).filter(
+          const record = entry as Record<string, unknown>
+          const extra = Object.keys(record).filter(
             field => field !== 'scanner' && field !== 'file' && field !== 'symbol',
           )
           if (extra.length > 0) {
@@ -244,13 +293,13 @@ export async function validateRevision(revisionRoot, options = {}) {
               `${relativeFile}: code[${index}] has unsupported field(s): ${extra.join(', ')}`,
             )
           }
-          if (typeof entry.scanner !== 'string' || entry.scanner.length === 0) {
+          if (typeof record.scanner !== 'string' || record.scanner.length === 0) {
             errors.push(`${relativeFile}: code[${index}] requires scanner`)
           }
-          if (typeof entry.file !== 'string' || entry.file.length === 0) {
+          if (typeof record.file !== 'string' || record.file.length === 0) {
             errors.push(`${relativeFile}: code[${index}] requires file`)
           }
-          if (entry.symbol !== undefined && typeof entry.symbol !== 'string') {
+          if (record.symbol !== undefined && typeof record.symbol !== 'string') {
             errors.push(`${relativeFile}: code[${index}] symbol must be a string`)
           }
         }
@@ -334,15 +383,15 @@ export async function validateRevision(revisionRoot, options = {}) {
     })
   }
 
-  const elementsById = new Map()
+  const elementsById = new Map<string, ValidatedElement>()
   for (const element of elements) {
-    if (elementsById.has(element.id)) {
+    if (typeof element.id === 'string' && elementsById.has(element.id)) {
       const first = elementsById.get(element.id)
       errors.push(
         `${element.relativeFile}: duplicate id "${element.id}" `
-        + `(already declared by ${first.relativeFile})`,
+        + `(already declared by ${first?.relativeFile})`,
       )
-    } else if (element.id !== undefined) {
+    } else if (typeof element.id === 'string') {
       elementsById.set(element.id, element)
     }
   }
@@ -353,7 +402,9 @@ export async function validateRevision(revisionRoot, options = {}) {
   }
 
   for (const element of elements) {
-    const expectedParentKind = expectedParentKinds.get(element.kind)
+    const expectedParentKind = typeof element.kind === 'string'
+      ? expectedParentKinds.get(element.kind as C4Kind)
+      : undefined
     if (!expectedParentKind || typeof element.parent !== 'string') {
       continue
     }
@@ -382,14 +433,18 @@ export async function validateRevision(revisionRoot, options = {}) {
   }
 }
 
-export async function validateRepository(repositoryRoot) {
+export async function validateRepository(
+  repositoryRoot: string,
+): Promise<RevisionValidationResult[]> {
   const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
   const plansRoot = path.join(repositoryRoot, 'groma', 'plans')
   const planEntries = await readdir(plansRoot, { withFileTypes: true })
   const observed = await validateRevision(observedRoot)
   const knownElements = new Map(
     observed.elements
-      .filter(element => typeof element.id === 'string')
+      .filter((element): element is ValidatedElement & { id: string } => {
+        return typeof element.id === 'string'
+      })
       .map(element => [element.id, element]),
   )
   const plans = []
@@ -427,7 +482,7 @@ if (isDirectRun) {
       + `${relationshipCount} relationships.`,
     )
   } catch (error) {
-    console.error(error.message)
+    console.error(errorMessage(error))
     process.exitCode = 1
   }
 }

@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { compareArchitectureModels } from '../src/architecture-comparison.mjs'
+import { compareArchitectureModels } from '../src/architecture-comparison.ts'
+import type {
+  ArchitectureElement,
+  ArchitectureModel,
+  ArchitectureRelationship,
+  Revision,
+} from '../src/types.ts'
 
-function system(id) {
+function system(id: string): ArchitectureElement {
   return {
     id,
     kind: 'system',
@@ -11,16 +17,35 @@ function system(id) {
     description: `${id} system`,
     parentId: null,
     external: false,
+    code: [],
+    sourceFilename: `${id}.md`,
   }
 }
 
-function model(kind, elements, relationships) {
+type RelationshipInput = Pick<
+  ArchitectureRelationship,
+  'sourceId' | 'targetId' | 'description' | 'technology'
+>
+
+function model(
+  kind: Revision['kind'],
+  elements: ArchitectureElement[],
+  relationships: RelationshipInput[],
+): ArchitectureModel {
   return {
     revision: kind === 'observed'
-      ? { kind: 'observed' }
-      : { kind: 'plan', name: 'comparison-test' },
+      ? { kind: 'observed', sourceDirectory: 'groma/observed' }
+      : {
+          kind: 'plan',
+          name: 'comparison-test',
+          sourceDirectory: 'groma/plans/comparison-test',
+        },
     elements,
-    relationships,
+    relationships: relationships.map(relationship => ({
+      ...relationship,
+      sourceFilename: `${relationship.sourceId}.md`,
+      targetSourceFilename: `${relationship.targetId}.md`,
+    })),
   }
 }
 
@@ -56,6 +81,7 @@ test('preserves both containment histories for a moved shared element', () => {
     system('old-system'),
     system('new-system'),
     {
+      ...system('moved-container'),
       id: 'moved-container',
       kind: 'container',
       name: 'Moved container',
@@ -68,6 +94,7 @@ test('preserves both containment histories for a moved shared element', () => {
     system('old-system'),
     system('new-system'),
     {
+      ...system('moved-container'),
       id: 'moved-container',
       kind: 'container',
       name: 'Moved container',
@@ -82,6 +109,7 @@ test('preserves both containment histories for a moved shared element', () => {
     return element.id === 'moved-container'
   })
 
+  assert.ok(moved)
   assert.equal(moved.comparisonStatus, 'modification')
   assert.equal(moved.observedParentId, 'old-system')
   assert.equal(moved.plannedParentId, 'new-system')

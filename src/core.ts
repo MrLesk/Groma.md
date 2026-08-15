@@ -1,26 +1,48 @@
 import path from 'node:path'
 
-import { buildArchitectureModel } from './architecture-model.mjs'
-import { loadArchitecture } from './architecture-reader.mjs'
+import { buildArchitectureModel } from './architecture-model.ts'
+import { loadArchitecture } from './architecture-reader.ts'
+import { layoutArchitectureWorld } from './world-layout.ts'
+import type {
+  AnnotatedArchitectureModel,
+  AnnotatedElement,
+  AnnotatedRelationship,
+  ArchitectureDocument,
+  ArchitectureViewModel,
+  FilesystemAccessHandler,
+  Origin,
+  Revision,
+  RevisionRecord,
+} from './types.ts'
 
-function originFor(revision) {
+function originFor(revision: Revision): Origin {
   return revision.kind === 'plan' ? 'planned' : revision.kind
 }
 
-function representationId(origin, plan, elementId) {
+function representationId(
+  origin: Origin,
+  plan: string | undefined,
+  elementId: string,
+): string {
   return plan
     ? `${origin}:${plan}:${elementId}`
     : `${origin}:${elementId}`
 }
 
-function relativeElementFilename(document, revision) {
+function relativeElementFilename(
+  document: ArchitectureDocument,
+  revision: Revision,
+): string {
   return path.posix.relative(
     revision.sourceDirectory,
     document.sourceFilename,
   )
 }
 
-function documentsResolvedAgainstObserved(observed, revisionRecord) {
+function documentsResolvedAgainstObserved(
+  observed: RevisionRecord,
+  revisionRecord: RevisionRecord,
+): ArchitectureDocument[] {
   if (revisionRecord.revision.kind === 'observed') {
     return revisionRecord.documents
   }
@@ -41,8 +63,8 @@ function documentsResolvedAgainstObserved(observed, revisionRecord) {
   return [...fallbackDocuments, ...revisionRecord.documents]
 }
 
-function withDirectChildren(elements) {
-  const childrenByParent = new Map()
+function withDirectChildren(elements: AnnotatedElement[]): AnnotatedElement[] {
+  const childrenByParent = new Map<string, string[]>()
 
   for (const element of elements) {
     if (element.parent === null) continue
@@ -57,7 +79,10 @@ function withDirectChildren(elements) {
   }))
 }
 
-function annotateRevision(observed, revisionRecord) {
+function annotateRevision(
+  observed: RevisionRecord,
+  revisionRecord: RevisionRecord,
+): Pick<AnnotatedArchitectureModel, 'elements' | 'relationships'> {
   const origin = originFor(revisionRecord.revision)
   const plan = revisionRecord.revision.kind === 'plan'
     ? revisionRecord.revision.name
@@ -69,15 +94,17 @@ function annotateRevision(observed, revisionRecord) {
     revision: revisionRecord.revision,
     documents: documentsResolvedAgainstObserved(observed, revisionRecord),
   })
-  const ownRepresentation = elementId => representationId(origin, plan, elementId)
-  const resolvedRepresentation = elementId => suppliedIds.has(elementId)
+  const ownRepresentation = (elementId: string) => {
+    return representationId(origin, plan, elementId)
+  }
+  const resolvedRepresentation = (elementId: string) => suppliedIds.has(elementId)
     ? ownRepresentation(elementId)
     : representationId('observed', undefined, elementId)
 
   return {
     elements: model.elements
       .filter(element => suppliedIds.has(element.id))
-      .map(element => ({
+      .map<AnnotatedElement>(element => ({
         representationId: ownRepresentation(element.id),
         id: element.id,
         kind: element.kind,
@@ -94,7 +121,7 @@ function annotateRevision(observed, revisionRecord) {
       })),
     relationships: model.relationships
       .filter(relationship => suppliedIds.has(relationship.sourceId))
-      .map(relationship => ({
+      .map<AnnotatedRelationship>(relationship => ({
         source: ownRepresentation(relationship.sourceId),
         target: resolvedRepresentation(relationship.targetId),
         description: relationship.description,
@@ -105,17 +132,26 @@ function annotateRevision(observed, revisionRecord) {
   }
 }
 
-export async function loadArchitectureViewModel(repositoryRoot, options = {}) {
+export async function loadArchitectureViewModel(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<ArchitectureViewModel> {
   const revisions = await loadArchitecture(repositoryRoot, options)
   const observed = revisions.find(record => record.revision.kind === 'observed')
+  if (!observed) throw new Error('Observed architecture revision is required')
   const annotated = revisions.map(record => annotateRevision(observed, record))
   const elements = annotated.flatMap(model => model.elements)
 
-  return {
-    plans: revisions
-      .filter(record => record.revision.kind === 'plan')
-      .map(record => record.revision.name),
+  const model = {
+    plans: revisions.flatMap(record => {
+      return record.revision.kind === 'plan' ? [record.revision.name] : []
+    }),
     elements: withDirectChildren(elements),
     relationships: annotated.flatMap(model => model.relationships),
+  }
+
+  return {
+    ...model,
+    world: await layoutArchitectureWorld(model),
   }
 }

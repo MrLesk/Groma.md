@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { watch } from 'node:fs'
 import {
   cp,
   mkdir,
@@ -14,7 +15,9 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import type { TypeScriptScanResult } from '../src/types.ts'
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -36,39 +39,66 @@ class FakeWatchHandle extends EventEmitter {
   close() {
     this.closed = true
   }
-}
 
-function createFakeFilesystemWatcher() {
-  const registrations = []
-  return {
-    registrations,
-    watchFileSystem(directory, options, callback) {
-      const handle = new FakeWatchHandle()
-      registrations.push({ callback, directory, handle, options })
-      return handle
-    },
+  ref(): this {
+    return this
+  }
+
+  unref(): this {
+    return this
   }
 }
 
-function deferred() {
-  let resolve
-  const promise = new Promise(resolvePromise => {
-    resolve = resolvePromise
+type FakeWatchCallback = (
+  eventType: 'rename' | 'change',
+  filename: string | Buffer | null | undefined,
+) => void
+
+interface FakeWatchRegistration {
+  callback: FakeWatchCallback
+  directory: string
+  handle: FakeWatchHandle
+  options: { encoding: string; recursive: boolean }
+}
+
+function createFakeFilesystemWatcher() {
+  const registrations: FakeWatchRegistration[] = []
+  const watchFileSystem = ((
+    directory: string,
+    options: { encoding: string; recursive: boolean },
+    callback: FakeWatchCallback,
+  ) => {
+    const handle = new FakeWatchHandle()
+    registrations.push({ callback, directory, handle, options })
+    return handle
+  }) as unknown as typeof watch
+  return {
+    registrations,
+    watchFileSystem,
+  }
+}
+
+function deferred<T = void>() {
+  let settle!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>(resolvePromise => {
+    settle = resolvePromise
   })
+  const resolve = (value?: T): void => settle(value as T)
   return { promise, resolve }
 }
 
-function notificationQueue() {
-  const values = []
-  const waiters = []
+function notificationQueue<T>() {
+  const values: T[] = []
+  const waiters: Array<(value: T) => void> = []
   return {
-    next() {
-      if (values.length > 0) return Promise.resolve(values.shift())
-      const next = deferred()
-      waiters.push(next.resolve)
+    next(): Promise<T> {
+      const value = values.shift()
+      if (value !== undefined) return Promise.resolve(value)
+      const next = deferred<T>()
+      waiters.push(value => next.resolve(value))
       return next.promise
     },
-    notify(value) {
+    notify(value: T): void {
       const resolve = waiters.shift()
       if (resolve) resolve(value)
       else values.push(value)
@@ -76,31 +106,34 @@ function notificationQueue() {
   }
 }
 
-function delay(milliseconds) {
+function delay(milliseconds: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
-async function within(promise, milliseconds, label) {
-  let timeout
+async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,
-      new Promise((_, reject) => {
+      new Promise<never>((_, reject) => {
         timeout = setTimeout(() => {
           reject(new Error(`Timed out waiting for ${label}`))
         }, milliseconds)
       }),
     ])
   } finally {
-    clearTimeout(timeout)
+    if (timeout !== undefined) clearTimeout(timeout)
   }
 }
 
-async function treeHash(directory, options = {}) {
+async function treeHash(
+  directory: string,
+  options: { exclude?: (relativeFilename: string) => boolean } = {},
+): Promise<string> {
   const { exclude = () => false } = options
   const hash = createHash('sha256')
 
-  async function walk(currentDirectory) {
+  async function walk(currentDirectory: string): Promise<void> {
     const entries = await readdir(currentDirectory, { withFileTypes: true })
     entries.sort((left, right) => {
       return Buffer.compare(Buffer.from(left.name), Buffer.from(right.name))
@@ -126,7 +159,7 @@ async function treeHash(directory, options = {}) {
   return hash.digest('hex')
 }
 
-async function createSupportedRepository(t) {
+async function createSupportedRepository(t: TestContext): Promise<string> {
   const repositoryRoot = await mkdtemp(
     path.join(os.tmpdir(), 'groma-scanner-integration-'),
   )
@@ -157,13 +190,36 @@ async function createSupportedRepository(t) {
   return repositoryRoot
 }
 
+const fakeScanResult: TypeScriptScanResult = {
+  contract: 'groma.scanner.typescript-bun/v1',
+  containerId: 'scanner',
+  entryPoints: [],
+  components: [],
+}
+
+const fakeEmissionResult = {
+  componentIds: [] as string[],
+  outputDirectory: ownedRelativePath,
+}
+
+function failOnError(error: unknown): never {
+  assert.fail(error instanceof Error ? error : String(error))
+}
+
+function requiredRegistration(
+  registration: FakeWatchRegistration | undefined,
+): FakeWatchRegistration {
+  assert.ok(registration)
+  return registration
+}
+
 test('one settled supported event burst runs one complete scan and emission', async t => {
-  const { startScanner } = await import('../src/scanner.mjs')
+  const { startScanner } = await import('../src/scanner.ts')
   const repositoryRoot = path.resolve('/tmp/groma-scanner-test')
   const fake = createFakeFilesystemWatcher()
-  const completed = deferred()
-  const scanResult = { complete: true }
-  const calls = []
+  const completed = deferred<typeof fakeEmissionResult>()
+  const scanResult = fakeScanResult
+  const calls: unknown[][] = []
   const scanner = await startScanner(repositoryRoot, {
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
@@ -173,9 +229,12 @@ test('one settled supported event burst runs one complete scan and emission', as
     },
     async emitComponents(root, suppliedScanResult) {
       calls.push(['emit', root, suppliedScanResult])
+      return fakeEmissionResult
     },
-    onError: assert.fail,
-    onScanComplete: completed.resolve,
+    onError: failOnError,
+    onScanComplete(result) {
+      completed.resolve(result)
+    },
   })
   t.after(() => scanner.close())
 
@@ -185,10 +244,10 @@ test('one settled supported event burst runs one complete scan and emission', as
       registration,
     ]),
   )
-  byDirectory.get(repositoryRoot).callback('change', 'package.json')
-  byDirectory.get(path.join(repositoryRoot, 'src'))
+  requiredRegistration(byDirectory.get(repositoryRoot)).callback('change', 'package.json')
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src')))
     .callback('rename', 'index.ts')
-  byDirectory.get(path.join(repositoryRoot, 'src', 'components'))
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src', 'components')))
     .callback('change', 'source-watcher.ts')
 
   await within(completed.promise, 500, 'settled scan')
@@ -199,18 +258,20 @@ test('one settled supported event burst runs one complete scan and emission', as
 })
 
 test('out-of-scope and filename-less events are ignored before scanning', async t => {
-  const { startScanner } = await import('../src/scanner.mjs')
+  const { startScanner } = await import('../src/scanner.ts')
   const repositoryRoot = path.resolve('/tmp/groma-scanner-filter-test')
   const fake = createFakeFilesystemWatcher()
-  const calls = []
+  const calls: string[] = []
   const scanner = await startScanner(repositoryRoot, {
     settleMilliseconds: 5,
     watchFileSystem: fake.watchFileSystem,
-    scanSource() {
+    async scanSource() {
       calls.push('scan')
+      return fakeScanResult
     },
-    emitComponents() {
+    async emitComponents() {
       calls.push('emit')
+      return fakeEmissionResult
     },
     onError() {
       calls.push('error')
@@ -224,15 +285,15 @@ test('out-of-scope and filename-less events are ignored before scanning', async 
       registration,
     ]),
   )
-  byDirectory.get(repositoryRoot).callback('change', 'README.md')
-  byDirectory.get(repositoryRoot).callback('change', 'bun.lock')
-  byDirectory.get(path.join(repositoryRoot, 'src'))
+  requiredRegistration(byDirectory.get(repositoryRoot)).callback('change', 'README.md')
+  requiredRegistration(byDirectory.get(repositoryRoot)).callback('change', 'bun.lock')
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src')))
     .callback('change', 'other.ts')
-  byDirectory.get(path.join(repositoryRoot, 'src', 'components'))
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src', 'components')))
     .callback('change', 'nested/deep.ts')
-  byDirectory.get(path.join(repositoryRoot, 'src', 'components'))
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src', 'components')))
     .callback('change', 'component.tsx')
-  byDirectory.get(path.join(repositoryRoot, 'src', 'components'))
+  requiredRegistration(byDirectory.get(path.join(repositoryRoot, 'src', 'components')))
     .callback('change', undefined)
 
   await delay(20)
@@ -240,7 +301,7 @@ test('out-of-scope and filename-less events are ignored before scanning', async 
 })
 
 test('a supported event during scanning queues one later complete scan', async t => {
-  const { startScanner } = await import('../src/scanner.mjs')
+  const { startScanner } = await import('../src/scanner.ts')
   const repositoryRoot = path.resolve('/tmp/groma-scanner-queue-test')
   const fake = createFakeFilesystemWatcher()
   const firstScanStarted = deferred()
@@ -257,19 +318,20 @@ test('a supported event during scanning queues one later complete scan', async t
         firstScanStarted.resolve()
         await releaseFirstScan.promise
       }
-      return { complete: true }
+      return fakeScanResult
     },
     async emitComponents() {
       emissions += 1
       if (emissions === 2) twoScansCompleted.resolve()
+      return fakeEmissionResult
     },
-    onError: assert.fail,
+    onError: failOnError,
   })
   t.after(() => scanner.close())
 
-  const sourceRegistration = fake.registrations.find(registration => {
+  const sourceRegistration = requiredRegistration(fake.registrations.find(registration => {
     return registration.directory === path.join(repositoryRoot, 'src')
-  })
+  }))
   sourceRegistration.callback('change', 'index.ts')
   await firstScanStarted.promise
   sourceRegistration.callback('change', 'index.ts')
@@ -282,7 +344,7 @@ test('a supported event during scanning queues one later complete scan', async t
 })
 
 test('add, modify, and remove events replace only the owned subtree', async t => {
-  const { startScanner } = await import('../src/scanner.mjs')
+  const { startScanner } = await import('../src/scanner.ts')
   const repositoryRoot = await createSupportedRepository(t)
   const fake = createFakeFilesystemWatcher()
   const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
@@ -298,21 +360,22 @@ test('add, modify, and remove events replace only the owned subtree', async t =>
     },
   })
   const beforePlans = await treeHash(plansRoot)
-  const completions = notificationQueue()
-  const completedResults = []
+  type EmissionResult = typeof fakeEmissionResult
+  const completions = notificationQueue<EmissionResult>()
+  const completedResults: EmissionResult[] = []
   const scanner = await startScanner(repositoryRoot, {
     settleMilliseconds: 40,
     watchFileSystem: fake.watchFileSystem,
-    onError: assert.fail,
+    onError: failOnError,
     onScanComplete(result) {
       completedResults.push(result)
       completions.notify(result)
     },
   })
   t.after(() => scanner.close())
-  const sourceRegistration = fake.registrations.find(registration => {
+  const sourceRegistration = requiredRegistration(fake.registrations.find(registration => {
     return registration.directory === path.join(repositoryRoot, 'src', 'components')
-  })
+  }))
 
   const addedComponent = path.join(
     repositoryRoot,
@@ -368,7 +431,7 @@ test('add, modify, and remove events replace only the owned subtree', async t =>
     readFile(
       path.join(repositoryRoot, ownedRelativePath, 'event-recorder.md'),
     ),
-    error => error.code === 'ENOENT',
+    error => error instanceof Error && 'code' in error && error.code === 'ENOENT',
   )
 
   await delay(160)
@@ -418,7 +481,8 @@ test('scanner process closes its watchers on SIGTERM', async t => {
   const child = spawn(
     process.execPath,
     [
-      'src/scanner-process.mjs',
+      '--import=tsx',
+      'src/scanner-process.ts',
       '--repository',
       repositoryRoot,
     ],

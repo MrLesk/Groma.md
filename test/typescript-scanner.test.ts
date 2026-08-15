@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url'
 import {
   scanTypeScriptSource,
   UnsupportedSourceShapeError,
-} from '../src/typescript-scanner.mjs'
+} from '../src/typescript-scanner.ts'
+import type { FilesystemAccess } from '../src/types.ts'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,11 +32,14 @@ const fixtureRoot = path.join(
 const supportedRoot = path.join(fixtureRoot, 'supported')
 const unsupportedRoot = path.join(fixtureRoot, 'unsupported')
 
-async function readJson(filename) {
-  return JSON.parse(await readFile(filename, 'utf8'))
+async function readJson<T = unknown>(filename: string): Promise<T> {
+  return JSON.parse(await readFile(filename, 'utf8')) as T
 }
 
-async function assertUnsupportedRoot(root, options) {
+async function assertUnsupportedRoot(
+  root: string,
+  options?: Parameters<typeof scanTypeScriptSource>[1],
+): Promise<void> {
   await assert.rejects(
     scanTypeScriptSource(root, options),
     error => {
@@ -131,7 +135,7 @@ test('returns equivalent bytewise-ordered scan results on repeated reads', async
     ['markdown-emitter', 'scanner-plugin', 'source-watcher'],
   )
   assert.deepEqual(
-    first.components[2].relationships.map(({ targetId }) => targetId),
+    first.components[2]?.relationships.map(({ targetId }) => targetId),
     ['architecture-workspace', 'scanner-plugin'],
   )
 })
@@ -149,7 +153,7 @@ test('reads only bounded source files and never executes project text', async t 
     path.join(temporaryRoot, 'groma', 'plans', 'must-not-be-read.md'),
     '# Sentinel\n',
   )
-  const accesses = []
+  const accesses: Array<{ operation: FilesystemAccess['operation']; path: string }> = []
 
   const scanResult = await scanTypeScriptSource(temporaryRoot, {
     onFilesystemAccess(access) {
@@ -185,11 +189,13 @@ test('rejects the unsupported fixture with one exact all-or-nothing error', asyn
 })
 
 test('rejects representative v1 violations without partial extraction', async t => {
-  const cases = [
+  const cases: Array<{ name: string; mutate(root: string): Promise<void> }> = [
     {
       name: 'mismatched package type marker',
       mutate: async root => {
-        const packageJson = await readJson(path.join(root, 'package.json'))
+        const packageJson = await readJson<Record<string, unknown>>(
+          path.join(root, 'package.json'),
+        )
         packageJson.type = 'commonjs'
         await writeFile(
           path.join(root, 'package.json'),

@@ -1,31 +1,48 @@
 import { watch } from 'node:fs'
+import type { FSWatcher } from 'node:fs'
 import path from 'node:path'
 
-import { emitObservedComponents } from './markdown-emitter.mjs'
-import { scanTypeScriptSource } from './typescript-scanner.mjs'
+import { emitObservedComponents } from './markdown-emitter.ts'
+import { scanTypeScriptSource } from './typescript-scanner.ts'
 
 const defaultSettleMilliseconds = 120
 
-function isSupportedEvent(scope, filename) {
+type WatchScope = 'repository' | 'source' | 'components'
+type EmissionResult = Awaited<ReturnType<typeof emitObservedComponents>>
+
+interface ScannerOptions {
+  emitComponents?: typeof emitObservedComponents
+  scanSource?: typeof scanTypeScriptSource
+  onError?: (error: unknown) => void | Promise<void>
+  onScanComplete?: (result: EmissionResult) => void | Promise<void>
+  settleMilliseconds?: number
+  watchFileSystem?: typeof watch
+}
+
+function isSupportedEvent(scope: WatchScope, filename: string | Buffer | null): boolean {
   if (typeof filename !== 'string') return false
   if (scope === 'repository') return filename === 'package.json'
   if (scope === 'source') return filename === 'index.ts'
   return /^[^/\\]+\.ts$/.test(filename)
 }
 
-export async function startScanner(suppliedRepositoryRoot, options = {}) {
+export async function startScanner(
+  suppliedRepositoryRoot: string,
+  options: ScannerOptions = {},
+) {
   const repositoryRoot = path.resolve(suppliedRepositoryRoot)
   const {
     emitComponents = emitObservedComponents,
     scanSource = scanTypeScriptSource,
     onError = error => {
-      console.error(`[groma scanner] ${error.message}`)
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[groma scanner] ${message}`)
     },
     onScanComplete = () => {},
     settleMilliseconds = defaultSettleMilliseconds,
     watchFileSystem = watch,
   } = options
-  const watchScopes = [
+  const watchScopes: Array<{ directory: string; scope: WatchScope }> = [
     { directory: repositoryRoot, scope: 'repository' },
     { directory: path.join(repositoryRoot, 'src'), scope: 'source' },
     {
@@ -33,12 +50,12 @@ export async function startScanner(suppliedRepositoryRoot, options = {}) {
       scope: 'components',
     },
   ]
-  const handles = []
+  const handles: FSWatcher[] = []
   let closed = false
-  let settleTimer
-  let scanQueue = Promise.resolve()
+  let settleTimer: NodeJS.Timeout | undefined
+  let scanQueue: Promise<void> = Promise.resolve()
 
-  function scheduleScan() {
+  function scheduleScan(): void {
     if (settleTimer !== undefined) clearTimeout(settleTimer)
     settleTimer = setTimeout(() => {
       settleTimer = undefined
