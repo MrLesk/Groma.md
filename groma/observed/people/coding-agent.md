@@ -11,4 +11,4 @@ Plans and implements software changes while sharing the same architecture as peo
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Architecture workspace](../systems/groma/containers/architecture-workspace/container.md) | Reads plans and records materialized architecture | Markdown and Git |
+| [Architecture workspace](../systems/groma/containers/architecture-workspace/container.md) | Curates observed architecture and plans | Markdown and Git |

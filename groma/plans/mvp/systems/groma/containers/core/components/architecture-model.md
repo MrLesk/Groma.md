@@ -6,8 +6,10 @@ parent: core
 
 # Architecture model
 
-Loads every observed, missing, and planned Markdown document, then represents people, systems, containers, components,
-containment, relationships, plan identity, component Code references, and core-derived runtime annotations.
+Merges observed architecture and planned fragments into one world: one
+element per architecture ID, parents resolved across locations, planned
+documents as ghosts, plus Code references and core-derived origin
+annotations.
 
 ## Relationships
 

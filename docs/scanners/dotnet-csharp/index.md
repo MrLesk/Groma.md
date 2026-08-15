@@ -2,8 +2,15 @@
 
 Status: **TBD**
 
-.NET/C# will have its own plugin implementing Groma's shared scanner-plugin interface. Its source contract will define
-the .NET project evidence and architectural mapping understood by that plugin.
+.NET/C# has its own plugin implementing Groma's shared scanner-plugin
+interface. Its source contract will live in this directory when a concrete
+.NET example defines the mapping.
 
-A scanner contract will be added only when a concrete .NET/C# example defines the architecture mapping. Shared scanner
-concepts remain language-neutral, while .NET/C#-specific declarations and behavior belong in this directory.
+TypeScript is not Groma's source language. `package.json`, `tsconfig`, npm
+workspaces, and other TypeScript project facts belong only in the TypeScript
+plugin. They must not appear in Groma core, the scan-result model, or
+architecture Markdown. A C# plugin will use `.csproj`, solutions, and C#
+declarations the same way: inside this plugin, never in core.
+
+Shared scanner concepts stay language-neutral. A scanner contract is added
+here only when a real .NET/C# example exists.

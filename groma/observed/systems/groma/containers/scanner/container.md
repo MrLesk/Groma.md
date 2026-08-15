@@ -6,8 +6,8 @@ parent: groma
 
 # Scanner
 
-Produces a recognizable source-derived architecture and high-level Code references for Groma core. It does not decide
-what becomes observed architecture, write architecture Markdown, or overwrite curated meaning.
+Produces recognizable source observations and high-level Code references for Groma core. It does not write architecture
+Markdown or overwrite curated meaning.
 
 ## Technology
 

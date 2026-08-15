@@ -1,25 +1,30 @@
 # Scanners
 
-Groma scanners turn supported source code into a recognizable architectural starting point. A scanner coordinates
-source watching and invokes the plugin for the project's language or ecosystem. Groma core owns the resulting
-architecture model.
+`groma scan` reads this repository, sends the result to Groma core, and
+prints `ok` plus a short summary. It does not print the architecture. Core
+writes or refreshes Markdown. The command runs once and exits.
 
 ```text
-scan → recognizable architecture → human or agent curation → rescan without lost annotations
+groma scan → plugin result → core writes Markdown → ok
 ```
 
-Every scanner plugin implements Groma's scanner-plugin interface. Each plugin defines the source shapes it supports and
-translates them into a shared C4 scan result containing systems, containers, components, relationships, optional people,
-and high-level Code references. A Code reference contains the scanner, exact repository-relative file, and optional
-symbol. Multiple scanners may contribute references to one component.
+The plugin result contains names, responsibilities, relationships, optional
+people, and Code references. A Code reference is the scanner, an exact
+repository-relative file, and an optional symbol. That result does not
+contain architecture IDs and is not the user-facing output.
 
-Core reconciles the result with observed and missing architecture. It may create the initial component Markdown, but a
-later scanner still only returns data. Core updates `code` frontmatter from that result and preserves the curated body.
+Core matches a candidate to an existing `code` reference, else to the
+kebab-case of its name. An observed match refreshes `code` and keeps the
+body. A ghost match attaches `code` to the planned document and leaves it
+planned. Anything else becomes a new observed file. After the first write,
+scans never rewrite the body. A scan never turns a ghost into observed
+architecture. `groma accept` needs that match.
 
-See [Creating a scanner plugin](creating-a-plugin.md) for the shared interface, source-contract responsibilities, and
-the boundary with Groma core.
+See [Creating a scanner plugin](creating-a-plugin.md) for the shared
+interface. TypeScript is one plugin, not the model. Core never reads
+`package.json` or other language project files.
 
 ## Scanner plugins
 
-- [TypeScript](typescript/index.md): TypeScript project interpretation and scanner-plugin contract
-- [.NET/C#](dotnet-csharp/index.md): future scanner direction; behavior and contract are still TBD
+- [TypeScript](typescript/index.md)
+- [.NET/C#](dotnet-csharp/index.md)

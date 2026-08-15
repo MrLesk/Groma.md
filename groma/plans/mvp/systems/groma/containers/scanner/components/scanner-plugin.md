@@ -6,7 +6,7 @@ parent: scanner
 
 # Scanner plugin
 
-Returns only the components, relationships, and Code references supported by its scanner contract.
+Returns only the candidates, relationships, and Code references supported by its scanner contract.
 
 ## Relationships
 

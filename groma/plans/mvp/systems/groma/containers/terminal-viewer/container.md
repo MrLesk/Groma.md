@@ -8,10 +8,6 @@ parent: groma
 
 Presents the architecture as one fixed nested world across System Context, Containers, and Components.
 
-## Technology
-
-Bun and OpenTUI.
-
 ## Relationships
 
 | Target | Description | Technology |

@@ -1,95 +1,132 @@
 # Product model
 
-Groma stores a C4-compatible architecture model in Markdown. This document defines how observed architecture, missing
-architecture, plans, and revisions relate to one another. The [component Markdown contract](../groma/README.md) defines
-the exact document format.
+Groma is this repository's architecture, stored as ordinary Markdown and shown
+as one C4 world. Solid boxes exist. Ghosts are next. A generated picture of
+the same repo is already out of date.
+
+The architecture model owns identity. Source code is evidence. Groma is the
+only writer of files under `groma/`. The [component Markdown
+contract](../groma/README.md) defines the document format.
+
+## What you do
+
+People and agents use Groma. They do not edit `groma/` Markdown by hand.
+Groma writes those files so paths, identity, and metadata stay consistent.
+
+1. Open a viewer — see the world. `groma view` starts the TUI plugin. It
+   does not scan.
+2. `groma scan` — scan this repo. Core folds the findings into Markdown.
+   The command prints `ok` and a short summary. It does not print the
+   architecture.
+3. Change the architecture through Groma, in the viewer or the CLI.
+   - A **new part** becomes a ghost in a plan.
+   - A **required change** to an existing part becomes a plan that restates
+     that ID, so the same box shows work still to do.
+   - An **explanation** of an existing part — notes that describe it without
+     changing it — stays on the observed document.
+4. `groma accept <id>` — accept that ghost, only if a scan has matched it.
+   Groma may scan first if needed. No match: the command fails and the
+   ghost stays planned. A scan never accepts a ghost on its own.
+
+An architect who only wants to see the repo uses 1 and 2. A builder adding
+parts from elsewhere asks Groma to put them in a plan, then uses 1 and 4.
+An expert or agent uses the same commands, including from an empty world.
+
+## Identity
+
+An architecture ID is a stable lowercase kebab-case name in Markdown. Groma
+does not put architecture IDs in application source.
+
+The merged world allows one element per ID.
+
+- Observed IDs are solid.
+- A new planned element receives its ID when Groma authors the plan. That is
+  the ID it will keep when accepted.
+- A required change to something that exists restates that same ID. The box
+  stays one box and shows as planned until accepted.
+- Core assigns an ID only when a scan finds something that is not already in
+  the world, derived from the candidate's recognizable name.
+- A scanner never invents an ID for a ghost and never decides that a ghost is
+  built.
 
 ## Observed architecture
 
-Observed architecture is the architecture currently known to exist. Its canonical Markdown lives under
-`groma/observed/` and may combine hand-authored elements with source-derived elements accepted by Groma core. It is the
-only authored complete state.
+Observed architecture is what is known to exist. It lives under
+`groma/observed/`. It may be empty. Groma writes it from a first scan, from
+accepted plans, and from explanations people add through Groma.
 
-## Scanning and curation
+After the first write of a document, later scans may refresh only `code`
+frontmatter. They do not rewrite explanations or other authored prose.
 
-An initial scan may materialize a recognizable component as a starting point. A person or coding agent then improves its
-name, responsibility, relationships, and other Markdown prose. That body becomes authoritative.
+## Scanning
 
-Scanners send later results to Groma core. Core reconciles them against the stable component and refreshes only its
-`code` frontmatter. Core does not rewrite the Markdown body. Multiple scanners may contribute Code references to the
-same component.
+`groma scan` runs once and exits. From the user's point of view it succeeds
+with `ok` and a short summary of what changed. It does not print elements,
+IDs, or a machine-readable architecture. If someone later needs that, it is
+a different command, not scan.
 
-## Missing architecture
+The scanner plugin sends candidates to Groma core: names, responsibilities,
+containment evidence, relationships, and Code references, and no architecture
+IDs. Core folds that result into Markdown.
 
-Missing architecture contains source-backed elements that previously existed in observed architecture and whose stable
-IDs are absent from the latest complete results of every applicable scanner. Groma core moves their Markdown from
-`groma/observed/` to `groma/missing/`, preserving the last known architectural meaning while intent is clarified.
+Core applies a candidate like this:
 
-An accidental source deletion turns the missing element into planned restoration by moving its Markdown into a plan. An
-acknowledged deletion removes the missing Markdown. Git preserves the element and its removal in revision history.
+1. An existing `code` reference that still matches keeps that element's ID.
+   Core refreshes `code` and leaves the body alone.
+2. Else the kebab-case of the candidate name equals an existing ID. Observed
+   match: refresh `code`, keep the body. Ghost match: attach `code` to the
+   planned document. The ID stays planned.
+3. Else Groma creates a new observed file with that ID.
+
+A scan never turns a ghost into observed architecture.
 
 ## Plans
 
-A plan is an independent, mutable description of one desired feature. It lives under `groma/plans/<feature>/` and
-contains a README plus only the element Markdown not yet implemented. Element paths mirror their eventual location under
-observed architecture.
+A plan is a fragment of desired architecture, not a second complete system.
+It lives under `groma/plans/<plan-id>/`. Groma creates and updates that
+directory. The plan README declares an immutable kebab-case ID. The directory
+holds only element documents that are not yet accepted. When none remain, the
+plan is complete; its README stays as the record.
 
-A plan is a partial overlay, not a complete architecture, a numbered step, or the successor of another plan. Plans do
-not build on one another and have no order. Groma loads every plan alongside observed architecture while preserving each
-plan as an independent expression of intent. The MVP does not reconcile or merge overlapping plans: core returns each
-planned representation independently with its plan identity.
+A plan describes outcomes and requirements. It does not specify frameworks,
+file layouts, or other implementation detail unless a requirement forces it.
 
-## Core view model
+Parents resolve in the merged world. A planned component may name an observed
+container as `parent` without copying that container into the plan.
 
-Groma core is the only runtime boundary that reads architecture Markdown. For a viewer request, core loads
-every C4 element document under `groma/observed/`, `groma/missing/`, and every directory under `groma/plans/`. README
-files and other prose documents without C4 element frontmatter are not architecture items. Core resolves each element's
-stable ID, kind, name, description, containment, direct children, plan identity, annotations, and Code references, plus
-each relationship's source, target, description, and technology. It calculates the fixed world with ELK and returns the
-annotated model and ELK layout objects. A viewer never reads those directories itself.
+Two plans must not claim the same element ID. Groma keeps that true when it
+writes files.
 
-Core adds small runtime annotations for review:
+`groma accept <id>` succeeds only when a scan has matched that ID — either
+a scan you already ran, or a scan Groma runs as part of accept. No match:
+accept fails and the ghost stays a ghost.
 
-- `observed` marks an item supplied by observed architecture.
-- `planned` marks an item supplied by a plan whose desired result is not yet implemented.
-- `missing` marks an item supplied by missing architecture.
+On success, Groma applies the planned document to observed architecture: a
+new ID becomes observed; a restated ID updates the existing observed
+document. Groma writes the matching `code`, updates paths and metadata, and
+removes the planned file. Implementation still happens in source. Accept
+does not invent evidence.
 
-The origin annotations `observed`, `planned`, and `missing` are mutually exclusive for one returned representation.
-These annotations are derived response data. They are never written into architecture frontmatter or Markdown bodies.
+## One world
 
-## Revisions
+Core is the only runtime that reads architecture Markdown. It loads every C4
+element document under `groma/observed/` and every plan, merges them into one
+world, and lays that world out once. A viewer plugin projects that world. It
+never reads the files itself.
 
-A revision is the immutable architecture state represented by a Git commit and identified by its SHA. Revisions are not
-stored as directories. A plan may materialize across any number of revisions. For the MVP, Git history is the only
-archive and Groma records no plan-to-revision mapping. More direct traceability is deferred until after the MVP.
+A plan README is not an element. Other prose without C4 frontmatter is not an
+element.
 
-## Implementation lifecycle
+Parents and relationship targets resolve by `id` across this merged world. The
+Markdown link is for readers, not identity.
 
-Implementing a planned element moves its Markdown into observed architecture:
+Runtime annotations are derived from location and are never written into
+frontmatter:
 
-```text
-groma/plans/<feature>/<element>.md
-                ↓ implemented
-groma/observed/<element>.md
-```
+- `observed` — the ID lives under `groma/observed/`
+- `planned` — the ID lives in a plan
 
-A planned change to an existing element is its desired version at the same relative path. Implementing that change
-replaces the observed file and removes the planned file in the same commit.
+A plan that restates an observed ID wins for that box until it is accepted.
 
-The plan drains as implementation lands, so its remaining content shows its progress. When no element Markdown remains,
-the plan is complete and its README and directory are deleted. The README does not move into observed architecture.
-There is no archive directory, status field, lock file, or lifecycle metadata.
-
-## Comparison
-
-Groma matches elements by stable ID and derives comparison state rather than storing it in Markdown:
-
-- An element present only in the plan is a ghost addition.
-- A shared element is modified when its C4 properties or outgoing relationships differ.
-- A shared element with no such differences is unchanged.
-- An element under `groma/missing/` is missing from the current source-backed architecture.
-
-Directory names, Markdown paths, and transient viewer state do not affect the comparison.
-
-Observed elements provide the implemented foundation. Remaining plan elements provide desired additions and changes.
-Moving through Git revisions shows planned Markdown materializing into observed architecture.
+Git is history. Walking commits shows observed documents appearing and
+changing as ghosts are accepted.

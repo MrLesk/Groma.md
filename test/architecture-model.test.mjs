@@ -455,7 +455,7 @@ for (const {
 test('contains no presentation state', async () => {
   const loadedRevision = await loadRevision(
     repositoryRoot,
-    { kind: 'plan', name: 'mvp' },
+    { kind: 'observed' },
   )
 
   const model = buildArchitectureModel(loadedRevision)

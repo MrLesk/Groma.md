@@ -60,7 +60,7 @@ test('validates observed and every planned revision', async () => {
       'groma/plans/mvp',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [6, 14])
+  assert.deepEqual(results.map(result => result.elementCount), [6, 7])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {

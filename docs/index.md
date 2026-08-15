@@ -1,28 +1,28 @@
 # Groma documentation
 
-Groma has three main flows: scan source code into an architecture model, view the current and planned architecture, and
-plan a desired architectural change.
+Groma is this repo's architecture in Git: Markdown you can read, one C4 world
+you can walk. Solid boxes exist. Ghosts are next. Groma is the only writer of
+the files under `groma/`.
 
-## Scan
+## See
 
-Scan source code into a recognizable C4 starting point, then preserve its curated meaning across later scans.
+`groma scan` updates Markdown from this repo and prints `ok`. A viewer
+shows the world. `groma view` starts the TUI plugin.
 
-- [Scanners](scanners/index.md): the shared scanning flow and available language or ecosystem plugins
+- [Scanners](scanners/index.md)
+- [Viewers](viewers/index.md)
+- [Observed architecture](../groma/observed/README.md)
 
-## View
+## Change and accept
 
-Explore observed and missing architecture alongside every plan.
+Change the architecture through Groma. Required changes and new parts become
+plan ghosts. Explanations stay on the observed element. `groma accept <id>`
+applies a ghost only after a scan has matched it.
 
-- [Viewer](viewer.md): one fixed-world view of observed, missing, and planned architecture
-- [Observed architecture](../groma/observed/README.md): the architecture currently represented by this repository
-
-## Plan
-
-Describe one independent, final desired architectural outcome.
-
-- [Product model](product-model.md): observed architecture, plans, revisions, and the implementation lifecycle
-- [Component Markdown contract](../groma/README.md): the canonical architecture document format
+- [Product model](product-model.md)
+- [Plans](../groma/plans/README.md)
+- [Component Markdown contract](../groma/README.md)
 
 ## Product principles
 
-- [Groma manifesto](../MANIFESTO.md): principles and boundaries that guide the product
+- [Groma manifesto](../MANIFESTO.md)

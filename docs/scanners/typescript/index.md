@@ -1,14 +1,10 @@
 # TypeScript scanner
 
-The TypeScript scanner plugin implements Groma's scanner-plugin interface for TypeScript projects. It adapts TypeScript
-and ecosystem-specific source evidence into Groma's shared scan-result model for Groma core.
+The TypeScript scanner plugin implements Groma's scanner-plugin interface.
+It receives this repository's root and returns the shared scan-result model.
 
-The plugin receives a project root and recognizes only the source shapes named by its contract. TypeScript configuration,
-package metadata, framework conventions, declarations, imports, and calls may provide evidence for those shapes.
+It must not require Groma-specific types, comments, or IDs in application
+source.
 
-The surrounding scanner owns source watching. Groma core evaluates the transient result and decides what becomes
-observed or missing architecture. This keeps source interpretation inside the plugin and persistence decisions inside
-the core domain.
-
-The [TypeScript scanner contract](contract.md) defines the intended project compatibility, architectural interpretation,
-shared-interface boundary, and core handoff.
+The [TypeScript scanner contract](contract.md) will name the supported source
+shapes when an approved example exists.

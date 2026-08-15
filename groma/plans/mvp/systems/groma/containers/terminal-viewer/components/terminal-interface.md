@@ -9,10 +9,6 @@ parent: terminal-viewer
 Projects the fixed world, moves selection spatially, enters selected boundaries, and presents selected-element details
 as side or full-screen overlays. It never reads Markdown.
 
-## Technology
-
-OpenTUI.
-
 ## Relationships
 
 | Target | Description | Technology |

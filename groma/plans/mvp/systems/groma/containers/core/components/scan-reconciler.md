@@ -6,11 +6,13 @@ parent: core
 
 # Scan reconciler
 
-Matches scanner results to stable components, creates recognizable starting documents, and refreshes only Code
-frontmatter after those documents have been curated.
+Matches scanner results to elements that already exist, refreshes only Code
+frontmatter after curation, attaches Code to a matching ghost without
+accepting it, and assigns a readable ID only to a new observation that is
+not already in the world.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Architecture model](architecture-model.md) | Applies accepted scan results without rewriting curated prose | In-process data |
+| [Architecture model](architecture-model.md) | Applies accepted evidence without rewriting stable IDs or curated prose | In-process data |

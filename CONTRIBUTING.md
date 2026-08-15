@@ -13,12 +13,15 @@ code work; small documentation corrections can be made directly.
 
 ## Set up the repository
 
-Groma uses Bun and requires Node.js 20.19 or newer.
+Groma requires Bun and Node.js 20.19 or newer.
 
 ```sh
 bun install
 bun run check
 ```
+
+Groma is written in TypeScript. Bun runs the CLI and TUI viewer, while Node-specific scripts and tests run through
+`tsx`. `bun run check` includes typechecking.
 
 ## Before starting a feature
 

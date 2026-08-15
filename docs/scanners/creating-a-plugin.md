@@ -1,25 +1,21 @@
 # Creating a scanner plugin
 
-A scanner plugin is the adaptation boundary between one source ecosystem and Groma. It translates ecosystem-specific
-source into the shared scan-result model understood by Groma core. Groma owns the interface and core consumes its
-canonical result.
+A scanner plugin translates one source ecosystem into Groma's shared
+scan-result model. Core consumes that result. The plugin does not write
+Markdown and does not assign architecture IDs.
 
-## Responsibility
-
-A plugin defines which source shapes it understands and the recognizable architecture they support. It returns one
-complete, deterministic scan result through Groma's scanner-plugin interface. Unsupported source produces no claim.
-
-The surrounding scanner owns source watching and decides when to request a scan. The plugin owns source interpretation.
-Groma core owns domain evaluation and reconciles information from the scan result with observed and missing
-architecture.
+A plugin must not require Groma-specific types, comments, or IDs in
+application source. Language and ecosystem facts stay in the plugin.
+`package.json`, `tsconfig`, `.csproj`, and similar files are not inputs to
+Groma core.
 
 ```text
-source ecosystem → scanner plugin → shared scan result → Groma core
+source → scanner plugin → scan result → Groma core
 ```
 
 ## The shared interface
 
-Every plugin returns a C4 scan result owned by Groma. Each reported architecture element has one of these types:
+Each candidate has one of these types:
 
 | Type        | Meaning                                                     | C4 parent      |
 |-------------|-------------------------------------------------------------|----------------|
@@ -28,7 +24,7 @@ Every plugin returns a C4 scan result owned by Groma. Each reported architecture
 | `component` | A cohesive responsibility inside a container                | `container`    |
 | `person`    | A human or external actor interacting with the architecture | none; optional |
 
-Code is not another architecture element. A component may instead carry a small list of Code references:
+A component may carry Code references:
 
 ```yaml
 code:
@@ -37,38 +33,22 @@ code:
     symbol: OrdersService
 ```
 
-`scanner` and `file` are required. `file` is relative to the scanned project. `symbol` names the relevant declaration or
-entry point and is omitted when the complete file is the useful reference. Repeating the entry allows one or more
-scanners to contribute to the same component.
+`scanner` and `file` are required. `file` is relative to this repository.
+`symbol` is omitted when the complete file is the useful reference.
 
-Each element otherwise contains the smallest information needed to produce the approved architecture: stable ID, type,
-name, responsibility, required parent, relevant technology, and relationships. Filenames and framework structure remain
-evidence unless the source contract explicitly gives them architectural meaning.
+Each candidate otherwise contains the smallest information needed: type,
+recognizable name and responsibility, parent evidence, relevant technology,
+relationships, and Code references. It does not contain an architecture ID.
 
-A scan result is transient input expressed entirely through Groma's domain concepts. Groma core evaluates that result
-before representing accepted architecture as observed or missing Markdown. On rescan, core may replace the `code`
-frontmatter but must preserve the component's Markdown body.
+Core evaluates the result against the current world using the rules in the
+[product model](../product-model.md).
 
 ## The source contract
 
-Each plugin documents its source contract inside its own directory under `docs/scanners/`. The contract defines:
+Each plugin documents its source contract under `docs/scanners/`. The
+contract names the concrete source shapes it supports and the scan result
+from one approved example. There is no contract until that example exists.
 
-- The concrete source shapes the plugin supports.
-- How those shapes support a recognizable component, its relationships, and its Code references.
-- The complete scan result produced from an approved example.
-- The boundary between source interpretation and Groma core domain logic.
-
-The source contract is specific to the language or ecosystem. The scanner-plugin interface and scan-result model remain
-Groma concepts shared by every plugin.
-
-## Ownership boundaries
-
-- The scanner owns source watching and scan scheduling.
-- The plugin owns ecosystem-specific source interpretation and produces the shared scan result.
-- Groma core owns domain evaluation, identity reconciliation, plans, revisions, storage, and Markdown representation.
-- The viewer owns presentation of the architecture exposed by Groma core.
-
-These boundaries keep source technology within its plugin while every scanner participates in the same product flow.
-
-The [TypeScript scanner](typescript/index.md) illustrates this boundary for TypeScript projects. The
-[.NET/C# scanner](dotnet-csharp/index.md) remains TBD.
+The [TypeScript scanner](typescript/index.md) is the first plugin. It has no
+approved example yet. The [.NET/C# scanner](dotnet-csharp/index.md) is the
+same interface for another ecosystem. Neither plugin is Groma core.
