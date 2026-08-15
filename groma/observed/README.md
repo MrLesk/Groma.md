@@ -1,20 +1,20 @@
 # Observed architecture
 
-This is the architecture known to exist in this repository. Groma writes
-these files. Planned fragments appear as ghosts until `groma accept`
-applies them after a scan has matched them.
+This is the architecture known to exist in this repository.
 
 ## Start here
 
 - [Groma](systems/groma/system.md) keeps the architecture as Markdown.
-- Its users are the [human architect](people/human-architect.md) and
-  [coding agent](people/coding-agent.md).
-- The [architecture workspace](systems/groma/containers/architecture-workspace/container.md)
-  keeps observed and planned architecture in the repository and declares its
-  relationship to [Git](systems/git/system.md).
+- The [human architect](people/human-architect.md) and
+  [coding agent](people/coding-agent.md) use it.
+- [Core](systems/groma/containers/core/container.md) merges observed
+  architecture and planned fragments into one world.
+- The [terminal viewer](systems/groma/containers/terminal-viewer/container.md)
+  shows that world.
 - The [scanner](systems/groma/containers/scanner/container.md) supplies
-  recognizable source-derived starting points and Code references to Groma
-  core.
+  source-derived candidates.
+- The [architecture workspace](systems/groma/containers/architecture-workspace/container.md)
+  keeps the Markdown and versions it through [Git](systems/git/system.md).
 
 The [component Markdown contract](../README.md) defines how these documents
-represent C4 elements, containment, and directed relationships.
+represent C4 elements.

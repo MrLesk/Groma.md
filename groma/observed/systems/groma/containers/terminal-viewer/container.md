@@ -12,4 +12,4 @@ Presents the architecture as one fixed nested world across System Context, Conta
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Core](../core/container.md) | Requests the annotated model and fixed-world ELK objects | In-process data |
+| [Core](../core/container.md) | Requests the annotated world | In-process data |

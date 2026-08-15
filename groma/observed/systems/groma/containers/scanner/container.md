@@ -6,8 +6,7 @@ parent: groma
 
 # Scanner
 
-Produces recognizable source observations and high-level Code references for Groma core. It does not write architecture
-Markdown or overwrite curated meaning.
+Produces recognizable source observations and high-level Code references. It does not write architecture Markdown.
 
 ## Technology
 
@@ -17,4 +16,4 @@ Local scanner runtime and language plugins.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Architecture workspace](../architecture-workspace/container.md) | Supplies scan results for domain evaluation | In-process data |
+| [Core](../core/container.md) | Supplies scan results | In-process data |

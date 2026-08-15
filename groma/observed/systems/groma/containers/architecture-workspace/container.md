@@ -8,15 +8,6 @@ parent: groma
 
 Keeps observed and planned architecture as ordinary Markdown files inside the repository.
 
-## Structure
-
-```text
-groma/
-  observed/
-  plans/
-    <plan-id>/
-```
-
 ## Technology
 
 Markdown files on the local filesystem.
@@ -25,4 +16,4 @@ Markdown files on the local filesystem.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |
+| [Git](../../../git/system.md) | Versions architecture changes | Git |

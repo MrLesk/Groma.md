@@ -64,7 +64,7 @@ test('validates observed and every planned revision', async () => {
       'groma/plans/mvp',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [6, 7])
+  assert.deepEqual(results.map(result => result.elementCount), [12, 1])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {
@@ -77,7 +77,9 @@ test('observed index links readers to the Markdown foundation', async () => {
     'people/human-architect.md',
     'people/coding-agent.md',
     'systems/groma/containers/architecture-workspace/container.md',
+    'systems/groma/containers/core/container.md',
     'systems/groma/containers/scanner/container.md',
+    'systems/groma/containers/terminal-viewer/container.md',
     'systems/git/system.md',
   ]
 
@@ -240,7 +242,7 @@ test('rejects a one-column relationship table', async t => {
     workspaceFile,
     '| Target | Description | Technology |\n'
       + '| --- | --- | --- |\n'
-      + '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
+      + '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
     '| Target |\n'
       + '| --- |\n'
       + '| [Git](../../../git/system.md) |',
@@ -264,7 +266,7 @@ test('rejects a relationship with a blank description', async t => {
   )
   await replaceInFile(
     workspaceFile,
-    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
+    '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
     '| [Git](../../../git/system.md) | | Git |',
   )
 
@@ -286,8 +288,8 @@ test('rejects a relationship with blank technology', async t => {
   )
   await replaceInFile(
     workspaceFile,
-    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | Git |',
-    '| [Git](../../../git/system.md) | Versions and reviews architecture changes | |',
+    '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
+    '| [Git](../../../git/system.md) | Versions architecture changes | |',
   )
 
   await assert.rejects(

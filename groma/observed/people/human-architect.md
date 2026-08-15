@@ -11,4 +11,4 @@ Understands, plans, and reviews the architecture of a software system.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Architecture workspace](../systems/groma/containers/architecture-workspace/container.md) | Reads and writes architecture | Markdown and Git |
+| [Groma](../systems/groma/system.md) | Reads | Viewer and Markdown |

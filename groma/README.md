@@ -173,8 +173,8 @@ TypeScript, NestJS, and PostgreSQL.
 
 The [observed architecture](observed/README.md) combined with the
 [MVP plan](plans/mvp/README.md) is a complete example of the document
-format: observed people and systems, plus planned fragments that add new
-IDs only.
+format: observed people, systems, containers, and components, plus planned
+fragments that add new IDs only.
 
 All element documents are valid CommonMark/GFM with YAML frontmatter and can
 be parsed directly by the `comark` npm package.
