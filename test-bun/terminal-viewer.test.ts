@@ -22,6 +22,7 @@ import {
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
+import { zoomReadout } from '../src/viewers/tui/organisms/chrome.ts'
 import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
 import { initialTree, treeRows } from '../src/viewers/tui/tree.ts'
 import { fitLayer, fitView, followSelection, projectWorld } from '../src/viewers/tui/projection.ts'
@@ -481,7 +482,7 @@ function cameraOn(
   }
 }
 
-test.concurrent('unit navigation covers selection, zoom, and spatial movement', () => {
+test.concurrent('unit navigation covers selection, level changes, and spatial movement', () => {
   const world = navigationWorld()
   assert.equal(defaultSelection(world, 'context')?.representationId, 'observed:alpha')
   assert.notEqual(world.elements[0]?.representationId, 'observed:alpha')
@@ -491,7 +492,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     level: 'context',
     currentId: 'observed:alpha',
     focus: 'architecture',
-    zoomSlot: 'context',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   })
@@ -517,7 +517,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
       level: 'components',
       currentId: 'observed:pleft',
       focus: 'architecture',
-      zoomSlot: 'components',
       tree: initialTree(),
       panes: { hierarchy: true, details: true },
     }, 'enter')),
@@ -543,56 +542,10 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:alpha',
   })
 
-  state = initialState(world)
-  const selected = state.currentId
-  state = reduceViewer(world, state, 'zoom')
-  assert.equal(state.focus, 'zoom')
-  assert.equal(state.zoomSlot, 'context')
-  assert.equal(state.currentId, selected)
-  state = reduceViewer(world, state, 'left')
-  assert.equal(state.zoomSlot, 'leave')
-  assert.equal(state.level, 'context')
-  state = reduceViewer(world, state, 'right')
-  assert.equal(state.zoomSlot, 'context')
-  state = reduceViewer(world, state, 'right')
-  assert.equal(state.zoomSlot, 'containers')
-  state = reduceViewer(world, state, 'enter')
-  assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:alpha' })
-  assert.equal(state.focus, 'zoom')
-
-  state = reduceViewer(world, state, 'right')
-  assert.equal(state.zoomSlot, 'components')
-  state = reduceViewer(world, state, 'enter')
-  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
-  assert.equal(state.focus, 'zoom')
-
-  state = reduceViewer(world, state, 'left')
-  state = reduceViewer(world, state, 'left')
-  state = reduceViewer(world, state, 'left')
-  assert.equal(state.zoomSlot, 'leave')
-  state = reduceViewer(world, state, 'enter')
-  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
-  assert.equal(state.focus, 'zoom')
-
-  state = reduceViewer(world, { ...state, zoomSlot: 'enter' }, 'enter')
-  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
-  assert.equal(state.focus, 'zoom')
-
-  state = reduceViewer(world, state, 'dismiss')
-  assert.equal(state.focus, 'architecture')
-  assert.equal(state.level, 'components')
-
-  state = reduceViewer(world, state, 'zoom')
-  assert.equal(state.focus, 'zoom')
-  state = reduceViewer(world, state, 'zoom')
-  assert.equal(state.focus, 'architecture')
-  assert.equal(state.currentId, 'observed:pleft')
-
   state = {
     level: 'containers',
     currentId: 'observed:cleft',
     focus: 'architecture',
-    zoomSlot: 'containers',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   }
@@ -602,7 +555,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     level: 'components',
     currentId: 'observed:pright',
     focus: 'architecture',
-    zoomSlot: 'components',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   }
@@ -615,7 +567,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     level: 'components',
     currentId: 'observed:pfar',
     focus: 'architecture',
-    zoomSlot: 'components',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   }
@@ -628,7 +579,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     level: 'components',
     currentId: 'observed:pleft',
     focus: 'architecture',
-    zoomSlot: 'components',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   }
@@ -641,7 +591,6 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     level: 'context',
     currentId: 'observed:ann',
     focus: 'architecture',
-    zoomSlot: 'context',
     tree: initialTree(),
     panes: { hierarchy: false, details: true },
   }
@@ -669,13 +618,12 @@ test.concurrent('headless keys drive the viewer and leave world coordinates unch
   const app = mountTerminalViewer(setup.renderer, response)
   await setup.renderOnce()
 
-  // Zoom, footer strip, arrows, Enter, and Esc all keep the viewer alive
-  // and never mutate the world's fixed geometry.
+  // Zoom keys, arrows, Enter, Tab, pane toggles, and Esc all keep the
+  // viewer alive and never mutate the world's fixed geometry.
   await press(setup, '+', '-', '_', '=', '_')
-  await press(setup, 'z', '+', 'escape', '-')
   await press(setup, 'enter', 'right', 'left', 'up', 'down')
-  await press(setup, 'z', 'right', 'enter', 'z')
-  await press(setup, 'z', 'left', 'left', 'enter', 'escape')
+  await press(setup, 'tab', 'right', 'down', 'enter', 'escape')
+  await press(setup, '[', ']', '[', ']')
   await press(setup, 'enter', 'escape')
   assert.equal(setup.renderer.isDestroyed, false)
 
@@ -845,40 +793,9 @@ test.concurrent('opening map fits the whole world and zoom stays inside its boun
   const zoomed = await press(setup, '+')
   assert.notEqual(zoomed, first)
   await press(setup, '-')
-  // Footer strip enter on `+` zooms exactly like the `+` key.
-  await press(setup, 'z', 'right', 'right', 'right', 'enter')
-  const keyedMatch = await press(setup, 'z')
-  assert.equal(keyedMatch, zoomed)
-  app.destroy()
-})
-
-test.concurrent('footer layer enter zooms the camera to that layer', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
-  const viewport = mapViewportOf({ width: 120, height: 36 })
-  const fitAll = fitView(response.world, viewport)
-  const fitted = fitLayer(
-    response.world,
-    viewport,
-    'containers',
-    'observed:groma',
-  )
-  assert.ok(fitted.zoom > fitAll.zoom)
-
-  const setup = await createTestRenderer({ width: 120, height: 36 })
-  const app = mountTerminalViewer(setup.renderer, response)
-  await setup.renderOnce()
-
-  const worldFit = await createTestRenderer({ width: 120, height: 36 })
-  const worldFitApp = mountTerminalViewer(worldFit.renderer, response, {
-    level: 'containers',
-    currentId: 'observed:groma',
-  })
-  await worldFit.renderOnce()
-  const unzoomed = worldFit.captureCharFrame()
-  worldFitApp.destroy()
-
-  const layer = await press(setup, 'z', 'right', 'enter', 'z')
-  assert.notEqual(layer, unzoomed)
+  // Zooming is deterministic: fit -> in lands on the same frame again.
+  const rezoomed = await press(setup, '+')
+  assert.equal(rezoomed, zoomed)
   app.destroy()
 })
 
@@ -1138,4 +1055,11 @@ test.concurrent('pane toggles resize the map viewport without touching the world
       element.representationId,
     )
   }
+})
+
+test.concurrent('the zoom readout names fit, in-between, and one-to-one states', () => {
+  assert.equal(zoomReadout(0.31, 0.31), 'fit')
+  assert.equal(zoomReadout(0.62, 0.31), '62%')
+  assert.equal(zoomReadout(1, 0.31), '1:1')
+  assert.equal(zoomReadout(1, 1), '1:1')
 })

@@ -10,15 +10,7 @@ import type {
   WorldElement,
 } from '../../types.ts'
 
-export type ViewerFocus = 'architecture' | 'zoom' | 'hierarchy'
-const zoomSlots = [
-  'leave',
-  'context',
-  'containers',
-  'components',
-  'enter',
-] as const
-export type ZoomSlot = (typeof zoomSlots)[number]
+export type ViewerFocus = 'architecture' | 'hierarchy'
 export type ViewerAction =
   | 'enter'
   | 'leave'
@@ -26,7 +18,6 @@ export type ViewerAction =
   | 'down'
   | 'left'
   | 'right'
-  | 'zoom'
   | 'tab'
   | 'toggle-hierarchy'
   | 'toggle-details'
@@ -36,7 +27,6 @@ export interface ViewerState {
   level: SemanticLevel
   currentId?: string
   focus: ViewerFocus
-  zoomSlot: ZoomSlot
   tree: TreeState
   panes: PaneVisibility
 }
@@ -76,7 +66,6 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     level: 'context',
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
-    zoomSlot: 'context',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
   }
@@ -144,47 +133,6 @@ function enterView(
     level: 'components',
     currentId: component?.representationId ?? element.representationId,
   }
-}
-
-function jumpView(
-  world: ArchitectureWorld,
-  selected: WorldElement | undefined,
-  target: SemanticLevel,
-): Pick<ViewerState, 'level' | 'currentId'> {
-  const byId = elementsById(world)
-  if (target === 'context') {
-    let top = selected
-    while (top && top.parent !== null) {
-      const parent = byId.get(top.parent)
-      if (!parent) break
-      top = parent
-    }
-    return { level: 'context', currentId: top?.representationId }
-  }
-  if (target === 'containers') {
-    const system = ancestorOfKind(selected, 'system', byId)
-    if (!system || system.external) {
-      return { level: 'context', currentId: selected?.representationId }
-    }
-    return { level: 'containers', currentId: system.representationId }
-  }
-  const container = ancestorOfKind(selected, 'container', byId)
-    ?? firstChildOfKind(ancestorOfKind(selected, 'system', byId), 'container', byId)
-  if (!container) return { level: 'context', currentId: selected?.representationId }
-  const component = selected?.kind === 'component'
-    ? selected
-    : firstComponentUnder(container, byId)
-      ?? firstComponentUnder(ancestorOfKind(selected, 'system', byId), byId)
-  return {
-    level: 'components',
-    currentId: component?.representationId ?? container.representationId,
-  }
-}
-
-function moveZoomSlot(slot: ZoomSlot, direction: 'left' | 'right'): ZoomSlot {
-  const index = zoomSlots.indexOf(slot)
-  const next = direction === 'right' ? index + 1 : index - 1
-  return zoomSlots[Math.max(0, Math.min(zoomSlots.length - 1, next))]!
 }
 
 function leaveView(
@@ -382,13 +330,6 @@ export function reduceViewer(
     currentId: resolved.currentId,
   }
 
-  if (action === 'zoom') {
-    return {
-      ...current,
-      focus: current.focus === 'zoom' ? 'architecture' : 'zoom',
-      zoomSlot: current.level,
-    }
-  }
   if (action === 'tab') {
     if (current.focus === 'hierarchy') return { ...current, focus: 'architecture' }
     return syncTree(world, {
@@ -416,18 +357,6 @@ export function reduceViewer(
   }
   if (current.focus === 'hierarchy') {
     return reduceTree(world, current, action)
-  }
-  if (current.focus === 'zoom' && (action === 'left' || action === 'right')) {
-    return { ...current, zoomSlot: moveZoomSlot(current.zoomSlot, action) }
-  }
-  if (current.focus === 'zoom' && action === 'enter') {
-    if (current.zoomSlot === 'leave' || current.zoomSlot === 'enter') {
-      return current
-    }
-    return syncTree(world, {
-      ...current,
-      ...jumpView(world, resolved.selected, current.zoomSlot),
-    })
   }
   if (action === 'enter') {
     const next = resolved.selected && canEnter(resolved.selected)

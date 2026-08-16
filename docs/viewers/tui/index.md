@@ -10,9 +10,12 @@ This page is the terminal surface. The shared viewer rules live in
 
 Fixed chrome frames the world. A one-row header shows the groma
 wordmark on the left and the exit hint on the right. A one-row footer
-shows the level strip and key hints. Between them sit three panes that
-each reserve their width: the hierarchy pane on the left, the map pane
-in the center, and the details pane on the right. The map pane is the
+shows the key hints for the focused pane, and zoom controls with a
+readout of the camera state: `fit` when the whole map fits, a
+percentage in between, `1:1` at the closest zoom. Between them sit
+three panes that each reserve their width: the hierarchy pane on the
+left, the map pane in the center, and the details pane on the right.
+The map pane is the
 camera viewport; the map never renders under a side pane. `[` and `]`
 collapse and restore the hierarchy and details panes; the map pane
 takes the freed width immediately, and only the camera viewport
@@ -64,9 +67,9 @@ Arrows change which item is selected. Same-level peers keep the
 current zoom; the camera pans just enough if that peer would leave
 the map pane. When there is no same-level peer in that direction,
 selection leaves the boundary and the camera zooms out. Enter on a
-system or container, and the footer `z` strip, are what change C4
-level inward. At Containers the camera frames the parent system. At
-Components it frames the parent container.
+system or container changes C4 level inward; the hierarchy pane jumps
+to any element at its level. At Containers the camera frames the
+parent system. At Components it frames the parent container.
 
 ## What you can do
 
@@ -80,7 +83,7 @@ the last level. The first view fits the whole map.
   component. Components is the last level.
 - `R` asks core for the world again and redraws it.
 - Esc never changes level and does not exit. It returns focus from
-  the footer strip to the map.
+  the hierarchy pane to the map.
 - Ctrl+C leaves the viewer and restores the terminal.
 - Arrows select the nearest element in that direction at the current
   level. If none exists, selection moves up a level. Arrows never
@@ -95,9 +98,3 @@ the last level. The first view fits the whole map.
   expands a row, and Left collapses it or climbs to its parent. Enter
   selects that element on the map at its level and the camera brings
   it into view; the tree stays focused.
-- `z` focuses the footer strip `- context | containers | components +`
-  and highlights the current level. Left and right move the highlight.
-  Enter on a level name goes there and zooms the camera to fit that
-  layer. Enter on `+` or `-` zooms the camera the same way the `+`
-  and `-` keys do. The strip stays focused. `z` or Esc returns to
-  the selected item.

@@ -1,7 +1,7 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from './atoms/theme.ts'
-import type { ViewerFocus, ZoomSlot } from './navigation.ts'
+import type { ViewerFocus } from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
 import { drawChrome } from './organisms/chrome.ts'
 import { drawDetails } from './organisms/details.ts'
@@ -22,7 +22,6 @@ export function paintWorld(
   options: {
     tree: TreeState
     focus?: ViewerFocus
-    zoomSlot?: ZoomSlot
   },
 ): void {
   buffer.clear(theme.background)
@@ -44,5 +43,5 @@ export function paintWorld(
   if (selected) {
     drawDetails(buffer, layout.details, selected, world, theme)
   }
-  drawChrome(buffer, layout, projection, theme, options)
+  drawChrome(buffer, layout, projection, theme, options.focus)
 }

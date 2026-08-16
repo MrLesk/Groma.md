@@ -135,7 +135,6 @@ export function mountTerminalViewer(
     }
     paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel.world, theme, {
       focus: state.focus,
-      zoomSlot: state.zoomSlot,
       tree: state.tree,
     })
     frame.requestRender()
@@ -220,7 +219,6 @@ export function mountTerminalViewer(
     if (key.name === 'tab') return 'tab'
     if (key.name === '[') return 'toggle-hierarchy'
     if (key.name === ']') return 'toggle-details'
-    if (key.name === 'z') return 'zoom'
     if (
       key.name === 'up'
       || key.name === 'down'
@@ -233,9 +231,6 @@ export function mountTerminalViewer(
   function zoomFactor(key: KeyEvent): number | undefined {
     if (key.name === '+' || key.name === '=') return ZOOM_STEP
     if (key.name === '-' || key.name === '_') return 1 / ZOOM_STEP
-    if (key.name !== 'return' || state.focus !== 'zoom') return undefined
-    if (state.zoomSlot === 'enter') return ZOOM_STEP
-    if (state.zoomSlot === 'leave') return 1 / ZOOM_STEP
     return undefined
   }
 

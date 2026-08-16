@@ -5,28 +5,20 @@ import { drawBorder } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import type { ViewerFocus, ZoomSlot } from '../navigation.ts'
+import type { ViewerFocus } from '../navigation.ts'
 import type { PaneLayout } from '../layout.ts'
 import type { WorldProjection } from '../../../types.ts'
 
-const zoomControl = '- context | containers | components +'
-
-const zoomSlotLabel: Record<ZoomSlot, string> = {
-  leave: '-',
-  context: 'context',
-  containers: 'containers',
-  components: 'components',
-  enter: '+',
+/** The camera state shown beside the zoom controls. */
+export function zoomReadout(zoom: number, fitZoom: number): string {
+  if (Math.abs(zoom - 1) < 1e-6) return '1:1'
+  if (Math.abs(zoom - fitZoom) < 1e-6) return 'fit'
+  return `${Math.round(zoom * 100)}%`
 }
 
-function footerHints(focus: ViewerFocus): string {
-  const hints = []
-  if (focus === 'architecture') {
-    hints.push('+ in', '- out')
-  }
-  hints.push(focus === 'zoom' ? 'z item' : 'z zoom')
-  hints.push('[ ] panes', 'R refresh')
-  return hints.join('   ')
+const paneHints: Record<ViewerFocus, string> = {
+  architecture: '←↑↓→ select   enter open   tab tree   [ ] panes   R refresh',
+  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes   R refresh',
 }
 
 export function drawChrome(
@@ -34,9 +26,8 @@ export function drawChrome(
   layout: PaneLayout,
   projection: WorldProjection,
   theme: ViewerTheme,
-  chrome: { focus?: ViewerFocus; zoomSlot?: ZoomSlot } = {},
+  focus: ViewerFocus = 'architecture',
 ): void {
-  const focus = chrome.focus ?? 'architecture'
   for (const pane of [layout.hierarchy, layout.map]) {
     drawBorder(
       buffer,
@@ -72,28 +63,24 @@ export function drawChrome(
     TextAttributes.DIM,
   )
 
-  const footer = `${zoomControl}   ${footerHints(focus)}`
+  const readout = zoomReadout(projection.camera.zoom, projection.fitZoom)
+  const zoomControls = `- out   + in · ${readout}`
   text(
     buffer,
-    footer,
+    paneHints[focus],
     layout.footer.x + 1,
     layout.footer.y,
-    Math.max(0, layout.footer.width - 2),
+    Math.max(0, layout.footer.width - zoomControls.length - 3),
     theme.foreground,
     theme.background,
   )
-  const slot = focus === 'zoom'
-    ? chrome.zoomSlot ?? projection.level
-    : projection.level
-  const token = zoomSlotLabel[slot]
   text(
     buffer,
-    token,
-    layout.footer.x + 1 + zoomControl.indexOf(token),
+    zoomControls,
+    Math.max(0, layout.footer.x + layout.footer.width - zoomControls.length - 1),
     layout.footer.y,
-    token.length,
-    theme.selected,
+    zoomControls.length,
+    theme.foreground,
     theme.background,
-    TextAttributes.BOLD,
   )
 }
