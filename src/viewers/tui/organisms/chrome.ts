@@ -7,7 +7,7 @@ import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { ViewerFocus } from '../navigation.ts'
 import type { PaneLayout } from '../layout.ts'
-import type { WorldProjection } from '../../../types.ts'
+import type { Bounds, WorldProjection } from '../../../types.ts'
 
 /** The camera state shown beside the zoom controls. */
 export function zoomReadout(zoom: number, fitZoom: number): string {
@@ -19,6 +19,7 @@ export function zoomReadout(zoom: number, fitZoom: number): string {
 const paneHints: Record<ViewerFocus, string> = {
   architecture: '←↑↓→ select   enter open   tab tree   [ ] panes   R refresh',
   hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes   R refresh',
+  details: '↑↓ scroll   esc map   [ ] panes   R refresh',
 }
 
 export function drawChrome(
@@ -28,15 +29,20 @@ export function drawChrome(
   theme: ViewerTheme,
   focus: ViewerFocus = 'architecture',
 ): void {
-  for (const pane of [layout.hierarchy, layout.map]) {
+  const panes: Array<[ViewerFocus, Bounds]> = [
+    ['hierarchy', layout.hierarchy],
+    ['architecture', layout.map],
+  ]
+  for (const [paneFocus, pane] of panes) {
+    const focused = focus === paneFocus
     drawBorder(
       buffer,
       pane,
       'observed',
-      theme.foreground,
+      focused ? theme.selected : theme.foreground,
       theme.background,
       'card',
-      TextAttributes.DIM,
+      focused ? 0 : TextAttributes.DIM,
     )
   }
 

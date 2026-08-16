@@ -120,9 +120,12 @@ export function drawDetails(
   element: WorldElement,
   world: ArchitectureWorld,
   theme: ViewerTheme,
+  view: { focused: boolean; scroll: number },
 ): void {
   const background = theme.background
-  const color = element.origin === 'observed' ? theme.foreground : theme[element.origin]
+  const color = view.focused
+    ? theme.selected
+    : element.origin === 'observed' ? theme.foreground : theme[element.origin]
   const width = Math.max(0, bounds.width - 4)
   const rows = detailsRows(element, world, theme, width)
   if (bounds.width > 0 && bounds.height > 0) {
@@ -140,9 +143,11 @@ export function drawDetails(
     TextAttributes.BOLD,
   )
 
+  const visibleRows = Math.max(0, bounds.height - 2)
+  const scroll = Math.max(0, Math.min(view.scroll, rows.length - visibleRows))
   const maxY = bounds.y + bounds.height - 2
   let y = bounds.y + 1
-  for (const row of rows) {
+  for (const row of rows.slice(scroll)) {
     if (y > maxY) return
     let x = bounds.x + 2
     for (const span of row) {

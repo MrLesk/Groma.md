@@ -494,6 +494,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   })
 
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
@@ -519,6 +520,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
       focus: 'architecture',
       tree: initialTree(),
       panes: { hierarchy: true, details: true },
+      detailsScroll: 0,
     }, 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
@@ -548,6 +550,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
@@ -557,6 +560,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
@@ -569,6 +573,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'context',
@@ -581,6 +586,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   }
   const escaped = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
@@ -593,6 +599,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: false, details: true },
+    detailsScroll: 0,
   }
   // Nothing lies further left of the leftmost person: focus escapes into
   // the hierarchy pane, selection unchanged, and the hidden pane reopens.
@@ -602,13 +609,34 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
   assert.equal(toTree.tree.cursor, 'observed:ann')
   assert.equal(toTree.panes.hierarchy, true)
 
-  // The right edge has no interactive pane; the view simply stays.
-  const atRightEdge = reduceViewer(world, {
+  // Right at the right edge mirrors it into the details pane.
+  const toDetails = reduceViewer(world, {
     ...state,
     currentId: 'observed:ext',
+    panes: { hierarchy: true, details: false },
   }, 'right')
-  assert.deepEqual(viewOf(atRightEdge), { level: 'context', currentId: 'observed:ext' })
-  assert.equal(atRightEdge.focus, 'architecture')
+  assert.deepEqual(viewOf(toDetails), { level: 'context', currentId: 'observed:ext' })
+  assert.equal(toDetails.focus, 'details')
+  assert.equal(toDetails.panes.details, true)
+
+  // Details focus scrolls with Up/Down, never below zero, and returns on Left;
+  // a selection change resets the scroll.
+  let details = reduceViewer(world, toDetails, 'down')
+  details = reduceViewer(world, details, 'down')
+  assert.equal(details.detailsScroll, 2)
+  details = reduceViewer(world, details, 'up')
+  details = reduceViewer(world, details, 'up')
+  details = reduceViewer(world, details, 'up')
+  assert.equal(details.detailsScroll, 0)
+  details = reduceViewer(world, { ...details, detailsScroll: 3 }, 'left')
+  assert.equal(details.focus, 'architecture')
+  const moved = reduceViewer(world, details, 'left')
+  assert.equal(moved.detailsScroll, 0)
+
+  // Hiding the focused details pane hands focus back to the map.
+  const hidden = reduceViewer(world, toDetails, 'toggle-details')
+  assert.equal(hidden.focus, 'architecture')
+  assert.equal(hidden.panes.details, false)
 })
 
 test.concurrent('headless keys drive the viewer and leave world coordinates unchanged', async () => {
