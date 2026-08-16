@@ -6,7 +6,7 @@ import { parse, parseFrontmatter } from 'comark'
 
 import type { C4Kind, MarkdownElement } from '../src/types.ts'
 
-const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external', 'code'])
+const allowedFrontmatterFields = new Set(['id', 'kind', 'parent', 'external', 'group', 'code'])
 const allowedKinds = new Set(['person', 'system', 'container', 'component'])
 const expectedParentKinds = new Map<C4Kind, C4Kind>([
   ['container', 'system'],
@@ -271,6 +271,13 @@ export async function validateRevision(
 
     if (frontmatter.external === true && frontmatter.kind !== 'system') {
       errors.push(`${relativeFile}: only a system can be external`)
+    }
+
+    if (
+      frontmatter.group !== undefined
+      && (typeof frontmatter.group !== 'string' || frontmatter.group.trim().length === 0)
+    ) {
+      errors.push(`${relativeFile}: group must be a non-empty string when present`)
     }
 
     if (frontmatter.code !== undefined) {

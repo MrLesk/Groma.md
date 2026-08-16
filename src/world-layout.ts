@@ -13,6 +13,7 @@ import type {
   C4Kind,
   Point,
   WorldElement,
+  WorldGroup,
   WorldRelationship,
 } from './types.ts'
 
@@ -44,6 +45,11 @@ const nestedLayoutOptions = {
   'elk.layered.spacing.nodeNodeBetweenLayers': '12',
 }
 
+const groupLayoutOptions = {
+  ...nestedLayoutOptions,
+  'elk.padding': '[top=6,left=4,bottom=4,right=4]',
+}
+
 const minimumSizes: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   component: { width: 34, height: 16 },
   container: { width: 42, height: 32 },
@@ -55,16 +61,72 @@ function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
+type GroupSeeds = Map<string, Pick<WorldGroup, 'name' | 'parent'>>
+
+// Group ids share the ELK node id namespace with representationIds so that
+// edgeOffset can treat a group as the common ancestor anchoring a route.
+function groupNodeId(parent: string | null, name: string): string {
+  return `group:${parent ?? ''}:${name}`
+}
+
+function groupSeedsFor(elements: AnnotatedElement[]): GroupSeeds {
+  const seeds: GroupSeeds = new Map()
+  for (const element of elements) {
+    if (element.group !== undefined) {
+      seeds.set(groupNodeId(element.parent, element.group), {
+        name: element.group,
+        parent: element.parent,
+      })
+    }
+  }
+  return seeds
+}
+
+/** Sibling nodes, with siblings that share a group wrapped in one synthetic node. */
+function siblingNodes(
+  parent: string | null,
+  siblings: AnnotatedElement[],
+  elementsById: Map<string, AnnotatedElement>,
+): ElkNode[] {
+  const nodes: ElkNode[] = []
+  const memberNodes = new Map<string, ElkNode[]>()
+
+  for (const sibling of siblings) {
+    const node = nodeFor(sibling, elementsById)
+    if (sibling.group === undefined) {
+      nodes.push(node)
+      continue
+    }
+    const id = groupNodeId(parent, sibling.group)
+    const members = memberNodes.get(id) ?? []
+    members.push(node)
+    memberNodes.set(id, members)
+  }
+
+  const groupIds = [...memberNodes.keys()].sort(compareStrings)
+  return [
+    ...nodes,
+    ...groupIds.map(id => ({
+      id,
+      layoutOptions: groupLayoutOptions,
+      children: memberNodes.get(id),
+    })),
+  ]
+}
+
 function nodeFor(
   element: AnnotatedElement,
   elementsById: Map<string, AnnotatedElement>,
 ): ElkNode {
-  const children = element.children
-    .map(id => {
+  const children = siblingNodes(
+    element.representationId,
+    element.children.map(id => {
       const child = elementsById.get(id)
       if (!child) throw new Error(`Unknown child representation: ${id}`)
-      return nodeFor(child, elementsById)
-    })
+      return child
+    }),
+    elementsById,
+  )
   const size = minimumSizes[element.kind]
 
   return {
@@ -97,7 +159,7 @@ function graphFor(model: AnnotatedArchitectureModel): ElkNode {
   return {
     id: 'architecture-world',
     layoutOptions: rootLayoutOptions,
-    children: roots.map(element => nodeFor(element, elementsById)),
+    children: siblingNodes(null, roots, elementsById),
     edges: model.relationships.map((relationship, index) => ({
       id: `relationship:${index}`,
       sources: [relationship.source],
@@ -119,29 +181,22 @@ function absolutePoint(point: ElkPoint, offsetX: number, offsetY: number): Point
   }
 }
 
-function collectElements(
+function collectBounds(
   graph: ElkNode,
-  modelElements: Map<string, AnnotatedElement>,
   offsetX = 0,
   offsetY = 0,
-  result: WorldElement[] = [],
-): WorldElement[] {
+  result = new Map<string, Bounds>(),
+): Map<string, Bounds> {
   for (const node of graph.children ?? []) {
     const x = offsetX + (node.x ?? 0)
     const y = offsetY + (node.y ?? 0)
-    const element = modelElements.get(node.id)
-    if (!element) throw new Error(`Unknown laid-out representation: ${node.id}`)
-
-    result.push({
-      ...element,
-      bounds: {
-        x,
-        y,
-        width: node.width ?? 0,
-        height: node.height ?? 0,
-      },
+    result.set(node.id, {
+      x,
+      y,
+      width: node.width ?? 0,
+      height: node.height ?? 0,
     })
-    collectElements(node, modelElements, x, y, result)
+    collectBounds(node, x, y, result)
   }
 
   return result
@@ -155,6 +210,9 @@ function ancestorIds(
   let current: WorldElement | undefined = element
   while (current) {
     ids.push(current.representationId)
+    if (current.group !== undefined) {
+      ids.push(groupNodeId(current.parent, current.group))
+    }
     current = current.parent === null
       ? undefined
       : elementsById.get(current.parent)
@@ -165,6 +223,7 @@ function ancestorIds(
 function edgeOffset(
   relationship: AnnotatedRelationship,
   elementsById: Map<string, WorldElement>,
+  groupsById: Map<string, WorldGroup>,
 ): Pick<Bounds, 'x' | 'y'> {
   const source = elementsById.get(relationship.source)
   const target = elementsById.get(relationship.target)
@@ -174,7 +233,8 @@ function edgeOffset(
     .find(id => targetAncestors.has(id))
 
   return commonAncestor
-    ? elementsById.get(commonAncestor)?.bounds ?? { x: 0, y: 0 }
+    ? (elementsById.get(commonAncestor) ?? groupsById.get(commonAncestor))?.bounds
+      ?? { x: 0, y: 0 }
     : { x: 0, y: 0 }
 }
 
@@ -182,6 +242,7 @@ function collectEdges(
   graph: ElkNode,
   modelRelationships: Map<string, AnnotatedRelationship>,
   elementsById: Map<string, WorldElement>,
+  groupsById: Map<string, WorldGroup>,
   result: WorldRelationship[] = [],
 ): WorldRelationship[] {
   for (const edge of graph.edges ?? []) {
@@ -190,7 +251,7 @@ function collectEdges(
 
     if (!section || !relationship) continue
 
-    const offset = edgeOffset(relationship, elementsById)
+    const offset = edgeOffset(relationship, elementsById, groupsById)
 
     result.push({
       id: edge.id,
@@ -212,7 +273,7 @@ function collectEdges(
   }
 
   for (const child of graph.children ?? []) {
-    collectEdges(child, modelRelationships, elementsById, result)
+    collectEdges(child, modelRelationships, elementsById, groupsById, result)
   }
 
   return result
@@ -229,24 +290,31 @@ export async function layoutArchitectureWorld(
   } finally {
     elk.terminateWorker()
   }
-  const modelElements = new Map(model.elements.map(element => [
-    element.representationId,
-    element,
-  ]))
   const modelRelationships = new Map(model.relationships.map((relationship, index) => [
     `relationship:${index}`,
     relationship,
   ]))
 
-  const elements = collectElements(laidOut, modelElements)
+  const boundsById = collectBounds(laidOut)
+  const requiredBounds = (id: string): Bounds => {
+    const bounds = boundsById.get(id)
+    if (!bounds) throw new Error(`Missing layout bounds for: ${id}`)
+    return bounds
+  }
+  const elements = model.elements
+    .map(element => ({ ...element, bounds: requiredBounds(element.representationId) }))
     .sort((left, right) => compareStrings(
       left.representationId,
       right.representationId,
     ))
+  const groups = [...groupSeedsFor(model.elements)]
+    .map(([id, seed]) => ({ id, ...seed, bounds: requiredBounds(id) }))
+    .sort((left, right) => compareStrings(left.id, right.id))
   const laidOutElements = new Map(elements.map(element => [
     element.representationId,
     element,
   ]))
+  const laidOutGroups = new Map(groups.map(group => [group.id, group]))
 
   return {
     bounds: {
@@ -256,10 +324,12 @@ export async function layoutArchitectureWorld(
       height: laidOut.height ?? 0,
     },
     elements,
+    groups,
     relationships: collectEdges(
       laidOut,
       modelRelationships,
       laidOutElements,
+      laidOutGroups,
     )
       .sort((left, right) => compareStrings(left.id, right.id)),
   }

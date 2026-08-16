@@ -2,7 +2,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { visible } from '../atoms/visible.ts'
-import { drawBoundary } from '../molecules/boundary.ts'
+import { drawBoundary, drawGroupBoundary } from '../molecules/boundary.ts'
 import { drawCard } from '../molecules/card.ts'
 import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts'
 import { drawSelection } from '../molecules/selection.ts'
@@ -33,6 +33,11 @@ export function drawWorld(
     return element.display === 'card' && element.kind === 'component'
   })) {
     drawCard(buffer, element, projection, theme)
+  }
+  for (const group of projection.groups) {
+    if (visible(group.cellBounds, projection.viewport)) {
+      drawGroupBoundary(buffer, group, projection, theme)
+    }
   }
   for (const element of shown(element => element.display === 'container-boundary')) {
     drawBoundary(buffer, element, projection, theme)

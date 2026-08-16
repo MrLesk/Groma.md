@@ -71,10 +71,15 @@ these fields:
 | `kind` | yes | One of `person`, `system`, `container`, or `component`. |
 | `parent` | for containers and components | The stable `id` of the containing system or container. |
 | `external` | no | `true` only for a system outside the architecture's ownership boundary; absence means `false`. |
+| `group` | no | Readable name of a hand-chosen cluster. Siblings with the same parent and the same `group` render inside one boundary labeled with that name. |
 | `code` | no | High-level scanner-produced source references for a component. |
 
 No other frontmatter field is part of the contract. Observed versus planned
 meaning comes only from the containing directory.
+
+A group is a narrative overlay on one level of the hierarchy: it never
+becomes a parent, owns no relationships, and only an author writes it —
+scanners never derive groups.
 
 The architecture model owns IDs. Groma is the only writer of these files. A
 planned addition receives its ID when Groma authors it and keeps that ID

@@ -124,6 +124,7 @@ function annotateRevision(
           : resolvedRepresentation(element.parentId),
         children: [],
         external: element.external,
+        ...(element.group === undefined ? {} : { group: element.group }),
         code: element.code,
         origin,
         ...(plan ? { plan } : {}),

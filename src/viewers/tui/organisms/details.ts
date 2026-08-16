@@ -1,16 +1,20 @@
 import { TextAttributes } from '@opentui/core'
-import type { OptimizedBuffer } from '@opentui/core'
+import type { OptimizedBuffer, RGBA } from '@opentui/core'
 
 import { drawBorder } from '../atoms/border.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { drawChip } from '../molecules/chip.ts'
-import { kindLabel } from '../molecules/kind-label.ts'
 import type {
   ArchitectureWorld,
   Bounds,
   WorldElement,
 } from '../../../types.ts'
+
+interface Span {
+  value: string
+  foreground: RGBA
+  attributes: number
+}
 
 function sidePanelWidth(totalWidth: number): number {
   return Math.max(24, Math.floor(totalWidth / 3))
@@ -60,83 +64,125 @@ function wrap(value: string, width: number): string[] {
   return lines
 }
 
+function detailsRows(
+  element: WorldElement,
+  world: ArchitectureWorld,
+  theme: ViewerTheme,
+  width: number,
+): Span[][] {
+  const plain = (value: string): Span => {
+    return { value, foreground: theme.foreground, attributes: 0 }
+  }
+  const dim = (value: string): Span => {
+    return { value, foreground: theme.foreground, attributes: TextAttributes.DIM }
+  }
+  const header = (value: string): Span => {
+    return dim(`${value} ${'─'.repeat(Math.max(0, width - value.length - 1))}`)
+  }
+
+  const kind = element.external
+    ? `EXTERNAL ${element.kind.toUpperCase()}`
+    : element.kind.toUpperCase()
+  const rows: Span[][] = [[
+    dim(kind),
+    dim(' · '),
+    { value: element.origin, foreground: theme[element.origin], attributes: TextAttributes.BOLD },
+  ]]
+
+  if (element.description) {
+    rows.push([])
+    for (const row of wrap(element.description, width)) rows.push([plain(row)])
+  }
+
+  const byId = new Map(world.elements.map(item => [item.representationId, item]))
+  const relationships = world.relationships.filter(relationship => {
+    return relationship.source === element.representationId
+      || relationship.target === element.representationId
+  })
+  if (relationships.length > 0) {
+    rows.push([], [header('Relationships')])
+    for (const relationship of relationships) {
+      const outgoing = relationship.source === element.representationId
+      const arrow = outgoing ? '→ ' : '← '
+      const otherId = outgoing ? relationship.target : relationship.source
+      const name = byId.get(otherId)?.name ?? otherId
+      const rest = ` · ${relationship.description}`
+      if (arrow.length + name.length + rest.length <= width) {
+        rows.push([dim(arrow), plain(name), dim(rest)])
+      } else {
+        rows.push([dim(arrow), plain(name)])
+        for (const row of wrap(relationship.description, width - arrow.length)) {
+          rows.push([dim(`${' '.repeat(arrow.length)}${row}`)])
+        }
+      }
+    }
+  }
+
+  if (element.children.length > 0) {
+    rows.push([], [header('Children')])
+    for (const childId of element.children) {
+      rows.push([plain(byId.get(childId)?.name ?? childId)])
+    }
+  }
+
+  if (element.code.length > 0) {
+    rows.push([], [header('Code')])
+    for (const reference of element.code) {
+      rows.push([plain(reference.file)])
+      rows.push([dim(
+        reference.symbol === undefined
+          ? reference.scanner
+          : `${reference.symbol} · ${reference.scanner}`,
+      )])
+    }
+  }
+
+  return rows
+}
+
 export function drawDetails(
   buffer: OptimizedBuffer,
   bounds: Bounds,
   element: WorldElement,
   world: ArchitectureWorld,
   theme: ViewerTheme,
+  panel: 'side' | 'full',
 ): void {
   const background = theme.background
   const color = element.origin === 'observed' ? theme.foreground : theme[element.origin]
-  if (bounds.width > 0 && bounds.height > 0) {
-    buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, background)
-  }
-  drawBorder(buffer, bounds, element.origin, color, background)
-
-  const x = bounds.x + 2
-  const maxY = bounds.y + bounds.height - 2
   const width = Math.max(0, bounds.width - 4)
-  let y = bounds.y + 1
-  const byId = new Map(world.elements.map(item => [item.representationId, item]))
-
-  function line(
-    value: string,
-    attributes = 0,
-    foreground = theme.foreground,
-  ): boolean {
-    if (y > maxY) return false
-    text(buffer, value, x, y, width, foreground, background, attributes)
-    y += 1
-    return true
+  const rows = detailsRows(element, world, theme, width)
+  // The side panel covers only as much of the map as its content needs.
+  const height = panel === 'full'
+    ? bounds.height
+    : Math.min(bounds.height, rows.length + 2)
+  const box = { ...bounds, height }
+  if (box.width > 0 && box.height > 0) {
+    buffer.fillRect(box.x, box.y, box.width, box.height, background)
   }
+  drawBorder(buffer, box, element.origin, color, background)
+  text(
+    buffer,
+    ` ${element.name} `,
+    box.x + 2,
+    box.y,
+    width,
+    theme[element.origin],
+    background,
+    TextAttributes.BOLD,
+  )
 
-  function block(value: string, attributes = 0): boolean {
-    for (const row of wrap(value, width)) {
-      if (!line(row, attributes)) return false
-    }
-    return true
-  }
-
-  if (!line(element.name, TextAttributes.BOLD)) return
-  if (!line(kindLabel(element), TextAttributes.DIM)) return
-  if (y <= maxY && width > 0) {
-    drawChip(buffer, element.origin, x, y, width, theme, background)
-    y += 2
-  }
-  if (element.description && !block(element.description)) return
-  y += 1
-
-  const relationships = world.relationships.filter(relationship => {
-    return relationship.source === element.representationId
-      || relationship.target === element.representationId
-  })
-  if (relationships.length > 0) {
-    if (!line('Relationships', TextAttributes.DIM)) return
-    for (const relationship of relationships) {
-      const otherId = relationship.source === element.representationId
-        ? relationship.target
-        : relationship.source
-      const other = byId.get(otherId)
-      if (!block(`${other?.name ?? otherId} · ${relationship.description}`)) return
+  const maxY = box.y + box.height - 2
+  let y = box.y + 1
+  for (const row of rows) {
+    if (y > maxY) return
+    let x = box.x + 2
+    for (const span of row) {
+      const available = width - (x - box.x - 2)
+      if (available <= 0) break
+      text(buffer, span.value, x, y, available, span.foreground, background, span.attributes)
+      x += [...span.value].length
     }
     y += 1
-  }
-
-  if (element.children.length > 0) {
-    if (!line('Children', TextAttributes.DIM)) return
-    for (const childId of element.children) {
-      const child = byId.get(childId)
-      if (!line(child?.name ?? childId)) return
-    }
-    y += 1
-  }
-
-  if (element.code.length === 0) return
-  if (!line('Code', TextAttributes.DIM)) return
-  for (const reference of element.code) {
-    if (!line(reference.scanner)) return
-    if (!line(reference.file)) return
-    if (reference.symbol !== undefined && !line(reference.symbol)) return
   }
 }

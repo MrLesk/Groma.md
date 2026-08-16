@@ -4,9 +4,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 import { drawBorder } from '../atoms/border.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { drawChip } from './chip.ts'
 import { drawHatch } from './hatch.ts'
-import { kindLabel } from './kind-label.ts'
 import { drawSpine } from './spine.ts'
 import type { ProjectedElement, WorldProjection } from '../../../types.ts'
 
@@ -30,11 +28,16 @@ export function drawCard(
     buffer.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2, fill)
   }
 
-  drawBorder(buffer, bounds, element.origin, color, background)
+  drawBorder(
+    buffer,
+    bounds,
+    element.origin,
+    color,
+    background,
+    element.kind === 'person' ? 'person' : 'card',
+    element.external ? TextAttributes.DIM : 0,
+  )
 
-  if (bounds.width >= 12) {
-    drawChip(buffer, element.origin, bounds.x + 1, bounds.y, bounds.width - 2, theme, background)
-  }
   if (element.origin === 'missing' && bounds.width > 4 && bounds.height > 2) {
     drawHatch(buffer, bounds, theme.missing, background)
   }
@@ -56,15 +59,5 @@ export function drawCard(
     theme.foreground,
     background,
     TextAttributes.BOLD,
-  )
-  text(
-    buffer,
-    kindLabel(element),
-    textX,
-    bounds.y + 2,
-    textWidth,
-    theme.foreground,
-    background,
-    TextAttributes.DIM,
   )
 }

@@ -16,8 +16,9 @@ import {
   reduceViewer,
 } from './navigation.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
+import { detailsBounds } from './organisms/details.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
-import { fitView, projectWorld } from './projection.ts'
+import { fitView, followSelection, projectWorld } from './projection.ts'
 import type {
   ArchitectureViewModel,
   MapCamera,
@@ -107,13 +108,17 @@ export function mountTerminalViewer(
   }
 
   function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
+    const { width, height } = frame.frameBuffer
     return projectWorld(viewModel.world, {
-      width: frame.frameBuffer.width,
-      height: frame.frameBuffer.height,
+      width,
+      height,
       level: state.level,
       currentId: state.currentId,
       camera: next ?? snapshot(),
       lockCamera,
+      ...(state.panel === 'side'
+        ? { coveredFromX: detailsBounds(width, height, 'side').x }
+        : {}),
     })
   }
 
@@ -213,8 +218,6 @@ export function mountTerminalViewer(
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
     if (key.ctrl) return undefined
-    if (key.name === '+' || key.name === '=') return 'enter'
-    if (key.name === '-' || key.name === '_') return 'leave'
     if (key.name === 'return') return 'inspect'
     if (key.name === 'z') return 'zoom'
     if (key.name === 'f') return 'flip'
@@ -224,6 +227,15 @@ export function mountTerminalViewer(
       || key.name === 'left'
       || key.name === 'right'
     ) return key.name
+    return undefined
+  }
+
+  function zoomFactor(key: KeyEvent): number | undefined {
+    if (key.name === '+' || key.name === '=') return ZOOM_STEP
+    if (key.name === '-' || key.name === '_') return 1 / ZOOM_STEP
+    if (key.name !== 'return' || state.focus !== 'zoom') return undefined
+    if (state.zoomSlot === 'enter') return ZOOM_STEP
+    if (state.zoomSlot === 'leave') return 1 / ZOOM_STEP
     return undefined
   }
 
@@ -243,23 +255,25 @@ export function mountTerminalViewer(
       void refresh()
       return
     }
-    if (
-      state.focus === 'architecture'
-      && (key.name === '+' || key.name === '=')
-    ) {
-      zoomBy(ZOOM_STEP)
-      return
-    }
-    if (
-      state.focus === 'architecture'
-      && (key.name === '-' || key.name === '_')
-    ) {
-      zoomBy(1 / ZOOM_STEP)
+    const factor = zoomFactor(key)
+    if (factor !== undefined) {
+      zoomBy(factor)
       return
     }
     const action = actionFor(key)
     if (!action) return
+    const previous = { level: state.level, currentId: state.currentId }
+    const current = snapshot()
     state = reduceViewer(viewModel.world, state, action)
+    const framed = followSelection(
+      viewModel.world,
+      frame.frameBuffer.width,
+      frame.frameBuffer.height,
+      previous,
+      state,
+      current,
+    )
+    if (framed) animateTo(framed)
     repaint()
   }
 

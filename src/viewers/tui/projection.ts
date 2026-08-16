@@ -5,6 +5,7 @@ import type {
   DisplayRole,
   MapCamera,
   Point,
+  ProjectedGroup,
   ProjectedRelationship,
   ProjectionOptions,
   SemanticLevel,
@@ -86,6 +87,51 @@ export function fitView(
   return overviewCamera(padded(world.bounds), viewportFor(width, height))
 }
 
+export function fitLayer(
+  world: ArchitectureWorld,
+  width: number,
+  height: number,
+  level: SemanticLevel,
+  currentId?: string,
+): MapCamera {
+  if (level === 'context') return fitView(world, width, height)
+  const elementsById = new Map(world.elements.map(element => [
+    element.representationId,
+    element,
+  ]))
+  const selected = currentId === undefined
+    ? defaultSelection(world, level)
+    : elementsById.get(currentId) ?? defaultSelection(world, level)
+  const subject = focusElement(level, selected, elementsById)
+  return overviewCamera(
+    padded(subject?.bounds ?? world.bounds),
+    viewportFor(width, height),
+  )
+}
+
+const levelDepth: Record<SemanticLevel, number> = {
+  context: 0,
+  containers: 1,
+  components: 2,
+}
+
+export function followSelection(
+  world: ArchitectureWorld,
+  width: number,
+  height: number,
+  previous: { level: SemanticLevel; currentId?: string },
+  next: { level: SemanticLevel; currentId?: string },
+  current: MapCamera,
+): MapCamera | undefined {
+  if (next.level === previous.level) return undefined
+  const target = fitLayer(world, width, height, next.level, next.currentId)
+  if (levelDepth[next.level] < levelDepth[previous.level]) {
+    // `+`/`-` can already be wider than the outer level; do not zoom in on the way out.
+    return { ...target, zoom: Math.min(current.zoom, target.zoom) }
+  }
+  return target
+}
+
 function transformFor(camera: MapCamera, viewport: Bounds): Transform {
   const xScale = camera.zoom
   const yScale = camera.zoom * CELL_ASPECT
@@ -102,6 +148,16 @@ function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
     && bounds.x + bounds.width > viewport.x
     && bounds.y < viewport.y + viewport.height
     && bounds.y + bounds.height > viewport.y
+}
+
+function uncoveredViewport(viewport: Bounds, coveredFromX?: number): Bounds {
+  if (coveredFromX === undefined) return viewport
+  // Keep the same one-cell margin the viewport leaves at screen edges,
+  // so the selection ring stays clear of the overlay too.
+  return {
+    ...viewport,
+    width: Math.max(1, coveredFromX - viewport.x - 1),
+  }
 }
 
 function panCells(bounds: Bounds, viewport: Bounds): Point {
@@ -538,12 +594,32 @@ function projectElements(
   return elements
 }
 
+function projectGroups(
+  world: ArchitectureWorld,
+  projectedElements: ReturnType<typeof projectElements>,
+  transform: Transform,
+): ProjectedGroup[] {
+  // A group is only as visible as its members: when every member is hidden
+  // at this level, the empty boundary would point at nothing.
+  return world.groups
+    .filter(group => projectedElements.some(element => {
+      return element.display !== 'hidden'
+        && element.group === group.name
+        && element.parent === group.parent
+    }))
+    .map(group => ({
+      ...group,
+      cellBounds: projectBounds(group.bounds, transform),
+    }))
+}
+
 function projectRelationships(
   world: ArchitectureWorld,
   level: SemanticLevel,
   focus: WorldElement | null,
   elementsById: Map<string, WorldElement>,
   projectedElements: ReturnType<typeof projectElements>,
+  projectedGroups: ProjectedGroup[],
   transform: Transform,
   viewport: Bounds,
 ): ProjectedRelationship[] {
@@ -551,14 +627,28 @@ function projectRelationships(
     element.representationId,
     element,
   ]))
-  const cardBounds = projectedElements
-    .filter(element => element.display === 'card')
-    .map(element => ({
-      x: element.cellBounds.x - 1,
-      y: element.cellBounds.y - 1,
-      width: element.cellBounds.width + 2,
-      height: element.cellBounds.height + 2,
-    }))
+  const titleRow = (bounds: Bounds): Bounds => ({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: 1,
+  })
+  const cardBounds = [
+    ...projectedElements
+      .filter(element => element.display === 'card')
+      .map(element => ({
+        x: element.cellBounds.x - 1,
+        y: element.cellBounds.y - 1,
+        width: element.cellBounds.width + 2,
+        height: element.cellBounds.height + 2,
+      })),
+    // Boundary and group titles sit on their top border; a route label
+    // placed there would erase the name.
+    ...projectedElements
+      .filter(element => element.display.endsWith('-boundary'))
+      .map(element => titleRow(element.cellBounds)),
+    ...projectedGroups.map(group => titleRow(group.cellBounds)),
+  ]
   return visibleRelationships(world, level, focus, elementsById)
     .map(relationship => {
       const sourceElement = elementsById.get(relationship.source)
@@ -657,7 +747,10 @@ export function projectWorld(
     && selectedElement
     && selectedElement.display !== 'hidden'
   ) {
-    const nudge = panCells(selectedElement.cellBounds, viewport)
+    const nudge = panCells(
+      selectedElement.cellBounds,
+      uncoveredViewport(viewport, options.coveredFromX),
+    )
     if (nudge.x !== 0 || nudge.y !== 0) {
       camera = {
         ...camera,
@@ -668,6 +761,7 @@ export function projectWorld(
       elements = projectElements(world, level, focus, transform, viewport)
     }
   }
+  const groups = projectGroups(world, elements, transform)
 
   return {
     level,
@@ -678,12 +772,14 @@ export function projectWorld(
     camera,
     viewport,
     elements,
+    groups,
     relationships: projectRelationships(
       world,
       level,
       focus,
       elementsById,
       elements,
+      groups,
       transform,
       viewport,
     ),

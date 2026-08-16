@@ -42,6 +42,8 @@ Its durable conclusions are:
 - The complete application state can be expressed as `(level, selection)`.
 - Arrows traverse peers and can escape a boundary by ascending, Enter descends,
   and Backspace or Esc ascends to the parent.
+- Same-level arrows pan just enough to keep the selection visible and do not
+  change zoom. Leaving a boundary *is* zooming out.
 - Each element needs a representation ladder selected by its available cell
   budget.
 - Terminal rendering should inherit the terminal theme rather than reproduce
