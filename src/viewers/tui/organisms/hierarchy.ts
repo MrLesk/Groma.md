@@ -37,11 +37,19 @@ export function drawHierarchy(
     const row = rows[scroll + line]
     if (!row) break
     const y = bounds.y + 1 + line
+    // The focused cursor row inverts into the selection accent.
     const active = focused && row.id === cursorId
-    const background = active ? theme.selectedTint : theme.background
+    const background = active ? theme.selected : theme.background
     if (active) buffer.fillRect(bounds.x + 1, y, width, 1, background)
     if (row.id === selectionId) {
-      cell(buffer, bounds.x + 1, y, '▌', theme.selected, background)
+      cell(
+        buffer,
+        bounds.x + 1,
+        y,
+        '▌',
+        active ? theme.background : theme.selected,
+        background,
+      )
     }
     const glyph = row.hasChildren
       ? row.expanded ? '▾' : '▸'
@@ -49,13 +57,16 @@ export function drawHierarchy(
     const suffix = row.hasChildren && !row.expanded ? ` (${row.count})` : ''
     let label = `${'  '.repeat(row.depth)}${glyph} ${row.name}${suffix}`
     if (label.length > width - 2) label = `${label.slice(0, width - 3)}…`
+    const foreground = active
+      ? theme.background
+      : row.origin === 'observed' ? theme.foreground : theme[row.origin]
     text(
       buffer,
       label,
       bounds.x + 2,
       y,
       Math.max(0, width - 1),
-      row.origin === 'observed' ? theme.foreground : theme[row.origin],
+      foreground,
       background,
     )
   }

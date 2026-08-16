@@ -16,7 +16,7 @@
     "typecheck": "tsc --version && tsc --noEmit",
     "test": "bun run test:node && bun run test:viewer",
     "test:node": "node --import=tsx --test test/*.test.ts",
-    "test:viewer": "bun test --timeout 20000 test-bun/terminal-viewer.test.ts",
+    "test:viewer": "bun test --timeout 20000 test-bun/",
     "check": "bun run typecheck && bun run validate:architecture && bun run test"
   },
   "dependencies": {

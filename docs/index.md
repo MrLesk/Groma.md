@@ -7,7 +7,8 @@ the files under `groma/`.
 ## See
 
 `groma scan` updates Markdown from this repo and prints `ok`. A viewer
-shows the world. `groma view` starts the TUI plugin.
+shows the world. `groma view` starts the TUI plugin. `groma web` serves
+the isometric web map in the browser.
 
 - [Scanners](scanners/index.md)
 - [Viewers](viewers/index.md)
