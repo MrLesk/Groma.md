@@ -336,30 +336,31 @@ function reduceTree(
     if (!cursor.hasChildren || cursor.expanded) {
       return { ...current, focus: 'architecture' }
     }
-    const collapsed = new Set(current.tree.collapsed)
-    collapsed.delete(cursor.id)
-    const expanded = new Set(current.tree.expanded)
-    expanded.add(cursor.id)
-    return { ...current, tree: { ...current.tree, expanded, collapsed } }
+    return { ...current, tree: expandRow(current.tree, cursor.id) }
   }
   if (action === 'enter') {
     const element = elementsById(world).get(cursor.id)
     if (!element) return current
     // Enter opens what it selects: a collapsed parent expands in place.
-    const expanded = new Set(current.tree.expanded)
-    const collapsed = new Set(current.tree.collapsed)
-    if (cursor.hasChildren && !cursor.expanded) {
-      expanded.add(cursor.id)
-      collapsed.delete(cursor.id)
-    }
+    const tree = cursor.hasChildren && !cursor.expanded
+      ? expandRow(current.tree, cursor.id)
+      : current.tree
     return syncTree(world, {
       ...current,
-      tree: { ...current.tree, expanded, collapsed },
+      tree,
       level: levelFor(element),
       currentId: element.representationId,
     })
   }
   return current
+}
+
+function expandRow(tree: TreeState, id: string): TreeState {
+  const expanded = new Set(tree.expanded)
+  expanded.add(id)
+  const collapsed = new Set(tree.collapsed)
+  collapsed.delete(id)
+  return { ...tree, expanded, collapsed }
 }
 
 export function reduceViewer(
