@@ -4,7 +4,12 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { loadAnnotatedArchitecture } from '../src/core.ts'
-import { formatPlainWorld, renderPlainWorld } from '../src/plain-world.ts'
+import {
+  formatPlainRecord,
+  formatPlainWorld,
+  renderPlainRecord,
+  renderPlainWorld,
+} from '../src/plain-world.ts'
 import type { AnnotatedElement, AnnotatedRelationship } from '../src/types.ts'
 
 const fixtureRoot = path.resolve(
@@ -170,4 +175,135 @@ test('a restated id prints once as planned and keeps only the winning source edg
     ].join('\n'),
   )
   assert.doesNotMatch(printed, /Places orders|charges/)
+})
+
+const approvedStock = `stock
+kind: component
+parent: api
+origin: planned
+plan: next
+
+Checks stock before placing an order.`
+
+const approvedOrders = `orders
+kind: component
+parent: api
+origin: observed
+code: src/orders.ts
+
+Owns the order lifecycle.
+
+->  talks to  stock`
+
+const approvedPlan = `next
+kind: plan
+
+The next release adds stock checks.
+
+ghosts
+stock`
+
+test('renderPlainRecord prints the approved fixture cards', async () => {
+  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'stock'), {
+    ok: true,
+    text: approvedStock,
+  })
+  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'orders'), {
+    ok: true,
+    text: approvedOrders,
+  })
+  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'next'), {
+    ok: true,
+    text: approvedPlan,
+  })
+  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'src/orders.ts'), {
+    ok: true,
+    text: approvedOrders,
+  })
+  assert.deepEqual(await renderPlainRecord(fixtureRoot, 'src/routes/orders.ts'), {
+    ok: true,
+    text: approvedOrders,
+  })
+})
+
+test('a complete plan prints only complete even when an outcome exists', () => {
+  const shop = element({
+    id: 'shop',
+    kind: 'system',
+    origin: 'observed',
+    name: 'Shop',
+    description: 'The store.',
+  })
+  const printed = formatPlainRecord(
+    { plans: ['next'], elements: [shop], relationships: [] },
+    [{ id: 'next', outcome: 'The next release adds stock checks.' }],
+    'next',
+  )
+
+  assert.deepEqual(printed, {
+    ok: true,
+    text: ['next', 'kind: plan', '', 'complete'].join('\n'),
+  })
+})
+
+test('several winning elements that share a code file fail', () => {
+  const orders = element({
+    id: 'orders',
+    kind: 'component',
+    origin: 'observed',
+    code: [{ scanner: 'typescript', file: 'src/orders.ts' }],
+  })
+  const other = element({
+    id: 'other',
+    kind: 'component',
+    origin: 'observed',
+    code: [{ scanner: 'typescript', file: 'src/orders.ts' }],
+  })
+  const printed = formatPlainRecord(
+    { plans: [], elements: [orders, other], relationships: [] },
+    [],
+    'src/orders.ts',
+  )
+
+  assert.deepEqual(printed, {
+    ok: false,
+    message: 'several elements share src/orders.ts',
+  })
+})
+
+test('an unknown target fails', () => {
+  const shop = element({
+    id: 'shop',
+    kind: 'system',
+    origin: 'observed',
+  })
+  const printed = formatPlainRecord(
+    { plans: [], elements: [shop], relationships: [] },
+    [],
+    'no-such',
+  )
+
+  assert.deepEqual(printed, {
+    ok: false,
+    message: 'unknown target: no-such',
+  })
+})
+
+test('an element id wins over a plan id with the same name', () => {
+  const next = element({
+    id: 'next',
+    kind: 'system',
+    origin: 'observed',
+    description: 'A system named next.',
+  })
+  const printed = formatPlainRecord(
+    { plans: ['next'], elements: [next], relationships: [] },
+    [{ id: 'next', outcome: 'Plan outcome.' }],
+    'next',
+  )
+
+  assert.deepEqual(printed, {
+    ok: true,
+    text: ['next', 'kind: system', 'origin: observed', '', 'A system named next.'].join('\n'),
+  })
 })
