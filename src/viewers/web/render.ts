@@ -199,24 +199,12 @@ const items = buildScene(world)
 const svg = document.querySelector('svg')!
 const view = svg.viewBox.baseVal
 
-const degrees = (radians: number) => Math.round(radians * 180 / Math.PI)
-const radians = (value: string) => Number(value) * Math.PI / 180
+const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
 
-const rotation = document.getElementById('rotation') as HTMLInputElement
-const tilt = document.getElementById('tilt') as HTMLInputElement
-const button2d = document.getElementById('mode-2d') as HTMLButtonElement
-const button3d = document.getElementById('mode-3d') as HTMLButtonElement
+const button2d = document.getElementById('mode-2d')!
+const button3d = document.getElementById('mode-3d')!
 
-rotation.value = String(degrees(defaultProjection.rotation))
-tilt.value = String(degrees(defaultProjection.elevation))
-let planView = false
-
-function projection(): Projection {
-  return {
-    rotation: radians(rotation.value),
-    elevation: planView ? Math.PI / 2 : radians(tilt.value),
-  }
-}
+let current: Projection = defaultProjection
 
 function fitCamera(current: Projection): void {
   const margin = 12
@@ -233,26 +221,20 @@ function draw(): void {
   queued = true
   requestAnimationFrame(() => {
     queued = false
-    const current = projection()
     fitCamera(current)
     svg.innerHTML = defs + orderScene(items, current).map(item => renderItem(current, item)).join('')
-    document.getElementById('rotation-value')!.textContent = `${rotation.value}°`
-    document.getElementById('tilt-value')!.textContent = planView ? '90°' : `${tilt.value}°`
   })
 }
 
 function setMode(plan: boolean): void {
-  planView = plan
-  button2d.classList.toggle('active', planView)
-  button3d.classList.toggle('active', !planView)
-  tilt.disabled = planView
+  current = plan ? planProjection : defaultProjection
+  button2d.classList.toggle('active', plan)
+  button3d.classList.toggle('active', !plan)
   draw()
 }
 
 button2d.addEventListener('click', () => setMode(true))
 button3d.addEventListener('click', () => setMode(false))
-rotation.addEventListener('input', () => draw())
-tilt.addEventListener('input', () => draw())
 
 const scale = () => {
   const rect = svg.getBoundingClientRect()
