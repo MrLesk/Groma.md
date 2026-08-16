@@ -16,32 +16,6 @@ interface Span {
   attributes: number
 }
 
-function sidePanelWidth(totalWidth: number): number {
-  return Math.max(24, Math.floor(totalWidth / 3))
-}
-
-export function detailsBounds(
-  width: number,
-  height: number,
-  panel: 'side' | 'full',
-): Bounds {
-  if (panel === 'full') {
-    return {
-      x: 1,
-      y: 3,
-      width: Math.max(1, width - 2),
-      height: Math.max(1, height - 4),
-    }
-  }
-  const panelWidth = sidePanelWidth(width)
-  return {
-    x: width - panelWidth,
-    y: 3,
-    width: Math.max(1, panelWidth - 1),
-    height: Math.max(1, height - 4),
-  }
-}
-
 function wrap(value: string, width: number): string[] {
   if (width <= 0 || value.length === 0) return []
   const lines: string[] = []
@@ -146,39 +120,33 @@ export function drawDetails(
   element: WorldElement,
   world: ArchitectureWorld,
   theme: ViewerTheme,
-  panel: 'side' | 'full',
 ): void {
   const background = theme.background
   const color = element.origin === 'observed' ? theme.foreground : theme[element.origin]
   const width = Math.max(0, bounds.width - 4)
   const rows = detailsRows(element, world, theme, width)
-  // The side panel covers only as much of the map as its content needs.
-  const height = panel === 'full'
-    ? bounds.height
-    : Math.min(bounds.height, rows.length + 2)
-  const box = { ...bounds, height }
-  if (box.width > 0 && box.height > 0) {
-    buffer.fillRect(box.x, box.y, box.width, box.height, background)
+  if (bounds.width > 0 && bounds.height > 0) {
+    buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, background)
   }
-  drawBorder(buffer, box, element.origin, color, background)
+  drawBorder(buffer, bounds, element.origin, color, background)
   text(
     buffer,
     ` ${element.name} `,
-    box.x + 2,
-    box.y,
+    bounds.x + 2,
+    bounds.y,
     width,
     theme[element.origin],
     background,
     TextAttributes.BOLD,
   )
 
-  const maxY = box.y + box.height - 2
-  let y = box.y + 1
+  const maxY = bounds.y + bounds.height - 2
+  let y = bounds.y + 1
   for (const row of rows) {
     if (y > maxY) return
-    let x = box.x + 2
+    let x = bounds.x + 2
     for (const span of row) {
-      const available = width - (x - box.x - 2)
+      const available = width - (x - bounds.x - 2)
       if (available <= 0) break
       text(buffer, span.value, x, y, available, span.foreground, background, span.attributes)
       x += [...span.value].length

@@ -14,12 +14,6 @@ import type {
   WorldRelationship,
 } from '../../types.ts'
 
-const levelNames: Record<SemanticLevel, string> = {
-  components: 'Components',
-  containers: 'Containers',
-  context: 'System Context',
-}
-
 const CELL_ASPECT = 0.5
 
 const titledCard = {
@@ -54,15 +48,6 @@ interface Transform {
   y: number
 }
 
-function viewportFor(width: number, height: number): Bounds {
-  return {
-    x: 1,
-    y: 3,
-    width: Math.max(1, width - 2),
-    height: Math.max(1, height - 4),
-  }
-}
-
 function fitZoomFor(subject: Bounds, viewport: Bounds): number {
   return Math.min(
     viewport.width / Math.max(1, subject.width),
@@ -81,20 +66,18 @@ function overviewCamera(subject: Bounds, viewport: Bounds): MapCamera {
 
 export function fitView(
   world: ArchitectureWorld,
-  width: number,
-  height: number,
+  viewport: Bounds,
 ): MapCamera {
-  return overviewCamera(padded(world.bounds), viewportFor(width, height))
+  return overviewCamera(padded(world.bounds), viewport)
 }
 
 export function fitLayer(
   world: ArchitectureWorld,
-  width: number,
-  height: number,
+  viewport: Bounds,
   level: SemanticLevel,
   currentId?: string,
 ): MapCamera {
-  if (level === 'context') return fitView(world, width, height)
+  if (level === 'context') return fitView(world, viewport)
   const elementsById = new Map(world.elements.map(element => [
     element.representationId,
     element,
@@ -105,7 +88,7 @@ export function fitLayer(
   const subject = focusElement(level, selected, elementsById)
   return overviewCamera(
     padded(subject?.bounds ?? world.bounds),
-    viewportFor(width, height),
+    viewport,
   )
 }
 
@@ -117,14 +100,13 @@ const levelDepth: Record<SemanticLevel, number> = {
 
 export function followSelection(
   world: ArchitectureWorld,
-  width: number,
-  height: number,
+  viewport: Bounds,
   previous: { level: SemanticLevel; currentId?: string },
   next: { level: SemanticLevel; currentId?: string },
   current: MapCamera,
 ): MapCamera | undefined {
   if (next.level === previous.level) return undefined
-  const target = fitLayer(world, width, height, next.level, next.currentId)
+  const target = fitLayer(world, viewport, next.level, next.currentId)
   if (levelDepth[next.level] < levelDepth[previous.level]) {
     // `+`/`-` can already be wider than the outer level; do not zoom in on the way out.
     return { ...target, zoom: Math.min(current.zoom, target.zoom) }
@@ -148,16 +130,6 @@ function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
     && bounds.x + bounds.width > viewport.x
     && bounds.y < viewport.y + viewport.height
     && bounds.y + bounds.height > viewport.y
-}
-
-function uncoveredViewport(viewport: Bounds, coveredFromX?: number): Bounds {
-  if (coveredFromX === undefined) return viewport
-  // Keep the same one-cell margin the viewport leaves at screen edges,
-  // so the selection ring stays clear of the overlay too.
-  return {
-    ...viewport,
-    width: Math.max(1, coveredFromX - viewport.x - 1),
-  }
 }
 
 function panCells(bounds: Bounds, viewport: Bounds): Point {
@@ -714,12 +686,11 @@ export function projectWorld(
   world: ArchitectureWorld,
   options: ProjectionOptions,
 ): WorldProjection {
-  const { width, height, level = 'context', currentId } = options
-  if (!Object.hasOwn(levelNames, level)) {
+  const { viewport, level = 'context', currentId } = options
+  if (!Object.hasOwn(levelDepth, level)) {
     throw new Error(`Unsupported semantic level: ${level}`)
   }
 
-  const viewport = viewportFor(width, height)
   const elementsById = new Map(world.elements.map(element => [
     element.representationId,
     element,
@@ -747,10 +718,7 @@ export function projectWorld(
     && selectedElement
     && selectedElement.display !== 'hidden'
   ) {
-    const nudge = panCells(
-      selectedElement.cellBounds,
-      uncoveredViewport(viewport, options.coveredFromX),
-    )
+    const nudge = panCells(selectedElement.cellBounds, viewport)
     if (nudge.x !== 0 || nudge.y !== 0) {
       camera = {
         ...camera,
@@ -765,9 +733,7 @@ export function projectWorld(
 
   return {
     level,
-    levelName: levelNames[level],
     currentId: selected?.representationId ?? null,
-    currentName: selected?.name ?? 'Architecture',
     fitZoom,
     camera,
     viewport,

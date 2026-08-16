@@ -11,12 +11,12 @@ import type {
 
 import { loadArchitectureViewModel } from '../../core.ts'
 import { createCamera } from './camera.ts'
+import { paneLayout } from './layout.ts'
 import {
   initialState,
   reduceViewer,
 } from './navigation.ts'
 import type { ViewerAction, ViewerState } from './navigation.ts'
-import { detailsBounds } from './organisms/details.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
 import { fitView, followSelection, projectWorld } from './projection.ts'
 import type {
@@ -74,8 +74,10 @@ export function mountTerminalViewer(
   const camera = createCamera(
     options.camera ?? fitView(
       viewModel.world,
-      Math.max(1, renderer.width),
-      Math.max(1, renderer.height),
+      paneLayout(
+        Math.max(1, renderer.width),
+        Math.max(1, renderer.height),
+      ).mapViewport,
     ),
   )
   let live = false
@@ -107,18 +109,18 @@ export function mountTerminalViewer(
     renderer.dropLive()
   }
 
-  function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
+  function currentLayout() {
     const { width, height } = frame.frameBuffer
+    return paneLayout(width, height)
+  }
+
+  function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
     return projectWorld(viewModel.world, {
-      width,
-      height,
+      viewport: currentLayout().mapViewport,
       level: state.level,
       currentId: state.currentId,
       camera: next ?? snapshot(),
       lockCamera,
-      ...(state.panel === 'side'
-        ? { coveredFromX: detailsBounds(width, height, 'side').x }
-        : {}),
     })
   }
 
@@ -130,11 +132,9 @@ export function mountTerminalViewer(
       ...state,
       currentId: projection.currentId ?? undefined,
     }
-    paintWorld(frame.frameBuffer, projection, theme, {
+    paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel.world, theme, {
       focus: state.focus,
-      panel: state.panel,
       zoomSlot: state.zoomSlot,
-      world: viewModel.world,
     })
     frame.requestRender()
   }
@@ -154,11 +154,7 @@ export function mountTerminalViewer(
   }
 
   function zoomBy(factor: number): void {
-    const fitted = fitView(
-      viewModel.world,
-      frame.frameBuffer.width,
-      frame.frameBuffer.height,
-    )
+    const fitted = fitView(viewModel.world, currentLayout().mapViewport)
     const nextZoom = factor > 1
       ? Math.min(1, camera.zoom * factor)
       : Math.max(fitted.zoom, camera.zoom * factor)
@@ -218,9 +214,8 @@ export function mountTerminalViewer(
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
     if (key.ctrl) return undefined
-    if (key.name === 'return') return 'inspect'
+    if (key.name === 'return') return 'enter'
     if (key.name === 'z') return 'zoom'
-    if (key.name === 'f') return 'flip'
     if (
       key.name === 'up'
       || key.name === 'down'
@@ -246,7 +241,7 @@ export function mountTerminalViewer(
       return
     }
     if (key.name === 'escape') {
-      if (state.panel === 'closed' && state.focus !== 'zoom') return
+      if (state.focus !== 'zoom') return
       state = reduceViewer(viewModel.world, state, 'dismiss')
       repaint()
       return
@@ -267,8 +262,7 @@ export function mountTerminalViewer(
     state = reduceViewer(viewModel.world, state, action)
     const framed = followSelection(
       viewModel.world,
-      frame.frameBuffer.width,
-      frame.frameBuffer.height,
+      currentLayout().mapViewport,
       previous,
       state,
       current,
