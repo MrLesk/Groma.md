@@ -1,0 +1,332 @@
+Backlog md  system
+|-- Advanced config wizard  container  src/commands/advanced-config-wizard.ts  runAdvancedConfigWizard
+|-- Agent instructions  container  src/agent-instructions.ts  addAgentInstructions
+|-- Agent selection  container  src/utils/agent-selection.ts  processAgentSelection
+|-- Backlog  container  src/core/backlog.ts  createRuntimeCore
+|   |-- Config migration  component  src/core/config-migration.ts  migrateConfig
+|   |-- Prefix migration  component  src/core/prefix-migration.ts  needsDraftPrefixMigration
+|   |-- Reorder  component  src/core/reorder.ts  calculateNewOrdinal
+|   |-- Status callback  component  src/utils/status-callback.ts  executeStatusCallback
+|   `-- Task updated date  component  src/utils/task-updated-date.ts  upsertTaskUpdatedDate
+|-- Backlog directory  container  src/utils/backlog-directory.ts  resolveBacklogDirectoryFromRootConfig
+|-- Cli  container  src/cli.ts
+|   |-- Handlers  component  src/mcp/tools/milestones/handlers.ts  MilestoneHandlers
+|   |-- Init  component  src/core/init.ts  initializeProject
+|   |-- Mcp errors  component  src/mcp/errors/mcp-errors.ts  handleBacklogToolError
+|   |-- Milestone resolution  component  src/mcp/utils/milestone-resolution.ts  normalizeMilestoneName
+|   |-- Milestone storage  component  src/utils/milestone-storage.ts  resolveMilestoneInputForStorage
+|   |-- Milestones  component  src/core/milestones.ts  normalizeMilestoneName
+|   |-- Read output mode  component  src/utils/read-output-mode.ts  resolveReadOutputMode
+|   |-- Server  component  src/server/index.ts  markHtmlBundleNoStore
+|   `-- Task edit builder  component  src/utils/task-edit-builder.ts  buildTaskUpdateInput
+|-- Completion  container  src/commands/completion.ts  installCompletion
+|   |-- Command structure  component  src/completions/command-structure.ts  extractCommandStructure
+|   |-- Data providers  component  src/completions/data-providers.ts  getTaskIds
+|   `-- Helper  component  src/completions/helper.ts  parseCompletionContext
+|-- Config watcher  container  src/utils/config-watcher.ts  watchConfigFile
+|-- Configure advanced settings  container  src/commands/configure-advanced-settings.ts  configureAdvancedSettings
+|-- Constants  container  src/constants/index.ts
+|   `-- Guidelines  component  src/guidelines/index.ts
+|-- Content store  container  src/core/content-store.ts  ContentStore
+|-- Cross branch tasks  container  src/core/cross-branch-tasks.ts  getLatestTaskStatesForIds
+|-- Decision id  container  src/utils/decision-id.ts  decisionIdKey
+|-- Document id  container  src/utils/document-id.ts  normalizeDocumentId
+|-- Duplicate detection  container  src/utils/duplicate-detection.ts  detectContentIdentityIssues
+|-- Duplicate task repair  container  src/core/duplicate-task-repair.ts  findLocalDuplicateTaskIds
+|-- Editor  container  src/utils/editor.ts  resolveEditor
+|-- Find backlog root  container  src/utils/find-backlog-root.ts  findBacklogRoot
+|-- Generic list  container  src/ui/components/generic-list.ts  createGenericList
+|-- Git operations  container  src/git/operations.ts  isGitRepository
+|-- Help schema  container  src/commands/help-schema.ts  addHelpSchema
+|-- Id generators  container  src/utils/id-generators.ts  generateNextDocId
+|-- Instructions  container  src/commands/instructions.ts  formatInstructionGuideIndex
+|-- Json output  container  src/formatters/json-output.ts  taskListJson
+|-- Label filter  container  src/utils/label-filter.ts  collectAvailableLabels
+|-- Loading  container  src/ui/loading.ts  withLoadingScreen
+|-- Mcp  container  src/commands/mcp.ts  registerMcpCommand
+|   |-- App info  component  src/utils/app-info.ts  getPackageName
+|   |-- Definition of done  component  src/mcp/tools/definition-of-done/index.ts  registerDefinitionOfDoneTools
+|   |-- Document response  component  src/mcp/utils/document-response.ts  formatDocumentCallResult
+|   |-- Documents  component  src/mcp/tools/documents/index.ts  registerDocumentTools
+|   |-- Handlers  component  src/mcp/tools/definition-of-done/handlers.ts  DefinitionOfDoneHandlers
+|   |-- Handlers  component  src/mcp/tools/documents/handlers.ts  DocumentHandlers
+|   |-- Handlers  component  src/mcp/tools/tasks/handlers.ts  TaskHandlers
+|   |-- Init required  component  src/mcp/resources/init-required/index.ts  registerInitRequiredResource
+|   |-- Milestones  component  src/mcp/tools/milestones/index.ts  registerMilestoneTools
+|   |-- Schema generators  component  src/mcp/utils/schema-generators.ts  getStatusFieldEnumValues
+|   |-- Schemas  component  src/mcp/tools/definition-of-done/schemas.ts
+|   |-- Schemas  component  src/mcp/tools/documents/schemas.ts
+|   |-- Schemas  component  src/mcp/tools/milestones/schemas.ts
+|   |-- Schemas  component  src/mcp/tools/tasks/schemas.ts
+|   |-- Server  component  src/mcp/server.ts  createMcpServer
+|   |-- Task response  component  src/mcp/utils/task-response.ts  formatTaskCallResult
+|   |-- Tasks  component  src/mcp/tools/tasks/index.ts  registerTaskTools
+|   |-- Tool wrapper  component  src/mcp/validation/tool-wrapper.ts  createValidatedTool
+|   |-- Workflow  component  src/mcp/resources/workflow/index.ts  registerWorkflowResources
+|   `-- Workflow  component  src/mcp/tools/workflow/index.ts  registerWorkflowTools
+|-- Milestone filter  container  src/utils/milestone-filter.ts  createMilestoneFilterValueResolver
+|-- Operations  container  src/file-system/operations.ts  isConfigValueError
+|-- Overview  container  src/commands/overview.ts  runOverviewCommand
+|   |-- Overview tui  component  src/ui/overview-tui.ts  renderOverviewTui
+|   `-- Statistics  component  src/core/statistics.ts  getTaskStatistics
+|-- Parser  container  src/markdown/parser.ts  parseMarkdown
+|-- Prefix config  container  src/utils/prefix-config.ts  getDefaultPrefixConfig
+|-- Priority config  container  src/utils/priority-config.ts  normalizePriorityValue
+|-- Readiness  container  src/utils/readiness.ts  createReadinessGraph
+|-- Root entry  container  src/ui/root-entry.ts  formatRootEntry
+|-- Search service  container  src/core/search-service.ts  SearchService
+|-- Serializer  container  src/markdown/serializer.ts  serializeTask
+|-- Src  container  src/index.ts
+|   |-- Board  component  src/board.ts  buildKanbanStatusGroups
+|   `-- Readme  component  src/readme.ts  updateReadmeWithBoard
+|-- Status  container  src/utils/status.ts  getValidStatuses
+|-- Structured sections  container  src/markdown/structured-sections.ts  extractStructuredSection
+|   `-- Section titles  component  src/markdown/section-titles.ts  getStructuredSectionTitles
+|-- Task builders  container  src/utils/task-builders.ts  validateDependencies
+|-- Task id  container  src/utils/task-id.ts  normalizeTaskId
+|-- Task identity index  container  src/core/task-identity-index.ts  normalizeTaskLifecyclePath
+|-- Task loader  container  src/core/task-loader.ts  getBranchHistoryCutoff
+|-- Task path  container  src/utils/task-path.ts  normalizeTaskIdentity
+|-- Task plain text  container  src/formatters/task-plain-text.ts  formatDateForDisplay
+|-- Task search  container  src/utils/task-search.ts  createTaskSearchIndex
+|-- Task sorting  container  src/utils/task-sorting.ts  parseTaskId
+|-- Task subtasks  container  src/utils/task-subtasks.ts  attachSubtaskSummaries
+|-- Task type config  container  src/utils/task-type-config.ts  getTaskTypeValues
+|-- Task viewer with search  container  src/ui/task-viewer-with-search.ts  buildTaskViewerMilestoneFilterModel
+|   |-- Clipboard  component  src/utils/clipboard.ts  copyToClipboard
+|   |-- Confirm popup  component  src/ui/components/confirm-popup.ts  openConfirmPopup
+|   |-- Filter header  component  src/ui/components/filter-header.ts  resolveSearchHorizontalNavigation
+|   |-- Filter popup  component  src/ui/components/filter-popup.ts  createScrollableViewport
+|   |-- Footer content  component  src/ui/footer-content.ts  formatFooterContent
+|   |-- Help popup  component  src/ui/components/help-popup.ts  getHelpShortcuts
+|   |-- Task lifecycle  component  src/ui/task-lifecycle.ts  formatTaskCompletionBlockedMessage
+|   `-- Task type  component  src/ui/task-type.ts  formatTaskTypeBadge
+|-- Task wizard  container  src/commands/task-wizard.ts  pickTaskForEditWizard
+|-- Unified view  container  src/ui/unified-view.ts  applyUnifiedTaskUpdate
+|   |-- Board  component  src/ui/board.ts  hasMoveBlockingBoardFilters
+|   |-- Task composer  component  src/ui/components/task-composer.ts  caretIndexFromCursor
+|   `-- Task watcher  component  src/utils/task-watcher.ts  watchTasks
+|-- View switcher  container  src/ui/view-switcher.ts  ViewSwitcher
+`-- Workflow guides  container  src/mcp/workflow-guides.ts  getWorkflowGuideByUri
+    `-- Cli instructions  component  src/guidelines/cli-instructions/index.ts
+
+relationships
+Advanced config wizard  uses  Editor
+Agent instructions  uses  Constants
+Agent instructions  uses  Git operations
+Agent selection  uses  Agent instructions
+Backlog  uses  Constants
+Backlog  uses  Content store
+Backlog  uses  Decision id
+Backlog  uses  Document id
+Backlog  uses  Duplicate detection
+Backlog  uses  Duplicate task repair
+Backlog  uses  Editor
+Backlog  uses  Find backlog root
+Backlog  uses  Git operations
+Backlog  uses  Id generators
+Backlog  uses  Milestone filter
+Backlog  uses  Operations
+Backlog  uses  Parser
+Backlog  uses  Prefix config
+Backlog  uses  Priority config
+Backlog  uses  Search service
+Backlog  uses  Status
+Backlog  uses  Task builders
+Backlog  uses  Task identity index
+Backlog  uses  Task loader
+Backlog  uses  Task path
+Backlog  uses  Task search
+Backlog  uses  Task subtasks
+Backlog  uses  Task type config
+Backlog directory  uses  Constants
+Cli  uses  Advanced config wizard
+Cli  uses  Agent instructions
+Cli  starts  Agent selection
+Cli  uses  Backlog
+Cli  uses  Backlog directory
+Cli  starts  Completion
+Cli  starts  Configure advanced settings
+Cli  uses  Constants
+Cli  uses  Content store
+Cli  uses  Duplicate detection
+Cli  uses  Duplicate task repair
+Cli  uses  Editor
+Cli  uses  Find backlog root
+Cli  uses  Generic list
+Cli  uses  Help schema
+Cli  uses  Id generators
+Cli  starts  Instructions
+Cli  starts  Json output
+Cli  uses  Label filter
+Cli  uses  Loading
+Cli  starts  Mcp
+Cli  uses  Operations
+Cli  starts  Overview
+Cli  uses  Prefix config
+Cli  uses  Priority config
+Cli  uses  Readiness
+Cli  starts  Root entry
+Cli  uses  Search service
+Cli  uses  Src
+Cli  uses  Status
+Cli  uses  Task builders
+Cli  uses  Task id
+Cli  uses  Task path
+Cli  uses  Task plain text
+Cli  uses  Task sorting
+Cli  uses  Task type config
+Cli  uses  Task viewer with search
+Cli  starts  Task wizard
+Cli  starts  Unified view
+Completion  uses  Backlog
+Completion  uses  Priority config
+Completion  uses  Task type config
+Config watcher  uses  Backlog
+Config watcher  uses  Operations
+Configure advanced settings  uses  Advanced config wizard
+Configure advanced settings  uses  Backlog
+Content store  uses  Config watcher
+Content store  uses  Document id
+Content store  uses  Operations
+Content store  uses  Parser
+Content store  uses  Priority config
+Content store  uses  Task identity index
+Content store  uses  Task loader
+Content store  uses  Task path
+Content store  uses  Task sorting
+Content store  uses  Task type config
+Cross branch tasks  uses  Git operations
+Cross branch tasks  uses  Operations
+Cross branch tasks  uses  Prefix config
+Duplicate detection  uses  Task id
+Duplicate task repair  uses  Backlog
+Duplicate task repair  uses  Content store
+Duplicate task repair  uses  Duplicate detection
+Duplicate task repair  uses  Prefix config
+Duplicate task repair  uses  Task id
+Duplicate task repair  uses  Task loader
+Find backlog root  uses  Backlog directory
+Help schema  uses  Backlog directory
+Help schema  uses  Constants
+Help schema  uses  Priority config
+Help schema  uses  Task type config
+Id generators  uses  Src
+Instructions  uses  Help schema
+Instructions  uses  Workflow guides
+Json output  uses  Task sorting
+Mcp  uses  Backlog
+Mcp  uses  Backlog directory
+Mcp  uses  Cli
+Mcp  uses  Constants
+Mcp  uses  Duplicate detection
+Mcp  uses  Duplicate task repair
+Mcp  uses  Find backlog root
+Mcp  uses  Milestone filter
+Mcp  uses  Operations
+Mcp  uses  Priority config
+Mcp  uses  Readiness
+Mcp  uses  Task plain text
+Mcp  uses  Task search
+Mcp  uses  Task sorting
+Mcp  uses  Task type config
+Mcp  uses  Workflow guides
+Operations  uses  Backlog directory
+Operations  uses  Constants
+Operations  uses  Decision id
+Operations  uses  Document id
+Operations  uses  Parser
+Operations  uses  Prefix config
+Operations  uses  Serializer
+Operations  uses  Task path
+Operations  uses  Task sorting
+Operations  uses  Task type config
+Overview  uses  Backlog
+Overview  uses  Loading
+Overview  uses  Priority config
+Parser  uses  Priority config
+Parser  uses  Structured sections
+Readiness  uses  Backlog
+Readiness  uses  Constants
+Readiness  uses  Task id
+Root entry  uses  Help schema
+Root entry  uses  Workflow guides
+Search service  uses  Content store
+Search service  uses  Priority config
+Search service  uses  Task type config
+Serializer  uses  Structured sections
+Src  uses  Agent instructions
+Src  uses  Backlog
+Src  uses  Constants
+Src  uses  Git operations
+Src  uses  Operations
+Src  uses  Parser
+Src  uses  Search service
+Src  uses  Serializer
+Status  uses  Backlog
+Status  uses  Constants
+Task builders  uses  Backlog
+Task builders  uses  Task path
+Task id  uses  Prefix config
+Task identity index  uses  Cross branch tasks
+Task identity index  uses  Task path
+Task loader  uses  Constants
+Task loader  uses  Cross branch tasks
+Task loader  uses  Git operations
+Task loader  uses  Parser
+Task loader  uses  Prefix config
+Task loader  uses  Task identity index
+Task loader  uses  Task path
+Task path  uses  Backlog
+Task path  uses  Prefix config
+Task path  uses  Task id
+Task plain text  uses  Priority config
+Task plain text  uses  Task sorting
+Task search  uses  Label filter
+Task search  uses  Milestone filter
+Task search  uses  Priority config
+Task search  uses  Readiness
+Task search  uses  Task type config
+Task sorting  uses  Priority config
+Task subtasks  uses  Task path
+Task subtasks  uses  Task sorting
+Task type config  uses  Constants
+Task viewer with search  uses  Backlog
+Task viewer with search  uses  Constants
+Task viewer with search  uses  Generic list
+Task viewer with search  uses  Label filter
+Task viewer with search  uses  Loading
+Task viewer with search  uses  Milestone filter
+Task viewer with search  uses  Prefix config
+Task viewer with search  uses  Priority config
+Task viewer with search  uses  Readiness
+Task viewer with search  uses  Task id
+Task viewer with search  uses  Task plain text
+Task viewer with search  uses  Task search
+Task viewer with search  uses  Task subtasks
+Task viewer with search  uses  Task type config
+Task viewer with search  uses  View switcher
+Task wizard  uses  Constants
+Task wizard  uses  Priority config
+Task wizard  uses  Task builders
+Task wizard  uses  Task type config
+Unified view  uses  Backlog
+Unified view  uses  Config watcher
+Unified view  uses  Duplicate detection
+Unified view  uses  Duplicate task repair
+Unified view  uses  Generic list
+Unified view  uses  Label filter
+Unified view  uses  Loading
+Unified view  uses  Milestone filter
+Unified view  uses  Prefix config
+Unified view  uses  Priority config
+Unified view  uses  Src
+Unified view  uses  Task path
+Unified view  uses  Task search
+Unified view  uses  Task sorting
+Unified view  uses  Task type config
+Unified view  uses  Task viewer with search
+Unified view  uses  View switcher
+View switcher  uses  Backlog
+
+1 system, 55 containers, 55 components

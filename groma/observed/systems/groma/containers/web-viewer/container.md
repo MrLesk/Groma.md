@@ -2,6 +2,10 @@
 id: web-viewer
 kind: container
 parent: groma
+code:
+  - scanner: typescript
+    file: src/viewers/web/server.ts
+    symbol: startWebViewer
 ---
 
 # Web viewer

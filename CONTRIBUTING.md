@@ -21,7 +21,8 @@ bun run check
 ```
 
 Groma is written in TypeScript. Bun runs the CLI and TUI viewer, while Node-specific scripts and tests run through
-`tsx`. `bun run check` includes typechecking.
+`tsx`. `bun run check` typechecks and runs the test suites. Architecture validation uses fixtures under
+`test/fixtures/`, not the live `groma/` tree.
 
 ## Before starting a feature
 

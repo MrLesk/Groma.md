@@ -113,9 +113,17 @@ test('lays out one deterministic nested world without mutating the model', async
   ]))
   for (const element of first.elements) {
     if (element.parent !== null) {
+      const parent = requiredElement(byId, element.parent)
       assert.ok(
-        contains(requiredElement(byId, element.parent).bounds, element.bounds),
+        contains(parent.bounds, element.bounds),
         `${element.representationId} must stay inside ${element.parent}`,
+      )
+      assert.ok(
+        element.bounds.x >= parent.bounds.x + 8
+          && element.bounds.y >= parent.bounds.y + 8
+          && element.bounds.x + element.bounds.width <= parent.bounds.x + parent.bounds.width - 8
+          && element.bounds.y + element.bounds.height <= parent.bounds.y + parent.bounds.height - 8,
+        `${element.representationId} must sit inset from ${element.parent}`,
       )
     }
   }

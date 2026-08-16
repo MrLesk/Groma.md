@@ -79,7 +79,8 @@ lies in that direction, selection exits the boundary to the nearest
 outer item in that direction and the camera zooms out. Enter on a
 system or container changes C4 level inward; the hierarchy pane jumps
 to any element at its level. At Containers the camera frames the
-parent system. At Components it frames the parent container.
+parent system and the people who use it. At Components it frames
+the parent container.
 
 ## What you can do
 

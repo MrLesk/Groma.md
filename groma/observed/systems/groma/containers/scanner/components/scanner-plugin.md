@@ -5,7 +5,7 @@ parent: scanner
 code:
   - scanner: typescript
     file: src/typescript-scanner.ts
-    symbol: scanTypeScriptSource
+    symbol: listTypeScriptFiles
 ---
 
 # Scanner plugin

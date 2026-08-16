@@ -72,7 +72,8 @@ IDs. Core folds that result into Markdown.
 Core applies a candidate like this:
 
 1. An existing `code` reference that still matches keeps that element's ID.
-   Core refreshes `code` and leaves the body alone.
+   The file matches even when the symbol changed. Core refreshes `code` and
+   leaves the body alone.
 2. Else the kebab-case of the candidate name equals an existing ID. Observed
    match: refresh `code`, keep the body. Ghost match: attach `code` to the
    planned document. The ID stays planned.

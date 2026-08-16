@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = path.resolve(
@@ -9,20 +12,13 @@ const projectRoot = path.resolve(
   '..',
 )
 
-function runCli(args: string[]) {
+function run(command: string, args: string[], cwd: string) {
   return new Promise<{
     code: number | null
     stdout: string
     stderr: string
   }>((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ['--import=tsx', 'src/cli.ts', ...args],
-      {
-        cwd: projectRoot,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    )
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
     child.stdout.setEncoding('utf8')
@@ -40,12 +36,44 @@ function runCli(args: string[]) {
   })
 }
 
-test('groma scan runs once, prints ok and a short summary, and exits', async () => {
-  const result = await runCli(['scan'])
+async function writeTree(
+  root: string,
+  files: Record<string, string>,
+): Promise<void> {
+  for (const [relative, source] of Object.entries(files)) {
+    const filename = path.join(root, ...relative.split('/'))
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, source)
+  }
+}
 
-  assert.equal(result.code, 0)
+async function createScanRepo(t: TestContext): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'groma-cli-scan-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeTree(root, {
+    'package.json': JSON.stringify({ name: 'shop', bin: { shop: 'src/cli.ts' } }),
+    '.gitignore': 'node_modules/\n',
+    'groma/observed/README.md': '# Observed\n',
+    'groma/missing/README.md': '# Missing\n',
+    'groma/plans/README.md': '# Plans\n',
+    'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
+    'src/scanner.ts': 'export function scan() {}\n',
+  })
+  const init = await run('git', ['init'], root)
+  assert.equal(init.code, 0, init.stderr)
+  const add = await run('git', ['add', '-A'], root)
+  assert.equal(add.code, 0, add.stderr)
+  return root
+}
+
+test('groma scan runs once, prints ok and a short summary, and exits', async t => {
+  const root = await createScanRepo(t)
+  const result = await run('bun', [path.join(projectRoot, 'src/cli.ts'), 'scan'], root)
+
+  assert.equal(result.code, 0, result.stderr)
   assert.equal(result.stderr, '')
-  assert.equal(result.stdout, 'ok\ncreated 0, refreshed 0, matched 0\n')
+  assert.match(result.stdout, /^ok\ncreated \d+, refreshed \d+, matched \d+\n$/)
+  assert.notEqual(result.stdout, 'ok\ncreated 0, refreshed 0, matched 0\n')
   assert.doesNotMatch(result.stdout, /scan-reconciler|architecture-model/)
   assert.doesNotMatch(result.stdout, /\{|\[|id:/)
 })

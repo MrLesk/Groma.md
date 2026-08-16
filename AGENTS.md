@@ -176,6 +176,12 @@ immutability, and lifecycle. Do not assert decorative details: exact frame strin
 prose from the architecture Markdown. Never write a test that only restates its input, such as checking that an element
 named A renders the word A; assert the behavior that produced it, such as "the details pane shows the selected element".
 
+Automated tests load architecture only from `test/fixtures/`, never from the live `groma/` tree. A fixture is a
+minimum world that exhibits the rule under test: kinds, parentage, relationship direction, promotion, inset, camera.
+Do not photocopy this repository's observed architecture. Do not assert product names, descriptions, file layout,
+or that a particular person uses a particular system or container. If the fixture already says A uses B, do not
+write a test whose only claim is that A uses B.
+
 Tests must be parallel-safe and run concurrently (`test.concurrent` under `bun:test`). Each test owns its renderer,
 fixtures, and temp directories; nothing is shared between tests. When a test needs a text anchor to observe behavior,
 prefer one minimal anchor over exhaustive content matching.

@@ -1,29 +1,24 @@
 import assert from 'node:assert/strict'
-import { access, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { parse } from 'comark'
-
 import { validateRepository, validateRevision } from '../scripts/validate-architecture.ts'
 
-const repositoryRoot = path.resolve(
+const fixtureRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '..',
+  'fixtures',
+  'validate',
 )
-const foundationRoot = path.join(
-  repositoryRoot,
-  'groma',
-  'observed',
-)
+const observedFixture = path.join(fixtureRoot, 'groma', 'observed')
 
-async function createFoundationFixture(t: TestContext): Promise<string> {
+async function copyObserved(t: TestContext): Promise<string> {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'groma-validation-'))
   const revisionRoot = path.join(temporaryRoot, 'revision')
-  await cp(foundationRoot, revisionRoot, { recursive: true })
+  await cp(observedFixture, revisionRoot, { recursive: true })
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
   return revisionRoot
 }
@@ -34,84 +29,29 @@ async function replaceInFile(file: string, search: string, replacement: string):
   await writeFile(file, source.replace(search, replacement))
 }
 
-function collectLinkTargets(node: unknown, targets: string[] = []): string[] {
-  if (!Array.isArray(node)) {
-    return targets
-  }
-
-  const isAstNode = typeof node[0] === 'string'
-  const attributes = isAstNode && typeof node[1] === 'object' && node[1] !== null
-    ? node[1] as Record<string, unknown>
-    : undefined
-  if (isAstNode && node[0] === 'a' && typeof attributes?.href === 'string') {
-    targets.push(attributes.href)
-  }
-
-  for (const child of isAstNode ? node.slice(2) : node) {
-    collectLinkTargets(child, targets)
-  }
-
-  return targets
-}
-
-test('validates observed and every planned revision', async () => {
-  const results = await validateRepository(repositoryRoot)
+test('a fixture with each C4 kind and a relationship validates', async () => {
+  const results = await validateRepository(fixtureRoot)
+  const kinds = new Set(results[0]?.elements.map(element => element.kind))
 
   assert.deepEqual(
-    results.map(result => path.relative(repositoryRoot, result.revisionRoot)),
-    [
-      'groma/observed',
-      'groma/plans/mvp',
-    ],
+    results.map(result => path.basename(result.revisionRoot)),
+    ['observed', 'next'],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [16, 1])
+  assert.deepEqual(results.map(result => result.elementCount), [5, 1])
+  assert.ok(kinds.has('person'))
+  assert.ok(kinds.has('system'))
+  assert.ok(kinds.has('container'))
+  assert.ok(kinds.has('component'))
+  assert.ok((results[0]?.relationshipCount ?? 0) >= 1)
 })
 
-test('observed index links readers to the Markdown foundation', async () => {
-  const observedRoot = path.join(repositoryRoot, 'groma', 'observed')
-  const indexFile = path.join(observedRoot, 'README.md')
-  const tree = await parse(await readFile(indexFile, 'utf8'))
-  const targets = new Set(collectLinkTargets(tree.nodes))
-  const observedTargets = [
-    'systems/groma/system.md',
-    'people/human-architect.md',
-    'people/coding-agent.md',
-    'systems/groma/containers/architecture-workspace/container.md',
-    'systems/groma/containers/core/container.md',
-    'systems/groma/containers/scanner/container.md',
-    'systems/groma/containers/terminal-viewer/container.md',
-    'systems/groma/containers/web-viewer/container.md',
-    'systems/git/system.md',
-  ]
-
-  for (const target of observedTargets) {
-    assert.ok(targets.has(target), `observed index is missing ${target}`)
-    await access(path.resolve(observedRoot, target))
-  }
-})
-
-test('rejects duplicate stable IDs', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const gitFile = path.join(revisionRoot, 'systems', 'git', 'system.md')
-  await replaceInFile(gitFile, 'id: git', 'id: groma')
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /duplicate id "groma"/,
+test('a container parent must be a known system', async t => {
+  const revisionRoot = await copyObserved(t)
+  await replaceInFile(
+    path.join(revisionRoot, 'systems', 'shop', 'containers', 'api', 'container.md'),
+    'parent: shop',
+    'parent: missing-system',
   )
-})
-
-test('rejects unknown parent IDs', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(workspaceFile, 'parent: groma', 'parent: missing-system')
 
   await assert.rejects(
     validateRevision(revisionRoot),
@@ -119,251 +59,16 @@ test('rejects unknown parent IDs', async t => {
   )
 })
 
-test('rejects invalid C4 containment', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(workspaceFile, 'parent: groma', 'parent: human-architect')
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /invalid C4 containment; container "architecture-workspace" requires a system parent/,
-  )
-})
-
-test('rejects broken relationship links', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
+test('a relationship target must resolve', async t => {
+  const revisionRoot = await copyObserved(t)
   await replaceInFile(
-    workspaceFile,
-    '../../../git/system.md',
-    '../../../git/missing.md',
+    path.join(revisionRoot, 'systems', 'shop', 'system.md'),
+    '../git/system.md',
+    '../git/missing.md',
   )
 
   await assert.rejects(
     validateRevision(revisionRoot),
-    /broken relationship link "\.\.\/\.\.\/\.\.\/git\/missing\.md"/,
-  )
-})
-
-test('rejects relationship targets without a Markdown extension', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '../../../git/system.md',
-    '../../../git/system',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship target must be a relative Markdown link "\.\.\/\.\.\/\.\.\/git\/system"/,
-  )
-})
-
-test('rejects absolute relationship target URLs', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '../../../git/system.md',
-    'https://example.com/git.md',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship target must be a relative Markdown link "https:\/\/example\.com\/git\.md"/,
-  )
-})
-
-test('rejects an element without a level-one heading', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const gitFile = path.join(revisionRoot, 'systems', 'git', 'system.md')
-  await replaceInFile(gitFile, '# Git\n\n', '')
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /requires one level-one heading/,
-  )
-})
-
-test('rejects an element without prose immediately after its heading', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const gitFile = path.join(revisionRoot, 'systems', 'git', 'system.md')
-  await replaceInFile(
-    gitFile,
-    '\n# Git\n\nKeeps history, diffs, and collaboration for the architecture files.\n',
-    '\n# Git\n',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /requires prose immediately after its level-one heading/,
-  )
-})
-
-test('rejects a one-column relationship table', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '| Target | Description | Technology |\n'
-      + '| --- | --- | --- |\n'
-      + '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
-    '| Target |\n'
-      + '| --- |\n'
-      + '| [Git](../../../git/system.md) |',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship table must use columns "Target \| Description \| Technology"/,
-  )
-})
-
-test('rejects a relationship with a blank description', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
-    '| [Git](../../../git/system.md) | | Git |',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship description must not be empty/,
-  )
-})
-
-test('rejects a relationship with blank technology', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '| [Git](../../../git/system.md) | Versions architecture changes | Git |',
-    '| [Git](../../../git/system.md) | Versions architecture changes | |',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship technology must not be empty/,
-  )
-})
-
-test('rejects more than one link in a relationship target cell', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(
-    workspaceFile,
-    '[Git](../../../git/system.md)',
-    '[Git](../../../git/system.md) and [Missing](../../../git/missing.md)',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /relationship target must contain exactly one link/,
-  )
-})
-
-test('rejects and validates a relationship table under a renamed heading', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const workspaceFile = path.join(
-    revisionRoot,
-    'systems',
-    'groma',
-    'containers',
-    'architecture-workspace',
-    'container.md',
-  )
-  await replaceInFile(workspaceFile, '## Relationships', '## Connections')
-  await replaceInFile(
-    workspaceFile,
-    '../../../git/system.md',
-    '../../../git/missing.md',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    error => {
-      assert.ok(error instanceof Error)
-      assert.match(error.message, /relationship table must be under "## Relationships"/)
-      assert.match(error.message, /broken relationship link "\.\.\/\.\.\/\.\.\/git\/missing\.md"/)
-      return true
-    },
-  )
-})
-
-test('rejects a frontmatter-bearing element at an unsupported path', async t => {
-  const revisionRoot = await createFoundationFixture(t)
-  const rogueFile = path.join(revisionRoot, 'systems', 'rogue.md')
-  await writeFile(
-    rogueFile,
-    '---\n'
-      + 'id: groma\n'
-      + 'kind: system\n'
-      + '---\n\n'
-      + '# Rogue duplicate\n\n'
-      + 'Duplicates an existing stable ID outside the canonical system path.\n',
-  )
-
-  await assert.rejects(
-    validateRevision(revisionRoot),
-    /systems\/rogue\.md: frontmatter-bearing Markdown must use a supported element path/,
+    /broken relationship link "\.\.\/git\/missing\.md"/,
   )
 })

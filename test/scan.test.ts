@@ -109,8 +109,38 @@ function ordersCandidate(
 
 test('the TypeScript plugin result has no architecture IDs', async () => {
   const result = await scanTypeScriptSource('.')
-  assert.deepEqual(result, { candidates: [] })
+  assert.ok(result.candidates.length > 0)
   assert.equal(JSON.stringify(result).includes('"id"'), false)
+})
+
+test('a code file match refreshes when the symbol changed', async t => {
+  const root = await createWorld(t, {
+    'groma/observed/systems/shop/containers/api/components/orders.md':
+      ordersDocument,
+  })
+
+  const summary = await foldScanResult(root, {
+    candidates: [
+      ordersCandidate({
+        name: 'Order service',
+        code: [
+          { scanner: 'typescript', file: 'src/orders.ts', symbol: 'submitOrder' },
+        ],
+      }),
+    ],
+  })
+
+  const source = await readFile(
+    path.join(
+      root,
+      'groma/observed/systems/shop/containers/api/components/orders.md',
+    ),
+    'utf8',
+  )
+  assert.deepEqual(summary, { created: 0, refreshed: 1, matched: 0 })
+  assert.match(source, /symbol: submitOrder/)
+  assert.doesNotMatch(source, /symbol: placeOrder/)
+  assert.equal(documentBody(source), documentBody(ordersDocument))
 })
 
 test('an observed match refreshes code and leaves the body alone', async t => {
@@ -187,6 +217,37 @@ id: next
   assert.match(planned, /symbol: Inventory/)
   assert.equal(documentBody(planned), documentBody(inventoryDocument))
   assert.doesNotMatch(planned, /This must not accept the ghost/)
+})
+
+test('a created parent is visible to later candidates', async t => {
+  const root = await createWorld(t, {})
+
+  const summary = await foldScanResult(root, {
+    candidates: [
+      {
+        kind: 'system',
+        name: 'Warehouse',
+        responsibility: 'Stores stock.',
+      },
+      {
+        kind: 'container',
+        name: 'Picker',
+        responsibility: 'Picks stock.',
+        parent: 'Warehouse',
+        code: [{ scanner: 'typescript', file: 'src/picker.ts' }],
+      },
+    ],
+  })
+
+  const source = await readFile(
+    path.join(
+      root,
+      'groma/observed/systems/warehouse/containers/picker/container.md',
+    ),
+    'utf8',
+  )
+  assert.deepEqual(summary, { created: 2, refreshed: 0, matched: 0 })
+  assert.match(source, /parent: warehouse/)
 })
 
 test('an unknown candidate becomes a new observed file with a kebab-case id', async t => {
