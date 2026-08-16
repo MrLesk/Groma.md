@@ -499,9 +499,10 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     detailsScroll: 0,
   })
 
+  // Entering a system selects its first container, so arrows have siblings.
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
     level: 'containers',
-    currentId: 'observed:alpha',
+    currentId: 'observed:cleft',
   })
   assert.deepEqual(
     viewOf(reduceViewer(world, { ...state, currentId: 'observed:ann' }, 'enter')),
@@ -556,6 +557,8 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
+  // Exiting a container never lands on a component inside another one:
+  // the selection leaves the boundary and picks the outer item instead.
   state = {
     level: 'components',
     currentId: 'observed:pright',
@@ -565,8 +568,8 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     detailsScroll: 0,
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
-    level: 'components',
-    currentId: 'observed:pfar',
+    level: 'containers',
+    currentId: 'observed:cfar',
   })
 
   state = {

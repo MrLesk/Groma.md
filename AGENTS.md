@@ -191,10 +191,11 @@ closest zoom, names stay readable and the map may be larger than the
 map pane.
 
 - The details pane always shows the current selection.
-- Arrowing selects the nearest same-level peer. The camera pans just
-  enough if that peer would leave the map pane; it does not zoom. When
-  there is no same-level peer in that direction, selection escapes to
-  an outer item and the camera zooms out. Arrows never descend.
+- Arrowing selects the nearest sibling inside the same boundary. The
+  camera pans just enough if that sibling would leave the map pane; it
+  does not zoom. When no sibling lies in that direction, selection
+  exits to the nearest outer item in that direction and the camera
+  zooms out. Arrows never descend.
 - Cards, routes, and relationship labels stay on the same cells while
   the selection stays on screen.
 
