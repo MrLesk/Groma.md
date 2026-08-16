@@ -250,7 +250,7 @@ test.concurrent('planned and missing elements render with distinct dashes and ob
   )
   assert.match(frame, /[╌┆]/)
   assert.match(frame, /[┈┊░]/)
-  assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[4])))
+  assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[12])))
   assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[1])))
   assert.ok(spans.some(span => {
     return rgbToHex(span.bg) !== rgbToHex(palette.defaultBackground)
