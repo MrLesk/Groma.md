@@ -1,14 +1,22 @@
 # Web viewer
 
-Status: **TBD**
+The web plugin shows Groma's world in a browser. `groma web` starts it.
+It does not scan.
 
-A web viewer is another plugin on the same Groma world. It would show
-observed boxes and planned ghosts in a browser. It would not read
-architecture Markdown or calculate layout.
+This page is the browser surface. The shared viewer rules live in
+[Viewers](../index.md).
 
-The TUI is not Groma's only surface. Terminal keys, cell aspect, and
-terminal chrome belong only in the TUI plugin. They must not appear in
-Groma core, the world model, or architecture Markdown. A web plugin would
-use pages and pointers the same way: inside this plugin, never in core.
+## What it shows
 
-A contract is added here only when a real web example exists.
+The whole world is one map. 3D is the default city view. 2D is the
+top-down plan. Parents with children render as plates; children sit on
+them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
+groups are neighborhood zones. Routes follow the laid-out paths.
+
+The map never reads architecture Markdown or calculates layout. It
+projects the world Core already has.
+
+## What you can do
+
+The first view fits the whole map. Scrolling zooms. Dragging pans. The
+2D and 3D buttons switch the two fixed views and re-fit the camera.

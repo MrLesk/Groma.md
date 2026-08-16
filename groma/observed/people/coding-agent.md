@@ -11,4 +11,4 @@ Plans and implements software changes while sharing the same architecture as peo
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Groma](../systems/groma/system.md) | Curates | Viewer and Markdown |
+| [Groma](../systems/groma/system.md) | Curates the architecture while implementing | Viewer and Markdown |

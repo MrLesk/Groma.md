@@ -10,7 +10,9 @@ This is the architecture known to exist in this repository.
 - [Core](systems/groma/containers/core/container.md) merges observed
   architecture and planned fragments into one world.
 - The [terminal viewer](systems/groma/containers/terminal-viewer/container.md)
-  shows that world.
+  shows that world in the terminal.
+- The [web viewer](systems/groma/containers/web-viewer/container.md) shows
+  the same world in the browser.
 - The [scanner](systems/groma/containers/scanner/container.md) supplies
   source-derived candidates.
 - The [architecture workspace](systems/groma/containers/architecture-workspace/container.md)

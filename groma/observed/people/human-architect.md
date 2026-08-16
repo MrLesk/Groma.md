@@ -11,4 +11,4 @@ Understands, plans, and reviews the architecture of a software system.
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Groma](../systems/groma/system.md) | Reads | Viewer and Markdown |
+| [Groma](../systems/groma/system.md) | Reads the architecture | Viewer and Markdown |

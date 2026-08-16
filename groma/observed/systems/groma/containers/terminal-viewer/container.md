@@ -6,10 +6,4 @@ parent: groma
 
 # Terminal viewer
 
-Presents the architecture as one fixed nested world across System Context, Containers, and Components.
-
-## Relationships
-
-| Target | Description | Technology |
-| --- | --- | --- |
-| [Core](../core/container.md) | Requests the annotated world | In-process data |
+Shows the architecture in a terminal as a map between a hierarchy tree and a details pane. `groma view` starts it.
