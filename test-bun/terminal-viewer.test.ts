@@ -26,6 +26,7 @@ import type { ViewerState } from '../src/viewers/tui/navigation.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
 import { zoomReadout } from '../src/viewers/tui/organisms/chrome.ts'
 import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
+import { kindGlyph, kindLabel } from '../src/viewers/tui/atoms/kind.ts'
 import { initialTree, treeRows } from '../src/viewers/tui/tree.ts'
 import { fitLayer, fitView, followSelection, projectWorld } from '../src/viewers/tui/projection.ts'
 import type {
@@ -250,7 +251,6 @@ test.concurrent('planned and missing elements render with distinct dashes and ob
   )
   assert.match(frame, /[╌┆]/)
   assert.match(frame, /[┈┊░]/)
-  assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[12])))
   assert.ok(spans.some(span => rgbToHex(span.fg) === rgbToHex(palette.palette[1])))
   assert.ok(spans.some(span => {
     return rgbToHex(span.bg) !== rgbToHex(palette.defaultBackground)
@@ -918,7 +918,7 @@ test.concurrent('person cards use full names when the map has room', async () =>
   for (const person of people) {
     assert.equal(visible(person.cellBounds, view.viewport), true, person.name)
     assert.ok(
-      person.cellBounds.width >= person.name.length + 5,
+      person.cellBounds.width >= person.name.length + 7,
       `${person.name} is ${person.cellBounds.width} cells`,
     )
   }
@@ -953,8 +953,19 @@ test.concurrent('the details pane always shows the selection and reserves its co
     .map(line => [...line].slice(layout.details.x).join(''))
     .join('\n')
   assert.match(pane, /Architecture model/)
-  assert.match(pane, /COMPONENT · observed/)
+  assert.match(
+    pane,
+    new RegExp(`${kindGlyph('component')} ${kindLabel('component')} · observed`),
+  )
   assert.match(pane, /src\/architecture-model\.ts/)
+  const treePane = lines
+    .map(line => [...line].slice(layout.hierarchy.x, layout.map.x).join(''))
+    .join('\n')
+  assert.match(treePane, new RegExp(kindGlyph('system')))
+  assert.match(treePane, new RegExp(kindGlyph('container')))
+  assert.match(treePane, new RegExp(kindGlyph('component')))
+  assert.match(mapRegion(frame, 120), new RegExp(kindGlyph('system')))
+  assert.match(mapRegion(frame, 120), new RegExp(kindGlyph('container')))
   app.destroy()
 })
 
@@ -972,6 +983,12 @@ test.concurrent('the containment tree lists every element once and tracks collap
   assert.equal(depths.get('observed:alpha'), 0)
   assert.equal(depths.get('observed:cleft'), 1)
   assert.equal(depths.get('observed:pleft'), 2)
+  const kinds = new Map(all.map(row => [row.id, row.kind]))
+  assert.equal(kinds.get('observed:alpha'), 'system')
+  assert.equal(kinds.get('observed:cleft'), 'container')
+  assert.equal(kinds.get('observed:pleft'), 'component')
+  assert.equal(kinds.get('observed:ext'), 'system')
+  assert.equal(all.find(row => row.id === 'observed:ext')?.external, true)
 
   // Default state: collapsed except the path to the selection.
   const rows = treeRows(world, 'observed:pleft', initialTree())

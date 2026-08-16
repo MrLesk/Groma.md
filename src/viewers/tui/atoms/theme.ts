@@ -1,9 +1,9 @@
 import { RGBA } from '@opentui/core'
 import type { NormalizedTerminalPalette } from '@opentui/core'
 
-import type { Origin } from '../../../types.ts'
+import type { C4Kind, Origin } from '../../../types.ts'
 
-export interface ViewerTheme extends Record<Origin, RGBA> {
+export interface ViewerTheme extends Record<Origin | C4Kind, RGBA> {
   background: RGBA
   foreground: RGBA
   selected: RGBA
@@ -35,5 +35,9 @@ export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerThem
     selected: observed,
     observedTint: mix(palette.defaultBackground, observed, 0.08),
     selectedTint: mix(palette.defaultBackground, observed, 0.18),
+    person: palette.palette[11],
+    system: palette.palette[14],
+    container: palette.palette[12],
+    component: palette.palette[13],
   }
 }

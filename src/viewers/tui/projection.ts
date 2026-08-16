@@ -171,7 +171,7 @@ function centeredBounds(bounds: Bounds, width: number, height: number): Bounds {
 }
 
 function titledCardBounds(bounds: Bounds, element: WorldElement): Bounds {
-  const width = Math.max(titledCard.width, element.name.length + 5)
+  const width = Math.max(titledCard.width, element.name.length + 7)
   return centeredBounds(bounds, width, titledCard.height)
 }
 
