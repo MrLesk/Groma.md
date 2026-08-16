@@ -22,7 +22,8 @@ function mix(left: RGBA, right: RGBA, rightWeight: number): RGBA {
 
 export function themeFromPalette(palette: NormalizedTerminalPalette): ViewerTheme {
   const observed = palette.palette[2]
-  const planned = palette.palette[4]
+  // Bright blue: the normal ANSI blue is barely readable on dark themes.
+  const planned = palette.palette[12]
   const missing = palette.palette[1]
 
   return {
