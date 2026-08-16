@@ -14,7 +14,13 @@ program
 program
   .command('view')
   .description('Open the terminal map')
-  .action(async () => {
+  .option('--plain', 'print the merged world as plain text')
+  .action(async options => {
+    if (options.plain || !process.stdout.isTTY) {
+      const { renderPlainWorld } = await import('./plain-world.ts')
+      console.log(await renderPlainWorld(process.cwd()))
+      return
+    }
     const { startTerminalViewer } = await import('./viewers/tui/terminal-viewer.ts')
     const viewer = await startTerminalViewer(process.cwd())
     await viewer.closed

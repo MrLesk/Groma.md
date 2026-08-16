@@ -136,24 +136,35 @@ function annotateRevision(
   }
 }
 
-export async function loadArchitectureViewModel(
-  repositoryRoot: string,
-  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
-): Promise<ArchitectureViewModel> {
-  const revisions = await loadArchitecture(repositoryRoot, options)
+export function annotateArchitecture(
+  revisions: readonly RevisionRecord[],
+): AnnotatedArchitectureModel {
   const observed = revisions.find(record => record.revision.kind === 'observed')
   if (!observed) throw new Error('Observed architecture revision is required')
   const annotated = revisions.map(record => annotateRevision(observed, record))
   const elements = annotated.flatMap(model => model.elements)
 
-  const model = {
+  return {
     plans: revisions.flatMap(record => {
       return record.revision.kind === 'plan' ? [record.revision.name] : []
     }),
     elements: withDirectChildren(elements),
     relationships: annotated.flatMap(model => model.relationships),
   }
+}
 
+export async function loadAnnotatedArchitecture(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<AnnotatedArchitectureModel> {
+  return annotateArchitecture(await loadArchitecture(repositoryRoot, options))
+}
+
+export async function loadArchitectureViewModel(
+  repositoryRoot: string,
+  options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
+): Promise<ArchitectureViewModel> {
+  const model = await loadAnnotatedArchitecture(repositoryRoot, options)
   return {
     ...model,
     world: await layoutArchitectureWorld(model),
