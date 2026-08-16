@@ -643,12 +643,23 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'context',
     tree: initialTree(),
-    panes: { hierarchy: true, details: true },
+    panes: { hierarchy: false, details: true },
   }
-  assert.deepEqual(viewOf(reduceViewer(world, state, 'left')), {
-    level: 'context',
-    currentId: 'observed:ann',
-  })
+  // Nothing lies further left of the leftmost person: focus escapes into
+  // the hierarchy pane, selection unchanged, and the hidden pane reopens.
+  const toTree = reduceViewer(world, state, 'left')
+  assert.deepEqual(viewOf(toTree), { level: 'context', currentId: 'observed:ann' })
+  assert.equal(toTree.focus, 'hierarchy')
+  assert.equal(toTree.tree.cursor, 'observed:ann')
+  assert.equal(toTree.panes.hierarchy, true)
+
+  // The right edge has no interactive pane; the view simply stays.
+  const atRightEdge = reduceViewer(world, {
+    ...state,
+    currentId: 'observed:ext',
+  }, 'right')
+  assert.deepEqual(viewOf(atRightEdge), { level: 'context', currentId: 'observed:ext' })
+  assert.equal(atRightEdge.focus, 'architecture')
 })
 
 test.concurrent('headless keys drive the viewer and leave world coordinates unchanged', async () => {
