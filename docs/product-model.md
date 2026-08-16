@@ -13,9 +13,12 @@ contract](../groma/README.md) defines the document format.
 People and agents use Groma. They do not edit `groma/` Markdown by hand.
 Groma writes those files so paths, identity, and metadata stay consistent.
 
-1. Open a viewer — see the world. `groma view` starts the TUI plugin. It
-   does not scan. `groma view --plain`, or `groma view` when stdout is not
-   a TTY, prints the merged world as plain text and does not start the TUI.
+1. Open a viewer — see the world. On a TTY, `groma view` starts the TUI
+   plugin. It does not scan on open. The live process starts the same
+   watch as `groma scan --watch`, so a later source change folds and the
+   map updates. An architecture Markdown change reloads the world without
+   scanning. `groma view --plain`, or `groma view` when stdout is not a
+   TTY, prints the merged world as plain text and does not start the TUI.
 2. `groma scan` — scan this repo. Core folds the findings into Markdown.
    The command prints `ok` and a short summary. It does not print the
    architecture.
@@ -66,6 +69,10 @@ frontmatter. They do not rewrite explanations or other authored prose.
 with `ok` and a short summary of what changed. It does not print elements,
 IDs, or a machine-readable architecture. If someone later needs that, it is
 a different command, not scan.
+
+`groma scan --watch` is the same scan, left running. It watches the TypeScript
+plugin file set and folds each settled source change. It does not open a
+viewer. `groma view` and `groma web` start that watch in-process.
 
 The scanner plugin sends candidates to Groma core: names, responsibilities,
 containment evidence, relationships, and Code references, and no architecture

@@ -9,6 +9,7 @@ import type {
   NormalizedTerminalPalette,
 } from '@opentui/core'
 
+import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
 import { watchScan } from '../../scanner.ts'
 import { createCamera } from './camera.ts'
@@ -373,10 +374,17 @@ export async function startTerminalViewer(
     const sourceWatch = watchScan(repositoryRoot, {
       onFold: () => viewer.refresh(),
     })
+    const architectureWatch = watchArchitecture(repositoryRoot, {
+      onChange: () => viewer.refresh(),
+    })
+    const stopWatches = () => {
+      sourceWatch.close()
+      architectureWatch.close()
+    }
     return {
-      closed: viewer.closed.finally(() => sourceWatch.close()),
+      closed: viewer.closed.finally(stopWatches),
       destroy() {
-        sourceWatch.close()
+        stopWatches()
         viewer.destroy()
       },
       refresh: () => viewer.refresh(),

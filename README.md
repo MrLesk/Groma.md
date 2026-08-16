@@ -22,7 +22,9 @@ a second identity.
 Groma is the only writer of files under `groma/`.
 
 1. Open a viewer — see the world. `groma view` starts the TUI plugin. It
-   does not scan.
+   does not scan on open. The live process starts the same watch as
+   `groma scan --watch`. Architecture Markdown changes update the map
+   without scanning.
 2. `groma scan` — scan this repo. Core updates Markdown. The command
    prints `ok` and a short summary, not the architecture.
 3. Change the architecture through Groma. New parts and required changes
