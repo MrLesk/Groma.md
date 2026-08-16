@@ -1,3 +1,4 @@
+import type { PaneVisibility } from './layout.ts'
 import { ancestorsOf, compareElements, initialTree, treeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type {
@@ -27,6 +28,8 @@ export type ViewerAction =
   | 'right'
   | 'zoom'
   | 'tab'
+  | 'toggle-hierarchy'
+  | 'toggle-details'
   | 'dismiss'
 
 export interface ViewerState {
@@ -35,6 +38,7 @@ export interface ViewerState {
   focus: ViewerFocus
   zoomSlot: ZoomSlot
   tree: TreeState
+  panes: PaneVisibility
 }
 
 function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
@@ -74,6 +78,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     focus: 'architecture',
     zoomSlot: 'context',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
 }
 
@@ -386,7 +391,24 @@ export function reduceViewer(
   }
   if (action === 'tab') {
     if (current.focus === 'hierarchy') return { ...current, focus: 'architecture' }
-    return syncTree(world, { ...current, focus: 'hierarchy' })
+    return syncTree(world, {
+      ...current,
+      focus: 'hierarchy',
+      panes: { ...current.panes, hierarchy: true },
+    })
+  }
+  if (action === 'toggle-hierarchy') {
+    const hierarchy = !current.panes.hierarchy
+    return {
+      ...current,
+      panes: { ...current.panes, hierarchy },
+      focus: !hierarchy && current.focus === 'hierarchy'
+        ? 'architecture'
+        : current.focus,
+    }
+  }
+  if (action === 'toggle-details') {
+    return { ...current, panes: { ...current.panes, details: !current.panes.details } }
   }
   if (action === 'dismiss') {
     if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }

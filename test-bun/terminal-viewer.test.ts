@@ -493,6 +493,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'context',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   })
 
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
@@ -518,6 +519,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
       focus: 'architecture',
       zoomSlot: 'components',
       tree: initialTree(),
+      panes: { hierarchy: true, details: true },
     }, 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
@@ -592,6 +594,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'containers',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
@@ -601,6 +604,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'components',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
@@ -613,6 +617,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'components',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'context',
@@ -625,6 +630,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'components',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
   const escaped = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
@@ -637,6 +643,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     focus: 'architecture',
     zoomSlot: 'context',
     tree: initialTree(),
+    panes: { hierarchy: true, details: true },
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'left')), {
     level: 'context',
@@ -1063,5 +1070,61 @@ test.concurrent('tree scrolling keeps the cursor inside the visible window', () 
         assert.ok(scroll <= Math.max(0, rows - height))
       }
     }
+  }
+})
+
+test.concurrent('pane toggles resize the map viewport without touching the world', async () => {
+  const world = navigationWorld()
+  let state = initialState(world)
+  assert.deepEqual(state.panes, { hierarchy: true, details: true })
+
+  state = reduceViewer(world, state, 'toggle-details')
+  assert.deepEqual(state.panes, { hierarchy: true, details: false })
+  state = reduceViewer(world, state, 'toggle-hierarchy')
+  assert.deepEqual(state.panes, { hierarchy: false, details: false })
+
+  // Hiding the focused hierarchy pane hands focus back to the map.
+  state = reduceViewer(world, state, 'tab')
+  assert.equal(state.focus, 'hierarchy')
+  assert.equal(state.panes.hierarchy, true)
+  state = reduceViewer(world, state, 'toggle-hierarchy')
+  assert.equal(state.focus, 'architecture')
+  assert.equal(state.panes.hierarchy, false)
+
+  // With both panes hidden the map pane spans the full width.
+  const full = paneLayout(120, 36, { hierarchy: false, details: false })
+  assert.equal(full.map.x, 0)
+  assert.equal(full.map.width, 120)
+  const partial = paneLayout(120, 36, { hierarchy: true, details: false })
+  assert.equal(partial.map.x + partial.map.width, 120)
+
+  // The same camera over a wider viewport only translates the projection.
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const threePane = paneLayout(120, 36)
+  const narrow = projectWorld(response.world, {
+    viewport: threePane.mapViewport,
+    camera: cameraOn(response.world, 'observed:groma', 1),
+    lockCamera: true,
+  })
+  const wide = projectWorld(response.world, {
+    viewport: full.mapViewport,
+    camera: cameraOn(response.world, 'observed:groma', 1),
+    lockCamera: true,
+  })
+  assert.equal(wide.camera.zoom, narrow.camera.zoom)
+  const wideById = projectedById(wide.elements)
+  const deltaX = full.mapViewport.x + full.mapViewport.width / 2
+    - (threePane.mapViewport.x + threePane.mapViewport.width / 2)
+  for (const element of narrow.elements) {
+    const moved = requiredElement(wideById, element.representationId)
+    assert.equal(moved.cellBounds.y, element.cellBounds.y, element.representationId)
+    // Leaf cards are clamped into the viewport (keepTitledCardInView),
+    // so their shift legitimately differs from the camera translation.
+    if (element.kind === 'person' || element.external) continue
+    assert.equal(
+      moved.cellBounds.x - element.cellBounds.x,
+      Math.round(deltaX),
+      element.representationId,
+    )
   }
 })

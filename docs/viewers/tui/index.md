@@ -13,7 +13,10 @@ wordmark on the left and the exit hint on the right. A one-row footer
 shows the level strip and key hints. Between them sit three panes that
 each reserve their width: the hierarchy pane on the left, the map pane
 in the center, and the details pane on the right. The map pane is the
-camera viewport; the map never renders under a side pane.
+camera viewport; the map never renders under a side pane. `[` and `]`
+collapse and restore the hierarchy and details panes; the map pane
+takes the freed width immediately, and only the camera viewport
+changes, never the world layout.
 
 The hierarchy pane lists the merged world as a containment tree:
 people, systems, and external systems at the root, containers under
@@ -83,6 +86,9 @@ the last level. The first view fits the whole map.
   level. If none exists, selection moves up a level. Arrows never
   descend. Same-level moves keep zoom and pan only if needed. Leaving
   a boundary zooms out.
+- `[` toggles the hierarchy pane and `]` toggles the details pane.
+  Hiding the focused hierarchy pane returns focus to the map; Tab
+  reopens a hidden hierarchy pane.
 - Tab focuses the hierarchy pane; Tab or Esc returns to the map.
   While it is focused, Up and Down move through visible rows, Right
   expands a row, and Left collapses it or climbs to its parent. Enter

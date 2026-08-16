@@ -25,7 +25,7 @@ function footerHints(focus: ViewerFocus): string {
     hints.push('+ in', '- out')
   }
   hints.push(focus === 'zoom' ? 'z item' : 'z zoom')
-  hints.push('R refresh')
+  hints.push('[ ] panes', 'R refresh')
   return hints.join('   ')
 }
 

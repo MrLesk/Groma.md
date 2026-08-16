@@ -3,6 +3,11 @@ import type { Bounds } from '../../types.ts'
 export const HIERARCHY_PANE_WIDTH = 26
 export const DETAILS_PANE_WIDTH = 32
 
+export interface PaneVisibility {
+  hierarchy: boolean
+  details: boolean
+}
+
 export interface PaneLayout {
   header: Bounds
   hierarchy: Bounds
@@ -13,13 +18,22 @@ export interface PaneLayout {
   footer: Bounds
 }
 
-export function paneLayout(width: number, height: number): PaneLayout {
+export function paneLayout(
+  width: number,
+  height: number,
+  panes: PaneVisibility = { hierarchy: true, details: true },
+): PaneLayout {
   const body = { y: 1, height: Math.max(1, height - 2) }
-  const hierarchy = { x: 0, ...body, width: HIERARCHY_PANE_WIDTH }
-  const details = {
-    x: Math.max(hierarchy.width, width - DETAILS_PANE_WIDTH),
+  const detailsWidth = panes.details ? DETAILS_PANE_WIDTH : 0
+  const hierarchy = {
+    x: 0,
     ...body,
-    width: DETAILS_PANE_WIDTH,
+    width: panes.hierarchy ? HIERARCHY_PANE_WIDTH : 0,
+  }
+  const details = {
+    x: Math.max(hierarchy.width, width - detailsWidth),
+    ...body,
+    width: detailsWidth,
   }
   const map = {
     x: hierarchy.width,
