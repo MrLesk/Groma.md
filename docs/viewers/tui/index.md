@@ -29,8 +29,8 @@ Rows are collapsed except the path to the current
 selection; a collapsed row shows its child count. The tree and the
 map share one selection: the accent bar marks the selected element,
 and map moves keep the tree in step. The tree scrolls to keep its
-cursor visible. Groups are invisible to the tree, matching
-navigation.
+cursor visible. The bottom of the pane is the kind legend.
+Groups are invisible to the tree, matching navigation.
 
 The details pane always shows the current selection: name, kind,
 annotations, description, relationships, and children. Component

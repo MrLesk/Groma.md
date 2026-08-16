@@ -2,11 +2,16 @@ import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer } from '@opentui/core'
 
 import { cell } from '../atoms/cell.ts'
-import { kindGlyph } from '../atoms/kind.ts'
+import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type { TreeRow } from '../tree.ts'
-import type { Bounds } from '../../../types.ts'
+import type { Bounds, C4Kind } from '../../../types.ts'
+
+const legendKinds: C4Kind[][] = [
+  ['person', 'system'],
+  ['container', 'component'],
+]
 
 /** The first visible row, chosen so the cursor row stays inside the window. */
 export function scrollOffset(
@@ -32,10 +37,12 @@ export function drawHierarchy(
   const width = Math.max(0, bounds.width - 2)
   const height = Math.max(0, bounds.height - 2)
   if (width === 0 || height === 0) return
+  const legendHeight = height >= 3 ? 1 + legendKinds.length : 0
+  const treeHeight = height - legendHeight
   const cursorIndex = Math.max(0, rows.findIndex(row => row.id === cursorId))
-  const scroll = scrollOffset(cursorIndex, rows.length, height)
+  const scroll = scrollOffset(cursorIndex, rows.length, treeHeight)
 
-  for (let line = 0; line < height; line += 1) {
+  for (let line = 0; line < treeHeight; line += 1) {
     const row = rows[scroll + line]
     if (!row) break
     const y = bounds.y + 1 + line
@@ -69,5 +76,29 @@ export function drawHierarchy(
       ? 0
       : TextAttributes.DIM
     text(buffer, ` ${name}`, x, y, remaining(), nameColor, background, nameAttributes)
+  }
+
+  if (legendHeight === 0) return
+  const ruleY = bounds.y + 1 + treeHeight
+  text(
+    buffer,
+    '─'.repeat(width),
+    bounds.x + 1,
+    ruleY,
+    width,
+    theme.foreground,
+    theme.background,
+    TextAttributes.DIM,
+  )
+  for (const [index, line] of legendKinds.entries()) {
+    let x = bounds.x + 2
+    const y = ruleY + 1 + index
+    for (const kind of line) {
+      const label = ` ${kindLabel(kind)} `
+      text(buffer, kindGlyph(kind), x, y, Math.max(0, bounds.x + 1 + width - x), theme[kind], theme.background)
+      x += [...kindGlyph(kind)].length
+      text(buffer, label, x, y, Math.max(0, bounds.x + 1 + width - x), theme.foreground, theme.background)
+      x += [...label].length
+    }
   }
 }
