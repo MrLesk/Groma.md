@@ -991,6 +991,12 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
   assert.equal(state.focus, 'hierarchy')
   assert.equal(state.tree.cursor, 'observed:alpha')
 
+  // Enter on a collapsed parent selects it and opens its group in place.
+  const opened = reduceViewer(world, state, 'enter')
+  assert.equal(opened.currentId, 'observed:alpha')
+  assert.ok(opened.tree.expanded.has('observed:alpha'))
+  assert.equal(opened.focus, 'hierarchy')
+
   // Expand the selected root, then walk into its children.
   state = reduceViewer(world, state, 'right')
   state = reduceViewer(world, state, 'down')

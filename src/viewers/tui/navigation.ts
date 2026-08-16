@@ -345,8 +345,16 @@ function reduceTree(
   if (action === 'enter') {
     const element = elementsById(world).get(cursor.id)
     if (!element) return current
+    // Enter opens what it selects: a collapsed parent expands in place.
+    const expanded = new Set(current.tree.expanded)
+    const collapsed = new Set(current.tree.collapsed)
+    if (cursor.hasChildren && !cursor.expanded) {
+      expanded.add(cursor.id)
+      collapsed.delete(cursor.id)
+    }
     return syncTree(world, {
       ...current,
+      tree: { ...current.tree, expanded, collapsed },
       level: levelFor(element),
       currentId: element.representationId,
     })
