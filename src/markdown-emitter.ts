@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { C4Kind, CodeReference } from './types.ts'
@@ -91,4 +91,18 @@ export async function writeObservedDocument(
   const filename = absoluteFilename(repositoryRoot, sourceFilename)
   await mkdir(path.dirname(filename), { recursive: true })
   await writeFile(filename, source)
+}
+
+export async function readDocument(
+  repositoryRoot: string,
+  sourceFilename: string,
+): Promise<string> {
+  return readFile(absoluteFilename(repositoryRoot, sourceFilename), 'utf8')
+}
+
+export async function removeDocument(
+  repositoryRoot: string,
+  sourceFilename: string,
+): Promise<void> {
+  await unlink(absoluteFilename(repositoryRoot, sourceFilename))
 }

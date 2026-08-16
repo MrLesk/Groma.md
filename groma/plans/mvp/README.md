@@ -28,4 +28,4 @@ matched it.
 6. Core merges observed architecture and every plan into one world and
    returns that world to a viewer plugin.
 
-This fragment adds the [scan reconciler](systems/groma/containers/core/components/scan-reconciler.md).
+This plan is complete. Its README remains as the record.

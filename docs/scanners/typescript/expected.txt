@@ -2,26 +2,33 @@ bun src/typescript-scanner.ts --ignore test/** --ignore test-bun/** --ignore e2e
 
 Groma  system
 |-- Cli  container  src/cli.ts
-|-- Core  container  src/core.ts  foldScanResult
+|-- Core  container  src/core.ts  loadArchitectureViewModel
+|   |-- Accept  component  src/accept.ts  acceptGhost
 |   |-- Architecture model  component  src/architecture-model.ts  buildArchitectureModel
 |   |-- Architecture reader  component  src/architecture-reader.ts  loadRevision
 |   |-- Markdown emitter  component  src/markdown-emitter.ts  renderObservedDocument
+|   |-- Scan reconciler  component  src/scan-reconciler.ts  foldScanResult
 |   `-- World layout  component  src/world-layout.ts  layoutArchitectureWorld
 |-- Scanner  container  src/scanner.ts  formatScanSummary
-|   `-- Typescript scanner  component  src/typescript-scanner.ts  listTypeScriptFiles
+|   |-- Typescript files  component  src/typescript-files.ts  listTypeScriptFiles
+|   |-- Typescript graph  component  src/typescript-graph.ts  kebabCase
+|   `-- Typescript scanner  component  src/typescript-scanner.ts  formatTypeScriptObservation
 |-- Server  container  src/viewers/web/server.ts  startWebViewer
 |   |-- Page  component  src/viewers/web/page.ts  renderPage
 |   |-- Render  component  src/viewers/web/render.ts
 |   `-- Scene  component  src/viewers/web/scene.ts  project
 `-- Terminal viewer  container  src/viewers/tui/terminal-viewer.ts  mountTerminalViewer
+    |-- Action path  component  src/viewers/action-path.ts  actionCaption
     |-- Camera  component  src/viewers/tui/camera.ts  createCamera
     |-- Layout  component  src/viewers/tui/layout.ts  paneLayout
     |-- Navigation  component  src/viewers/tui/navigation.ts  defaultSelection
-    |-- Projection  component  src/viewers/tui/projection.ts  fitView
-    |-- Relationship text  component  src/viewers/relationship-text.ts  parentOfElements
-    `-- Tree  component  src/viewers/tui/tree.ts  initialTree
+    |-- Navigation spatial  component  src/viewers/tui/navigation-spatial.ts  canEnter
+    |-- Projection  component  src/viewers/tui/projection.ts  projectWorld
+    |-- Projection camera  component  src/viewers/tui/projection-camera.ts  focusElement
+    `-- Projection routes  component  src/viewers/tui/projection-routes.ts  orthogonalRoute
 
 relationships
+Cli  uses  Core
 Cli  starts  Scanner
 Cli  starts  Server
 Cli  starts  Terminal viewer
@@ -30,4 +37,4 @@ Server  uses  Core
 Server  uses  Terminal viewer
 Terminal viewer  uses  Core
 
-1 system, 5 containers, 14 components
+1 system, 5 containers, 20 components

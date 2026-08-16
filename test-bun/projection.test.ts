@@ -249,7 +249,7 @@ test.concurrent('selection changes never move the camera and pan only when off s
   const scanView = projectWorld(response.world, {
     viewport,
     level: 'components',
-    currentId: 'planned:mvp:scan-reconciler',
+    currentId: 'observed:scan-reconciler',
     camera: modelView.camera,
   })
   assert.deepEqual(scanView.camera, modelView.camera)

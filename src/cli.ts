@@ -1,21 +1,58 @@
 #!/usr/bin/env bun
 
+import { Command } from 'commander'
+
+import { acceptGhost } from './core.ts'
 import { formatScanSummary, scanRepository } from './scanner.ts'
 
-const [command] = process.argv.slice(2)
+const program = new Command()
 
-if (command === 'view') {
-  const { startTerminalViewer } = await import('./viewers/tui/terminal-viewer.ts')
-  const viewer = await startTerminalViewer(process.cwd())
-  await viewer.closed
-} else if (command === 'web') {
-  const { startWebViewer } = await import('./viewers/web/server.ts')
-  console.log(`groma web at ${await startWebViewer(process.cwd())}`)
-} else if (command === 'scan') {
-  const summary = await scanRepository(process.cwd())
-  console.log('ok')
-  console.log(formatScanSummary(summary))
-} else {
-  console.error('Usage: groma view|web|scan')
-  process.exitCode = 1
-}
+program
+  .name('groma')
+  .description("This repo's architecture in Git")
+
+program
+  .command('view')
+  .description('Open the terminal map')
+  .action(async () => {
+    const { startTerminalViewer } = await import('./viewers/tui/terminal-viewer.ts')
+    const viewer = await startTerminalViewer(process.cwd())
+    await viewer.closed
+  })
+
+program
+  .command('web')
+  .description('Open the browser map')
+  .action(async () => {
+    const { startWebViewer } = await import('./viewers/web/server.ts')
+    console.log(`groma web at ${await startWebViewer(process.cwd())}`)
+  })
+
+program
+  .command('scan')
+  .description('Scan this repo and fold findings into Markdown')
+  .action(async () => {
+    const summary = await scanRepository(process.cwd())
+    console.log('ok')
+    console.log(formatScanSummary(summary))
+  })
+
+program
+  .command('accept')
+  .description('Apply a matched planned ghost into observed')
+  .argument('<id>', 'planned element id')
+  .action(async (id: string) => {
+    let result = await acceptGhost(process.cwd(), id)
+    if (result === 'unmatched') {
+      await scanRepository(process.cwd())
+      result = await acceptGhost(process.cwd(), id)
+    }
+    if (result === 'accepted') {
+      console.log('ok')
+      return
+    }
+    console.error(result === 'missing' ? 'not a planned ghost' : 'no scan match')
+    process.exitCode = 1
+  })
+
+await program.parseAsync()
