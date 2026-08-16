@@ -14,7 +14,10 @@ Groma core → world → viewer plugin
 ```
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or
-lays the world out. It asks core for the world and projects it. The world
+lays the world out. It asks core for the world and projects it. A live
+viewer starts the same watch as `groma scan --watch` in-process and applies
+each new world after a fold. It also reloads the world when architecture
+Markdown changes. It does not scan on open. The world
 is a map: selecting an item or opening details does not lay it out again.
 The first view fits the whole map. Zooming in stops at one cell per world
 unit so names stay readable. Routes stay on the map. One authored relationship is one route. Parents

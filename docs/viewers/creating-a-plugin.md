@@ -26,8 +26,9 @@ itself. Groma writes those files.
 ## The world
 
 Core returns the merged observed and planned architecture, already laid
-out, with origin annotations. That response is the only input. Keys,
-pointers, and widgets are plugin concerns.
+out, with origin annotations. That response is the only input. A live
+host may replace it after `groma scan --watch` folds. Keys, pointers,
+and widgets are plugin concerns.
 
 The [TUI viewer](tui/index.md) is the first plugin. The [web
 viewer](web/index.md) is the same interface for another surface. Neither

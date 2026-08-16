@@ -1,3 +1,4 @@
+import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
 import { watchScan } from '../../scanner.ts'
 import { renderPage } from './page.ts'
@@ -44,6 +45,9 @@ export async function startWebViewer(
 
   const sourceWatch = watchScan(repositoryRoot, {
     onFold: publishWorld,
+  })
+  const architectureWatch = watchArchitecture(repositoryRoot, {
+    onChange: publishWorld,
   })
 
   const server = Bun.serve({
@@ -96,6 +100,7 @@ export async function startWebViewer(
     url: `http://localhost:${server.port}`,
     close() {
       sourceWatch.close()
+      architectureWatch.close()
       for (const client of clients) {
         try {
           client.close()
