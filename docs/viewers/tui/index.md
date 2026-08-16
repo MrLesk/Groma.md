@@ -23,8 +23,10 @@ details panes; the map pane takes the freed width immediately, and
 only the camera viewport changes, never the world layout.
 
 The hierarchy pane lists the merged world as a containment tree:
-people, systems, and external systems at the root, containers under
-their system, components under their container. Ghost names are dim.
+people, then systems, then external systems at the root, left to
+right as on the map. Containers sit under their system and
+components under their container, in the same left-to-right order.
+Ghost names are dim.
 Rows are collapsed except the path to the current
 selection; a collapsed row shows its child count. The tree and the
 map share one selection: the accent bar marks the selected element,
@@ -51,7 +53,7 @@ external systems are compact cards. Those cards show the full name
 when empty space around them is large enough.
 
 Each kind has one mark used in the tree, on the map, and in
-details: a yellow ● person, a cyan ■ system, a blue □ container,
+details: a yellow ● person, a cyan ■ system, a light □ container,
 and a magenta ▪ component. External systems use a dim system mark.
 The map carries no kind or origin words. Details spells the kind
 next to the mark and origin as a word. Person cards have rounded

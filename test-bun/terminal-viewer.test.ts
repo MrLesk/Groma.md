@@ -1027,6 +1027,21 @@ test.concurrent('the containment tree lists every element once and tracks collap
   assert.equal(kinds.get('observed:pleft'), 'component')
   assert.equal(kinds.get('observed:ext'), 'system')
   assert.equal(all.find(row => row.id === 'observed:ext')?.external, true)
+  assert.deepEqual(
+    all.filter(row => row.depth === 0).map(row => row.id),
+    [
+      'observed:ann',
+      'observed:alpha',
+      'observed:zeta',
+      'observed:empty',
+      'observed:ext',
+    ],
+  )
+  assert.deepEqual(
+    all.filter(row => row.id === 'observed:cleft' || row.id === 'observed:cright')
+      .map(row => row.id),
+    ['observed:cleft', 'observed:cright'],
+  )
 
   // Default state: collapsed except the path to the selection.
   const rows = treeRows(world, 'observed:pleft', initialTree())
@@ -1171,10 +1186,10 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
   const response = await loadArchitectureViewModel(repositoryRoot)
   const world = response.world
 
-  // Case-insensitive substring over the merged world, in id order.
+  // Case-insensitive substring over the merged world, in tree order.
   assert.deepEqual(
     filterMatches(world, 'WOR').map(element => element.representationId),
-    ['observed:architecture-workspace', 'observed:world-layout'],
+    ['observed:world-layout', 'observed:architecture-workspace'],
   )
   assert.deepEqual(filterMatches(world, ''), [])
   assert.deepEqual(filterMatches(world, 'no such thing'), [])
@@ -1192,18 +1207,18 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
     state = reduceFilter(world, state, { type: 'char', char })
   }
   // The first match selects live at its own level.
-  assert.equal(state.currentId, 'observed:architecture-workspace')
-  assert.equal(state.level, 'containers')
-
-  state = reduceFilter(world, state, { type: 'next' })
   assert.equal(state.currentId, 'observed:world-layout')
   assert.equal(state.level, 'components')
-  state = reduceFilter(world, state, { type: 'previous' })
+
+  state = reduceFilter(world, state, { type: 'next' })
   assert.equal(state.currentId, 'observed:architecture-workspace')
+  assert.equal(state.level, 'containers')
+  state = reduceFilter(world, state, { type: 'previous' })
+  assert.equal(state.currentId, 'observed:world-layout')
 
   // Narrowing to nothing leaves the view alone; deleting widens again.
   state = reduceFilter(world, state, { type: 'char', char: 'q' })
-  assert.equal(state.currentId, 'observed:architecture-workspace')
+  assert.equal(state.currentId, 'observed:world-layout')
   state = reduceFilter(world, state, { type: 'delete' })
   assert.equal(state.filter?.query, 'wor')
 
@@ -1215,6 +1230,6 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
 
   const accepted = reduceFilter(world, state, { type: 'accept' })
   assert.equal(accepted.filter, undefined)
-  assert.equal(accepted.currentId, 'observed:architecture-workspace')
-  assert.equal(accepted.level, 'containers')
+  assert.equal(accepted.currentId, 'observed:world-layout')
+  assert.equal(accepted.level, 'components')
 })
