@@ -77,6 +77,7 @@ export function mountTerminalViewer(
       paneLayout(
         Math.max(1, renderer.width),
         Math.max(1, renderer.height),
+        state.panes,
       ).mapViewport,
     ),
   )
@@ -111,7 +112,7 @@ export function mountTerminalViewer(
 
   function currentLayout() {
     const { width, height } = frame.frameBuffer
-    return paneLayout(width, height)
+    return paneLayout(width, height, state.panes)
   }
 
   function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
@@ -217,6 +218,8 @@ export function mountTerminalViewer(
     if (key.ctrl) return undefined
     if (key.name === 'return') return 'enter'
     if (key.name === 'tab') return 'tab'
+    if (key.name === '[') return 'toggle-hierarchy'
+    if (key.name === ']') return 'toggle-details'
     if (key.name === 'z') return 'zoom'
     if (
       key.name === 'up'
