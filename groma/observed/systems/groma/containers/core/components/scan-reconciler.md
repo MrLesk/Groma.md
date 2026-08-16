@@ -2,6 +2,10 @@
 id: scan-reconciler
 kind: component
 parent: core
+code:
+  - scanner: typescript
+    file: src/scan-reconciler.ts
+    symbol: foldScanResult
 ---
 
 # Scan reconciler

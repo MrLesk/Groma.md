@@ -5,7 +5,7 @@ parent: groma
 code:
   - scanner: typescript
     file: src/core.ts
-    symbol: foldScanResult
+    symbol: loadArchitectureViewModel
 ---
 
 # Core
