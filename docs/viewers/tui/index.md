@@ -8,7 +8,8 @@ This page is the terminal surface. The shared viewer rules live in
 
 ## Layout
 
-Fixed chrome frames the world. A one-row header shows the groma
+Fixed chrome frames the world. One blank row sits above the header
+and one below the footer. A one-row header shows the groma
 wordmark on the left and the exit hint on the right. A one-row footer
 shows the key hints for the focused pane, and zoom controls with a
 readout of the camera state: `fit` when the whole map fits, a

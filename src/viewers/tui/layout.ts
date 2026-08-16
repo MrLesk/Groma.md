@@ -23,7 +23,7 @@ export function paneLayout(
   height: number,
   panes: PaneVisibility = { hierarchy: true, details: true },
 ): PaneLayout {
-  const body = { y: 1, height: Math.max(1, height - 2) }
+  const body = { y: 2, height: Math.max(1, height - 4) }
   const detailsWidth = panes.details ? DETAILS_PANE_WIDTH : 0
   const hierarchy = {
     x: 0,
@@ -41,7 +41,7 @@ export function paneLayout(
     width: Math.max(3, details.x - hierarchy.width),
   }
   return {
-    header: { x: 0, y: 0, width, height: 1 },
+    header: { x: 0, y: 1, width, height: 1 },
     hierarchy,
     map,
     mapViewport: {
@@ -51,6 +51,6 @@ export function paneLayout(
       height: Math.max(1, map.height - 2),
     },
     details,
-    footer: { x: 0, y: height - 1, width, height: 1 },
+    footer: { x: 0, y: height - 2, width, height: 1 },
   }
 }
