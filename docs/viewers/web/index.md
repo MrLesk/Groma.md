@@ -8,7 +8,7 @@ This page is the browser surface. The shared viewer rules live in
 
 ## Layout
 
-Fixed chrome frames the world. A header shows the groma wordmark. A
+Fixed chrome frames the world. A header shows the groma.md lockup. A
 footer holds the 2D and 3D controls and a zoom readout: `fit` when the
 whole map fits, a percentage after zooming. Between them sit three
 panes that each reserve their width: the hierarchy pane on the left,
