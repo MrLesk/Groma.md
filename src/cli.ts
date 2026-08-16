@@ -5,6 +5,7 @@ import { Command } from 'commander'
 import { acceptGhost } from './core.ts'
 import { createPlannedElement } from './create.ts'
 import { editArchitecture } from './edit.ts'
+import { authoring, overview, splash } from './instructions.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 
 const program = new Command()
@@ -12,6 +13,10 @@ const program = new Command()
 program
   .name('groma')
   .description("This repo's architecture in Git")
+  .option('--plain', 'print as plain text')
+  .action(() => {
+    console.log(splash)
+  })
 
 program
   .command('view')
@@ -141,6 +146,23 @@ program
       return
     }
     console.error(result === 'missing' ? 'not a planned ghost' : 'no scan match')
+    process.exitCode = 1
+  })
+
+program
+  .command('instructions')
+  .description('Print a shipped instruction guide')
+  .argument('[guide]', 'overview or authoring')
+  .action((guide: string | undefined) => {
+    if (guide === undefined || guide === 'overview') {
+      console.log(overview)
+      return
+    }
+    if (guide === 'authoring') {
+      console.log(authoring)
+      return
+    }
+    console.error(`unknown guide: ${guide}`)
     process.exitCode = 1
   })
 
