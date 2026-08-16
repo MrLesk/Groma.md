@@ -309,20 +309,46 @@ function addRoute(parent: Group, relationship: WorldRelationship, z: number): vo
     }
   }
   if (relationship.label !== null) {
-    const bounds = relationship.label
-    parent.add(labelPlane(bounds, z + 0.3, (ctx, scale) => {
-      ctx.font = `${4 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const cx = bounds.width * scale / 2
-      const cy = bounds.height * scale / 2
-      ctx.lineWidth = 6
-      ctx.strokeStyle = '#EDE8D6'
-      ctx.strokeText(relationship.description, cx, cy)
-      ctx.fillStyle = '#26251D'
-      ctx.fillText(relationship.description, cx, cy)
-    }))
+    parent.add(flowLabel(relationship.description, relationship.label, z + 0.3))
   }
+}
+
+/** ELK reserves a 1-unit-tall box; the plane is sized to the words. */
+function flowLabel(description: string, bounds: Bounds, z: number): Mesh {
+  const scale = 16
+  const fontPx = 4 * scale
+  const font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`
+  const measure = document.createElement('canvas').getContext('2d')!
+  measure.font = font
+  const width = Math.max(2, Math.ceil(measure.measureText(description).width + 12))
+  const height = Math.max(2, Math.ceil(fontPx * 1.8))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')!
+  ctx.font = font
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = 6
+  ctx.strokeStyle = '#EDE8D6'
+  ctx.strokeText(description, width / 2, height / 2)
+  ctx.fillStyle = '#26251D'
+  ctx.fillText(description, width / 2, height / 2)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  const mesh = new Mesh(
+    new PlaneGeometry(width / scale, height / scale),
+    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+  )
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.copy(at(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+    z,
+  ))
+  mesh.raycast = () => {}
+  return mesh
 }
 
 function addItem(parent: Group, item: SceneItem): void {
