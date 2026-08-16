@@ -87,6 +87,22 @@ function indexWorld(revisions: RevisionRecord[]) {
   return byId
 }
 
+export async function ensurePlanReadme(
+  repositoryRoot: string,
+  planId: string,
+  revisions: RevisionRecord[],
+): Promise<void> {
+  const planExists = revisions.some(record => {
+    return record.revision.kind === 'plan' && record.revision.name === planId
+  })
+  if (planExists) return
+  await writeObservedDocument(
+    repositoryRoot,
+    `groma/plans/${planId}/README.md`,
+    `---\nid: ${planId}\n---\n\n# ${displayName(planId)}\n`,
+  )
+}
+
 function requireText(value: string | undefined, flag: string): string {
   if (value === undefined || value === '') {
     throw new Error(`${flag} is required`)
@@ -146,16 +162,7 @@ export async function createPlannedElement(
     }
   }
 
-  const planExists = revisions.some(record => {
-    return record.revision.kind === 'plan' && record.revision.name === planId
-  })
-  if (!planExists) {
-    await writeObservedDocument(
-      repositoryRoot,
-      `groma/plans/${planId}/README.md`,
-      `---\nid: ${planId}\n---\n\n# ${displayName(planId)}\n`,
-    )
-  }
+  await ensurePlanReadme(repositoryRoot, planId, revisions)
   await writeObservedDocument(
     repositoryRoot,
     plannedPathFor(planId, kind, id, parent),

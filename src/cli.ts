@@ -4,6 +4,7 @@ import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
 import { createPlannedElement } from './create.ts'
+import { editArchitecture } from './edit.ts'
 import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 
 const program = new Command()
@@ -98,6 +99,27 @@ program
       })
       console.log('ok')
       console.log(id)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
+  })
+
+program
+  .command('edit')
+  .description('Update authored meaning')
+  .argument('<id>', 'element id or plan id')
+  .option('--description <prose>', 'lead prose or plan Outcome')
+  .option('--plan <plan-id>', 'restate this element in the plan')
+  .action(async (id: string, options) => {
+    try {
+      const edited = await editArchitecture(process.cwd(), {
+        id,
+        description: options.description,
+        plan: options.plan,
+      })
+      console.log('ok')
+      console.log(edited)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
       process.exitCode = 1
