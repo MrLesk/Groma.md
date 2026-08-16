@@ -1,390 +1,44 @@
 import {
   Box3,
-  BoxGeometry,
-  BufferGeometry,
-  CanvasTexture,
   Color,
-  ConeGeometry,
-  EdgesGeometry,
-  Group,
-  Line,
-  LineBasicMaterial,
-  LineDashedMaterial,
-  LineSegments,
-  Mesh,
-  MeshBasicMaterial,
-  NearestFilter,
   OrthographicCamera,
-  PlaneGeometry,
   Raycaster,
-  RepeatWrapping,
-  SRGBColorSpace,
   Scene,
-  SphereGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three'
-import type { Material } from 'three'
-import type {
-  ArchitectureWorld,
-  Bounds,
-  C4Kind,
-  WorldElement,
-  WorldGroup,
-  WorldRelationship,
-} from '../../types.ts'
+import type { ArchitectureWorld, WorldElement } from '../../types.ts'
 import {
   parentOfElements,
-  promotedPeer,
   showsRelationshipText,
 } from '../relationship-text.ts'
-import { buildScene, defaultProjection } from './scene.ts'
-import type { Projection, SceneItem } from './scene.ts'
+import { defaultSelection } from '../tui/navigation.ts'
+import { initialTree, treeRows } from '../tui/tree.ts'
 
-const paper = 0xEDE8D6
-const raised = 0xF6F2E4
-const ink = 0x26251D
-const accent = 0x1D9E75
-const labelSizes = { person: 4.5, system: 5.5, container: 5, component: 4.5 } as const
+const tree = initialTree()
+import { accent, paper } from './atoms/theme.ts'
+import { zoomReadout } from './organisms/chrome.ts'
+import { buildCity } from './organisms/city.ts'
+import { paintDetails, inspectDetails } from './organisms/details.ts'
+import { paintHierarchy } from './organisms/hierarchy.ts'
+import { defaultProjection } from './scene.ts'
+import type { Projection } from './scene.ts'
+
 const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
 
 const world: ArchitectureWorld = JSON.parse(document.getElementById('world')!.textContent!)
-const items = buildScene(world)
+const { city, pickables, routeLabels } = buildCity(world)
+const pickMeshes = pickables.map(item => item.mesh)
 
-function at(x: number, y: number, z: number): Vector3 {
-  return new Vector3(x, z, y)
-}
-
-function hatchTexture(paint: (ctx: CanvasRenderingContext2D, size: number) => void): CanvasTexture {
-  const size = 64
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#F6F2E4'
-  ctx.fillRect(0, 0, size, size)
-  paint(ctx, size)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  texture.wrapS = RepeatWrapping
-  texture.wrapT = RepeatWrapping
-  texture.magFilter = NearestFilter
-  return texture
-}
-
-const hatches: Record<C4Kind, CanvasTexture> = {
-  system: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    for (let offset = -size; offset <= size * 2; offset += 16) {
-      ctx.moveTo(offset, size)
-      ctx.lineTo(offset + size, 0)
-    }
-    ctx.stroke()
-  }),
-  container: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    for (let offset = -size; offset <= size * 2; offset += 20) {
-      ctx.moveTo(offset, size)
-      ctx.lineTo(offset + size, 0)
-    }
-    ctx.stroke()
-  }),
-  component: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    for (let y = 12; y < size; y += 16) {
-      ctx.moveTo(0, y)
-      ctx.lineTo(size, y)
-    }
-    ctx.stroke()
-  }),
-  person: hatchTexture((ctx, size) => {
-    ctx.fillStyle = '#26251D'
-    for (let y = 10; y < size; y += 16) {
-      for (let x = 10; x < size; x += 16) {
-        ctx.beginPath()
-        ctx.arc(x, y, 3, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-  }),
-}
-
-function sideMaterial(kind: C4Kind, faceWidth: number, faceHeight: number, shaded: boolean): MeshBasicMaterial {
-  const map = hatches[kind].clone()
-  map.repeat.set(Math.max(faceWidth / 4, 0.5), Math.max(faceHeight / 4, 0.5))
-  return new MeshBasicMaterial({
-    map,
-    color: shaded ? 0xE4DFCC : 0xFFFFFF,
-  })
-}
-
-function labelTexture(
-  bounds: Bounds,
-  paint: (ctx: CanvasRenderingContext2D, scale: number) => void,
-): CanvasTexture {
-  const scale = 16
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(2, Math.round(bounds.width * scale))
-  canvas.height = Math.max(2, Math.round(bounds.height * scale))
-  paint(canvas.getContext('2d')!, scale)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  return texture
-}
-
-function labelPlane(
-  bounds: Bounds,
-  z: number,
-  paint: (ctx: CanvasRenderingContext2D, scale: number) => void,
-): Mesh {
-  const texture = labelTexture(bounds, paint)
-  const mesh = new Mesh(
-    new PlaneGeometry(bounds.width, bounds.height),
-    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
-  )
-  mesh.rotation.x = -Math.PI / 2
-  mesh.position.copy(at(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, z + 0.2))
-  mesh.raycast = () => {}
-  return mesh
-}
-
-function drawName(
-  ctx: CanvasRenderingContext2D,
-  scale: number,
-  bounds: Bounds,
-  text: string,
-  fontSize: number,
-  align: 'center' | 'start',
-  alpha = 1,
-): void {
-  ctx.font = `${fontSize * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`
-  ctx.fillStyle = '#26251D'
-  ctx.globalAlpha = alpha
-  if (align === 'center') {
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(text, bounds.width * scale / 2, bounds.height * scale / 2, bounds.width * scale - 8)
-    return
-  }
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
-  ctx.letterSpacing = `${0.08 * fontSize * scale}px`
-  ctx.fillText(text, 6, 6)
-}
-
-interface Pickable {
-  material: LineBasicMaterial | LineDashedMaterial
-  ink: Color
-}
-
-const pickables: { mesh: Mesh; pick: Pickable; element: WorldElement }[] = []
-const pickMeshes: Mesh[] = []
-const routeLabels: { source: string; target: string; mesh: Mesh }[] = []
-const accentColor = new Color(accent)
-const raycaster = new Raycaster()
-const pointerNdc = new Vector2()
-
-function addBlock(parent: Group, element: WorldElement, bottom: number, top: number, label: Mesh): void {
-  const { x, y, width, height } = element.bounds
-  const thickness = Math.max(top - bottom, 0.4)
-  const geometry = new BoxGeometry(width, thickness, height)
-  const materials = [
-    sideMaterial(element.kind, height, thickness, true),
-    sideMaterial(element.kind, height, thickness, true),
-    new MeshBasicMaterial({ color: raised }),
-    new MeshBasicMaterial({ color: raised }),
-    sideMaterial(element.kind, width, thickness, false),
-    sideMaterial(element.kind, width, thickness, false),
-  ]
-  const mesh = new Mesh(geometry, materials)
-  mesh.position.copy(at(x + width / 2, y + height / 2, bottom + thickness / 2))
-
-  const ghost = element.origin !== 'observed'
-  const outlineMaterial = ghost
-    ? new LineDashedMaterial({ color: ink, dashSize: 2, gapSize: 1.5 })
-    : new LineBasicMaterial({ color: ink })
-  const outline = new LineSegments(new EdgesGeometry(geometry), outlineMaterial)
-  outline.position.copy(mesh.position)
-  if (ghost) outline.computeLineDistances()
-
-  const block = new Group()
-  block.add(mesh, outline, label)
-  if (element.kind === 'person') {
-    const head = new Mesh(new SphereGeometry(3.5, 16, 12), new MeshBasicMaterial({ color: ink }))
-    head.position.copy(at(x + width / 2, y + height / 2 - 7, top + 3.5))
-    block.add(head)
-  }
-  parent.add(block)
-
-  pickables.push({ mesh, pick: { material: outlineMaterial, ink: new Color(ink) }, element })
-  pickMeshes.push(mesh)
-}
-
-function addSlab(parent: Group, element: WorldElement, bottom: number, top: number): void {
-  addBlock(parent, element, bottom, top, labelPlane(element.bounds, top, (ctx, scale) => {
-    drawName(ctx, scale, element.bounds, element.name.toUpperCase(), 5, 'start', 0.65)
-  }))
-}
-
-function addPrism(parent: Group, element: WorldElement, bottom: number, top: number): void {
-  addBlock(parent, element, bottom, top, labelPlane(element.bounds, top, (ctx, scale) => {
-    drawName(ctx, scale, element.bounds, element.name, labelSizes[element.kind], 'center')
-  }))
-}
-
-function addZone(parent: Group, group: WorldGroup, z: number): void {
-  const { bounds } = group
-  const fill = new Mesh(
-    new PlaneGeometry(bounds.width, bounds.height),
-    new MeshBasicMaterial({ color: ink, opacity: 0.03, transparent: true, depthWrite: false }),
-  )
-  fill.rotation.x = -Math.PI / 2
-  fill.position.copy(at(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, z + 0.05))
-  fill.raycast = () => {}
-
-  const corners = [
-    at(bounds.x, bounds.y, z + 0.06),
-    at(bounds.x + bounds.width, bounds.y, z + 0.06),
-    at(bounds.x + bounds.width, bounds.y + bounds.height, z + 0.06),
-    at(bounds.x, bounds.y + bounds.height, z + 0.06),
-    at(bounds.x, bounds.y, z + 0.06),
-  ]
-  const edge = new Line(
-    new BufferGeometry().setFromPoints(corners),
-    new LineDashedMaterial({ color: ink, dashSize: 3, gapSize: 2 }),
-  )
-  edge.computeLineDistances()
-  parent.add(fill, edge, labelPlane(bounds, z + 0.08, (ctx, scale) => {
-    drawName(ctx, scale, bounds, group.name.toUpperCase(), 4.5, 'start', 0.65)
-  }))
-}
-
-function addBar(
-  parent: Group,
-  from: Vector3,
-  to: Vector3,
-  width: number,
-  material: Material,
-): void {
-  const dx = to.x - from.x
-  const dz = to.z - from.z
-  const length = Math.hypot(dx, dz)
-  if (length < 0.01) return
-  const bar = new Mesh(new BoxGeometry(length, 0.12, width), material)
-  bar.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2)
-  bar.rotation.y = Math.atan2(dx, dz) - Math.PI / 2
-  bar.raycast = () => {}
-  parent.add(bar)
-}
-
-function addRoute(parent: Group, relationship: WorldRelationship, z: number): void {
-  const points = relationship.route.map(point => at(point.x, point.y, z + 0.25))
-  const ghost = relationship.origin !== 'observed'
-  if (ghost) {
-    const line = new Line(
-      new BufferGeometry().setFromPoints(points),
-      new LineDashedMaterial({ color: ink, dashSize: 2, gapSize: 1.5 }),
-    )
-    line.computeLineDistances()
-    parent.add(line)
-  } else {
-    const material = new MeshBasicMaterial({ color: ink })
-    for (let index = 0; index < points.length - 1; index += 1) {
-      addBar(parent, points[index]!, points[index + 1]!, 0.55, material)
-    }
-  }
-  if (points.length >= 2) {
-    const last = points[points.length - 1]!
-    const prev = points[points.length - 2]!
-    const direction = last.clone().sub(prev)
-    if (direction.lengthSq() > 0) {
-      const arrow = new Mesh(new ConeGeometry(1.1, 3, 8), new MeshBasicMaterial({ color: ink }))
-      arrow.position.copy(last)
-      arrow.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
-      arrow.raycast = () => {}
-      parent.add(arrow)
-    }
-  }
-  if (relationship.label !== null) {
-    const mesh = flowLabel(relationship.description, relationship.label, z + 0.3)
-    mesh.visible = false
-    parent.add(mesh)
-    routeLabels.push({
-      source: relationship.source,
-      target: relationship.target,
-      mesh,
-    })
-  }
-}
-
-/** ELK reserves a 1-unit-tall box; the plane is sized to the words. */
-function flowLabel(description: string, bounds: Bounds, z: number): Mesh {
-  const scale = 16
-  const fontPx = 4 * scale
-  const font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`
-  const measure = document.createElement('canvas').getContext('2d')!
-  measure.font = font
-  const width = Math.max(2, Math.ceil(measure.measureText(description).width + 12))
-  const height = Math.max(2, Math.ceil(fontPx * 1.8))
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')!
-  ctx.font = font
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.lineJoin = 'round'
-  ctx.lineWidth = 6
-  ctx.strokeStyle = '#EDE8D6'
-  ctx.strokeText(description, width / 2, height / 2)
-  ctx.fillStyle = '#26251D'
-  ctx.fillText(description, width / 2, height / 2)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  const mesh = new Mesh(
-    new PlaneGeometry(width / scale, height / scale),
-    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
-  )
-  mesh.rotation.x = -Math.PI / 2
-  mesh.position.copy(at(
-    bounds.x + bounds.width / 2,
-    bounds.y + bounds.height / 2,
-    z,
-  ))
-  mesh.raycast = () => {}
-  return mesh
-}
-
-function addItem(parent: Group, item: SceneItem): void {
-  switch (item.kind) {
-    case 'slab':
-      addSlab(parent, item.element, item.bottom, item.top)
-      return
-    case 'prism':
-      addPrism(parent, item.element, item.bottom, item.top)
-      return
-    case 'zone':
-      addZone(parent, item.group, item.z)
-      return
-    case 'route':
-      addRoute(parent, item.relationship, item.z)
-  }
-}
-
-const host = document.getElementById('map')!
 const scene = new Scene()
 scene.background = new Color(paper)
-const city = new Group()
-for (const item of items) addItem(city, item)
 scene.add(city)
 
+const host = document.getElementById('map')!
+const treeHost = document.getElementById('tree')!
+const detailsHost = document.getElementById('details')!
+const zoomHost = document.getElementById('zoom')!
 const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
 const renderer = new WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -394,6 +48,13 @@ const button2d = document.getElementById('mode-2d')!
 const button3d = document.getElementById('mode-3d')!
 let current: Projection = defaultProjection
 const target = new Vector3()
+const accentColor = new Color(accent)
+const raycaster = new Raycaster()
+const pointerNdc = new Vector2()
+const parentOf = parentOfElements(world.elements)
+
+let selectedId = defaultSelection(world, 'context')?.representationId
+let hoverId: string | undefined
 
 function placeCamera(projection: Projection): void {
   const span = new Box3().setFromObject(city).getSize(new Vector3())
@@ -445,6 +106,7 @@ function fitCamera(): void {
   camera.bottom = -halfH
   camera.zoom = 1
   camera.updateProjectionMatrix()
+  zoomHost.textContent = zoomReadout(camera.zoom)
 }
 
 function resize(): void {
@@ -480,50 +142,32 @@ function worldPerPixel(): number {
   return (camera.top - camera.bottom) / camera.zoom / Math.max(host.clientHeight, 1)
 }
 
-const details = document.getElementById('details')!
-const detailsTitle = details.querySelector('h1')!
-const detailsMeta = details.querySelector('.meta')!
-const detailsDescription = details.querySelector('.description') as HTMLElement
-const detailsRels = details.querySelector('.rels')!
-const byId = new Map(world.elements.map((element: WorldElement) => [element.representationId, element]))
-const parentOf = parentOfElements(world.elements)
-
-let selectedId: string | null = null
-let hoverId: string | null = null
-
-function fillDetails(element: WorldElement | null): void {
-  if (element === null) {
-    details.hidden = true
-    return
-  }
-  details.hidden = false
-  detailsTitle.textContent = element.name
-  detailsMeta.textContent = `${element.external ? `external ${element.kind}` : element.kind} · ${element.origin}`
-  detailsDescription.textContent = element.description
-  detailsDescription.hidden = element.description === ''
-  detailsRels.replaceChildren()
-  for (const relationship of world.relationships) {
-    const ends = promotedPeer(relationship, element.representationId, parentOf)
-    if (ends === null) continue
-    const other = byId.get(ends.peerId)
-    const item = document.createElement('li')
-    item.textContent = `${ends.outgoing ? '→' : '←'} ${other?.name ?? ''} · ${relationship.description}`
-    detailsRels.append(item)
-  }
+function selectedElement(): WorldElement | undefined {
+  return world.elements.find(element => element.representationId === selectedId)
 }
 
-function paintSelection(): void {
+function select(id: string): void {
+  selectedId = id
+  paintSelection()
+}
+
+function paintOutlines(): void {
   for (const item of pickables) {
     const id = item.element.representationId
     const on = id === selectedId || id === hoverId
-    item.pick.material.color.copy(on ? accentColor : item.pick.ink)
+    item.material.color.copy(on ? accentColor : item.ink)
   }
-  for (const label of routeLabels) {
-    label.mesh.visible = showsRelationshipText(label, selectedId, parentOf)
-  }
-  const selected = pickables.find(item => item.element.representationId === selectedId)
-  fillDetails(selected?.element ?? null)
   renderer.render(scene, camera)
+}
+
+function paintSelection(): void {
+  for (const label of routeLabels) {
+    label.mesh.visible = showsRelationshipText(label, selectedId ?? null, parentOf)
+  }
+  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select)
+  const selected = selectedElement()
+  if (selected) paintDetails(detailsHost, inspectDetails(selected, world), select)
+  paintOutlines()
 }
 
 const canvas = renderer.domElement
@@ -556,6 +200,7 @@ canvas.addEventListener('wheel', event => {
   const delta = before.sub(after)
   camera.position.add(delta)
   target.add(delta)
+  zoomHost.textContent = zoomReadout(camera.zoom)
   renderer.render(scene, camera)
 }, { passive: false })
 
@@ -585,31 +230,27 @@ canvas.addEventListener('pointermove', event => {
     }
     return
   }
-  hoverId = hitElement(event.clientX, event.clientY)?.representationId ?? null
-  paintSelection()
+  hoverId = hitElement(event.clientX, event.clientY)?.representationId
+  paintOutlines()
 })
 canvas.addEventListener('pointerup', event => {
   if (!dragging) {
-    selectedId = hitElement(event.clientX, event.clientY)?.representationId ?? null
+    const hit = hitElement(event.clientX, event.clientY)
+    if (hit) selectedId = hit.representationId
     paintSelection()
   }
   last = null
   dragging = false
 })
 canvas.addEventListener('pointerleave', () => {
-  hoverId = null
-  paintSelection()
-})
-window.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return
-  selectedId = null
-  paintSelection()
+  hoverId = undefined
+  paintOutlines()
 })
 
 button2d.addEventListener('click', () => setMode(true))
 button3d.addEventListener('click', () => setMode(false))
-window.addEventListener('resize', resize)
 
 renderer.setSize(host.clientWidth, host.clientHeight, false)
 fitCamera()
 paintSelection()
+new ResizeObserver(resize).observe(host)
