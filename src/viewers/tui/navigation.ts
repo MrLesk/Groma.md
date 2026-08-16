@@ -10,7 +10,7 @@ import type {
   WorldElement,
 } from '../../types.ts'
 
-export type ViewerFocus = 'architecture' | 'hierarchy'
+export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
 export type ViewerAction =
   | 'enter'
   | 'leave'
@@ -29,6 +29,8 @@ export interface ViewerState {
   focus: ViewerFocus
   tree: TreeState
   panes: PaneVisibility
+  /** First hidden content row of an overflowing details pane. */
+  detailsScroll: number
 }
 
 function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
@@ -68,6 +70,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     focus: 'architecture',
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
+    detailsScroll: 0,
   }
 }
 
@@ -261,7 +264,10 @@ function moveView(
   return { level: levelFor(higherHit), currentId: higherHit.representationId }
 }
 
-/** Selection changes keep the tree in step: cursor follows, its path unhides. */
+/**
+ * Selection changes keep the panes in step: the tree cursor follows,
+ * its path unhides, and the details scroll returns to the top.
+ */
 function syncTree(world: ArchitectureWorld, state: ViewerState): ViewerState {
   const path = ancestorsOf(state.currentId, elementsById(world))
   const collapsed = new Set(
@@ -270,6 +276,7 @@ function syncTree(world: ArchitectureWorld, state: ViewerState): ViewerState {
   return {
     ...state,
     tree: { ...state.tree, cursor: state.currentId, collapsed },
+    detailsScroll: 0,
   }
 }
 
@@ -349,7 +356,12 @@ export function reduceViewer(
     }
   }
   if (action === 'toggle-details') {
-    return { ...current, panes: { ...current.panes, details: !current.panes.details } }
+    const details = !current.panes.details
+    return {
+      ...current,
+      panes: { ...current.panes, details },
+      focus: !details && current.focus === 'details' ? 'architecture' : current.focus,
+    }
   }
   if (action === 'dismiss') {
     if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
@@ -357,6 +369,15 @@ export function reduceViewer(
   }
   if (current.focus === 'hierarchy') {
     return reduceTree(world, current, action)
+  }
+  if (current.focus === 'details') {
+    if (action === 'up' || action === 'down') {
+      const step = action === 'down' ? 1 : -1
+      // The upper bound lives in drawDetails: content height is a render fact.
+      return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
+    }
+    if (action === 'left') return { ...current, focus: 'architecture' }
+    return current
   }
   if (action === 'enter') {
     const next = resolved.selected && canEnter(resolved.selected)
@@ -367,17 +388,20 @@ export function reduceViewer(
   if (action === 'leave') {
     return syncTree(world, { ...current, ...leaveView(world, current, resolved.selected) })
   }
-  if (current.focus !== 'architecture' || !resolved.selected) {
+  if (!resolved.selected) {
     return current
   }
   const moved = moveView(world, current, resolved.selected, action)
-  if (
-    action === 'left'
-    && moved.level === current.level
-    && moved.currentId === current.currentId
-  ) {
-    // Nothing lies further left; the next stop is the hierarchy pane.
-    return reduceViewer(world, current, 'tab')
+  if (moved.level === current.level && moved.currentId === current.currentId) {
+    // Nothing lies further that way; the next stop is the side pane.
+    if (action === 'left') return reduceViewer(world, current, 'tab')
+    if (action === 'right') {
+      return {
+        ...current,
+        focus: 'details',
+        panes: { ...current.panes, details: true },
+      }
+    }
   }
   return syncTree(world, { ...current, ...moved })
 }

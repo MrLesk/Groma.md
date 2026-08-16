@@ -136,6 +136,7 @@ export function mountTerminalViewer(
     paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel.world, theme, {
       focus: state.focus,
       tree: state.tree,
+      detailsScroll: state.detailsScroll,
     })
     frame.requestRender()
   }

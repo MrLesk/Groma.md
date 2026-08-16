@@ -21,6 +21,7 @@ export function paintWorld(
   theme: ViewerTheme,
   options: {
     tree: TreeState
+    detailsScroll: number
     focus?: ViewerFocus
   },
 ): void {
@@ -41,7 +42,10 @@ export function paintWorld(
     return element.representationId === projection.currentId
   })
   if (selected) {
-    drawDetails(buffer, layout.details, selected, world, theme)
+    drawDetails(buffer, layout.details, selected, world, theme, {
+      focused: options.focus === 'details',
+      scroll: options.detailsScroll,
+    })
   }
   drawChrome(buffer, layout, projection, theme, options.focus)
 }

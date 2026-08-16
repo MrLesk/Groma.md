@@ -15,11 +15,11 @@ readout of the camera state: `fit` when the whole map fits, a
 percentage in between, `1:1` at the closest zoom. Between them sit
 three panes that each reserve their width: the hierarchy pane on the
 left, the map pane in the center, and the details pane on the right.
-The map pane is the
-camera viewport; the map never renders under a side pane. `[` and `]`
-collapse and restore the hierarchy and details panes; the map pane
-takes the freed width immediately, and only the camera viewport
-changes, never the world layout.
+The focused pane draws its border in the selection accent; the others
+stay dim. The map pane is the camera viewport; the map never renders
+under a side pane. `[` and `]` collapse and restore the hierarchy and
+details panes; the map pane takes the freed width immediately, and
+only the camera viewport changes, never the world layout.
 
 The hierarchy pane lists the merged world as a containment tree:
 people, systems, and external systems at the root, containers under
@@ -35,6 +35,9 @@ navigation.
 The details pane always shows the current selection: name, kind,
 annotations, description, relationships, and children. Component
 details include the scanner, file, and optional symbol from `code`.
+Right on the map with nothing further right focuses the details pane;
+Up and Down scroll overflowing content, and Esc or Left returns to
+the map. Selection changes reset the scroll.
 
 ## What it shows
 
@@ -83,13 +86,14 @@ the last level. The first view fits the whole map.
   component. Components is the last level.
 - `R` asks core for the world again and redraws it.
 - Esc never changes level and does not exit. It returns focus from
-  the hierarchy pane to the map.
+  a side pane to the map.
 - Ctrl+C leaves the viewer and restores the terminal.
 - Arrows select the nearest element in that direction at the current
   level. If none exists, selection moves up a level. Arrows never
   descend. Same-level moves keep zoom and pan only if needed. Leaving
-  a boundary zooms out. Left with nothing further left focuses the
-  hierarchy pane, selection unchanged.
+  a boundary zooms out. Left or Right with nothing further in that
+  direction focuses the hierarchy or details pane, selection
+  unchanged.
 - `[` toggles the hierarchy pane and `]` toggles the details pane.
   Hiding the focused hierarchy pane returns focus to the map; Tab
   reopens a hidden hierarchy pane.
