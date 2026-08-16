@@ -324,7 +324,10 @@ function reduceTree(
     return { ...current, tree: { ...current.tree, cursor: parent } }
   }
   if (action === 'right') {
-    if (!cursor.hasChildren || cursor.expanded) return current
+    // Nothing left to expand: Right keeps moving, back onto the map.
+    if (!cursor.hasChildren || cursor.expanded) {
+      return { ...current, focus: 'architecture' }
+    }
     const collapsed = new Set(current.tree.collapsed)
     collapsed.delete(cursor.id)
     const expanded = new Set(current.tree.expanded)

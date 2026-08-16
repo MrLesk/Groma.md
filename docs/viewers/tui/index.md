@@ -106,6 +106,7 @@ the last level. The first view fits the whole map.
   filter opened. The filter works with side panes collapsed.
 - Tab focuses the hierarchy pane; Tab or Esc returns to the map.
   While it is focused, Up and Down move through visible rows, Right
-  expands a row, and Left collapses it or climbs to its parent. Enter
+  expands a row, and Left collapses it or climbs to its parent. Right
+  on a row with nothing left to expand returns to the map. Enter
   selects that element on the map at its level and the camera brings
   it into view; the tree stays focused.
