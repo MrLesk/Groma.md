@@ -196,9 +196,7 @@ export interface MapCamera {
 
 export interface WorldProjection {
   level: SemanticLevel
-  levelName: string
   currentId: string | null
-  currentName: string
   fitZoom: number
   camera: MapCamera
   viewport: Bounds
@@ -208,12 +206,10 @@ export interface WorldProjection {
 }
 
 export interface ProjectionOptions {
-  width: number
-  height: number
+  /** The map pane interior; the camera projects the world into these cells. */
+  viewport: Bounds
   level?: SemanticLevel
   currentId?: string
   camera?: MapCamera
   lockCamera?: boolean
-  /** Screen column where a right-side overlay begins; the camera pans the selection clear of it. */
-  coveredFromX?: number
 }

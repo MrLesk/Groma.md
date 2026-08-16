@@ -5,7 +5,8 @@ import { drawBorder } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import type { ViewerFocus, ViewerPanel, ZoomSlot } from '../navigation.ts'
+import type { ViewerFocus, ZoomSlot } from '../navigation.ts'
+import type { PaneLayout } from '../layout.ts'
 import type { WorldProjection } from '../../../types.ts'
 
 const zoomControl = '- context | containers | components +'
@@ -18,61 +19,66 @@ const zoomSlotLabel: Record<ZoomSlot, string> = {
   enter: '+',
 }
 
-export function footerHints(focus: ViewerFocus, panel: ViewerPanel): string {
+function footerHints(focus: ViewerFocus): string {
   const hints = []
   if (focus === 'architecture') {
     hints.push('+ in', '- out')
   }
   hints.push(focus === 'zoom' ? 'z item' : 'z zoom')
-  if (panel !== 'closed') hints.push(panel === 'full' ? 'f side' : 'f full')
   hints.push('R refresh')
-  if (panel !== 'closed') hints.push('Esc close')
-  hints.push('Ctrl+C exit')
   return hints.join('   ')
 }
 
 export function drawChrome(
   buffer: OptimizedBuffer,
+  layout: PaneLayout,
   projection: WorldProjection,
   theme: ViewerTheme,
-  chrome: { focus?: ViewerFocus; panel?: ViewerPanel; zoomSlot?: ZoomSlot } = {},
+  chrome: { focus?: ViewerFocus; zoomSlot?: ZoomSlot } = {},
 ): void {
   const focus = chrome.focus ?? 'architecture'
-  const panel = chrome.panel ?? 'closed'
-  const header = { x: 0, y: 0, width: buffer.width, height: 3 }
-  drawBorder(
-    buffer,
-    header,
-    'observed',
-    theme.foreground,
-    theme.background,
-    'card',
-    TextAttributes.DIM,
-  )
+  for (const pane of [layout.hierarchy, layout.map]) {
+    drawBorder(
+      buffer,
+      pane,
+      'observed',
+      theme.foreground,
+      theme.background,
+      'card',
+      TextAttributes.DIM,
+    )
+  }
 
-  const title = `${projection.levelName} · ${projection.currentName}`
+  cell(buffer, layout.header.x, layout.header.y, '▌', theme.selected, theme.background)
   text(
     buffer,
-    title,
-    2,
-    1,
-    Math.max(0, buffer.width - 4),
+    'groma',
+    layout.header.x + 2,
+    layout.header.y,
+    Math.max(0, layout.header.width - 2),
     theme.foreground,
     theme.background,
     TextAttributes.BOLD,
   )
-  const underlineEnd = Math.min(2 + title.length, buffer.width - 2)
-  for (let column = 2; column < underlineEnd; column += 1) {
-    cell(buffer, column, 2, '━', theme.selected, theme.background)
-  }
+  const exitHint = 'Ctrl+C exit'
+  text(
+    buffer,
+    exitHint,
+    Math.max(0, layout.header.x + layout.header.width - exitHint.length - 1),
+    layout.header.y,
+    exitHint.length,
+    theme.foreground,
+    theme.background,
+    TextAttributes.DIM,
+  )
 
-  const footer = `${zoomControl}   ${footerHints(focus, panel)}`
+  const footer = `${zoomControl}   ${footerHints(focus)}`
   text(
     buffer,
     footer,
-    1,
-    buffer.height - 1,
-    Math.max(0, buffer.width - 2),
+    layout.footer.x + 1,
+    layout.footer.y,
+    Math.max(0, layout.footer.width - 2),
     theme.foreground,
     theme.background,
   )
@@ -83,8 +89,8 @@ export function drawChrome(
   text(
     buffer,
     token,
-    1 + zoomControl.indexOf(token),
-    buffer.height - 1,
+    layout.footer.x + 1 + zoomControl.indexOf(token),
+    layout.footer.y,
     token.length,
     theme.selected,
     theme.background,

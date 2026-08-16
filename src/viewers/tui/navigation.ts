@@ -8,7 +8,6 @@ import type {
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'zoom'
-export type ViewerPanel = 'closed' | 'side' | 'full'
 const zoomSlots = [
   'leave',
   'context',
@@ -20,20 +19,17 @@ export type ZoomSlot = (typeof zoomSlots)[number]
 export type ViewerAction =
   | 'enter'
   | 'leave'
-  | 'inspect'
   | 'up'
   | 'down'
   | 'left'
   | 'right'
   | 'zoom'
-  | 'flip'
   | 'dismiss'
 
 export interface ViewerState {
   level: SemanticLevel
   currentId?: string
   focus: ViewerFocus
-  panel: ViewerPanel
   zoomSlot: ZoomSlot
 }
 
@@ -79,7 +75,6 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     level: 'context',
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
-    panel: 'closed',
     zoomSlot: 'context',
   }
 }
@@ -336,19 +331,14 @@ export function reduceViewer(
       zoomSlot: current.level,
     }
   }
-  if (action === 'flip') {
-    if (current.panel === 'closed') return current
-    return { ...current, panel: current.panel === 'full' ? 'side' : 'full' }
-  }
   if (action === 'dismiss') {
-    if (current.panel !== 'closed') return { ...current, panel: 'closed' }
     if (current.focus === 'zoom') return { ...current, focus: 'architecture' }
     return current
   }
   if (current.focus === 'zoom' && (action === 'left' || action === 'right')) {
     return { ...current, zoomSlot: moveZoomSlot(current.zoomSlot, action) }
   }
-  if (current.focus === 'zoom' && action === 'inspect') {
+  if (current.focus === 'zoom' && action === 'enter') {
     if (current.zoomSlot === 'leave' || current.zoomSlot === 'enter') {
       return current
     }
@@ -357,20 +347,16 @@ export function reduceViewer(
       ...jumpView(world, resolved.selected, current.zoomSlot),
     }
   }
-  if (action === 'enter' || action === 'inspect') {
+  if (action === 'enter') {
     const next = resolved.selected && canEnter(resolved.selected)
       ? enterView(world, resolved.selected)
       : { level: current.level, currentId: current.currentId }
-    return {
-      ...current,
-      ...next,
-      panel: action === 'inspect' && current.panel === 'closed' ? 'side' : current.panel,
-    }
+    return { ...current, ...next }
   }
   if (action === 'leave') {
     return { ...current, ...leaveView(world, current, resolved.selected) }
   }
-  if (current.focus !== 'architecture' || current.panel === 'full' || !resolved.selected) {
+  if (current.focus !== 'architecture' || !resolved.selected) {
     return current
   }
   return { ...current, ...moveView(world, current, resolved.selected, action) }

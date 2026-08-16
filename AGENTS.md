@@ -169,16 +169,30 @@ The implementer applies accepted simplifications and reruns focused checks. Ther
 limited to the original simplicity findings and regressions caused by their fixes. The normal specification and quality
 reviews follow only after this gate passes.
 
+## Tests
+
+Test business logic, not UI or content. Cover navigation state, projection and layout invariants, camera rules, world
+immutability, and lifecycle. Do not assert decorative details: exact frame strings, hint text, border glyphs, colors, or
+prose from the architecture Markdown. Never write a test that only restates its input, such as checking that an element
+named A renders the word A; assert the behavior that produced it, such as "the details pane shows the selected element".
+
+Tests must be parallel-safe and run concurrently (`test.concurrent` under `bun:test`). Each test owns its renderer,
+fixtures, and temp directories; nothing is shared between tests. When a test needs a text anchor to observe behavior,
+prefer one minimal anchor over exhaustive content matching.
+
 ## TUI map
 
-The TUI world is a map. Do not reflow it for selection or details.
-The first view fits the whole map. `+` and `-` zoom the camera. At the
+The TUI world is a map inside fixed chrome: a one-row header, a
+hierarchy pane, the map pane, a details pane, and a one-row footer.
+Panes reserve width; they never overlay the map. The world layout
+never changes; only the camera viewport does. The first view fits the
+whole map inside the map pane. `+` and `-` zoom the camera. At the
 closest zoom, names stay readable and the map may be larger than the
-screen.
+map pane.
 
-- Details overlay the world. They do not reserve width or change scale.
+- The details pane always shows the current selection.
 - Arrowing selects the nearest same-level peer. The camera pans just
-  enough if that peer would leave the screen; it does not zoom. When
+  enough if that peer would leave the map pane; it does not zoom. When
   there is no same-level peer in that direction, selection escapes to
   an outer item and the camera zooms out. Arrows never descend.
 - Cards, routes, and relationship labels stay on the same cells while
