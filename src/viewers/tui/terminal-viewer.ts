@@ -135,6 +135,7 @@ export function mountTerminalViewer(
     paintWorld(frame.frameBuffer, currentLayout(), projection, viewModel.world, theme, {
       focus: state.focus,
       zoomSlot: state.zoomSlot,
+      tree: state.tree,
     })
     frame.requestRender()
   }
@@ -215,6 +216,7 @@ export function mountTerminalViewer(
   function actionFor(key: KeyEvent): ViewerAction | undefined {
     if (key.ctrl) return undefined
     if (key.name === 'return') return 'enter'
+    if (key.name === 'tab') return 'tab'
     if (key.name === 'z') return 'zoom'
     if (
       key.name === 'up'
@@ -241,7 +243,7 @@ export function mountTerminalViewer(
       return
     }
     if (key.name === 'escape') {
-      if (state.focus !== 'zoom') return
+      if (state.focus === 'architecture') return
       state = reduceViewer(viewModel.world, state, 'dismiss')
       repaint()
       return

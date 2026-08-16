@@ -15,6 +15,17 @@ each reserve their width: the hierarchy pane on the left, the map pane
 in the center, and the details pane on the right. The map pane is the
 camera viewport; the map never renders under a side pane.
 
+The hierarchy pane lists the merged world as a containment tree:
+people, systems, and external systems at the root, containers under
+their system, components under their container. Ghost rows use the
+planned and missing colors; a ghost leaf also carries a `◌` marker.
+Rows are collapsed except the path to the current
+selection; a collapsed row shows its child count. The tree and the
+map share one selection: the accent bar marks the selected element,
+and map moves keep the tree in step. The tree scrolls to keep its
+cursor visible. Groups are invisible to the tree, matching
+navigation.
+
 The details pane always shows the current selection: name, kind,
 annotations, description, relationships, and children. Component
 details include the scanner, file, and optional symbol from `code`.
@@ -72,6 +83,11 @@ the last level. The first view fits the whole map.
   level. If none exists, selection moves up a level. Arrows never
   descend. Same-level moves keep zoom and pan only if needed. Leaving
   a boundary zooms out.
+- Tab focuses the hierarchy pane; Tab or Esc returns to the map.
+  While it is focused, Up and Down move through visible rows, Right
+  expands a row, and Left collapses it or climbs to its parent. Enter
+  selects that element on the map at its level and the camera brings
+  it into view; the tree stays focused.
 - `z` focuses the footer strip `- context | containers | components +`
   and highlights the current level. Left and right move the highlight.
   Enter on a level name goes there and zooms the camera to fit that
