@@ -12,6 +12,7 @@ contract](../groma/README.md) defines the document format.
 
 People and agents use Groma. They do not edit `groma/` Markdown by hand.
 Groma writes those files so paths, identity, and metadata stay consistent.
+Bare `groma` and `groma instructions` are the local instruction hub.
 
 1. Open a viewer — see the world. On a TTY, `groma view` starts the TUI
    plugin. It does not scan on open. The live process starts the same
