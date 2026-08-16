@@ -2,6 +2,10 @@
 id: scanner
 kind: container
 parent: groma
+code:
+  - scanner: typescript
+    file: src/scanner.ts
+    symbol: formatScanSummary
 ---
 
 # Scanner

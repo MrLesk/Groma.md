@@ -38,7 +38,7 @@ const nestedLayoutOptions = {
   'elk.direction': 'RIGHT',
   'elk.edgeRouting': 'ORTHOGONAL',
   'elk.nodeSize.constraints': 'MINIMUM_SIZE',
-  'elk.padding': '[top=14,left=4,bottom=8,right=4]',
+  'elk.padding': '[top=32,left=20,bottom=20,right=20]',
   'elk.spacing.edgeEdge': '3',
   'elk.spacing.edgeNode': '8',
   'elk.spacing.nodeNode': '16',
@@ -47,7 +47,7 @@ const nestedLayoutOptions = {
 
 const groupLayoutOptions = {
   ...nestedLayoutOptions,
-  'elk.padding': '[top=6,left=4,bottom=4,right=4]',
+  'elk.padding': '[top=12,left=10,bottom=10,right=10]',
 }
 
 const minimumSizes: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {

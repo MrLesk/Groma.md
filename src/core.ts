@@ -166,6 +166,10 @@ function codeKey(reference: CodeReference): string {
   return `${reference.scanner}\0${reference.file}\0${reference.symbol ?? ''}`
 }
 
+function codeFileKey(reference: CodeReference): string {
+  return `${reference.scanner}\0${reference.file}`
+}
+
 function architectureRelative(sourceFilename: string): string {
   if (sourceFilename.startsWith('groma/plans/')) {
     const slash = sourceFilename.indexOf('/', 'groma/plans/'.length)
@@ -213,6 +217,7 @@ function observedPathFor(
 function indexWorld(revisions: RevisionRecord[]) {
   const byId = new Map<string, WorldRecord>()
   const byCode = new Map<string, string>()
+  const byCodeFile = new Map<string, string>()
 
   for (const record of revisions) {
     if (record.revision.kind === 'missing') continue
@@ -232,11 +237,12 @@ function indexWorld(revisions: RevisionRecord[]) {
       }
       for (const reference of worldRecord.code) {
         byCode.set(codeKey(reference), id)
+        byCodeFile.set(codeFileKey(reference), id)
       }
     }
   }
 
-  return { byId, byCode }
+  return { byId, byCode, byCodeFile }
 }
 
 function matchCandidate(
@@ -245,6 +251,7 @@ function matchCandidate(
 ): WorldRecord | undefined {
   for (const reference of candidate.code ?? []) {
     const id = world.byCode.get(codeKey(reference))
+      ?? world.byCodeFile.get(codeFileKey(reference))
     if (id !== undefined) return world.byId.get(id)
   }
   return world.byId.get(kebabCase(candidate.name))
@@ -285,6 +292,17 @@ export async function foldScanResult(
         code,
       }),
     )
+    const created: WorldRecord = {
+      id,
+      origin: 'observed',
+      sourceFilename,
+      code,
+    }
+    world.byId.set(id, created)
+    for (const reference of code) {
+      world.byCode.set(codeKey(reference), id)
+      world.byCodeFile.set(codeFileKey(reference), id)
+    }
     summary.created += 1
   }
 

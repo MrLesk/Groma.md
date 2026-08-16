@@ -21,7 +21,8 @@ scans never rewrite the body. A scan never turns a ghost into observed
 architecture. `groma accept` needs that match.
 
 See [Creating a scanner plugin](creating-a-plugin.md) for the shared
-interface. TypeScript is one plugin, not the model. Core never reads
+interface. TypeScript is the generic TypeScript plugin, not the model.
+A Nest or Next plugin would be a later mapping. Core never reads
 `package.json` or other language project files.
 
 ## Scanner plugins

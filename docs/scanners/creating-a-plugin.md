@@ -13,6 +13,11 @@ Groma core.
 source → scanner plugin → scan result → Groma core
 ```
 
+Every plugin takes the same two configuration knobs: a glob list for which
+files to read, and an ignore list for files and folders to skip. A plugin
+may also honor the host project's ignore file (the TypeScript plugin uses
+`.gitignore`). Defaults belong in the plugin, not in Groma core.
+
 ## The shared interface
 
 Each candidate has one of these types:
@@ -49,6 +54,7 @@ Each plugin documents its source contract under `docs/scanners/`. The
 contract names the concrete source shapes it supports and the scan result
 from one approved example. There is no contract until that example exists.
 
-The [TypeScript scanner](typescript/index.md) is the first plugin. It has no
-approved example yet. The [.NET/C# scanner](dotnet-csharp/index.md) is the
-same interface for another ecosystem. Neither plugin is Groma core.
+The [TypeScript scanner](typescript/index.md) is the generic TypeScript
+plugin. Nest or Next would be later plugins on the same interface. The
+[.NET/C# scanner](dotnet-csharp/index.md) is the same interface for another
+ecosystem. No plugin is Groma core.

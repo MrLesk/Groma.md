@@ -1,10 +1,30 @@
 import { ancestorOfKind, defaultSelection } from './navigation.ts'
+import {
+  clamp,
+  fitZoomFor,
+  focusElement,
+  overviewCamera,
+  padded,
+  panCells,
+  projectBounds,
+  projectPoint,
+  transformFor,
+  visibleIn,
+  within,
+} from './projection-camera.ts'
+import {
+  attachRouteToBounds,
+  boundsOverlap,
+  compactRouteLabel,
+  orthogonalRoute,
+  pointInside,
+  projectLabel,
+  trimRouteToDisplayedEndpoints,
+} from './projection-routes.ts'
 import type {
   ArchitectureWorld,
   Bounds,
   DisplayRole,
-  MapCamera,
-  Point,
   ProjectedGroup,
   ProjectedRelationship,
   ProjectionOptions,
@@ -14,151 +34,11 @@ import type {
   WorldRelationship,
 } from '../../types.ts'
 
-const CELL_ASPECT = 0.5
+export { fitLayer, fitView, followSelection } from './projection-camera.ts'
 
 const titledCard = {
   height: 5,
   width: 21,
-}
-
-function focusElement(
-  level: SemanticLevel,
-  selected: WorldElement | undefined,
-  elementsById: Map<string, WorldElement>,
-): WorldElement | null {
-  if (level === 'context') return null
-  const kind = level === 'containers' ? 'system' : 'container'
-  return ancestorOfKind(selected, kind, elementsById) ?? null
-}
-
-function padded(bounds: Bounds): Bounds {
-  const padding = 4
-  return {
-    x: bounds.x - padding,
-    y: bounds.y - padding,
-    width: bounds.width + padding * 2,
-    height: bounds.height + padding * 2,
-  }
-}
-
-interface Transform {
-  xScale: number
-  yScale: number
-  x: number
-  y: number
-}
-
-function fitZoomFor(subject: Bounds, viewport: Bounds): number {
-  return Math.min(
-    viewport.width / Math.max(1, subject.width),
-    viewport.height / Math.max(1, subject.height * CELL_ASPECT),
-    1,
-  )
-}
-
-function overviewCamera(subject: Bounds, viewport: Bounds): MapCamera {
-  return {
-    zoom: fitZoomFor(subject, viewport),
-    centerX: subject.x + subject.width / 2,
-    centerY: subject.y + subject.height / 2,
-  }
-}
-
-export function fitView(
-  world: ArchitectureWorld,
-  viewport: Bounds,
-): MapCamera {
-  return overviewCamera(padded(world.bounds), viewport)
-}
-
-export function fitLayer(
-  world: ArchitectureWorld,
-  viewport: Bounds,
-  level: SemanticLevel,
-  currentId?: string,
-): MapCamera {
-  if (level === 'context') return fitView(world, viewport)
-  const elementsById = new Map(world.elements.map(element => [
-    element.representationId,
-    element,
-  ]))
-  const selected = currentId === undefined
-    ? defaultSelection(world, level)
-    : elementsById.get(currentId) ?? defaultSelection(world, level)
-  const subject = focusElement(level, selected, elementsById)
-  return overviewCamera(
-    padded(subject?.bounds ?? world.bounds),
-    viewport,
-  )
-}
-
-const levelDepth: Record<SemanticLevel, number> = {
-  context: 0,
-  containers: 1,
-  components: 2,
-}
-
-export function followSelection(
-  world: ArchitectureWorld,
-  viewport: Bounds,
-  previous: { level: SemanticLevel; currentId?: string },
-  next: { level: SemanticLevel; currentId?: string },
-  current: MapCamera,
-): MapCamera | undefined {
-  if (next.level === previous.level) return undefined
-  const target = fitLayer(world, viewport, next.level, next.currentId)
-  if (levelDepth[next.level] < levelDepth[previous.level]) {
-    // `+`/`-` can already be wider than the outer level; do not zoom in on the way out.
-    return { ...target, zoom: Math.min(current.zoom, target.zoom) }
-  }
-  return target
-}
-
-function transformFor(camera: MapCamera, viewport: Bounds): Transform {
-  const xScale = camera.zoom
-  const yScale = camera.zoom * CELL_ASPECT
-  return {
-    xScale,
-    yScale,
-    x: viewport.x + viewport.width / 2 - camera.centerX * xScale,
-    y: viewport.y + viewport.height / 2 - camera.centerY * yScale,
-  }
-}
-
-function visibleIn(bounds: Bounds, viewport: Bounds): boolean {
-  return bounds.x < viewport.x + viewport.width
-    && bounds.x + bounds.width > viewport.x
-    && bounds.y < viewport.y + viewport.height
-    && bounds.y + bounds.height > viewport.y
-}
-
-function panCells(bounds: Bounds, viewport: Bounds): Point {
-  let x = 0
-  let y = 0
-  if (bounds.width <= viewport.width) {
-    if (bounds.x < viewport.x) x = viewport.x - bounds.x
-    else if (bounds.x + bounds.width > viewport.x + viewport.width) {
-      x = viewport.x + viewport.width - bounds.x - bounds.width
-    }
-  } else if (!visibleIn(bounds, viewport)) {
-    x = viewport.x - bounds.x
-  }
-  if (bounds.height <= viewport.height) {
-    if (bounds.y < viewport.y) y = viewport.y - bounds.y
-    else if (bounds.y + bounds.height > viewport.y + viewport.height) {
-      y = viewport.y + viewport.height - bounds.y - bounds.height
-    }
-  } else if (!visibleIn(bounds, viewport)) {
-    y = viewport.y - bounds.y
-  }
-  return { x, y }
-}
-
-function projectPoint(point: Point, transform: Transform): Point {
-  return {
-    x: Math.round(transform.x + point.x * transform.xScale),
-    y: Math.round(transform.y + point.y * transform.yScale),
-  }
 }
 
 function centeredBounds(bounds: Bounds, width: number, height: number): Bounds {
@@ -189,37 +69,6 @@ function keepTitledCardInView(bounds: Bounds, viewport: Bounds): Bounds {
   return { ...bounds, x, y }
 }
 
-function projectBounds(bounds: Bounds, transform: Transform): Bounds {
-  const topLeft = projectPoint(bounds, transform)
-  const bottomRight = projectPoint({
-    x: bounds.x + bounds.width,
-    y: bounds.y + bounds.height,
-  }, transform)
-
-  const projected = {
-    x: topLeft.x,
-    y: topLeft.y,
-    width: Math.max(1, bottomRight.x - topLeft.x),
-    height: Math.max(1, bottomRight.y - topLeft.y),
-  }
-  return projected
-}
-
-function within(
-  element: WorldElement | undefined,
-  ancestorId: string,
-  elementsById: Map<string, WorldElement>,
-): boolean {
-  let current = element
-  while (current) {
-    if (current.representationId === ancestorId) return true
-    current = current.parent === null
-      ? undefined
-      : elementsById.get(current.parent)
-  }
-  return false
-}
-
 function leafCard(element: WorldElement): boolean {
   return element.kind === 'person' || element.external
 }
@@ -229,7 +78,8 @@ function displayRole(
   level: SemanticLevel,
   focus: WorldElement | null,
 ): DisplayRole {
-  if (leafCard(element) && level !== 'context') return 'hidden'
+  if (element.external && level !== 'context') return 'hidden'
+  if (element.kind === 'person' && level === 'components') return 'hidden'
   if (
     level === 'components'
     && focus
@@ -240,6 +90,19 @@ function displayRole(
   if (element.kind === 'container') return 'container-boundary'
   if (element.kind === 'system' && !element.external) return 'system-boundary'
   return 'card'
+}
+
+function topAncestor(
+  element: WorldElement,
+  elementsById: Map<string, WorldElement>,
+): WorldElement {
+  let current = element
+  while (current.parent !== null) {
+    const parent = elementsById.get(current.parent)
+    if (!parent) throw new Error(`Unknown parent representation: ${current.parent}`)
+    current = parent
+  }
+  return current
 }
 
 function displayEndpoint(
@@ -271,27 +134,16 @@ function relationshipVisibleAtLevel(
   if (displaySource.representationId === displayTarget.representationId) return false
   if (level === 'context') return true
   if (level === 'containers') {
-    return focus !== null
-      && within(displaySource, focus.representationId, elementsById)
-      && within(displayTarget, focus.representationId, elementsById)
+    if (focus === null) return false
+    const sourceIn = within(displaySource, focus.representationId, elementsById)
+    const targetIn = within(displayTarget, focus.representationId, elementsById)
+    if (sourceIn && targetIn) return true
+    return (source.kind === 'person' && targetIn) || (target.kind === 'person' && sourceIn)
   }
   return focus !== null && (
     within(source, focus.representationId, elementsById)
     || within(target, focus.representationId, elementsById)
   )
-}
-
-function topAncestor(
-  element: WorldElement,
-  elementsById: Map<string, WorldElement>,
-): WorldElement {
-  let current = element
-  while (current.parent !== null) {
-    const parent = elementsById.get(current.parent)
-    if (!parent) throw new Error(`Unknown parent representation: ${current.parent}`)
-    current = parent
-  }
-  return current
 }
 
 function visibleRelationships(
@@ -324,217 +176,11 @@ function visibleRelationships(
   })
 }
 
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, value))
-}
-
-function insideSpan(value: number, start: number, size: number): number {
-  if (size <= 2) return Math.round(start + (size - 1) / 2)
-  return clamp(value, start + 1, start + size - 2)
-}
-
-function orthogonalRoute(route: Point[]): Point[] {
-  const points: Point[] = []
-  function add(point: Point): void {
-    const previous = points.at(-1)
-    if (!previous || previous.x !== point.x || previous.y !== point.y) {
-      points.push(point)
-    }
-  }
-
-  for (const [index, point] of route.entries()) {
-    if (index > 0) {
-      const previous = route[index - 1]
-      if (previous.x !== point.x && previous.y !== point.y) {
-        add({ x: point.x, y: previous.y })
-      }
-    }
-    add({ ...point })
-  }
-  return points
-}
-
-function pointInside(point: Point, bounds: Bounds): boolean {
-  return point.x >= bounds.x
-    && point.x < bounds.x + bounds.width
-    && point.y >= bounds.y
-    && point.y < bounds.y + bounds.height
-}
-
-function trimRouteToDisplayedEndpoints(
-  route: Point[],
-  source: Bounds,
-  target: Bounds,
-): Point[] {
-  if (route.length <= 2) return route
-  const sourceCenter = {
-    x: source.x + source.width / 2,
-    y: source.y + source.height / 2,
-  }
-  const targetCenter = {
-    x: target.x + target.width / 2,
-    y: target.y + target.height / 2,
-  }
-  const horizontal = Math.abs(targetCenter.x - sourceCenter.x)
-    >= Math.abs(targetCenter.y - sourceCenter.y)
-  const minimum = horizontal
-    ? sourceCenter.x <= targetCenter.x
-      ? source.x + source.width
-      : target.x + target.width
-    : sourceCenter.y <= targetCenter.y
-      ? source.y + source.height
-      : target.y + target.height
-  const maximum = horizontal
-    ? sourceCenter.x <= targetCenter.x
-      ? target.x - 1
-      : source.x - 1
-    : sourceCenter.y <= targetCenter.y
-      ? target.y - 1
-      : source.y - 1
-  const intermediates = route.slice(1, -1).filter(point => {
-    const coordinate = horizontal ? point.x : point.y
-    return coordinate >= minimum
-      && coordinate <= maximum
-      && !pointInside(point, source)
-      && !pointInside(point, target)
-  })
-  return [route[0]!, ...intermediates, route.at(-1)!]
-}
-
-function attachRouteToBounds(route: Point[], source: Bounds, target: Bounds): Point[] {
-  if (route.length < 2) return route
-  const attached = route.map(point => ({ ...point }))
-  const first = attached[0]!
-  const second = attached[1]!
-  if (second.x > first.x) {
-    first.x = source.x + source.width
-    first.y = insideSpan(first.y, source.y, source.height)
-  } else if (second.x < first.x) {
-    first.x = source.x - 1
-    first.y = insideSpan(first.y, source.y, source.height)
-  } else if (second.y > first.y) {
-    first.y = source.y + source.height
-    first.x = insideSpan(first.x, source.x, source.width)
-  } else {
-    first.y = source.y - 1
-    first.x = insideSpan(first.x, source.x, source.width)
-  }
-
-  const last = attached.at(-1)!
-  const previous = attached.at(-2)!
-  if (last.x > previous.x) {
-    last.x = target.x - 1
-    last.y = insideSpan(last.y, target.y, target.height)
-  } else if (last.x < previous.x) {
-    last.x = target.x + target.width
-    last.y = insideSpan(last.y, target.y, target.height)
-  } else if (last.y > previous.y) {
-    last.y = target.y - 1
-    last.x = insideSpan(last.x, target.x, target.width)
-  } else {
-    last.y = target.y + target.height
-    last.x = insideSpan(last.x, target.x, target.width)
-  }
-  return attached
-}
-
-function projectLabel(
-  label: Bounds,
-  transform: Transform,
-): Pick<Bounds, 'x' | 'y' | 'width'> {
-  const topLeft = projectPoint(label, transform)
-  const bottomRight = projectPoint({
-    x: label.x + label.width,
-    y: label.y + label.height,
-  }, transform)
-  const width = Math.max(10, bottomRight.x - topLeft.x)
-  const center = (topLeft.x + bottomRight.x) / 2
-  return {
-    x: Math.round(center - width / 2),
-    y: topLeft.y,
-    width,
-  }
-}
-
-function boundsOverlap(left: Bounds, right: Bounds): boolean {
-  return left.x < right.x + right.width
-    && left.x + left.width > right.x
-    && left.y < right.y + right.height
-    && left.y + left.height > right.y
-}
-
-function labelHits(
-  label: Pick<Bounds, 'x' | 'y' | 'width'>,
-  obstacles: Bounds[],
-): boolean {
-  const box = {
-    x: label.x - 1,
-    y: label.y,
-    width: label.width + 2,
-    height: 1,
-  }
-  return obstacles.some(obstacle => boundsOverlap(box, obstacle))
-}
-
-function compactRouteLabel(
-  route: Point[],
-  description: string,
-  preferred: Pick<Bounds, 'x' | 'y' | 'width'>,
-  obstacles: Bounds[],
-): Pick<Bounds, 'x' | 'y' | 'width'> {
-  const width = description.split(' ', 1)[0].length
-  const blocked = [
-    ...obstacles,
-    ...[route[0], route.at(-1)].flatMap(point => {
-      return point === undefined ? [] : [{ x: point.x, y: point.y, width: 1, height: 1 }]
-    }),
-  ]
-  const candidates: Array<Pick<Bounds, 'x' | 'y' | 'width'> & { distance: number }> = []
-  function consider(label: Pick<Bounds, 'x' | 'y' | 'width'>, distance: number): void {
-    const placed = { ...label, width }
-    if (!labelHits(placed, blocked)) {
-      candidates.push({ ...placed, distance })
-    }
-  }
-
-  for (let index = 1; index < route.length; index += 1) {
-    const from = route[index - 1]
-    const to = route[index]
-    if (from.x === to.x) continue
-    const left = Math.min(from.x, to.x) + 1
-    const right = Math.max(from.x, to.x) - 1
-    if (right - left + 1 < width) continue
-    consider(
-      {
-        x: Math.round((left + right - width + 1) / 2),
-        y: from.y,
-        width,
-      },
-      Math.abs((left + right) / 2 - (preferred.x + preferred.width / 2)),
-    )
-  }
-  consider(preferred, 0)
-  for (const point of route) {
-    for (const dy of [-1, 1, 0, -2, 2]) {
-      consider({ x: point.x, y: point.y + dy, width }, 20 + Math.abs(dy))
-    }
-  }
-  candidates.sort((left, right) => left.distance - right.distance)
-  if (candidates[0]) {
-    return {
-      x: candidates[0].x,
-      y: candidates[0].y,
-      width: candidates[0].width,
-    }
-  }
-  return { x: preferred.x, y: preferred.y, width }
-}
-
 function projectElements(
   world: ArchitectureWorld,
   level: SemanticLevel,
   focus: WorldElement | null,
-  transform: Transform,
+  transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
 ) {
   const elements = world.elements.map(element => {
@@ -570,10 +216,8 @@ function projectElements(
 function projectGroups(
   world: ArchitectureWorld,
   projectedElements: ReturnType<typeof projectElements>,
-  transform: Transform,
+  transform: ReturnType<typeof transformFor>,
 ): ProjectedGroup[] {
-  // A group is only as visible as its members: when every member is hidden
-  // at this level, the empty boundary would point at nothing.
   return world.groups
     .filter(group => projectedElements.some(element => {
       return element.display !== 'hidden'
@@ -593,7 +237,7 @@ function projectRelationships(
   elementsById: Map<string, WorldElement>,
   projectedElements: ReturnType<typeof projectElements>,
   projectedGroups: ProjectedGroup[],
-  transform: Transform,
+  transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
 ): ProjectedRelationship[] {
   const projectedById = new Map(projectedElements.map(element => [
@@ -615,8 +259,6 @@ function projectRelationships(
         width: element.cellBounds.width + 2,
         height: element.cellBounds.height + 2,
       })),
-    // Boundary and group titles sit on their top border; a route label
-    // placed there would erase the name.
     ...projectedElements
       .filter(element => element.display.endsWith('-boundary'))
       .map(element => titleRow(element.cellBounds)),
@@ -681,6 +323,12 @@ function projectRelationships(
     .filter((relationship): relationship is ProjectedRelationship => {
       return relationship !== null
     })
+}
+
+const levelDepth: Record<SemanticLevel, number> = {
+  context: 0,
+  containers: 1,
+  components: 2,
 }
 
 export function projectWorld(

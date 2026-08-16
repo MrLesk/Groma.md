@@ -2,6 +2,10 @@
 id: terminal-viewer
 kind: container
 parent: groma
+code:
+  - scanner: typescript
+    file: src/viewers/tui/terminal-viewer.ts
+    symbol: mountTerminalViewer
 ---
 
 # Terminal viewer
