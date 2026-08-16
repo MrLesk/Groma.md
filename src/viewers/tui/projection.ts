@@ -19,6 +19,7 @@ import {
   orthogonalRoute,
   pointInside,
   projectLabel,
+  routeBetweenBoxes,
   trimRouteToDisplayedEndpoints,
 } from './projection-routes.ts'
 import type {
@@ -290,13 +291,17 @@ function projectRelationships(
       if (!visibleIn(sourceBounds, viewport) || !visibleIn(targetBounds, viewport)) {
         return null
       }
-      const projectedRoute = trimRouteToDisplayedEndpoints(
-        orthogonalRoute(
-          relationship.route.map(point => projectPoint(point, transform)),
-        ),
-        sourceBounds,
-        targetBounds,
-      )
+      const promoted = source.representationId !== relationship.source
+        || target.representationId !== relationship.target
+      const projectedRoute = promoted
+        ? routeBetweenBoxes(sourceBounds, targetBounds)
+        : trimRouteToDisplayedEndpoints(
+            orthogonalRoute(
+              relationship.route.map(point => projectPoint(point, transform)),
+            ),
+            sourceBounds,
+            targetBounds,
+          )
       const cellRoute = orthogonalRoute(attachRouteToBounds(
         projectedRoute,
         sourceBounds,
