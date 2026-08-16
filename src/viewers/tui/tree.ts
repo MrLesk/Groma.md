@@ -24,14 +24,18 @@ export function initialTree(): TreeState {
   return { expanded: new Set(), collapsed: new Set() }
 }
 
-function compareStrings(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
+function meaningRank(element: WorldElement): number {
+  if (element.kind === 'person') return 0
+  if (element.external) return 2
+  return 1
 }
 
-/** Sibling order everywhere in the viewer: by architecture id. */
+/** Sibling order: people, then internal software, then externals; left to right. */
 export function compareElements(left: WorldElement, right: WorldElement): number {
-  return compareStrings(left.id, right.id)
-    || compareStrings(left.representationId, right.representationId)
+  return meaningRank(left) - meaningRank(right)
+    || left.bounds.x - right.bounds.x
+    || left.bounds.y - right.bounds.y
+    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
 }
 
 function sorted(elements: WorldElement[]): WorldElement[] {
