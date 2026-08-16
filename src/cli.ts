@@ -4,7 +4,7 @@ import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
 import { createPlannedElement } from './create.ts'
-import { formatScanSummary, scanRepository } from './scanner.ts'
+import { formatScanSummary, scanRepository, watchScan } from './scanner.ts'
 
 const program = new Command()
 
@@ -32,14 +32,37 @@ program
   .description('Open the browser map')
   .action(async () => {
     const { startWebViewer } = await import('./viewers/web/server.ts')
-    console.log(`groma web at ${await startWebViewer(process.cwd())}`)
+    const { url } = await startWebViewer(process.cwd())
+    console.log(`groma web at ${url}`)
   })
 
 program
   .command('scan')
   .description('Scan this repo and fold findings into Markdown')
-  .action(async () => {
-    const summary = await scanRepository(process.cwd())
+  .option('--watch', 'scan again when TypeScript source changes')
+  .action(async options => {
+    const root = process.cwd()
+    if (options.watch) {
+      const session = watchScan(root, {
+        onFold: summary => {
+          console.log('ok')
+          console.log(formatScanSummary(summary))
+        },
+        onError: error => {
+          console.error(error instanceof Error ? error.message : String(error))
+        },
+      })
+      await new Promise<void>(resolve => {
+        const stop = () => {
+          session.close()
+          resolve()
+        }
+        process.once('SIGINT', stop)
+        process.once('SIGTERM', stop)
+      })
+      return
+    }
+    const summary = await scanRepository(root)
     console.log('ok')
     console.log(formatScanSummary(summary))
   })

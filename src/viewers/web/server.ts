@@ -1,7 +1,8 @@
 import { loadArchitectureViewModel } from '../../core.ts'
+import { watchScan } from '../../scanner.ts'
 import { renderPage } from './page.ts'
 
-const port = 4747
+const defaultPort = 4747
 
 async function bundleRenderer(): Promise<string> {
   const build = await Bun.build({
@@ -12,22 +13,98 @@ async function bundleRenderer(): Promise<string> {
 }
 
 /** Starts the map server and returns its URL. */
-export async function startWebViewer(repositoryRoot: string): Promise<string> {
+export async function startWebViewer(
+  repositoryRoot: string,
+  options: { port?: number } = {},
+): Promise<{ url: string; close: () => void }> {
   const renderer = await bundleRenderer()
+  let viewModel = await loadArchitectureViewModel(repositoryRoot)
+  let generation = 1
+  const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
+  const encoder = new TextEncoder()
+
+  function worldEvent(): Uint8Array {
+    return encoder.encode(
+      `event: world\ndata: ${JSON.stringify({ generation, world: viewModel.world })}\n\n`,
+    )
+  }
+
+  async function publishWorld(): Promise<void> {
+    viewModel = await loadArchitectureViewModel(repositoryRoot)
+    generation += 1
+    const chunk = worldEvent()
+    for (const client of clients) {
+      try {
+        client.enqueue(chunk)
+      } catch {
+        clients.delete(client)
+      }
+    }
+  }
+
+  const sourceWatch = watchScan(repositoryRoot, {
+    onFold: publishWorld,
+  })
+
   const server = Bun.serve({
-    port,
+    port: options.port ?? defaultPort,
     fetch: async request => {
-      if (new URL(request.url).pathname === '/render.js') {
+      const { pathname } = new URL(request.url)
+      if (pathname === '/render.js') {
         return new Response(renderer, {
-          headers: { 'Content-Type': 'text/javascript; charset=utf-8' },
+          headers: {
+            'Content-Type': 'text/javascript; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        })
+      }
+      if (pathname === '/world.json') {
+        return Response.json({ generation, world: viewModel.world })
+      }
+      if (pathname === '/events') {
+        let controller: ReadableStreamDefaultController<Uint8Array>
+        const stream = new ReadableStream<Uint8Array>({
+          start(next) {
+            controller = next
+            clients.add(next)
+            next.enqueue(worldEvent())
+          },
+          cancel() {
+            clients.delete(controller)
+          },
+        })
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
         })
       }
       // Reload on every request so a browser refresh picks up architecture edits.
-      const viewModel = await loadArchitectureViewModel(repositoryRoot)
-      return new Response(renderPage(viewModel.world), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      viewModel = await loadArchitectureViewModel(repositoryRoot)
+      return new Response(renderPage(viewModel.world, generation), {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        },
       })
     },
   })
-  return `http://localhost:${server.port}`
+
+  return {
+    url: `http://localhost:${server.port}`,
+    close() {
+      sourceWatch.close()
+      for (const client of clients) {
+        try {
+          client.close()
+        } catch {
+          // already closed
+        }
+      }
+      clients.clear()
+      server.stop(true)
+    },
+  }
 }

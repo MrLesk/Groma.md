@@ -98,6 +98,14 @@ function gitListFiles(repositoryRoot: string): Promise<string[]> {
   })
 }
 
+export function isTypeScriptScanFile(
+  relative: string,
+  config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
+): boolean {
+  const file = relative.split(path.sep).join('/')
+  return matchesAny(file, config.globs) && !matchesAny(file, config.ignore)
+}
+
 export async function listTypeScriptFiles(
   repositoryRoot: string,
   config: TypeScriptScannerConfig = defaultTypeScriptScannerConfig,
@@ -105,7 +113,6 @@ export async function listTypeScriptFiles(
   const listed = await gitListFiles(repositoryRoot)
   return listed
     .map(file => file.split(path.sep).join('/'))
-    .filter(file => matchesAny(file, config.globs))
-    .filter(file => !matchesAny(file, config.ignore))
+    .filter(file => isTypeScriptScanFile(file, config))
     .sort()
 }

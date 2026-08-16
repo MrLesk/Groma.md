@@ -16,7 +16,8 @@ source → scanner plugin → scan result → Groma core
 Every plugin takes the same two configuration knobs: a glob list for which
 files to read, and an ignore list for files and folders to skip. A plugin
 may also honor the host project's ignore file (the TypeScript plugin uses
-`.gitignore`). Defaults belong in the plugin, not in Groma core.
+`.gitignore`). `groma scan --watch` watches that same file set. Defaults
+belong in the plugin, not in Groma core.
 
 ## The shared interface
 

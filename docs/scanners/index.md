@@ -3,9 +3,12 @@
 `groma scan` reads this repository, sends the result to Groma core, and
 prints `ok` plus a short summary. It does not print the architecture. Core
 writes or refreshes Markdown. The command runs once and exits.
+`groma scan --watch` stays open and folds each settled change to the
+plugin file set.
 
 ```text
 groma scan → plugin result → core writes Markdown → ok
+groma scan --watch → the same loop, once per settled source change
 ```
 
 The plugin result contains names, responsibilities, relationships, optional
