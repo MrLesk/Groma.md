@@ -14,7 +14,8 @@ People and agents use Groma. They do not edit `groma/` Markdown by hand.
 Groma writes those files so paths, identity, and metadata stay consistent.
 
 1. Open a viewer — see the world. `groma view` starts the TUI plugin. It
-   does not scan.
+   does not scan. `groma view --plain`, or `groma view` when stdout is not
+   a TTY, prints the merged world as plain text and does not start the TUI.
 2. `groma scan` — scan this repo. Core folds the findings into Markdown.
    The command prints `ok` and a short summary. It does not print the
    architecture.
