@@ -266,15 +266,14 @@ function relationshipVisibleAtLevel(
   const source = elementsById.get(relationship.source)
   const target = elementsById.get(relationship.target)
   if (!source || !target) return false
-  if (level === 'context') {
-    return source.parent === null || target.parent === null
-  }
+  const displaySource = displayEndpoint(source, level, focus, elementsById)
+  const displayTarget = displayEndpoint(target, level, focus, elementsById)
+  if (displaySource.representationId === displayTarget.representationId) return false
+  if (level === 'context') return true
   if (level === 'containers') {
-    return source.kind !== 'component'
-      && target.kind !== 'component'
-      && focus !== null
-      && within(source, focus.representationId, elementsById)
-      && within(target, focus.representationId, elementsById)
+    return focus !== null
+      && within(displaySource, focus.representationId, elementsById)
+      && within(displayTarget, focus.representationId, elementsById)
   }
   return focus !== null && (
     within(source, focus.representationId, elementsById)
@@ -516,7 +515,9 @@ function compactRouteLabel(
   }
   consider(preferred, 0)
   for (const point of route) {
-    consider({ x: point.x, y: point.y - 1, width }, 20)
+    for (const dy of [-1, 1, 0, -2, 2]) {
+      consider({ x: point.x, y: point.y + dy, width }, 20 + Math.abs(dy))
+    }
   }
   candidates.sort((left, right) => left.distance - right.distance)
   if (candidates[0]) {

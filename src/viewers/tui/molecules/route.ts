@@ -5,7 +5,7 @@ import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import { visible } from '../atoms/visible.ts'
-import { showsRelationshipText } from '../../relationship-text.ts'
+import { parentOfElements, showsRelationshipText } from '../../relationship-text.ts'
 import type { Point, ProjectedRelationship, WorldProjection } from '../../../types.ts'
 
 function drawLine(
@@ -129,7 +129,11 @@ export function drawRouteLabel(
   theme: ViewerTheme,
 ): void {
   if (!relationship.cellLabel) return
-  if (!showsRelationshipText(relationship, projection.currentId)) return
+  if (!showsRelationshipText(
+    relationship,
+    projection.currentId,
+    parentOfElements(projection.elements),
+  )) return
   const fullLabel = projection.level === 'components'
     ? relationship.description.split(' ').slice(0, 2).join(' ')
     : relationship.description.split(' ', 1)[0]

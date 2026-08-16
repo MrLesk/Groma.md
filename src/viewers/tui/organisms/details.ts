@@ -5,6 +5,11 @@ import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
+import {
+  parentOfElements,
+  promotedPeer,
+  showsRelationshipText,
+} from '../../relationship-text.ts'
 import type {
   ArchitectureWorld,
   Bounds,
@@ -79,16 +84,18 @@ function detailsRows(
   }
 
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
+  const parentOf = parentOfElements(world.elements)
   const relationships = world.relationships.filter(relationship => {
-    return relationship.source === element.representationId
-      || relationship.target === element.representationId
+    return showsRelationshipText(relationship, element.representationId, parentOf)
   })
   if (relationships.length > 0) {
     rows.push([], [header('Relationships')])
     for (const relationship of relationships) {
-      const outgoing = relationship.source === element.representationId
+      const ends = promotedPeer(relationship, element.representationId, parentOf)
+      if (ends === null) continue
+      const outgoing = ends.outgoing
       const arrow = outgoing ? '→ ' : '← '
-      const otherId = outgoing ? relationship.target : relationship.source
+      const otherId = ends.peerId
       const peer = byId.get(otherId)
       const name = peer?.name ?? otherId
       const rest = ` · ${relationship.description}`

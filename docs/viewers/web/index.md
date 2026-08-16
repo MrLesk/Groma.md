@@ -13,8 +13,8 @@ top-down plan. Parents with children render as plates; children sit on
 them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
 groups are neighborhood zones. Planned items are ghosts with dashed
 edges. Routes follow the laid-out paths. Names sit on the top face. A
-relationship description is drawn on its route only while that
-relationship's source or target is selected.
+relationship description is drawn on its route only while the
+selection is an endpoint or an ancestor of exactly one endpoint.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.

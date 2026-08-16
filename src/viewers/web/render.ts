@@ -34,7 +34,11 @@ import type {
   WorldGroup,
   WorldRelationship,
 } from '../../types.ts'
-import { showsRelationshipText } from '../relationship-text.ts'
+import {
+  parentOfElements,
+  promotedPeer,
+  showsRelationshipText,
+} from '../relationship-text.ts'
 import { buildScene, defaultProjection } from './scene.ts'
 import type { Projection, SceneItem } from './scene.ts'
 
@@ -482,6 +486,7 @@ const detailsMeta = details.querySelector('.meta')!
 const detailsDescription = details.querySelector('.description') as HTMLElement
 const detailsRels = details.querySelector('.rels')!
 const byId = new Map(world.elements.map((element: WorldElement) => [element.representationId, element]))
+const parentOf = parentOfElements(world.elements)
 
 let selectedId: string | null = null
 let hoverId: string | null = null
@@ -498,11 +503,11 @@ function fillDetails(element: WorldElement | null): void {
   detailsDescription.hidden = element.description === ''
   detailsRels.replaceChildren()
   for (const relationship of world.relationships) {
-    if (!showsRelationshipText(relationship, element.representationId)) continue
-    const outgoing = relationship.source === element.representationId
-    const other = byId.get(outgoing ? relationship.target : relationship.source)
+    const ends = promotedPeer(relationship, element.representationId, parentOf)
+    if (ends === null) continue
+    const other = byId.get(ends.peerId)
     const item = document.createElement('li')
-    item.textContent = `${outgoing ? '→' : '←'} ${other?.name ?? ''} · ${relationship.description}`
+    item.textContent = `${ends.outgoing ? '→' : '←'} ${other?.name ?? ''} · ${relationship.description}`
     detailsRels.append(item)
   }
 }
@@ -514,7 +519,7 @@ function paintSelection(): void {
     item.pick.material.color.copy(on ? accentColor : item.pick.ink)
   }
   for (const label of routeLabels) {
-    label.mesh.visible = showsRelationshipText(label, selectedId)
+    label.mesh.visible = showsRelationshipText(label, selectedId, parentOf)
   }
   const selected = pickables.find(item => item.element.representationId === selectedId)
   fillDetails(selected?.element ?? null)
