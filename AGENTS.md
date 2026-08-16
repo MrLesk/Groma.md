@@ -55,6 +55,10 @@ request.
 
 ## Commit messages
 
+When the user confirms that a task is done, commit that task's files
+immediately. Stage only the files this agent changed for that task.
+Do not stage files other agents changed, even if they sit nearby.
+
 For work associated with a Backlog task, use the exact task ID and title as the commit subject:
 
 ```text
