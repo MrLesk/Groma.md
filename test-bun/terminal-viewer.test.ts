@@ -1119,6 +1119,18 @@ test.concurrent('tree scrolling keeps the cursor inside the visible window', () 
   }
 })
 
+test.concurrent('header and footer sit one row in from the terminal edges', () => {
+  const height = 36
+  const layout = paneLayout(120, height)
+  assert.equal(layout.header.y, 1)
+  assert.equal(layout.footer.y, height - 2)
+  assert.equal(layout.hierarchy.y, layout.header.y + layout.header.height)
+  assert.equal(layout.map.y, layout.hierarchy.y)
+  assert.equal(layout.details.y, layout.hierarchy.y)
+  assert.equal(layout.hierarchy.y + layout.hierarchy.height, layout.footer.y)
+  assert.equal(layout.footer.y + layout.footer.height, height - 1)
+})
+
 test.concurrent('pane toggles resize the map viewport without touching the world', async () => {
   const world = navigationWorld()
   let state = initialState(world)

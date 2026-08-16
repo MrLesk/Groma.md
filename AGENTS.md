@@ -183,7 +183,8 @@ prefer one minimal anchor over exhaustive content matching.
 ## TUI map
 
 The TUI world is a map inside fixed chrome: a one-row header, a
-hierarchy pane, the map pane, a details pane, and a one-row footer.
+hierarchy pane, the map pane, a details pane, and a one-row footer,
+with one blank row above the header and below the footer.
 Panes reserve width; they never overlay the map. The world layout
 never changes; only the camera viewport does. The first view fits the
 whole map inside the map pane. `+` and `-` zoom the camera. At the
