@@ -1002,9 +1002,18 @@ test.concurrent('tree focus moves the cursor and enter drives selection and leve
   assert.equal(state.level, 'components')
   assert.equal(state.focus, 'hierarchy')
 
+  // Right with nothing left to expand keeps moving, back onto the map,
+  // leaving selection and cursor untouched.
+  const backFromLeaf = reduceViewer(world, state, 'right')
+  assert.equal(backFromLeaf.focus, 'architecture')
+  assert.equal(backFromLeaf.currentId, state.currentId)
+  assert.equal(backFromLeaf.tree.cursor, state.tree.cursor)
+
   // Left climbs to the parent on a leaf, then collapses the parent.
   state = reduceViewer(world, state, 'left')
   assert.equal(state.tree.cursor, 'observed:cleft')
+  const backFromExpanded = reduceViewer(world, state, 'right')
+  assert.equal(backFromExpanded.focus, 'architecture')
   state = reduceViewer(world, state, 'left')
   assert.ok(state.tree.collapsed.has('observed:cleft'))
   assert.equal(state.currentId, 'observed:pleft')
