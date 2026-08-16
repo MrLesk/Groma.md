@@ -65,9 +65,9 @@ The world is a map. The first view fits the whole map inside the map
 pane. `+` and `-` zoom the camera; at the closest zoom, one world unit
 is one cell and names stay readable. Cards and routes have places on
 that map. A relationship description is drawn on its route only while
-that relationship's source or target is selected. Changing selection
-or terminal size never lays the architecture out again; only the
-camera viewport changes.
+the selection is an endpoint or an ancestor of exactly one endpoint.
+Changing selection or terminal size never lays the architecture out
+again; only the camera viewport changes.
 
 Arrows change which item is selected. They move between siblings
 inside the same boundary and keep the current zoom; the camera pans

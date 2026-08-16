@@ -120,6 +120,13 @@ element.
 Parents and relationship targets resolve by `id` across this merged world. The
 Markdown link is for readers, not identity.
 
+A software-to-software relationship is authored on the lowest elements that
+exist — components, once they exist. Parents are connected because a child
+is. Do not also write that collaboration on a parent. A person-to-system
+relationship, and a parent row with no lower pin yet, stay as written.
+Viewers treat an authored A → B as also connecting exclusive ancestors of
+A and B. Layout keeps one route per authored relationship.
+
 Runtime annotations are derived from location and are never written into
 frontmatter:
 

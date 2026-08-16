@@ -757,6 +757,22 @@ test.concurrent('selection changes never move the camera and pan only when off s
   }
 })
 
+test.concurrent('containers view promotes a component relationship to its parents', async () => {
+  const fixture = await loadArchitectureViewModel(repositoryRoot)
+  const projection = projectWorld(fixture.world, {
+    viewport: mapViewportOf({ width: 120, height: 36 }),
+    level: 'containers',
+    currentId: 'observed:groma',
+  })
+  const promoted = projection.relationships.find(relationship => {
+    return relationship.source === 'observed:world-layout'
+      && relationship.target === 'observed:web-map'
+  })
+  assert.ok(promoted)
+  assert.equal(promoted.displaySource, 'observed:core')
+  assert.equal(promoted.displayTarget, 'observed:web-viewer')
+})
+
 test.concurrent('components level shows only the focused container children', async () => {
   const fixture = await loadArchitectureViewModel(fixtureRoot)
   const projection = projectWorld(fixture.world, {

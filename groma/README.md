@@ -142,6 +142,12 @@ source. The target document's `id` identifies the target. The Markdown link
 is for readers. Core resolves parents and relationship targets by `id`
 across the merged world.
 
+A software-to-software relationship is authored on the lowest elements
+that exist. Once two components participate, write the row there and not
+again on their containers or systems. Parents show as connected because
+that child row exists. A person-to-system relationship, and a parent row
+with no lower pin yet, stay on those documents.
+
 `Description` states the intent of the interaction. On an observed document,
 `Technology` states its mechanism. On a planned document it may state a
 required constraint or be omitted.
