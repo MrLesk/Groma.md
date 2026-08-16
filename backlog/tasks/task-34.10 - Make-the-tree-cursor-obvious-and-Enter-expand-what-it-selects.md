@@ -1,10 +1,11 @@
 ---
 id: TASK-34.10
 title: Make the tree cursor obvious and Enter expand what it selects
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-08-16 12:47'
+updated_date: '2026-08-16 12:50'
 labels: []
 dependencies: []
 parent_task_id: TASK-34
@@ -21,16 +22,16 @@ The hierarchy cursor row is barely visible: its tint is too subtle to spot. The 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With the hierarchy pane focused, the cursor row renders inverted in the selection accent and is obvious at a glance
-- [ ] #2 Enter on a collapsed parent selects it on the map and expands its children in the tree
-- [ ] #3 Enter on a leaf keeps its current select-on-map behavior
+- [x] #1 With the hierarchy pane focused, the cursor row renders inverted in the selection accent and is obvious at a glance
+- [x] #2 Enter on a collapsed parent selects it on the map and expands its children in the tree
+- [x] #3 Enter on a leaf keeps its current select-on-map behavior
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
 - [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
@@ -41,3 +42,15 @@ The hierarchy cursor row is barely visible: its tint is too subtle to spot. The 
 2. reduceTree enter: also move the row from collapsed to expanded when it has children.
 3. Reducer test for select+expand; live agent-tty screenshot for the highlight.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Cold simplicity review applied: shared expandRow helper for the Right and Enter branches, no Set churn on leaf Enter. Verified live with agent-tty screenshot at 100x30: the cursor row renders as a solid accent bar with dark text, unmistakable next to the old tint; Tab then Enter on Groma selected it and opened its four containers in place.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The focused tree cursor row now renders inverted in the selection accent, and Enter on a collapsed parent expands its children in place while still selecting the element on the map; leaves keep plain select. Verified by reducer tests and a live agent-tty screenshot.
+<!-- SECTION:FINAL_SUMMARY:END -->
