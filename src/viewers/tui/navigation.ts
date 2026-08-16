@@ -441,8 +441,14 @@ export function reduceViewer(
   if (current.focus !== 'architecture' || !resolved.selected) {
     return current
   }
-  return syncTree(world, {
-    ...current,
-    ...moveView(world, current, resolved.selected, action),
-  })
+  const moved = moveView(world, current, resolved.selected, action)
+  if (
+    action === 'left'
+    && moved.level === current.level
+    && moved.currentId === current.currentId
+  ) {
+    // Nothing lies further left; the next stop is the hierarchy pane.
+    return reduceViewer(world, current, 'tab')
+  }
+  return syncTree(world, { ...current, ...moved })
 }

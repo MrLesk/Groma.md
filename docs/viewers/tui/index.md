@@ -85,7 +85,8 @@ the last level. The first view fits the whole map.
 - Arrows select the nearest element in that direction at the current
   level. If none exists, selection moves up a level. Arrows never
   descend. Same-level moves keep zoom and pan only if needed. Leaving
-  a boundary zooms out.
+  a boundary zooms out. Left with nothing further left focuses the
+  hierarchy pane, selection unchanged.
 - `[` toggles the hierarchy pane and `]` toggles the details pane.
   Hiding the focused hierarchy pane returns focus to the map; Tab
   reopens a hidden hierarchy pane.
