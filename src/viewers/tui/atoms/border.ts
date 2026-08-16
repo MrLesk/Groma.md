@@ -3,9 +3,32 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { cell } from './cell.ts'
 import type { Bounds, Origin } from '../../../types.ts'
 
-export type BorderStyle = 'card' | 'system' | 'container'
+export type BorderStyle = 'card' | 'person' | 'system' | 'container' | 'group'
 
-export function borderCharacters(origin: Origin, style: BorderStyle) {
+interface BorderCharacters {
+  bottomLeft: string
+  bottomRight: string
+  horizontal: string
+  topLeft: string
+  topRight: string
+  vertical: string
+}
+
+export function borderCharacters(origin: Origin, style: BorderStyle): BorderCharacters {
+  if (style === 'group') {
+    // A group boundary shares the planned dash; its dim color and quiet
+    // title keep it apart on the map.
+    return borderCharacters('planned', 'card')
+  }
+  if (style === 'person') {
+    return {
+      ...borderCharacters(origin, 'card'),
+      bottomLeft: '╰',
+      bottomRight: '╯',
+      topLeft: '╭',
+      topRight: '╮',
+    }
+  }
   if (origin === 'observed' && style === 'system') {
     return {
       bottomLeft: '╚',

@@ -37,6 +37,7 @@ export function paintWorld(
         selected,
         options.world,
         theme,
+        panel,
       )
     }
   }

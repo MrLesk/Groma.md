@@ -19,12 +19,13 @@ const elements: AnnotatedArchitectureModel['elements'] = [
     representationId: 'observed:shop', id: 'shop', kind: 'system',
     name: 'Shop', description: 'Sells products.', parent: null,
     children: ['observed:api', 'observed:worker'], external: false, code: [],
-    origin: 'observed',
+    origin: 'observed', group: 'Platform',
   },
   {
     representationId: 'observed:api', id: 'api', kind: 'container',
     name: 'API', description: 'Serves requests.', parent: 'observed:shop',
     children: ['planned:checkout'], external: false, code: [], origin: 'observed',
+    group: 'Runtime',
   },
   {
     representationId: 'planned:checkout', id: 'checkout', kind: 'component',
@@ -35,6 +36,7 @@ const elements: AnnotatedArchitectureModel['elements'] = [
     representationId: 'observed:worker', id: 'worker', kind: 'container',
     name: 'Worker', description: 'Runs jobs.', parent: 'observed:shop',
     children: ['missing:fulfilment'], external: false, code: [], origin: 'observed',
+    group: 'Runtime',
   },
   {
     representationId: 'missing:fulfilment', id: 'fulfilment', kind: 'component',
@@ -45,6 +47,7 @@ const elements: AnnotatedArchitectureModel['elements'] = [
     representationId: 'observed:payments', id: 'payments', kind: 'system',
     name: 'Payments', description: 'Authorizes payments.', parent: null,
     children: [], external: true, code: [], origin: 'observed',
+    group: 'Platform',
   },
 ]
 
@@ -164,3 +167,30 @@ function requiredElement(elementsById: Map<string, WorldElement>, id: string): W
   assert.ok(element)
   return element
 }
+
+test('clusters grouped siblings inside labeled group bounds', async () => {
+  const world = await layoutArchitectureWorld(model)
+  const byId = new Map<string, WorldElement>(world.elements.map(element => [
+    element.representationId,
+    element,
+  ]))
+  const platform = world.groups.find(group => group.name === 'Platform')
+  const runtime = world.groups.find(group => group.name === 'Runtime')
+
+  assert.equal(world.groups.length, 2)
+  assert.ok(platform)
+  assert.equal(platform.parent, null)
+  assert.ok(runtime)
+  assert.equal(runtime.parent, 'observed:shop')
+
+  assert.ok(contains(platform.bounds, requiredElement(byId, 'observed:shop').bounds))
+  assert.ok(contains(platform.bounds, requiredElement(byId, 'observed:payments').bounds))
+  assert.equal(
+    overlaps(platform.bounds, requiredElement(byId, 'observed:architect').bounds),
+    false,
+  )
+
+  assert.ok(contains(requiredElement(byId, 'observed:shop').bounds, runtime.bounds))
+  assert.ok(contains(runtime.bounds, requiredElement(byId, 'observed:api').bounds))
+  assert.ok(contains(runtime.bounds, requiredElement(byId, 'observed:worker').bounds))
+})

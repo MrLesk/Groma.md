@@ -1,43 +1,42 @@
 import { TextAttributes } from '@opentui/core'
-import type { OptimizedBuffer } from '@opentui/core'
+import type { OptimizedBuffer, RGBA } from '@opentui/core'
 
 import { borderCharacters, drawBorder } from '../atoms/border.ts'
 import type { BorderStyle } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { drawChip } from './chip.ts'
-import { kindLabel } from './kind-label.ts'
-import type { ProjectedElement, WorldProjection } from '../../../types.ts'
+import type {
+  Bounds,
+  Origin,
+  ProjectedElement,
+  ProjectedGroup,
+  WorldProjection,
+} from '../../../types.ts'
 
-export function drawBoundary(
+function drawTitledFrame(
   buffer: OptimizedBuffer,
-  element: ProjectedElement,
   projection: WorldProjection,
   theme: ViewerTheme,
+  bounds: Bounds,
+  name: string,
+  origin: Origin,
+  style: BorderStyle,
+  color: RGBA,
+  titleBackground: RGBA,
+  titleAttributes: number,
 ): void {
-  const bounds = element.cellBounds
-  const color = element.origin === 'observed'
-    ? theme.foreground
-    : theme[element.origin]
-  const background = element.origin === 'observed'
-    ? theme.observedTint
-    : theme.background
-  const style: BorderStyle = element.display === 'system-boundary'
-    ? 'system'
-    : 'container'
-
   drawBorder(
     buffer,
     bounds,
-    element.origin,
+    origin,
     color,
     theme.background,
     style,
     TextAttributes.DIM,
   )
   if (bounds.y < projection.viewport.y) {
-    const characters = borderCharacters(element.origin, style)
+    const characters = borderCharacters(origin, style)
     const left = Math.max(bounds.x, projection.viewport.x)
     const right = Math.min(
       bounds.x + bounds.width,
@@ -62,23 +61,64 @@ export function drawBoundary(
     bounds.x + bounds.width - 2,
     projection.viewport.x + projection.viewport.width - 1,
   )
-  const chipWidth = drawChip(
+  text(
     buffer,
-    element.origin,
+    ` ${name} `,
     titleX,
     titleY,
     Math.max(0, titleRight - titleX),
-    theme,
-    background,
-  )
-  text(
-    buffer,
-    ` ${kindLabel(element)} · ${element.name} `,
-    titleX + chipWidth,
-    titleY,
-    Math.max(0, titleRight - titleX - chipWidth),
     theme.foreground,
+    titleBackground,
+    titleAttributes,
+  )
+}
+
+export function drawBoundary(
+  buffer: OptimizedBuffer,
+  element: ProjectedElement,
+  projection: WorldProjection,
+  theme: ViewerTheme,
+): void {
+  const color = element.origin === 'observed'
+    ? theme.foreground
+    : theme[element.origin]
+  const background = element.origin === 'observed'
+    ? theme.observedTint
+    : theme.background
+  const style: BorderStyle = element.display === 'system-boundary'
+    ? 'system'
+    : 'container'
+
+  drawTitledFrame(
+    buffer,
+    projection,
+    theme,
+    element.cellBounds,
+    element.name,
+    element.origin,
+    style,
+    color,
     background,
     TextAttributes.BOLD,
+  )
+}
+
+export function drawGroupBoundary(
+  buffer: OptimizedBuffer,
+  group: ProjectedGroup,
+  projection: WorldProjection,
+  theme: ViewerTheme,
+): void {
+  drawTitledFrame(
+    buffer,
+    projection,
+    theme,
+    group.cellBounds,
+    group.name,
+    'observed',
+    'group',
+    theme.foreground,
+    theme.background,
+    TextAttributes.DIM,
   )
 }

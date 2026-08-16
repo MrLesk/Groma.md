@@ -45,6 +45,7 @@ export interface ArchitectureFrontmatter extends Record<string, unknown> {
   kind?: unknown
   parent?: string | null
   external?: unknown
+  group?: unknown
   code?: CodeReference[]
 }
 
@@ -92,6 +93,7 @@ export interface ArchitectureElement {
   description: string
   parentId: string | null
   external: boolean
+  group?: string
   code: CodeReference[]
   sourceFilename: string
 }
@@ -120,6 +122,7 @@ export interface AnnotatedElement {
   parent: string | null
   children: string[]
   external: boolean
+  group?: string
   code: CodeReference[]
   origin: Origin
   plan?: string
@@ -150,9 +153,18 @@ export interface WorldRelationship extends AnnotatedRelationship {
   label: Bounds | null
 }
 
+/** A named cluster of siblings; a narrative overlay, never a parent. */
+export interface WorldGroup {
+  id: string
+  name: string
+  parent: string | null
+  bounds: Bounds
+}
+
 export interface ArchitectureWorld {
   bounds: Bounds
   elements: WorldElement[]
+  groups: WorldGroup[]
   relationships: WorldRelationship[]
 }
 
@@ -162,6 +174,10 @@ export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
 
 export interface ProjectedElement extends WorldElement {
   display: DisplayRole
+  cellBounds: Bounds
+}
+
+export interface ProjectedGroup extends WorldGroup {
   cellBounds: Bounds
 }
 
@@ -187,6 +203,7 @@ export interface WorldProjection {
   camera: MapCamera
   viewport: Bounds
   elements: ProjectedElement[]
+  groups: ProjectedGroup[]
   relationships: ProjectedRelationship[]
 }
 
@@ -197,4 +214,6 @@ export interface ProjectionOptions {
   currentId?: string
   camera?: MapCamera
   lockCamera?: boolean
+  /** Screen column where a right-side overlay begins; the camera pans the selection clear of it. */
+  coveredFromX?: number
 }

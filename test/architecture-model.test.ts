@@ -48,6 +48,7 @@ interface ElementDocumentFixture {
   sourceFilename: string
   parent?: string | null
   external?: unknown
+  group?: unknown
   relationships?: RelationshipFixture[]
 }
 
@@ -57,6 +58,7 @@ function elementDocument({
   sourceFilename,
   parent,
   external,
+  group,
   relationships = [],
 }: ElementDocumentFixture): ArchitectureDocument {
   const frontmatter: ArchitectureFrontmatter = { id, kind }
@@ -65,6 +67,9 @@ function elementDocument({
   }
   if (external !== undefined) {
     frontmatter.external = external
+  }
+  if (group !== undefined) {
+    frontmatter.group = group
   }
 
   const nodes: MarkdownNode[] = [
@@ -177,6 +182,28 @@ test('builds a serializable revision-local C4 graph with Code references', async
   assert.ok(Object.isFrozen(model.elements[0]))
   assert.ok(Object.isFrozen(model.relationships))
   assert.ok(Object.isFrozen(model.relationships[0]))
+})
+
+test('keeps the group on the element and omits it otherwise', () => {
+  const model = buildArchitectureModel(revisionRecord([
+    elementDocument({
+      id: 'grouped-system',
+      kind: 'system',
+      group: 'Edge services',
+      sourceFilename: 'groma/plans/test-revision/systems/grouped-system/system.md',
+    }),
+    elementDocument({
+      id: 'plain-system',
+      kind: 'system',
+      sourceFilename: 'groma/plans/test-revision/systems/plain-system/system.md',
+    }),
+  ]))
+
+  const grouped = model.elements.find(element => element.id === 'grouped-system')
+  const plain = model.elements.find(element => element.id === 'plain-system')
+  assert.equal(grouped?.group, 'Edge services')
+  assert.ok(plain)
+  assert.equal(Object.hasOwn(plain, 'group'), false)
 })
 
 test('resolves a relationship link to the target document stable id', () => {
@@ -462,6 +489,38 @@ for (const {
     code: 'UNKNOWN_RELATIONSHIP_TARGET',
     sourceFilename: 'groma/plans/test-revision/people/architect.md',
     message: /relationship target.*systems\/missing\/system\.md.*does not resolve/,
+  },
+  {
+    name: 'reports a group that is not a string',
+    documents: [
+      elementDocument({
+        id: 'numeric-group-system',
+        kind: 'system',
+        group: 7,
+        sourceFilename:
+          'groma/plans/test-revision/systems/numeric-group-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/numeric-group-system/system.md',
+    message: /group must be a non-empty string when present/,
+  },
+  {
+    name: 'reports a blank group',
+    documents: [
+      elementDocument({
+        id: 'blank-group-system',
+        kind: 'system',
+        group: '  ',
+        sourceFilename:
+          'groma/plans/test-revision/systems/blank-group-system/system.md',
+      }),
+    ],
+    code: 'INVALID_ELEMENT',
+    sourceFilename:
+      'groma/plans/test-revision/systems/blank-group-system/system.md',
+    message: /group must be a non-empty string when present/,
   },
 ]) {
   test(name, () => {

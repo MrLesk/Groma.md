@@ -101,13 +101,18 @@ function canEnter(element: WorldElement): boolean {
     && element.children.length > 0
 }
 
-function enterView(
-  element: WorldElement,
-): Pick<ViewerState, 'level' | 'currentId'> {
-  return {
-    level: element.kind === 'system' ? 'containers' : 'components',
-    currentId: element.representationId,
-  }
+function childElements(
+  element: WorldElement | undefined,
+  byId: Map<string, WorldElement>,
+): WorldElement[] {
+  if (!element) return []
+  return element.children
+    .map(id => byId.get(id))
+    .filter((child): child is WorldElement => child !== undefined)
+    .sort((left, right) => {
+      return compareStrings(left.id, right.id)
+        || compareStrings(left.representationId, right.representationId)
+    })
 }
 
 function firstChildOfKind(
@@ -115,15 +120,35 @@ function firstChildOfKind(
   kind: C4Kind,
   byId: Map<string, WorldElement>,
 ): WorldElement | undefined {
+  return childElements(element, byId).find(child => child.kind === kind)
+}
+
+function firstComponentUnder(
+  element: WorldElement | undefined,
+  byId: Map<string, WorldElement>,
+): WorldElement | undefined {
   if (!element) return undefined
-  const children = element.children
-    .map(id => byId.get(id))
-    .filter((child): child is WorldElement => child !== undefined)
-    .sort((left, right) => {
-      return compareStrings(left.id, right.id)
-        || compareStrings(left.representationId, right.representationId)
-    })
-  return children.find(child => child.kind === kind)
+  if (element.kind === 'component') return element
+  const direct = firstChildOfKind(element, 'component', byId)
+  if (direct) return direct
+  for (const child of childElements(element, byId)) {
+    const found = firstComponentUnder(child, byId)
+    if (found) return found
+  }
+}
+
+function enterView(
+  world: ArchitectureWorld,
+  element: WorldElement,
+): Pick<ViewerState, 'level' | 'currentId'> {
+  if (element.kind === 'system') {
+    return { level: 'containers', currentId: element.representationId }
+  }
+  const component = firstComponentUnder(element, elementsById(world))
+  return {
+    level: 'components',
+    currentId: component?.representationId ?? element.representationId,
+  }
 }
 
 function jumpView(
@@ -151,7 +176,14 @@ function jumpView(
   const container = ancestorOfKind(selected, 'container', byId)
     ?? firstChildOfKind(ancestorOfKind(selected, 'system', byId), 'container', byId)
   if (!container) return { level: 'context', currentId: selected?.representationId }
-  return { level: 'components', currentId: container.representationId }
+  const component = selected?.kind === 'component'
+    ? selected
+    : firstComponentUnder(container, byId)
+      ?? firstComponentUnder(ancestorOfKind(selected, 'system', byId), byId)
+  return {
+    level: 'components',
+    currentId: component?.representationId ?? container.representationId,
+  }
 }
 
 function moveZoomSlot(slot: ZoomSlot, direction: 'left' | 'right'): ZoomSlot {
@@ -317,24 +349,17 @@ export function reduceViewer(
     return { ...current, zoomSlot: moveZoomSlot(current.zoomSlot, action) }
   }
   if (current.focus === 'zoom' && action === 'inspect') {
-    if (current.zoomSlot === 'leave') {
-      return { ...current, ...leaveView(world, current, resolved.selected), focus: 'architecture' }
-    }
-    if (current.zoomSlot === 'enter') {
-      const next = resolved.selected && canEnter(resolved.selected)
-        ? enterView(resolved.selected)
-        : { level: current.level, currentId: current.currentId }
-      return { ...current, ...next, focus: 'architecture' }
+    if (current.zoomSlot === 'leave' || current.zoomSlot === 'enter') {
+      return current
     }
     return {
       ...current,
       ...jumpView(world, resolved.selected, current.zoomSlot),
-      focus: 'architecture',
     }
   }
   if (action === 'enter' || action === 'inspect') {
     const next = resolved.selected && canEnter(resolved.selected)
-      ? enterView(resolved.selected)
+      ? enterView(world, resolved.selected)
       : { level: current.level, currentId: current.currentId }
     return {
       ...current,
@@ -345,7 +370,7 @@ export function reduceViewer(
   if (action === 'leave') {
     return { ...current, ...leaveView(world, current, resolved.selected) }
   }
-  if (current.focus !== 'architecture' || current.panel !== 'closed' || !resolved.selected) {
+  if (current.focus !== 'architecture' || current.panel === 'full' || !resolved.selected) {
     return current
   }
   return { ...current, ...moveView(world, current, resolved.selected, action) }

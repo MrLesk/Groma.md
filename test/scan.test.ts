@@ -64,6 +64,7 @@ const ordersDocument = `---
 id: orders
 kind: component
 parent: api
+group: Order handling
 code:
   - scanner: typescript
     file: src/orders.ts
@@ -135,6 +136,7 @@ test('an observed match refreshes code and leaves the body alone', async t => {
   )
   assert.deepEqual(summary, { created: 0, refreshed: 1, matched: 0 })
   assert.match(source, /symbol: cancelOrder/)
+  assert.match(source, /group: Order handling/)
   assert.equal(documentBody(source), documentBody(ordersDocument))
   assert.match(source, /Curated prose must remain\./)
   assert.doesNotMatch(source, /This must not overwrite curated prose/)

@@ -2,6 +2,7 @@
 id: architecture-model
 kind: component
 parent: core
+group: World building
 code:
   - scanner: typescript
     file: src/architecture-model.ts

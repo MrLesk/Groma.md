@@ -177,9 +177,10 @@ closest zoom, names stay readable and the map may be larger than the
 screen.
 
 - Details overlay the world. They do not reserve width or change scale.
-- Arrowing only changes which item is selected. If that item would leave
-  the screen, pan just enough to keep it visible. Do not follow every
-  selection.
+- Arrowing selects the nearest same-level peer. The camera pans just
+  enough if that peer would leave the screen; it does not zoom. When
+  there is no same-level peer in that direction, selection escapes to
+  an outer item and the camera zooms out. Arrows never descend.
 - Cards, routes, and relationship labels stay on the same cells while
   the selection stays on screen.
 
