@@ -28,9 +28,12 @@ Groma writes those files so paths, identity, and metadata stay consistent.
    - A **new part** becomes a ghost in a plan. `groma create` authors that
      ghost.
    - A **required change** to an existing part becomes a plan that restates
-     that ID, so the same box shows work still to do.
+     that ID, so the same box shows work still to do. `groma edit
+     <element-id> --plan <plan-id>` restates that ID.
    - An **explanation** of an existing part — notes that describe it without
-     changing it — stays on the observed document.
+     changing it — stays on the observed document. `groma edit
+     <element-id> --description <prose>` updates that lead prose.
+     `groma edit <plan-id> --description <prose>` sets the plan Outcome.
 4. `groma accept <id>` — accept that ghost, only if a scan has matched it.
    Groma may scan first if needed. No match: the command fails and the
    ghost stays planned. A scan never accepts a ghost on its own.

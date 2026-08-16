@@ -46,6 +46,46 @@ function withCodeFrontmatter(
   return `---\n${header}\n---\n${source.slice(close + 5)}`
 }
 
+export function omitCode(source: string): string {
+  return withCodeFrontmatter(source, [])
+}
+
+function afterHeading(source: string, heading: RegExp) {
+  const match = source.match(heading)
+  if (match === null || match.index === undefined) return undefined
+  const rest = source.slice(match.index + match[0].length)
+  const next = rest.search(/\n#{1,6} /)
+  return {
+    prefix: source.slice(0, match.index + match[0].length),
+    suffix: next === -1 ? '' : rest.slice(next),
+  }
+}
+
+function replaceHeadingBody(
+  source: string,
+  heading: RegExp,
+  body: string,
+): string | undefined {
+  const range = afterHeading(source, heading)
+  if (range === undefined) return undefined
+  const next = body.trim()
+  return `${range.prefix}\n\n${next}${range.suffix === '' ? '\n' : `\n${range.suffix}`}`
+}
+
+export function replaceLeadProse(source: string, prose: string): string {
+  const next = replaceHeadingBody(source, /^# .+$/m, prose)
+  if (next === undefined) throw new Error('document requires a heading')
+  return next
+}
+
+export function setOutcomeSection(source: string, prose: string): string {
+  const replaced = replaceHeadingBody(source, /^## Outcome$/m, prose)
+  if (replaced !== undefined) return replaced
+  const inserted = replaceHeadingBody(source, /^# .+$/m, `## Outcome\n\n${prose}`)
+  if (inserted === undefined) throw new Error('document requires a heading')
+  return inserted
+}
+
 export function renderObservedDocument(input: {
   id: string
   kind: C4Kind
