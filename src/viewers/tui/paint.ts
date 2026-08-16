@@ -1,7 +1,8 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
 import type { ViewerTheme } from './atoms/theme.ts'
-import type { ViewerFocus } from './navigation.ts'
+import { filterMatches } from './navigation.ts'
+import type { FilterState, ViewerFocus } from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
 import { drawChrome } from './organisms/chrome.ts'
 import { drawDetails } from './organisms/details.ts'
@@ -23,6 +24,7 @@ export function paintWorld(
     tree: TreeState
     detailsScroll: number
     focus?: ViewerFocus
+    filter?: FilterState
   },
 ): void {
   buffer.clear(theme.background)
@@ -47,5 +49,21 @@ export function paintWorld(
       scroll: options.detailsScroll,
     })
   }
-  drawChrome(buffer, layout, projection, theme, options.focus)
+  drawChrome(
+    buffer,
+    layout,
+    projection,
+    theme,
+    options.focus,
+    options.filter && filterLine(world, options.filter),
+  )
+}
+
+function filterLine(world: ArchitectureWorld, filter: FilterState): string {
+  const matches = filterMatches(world, filter.query)
+  const match = matches[filter.index]
+  const position = match === undefined
+    ? filter.query.trim().length === 0 ? '' : 'no matches'
+    : `${filter.index + 1} of ${matches.length} · ${match.name}`
+  return `/ ${filter.query}▏  ${position}   ↑↓ next   enter keep   esc back`
 }

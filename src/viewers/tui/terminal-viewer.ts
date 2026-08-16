@@ -14,9 +14,10 @@ import { createCamera } from './camera.ts'
 import { paneLayout } from './layout.ts'
 import {
   initialState,
+  reduceFilter,
   reduceViewer,
 } from './navigation.ts'
-import type { ViewerAction, ViewerState } from './navigation.ts'
+import type { FilterInput, ViewerAction, ViewerState } from './navigation.ts'
 import { paintWorld, themeFromPalette } from './paint.ts'
 import { fitView, followSelection, projectWorld } from './projection.ts'
 import type {
@@ -137,6 +138,7 @@ export function mountTerminalViewer(
       focus: state.focus,
       tree: state.tree,
       detailsScroll: state.detailsScroll,
+      filter: state.filter,
     })
     frame.requestRender()
   }
@@ -235,10 +237,64 @@ export function mountTerminalViewer(
     return undefined
   }
 
+  let filterReturnCamera: MapCamera | undefined
+
+  function filterInputFor(key: KeyEvent): FilterInput | undefined {
+    if (key.name === 'return') return { type: 'accept' }
+    if (key.name === 'backspace') return { type: 'delete' }
+    if (key.name === 'down') return { type: 'next' }
+    if (key.name === 'up') return { type: 'previous' }
+    if (key.name === 'space') return { type: 'char', char: ' ' }
+    if (key.name?.length === 1 && !key.ctrl) return { type: 'char', char: key.name }
+    return undefined
+  }
+
+  // The camera follows any selection change through one framing rule.
+  function transition(next: ViewerState): void {
+    const previous = { level: state.level, currentId: state.currentId }
+    const current = snapshot()
+    state = next
+    const framed = followSelection(
+      viewModel.world,
+      currentLayout().mapViewport,
+      previous,
+      state,
+      current,
+    )
+    if (framed) animateTo(framed)
+    repaint()
+  }
+
+  function onFilterKey(key: KeyEvent): void {
+    if (key.name === 'escape') {
+      state = reduceFilter(viewModel.world, state, { type: 'cancel' })
+      if (filterReturnCamera) {
+        animateTo(filterReturnCamera)
+        filterReturnCamera = undefined
+      }
+      repaint()
+      return
+    }
+    const input = filterInputFor(key)
+    if (!input) return
+    if (input.type === 'accept') filterReturnCamera = undefined
+    transition(reduceFilter(viewModel.world, state, input))
+  }
+
   function onKeypress(key: KeyEvent): void {
     if (key.eventType === 'release') return
     if (key.ctrl && key.name === 'c') {
       destroy()
+      return
+    }
+    if (state.filter) {
+      onFilterKey(key)
+      return
+    }
+    if (key.name === '/') {
+      state = reduceFilter(viewModel.world, state, { type: 'open' })
+      filterReturnCamera = snapshot()
+      repaint()
       return
     }
     if (key.name === 'escape') {
@@ -258,18 +314,7 @@ export function mountTerminalViewer(
     }
     const action = actionFor(key)
     if (!action) return
-    const previous = { level: state.level, currentId: state.currentId }
-    const current = snapshot()
-    state = reduceViewer(viewModel.world, state, action)
-    const framed = followSelection(
-      viewModel.world,
-      currentLayout().mapViewport,
-      previous,
-      state,
-      current,
-    )
-    if (framed) animateTo(framed)
-    repaint()
+    transition(reduceViewer(viewModel.world, state, action))
   }
 
   renderer.setFrameCallback(onFrame)

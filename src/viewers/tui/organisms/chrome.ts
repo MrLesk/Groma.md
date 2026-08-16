@@ -28,6 +28,7 @@ export function drawChrome(
   projection: WorldProjection,
   theme: ViewerTheme,
   focus: ViewerFocus = 'architecture',
+  footerOverride?: string,
 ): void {
   const panes: Array<[ViewerFocus, Bounds]> = [
     ['hierarchy', layout.hierarchy],
@@ -73,7 +74,7 @@ export function drawChrome(
   const zoomControls = `- out   + in · ${readout}`
   text(
     buffer,
-    paneHints[focus],
+    footerOverride ?? paneHints[focus],
     layout.footer.x + 1,
     layout.footer.y,
     Math.max(0, layout.footer.width - zoomControls.length - 3),

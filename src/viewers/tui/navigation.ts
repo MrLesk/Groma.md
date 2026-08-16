@@ -23,6 +23,22 @@ export type ViewerAction =
   | 'toggle-details'
   | 'dismiss'
 
+export type FilterInput =
+  | { type: 'open' }
+  | { type: 'char'; char: string }
+  | { type: 'delete' }
+  | { type: 'next' }
+  | { type: 'previous' }
+  | { type: 'accept' }
+  | { type: 'cancel' }
+
+export interface FilterState {
+  query: string
+  index: number
+  /** The view to restore when the filter is cancelled. */
+  before: { level: SemanticLevel; currentId?: string }
+}
+
 export interface ViewerState {
   level: SemanticLevel
   currentId?: string
@@ -31,6 +47,7 @@ export interface ViewerState {
   panes: PaneVisibility
   /** First hidden content row of an overflowing details pane. */
   detailsScroll: number
+  filter?: FilterState
 }
 
 function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
@@ -404,4 +421,75 @@ export function reduceViewer(
     }
   }
   return syncTree(world, { ...current, ...moved })
+}
+
+export function filterMatches(
+  world: ArchitectureWorld,
+  query: string,
+): WorldElement[] {
+  const needle = query.trim().toLowerCase()
+  if (needle.length === 0) return []
+  return world.elements
+    .filter(element => element.name.toLowerCase().includes(needle))
+    .sort(compareElements)
+}
+
+/** The current match drives selection live; no match leaves the view alone. */
+function followMatch(world: ArchitectureWorld, state: ViewerState): ViewerState {
+  const filter = state.filter
+  if (!filter) return state
+  const match = filterMatches(world, filter.query)[filter.index]
+  if (!match) return state
+  return syncTree(world, {
+    ...state,
+    level: levelFor(match),
+    currentId: match.representationId,
+  })
+}
+
+export function reduceFilter(
+  world: ArchitectureWorld,
+  state: ViewerState,
+  input: FilterInput,
+): ViewerState {
+  if (input.type === 'open') {
+    return {
+      ...state,
+      filter: {
+        query: '',
+        index: 0,
+        before: { level: state.level, currentId: state.currentId },
+      },
+    }
+  }
+  const filter = state.filter
+  if (!filter) return state
+  if (input.type === 'char') {
+    return followMatch(world, {
+      ...state,
+      filter: { ...filter, query: filter.query + input.char, index: 0 },
+    })
+  }
+  if (input.type === 'delete') {
+    return followMatch(world, {
+      ...state,
+      filter: { ...filter, query: filter.query.slice(0, -1), index: 0 },
+    })
+  }
+  if (input.type === 'next' || input.type === 'previous') {
+    const count = filterMatches(world, filter.query).length
+    if (count === 0) return state
+    const step = input.type === 'next' ? 1 : -1
+    const index = (filter.index + step + count) % count
+    return followMatch(world, { ...state, filter: { ...filter, index } })
+  }
+  if (input.type === 'accept') {
+    return { ...state, filter: undefined }
+  }
+  return syncTree(world, {
+    ...state,
+    filter: undefined,
+    level: filter.before.level,
+    currentId: filter.before.currentId,
+  })
 }

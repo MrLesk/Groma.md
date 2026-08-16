@@ -12,7 +12,8 @@ Fixed chrome frames the world. A one-row header shows the groma
 wordmark on the left and the exit hint on the right. A one-row footer
 shows the key hints for the focused pane, and zoom controls with a
 readout of the camera state: `fit` when the whole map fits, a
-percentage in between, `1:1` at the closest zoom. Between them sit
+percentage in between, `1:1` at the closest zoom. While the `/`
+filter is open, the hint line becomes the filter line. Between them sit
 three panes that each reserve their width: the hierarchy pane on the
 left, the map pane in the center, and the details pane on the right.
 The focused pane draws its border in the selection accent; the others
@@ -97,6 +98,12 @@ the last level. The first view fits the whole map.
 - `[` toggles the hierarchy pane and `]` toggles the details pane.
   Hiding the focused hierarchy pane returns focus to the map; Tab
   reopens a hidden hierarchy pane.
+- `/` opens a filter over element names in the footer. Typing
+  narrows matches; the current match drives selection and camera
+  live, with its position and name shown beside the query. Up and
+  Down cycle matches. Enter keeps the selection and closes the
+  filter; Esc restores the selection and camera from before the
+  filter opened. The filter works with side panes collapsed.
 - Tab focuses the hierarchy pane; Tab or Esc returns to the map.
   While it is focused, Up and Down move through visible rows, Right
   expands a row, and Left collapses it or climbs to its parent. Enter

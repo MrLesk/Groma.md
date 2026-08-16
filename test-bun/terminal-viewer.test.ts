@@ -17,7 +17,9 @@ import {
 } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   defaultSelection,
+  filterMatches,
   initialState,
+  reduceFilter,
   reduceViewer,
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
@@ -1090,4 +1092,56 @@ test.concurrent('the zoom readout names fit, in-between, and one-to-one states',
   assert.equal(zoomReadout(0.62, 0.31), '62%')
   assert.equal(zoomReadout(1, 0.31), '1:1')
   assert.equal(zoomReadout(1, 1), '1:1')
+})
+
+test.concurrent('the filter narrows by name, drives selection live, and restores on cancel', async () => {
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const world = response.world
+
+  // Case-insensitive substring over the merged world, in id order.
+  assert.deepEqual(
+    filterMatches(world, 'WOR').map(element => element.representationId),
+    ['observed:architecture-workspace', 'observed:world-layout'],
+  )
+  assert.deepEqual(filterMatches(world, ''), [])
+  assert.deepEqual(filterMatches(world, 'no such thing'), [])
+
+  // Panes collapsed do not affect the filter.
+  let state = {
+    ...initialState(world),
+    panes: { hierarchy: false, details: false },
+  }
+  const before = { level: state.level, currentId: state.currentId }
+
+  state = reduceFilter(world, state, { type: 'open' })
+  assert.ok(state.filter)
+  for (const char of 'wor') {
+    state = reduceFilter(world, state, { type: 'char', char })
+  }
+  // The first match selects live at its own level.
+  assert.equal(state.currentId, 'observed:architecture-workspace')
+  assert.equal(state.level, 'containers')
+
+  state = reduceFilter(world, state, { type: 'next' })
+  assert.equal(state.currentId, 'observed:world-layout')
+  assert.equal(state.level, 'components')
+  state = reduceFilter(world, state, { type: 'previous' })
+  assert.equal(state.currentId, 'observed:architecture-workspace')
+
+  // Narrowing to nothing leaves the view alone; deleting widens again.
+  state = reduceFilter(world, state, { type: 'char', char: 'q' })
+  assert.equal(state.currentId, 'observed:architecture-workspace')
+  state = reduceFilter(world, state, { type: 'delete' })
+  assert.equal(state.filter?.query, 'wor')
+
+  // Esc restores the pre-filter view; Enter keeps the match.
+  const cancelled = reduceFilter(world, state, { type: 'cancel' })
+  assert.equal(cancelled.filter, undefined)
+  assert.equal(cancelled.level, before.level)
+  assert.equal(cancelled.currentId, before.currentId)
+
+  const accepted = reduceFilter(world, state, { type: 'accept' })
+  assert.equal(accepted.filter, undefined)
+  assert.equal(accepted.currentId, 'observed:architecture-workspace')
+  assert.equal(accepted.level, 'containers')
 })
