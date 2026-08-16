@@ -14,3 +14,4 @@ Owns architecture identity and merges observed architecture and planned fragment
 | --- | --- | --- |
 | [Architecture workspace](../architecture-workspace/container.md) | Reads and writes architecture Markdown | Filesystem |
 | [Terminal viewer](../terminal-viewer/container.md) | Supplies the annotated world | In-process data |
+| [Web viewer](../web-viewer/container.md) | Supplies the annotated world | In-process data |

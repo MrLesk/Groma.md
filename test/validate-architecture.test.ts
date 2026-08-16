@@ -64,7 +64,7 @@ test('validates observed and every planned revision', async () => {
       'groma/plans/mvp',
     ],
   )
-  assert.deepEqual(results.map(result => result.elementCount), [12, 1])
+  assert.deepEqual(results.map(result => result.elementCount), [16, 1])
 })
 
 test('observed index links readers to the Markdown foundation', async () => {
@@ -80,6 +80,7 @@ test('observed index links readers to the Markdown foundation', async () => {
     'systems/groma/containers/core/container.md',
     'systems/groma/containers/scanner/container.md',
     'systems/groma/containers/terminal-viewer/container.md',
+    'systems/groma/containers/web-viewer/container.md',
     'systems/git/system.md',
   ]
 
