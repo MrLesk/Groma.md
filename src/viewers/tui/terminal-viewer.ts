@@ -10,6 +10,7 @@ import type {
 } from '@opentui/core'
 
 import { loadArchitectureViewModel } from '../../core.ts'
+import { watchScan } from '../../scanner.ts'
 import { createCamera } from './camera.ts'
 import { paneLayout } from './layout.ts'
 import {
@@ -365,10 +366,22 @@ export async function startTerminalViewer(
     const palette = options.palette ?? normalizeTerminalPalette(
       await renderer.getPalette({ timeout: 100 }),
     )
-    return mountTerminalViewer(renderer, response, {
+    const viewer = mountTerminalViewer(renderer, response, {
       palette,
       repositoryRoot,
     })
+    const sourceWatch = watchScan(repositoryRoot, {
+      onFold: () => viewer.refresh(),
+    })
+    return {
+      closed: viewer.closed.finally(() => sourceWatch.close()),
+      destroy() {
+        sourceWatch.close()
+        viewer.destroy()
+      },
+      refresh: () => viewer.refresh(),
+      setView: next => viewer.setView(next),
+    }
   } catch (error) {
     renderer.destroy()
     throw error

@@ -7,6 +7,7 @@ import test from 'node:test'
 import type { TestContext } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isTypeScriptScanFile } from '../src/typescript-files.ts'
 import {
   formatTypeScriptObservation,
   listTypeScriptFiles,
@@ -93,6 +94,8 @@ test('gitignore and ignore patterns drop files; globs select the rest', async t 
 
   const listed = await listTypeScriptFiles(root)
   assert.deepEqual(listed, ['lib/extra.ts', 'src/cli.ts'])
+  assert.equal(isTypeScriptScanFile('src/cli.ts'), true)
+  assert.equal(isTypeScriptScanFile('src/cli.test.ts'), false)
 
   const onlySrc = await listTypeScriptFiles(root, {
     globs: ['src/**/*.ts'],
