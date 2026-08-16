@@ -19,6 +19,8 @@ Groma writes those files so paths, identity, and metadata stay consistent.
    map updates. An architecture Markdown change reloads the world without
    scanning. `groma view --plain`, or `groma view` when stdout is not a
    TTY, prints the merged world as plain text and does not start the TUI.
+   `groma view` with a target prints one record as plain text and does not
+   start the TUI.
 2. `groma scan` — scan this repo. Core folds the findings into Markdown.
    The command prints `ok` and a short summary. It does not print the
    architecture.

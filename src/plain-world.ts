@@ -184,3 +184,94 @@ export async function renderPlainWorld(repositoryRoot: string): Promise<string> 
   const revisions = await loadArchitecture(repositoryRoot)
   return formatPlainWorld(annotateArchitecture(revisions), planOutcomes(revisions))
 }
+
+export type PlainRecordResult =
+  | { ok: true; text: string }
+  | { ok: false; message: string }
+
+function formatElementRecord(
+  element: AnnotatedElement,
+  model: AnnotatedArchitectureModel,
+  byRepresentation: Map<string, AnnotatedElement>,
+): string {
+  const lines = [element.id, `kind: ${element.kind}`]
+  const parentId = parentArchitectureId(element, byRepresentation)
+  if (parentId !== null) lines.push(`parent: ${parentId}`)
+  lines.push(`origin: ${element.origin}`)
+  if (element.origin === 'planned' && element.plan !== undefined) {
+    lines.push(`plan: ${element.plan}`)
+  }
+  const file = element.code[0]?.file
+  if (file !== undefined) lines.push(`code: ${file}`)
+
+  const sections = [lines.join('\n')]
+  if (element.description !== '') sections.push(element.description)
+  const edges = outgoingEdges(element, model.relationships, byRepresentation)
+  if (edges.length > 0) {
+    sections.push(
+      edges.map(edge => `->  ${edge.description}  ${edge.targetId}`).join('\n'),
+    )
+  }
+  return sections.join('\n\n')
+}
+
+function formatPlanRecord(
+  plan: PlanOutcome,
+  ghosts: readonly AnnotatedElement[],
+): string {
+  const header = `${plan.id}\nkind: plan`
+  if (ghosts.length === 0) return `${header}\n\ncomplete`
+  const ghostBlock = ['ghosts', ...ghosts.map(ghost => ghost.id)].join('\n')
+  if (plan.outcome === '') return `${header}\n\n${ghostBlock}`
+  return `${header}\n\n${plan.outcome}\n\n${ghostBlock}`
+}
+
+export function formatPlainRecord(
+  model: AnnotatedArchitectureModel,
+  plans: readonly PlanOutcome[],
+  target: string,
+): PlainRecordResult {
+  const winners = winningElements(model.elements)
+  const byRepresentation = new Map(
+    model.elements.map(element => [element.representationId, element]),
+  )
+  const element = winners.find(item => item.id === target)
+  if (element !== undefined) {
+    return {
+      ok: true,
+      text: formatElementRecord(element, model, byRepresentation),
+    }
+  }
+  const plan = plans.find(item => item.id === target)
+  if (plan !== undefined) {
+    const ghosts = winners
+      .filter(item => item.origin === 'planned' && item.plan === plan.id)
+      .sort((left, right) => compareIds(left.id, right.id))
+    return { ok: true, text: formatPlanRecord(plan, ghosts) }
+  }
+  const [match, extra] = winners.filter(item => {
+    return item.code.some(reference => reference.file === target)
+  })
+  if (extra !== undefined) {
+    return { ok: false, message: `several elements share ${target}` }
+  }
+  if (match !== undefined) {
+    return {
+      ok: true,
+      text: formatElementRecord(match, model, byRepresentation),
+    }
+  }
+  return { ok: false, message: `unknown target: ${target}` }
+}
+
+export async function renderPlainRecord(
+  repositoryRoot: string,
+  target: string,
+): Promise<PlainRecordResult> {
+  const revisions = await loadArchitecture(repositoryRoot)
+  return formatPlainRecord(
+    annotateArchitecture(revisions),
+    planOutcomes(revisions),
+    target,
+  )
+}
