@@ -38,9 +38,15 @@ Groups are invisible to the tree, matching navigation.
 The details pane always shows the current selection: name, kind,
 annotations, description, relationships, and children. Component
 details include the scanner, file, and optional symbol from `code`.
-Right on the map with nothing further right focuses the details pane;
-Up and Down scroll overflowing content, and Esc or Left returns to
-the map. Selection changes reset the scroll.
+Enter on a person or other leaf focuses the details pane. Right on
+the map with nothing further right does the same. When the
+selection is a person who uses a launcher — software they use that
+starts other software they also use — the person's outgoing rows
+are that launcher's commands. Up and Down choose one command and
+light its path immediately. Esc or Left returns to the map and
+leaves the path on, so arrows, Enter, and zoom still inspect the
+boxes it touches. `x` clears the path. Choosing another person
+command replaces it.
 
 ## What it shows
 
@@ -92,7 +98,8 @@ the last level. The first view fits the whole map.
   whole map.
 - Enter enters the selection: a system selects one of its
   containers, a container one of its components. Components is the
-  last level.
+  last level. Backspace is the reverse: it leaves that level for the
+  parent Enter came from. From details it also returns to the map.
 - `R` asks core for the world again and redraws it.
 - Esc never changes level and does not exit. It returns focus from
   a side pane to the map.

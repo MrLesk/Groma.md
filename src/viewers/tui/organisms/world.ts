@@ -12,6 +12,13 @@ export function drawWorld(
   buffer: OptimizedBuffer,
   projection: WorldProjection,
   theme: ViewerTheme,
+  trace: {
+    pathIds: Set<string>
+    onPath: (elementId: string) => boolean
+  } = {
+    pathIds: new Set(),
+    onPath: () => true,
+  },
 ): void {
   buffer.pushScissorRect(
     projection.viewport.x,
@@ -26,13 +33,20 @@ export function drawWorld(
       return match(element) && visible(element.cellBounds, projection.viewport)
     })
   }
+  const tracing = trace.pathIds.size > 0
   for (const relationship of projection.relationships) {
-    drawRoute(buffer, relationship, theme)
+    drawRoute(buffer, relationship, theme, tracing && !trace.pathIds.has(relationship.id))
   }
   for (const element of shown(element => {
     return element.display === 'card' && element.kind === 'component'
   })) {
-    drawCard(buffer, element, projection, theme)
+    drawCard(
+      buffer,
+      element,
+      projection,
+      theme,
+      tracing && !trace.onPath(element.representationId),
+    )
   }
   for (const group of projection.groups) {
     if (visible(group.cellBounds, projection.viewport)) {
@@ -54,15 +68,28 @@ export function drawWorld(
   for (const element of shown(element => {
     return element.display === 'card' && element.kind !== 'component'
   })) {
-    drawCard(buffer, element, projection, theme)
+    drawCard(
+      buffer,
+      element,
+      projection,
+      theme,
+      tracing && !trace.onPath(element.representationId),
+    )
   }
   if (selected?.display === 'card') {
     drawSelection(buffer, selected, theme)
   }
   for (const relationship of projection.relationships) {
-    drawRouteLabel(buffer, relationship, projection, theme)
+    drawRouteLabel(
+      buffer,
+      relationship,
+      projection,
+      theme,
+      tracing && trace.pathIds.has(relationship.id),
+    )
   }
   for (const relationship of projection.relationships) {
+    if (tracing && !trace.pathIds.has(relationship.id)) continue
     drawRouteArrow(buffer, relationship, projection, theme)
   }
   buffer.popScissorRect()

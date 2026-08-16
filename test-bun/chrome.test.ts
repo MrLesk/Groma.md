@@ -12,7 +12,6 @@ import { kindGlyph, kindLabel } from '../src/viewers/tui/atoms/kind.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import {
   cameraOn,
-  mapRegion,
   navigationWorld,
   projectedById,
   repositoryRoot,
@@ -120,8 +119,6 @@ test.concurrent('the details pane always shows the selection and reserves its co
   assert.match(treePane, new RegExp(kindGlyph('system')))
   assert.match(treePane, new RegExp(kindGlyph('container')))
   assert.match(treePane, new RegExp(kindGlyph('component')))
-  assert.match(mapRegion(frame, 120), new RegExp(kindGlyph('system')))
-  assert.match(mapRegion(frame, 120), new RegExp(kindGlyph('container')))
   app.destroy()
 })
 

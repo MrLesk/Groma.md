@@ -1,5 +1,11 @@
 import type { OptimizedBuffer } from '@opentui/core'
 
+import {
+  actionCaption,
+  actionPath,
+  elementOnPath,
+  pickableActions,
+} from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import { filterMatches } from './navigation.ts'
 import type { FilterState, ViewerFocus } from './navigation.ts'
@@ -25,11 +31,18 @@ export function paintWorld(
     detailsScroll: number
     focus?: ViewerFocus
     filter?: FilterState
+    activeActionId?: string
   },
 ): void {
   buffer.clear(theme.background)
-  drawWorld(buffer, projection, theme)
+  const pathIds = actionPath(options.activeActionId, world)
   const selectionId = projection.currentId ?? undefined
+  drawWorld(buffer, projection, theme, {
+    pathIds,
+    onPath: elementId => {
+      return elementId === selectionId || elementOnPath(elementId, pathIds, world)
+    },
+  })
   const tree = options.tree
   drawHierarchy(
     buffer,
@@ -47,8 +60,11 @@ export function paintWorld(
     drawDetails(buffer, layout.details, selected, world, theme, {
       focused: options.focus === 'details',
       scroll: options.detailsScroll,
+      activeActionId: options.activeActionId,
     })
   }
+  const active = world.relationships.find(item => item.id === options.activeActionId)
+  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
   drawChrome(
     buffer,
     layout,
@@ -56,6 +72,10 @@ export function paintWorld(
     theme,
     options.focus,
     options.filter && filterLine(world, options.filter),
+    active === undefined
+      ? undefined
+      : actionCaption(active, true, id => names.get(id)).title,
+    options.focus === 'details' && pickableActions(selectionId, world).length > 0,
   )
 }
 

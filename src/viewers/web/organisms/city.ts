@@ -3,20 +3,20 @@ import type { ArchitectureWorld } from '../../../types.ts'
 import { addPrism, addSlab } from '../molecules/block.ts'
 import type { CityPick } from '../molecules/block.ts'
 import { addRoute } from '../molecules/route.ts'
-import type { CityRouteLabel } from '../molecules/route.ts'
+import type { CityRoute } from '../molecules/route.ts'
 import { addZone } from '../molecules/zone.ts'
 import { buildScene } from '../scene.ts'
 
-export type { CityPick, CityRouteLabel }
+export type { CityPick, CityRoute }
 
 export function buildCity(world: ArchitectureWorld): {
   city: Group
   pickables: CityPick[]
-  routeLabels: CityRouteLabel[]
+  routes: CityRoute[]
 } {
   const city = new Group()
   const pickables: CityPick[] = []
-  const routeLabels: CityRouteLabel[] = []
+  const routes: CityRoute[] = []
   for (const item of buildScene(world)) {
     switch (item.kind) {
       case 'slab':
@@ -28,11 +28,9 @@ export function buildCity(world: ArchitectureWorld): {
       case 'zone':
         addZone(city, item.group, item.z)
         break
-      case 'route': {
-        const label = addRoute(city, item.relationship, item.z)
-        if (label) routeLabels.push(label)
-      }
+      case 'route':
+        routes.push(addRoute(city, item.relationship, item.z))
     }
   }
-  return { city, pickables, routeLabels }
+  return { city, pickables, routes }
 }

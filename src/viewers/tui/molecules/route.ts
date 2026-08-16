@@ -55,6 +55,7 @@ export function drawRoute(
   buffer: OptimizedBuffer,
   relationship: ProjectedRelationship,
   theme: ViewerTheme,
+  dimmed = false,
 ): void {
   const color = relationship.origin === 'observed'
     ? theme.foreground
@@ -70,7 +71,7 @@ export function drawRoute(
       relationship.cellRoute[index],
       color,
       theme.background,
-      TextAttributes.DIM,
+      dimmed ? TextAttributes.DIM : 0,
       characters,
     )
   }
@@ -86,7 +87,7 @@ export function drawRoute(
         cornerFor(previous, point, next),
         color,
         theme.background,
-        TextAttributes.DIM,
+        dimmed ? TextAttributes.DIM : 0,
       )
     }
   }
@@ -127,9 +128,10 @@ export function drawRouteLabel(
   relationship: ProjectedRelationship,
   projection: WorldProjection,
   theme: ViewerTheme,
+  forced = false,
 ): void {
   if (!relationship.cellLabel) return
-  if (!showsRelationshipText(
+  if (!forced && !showsRelationshipText(
     relationship,
     projection.currentId,
     parentOfElements(projection.elements),

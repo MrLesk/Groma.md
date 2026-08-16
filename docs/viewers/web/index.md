@@ -27,7 +27,12 @@ Groups are invisible to the tree.
 The details pane always shows the current selection: name, kind,
 origin, description, relationships, children, and code. Component
 details include the scanner, file, and optional symbol from `code`.
-Children and relationship peers select that element.
+Children and relationship peers select that element. When the
+selection is a person who uses a launcher — software they use that
+starts other software they also use — the person's outgoing rows
+are that launcher's commands. Click a command to light its path on
+the city. The path stays while other boxes are selected. `x` clears
+it. Choosing another person command replaces it.
 
 ## What it shows
 
@@ -37,7 +42,8 @@ them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
 groups are neighborhood zones. Planned items are ghosts with dashed
 edges. Routes follow the laid-out paths. Names sit on the top face. A
 relationship description is drawn on its route only while the
-selection is an endpoint or an ancestor of exactly one endpoint.
+selection is an endpoint or an ancestor of exactly one endpoint,
+or while that route is on a lit person-command path.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.
@@ -48,4 +54,4 @@ The first view fits the whole map inside the map pane. The first
 internal system is selected. Scrolling zooms. Dragging pans. The 2D
 and 3D buttons switch the two fixed views and re-fit the camera.
 Click a box or a tree row to select it. Click empty space or Esc
-keeps the selection.
+keeps the selection. A person command stays on the city until `x`.

@@ -5,6 +5,7 @@ import type {
   Origin,
   WorldElement,
 } from '../../../types.ts'
+import { actionCaption, outgoingActions } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import {
   parentOfElements,
@@ -12,12 +13,15 @@ import {
 } from '../../relationship-text.ts'
 
 export interface InspectedRelationship {
+  id: string
   outgoing: boolean
+  pickable: boolean
   peerId: string
   peerName: string
   peerKind: C4Kind | null
   peerExternal: boolean
-  description: string
+  title: string
+  detail: string
 }
 
 export interface InspectedChild {
@@ -37,24 +41,43 @@ export interface Inspected {
   code: CodeReference[]
 }
 
+export function nextActiveActionId(
+  current: string | undefined,
+  event: { type: 'pick'; id: string } | { type: 'select' } | { type: 'clear' },
+): string | undefined {
+  if (event.type === 'pick') return event.id
+  if (event.type === 'clear') return undefined
+  return current
+}
+
 export function inspectDetails(
   element: WorldElement,
   world: ArchitectureWorld,
 ): Inspected {
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
+  const actions = outgoingActions(element.representationId, world)
+  const actionIds = new Set(actions.map(item => item.id))
+  const incoming = world.relationships.filter(relationship => {
+    return promotedPeer(relationship, element.representationId, parentOf)?.outgoing === false
+  })
   const relationships: InspectedRelationship[] = []
-  for (const relationship of world.relationships) {
+  for (const relationship of [...actions, ...incoming]) {
+    const outgoing = actionIds.has(relationship.id)
     const ends = promotedPeer(relationship, element.representationId, parentOf)
-    if (ends === null) continue
-    const peer = byId.get(ends.peerId)
+    const peerId = outgoing ? relationship.target : ends?.peerId ?? relationship.source
+    const peer = byId.get(peerId)
+    const caption = actionCaption(relationship, outgoing, id => byId.get(id)?.name)
     relationships.push({
-      outgoing: ends.outgoing,
-      peerId: ends.peerId,
-      peerName: peer?.name ?? ends.peerId,
+      id: relationship.id,
+      outgoing,
+      pickable: element.kind === 'person' && outgoing,
+      peerId,
+      peerName: peer?.name ?? peerId,
       peerKind: peer?.kind ?? null,
       peerExternal: peer?.external ?? false,
-      description: relationship.description,
+      title: caption.title,
+      detail: caption.detail,
     })
   }
   const children: InspectedChild[] = []
@@ -106,6 +129,8 @@ export function paintDetails(
   host: HTMLElement,
   inspected: Inspected,
   onSelect: (id: string) => void,
+  onPickAction: (id: string) => void,
+  activeActionId?: string,
 ): void {
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
@@ -125,12 +150,21 @@ export function paintDetails(
       const link = document.createElement('button')
       link.type = 'button'
       link.className = 'link'
-      link.append(
-        relationship.outgoing ? '→ ' : '← ',
-        marked(relationship.peerKind, relationship.peerExternal, relationship.peerName),
-      )
-      link.addEventListener('click', () => onSelect(relationship.peerId))
-      item.append(link, ` · ${relationship.description}`)
+      if (relationship.id === activeActionId) link.classList.add('active')
+      const rest = relationship.detail === '' ? '' : ` · ${relationship.detail}`
+      if (relationship.outgoing) {
+        link.append(`→ ${relationship.title}`)
+      } else {
+        link.append(
+          '← ',
+          marked(relationship.peerKind, relationship.peerExternal, relationship.title),
+        )
+      }
+      link.addEventListener('click', () => {
+        if (relationship.pickable) onPickAction(relationship.id)
+        else onSelect(relationship.peerId)
+      })
+      item.append(link, rest)
       list.append(item)
     }
     body.append(list)

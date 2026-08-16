@@ -139,6 +139,7 @@ export function mountTerminalViewer(
       tree: state.tree,
       detailsScroll: state.detailsScroll,
       filter: state.filter,
+      activeActionId: state.activeActionId,
     })
     frame.requestRender()
   }
@@ -219,9 +220,11 @@ export function mountTerminalViewer(
   function actionFor(key: KeyEvent): ViewerAction | undefined {
     if (key.ctrl) return undefined
     if (key.name === 'return') return 'enter'
+    if (key.name === 'backspace') return 'leave'
     if (key.name === 'tab') return 'tab'
     if (key.name === '[') return 'toggle-hierarchy'
     if (key.name === ']') return 'toggle-details'
+    if (key.name === 'x') return 'clear-action'
     if (
       key.name === 'up'
       || key.name === 'down'

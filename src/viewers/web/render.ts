@@ -1,6 +1,9 @@
 import {
   Box3,
   Color,
+  Line,
+  LineSegments,
+  Mesh,
   OrthographicCamera,
   Raycaster,
   Scene,
@@ -8,7 +11,13 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
+import type { Material, Object3D } from 'three'
 import type { ArchitectureWorld, WorldElement } from '../../types.ts'
+import {
+  actionCaption,
+  actionPath,
+  elementOnPath,
+} from '../action-path.ts'
 import {
   parentOfElements,
   showsRelationshipText,
@@ -20,16 +29,21 @@ const tree = initialTree()
 import { accent, paper } from './atoms/theme.ts'
 import { zoomReadout } from './organisms/chrome.ts'
 import { buildCity } from './organisms/city.ts'
-import { paintDetails, inspectDetails } from './organisms/details.ts'
+import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { defaultProjection } from './scene.ts'
 import type { Projection } from './scene.ts'
 
 const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
 
-const world: ArchitectureWorld = JSON.parse(document.getElementById('world')!.textContent!)
-const { city, pickables, routeLabels } = buildCity(world)
-const pickMeshes = pickables.map(item => item.mesh)
+const boot = JSON.parse(document.getElementById('world')!.textContent!) as {
+  generation: number
+  world: ArchitectureWorld
+}
+let world = boot.world
+let applied = boot.generation
+let { city, pickables, routes } = buildCity(world)
+let pickMeshes = pickables.map(item => item.mesh)
 
 const scene = new Scene()
 scene.background = new Color(paper)
@@ -38,6 +52,7 @@ scene.add(city)
 const host = document.getElementById('map')!
 const treeHost = document.getElementById('tree')!
 const detailsHost = document.getElementById('details')!
+const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
 const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
 const renderer = new WebGLRenderer({ antialias: true })
@@ -51,10 +66,11 @@ const target = new Vector3()
 const accentColor = new Color(accent)
 const raycaster = new Raycaster()
 const pointerNdc = new Vector2()
-const parentOf = parentOfElements(world.elements)
+let parentOf = parentOfElements(world.elements)
 
 let selectedId = defaultSelection(world, 'context')?.representationId
 let hoverId: string | undefined
+let activeActionId: string | undefined
 
 function placeCamera(projection: Projection): void {
   const span = new Box3().setFromObject(city).getSize(new Vector3())
@@ -142,32 +158,100 @@ function worldPerPixel(): number {
   return (camera.top - camera.bottom) / camera.zoom / Math.max(host.clientHeight, 1)
 }
 
+function disposeObject(object: Object3D): void {
+  object.traverse(child => {
+    if (!(child instanceof Mesh || child instanceof LineSegments)) return
+    child.geometry.dispose()
+    const materials: Material[] = Array.isArray(child.material)
+      ? child.material
+      : [child.material]
+    for (const material of materials) material.dispose()
+  })
+}
+
+function applyWorld(next: ArchitectureWorld): void {
+  scene.remove(city)
+  disposeObject(city)
+  world = next
+  parentOf = parentOfElements(world.elements)
+  if (!world.elements.some(element => element.representationId === selectedId)) {
+    selectedId = defaultSelection(world, 'context')?.representationId
+  }
+  ;({ city, pickables, routes } = buildCity(world))
+  pickMeshes = pickables.map(item => item.mesh)
+  scene.add(city)
+  paintSelection()
+}
+
 function selectedElement(): WorldElement | undefined {
   return world.elements.find(element => element.representationId === selectedId)
 }
 
 function select(id: string): void {
   selectedId = id
+  activeActionId = nextActiveActionId(activeActionId, { type: 'select' })
   paintSelection()
 }
 
-function paintOutlines(): void {
+function setDimmed(object: Object3D, dimmed: boolean): void {
+  object.traverse(child => {
+    if (!(child instanceof Mesh || child instanceof Line || child instanceof LineSegments)) return
+    const materials: Material[] = Array.isArray(child.material)
+      ? child.material
+      : [child.material]
+    for (const material of materials) {
+      material.opacity = dimmed ? 0.2 : 1
+      if (material.depthWrite === false) material.transparent = true
+      else material.transparent = dimmed
+    }
+  })
+}
+
+function paintOutlines(pathIds = actionPath(activeActionId, world)): void {
+  const tracing = pathIds.size > 0
   for (const item of pickables) {
     const id = item.element.representationId
     const on = id === selectedId || id === hoverId
     item.material.color.copy(on ? accentColor : item.ink)
+    const onPath = !tracing
+      || id === selectedId
+      || elementOnPath(id, pathIds, world)
+    setDimmed(item.mesh.parent ?? item.mesh, !onPath)
   }
   renderer.render(scene, camera)
 }
 
 function paintSelection(): void {
-  for (const label of routeLabels) {
-    label.mesh.visible = showsRelationshipText(label, selectedId ?? null, parentOf)
+  const pathIds = actionPath(activeActionId, world)
+  for (const route of routes) {
+    if (route.mesh) {
+      route.mesh.visible = pathIds.has(route.id)
+        || showsRelationshipText(route, selectedId ?? null, parentOf)
+    }
+    setDimmed(route.group, pathIds.size > 0 && !pathIds.has(route.id))
   }
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select)
   const selected = selectedElement()
-  if (selected) paintDetails(detailsHost, inspectDetails(selected, world), select)
-  paintOutlines()
+  if (selected) {
+    paintDetails(
+      detailsHost,
+      inspectDetails(selected, world),
+      select,
+      pickAction,
+      activeActionId,
+    )
+  }
+  const active = world.relationships.find(item => item.id === activeActionId)
+  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
+  actionHost.textContent = active === undefined
+    ? ''
+    : `${actionCaption(active, true, id => names.get(id)).title}   x clear`
+  paintOutlines(pathIds)
+}
+
+function pickAction(id: string): void {
+  activeActionId = nextActiveActionId(activeActionId, { type: 'pick', id })
+  paintSelection()
 }
 
 const canvas = renderer.domElement
@@ -250,7 +334,25 @@ canvas.addEventListener('pointerleave', () => {
 button2d.addEventListener('click', () => setMode(true))
 button3d.addEventListener('click', () => setMode(false))
 
+document.addEventListener('keydown', event => {
+  if (event.key !== 'x' && event.key !== 'X') return
+  if (event.metaKey || event.ctrlKey || event.altKey) return
+  activeActionId = nextActiveActionId(activeActionId, { type: 'clear' })
+  paintSelection()
+})
+
 renderer.setSize(host.clientWidth, host.clientHeight, false)
 fitCamera()
 paintSelection()
 new ResizeObserver(resize).observe(host)
+
+const events = new EventSource('/events')
+events.addEventListener('world', event => {
+  const payload = JSON.parse(event.data) as {
+    generation: number
+    world: ArchitectureWorld
+  }
+  if (payload.generation <= applied) return
+  applied = payload.generation
+  applyWorld(payload.world)
+})

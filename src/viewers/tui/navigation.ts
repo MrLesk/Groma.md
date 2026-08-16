@@ -1,3 +1,4 @@
+import { pickableActions } from '../action-path.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -27,6 +28,7 @@ export type ViewerAction =
   | 'toggle-hierarchy'
   | 'toggle-details'
   | 'dismiss'
+  | 'clear-action'
 
 export type FilterInput =
   | { type: 'open' }
@@ -52,6 +54,8 @@ export interface ViewerState {
   panes: PaneVisibility
   /** First hidden content row of an overflowing details pane. */
   detailsScroll: number
+  /** One person command. Survives leaving the person until x or another pick. */
+  activeActionId?: string
   filter?: FilterState
 }
 
@@ -218,9 +222,19 @@ export function reduceViewer(
       focus: !details && current.focus === 'details' ? 'architecture' : current.focus,
     }
   }
+  if (action === 'clear-action') {
+    return { ...current, activeActionId: undefined }
+  }
   if (action === 'dismiss') {
     if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
     return current
+  }
+  if (action === 'leave') {
+    return syncTree(world, {
+      ...current,
+      ...leaveView(world, current, resolved.selected),
+      focus: 'architecture',
+    })
   }
   if (current.focus === 'hierarchy') {
     return reduceTree(world, current, action)
@@ -228,20 +242,28 @@ export function reduceViewer(
   if (current.focus === 'details') {
     if (action === 'up' || action === 'down') {
       const step = action === 'down' ? 1 : -1
-      // The upper bound lives in drawDetails: content height is a render fact.
-      return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
+      const actions = pickableActions(current.currentId, world)
+      if (actions.length === 0) {
+        return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
+      }
+      const index = actions.findIndex(item => item.id === current.activeActionId)
+      const next = index < 0
+        ? (step > 0 ? 0 : actions.length - 1)
+        : Math.max(0, Math.min(actions.length - 1, index + step))
+      return { ...current, activeActionId: actions[next]!.id }
     }
     if (action === 'left') return { ...current, focus: 'architecture' }
     return current
   }
   if (action === 'enter') {
-    const next = resolved.selected && canEnter(resolved.selected)
-      ? enterView(world, resolved.selected)
-      : { level: current.level, currentId: current.currentId }
-    return syncTree(world, { ...current, ...next })
-  }
-  if (action === 'leave') {
-    return syncTree(world, { ...current, ...leaveView(world, current, resolved.selected) })
+    if (resolved.selected && canEnter(resolved.selected)) {
+      return syncTree(world, { ...current, ...enterView(world, resolved.selected) })
+    }
+    return {
+      ...current,
+      focus: 'details',
+      panes: { ...current.panes, details: true },
+    }
   }
   if (!resolved.selected) {
     return current
