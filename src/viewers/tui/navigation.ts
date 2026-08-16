@@ -146,7 +146,12 @@ function enterView(
   element: WorldElement,
 ): Pick<ViewerState, 'level' | 'currentId'> {
   if (element.kind === 'system') {
-    return { level: 'containers', currentId: element.representationId }
+    // Entering selects a child, so arrows immediately move among siblings.
+    const container = firstChildOfKind(element, 'container', elementsById(world))
+    return {
+      level: 'containers',
+      currentId: container?.representationId ?? element.representationId,
+    }
   }
   const component = firstComponentUnder(element, elementsById(world))
   return {
@@ -266,8 +271,11 @@ function moveView(
   direction: 'up' | 'down' | 'left' | 'right',
 ): Pick<ViewerState, 'level' | 'currentId'> {
   const current = { level: state.level, currentId: selected.representationId }
+  // Arrows stay inside the boundary: only siblings of the same parent are
+  // peers. Leaving the boundary selects the outer item in that direction.
   const same = sameLevelItems(world, state.level).filter(element => {
     return element.representationId !== selected.representationId
+      && element.parent === selected.parent
   })
   const sameHit = nearestInDirection(selected, same, direction)
   if (sameHit) return { level: state.level, currentId: sameHit.representationId }

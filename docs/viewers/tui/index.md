@@ -67,10 +67,11 @@ labels have places on that map. Changing selection or terminal size
 never lays the architecture out again; only the camera viewport
 changes.
 
-Arrows change which item is selected. Same-level peers keep the
-current zoom; the camera pans just enough if that peer would leave
-the map pane. When there is no same-level peer in that direction,
-selection leaves the boundary and the camera zooms out. Enter on a
+Arrows change which item is selected. They move between siblings
+inside the same boundary and keep the current zoom; the camera pans
+just enough if that sibling would leave the map pane. When no sibling
+lies in that direction, selection exits the boundary to the nearest
+outer item in that direction and the camera zooms out. Enter on a
 system or container changes C4 level inward; the hierarchy pane jumps
 to any element at its level. At Containers the camera frames the
 parent system. At Components it frames the parent container.
@@ -83,18 +84,19 @@ the last level. The first view fits the whole map.
 
 - `+` or `=` zooms the camera in. `-` or `_` zooms out toward the
   whole map.
-- Enter enters the selection. On a container it selects a child
-  component. Components is the last level.
+- Enter enters the selection: a system selects one of its
+  containers, a container one of its components. Components is the
+  last level.
 - `R` asks core for the world again and redraws it.
 - Esc never changes level and does not exit. It returns focus from
   a side pane to the map.
 - Ctrl+C leaves the viewer and restores the terminal.
-- Arrows select the nearest element in that direction at the current
-  level. If none exists, selection moves up a level. Arrows never
-  descend. Same-level moves keep zoom and pan only if needed. Leaving
-  a boundary zooms out. Left or Right with nothing further in that
-  direction focuses the hierarchy or details pane, selection
-  unchanged.
+- Arrows select the nearest sibling in that direction inside the
+  same boundary. With no sibling that way, selection exits one level
+  up to the outer item in that direction. Arrows never descend.
+  Sibling moves keep zoom and pan only if needed. Leaving a boundary
+  zooms out. Left or Right with nothing further in that direction
+  focuses the hierarchy or details pane, selection unchanged.
 - `[` toggles the hierarchy pane and `]` toggles the details pane.
   Hiding the focused hierarchy pane returns focus to the map; Tab
   reopens a hidden hierarchy pane.
