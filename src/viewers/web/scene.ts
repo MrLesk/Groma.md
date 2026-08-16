@@ -17,8 +17,8 @@ export interface Projection {
 }
 
 export const defaultProjection: Projection = {
-  rotation: Math.PI / 4,
-  elevation: Math.PI / 3,
+  rotation: Math.PI / 6,
+  elevation: Math.PI / 4,
 }
 
 /** Vertical rise of one containment layer; a parent's slab is exactly this thick. */

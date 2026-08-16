@@ -24,22 +24,16 @@ const style = `
   .route { fill: none; stroke: var(--ink); stroke-width: 0.6; }
   .route.ghost { stroke-dasharray: 2 1.5; }
   .flow { text-anchor: middle; dominant-baseline: central; opacity: 0.8; paint-order: stroke; stroke: var(--paper); stroke-width: 2; }
-  #controls { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px;
-    padding: 10px 12px; background: var(--raised); border: 1px solid var(--ink);
+  #controls { position: fixed; top: 12px; right: 12px; display: flex; gap: 4px;
+    padding: 8px; background: var(--raised); border: 1px solid var(--ink);
     font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink); }
-  #controls .modes { display: flex; gap: 4px; }
-  #controls button { flex: 1; padding: 2px 10px; background: var(--paper); border: 1px solid var(--ink);
+  #controls button { padding: 2px 14px; background: var(--paper); border: 1px solid var(--ink);
     font: inherit; color: inherit; cursor: pointer; }
   #controls button.active { background: var(--accent); border-color: var(--accent); color: var(--raised); }
-  #controls label { display: flex; align-items: center; gap: 6px; }
-  #controls input[type="range"] { width: 110px; accent-color: var(--accent); }
-  #controls span { min-width: 3.5ch; text-align: right; }
 `
 
 const controls = `<div id="controls">
-  <div class="modes"><button id="mode-2d">2D</button><button id="mode-3d" class="active">3D</button></div>
-  <label>rotate <input id="rotation" type="range" min="0" max="359"> <span id="rotation-value"></span></label>
-  <label>tilt <input id="tilt" type="range" min="20" max="85"> <span id="tilt-value"></span></label>
+  <button id="mode-2d">2D</button><button id="mode-3d" class="active">3D</button>
 </div>`
 
 export function renderPage(world: ArchitectureWorld): string {
