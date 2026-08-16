@@ -38,6 +38,45 @@ export function pointInside(point: Point, bounds: Bounds): boolean {
     && point.y < bounds.y + bounds.height
 }
 
+export function routeBetweenBoxes(source: Bounds, target: Bounds): Point[] {
+  const sourceMid = {
+    x: source.x + source.width / 2,
+    y: source.y + source.height / 2,
+  }
+  const targetMid = {
+    x: target.x + target.width / 2,
+    y: target.y + target.height / 2,
+  }
+  if (
+    Math.abs(targetMid.x - sourceMid.x) >= Math.abs(targetMid.y - sourceMid.y)
+  ) {
+    const rightward = sourceMid.x <= targetMid.x
+    const start = {
+      x: rightward ? source.x + source.width : source.x - 1,
+      y: insideSpan(sourceMid.y, source.y, source.height),
+    }
+    return orthogonalRoute([
+      start,
+      {
+        x: rightward ? target.x - 1 : target.x + target.width,
+        y: insideSpan(start.y, target.y, target.height),
+      },
+    ])
+  }
+  const downward = sourceMid.y <= targetMid.y
+  const start = {
+    x: insideSpan(sourceMid.x, source.x, source.width),
+    y: downward ? source.y + source.height : source.y - 1,
+  }
+  return orthogonalRoute([
+    start,
+    {
+      x: insideSpan(start.x, target.x, target.width),
+      y: downward ? target.y - 1 : target.y + target.height,
+    },
+  ])
+}
+
 export function trimRouteToDisplayedEndpoints(
   route: Point[],
   source: Bounds,

@@ -8,7 +8,12 @@ import { createTestRenderer } from '@opentui/core/testing'
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
-import type { C4Kind, SemanticLevel } from '../src/types.ts'
+import type {
+  ArchitectureWorld,
+  C4Kind,
+  SemanticLevel,
+  WorldElement,
+} from '../src/types.ts'
 import {
   cameraOn,
   containersFixtureRoot,
@@ -349,4 +354,102 @@ test.concurrent('person cards use full names when the map has room', async () =>
     assert.equal(overlaps(person.cellBounds, groma.cellBounds), false)
     assert.equal(overlaps(person.cellBounds, git.cellBounds), false)
   }
+})
+
+function routeWorld(target: 'container' | 'system'): ArchitectureWorld {
+  const person: WorldElement = {
+    representationId: 'observed:ann',
+    id: 'ann',
+    kind: 'person',
+    name: 'Ann',
+    description: '',
+    parent: null,
+    children: [],
+    external: false,
+    code: [],
+    origin: 'observed',
+    bounds: { x: 0, y: 0, width: 20, height: 20 },
+  }
+  const system: WorldElement = {
+    representationId: 'observed:shop',
+    id: 'shop',
+    kind: 'system',
+    name: 'Shop',
+    description: '',
+    parent: null,
+    children: ['observed:api'],
+    external: false,
+    code: [],
+    origin: 'observed',
+    bounds: { x: 40, y: 0, width: 80, height: 80 },
+  }
+  const container: WorldElement = {
+    representationId: 'observed:api',
+    id: 'api',
+    kind: 'container',
+    name: 'Api',
+    description: '',
+    parent: 'observed:shop',
+    children: [],
+    external: false,
+    code: [],
+    origin: 'observed',
+    bounds: { x: 70, y: 50, width: 20, height: 20 },
+  }
+  return {
+    bounds: { x: 0, y: 0, width: 140, height: 200 },
+    groups: [],
+    elements: [person, system, container],
+    relationships: [{
+      id: 'reads',
+      source: 'observed:ann',
+      target: target === 'container' ? 'observed:api' : 'observed:shop',
+      description: 'Reads the architecture',
+      technology: '',
+      origin: 'observed',
+      route: [
+        { x: 10, y: 10 },
+        { x: 30, y: 10 },
+        { x: 30, y: 180 },
+        { x: 80, y: 180 },
+        { x: 80, y: 60 },
+      ],
+      label: { x: 30, y: 180, width: 10, height: 2 },
+    }],
+  }
+}
+
+test.concurrent('promoted context routes stay between the displayed boxes', () => {
+  const world = routeWorld('container')
+  const projection = projectWorld(world, {
+    viewport: { x: 0, y: 0, width: 80, height: 36 },
+    level: 'context',
+    currentId: 'observed:ann',
+  })
+  const byId = projectedById(projection.elements)
+  const person = requiredElement(byId, 'observed:ann').cellBounds
+  const system = requiredElement(byId, 'observed:shop').cellBounds
+  const route = projection.relationships[0]?.cellRoute
+  assert.ok(route)
+  const top = Math.min(person.y, system.y) - 1
+  const bottom = Math.max(person.y + person.height, system.y + system.height)
+  for (const point of route) {
+    assert.ok(point.y >= top && point.y <= bottom, `${point.y} left the boxes`)
+  }
+  const span = Math.max(...route.map(point => point.y)) - Math.min(...route.map(point => point.y))
+  assert.ok(span <= Math.max(person.height, system.height))
+})
+
+test.concurrent('authored endpoint routes keep their laid-out bend', () => {
+  const world = routeWorld('system')
+  const projection = projectWorld(world, {
+    viewport: { x: 0, y: 0, width: 80, height: 36 },
+    level: 'context',
+    currentId: 'observed:ann',
+    camera: { zoom: 1, centerX: 70, centerY: 100 },
+  })
+  const route = projection.relationships[0]?.cellRoute
+  assert.ok(route)
+  const ys = new Set(route.map(point => point.y))
+  assert.ok(ys.size > 1)
 })
