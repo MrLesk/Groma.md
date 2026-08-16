@@ -969,6 +969,28 @@ test.concurrent('the details pane always shows the selection and reserves its co
   app.destroy()
 })
 
+test.concurrent('the hierarchy pane ends with the kind legend', async () => {
+  const response = await loadArchitectureViewModel(repositoryRoot)
+  const setup = await createTestRenderer({ width: 120, height: 36 })
+  const app = mountTerminalViewer(setup.renderer, response)
+  await setup.renderOnce()
+  const layout = paneLayout(120, 36)
+  const lines = setup.captureCharFrame().split('\n')
+  const column = (line: string) => {
+    return [...line].slice(layout.hierarchy.x, layout.map.x).join('')
+  }
+  const interior = lines
+    .slice(layout.hierarchy.y + 1, layout.hierarchy.y + layout.hierarchy.height - 1)
+    .map(column)
+  const tail = interior.slice(-3).join('\n')
+  const tree = interior.slice(0, -3).join('\n')
+  for (const kind of ['person', 'system', 'container', 'component'] as const) {
+    assert.match(tail, new RegExp(`${kindGlyph(kind)} ${kindLabel(kind)}`))
+    assert.doesNotMatch(tree, new RegExp(kindLabel(kind)))
+  }
+  app.destroy()
+})
+
 test.concurrent('the containment tree lists every element once and tracks collapse state', () => {
   const world = navigationWorld()
   const all = treeRows(world, undefined, {
