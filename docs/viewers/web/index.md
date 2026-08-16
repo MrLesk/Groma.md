@@ -11,7 +11,8 @@ This page is the browser surface. The shared viewer rules live in
 The whole world is one map. 3D is the default city view. 2D is the
 top-down plan. Parents with children render as plates; children sit on
 them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
-groups are neighborhood zones. Routes follow the laid-out paths.
+groups are neighborhood zones. Planned items are ghosts with dashed
+edges. Routes follow the laid-out paths. Names sit on the top face.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.

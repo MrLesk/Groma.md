@@ -1,274 +1,517 @@
+import {
+  Box3,
+  BoxGeometry,
+  BufferGeometry,
+  CanvasTexture,
+  Color,
+  ConeGeometry,
+  EdgesGeometry,
+  Group,
+  Line,
+  LineBasicMaterial,
+  LineDashedMaterial,
+  LineSegments,
+  Mesh,
+  MeshBasicMaterial,
+  NearestFilter,
+  OrthographicCamera,
+  PlaneGeometry,
+  Raycaster,
+  RepeatWrapping,
+  SRGBColorSpace,
+  Scene,
+  SphereGeometry,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from 'three'
+import type { Material } from 'three'
 import type {
-  ArchitectureWorld,
   Bounds,
+  C4Kind,
   WorldElement,
   WorldGroup,
   WorldRelationship,
 } from '../../types.ts'
-import {
-  buildScene,
-  corners,
-  defaultProjection,
-  fitScene,
-  orderScene,
-  project,
-} from './scene.ts'
-import type { Projection, SceneItem, ScreenPoint } from './scene.ts'
+import { buildScene, defaultProjection } from './scene.ts'
+import type { Projection, SceneItem } from './scene.ts'
 
+const paper = 0xEDE8D6
+const raised = 0xF6F2E4
+const ink = 0x26251D
+const accent = 0x1D9E75
 const labelSizes = { person: 4.5, system: 5.5, container: 5, component: 4.5 } as const
+const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
 
-function escapeXml(text: string): string {
-  const replacements: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&apos;',
-  }
-  return text.replace(/[&<>"']/g, character => replacements[character] as string)
+const world = JSON.parse(document.getElementById('world')!.textContent!)
+const items = buildScene(world)
+
+function at(x: number, y: number, z: number): Vector3 {
+  return new Vector3(x, z, y)
 }
 
-function points(screenPoints: ScreenPoint[]): string {
-  return screenPoints
-    .map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
-    .join(' ')
+function hatchTexture(paint: (ctx: CanvasRenderingContext2D, size: number) => void): CanvasTexture {
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#F6F2E4'
+  ctx.fillRect(0, 0, size, size)
+  paint(ctx, size)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.wrapS = RepeatWrapping
+  texture.wrapT = RepeatWrapping
+  texture.magFilter = NearestFilter
+  return texture
 }
 
-function polygon(screenPoints: ScreenPoint[], className: string): string {
-  return `<polygon class="${className}" points="${points(screenPoints)}"/>`
+const hatches: Record<C4Kind, CanvasTexture> = {
+  system: hatchTexture((ctx, size) => {
+    ctx.strokeStyle = '#26251D'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    for (let offset = -size; offset <= size * 2; offset += 16) {
+      ctx.moveTo(offset, size)
+      ctx.lineTo(offset + size, 0)
+    }
+    ctx.stroke()
+  }),
+  container: hatchTexture((ctx, size) => {
+    ctx.strokeStyle = '#26251D'
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    for (let offset = -size; offset <= size * 2; offset += 20) {
+      ctx.moveTo(offset, size)
+      ctx.lineTo(offset + size, 0)
+    }
+    ctx.stroke()
+  }),
+  component: hatchTexture((ctx, size) => {
+    ctx.strokeStyle = '#26251D'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    for (let y = 12; y < size; y += 16) {
+      ctx.moveTo(0, y)
+      ctx.lineTo(size, y)
+    }
+    ctx.stroke()
+  }),
+  person: hatchTexture((ctx, size) => {
+    ctx.fillStyle = '#26251D'
+    for (let y = 10; y < size; y += 16) {
+      for (let x = 10; x < size; x += 16) {
+        ctx.beginPath()
+        ctx.arc(x, y, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+  }),
 }
 
-/** Content drawn flat on the plane at elevation z; text inside skews with the map. */
-function flat(projection: Projection, z: number, content: string): string {
-  // The projected axes and origin ARE the affine matrix, so labels lie on the
-  // same plane as the geometry by construction.
-  const u = project(projection, 1, 0, 0)
-  const v = project(projection, 0, 1, 0)
-  const origin = project(projection, 0, 0, z)
-  return `<g transform="matrix(${u.x} ${u.y} ${v.x} ${v.y} ${origin.x} ${origin.y})">${content}</g>`
+function sideMaterial(kind: C4Kind, faceWidth: number, faceHeight: number, shaded: boolean): MeshBasicMaterial {
+  const map = hatches[kind].clone()
+  map.repeat.set(Math.max(faceWidth / 4, 0.5), Math.max(faceHeight / 4, 0.5))
+  return new MeshBasicMaterial({
+    map,
+    color: shaded ? 0xE4DFCC : 0xFFFFFF,
+  })
 }
 
-function fittedText(
+function labelTexture(
+  bounds: Bounds,
+  paint: (ctx: CanvasRenderingContext2D, scale: number) => void,
+): CanvasTexture {
+  const scale = 16
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(2, Math.round(bounds.width * scale))
+  canvas.height = Math.max(2, Math.round(bounds.height * scale))
+  paint(canvas.getContext('2d')!, scale)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+function labelPlane(
+  bounds: Bounds,
+  z: number,
+  paint: (ctx: CanvasRenderingContext2D, scale: number) => void,
+): Mesh {
+  const texture = labelTexture(bounds, paint)
+  const mesh = new Mesh(
+    new PlaneGeometry(bounds.width, bounds.height),
+    new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+  )
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.copy(at(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, z + 0.2))
+  mesh.raycast = () => {}
+  return mesh
+}
+
+function drawName(
+  ctx: CanvasRenderingContext2D,
+  scale: number,
   bounds: Bounds,
   text: string,
   fontSize: number,
-  className: string,
-): string {
-  const available = bounds.width - 4
-  const estimated = text.length * fontSize * 0.62
-  const squeeze = estimated > available
-    ? ` textLength="${available.toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
-    : ''
-  const x = bounds.x + bounds.width / 2
-  const y = bounds.y + bounds.height / 2
-  return `<text class="${className}" x="${x}" y="${y}" font-size="${fontSize}"${squeeze}>${escapeXml(text)}</text>`
+  align: 'center' | 'start',
+  alpha = 1,
+): void {
+  ctx.font = `${fontSize * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`
+  ctx.fillStyle = '#26251D'
+  ctx.globalAlpha = alpha
+  if (align === 'center') {
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, bounds.width * scale / 2, bounds.height * scale / 2, bounds.width * scale - 8)
+    return
+  }
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.letterSpacing = `${0.08 * fontSize * scale}px`
+  ctx.fillText(text, 6, 6)
 }
 
-interface Wall {
-  corners: ScreenPoint[]
-  /** Positive when the wall faces the viewer. */
-  facing: number
-  /** East/west walls carry the shade overlay so lighting stays consistent while rotating. */
-  shaded: boolean
+interface Pickable {
+  material: LineBasicMaterial | LineDashedMaterial
+  ink: Color
 }
 
-/** The walls that face the viewer; back walls sit fully behind the top and front ones. */
-function visibleWalls(
-  projection: Projection,
-  bounds: Bounds,
-  bottom: number,
-  top: number,
-): Wall[] {
-  const { x, y, width, height } = bounds
-  const sin = Math.sin(projection.rotation)
-  const cos = Math.cos(projection.rotation)
-  const p = (px: number, py: number, z: number) => project(projection, px, py, z)
-  const walls: Wall[] = [
-    {
-      corners: [p(x + width, y, bottom), p(x + width, y + height, bottom), p(x + width, y + height, top), p(x + width, y, top)],
-      facing: sin,
-      shaded: true,
-    },
-    {
-      corners: [p(x, y, bottom), p(x, y + height, bottom), p(x, y + height, top), p(x, y, top)],
-      facing: -sin,
-      shaded: true,
-    },
-    {
-      corners: [p(x, y + height, bottom), p(x + width, y + height, bottom), p(x + width, y + height, top), p(x, y + height, top)],
-      facing: cos,
-      shaded: false,
-    },
-    {
-      corners: [p(x, y, bottom), p(x + width, y, bottom), p(x + width, y, top), p(x, y, top)],
-      facing: -cos,
-      shaded: false,
-    },
+const pickables: { mesh: Mesh; pick: Pickable; title: string }[] = []
+const pickMeshes: Mesh[] = []
+const accentColor = new Color(accent)
+const raycaster = new Raycaster()
+const pointerNdc = new Vector2()
+
+function addBlock(parent: Group, element: WorldElement, bottom: number, top: number, label: Mesh): void {
+  const { x, y, width, height } = element.bounds
+  const thickness = Math.max(top - bottom, 0.4)
+  const geometry = new BoxGeometry(width, thickness, height)
+  const materials = [
+    sideMaterial(element.kind, height, thickness, true),
+    sideMaterial(element.kind, height, thickness, true),
+    new MeshBasicMaterial({ color: raised }),
+    new MeshBasicMaterial({ color: raised }),
+    sideMaterial(element.kind, width, thickness, false),
+    sideMaterial(element.kind, width, thickness, false),
   ]
-  return walls.filter(wall => wall.facing > 0)
+  const mesh = new Mesh(geometry, materials)
+  mesh.position.copy(at(x + width / 2, y + height / 2, bottom + thickness / 2))
+
+  const ghost = element.origin !== 'observed'
+  const outlineMaterial = ghost
+    ? new LineDashedMaterial({ color: ink, dashSize: 2, gapSize: 1.5 })
+    : new LineBasicMaterial({ color: ink })
+  const outline = new LineSegments(new EdgesGeometry(geometry), outlineMaterial)
+  outline.position.copy(mesh.position)
+  if (ghost) outline.computeLineDistances()
+
+  const block = new Group()
+  block.add(mesh, outline, label)
+  if (element.kind === 'person') {
+    const head = new Mesh(new SphereGeometry(3.5, 16, 12), new MeshBasicMaterial({ color: ink }))
+    head.position.copy(at(x + width / 2, y + height / 2 - 7, top + 3.5))
+    block.add(head)
+  }
+  parent.add(block)
+
+  const title = element.description === ''
+    ? `${element.name} · ${element.kind}`
+    : `${element.name} · ${element.kind}\n${element.description}`
+  pickables.push({ mesh, pick: { material: outlineMaterial, ink: new Color(ink) }, title })
+  pickMeshes.push(mesh)
 }
 
-function tooltip(element: WorldElement): string {
-  const description = element.description === '' ? '' : `\n${element.description}`
-  return `<title>${escapeXml(`${element.name} · ${element.kind}${description}`)}</title>`
+function addSlab(parent: Group, element: WorldElement, bottom: number, top: number): void {
+  addBlock(parent, element, bottom, top, labelPlane(element.bounds, top, (ctx, scale) => {
+    drawName(ctx, scale, element.bounds, element.name.toUpperCase(), 5, 'start', 0.65)
+  }))
 }
 
-function block(
-  projection: Projection,
-  element: WorldElement,
-  bottom: number,
-  top: number,
-  label: string,
-): string {
-  const ghost = element.origin === 'observed' ? '' : ' ghost'
-  // At top-down elevation the walls collapse to lines; drawing them would
-  // double every box edge's stroke.
-  const topDown = Math.cos(projection.elevation) < 0.01
-  const sides = topDown
-    ? ''
-    : visibleWalls(projection, element.bounds, bottom, top)
-        .map(wall => polygon(wall.corners, 'side') + (wall.shaded ? polygon(wall.corners, 'shade') : ''))
-        .join('')
-  return `<g class="el${ghost}" data-kind="${element.kind}">${tooltip(element)}`
-    + sides
-    + polygon(corners(projection, element.bounds, top), 'top')
-    + flat(projection, top, label)
-    + '</g>'
+function addPrism(parent: Group, element: WorldElement, bottom: number, top: number): void {
+  addBlock(parent, element, bottom, top, labelPlane(element.bounds, top, (ctx, scale) => {
+    drawName(ctx, scale, element.bounds, element.name, labelSizes[element.kind], 'center')
+  }))
 }
 
-function slab(projection: Projection, element: WorldElement, bottom: number, top: number): string {
-  const label = `<text class="district" x="${element.bounds.x + 3}" y="${element.bounds.y + 3}" font-size="5">${escapeXml(element.name.toUpperCase())}</text>`
-  return block(projection, element, bottom, top, label)
+function addZone(parent: Group, group: WorldGroup, z: number): void {
+  const { bounds } = group
+  const fill = new Mesh(
+    new PlaneGeometry(bounds.width, bounds.height),
+    new MeshBasicMaterial({ color: ink, opacity: 0.03, transparent: true, depthWrite: false }),
+  )
+  fill.rotation.x = -Math.PI / 2
+  fill.position.copy(at(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, z + 0.05))
+  fill.raycast = () => {}
+
+  const corners = [
+    at(bounds.x, bounds.y, z + 0.06),
+    at(bounds.x + bounds.width, bounds.y, z + 0.06),
+    at(bounds.x + bounds.width, bounds.y + bounds.height, z + 0.06),
+    at(bounds.x, bounds.y + bounds.height, z + 0.06),
+    at(bounds.x, bounds.y, z + 0.06),
+  ]
+  const edge = new Line(
+    new BufferGeometry().setFromPoints(corners),
+    new LineDashedMaterial({ color: ink, dashSize: 3, gapSize: 2 }),
+  )
+  edge.computeLineDistances()
+  parent.add(fill, edge, labelPlane(bounds, z + 0.08, (ctx, scale) => {
+    drawName(ctx, scale, bounds, group.name.toUpperCase(), 4.5, 'start', 0.65)
+  }))
 }
 
-function prism(projection: Projection, element: WorldElement, bottom: number, top: number): string {
-  const fontSize = labelSizes[element.kind]
-  const head = element.kind === 'person'
-    ? `<circle class="head" cx="${element.bounds.x + element.bounds.width / 2}" cy="${element.bounds.y + element.bounds.height / 2 - 7}" r="3.5"/>`
-    : ''
-  return block(projection, element, bottom, top, head + fittedText(element.bounds, element.name, fontSize, 'name'))
+function addBar(
+  parent: Group,
+  from: Vector3,
+  to: Vector3,
+  width: number,
+  material: Material,
+): void {
+  const dx = to.x - from.x
+  const dz = to.z - from.z
+  const length = Math.hypot(dx, dz)
+  if (length < 0.01) return
+  const bar = new Mesh(new BoxGeometry(length, 0.12, width), material)
+  bar.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2)
+  bar.rotation.y = Math.atan2(dx, dz) - Math.PI / 2
+  bar.raycast = () => {}
+  parent.add(bar)
 }
 
-function zone(projection: Projection, group: WorldGroup, z: number): string {
-  const bounds = group.bounds
-  const label = `<text class="district" x="${bounds.x + 3}" y="${bounds.y + 3}" font-size="4.5">${escapeXml(group.name.toUpperCase())}</text>`
-  const rect = `<rect class="zone" x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}"/>`
-  return flat(projection, z, rect + label)
-}
-
-function route(projection: Projection, relationship: WorldRelationship, z: number): string {
-  const ghost = relationship.origin === 'observed' ? '' : ' ghost'
-  const line = `<polyline class="route${ghost}" points="${relationship.route.map(point => `${point.x},${point.y}`).join(' ')}" marker-end="url(#arrow)"/>`
-  const label = relationship.label === null
-    ? ''
-    : fittedText(relationship.label, relationship.description, 4, 'flow')
-  return flat(projection, z, line + label)
-}
-
-function renderItem(projection: Projection, item: SceneItem): string {
-  switch (item.kind) {
-    case 'slab':
-      return slab(projection, item.element, item.bottom, item.top)
-    case 'prism':
-      return prism(projection, item.element, item.bottom, item.top)
-    case 'zone':
-      return zone(projection, item.group, item.z)
-    case 'route':
-      return route(projection, item.relationship, item.z)
+function addRoute(parent: Group, relationship: WorldRelationship, z: number): void {
+  const points = relationship.route.map(point => at(point.x, point.y, z + 0.25))
+  const ghost = relationship.origin !== 'observed'
+  if (ghost) {
+    const line = new Line(
+      new BufferGeometry().setFromPoints(points),
+      new LineDashedMaterial({ color: ink, dashSize: 2, gapSize: 1.5 }),
+    )
+    line.computeLineDistances()
+    parent.add(line)
+  } else {
+    const material = new MeshBasicMaterial({ color: ink })
+    for (let index = 0; index < points.length - 1; index += 1) {
+      addBar(parent, points[index]!, points[index + 1]!, 0.55, material)
+    }
+  }
+  if (points.length >= 2) {
+    const last = points[points.length - 1]!
+    const prev = points[points.length - 2]!
+    const direction = last.clone().sub(prev)
+    if (direction.lengthSq() > 0) {
+      const arrow = new Mesh(new ConeGeometry(1.1, 3, 8), new MeshBasicMaterial({ color: ink }))
+      arrow.position.copy(last)
+      arrow.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
+      arrow.raycast = () => {}
+      parent.add(arrow)
+    }
+  }
+  if (relationship.label !== null) {
+    const bounds = relationship.label
+    parent.add(labelPlane(bounds, z + 0.3, (ctx, scale) => {
+      ctx.font = `${4 * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const cx = bounds.width * scale / 2
+      const cy = bounds.height * scale / 2
+      ctx.lineWidth = 6
+      ctx.strokeStyle = '#EDE8D6'
+      ctx.strokeText(relationship.description, cx, cy)
+      ctx.fillStyle = '#26251D'
+      ctx.fillText(relationship.description, cx, cy)
+    }))
   }
 }
 
-function hatch(id: string, content: string): string {
-  return `<pattern id="${id}" patternUnits="userSpaceOnUse" width="4" height="4">`
-    + `<rect width="4" height="4" fill="var(--raised)"/>${content}</pattern>`
+function addItem(parent: Group, item: SceneItem): void {
+  switch (item.kind) {
+    case 'slab':
+      addSlab(parent, item.element, item.bottom, item.top)
+      return
+    case 'prism':
+      addPrism(parent, item.element, item.bottom, item.top)
+      return
+    case 'zone':
+      addZone(parent, item.group, item.z)
+      return
+    case 'route':
+      addRoute(parent, item.relationship, item.z)
+  }
 }
 
-const defs = '<defs>'
-  + hatch('hatch-system', '<path d="M-1,1 L1,-1 M0,4 L4,0 M3,5 L5,3" stroke="#26251D" stroke-width="0.6"/>')
-  + hatch('hatch-container', '<path d="M-1,3 L3,-1 M1,5 L5,1" stroke="#26251D" stroke-width="0.5"/>')
-  + hatch('hatch-component', '<path d="M0,1 H4 M0,3 H4" stroke="#26251D" stroke-width="0.4"/>')
-  + hatch('hatch-person', '<circle cx="2" cy="2" r="0.7" fill="#26251D"/>')
-  + '<marker id="arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
-  + '<path d="M0,0 L6,3 L0,6 z" fill="#26251D"/></marker>'
-  + '</defs>'
+const host = document.getElementById('map')!
+const scene = new Scene()
+scene.background = new Color(paper)
+const city = new Group()
+for (const item of items) addItem(city, item)
+scene.add(city)
 
-const world: ArchitectureWorld = JSON.parse(
-  document.getElementById('world')!.textContent!,
-)
-const items = buildScene(world)
-const svg = document.querySelector('svg')!
-const view = svg.viewBox.baseVal
-
-const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
+const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
+const renderer = new WebGLRenderer({ antialias: true })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+host.appendChild(renderer.domElement)
 
 const button2d = document.getElementById('mode-2d')!
 const button3d = document.getElementById('mode-3d')!
-
 let current: Projection = defaultProjection
+const target = new Vector3()
 
-function fitCamera(current: Projection): void {
-  const margin = 12
-  const fit = fitScene(items, current)
-  view.x = fit.x - margin
-  view.y = fit.y - margin
-  view.width = fit.width + margin * 2
-  view.height = fit.height + margin * 2
+function placeCamera(projection: Projection): void {
+  const span = new Box3().setFromObject(city).getSize(new Vector3())
+  const distance = Math.max(span.x, span.y, span.z, 1) * 2
+  const horiz = distance * Math.cos(projection.elevation)
+  camera.position.set(
+    target.x + Math.sin(projection.rotation) * horiz,
+    target.y + distance * Math.sin(projection.elevation),
+    target.z + Math.cos(projection.rotation) * horiz,
+  )
+  if (Math.cos(projection.elevation) < 0.01) camera.up.set(0, 0, -1)
+  else camera.up.set(0, 1, 0)
+  camera.lookAt(target)
 }
 
-let queued = false
-function draw(): void {
-  if (queued) return
-  queued = true
-  requestAnimationFrame(() => {
-    queued = false
-    fitCamera(current)
-    svg.innerHTML = defs + orderScene(items, current).map(item => renderItem(current, item)).join('')
-  })
+function fitCamera(): void {
+  const box = new Box3().setFromObject(city)
+  if (box.isEmpty()) return
+  box.getCenter(target)
+  placeCamera(current)
+  camera.updateMatrixWorld()
+  const inverse = camera.matrixWorldInverse
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  const corner = new Vector3()
+  const { min, max } = box
+  for (const x of [min.x, max.x]) {
+    for (const y of [min.y, max.y]) {
+      for (const z of [min.z, max.z]) {
+        corner.set(x, y, z).applyMatrix4(inverse)
+        minX = Math.min(minX, corner.x)
+        maxX = Math.max(maxX, corner.x)
+        minY = Math.min(minY, corner.y)
+        maxY = Math.max(maxY, corner.y)
+      }
+    }
+  }
+  const margin = 16
+  let halfW = (maxX - minX) / 2 + margin
+  let halfH = (maxY - minY) / 2 + margin
+  const aspect = host.clientWidth / Math.max(host.clientHeight, 1)
+  if (halfW / halfH > aspect) halfH = halfW / aspect
+  else halfW = halfH * aspect
+  camera.left = -halfW
+  camera.right = halfW
+  camera.top = halfH
+  camera.bottom = -halfH
+  camera.zoom = 1
+  camera.updateProjectionMatrix()
+}
+
+function resize(): void {
+  const width = host.clientWidth
+  const height = host.clientHeight
+  renderer.setSize(width, height, false)
+  const aspect = width / Math.max(height, 1)
+  const halfH = (camera.top - camera.bottom) / 2
+  camera.top = halfH
+  camera.bottom = -halfH
+  camera.left = -halfH * aspect
+  camera.right = halfH * aspect
+  camera.updateProjectionMatrix()
+  renderer.render(scene, camera)
 }
 
 function setMode(plan: boolean): void {
   current = plan ? planProjection : defaultProjection
   button2d.classList.toggle('active', plan)
   button3d.classList.toggle('active', !plan)
-  draw()
+  fitCamera()
+  renderer.render(scene, camera)
 }
+
+function viewAxes(): { right: Vector3; up: Vector3 } {
+  return {
+    right: new Vector3().setFromMatrixColumn(camera.matrixWorld, 0),
+    up: new Vector3().setFromMatrixColumn(camera.matrixWorld, 1),
+  }
+}
+
+function worldPerPixel(): number {
+  return (camera.top - camera.bottom) / camera.zoom / Math.max(host.clientHeight, 1)
+}
+
+const canvas = renderer.domElement
+canvas.addEventListener('wheel', event => {
+  event.preventDefault()
+  const rect = canvas.getBoundingClientRect()
+  const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1
+  const { right, up } = viewAxes()
+  const before = camera.position.clone()
+    .addScaledVector(right, ndcX * (camera.right - camera.left) / 2 / camera.zoom)
+    .addScaledVector(up, ndcY * (camera.top - camera.bottom) / 2 / camera.zoom)
+  camera.zoom = Math.min(40, Math.max(0.2, camera.zoom / Math.exp(event.deltaY * 0.002)))
+  camera.updateProjectionMatrix()
+  const after = camera.position.clone()
+    .addScaledVector(right, ndcX * (camera.right - camera.left) / 2 / camera.zoom)
+    .addScaledVector(up, ndcY * (camera.top - camera.bottom) / 2 / camera.zoom)
+  const delta = before.sub(after)
+  camera.position.add(delta)
+  target.add(delta)
+  renderer.render(scene, camera)
+}, { passive: false })
+
+let last: Vector2 | null = null
+canvas.addEventListener('pointerdown', event => {
+  last = new Vector2(event.clientX, event.clientY)
+  canvas.setPointerCapture(event.pointerId)
+})
+canvas.addEventListener('pointermove', event => {
+  if (last !== null) {
+    const { right, up } = viewAxes()
+    const scale = worldPerPixel()
+    const dx = event.clientX - last.x
+    const dy = event.clientY - last.y
+    camera.position.addScaledVector(right, -dx * scale)
+    camera.position.addScaledVector(up, dy * scale)
+    target.addScaledVector(right, -dx * scale)
+    target.addScaledVector(up, dy * scale)
+    last.set(event.clientX, event.clientY)
+    renderer.render(scene, camera)
+    return
+  }
+  const rect = canvas.getBoundingClientRect()
+  pointerNdc.set(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1,
+  )
+  raycaster.setFromCamera(pointerNdc, camera)
+  const hit = raycaster.intersectObjects(pickMeshes, false)[0]
+  const picked = pickables.find(item => item.mesh === hit?.object)
+  canvas.title = picked?.title ?? ''
+  for (const item of pickables) {
+    item.pick.material.color.copy(item === picked ? accentColor : item.pick.ink)
+  }
+  renderer.render(scene, camera)
+})
+canvas.addEventListener('pointerup', () => {
+  last = null
+})
+canvas.addEventListener('pointerleave', () => {
+  for (const item of pickables) {
+    item.pick.material.color.copy(item.pick.ink)
+  }
+  canvas.title = ''
+  renderer.render(scene, camera)
+})
 
 button2d.addEventListener('click', () => setMode(true))
 button3d.addEventListener('click', () => setMode(false))
+window.addEventListener('resize', resize)
 
-const scale = () => {
-  const rect = svg.getBoundingClientRect()
-  return Math.min(rect.width / view.width, rect.height / view.height)
-}
-svg.addEventListener('wheel', event => {
-  event.preventDefault()
-  const rect = svg.getBoundingClientRect()
-  const k = scale()
-  const pointer = {
-    x: view.x + view.width / 2 + (event.clientX - rect.left - rect.width / 2) / k,
-    y: view.y + view.height / 2 + (event.clientY - rect.top - rect.height / 2) / k,
-  }
-  const factor = Math.exp(event.deltaY * 0.002)
-  view.x = pointer.x - (pointer.x - view.x) * factor
-  view.y = pointer.y - (pointer.y - view.y) * factor
-  view.width *= factor
-  view.height *= factor
-}, { passive: false })
-
-let last: ScreenPoint | null = null
-svg.addEventListener('pointerdown', event => {
-  last = { x: event.clientX, y: event.clientY }
-  svg.setPointerCapture(event.pointerId)
-})
-svg.addEventListener('pointermove', event => {
-  if (last === null) return
-  const k = scale()
-  view.x -= (event.clientX - last.x) / k
-  view.y -= (event.clientY - last.y) / k
-  last = { x: event.clientX, y: event.clientY }
-})
-svg.addEventListener('pointerup', () => {
-  last = null
-})
-
-draw()
+renderer.setSize(host.clientWidth, host.clientHeight, false)
+fitCamera()
+renderer.render(scene, camera)
