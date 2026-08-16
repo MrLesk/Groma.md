@@ -80,6 +80,10 @@ work without it.
 When multiple approaches produce the same result, choose the one that is shortest and easiest to explain. Do not import
 complexity from an earlier Groma implementation, a generic architecture, or a hypothetical future requirement.
 
+## File length
+
+A source or test file over 500 lines is a code smell. Split it so each file stays at or under 500 lines.
+
 ## UI descriptions
 
 Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer
