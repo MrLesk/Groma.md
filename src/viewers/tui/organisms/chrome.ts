@@ -17,9 +17,31 @@ export function zoomReadout(zoom: number, fitZoom: number): string {
 }
 
 const paneHints: Record<ViewerFocus, string> = {
-  architecture: '←↑↓→ select   enter open   tab tree   [ ] panes   R refresh',
-  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes   R refresh',
-  details: '↑↓ scroll   esc map   [ ] panes   R refresh',
+  architecture: '←↑↓→ select   enter open   backspace back   tab tree',
+  hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes',
+  details: '↑↓ scroll   backspace back   esc map   [ ] panes',
+}
+
+function footerHint(
+  focus: ViewerFocus,
+  actionTitle: string | undefined,
+  picking: boolean,
+): string {
+  if (picking) {
+    return actionTitle === undefined
+      ? '↑↓ action   esc map   [ ] panes   R refresh'
+      : '↑↓ action   x clear   esc map'
+  }
+  if (actionTitle !== undefined) {
+    if (focus === 'architecture') {
+      return `${actionTitle}   x clear   enter open   backspace back`
+    }
+    if (focus === 'hierarchy') {
+      return `${actionTitle}   x clear   ↑↓ move   enter select`
+    }
+    return `${actionTitle}   x clear   backspace back   esc map`
+  }
+  return paneHints[focus]
 }
 
 export function drawChrome(
@@ -29,6 +51,8 @@ export function drawChrome(
   theme: ViewerTheme,
   focus: ViewerFocus = 'architecture',
   footerOverride?: string,
+  actionTitle?: string,
+  picking = false,
 ): void {
   const panes: Array<[ViewerFocus, Bounds]> = [
     ['hierarchy', layout.hierarchy],
@@ -74,7 +98,7 @@ export function drawChrome(
   const zoomControls = `- out   + in · ${readout}`
   text(
     buffer,
-    footerOverride ?? paneHints[focus],
+    footerOverride ?? footerHint(focus, actionTitle, picking),
     layout.footer.x + 1,
     layout.footer.y,
     Math.max(0, layout.footer.width - zoomControls.length - 3),

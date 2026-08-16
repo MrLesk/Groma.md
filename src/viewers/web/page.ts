@@ -63,6 +63,7 @@ const style = `
     align-items: center;
     gap: 12px;
   }
+  #action { margin-right: auto; }
   #controls { display: flex; gap: 4px; }
   #controls button, .row, .link {
     padding: 2px 10px;
@@ -87,6 +88,7 @@ const style = `
   .row .twist { width: 1em; flex: none; }
   .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link { border: 0; background: transparent; padding: 0; }
+  .link.active { box-shadow: inset 3px 0 var(--accent); }
   .mark { flex: none; }
   .mark.person { color: var(--person); }
   .mark.system { color: var(--system); }
@@ -104,15 +106,15 @@ function legend(): string {
   }).join('')
 }
 
-export function renderPage(world: ArchitectureWorld): string {
-  const json = JSON.stringify(world).replace(/</g, '\\u003c')
+export function renderPage(world: ArchitectureWorld, generation = 1): string {
+  const json = JSON.stringify({ generation, world }).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma map</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}</header>`
     + `<nav id="hierarchy"><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
     + '<aside id="details"><h1></h1><p class="meta"></p><p class="description"></p><div class="body"></div></aside>'
-    + '<footer id="footer"><span id="zoom">fit</span>'
+    + '<footer id="footer"><span id="action"></span><span id="zoom">fit</span>'
     + '<div id="controls"><button id="mode-2d">2D</button><button id="mode-3d" class="active">3D</button></div>'
     + '</footer>'
     + `<script type="application/json" id="world">${json}</script>`

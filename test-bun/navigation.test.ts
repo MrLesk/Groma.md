@@ -10,6 +10,7 @@ import {
   reduceViewer,
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
+import type { ArchitectureWorld } from '../src/types.ts'
 import { initialTree } from '../src/viewers/tui/tree.ts'
 import { navigationWorld, repositoryRoot } from './helpers.ts'
 
@@ -36,17 +37,17 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     level: 'containers',
     currentId: 'observed:cleft',
   })
-  assert.deepEqual(
-    viewOf(reduceViewer(world, { ...state, currentId: 'observed:ann' }, 'enter')),
-    { level: 'context', currentId: 'observed:ann' },
+  assert.equal(
+    reduceViewer(world, { ...state, currentId: 'observed:ann' }, 'enter').focus,
+    'details',
   )
-  assert.deepEqual(
-    viewOf(reduceViewer(world, { ...state, currentId: 'observed:ext' }, 'enter')),
-    { level: 'context', currentId: 'observed:ext' },
+  assert.equal(
+    reduceViewer(world, { ...state, currentId: 'observed:ext' }, 'enter').focus,
+    'details',
   )
-  assert.deepEqual(
-    viewOf(reduceViewer(world, { ...state, currentId: 'observed:empty' }, 'enter')),
-    { level: 'context', currentId: 'observed:empty' },
+  assert.equal(
+    reduceViewer(world, { ...state, currentId: 'observed:empty' }, 'enter').focus,
+    'details',
   )
   assert.deepEqual(
     viewOf(reduceViewer(world, {
@@ -216,4 +217,89 @@ test.concurrent('the filter narrows by name, drives selection live, and restores
   assert.equal(accepted.filter, undefined)
   assert.equal(accepted.currentId, firstMatch)
   assert.equal(accepted.level, 'containers')
+})
+
+test.concurrent('leave from details returns to the map and the parent Enter opened', () => {
+  const world = navigationWorld()
+  let state = initialState(world)
+  state = reduceViewer(world, state, 'enter')
+  state = reduceViewer(world, state, 'enter')
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.focus, 'details')
+  assert.deepEqual(viewOf(state), { level: 'components', currentId: 'observed:pleft' })
+  const dismissed = reduceViewer(world, state, 'dismiss')
+  assert.equal(dismissed.focus, 'architecture')
+  assert.deepEqual(viewOf(dismissed), { level: 'components', currentId: 'observed:pleft' })
+  state = reduceViewer(world, state, 'leave')
+  assert.equal(state.focus, 'architecture')
+  assert.deepEqual(viewOf(state), { level: 'containers', currentId: 'observed:cleft' })
+})
+
+test.concurrent('a person action stays on after leaving details and x clears it', () => {
+  const box = (
+    id: string,
+    kind: 'person' | 'container',
+    parent: string | null = null,
+  ) => ({
+    representationId: id,
+    id,
+    kind,
+    name: id,
+    description: '',
+    parent,
+    children: [] as string[],
+    external: false,
+    code: [],
+    origin: 'observed' as const,
+    bounds: { x: 0, y: 0, width: 8, height: 8 },
+  })
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    relationships: [
+      {
+        id: 'buyer-api',
+        source: 'buyer',
+        target: 'api',
+        description: 'sends',
+        technology: 'https',
+        origin: 'observed' as const,
+        route: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+        label: null,
+      },
+      {
+        id: 'buyer-web',
+        source: 'buyer',
+        target: 'web',
+        description: 'reads',
+        technology: 'https',
+        origin: 'observed' as const,
+        route: [{ x: 0, y: 0 }, { x: 2, y: 0 }],
+        label: null,
+      },
+    ],
+  }
+  let state: ViewerState = {
+    ...initialState(world),
+    currentId: 'buyer',
+    focus: 'details',
+  }
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.activeActionId, 'buyer-api')
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.activeActionId, 'buyer-web')
+  state = reduceViewer(world, state, 'left')
+  assert.equal(state.focus, 'architecture')
+  assert.equal(state.activeActionId, 'buyer-web')
+  state = reduceViewer(world, { ...state, currentId: 'api', focus: 'details' }, 'down')
+  assert.equal(state.activeActionId, 'buyer-web')
+  assert.equal(state.detailsScroll, 1)
+  state = reduceViewer(world, { ...state, currentId: 'buyer', focus: 'details' }, 'up')
+  assert.equal(state.activeActionId, 'buyer-api')
+  state = reduceViewer(world, state, 'dismiss')
+  assert.equal(state.focus, 'architecture')
+  assert.equal(state.activeActionId, 'buyer-api')
+  state = reduceViewer(world, state, 'clear-action')
+  assert.equal(state.activeActionId, undefined)
 })

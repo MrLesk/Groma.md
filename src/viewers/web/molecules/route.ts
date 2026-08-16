@@ -55,10 +55,12 @@ function flowLabel(description: string, bounds: Bounds, z: number): Mesh {
   return mesh
 }
 
-export interface CityRouteLabel {
+export interface CityRoute {
+  id: string
   source: string
   target: string
-  mesh: Mesh
+  group: Group
+  mesh: Mesh | null
 }
 
 function addBar(
@@ -83,7 +85,9 @@ export function addRoute(
   parent: Group,
   relationship: WorldRelationship,
   z: number,
-): CityRouteLabel | null {
+): CityRoute {
+  const group = new Group()
+  parent.add(group)
   const points = relationship.route.map(point => at(point.x, point.y, z + 0.25))
   const ghost = relationship.origin !== 'observed'
   if (ghost) {
@@ -92,11 +96,11 @@ export function addRoute(
       new LineDashedMaterial({ color: ink, dashSize: 2, gapSize: 1.5 }),
     )
     line.computeLineDistances()
-    parent.add(line)
+    group.add(line)
   } else {
     const material = new MeshBasicMaterial({ color: ink })
     for (let index = 0; index < points.length - 1; index += 1) {
-      addBar(parent, points[index]!, points[index + 1]!, 0.55, material)
+      addBar(group, points[index]!, points[index + 1]!, 0.55, material)
     }
   }
   if (points.length >= 2) {
@@ -108,12 +112,21 @@ export function addRoute(
       arrow.position.copy(last)
       arrow.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize())
       arrow.raycast = () => {}
-      parent.add(arrow)
+      group.add(arrow)
     }
   }
-  if (relationship.label === null) return null
-  const mesh = flowLabel(relationship.description, relationship.label, z + 0.3)
-  mesh.visible = false
-  parent.add(mesh)
-  return { source: relationship.source, target: relationship.target, mesh }
+  const mesh = relationship.label === null
+    ? null
+    : flowLabel(relationship.description, relationship.label, z + 0.3)
+  if (mesh) {
+    mesh.visible = false
+    group.add(mesh)
+  }
+  return {
+    id: relationship.id,
+    source: relationship.source,
+    target: relationship.target,
+    group,
+    mesh,
+  }
 }

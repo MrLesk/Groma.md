@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test'
 
-import { inspectDetails } from '../src/viewers/web/organisms/details.ts'
+import {
+  inspectDetails,
+  nextActiveActionId,
+} from '../src/viewers/web/organisms/details.ts'
 import type {
   ArchitectureWorld,
   Bounds,
@@ -81,12 +84,15 @@ test.concurrent('details list children, promoted peers, and code', () => {
 
   const core = inspectDetails(fixture.elements[2]!, fixture)
   expect(core.relationships).toEqual([{
+    id: 'r1',
     outgoing: true,
+    pickable: false,
     peerId: 'web',
     peerName: 'web',
     peerKind: 'container',
     peerExternal: false,
-    description: 'supplies positions',
+    title: 'supplies positions',
+    detail: 'web',
   }])
 
   const layout = inspectDetails(fixture.elements[4]!, fixture)
@@ -95,5 +101,81 @@ test.concurrent('details list children, promoted peers, and code', () => {
     file: 'src/world-layout.ts',
     symbol: 'layoutWorld',
   }])
+})
+
+test.concurrent('a person lists launcher commands as pickable actions', () => {
+  const fixture: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 40, height: 20 },
+    groups: [],
+    elements: [
+      element('buyer', 'person', null, []),
+      element('api', 'container', null, []),
+      element('web', 'container', null, []),
+      element('jobs', 'container', null, []),
+    ],
+    relationships: [
+      {
+        id: 'buyer-api',
+        source: 'buyer',
+        target: 'api',
+        description: 'sends',
+        technology: '',
+        origin: 'observed',
+        route: [],
+        label: null,
+      },
+      {
+        id: 'buyer-web',
+        source: 'buyer',
+        target: 'web',
+        description: 'reads',
+        technology: '',
+        origin: 'observed',
+        route: [],
+        label: null,
+      },
+      {
+        id: 'api-web',
+        source: 'api',
+        target: 'web',
+        description: 'starts',
+        technology: '',
+        origin: 'observed',
+        route: [],
+        label: null,
+      },
+      {
+        id: 'api-jobs',
+        source: 'api',
+        target: 'jobs',
+        description: 'runs jobs',
+        technology: '',
+        origin: 'observed',
+        route: [],
+        label: null,
+      },
+    ],
+  }
+  const buyer = inspectDetails(fixture.elements[0]!, fixture)
+  expect(buyer.relationships.map(item => ({
+    id: item.id,
+    pickable: item.pickable,
+  }))).toEqual([
+    { id: 'api-web', pickable: true },
+    { id: 'api-jobs', pickable: true },
+  ])
+  const api = inspectDetails(fixture.elements[1]!, fixture)
+  expect(api.relationships.every(item => item.pickable)).toBe(false)
+})
+
+test.concurrent('a picked action stays across selection and clears on x', () => {
+  let id = nextActiveActionId(undefined, { type: 'pick', id: 'api-jobs' })
+  expect(id).toBe('api-jobs')
+  id = nextActiveActionId(id, { type: 'select' })
+  expect(id).toBe('api-jobs')
+  id = nextActiveActionId(id, { type: 'pick', id: 'api-web' })
+  expect(id).toBe('api-web')
+  id = nextActiveActionId(id, { type: 'clear' })
+  expect(id).toBeUndefined()
 })
 

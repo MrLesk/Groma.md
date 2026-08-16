@@ -5,10 +5,10 @@ import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
+import { actionCaption, outgoingActions } from '../../action-path.ts'
 import {
   parentOfElements,
   promotedPeer,
-  showsRelationshipText,
 } from '../../relationship-text.ts'
 import type {
   ArchitectureWorld,
@@ -49,7 +49,8 @@ function detailsRows(
   world: ArchitectureWorld,
   theme: ViewerTheme,
   width: number,
-): Span[][] {
+  activeActionId: string | undefined,
+): { rows: Span[][]; cursorLine?: number } {
   const plain = (value: string): Span => {
     return { value, foreground: theme.foreground, attributes: 0 }
   }
@@ -85,28 +86,40 @@ function detailsRows(
 
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   const parentOf = parentOfElements(world.elements)
-  const relationships = world.relationships.filter(relationship => {
-    return showsRelationshipText(relationship, element.representationId, parentOf)
+  const actions = outgoingActions(element.representationId, world)
+  const actionIds = new Set(actions.map(item => item.id))
+  const incoming = world.relationships.filter(relationship => {
+    return promotedPeer(relationship, element.representationId, parentOf)?.outgoing === false
   })
+  const relationships = [...actions, ...incoming]
+  let cursorLine: number | undefined
   if (relationships.length > 0) {
     rows.push([], [header('Relationships')])
     for (const relationship of relationships) {
-      const ends = promotedPeer(relationship, element.representationId, parentOf)
-      if (ends === null) continue
-      const outgoing = ends.outgoing
+      const outgoing = actionIds.has(relationship.id)
       const arrow = outgoing ? '→ ' : '← '
-      const otherId = ends.peerId
+      const ends = promotedPeer(relationship, element.representationId, parentOf)
+      const otherId = outgoing ? relationship.target : ends?.peerId ?? relationship.source
       const peer = byId.get(otherId)
-      const name = peer?.name ?? otherId
-      const rest = ` · ${relationship.description}`
-      const peerMark = peer === undefined ? [] : [mark(peer.kind, peer.external), plain(' ')]
-      const markWidth = peer === undefined ? 0 : 2
-      if (arrow.length + markWidth + name.length + rest.length <= width) {
-        rows.push([dim(arrow), ...peerMark, plain(name), dim(rest)])
+      const caption = actionCaption(
+        relationship,
+        outgoing,
+        id => byId.get(id)?.name,
+      )
+      const rest = caption.detail === '' ? '' : ` · ${caption.detail}`
+      const peerMark = outgoing || peer === undefined
+        ? []
+        : [mark(peer.kind, peer.external), plain(' ')]
+      const markWidth = peerMark.length === 0 ? 0 : 2
+      if (relationship.id === activeActionId) cursorLine = rows.length
+      if (arrow.length + markWidth + caption.title.length + rest.length <= width) {
+        rows.push([dim(arrow), ...peerMark, plain(caption.title), dim(rest)])
       } else {
-        rows.push([dim(arrow), ...peerMark, plain(name)])
-        for (const row of wrap(relationship.description, width - arrow.length)) {
-          rows.push([dim(`${' '.repeat(arrow.length)}${row}`)])
+        rows.push([dim(arrow), ...peerMark, plain(caption.title)])
+        if (caption.detail !== '') {
+          for (const row of wrap(caption.detail, width - arrow.length)) {
+            rows.push([dim(`${' '.repeat(arrow.length)}${row}`)])
+          }
         }
       }
     }
@@ -136,7 +149,7 @@ function detailsRows(
     }
   }
 
-  return rows
+  return { rows, cursorLine }
 }
 
 export function drawDetails(
@@ -145,14 +158,24 @@ export function drawDetails(
   element: WorldElement,
   world: ArchitectureWorld,
   theme: ViewerTheme,
-  view: { focused: boolean; scroll: number },
+  view: {
+    focused: boolean
+    scroll: number
+    activeActionId?: string
+  },
 ): void {
   const background = theme.background
   const color = view.focused
     ? theme.selected
     : element.origin === 'observed' ? theme.foreground : theme[element.origin]
   const width = Math.max(0, bounds.width - 4)
-  const rows = detailsRows(element, world, theme, width)
+  const { rows, cursorLine } = detailsRows(
+    element,
+    world,
+    theme,
+    width,
+    view.activeActionId,
+  )
   if (bounds.width > 0 && bounds.height > 0) {
     buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, background)
   }
@@ -169,16 +192,34 @@ export function drawDetails(
   )
 
   const visibleRows = Math.max(0, bounds.height - 2)
-  const scroll = Math.max(0, Math.min(view.scroll, rows.length - visibleRows))
+  let scroll = Math.max(0, Math.min(view.scroll, Math.max(0, rows.length - visibleRows)))
+  if (cursorLine !== undefined && visibleRows > 0) {
+    if (cursorLine < scroll) scroll = cursorLine
+    if (cursorLine >= scroll + visibleRows) scroll = cursorLine - visibleRows + 1
+  }
   const maxY = bounds.y + bounds.height - 2
   let y = bounds.y + 1
-  for (const row of rows.slice(scroll)) {
+  for (const [index, row] of rows.entries()) {
+    if (index < scroll) continue
     if (y > maxY) return
+    const cursor = index === cursorLine
+    if (cursor) {
+      buffer.fillRect(bounds.x + 1, y, Math.max(0, bounds.width - 2), 1, theme.selectedTint)
+    }
     let x = bounds.x + 2
     for (const span of row) {
       const available = width - (x - bounds.x - 2)
       if (available <= 0) break
-      text(buffer, span.value, x, y, available, span.foreground, background, span.attributes)
+      text(
+        buffer,
+        span.value,
+        x,
+        y,
+        available,
+        cursor ? theme.selected : span.foreground,
+        cursor ? theme.selectedTint : background,
+        span.attributes,
+      )
       x += [...span.value].length
     }
     y += 1
