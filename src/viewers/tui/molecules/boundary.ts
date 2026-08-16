@@ -4,6 +4,7 @@ import type { OptimizedBuffer, RGBA } from '@opentui/core'
 import { borderCharacters, drawBorder } from '../atoms/border.ts'
 import type { BorderStyle } from '../atoms/border.ts'
 import { cell } from '../atoms/cell.ts'
+import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type {
@@ -67,7 +68,7 @@ function drawTitledFrame(
     titleX,
     titleY,
     Math.max(0, titleRight - titleX),
-    theme.foreground,
+    color,
     titleBackground,
     titleAttributes,
   )
@@ -79,9 +80,7 @@ export function drawBoundary(
   projection: WorldProjection,
   theme: ViewerTheme,
 ): void {
-  const color = element.origin === 'observed'
-    ? theme.foreground
-    : theme[element.origin]
+  const color = theme[element.kind]
   const background = element.origin === 'observed'
     ? theme.observedTint
     : theme.background
@@ -94,12 +93,12 @@ export function drawBoundary(
     projection,
     theme,
     element.cellBounds,
-    element.name,
+    `${kindGlyph(element.kind)} ${element.name}`,
     element.origin,
     style,
     color,
     background,
-    TextAttributes.BOLD,
+    element.external ? TextAttributes.DIM : TextAttributes.BOLD,
   )
 }
 

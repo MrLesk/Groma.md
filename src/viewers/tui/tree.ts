@@ -1,4 +1,4 @@
-import type { ArchitectureWorld, Origin, WorldElement } from '../../types.ts'
+import type { ArchitectureWorld, C4Kind, Origin, WorldElement } from '../../types.ts'
 
 /** Manual overrides on top of the always-visible path to the selection. */
 export interface TreeState {
@@ -10,6 +10,8 @@ export interface TreeState {
 export interface TreeRow {
   id: string
   name: string
+  kind: C4Kind
+  external: boolean
   depth: number
   origin: Origin
   hasChildren: boolean
@@ -76,6 +78,8 @@ export function treeRows(
     rows.push({
       id: element.representationId,
       name: element.name,
+      kind: element.kind,
+      external: element.external,
       depth,
       origin: element.origin,
       hasChildren: children.length > 0,

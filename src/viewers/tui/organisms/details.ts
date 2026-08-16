@@ -2,6 +2,7 @@ import { TextAttributes } from '@opentui/core'
 import type { OptimizedBuffer, RGBA } from '@opentui/core'
 
 import { drawBorder } from '../atoms/border.ts'
+import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
 import type {
@@ -54,11 +55,20 @@ function detailsRows(
     return dim(`${value} ${'─'.repeat(Math.max(0, width - value.length - 1))}`)
   }
 
-  const kind = element.external
-    ? `EXTERNAL ${element.kind.toUpperCase()}`
-    : element.kind.toUpperCase()
+  const mark = (kind: WorldElement['kind'], external = false): Span => {
+    return {
+      value: kindGlyph(kind),
+      foreground: theme[kind],
+      attributes: external ? TextAttributes.DIM : 0,
+    }
+  }
   const rows: Span[][] = [[
-    dim(kind),
+    mark(element.kind, element.external),
+    {
+      value: ` ${kindLabel(element.kind, element.external)}`,
+      foreground: theme[element.kind],
+      attributes: element.external ? TextAttributes.DIM : 0,
+    },
     dim(' · '),
     { value: element.origin, foreground: theme[element.origin], attributes: TextAttributes.BOLD },
   ]]
@@ -79,12 +89,15 @@ function detailsRows(
       const outgoing = relationship.source === element.representationId
       const arrow = outgoing ? '→ ' : '← '
       const otherId = outgoing ? relationship.target : relationship.source
-      const name = byId.get(otherId)?.name ?? otherId
+      const peer = byId.get(otherId)
+      const name = peer?.name ?? otherId
       const rest = ` · ${relationship.description}`
-      if (arrow.length + name.length + rest.length <= width) {
-        rows.push([dim(arrow), plain(name), dim(rest)])
+      const peerMark = peer === undefined ? [] : [mark(peer.kind, peer.external), plain(' ')]
+      const markWidth = peer === undefined ? 0 : 2
+      if (arrow.length + markWidth + name.length + rest.length <= width) {
+        rows.push([dim(arrow), ...peerMark, plain(name), dim(rest)])
       } else {
-        rows.push([dim(arrow), plain(name)])
+        rows.push([dim(arrow), ...peerMark, plain(name)])
         for (const row of wrap(relationship.description, width - arrow.length)) {
           rows.push([dim(`${' '.repeat(arrow.length)}${row}`)])
         }
@@ -95,7 +108,12 @@ function detailsRows(
   if (element.children.length > 0) {
     rows.push([], [header('Children')])
     for (const childId of element.children) {
-      rows.push([plain(byId.get(childId)?.name ?? childId)])
+      const child = byId.get(childId)
+      if (child === undefined) {
+        rows.push([plain(childId)])
+        continue
+      }
+      rows.push([mark(child.kind, child.external), plain(` ${child.name}`)])
     }
   }
 
