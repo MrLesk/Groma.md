@@ -10,7 +10,7 @@ if (command === 'view') {
   await viewer.closed
 } else if (command === 'web') {
   const { startWebViewer } = await import('./viewers/web/server.ts')
-  console.log(`groma web at ${startWebViewer(process.cwd())}`)
+  console.log(`groma web at ${await startWebViewer(process.cwd())}`)
 } else if (command === 'scan') {
   const summary = await scanRepository(process.cwd())
   console.log('ok')

@@ -7,8 +7,19 @@ import type {
   WorldRelationship,
 } from '../../types.ts'
 
-export const ISO_X = Math.cos(Math.PI / 6)
-export const ISO_Y = Math.sin(Math.PI / 6)
+/**
+ * Camera angles in radians. Elevation is the angle the camera looks down at
+ * the ground plane: PI/2 is a flat top-down plan where heights vanish.
+ */
+export interface Projection {
+  rotation: number
+  elevation: number
+}
+
+export const defaultProjection: Projection = {
+  rotation: Math.PI / 4,
+  elevation: Math.PI / 3,
+}
 
 /** Vertical rise of one containment layer; a parent's slab is exactly this thick. */
 export const LAYER_RISE = 8
@@ -25,8 +36,22 @@ export interface ScreenPoint {
   y: number
 }
 
-export function project(x: number, y: number, z: number): ScreenPoint {
-  return { x: (x - y) * ISO_X, y: (x + y) * ISO_Y - z }
+/** Screen-depth of a ground point: larger means nearer to the viewer. */
+function depth(projection: Projection, x: number, y: number): number {
+  return x * Math.sin(projection.rotation) + y * Math.cos(projection.rotation)
+}
+
+export function project(
+  projection: Projection,
+  x: number,
+  y: number,
+  z: number,
+): ScreenPoint {
+  return {
+    x: x * Math.cos(projection.rotation) - y * Math.sin(projection.rotation),
+    y: depth(projection, x, y) * Math.sin(projection.elevation)
+      - z * Math.cos(projection.elevation),
+  }
 }
 
 export type SceneItem =
@@ -35,34 +60,8 @@ export type SceneItem =
   | { kind: 'route'; relationship: WorldRelationship; z: number }
   | { kind: 'prism'; element: WorldElement; bottom: number; top: number }
 
-export interface IsoScene {
-  /** Already in painter order: draw front to back of this array. */
-  items: SceneItem[]
-  /** Screen-space box around every projected corner, for the initial camera fit. */
-  fit: Bounds
-}
-
-// Painter phases within one layer: flat decor on the surface first, then the
-// blocks standing on it (which occlude decor passing behind them).
-const phases = { zone: 0, route: 1, slab: 2, prism: 2 } as const
-
-function nearness(bounds: Bounds): number {
-  return bounds.x + bounds.width / 2 + bounds.y + bounds.height / 2
-}
-
-function sortKey(item: SceneItem) {
-  switch (item.kind) {
-    case 'slab':
-    case 'prism':
-      return { elevation: item.bottom, near: nearness(item.element.bounds) }
-    case 'zone':
-      return { elevation: item.z, near: nearness(item.group.bounds) }
-    case 'route':
-      return { elevation: item.z, near: 0 }
-  }
-}
-
-export function buildScene(world: ArchitectureWorld): IsoScene {
+/** Elevates the world; ordering is a separate, projection-dependent step. */
+export function buildScene(world: ArchitectureWorld): SceneItem[] {
   const byId = new Map(world.elements.map(element => [element.representationId, element]))
 
   const layers = new Map<string, number>()
@@ -97,35 +96,66 @@ export function buildScene(world: ArchitectureWorld): IsoScene {
     items.push({ kind: 'route', relationship, z })
   }
 
-  items.sort((left, right) => {
-    const a = sortKey(left)
-    const b = sortKey(right)
+  return items
+}
+
+// Painter phases within one layer: flat decor on the surface first, then the
+// blocks standing on it (which occlude decor passing behind them).
+const phases = { zone: 0, route: 1, slab: 2, prism: 2 } as const
+
+function center(projection: Projection, bounds: Bounds): number {
+  return depth(projection, bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+}
+
+function sortKey(projection: Projection, item: SceneItem) {
+  switch (item.kind) {
+    case 'slab':
+    case 'prism':
+      return { elevation: item.bottom, near: center(projection, item.element.bounds) }
+    case 'zone':
+      return { elevation: item.z, near: center(projection, item.group.bounds) }
+    case 'route':
+      return { elevation: item.z, near: 0 }
+  }
+}
+
+/** Painter order for one projection: draw the result front to back. */
+export function orderScene(items: SceneItem[], projection: Projection): SceneItem[] {
+  return items.toSorted((left, right) => {
+    const a = sortKey(projection, left)
+    const b = sortKey(projection, right)
     if (a.elevation !== b.elevation) return a.elevation - b.elevation
     if (phases[left.kind] !== phases[right.kind]) return phases[left.kind] - phases[right.kind]
     return a.near - b.near
   })
-
-  return { items, fit: fitBox(items) }
 }
 
-export function corners(bounds: Bounds, z: number): ScreenPoint[] {
+export function corners(
+  projection: Projection,
+  bounds: Bounds,
+  z: number,
+): ScreenPoint[] {
   return [
-    project(bounds.x, bounds.y, z),
-    project(bounds.x + bounds.width, bounds.y, z),
-    project(bounds.x + bounds.width, bounds.y + bounds.height, z),
-    project(bounds.x, bounds.y + bounds.height, z),
+    project(projection, bounds.x, bounds.y, z),
+    project(projection, bounds.x + bounds.width, bounds.y, z),
+    project(projection, bounds.x + bounds.width, bounds.y + bounds.height, z),
+    project(projection, bounds.x, bounds.y + bounds.height, z),
   ]
 }
 
-function fitBox(items: SceneItem[]): Bounds {
+/** Screen-space box around every projected corner, for the camera fit. */
+export function fitScene(items: SceneItem[], projection: Projection): Bounds {
   const points: ScreenPoint[] = []
   for (const item of items) {
     if (item.kind === 'slab' || item.kind === 'prism') {
-      points.push(...corners(item.element.bounds, item.bottom), ...corners(item.element.bounds, item.top))
+      points.push(
+        ...corners(projection, item.element.bounds, item.bottom),
+        ...corners(projection, item.element.bounds, item.top),
+      )
     } else if (item.kind === 'zone') {
-      points.push(...corners(item.group.bounds, item.z))
+      points.push(...corners(projection, item.group.bounds, item.z))
     } else {
-      points.push(...item.relationship.route.map(point => project(point.x, point.y, item.z)))
+      points.push(...item.relationship.route.map(point => project(projection, point.x, point.y, item.z)))
     }
   }
   if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 }

@@ -1,6 +1,14 @@
 import { expect, test } from 'bun:test'
 
-import { buildScene, corners, LAYER_RISE, project } from '../src/viewers/web/scene.ts'
+import {
+  buildScene,
+  corners,
+  defaultProjection,
+  fitScene,
+  LAYER_RISE,
+  orderScene,
+  project,
+} from '../src/viewers/web/scene.ts'
 import type { SceneItem } from '../src/viewers/web/scene.ts'
 import type {
   AnnotatedElement,
@@ -76,9 +84,9 @@ function elementItem(items: SceneItem[], id: string): number {
 }
 
 test.concurrent('containment depth sets elevation and slab versus prism', () => {
-  const scene = buildScene(fixtureWorld())
+  const items = buildScene(fixtureWorld())
 
-  const byId = new Map(scene.items.flatMap(item =>
+  const byId = new Map(items.flatMap(item =>
     item.kind === 'slab' || item.kind === 'prism'
       ? [[item.element.representationId, item] as const]
       : []))
@@ -98,8 +106,7 @@ test.concurrent('containment depth sets elevation and slab versus prism', () => 
 })
 
 test.concurrent('painter order layers surfaces, zones, routes, then standing blocks', () => {
-  const scene = buildScene(fixtureWorld())
-  const items = scene.items
+  const items = orderScene(buildScene(fixtureWorld()), defaultProjection)
 
   const system = elementItem(items, 's')
   const zone = indexOf(items, item => item.kind === 'zone')
@@ -116,8 +123,7 @@ test.concurrent('painter order layers surfaces, zones, routes, then standing blo
 })
 
 test.concurrent('route sits on the lower endpoint surface', () => {
-  const scene = buildScene(fixtureWorld())
-  const route = scene.items.find(item => item.kind === 'route')
+  const route = buildScene(fixtureWorld()).find(item => item.kind === 'route')
   expect(route?.kind).toBe('route')
   if (route?.kind === 'route') expect(route.z).toBe(LAYER_RISE)
 })
@@ -127,51 +133,78 @@ test.concurrent('same-layer prisms draw back to front', () => {
   world.elements.push(
     element('q1', 'component', 'c1', [], { x: 55, y: 55, width: 30, height: 12 }),
   )
-  const scene = buildScene(world)
-  const near = elementItem(scene.items, 'q1')
-  const far = elementItem(scene.items, 'k1')
+  const items = orderScene(buildScene(world), defaultProjection)
+  const near = elementItem(items, 'q1')
+  const far = elementItem(items, 'k1')
   expect(far).toBeLessThan(near)
 })
 
-test.concurrent('fit box contains every projected corner', () => {
-  const scene = buildScene(fixtureWorld())
-  const inside = (x: number, y: number) =>
-    x >= scene.fit.x && x <= scene.fit.x + scene.fit.width
-    && y >= scene.fit.y && y <= scene.fit.y + scene.fit.height
+test.concurrent('rotating the camera half a turn reverses back to front', () => {
+  const world = fixtureWorld()
+  world.elements.push(
+    element('q1', 'component', 'c1', [], { x: 55, y: 55, width: 30, height: 12 }),
+  )
+  const opposite = {
+    rotation: defaultProjection.rotation + Math.PI,
+    elevation: defaultProjection.elevation,
+  }
+  const items = orderScene(buildScene(world), opposite)
+  const nowNear = elementItem(items, 'k1')
+  const nowFar = elementItem(items, 'q1')
+  expect(nowFar).toBeLessThan(nowNear)
+})
 
-  for (const item of scene.items) {
-    if (item.kind === 'slab' || item.kind === 'prism') {
-      for (const point of [
-        ...corners(item.element.bounds, item.bottom),
-        ...corners(item.element.bounds, item.top),
-      ]) {
-        expect(inside(point.x, point.y)).toBe(true)
-      }
-    } else if (item.kind === 'route') {
-      for (const waypoint of item.relationship.route) {
-        const point = project(waypoint.x, waypoint.y, item.z)
-        expect(inside(point.x, point.y)).toBe(true)
+test.concurrent('top-down elevation flattens heights away', () => {
+  const topDown = { rotation: defaultProjection.rotation, elevation: Math.PI / 2 }
+  const grounded = project(topDown, 30, 40, 0)
+  const raised = project(topDown, 30, 40, 25)
+  expect(raised.x).toBeCloseTo(grounded.x)
+  expect(raised.y).toBeCloseTo(grounded.y)
+})
+
+test.concurrent('fit box contains every projected corner', () => {
+  const items = buildScene(fixtureWorld())
+  for (const projection of [defaultProjection, { rotation: 3.2, elevation: 1.1 }]) {
+    const fit = fitScene(items, projection)
+    const inside = (x: number, y: number) =>
+      x >= fit.x && x <= fit.x + fit.width
+      && y >= fit.y && y <= fit.y + fit.height
+
+    for (const item of items) {
+      if (item.kind === 'slab' || item.kind === 'prism') {
+        for (const point of [
+          ...corners(projection, item.element.bounds, item.bottom),
+          ...corners(projection, item.element.bounds, item.top),
+        ]) {
+          expect(inside(point.x, point.y)).toBe(true)
+        }
+      } else if (item.kind === 'route') {
+        for (const waypoint of item.relationship.route) {
+          const point = project(projection, waypoint.x, waypoint.y, item.z)
+          expect(inside(point.x, point.y)).toBe(true)
+        }
       }
     }
   }
 })
 
-test.concurrent('building a scene leaves the world untouched', () => {
+test.concurrent('building and ordering a scene leaves the world untouched', () => {
   const world = fixtureWorld()
   deepFreeze(world)
-  // Any mutation of the frozen world would throw inside buildScene.
-  expect(buildScene(world).items.length).toBeGreaterThan(0)
+  // Any mutation of the frozen world would throw inside buildScene or orderScene.
+  const items = buildScene(world)
+  expect(orderScene(items, defaultProjection).length).toBeGreaterThan(0)
 })
 
 test.concurrent('an empty world produces an empty scene', () => {
-  const scene = buildScene({
+  const items = buildScene({
     bounds: { x: 0, y: 0, width: 0, height: 0 },
     elements: [],
     groups: [],
     relationships: [],
   })
-  expect(scene.items).toEqual([])
-  expect(scene.fit).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  expect(items).toEqual([])
+  expect(fitScene(items, defaultProjection)).toEqual({ x: 0, y: 0, width: 0, height: 0 })
 })
 
 function deepFreeze(value: unknown): void {
