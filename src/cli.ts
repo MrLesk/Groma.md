@@ -3,6 +3,7 @@
 import { Command } from 'commander'
 
 import { acceptGhost } from './core.ts'
+import { createPlannedElement } from './create.ts'
 import { formatScanSummary, scanRepository } from './scanner.ts'
 
 const program = new Command()
@@ -41,6 +42,31 @@ program
     const summary = await scanRepository(process.cwd())
     console.log('ok')
     console.log(formatScanSummary(summary))
+  })
+
+program
+  .command('create')
+  .description('Author a planned element')
+  .argument('<name>', 'element name')
+  .requiredOption('--plan <plan-id>', 'plan id')
+  .requiredOption('--kind <kind>', 'person, system, container, or component')
+  .requiredOption('--description <prose>', 'element description')
+  .option('--parent <id>', 'parent element id')
+  .action(async (name: string, options) => {
+    try {
+      const id = await createPlannedElement(process.cwd(), {
+        name,
+        plan: options.plan,
+        kind: options.kind,
+        description: options.description,
+        parent: options.parent,
+      })
+      console.log('ok')
+      console.log(id)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
   })
 
 program

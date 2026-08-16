@@ -20,7 +20,8 @@ Groma writes those files so paths, identity, and metadata stay consistent.
    The command prints `ok` and a short summary. It does not print the
    architecture.
 3. Change the architecture through Groma, in the viewer or the CLI.
-   - A **new part** becomes a ghost in a plan.
+   - A **new part** becomes a ghost in a plan. `groma create` authors that
+     ghost.
    - A **required change** to an existing part becomes a plan that restates
      that ID, so the same box shows work still to do.
    - An **explanation** of an existing part — notes that describe it without
