@@ -1,6 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import type { ArchitectureWorld, C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssVars } from './atoms/theme.ts'
+
+const lockup = readFileSync(
+  fileURLToPath(new URL('./atoms/lockup.svg', import.meta.url)),
+  'utf8',
+)
 
 const legendKinds: C4Kind[][] = [
   ['person', 'system'],
@@ -26,9 +34,8 @@ const style = `
     font-size: 12px;
     color: var(--ink);
   }
-  #header { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
-  #header::before { content: ''; width: 3px; height: 1em; background: var(--accent); }
-  #header strong { font-size: 13px; }
+  #header { grid-column: 1 / -1; display: flex; align-items: center; color: var(--ink); }
+  #header svg { height: 28px; width: auto; display: block; }
   #hierarchy, #details, #map {
     background: var(--raised);
     border: 1px solid var(--ink);
@@ -101,7 +108,7 @@ export function renderPage(world: ArchitectureWorld): string {
   const json = JSON.stringify(world).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma map</title>'
     + `<style>${style}</style></head><body>`
-    + '<header id="header"><strong>groma</strong></header>'
+    + `<header id="header">${lockup}</header>`
     + `<nav id="hierarchy"><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
     + '<aside id="details"><h1></h1><p class="meta"></p><p class="description"></p><div class="body"></div></aside>'
