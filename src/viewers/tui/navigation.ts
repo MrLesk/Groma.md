@@ -1,3 +1,5 @@
+import { ancestorsOf, compareElements, initialTree, treeRows } from './tree.ts'
+import type { TreeState } from './tree.ts'
 import type {
   ArchitectureWorld,
   Bounds,
@@ -7,7 +9,7 @@ import type {
   WorldElement,
 } from '../../types.ts'
 
-export type ViewerFocus = 'architecture' | 'zoom'
+export type ViewerFocus = 'architecture' | 'zoom' | 'hierarchy'
 const zoomSlots = [
   'leave',
   'context',
@@ -24,6 +26,7 @@ export type ViewerAction =
   | 'left'
   | 'right'
   | 'zoom'
+  | 'tab'
   | 'dismiss'
 
 export interface ViewerState {
@@ -31,10 +34,7 @@ export interface ViewerState {
   currentId?: string
   focus: ViewerFocus
   zoomSlot: ZoomSlot
-}
-
-function compareStrings(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
+  tree: TreeState
 }
 
 function elementsById(world: ArchitectureWorld): Map<string, WorldElement> {
@@ -45,10 +45,7 @@ export function defaultSelection(
   world: ArchitectureWorld,
   level: SemanticLevel,
 ): WorldElement | undefined {
-  const ranked = [...world.elements].sort((left, right) => {
-    return compareStrings(left.id, right.id)
-      || compareStrings(left.representationId, right.representationId)
-  })
+  const ranked = [...world.elements].sort(compareElements)
   if (level === 'context') {
     return ranked.find(element => element.kind === 'system' && !element.external)
   }
@@ -76,6 +73,7 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     currentId: defaultSelection(world, 'context')?.representationId,
     focus: 'architecture',
     zoomSlot: 'context',
+    tree: initialTree(),
   }
 }
 
@@ -104,10 +102,7 @@ function childElements(
   return element.children
     .map(id => byId.get(id))
     .filter((child): child is WorldElement => child !== undefined)
-    .sort((left, right) => {
-      return compareStrings(left.id, right.id)
-        || compareStrings(left.representationId, right.representationId)
-    })
+    .sort(compareElements)
 }
 
 function firstChildOfKind(
@@ -313,6 +308,64 @@ function moveView(
   return { level: levelFor(higherHit), currentId: higherHit.representationId }
 }
 
+/** Selection changes keep the tree in step: cursor follows, its path unhides. */
+function syncTree(world: ArchitectureWorld, state: ViewerState): ViewerState {
+  const path = ancestorsOf(state.currentId, elementsById(world))
+  const collapsed = new Set(
+    [...state.tree.collapsed].filter(id => !path.has(id)),
+  )
+  return {
+    ...state,
+    tree: { ...state.tree, cursor: state.currentId, collapsed },
+  }
+}
+
+function reduceTree(
+  world: ArchitectureWorld,
+  current: ViewerState,
+  action: ViewerAction,
+): ViewerState {
+  const rows = treeRows(world, current.currentId, current.tree)
+  const index = Math.max(0, rows.findIndex(row => row.id === current.tree.cursor))
+  const cursor = rows[index]
+  if (!cursor) return current
+  if (action === 'up' || action === 'down') {
+    const step = action === 'down' ? 1 : -1
+    const next = rows[Math.max(0, Math.min(rows.length - 1, index + step))]!
+    return { ...current, tree: { ...current.tree, cursor: next.id } }
+  }
+  if (action === 'left') {
+    if (cursor.expanded) {
+      const collapsed = new Set(current.tree.collapsed)
+      collapsed.add(cursor.id)
+      const expanded = new Set(current.tree.expanded)
+      expanded.delete(cursor.id)
+      return { ...current, tree: { ...current.tree, expanded, collapsed } }
+    }
+    const parent = elementsById(world).get(cursor.id)?.parent
+    if (parent === null || parent === undefined) return current
+    return { ...current, tree: { ...current.tree, cursor: parent } }
+  }
+  if (action === 'right') {
+    if (!cursor.hasChildren || cursor.expanded) return current
+    const collapsed = new Set(current.tree.collapsed)
+    collapsed.delete(cursor.id)
+    const expanded = new Set(current.tree.expanded)
+    expanded.add(cursor.id)
+    return { ...current, tree: { ...current.tree, expanded, collapsed } }
+  }
+  if (action === 'enter') {
+    const element = elementsById(world).get(cursor.id)
+    if (!element) return current
+    return syncTree(world, {
+      ...current,
+      level: levelFor(element),
+      currentId: element.representationId,
+    })
+  }
+  return current
+}
+
 export function reduceViewer(
   world: ArchitectureWorld,
   state: ViewerState,
@@ -331,9 +384,16 @@ export function reduceViewer(
       zoomSlot: current.level,
     }
   }
+  if (action === 'tab') {
+    if (current.focus === 'hierarchy') return { ...current, focus: 'architecture' }
+    return syncTree(world, { ...current, focus: 'hierarchy' })
+  }
   if (action === 'dismiss') {
-    if (current.focus === 'zoom') return { ...current, focus: 'architecture' }
+    if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
     return current
+  }
+  if (current.focus === 'hierarchy') {
+    return reduceTree(world, current, action)
   }
   if (current.focus === 'zoom' && (action === 'left' || action === 'right')) {
     return { ...current, zoomSlot: moveZoomSlot(current.zoomSlot, action) }
@@ -342,22 +402,25 @@ export function reduceViewer(
     if (current.zoomSlot === 'leave' || current.zoomSlot === 'enter') {
       return current
     }
-    return {
+    return syncTree(world, {
       ...current,
       ...jumpView(world, resolved.selected, current.zoomSlot),
-    }
+    })
   }
   if (action === 'enter') {
     const next = resolved.selected && canEnter(resolved.selected)
       ? enterView(world, resolved.selected)
       : { level: current.level, currentId: current.currentId }
-    return { ...current, ...next }
+    return syncTree(world, { ...current, ...next })
   }
   if (action === 'leave') {
-    return { ...current, ...leaveView(world, current, resolved.selected) }
+    return syncTree(world, { ...current, ...leaveView(world, current, resolved.selected) })
   }
   if (current.focus !== 'architecture' || !resolved.selected) {
     return current
   }
-  return { ...current, ...moveView(world, current, resolved.selected, action) }
+  return syncTree(world, {
+    ...current,
+    ...moveView(world, current, resolved.selected, action),
+  })
 }

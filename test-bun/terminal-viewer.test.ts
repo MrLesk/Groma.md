@@ -22,6 +22,8 @@ import {
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
 import { paneLayout } from '../src/viewers/tui/layout.ts'
+import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
+import { initialTree, treeRows } from '../src/viewers/tui/tree.ts'
 import { fitLayer, fitView, followSelection, projectWorld } from '../src/viewers/tui/projection.ts'
 import type {
   ArchitectureWorld,
@@ -490,6 +492,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:alpha',
     focus: 'architecture',
     zoomSlot: 'context',
+    tree: initialTree(),
   })
 
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
@@ -514,6 +517,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
       currentId: 'observed:pleft',
       focus: 'architecture',
       zoomSlot: 'components',
+      tree: initialTree(),
     }, 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
@@ -587,6 +591,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:cleft',
     focus: 'architecture',
     zoomSlot: 'containers',
+    tree: initialTree(),
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
@@ -595,6 +600,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:pright',
     focus: 'architecture',
     zoomSlot: 'components',
+    tree: initialTree(),
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'components',
@@ -606,6 +612,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:pfar',
     focus: 'architecture',
     zoomSlot: 'components',
+    tree: initialTree(),
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'context',
@@ -617,6 +624,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:pleft',
     focus: 'architecture',
     zoomSlot: 'components',
+    tree: initialTree(),
   }
   const escaped = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
@@ -628,6 +636,7 @@ test.concurrent('unit navigation covers selection, zoom, and spatial movement', 
     currentId: 'observed:ann',
     focus: 'architecture',
     zoomSlot: 'context',
+    tree: initialTree(),
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'left')), {
     level: 'context',
@@ -979,4 +988,80 @@ test.concurrent('the details pane always shows the selection and reserves its co
   assert.match(pane, /COMPONENT · observed/)
   assert.match(pane, /src\/architecture-model\.ts/)
   app.destroy()
+})
+
+test.concurrent('the containment tree lists every element once and tracks collapse state', () => {
+  const world = navigationWorld()
+  const all = treeRows(world, undefined, {
+    expanded: new Set(world.elements.map(element => element.representationId)),
+    collapsed: new Set(),
+  })
+  assert.deepEqual(
+    [...all.map(row => row.id)].sort(),
+    [...world.elements.map(element => element.representationId)].sort(),
+  )
+  const depths = new Map(all.map(row => [row.id, row.depth]))
+  assert.equal(depths.get('observed:alpha'), 0)
+  assert.equal(depths.get('observed:cleft'), 1)
+  assert.equal(depths.get('observed:pleft'), 2)
+
+  // Default state: collapsed except the path to the selection.
+  const rows = treeRows(world, 'observed:pleft', initialTree())
+  const ids = rows.map(row => row.id)
+  assert.ok(ids.includes('observed:pleft'))
+  assert.ok(ids.includes('observed:pmid'))
+  assert.ok(!ids.includes('observed:pright'))
+  assert.equal(rows.find(row => row.id === 'observed:alpha')?.expanded, true)
+  const cright = rows.find(row => row.id === 'observed:cright')
+  assert.equal(cright?.expanded, false)
+  assert.equal(cright?.count, 1)
+})
+
+test.concurrent('tree focus moves the cursor and enter drives selection and level', () => {
+  const world = navigationWorld()
+  let state = reduceViewer(world, initialState(world), 'tab')
+  assert.equal(state.focus, 'hierarchy')
+  assert.equal(state.tree.cursor, 'observed:alpha')
+
+  // Expand the selected root, then walk into its children.
+  state = reduceViewer(world, state, 'right')
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.tree.cursor, 'observed:cleft')
+  state = reduceViewer(world, state, 'right')
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.tree.cursor, 'observed:pleft')
+
+  // Enter selects on the map at the element's level; the tree stays focused.
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.currentId, 'observed:pleft')
+  assert.equal(state.level, 'components')
+  assert.equal(state.focus, 'hierarchy')
+
+  // Left climbs to the parent on a leaf, then collapses the parent.
+  state = reduceViewer(world, state, 'left')
+  assert.equal(state.tree.cursor, 'observed:cleft')
+  state = reduceViewer(world, state, 'left')
+  assert.ok(state.tree.collapsed.has('observed:cleft'))
+  assert.equal(state.currentId, 'observed:pleft')
+
+  // Esc returns to the map; a map move re-syncs the cursor and unhides its path.
+  state = reduceViewer(world, state, 'dismiss')
+  assert.equal(state.focus, 'architecture')
+  state = reduceViewer(world, state, 'right')
+  assert.equal(state.tree.cursor, state.currentId)
+  assert.equal(state.tree.collapsed.has('observed:cleft'), false)
+})
+
+test.concurrent('tree scrolling keeps the cursor inside the visible window', () => {
+  for (let rows = 1; rows < 60; rows += 7) {
+    for (let height = 1; height <= 20; height += 3) {
+      for (let cursor = 0; cursor < rows; cursor += 1) {
+        const scroll = scrollOffset(cursor, rows, height)
+        assert.ok(scroll >= 0)
+        assert.ok(cursor >= scroll)
+        assert.ok(cursor < scroll + height)
+        assert.ok(scroll <= Math.max(0, rows - height))
+      }
+    }
+  }
 })
