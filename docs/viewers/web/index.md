@@ -12,7 +12,9 @@ The whole world is one map. 3D is the default city view. 2D is the
 top-down plan. Parents with children render as plates; children sit on
 them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
 groups are neighborhood zones. Planned items are ghosts with dashed
-edges. Routes follow the laid-out paths. Names sit on the top face.
+edges. Routes follow the laid-out paths. Names sit on the top face. A
+relationship description is drawn on its route only while that
+relationship's source or target is selected.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.
@@ -21,3 +23,5 @@ projects the world Core already has.
 
 The first view fits the whole map. Scrolling zooms. Dragging pans. The
 2D and 3D buttons switch the two fixed views and re-fit the camera.
+Click a box to select it; the details panel shows that element and
+incident route text appears. Click empty space or Esc clears.

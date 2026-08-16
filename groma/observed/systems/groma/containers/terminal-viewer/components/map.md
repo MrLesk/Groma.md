@@ -10,4 +10,4 @@ code:
 
 # Map
 
-Projects the laid-out world into the center pane: camera, C4 level, cards, boundaries, and routes.
+Projects the laid-out world into the center pane: camera, C4 level, cards, boundaries, and routes. Relationship text appears on a route only while the selection is that route's source or target.

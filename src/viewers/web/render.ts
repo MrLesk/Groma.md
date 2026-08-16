@@ -27,12 +27,14 @@ import {
 } from 'three'
 import type { Material } from 'three'
 import type {
+  ArchitectureWorld,
   Bounds,
   C4Kind,
   WorldElement,
   WorldGroup,
   WorldRelationship,
 } from '../../types.ts'
+import { showsRelationshipText } from '../relationship-text.ts'
 import { buildScene, defaultProjection } from './scene.ts'
 import type { Projection, SceneItem } from './scene.ts'
 
@@ -43,7 +45,7 @@ const accent = 0x1D9E75
 const labelSizes = { person: 4.5, system: 5.5, container: 5, component: 4.5 } as const
 const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
 
-const world = JSON.parse(document.getElementById('world')!.textContent!)
+const world: ArchitectureWorld = JSON.parse(document.getElementById('world')!.textContent!)
 const items = buildScene(world)
 
 function at(x: number, y: number, z: number): Vector3 {
@@ -178,8 +180,9 @@ interface Pickable {
   ink: Color
 }
 
-const pickables: { mesh: Mesh; pick: Pickable; title: string }[] = []
+const pickables: { mesh: Mesh; pick: Pickable; element: WorldElement }[] = []
 const pickMeshes: Mesh[] = []
+const routeLabels: { source: string; target: string; mesh: Mesh }[] = []
 const accentColor = new Color(accent)
 const raycaster = new Raycaster()
 const pointerNdc = new Vector2()
@@ -216,10 +219,7 @@ function addBlock(parent: Group, element: WorldElement, bottom: number, top: num
   }
   parent.add(block)
 
-  const title = element.description === ''
-    ? `${element.name} · ${element.kind}`
-    : `${element.name} · ${element.kind}\n${element.description}`
-  pickables.push({ mesh, pick: { material: outlineMaterial, ink: new Color(ink) }, title })
+  pickables.push({ mesh, pick: { material: outlineMaterial, ink: new Color(ink) }, element })
   pickMeshes.push(mesh)
 }
 
@@ -309,7 +309,14 @@ function addRoute(parent: Group, relationship: WorldRelationship, z: number): vo
     }
   }
   if (relationship.label !== null) {
-    parent.add(flowLabel(relationship.description, relationship.label, z + 0.3))
+    const mesh = flowLabel(relationship.description, relationship.label, z + 0.3)
+    mesh.visible = false
+    parent.add(mesh)
+    routeLabels.push({
+      source: relationship.source,
+      target: relationship.target,
+      mesh,
+    })
   }
 }
 
@@ -469,7 +476,64 @@ function worldPerPixel(): number {
   return (camera.top - camera.bottom) / camera.zoom / Math.max(host.clientHeight, 1)
 }
 
+const details = document.getElementById('details')!
+const detailsTitle = details.querySelector('h1')!
+const detailsMeta = details.querySelector('.meta')!
+const detailsDescription = details.querySelector('.description') as HTMLElement
+const detailsRels = details.querySelector('.rels')!
+const byId = new Map(world.elements.map((element: WorldElement) => [element.representationId, element]))
+
+let selectedId: string | null = null
+let hoverId: string | null = null
+
+function fillDetails(element: WorldElement | null): void {
+  if (element === null) {
+    details.hidden = true
+    return
+  }
+  details.hidden = false
+  detailsTitle.textContent = element.name
+  detailsMeta.textContent = `${element.external ? `external ${element.kind}` : element.kind} · ${element.origin}`
+  detailsDescription.textContent = element.description
+  detailsDescription.hidden = element.description === ''
+  detailsRels.replaceChildren()
+  for (const relationship of world.relationships) {
+    if (!showsRelationshipText(relationship, element.representationId)) continue
+    const outgoing = relationship.source === element.representationId
+    const other = byId.get(outgoing ? relationship.target : relationship.source)
+    const item = document.createElement('li')
+    item.textContent = `${outgoing ? '→' : '←'} ${other?.name ?? ''} · ${relationship.description}`
+    detailsRels.append(item)
+  }
+}
+
+function paintSelection(): void {
+  for (const item of pickables) {
+    const id = item.element.representationId
+    const on = id === selectedId || id === hoverId
+    item.pick.material.color.copy(on ? accentColor : item.pick.ink)
+  }
+  for (const label of routeLabels) {
+    label.mesh.visible = showsRelationshipText(label, selectedId)
+  }
+  const selected = pickables.find(item => item.element.representationId === selectedId)
+  fillDetails(selected?.element ?? null)
+  renderer.render(scene, camera)
+}
+
 const canvas = renderer.domElement
+
+function hitElement(clientX: number, clientY: number): WorldElement | undefined {
+  const rect = canvas.getBoundingClientRect()
+  pointerNdc.set(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  )
+  raycaster.setFromCamera(pointerNdc, camera)
+  const hit = raycaster.intersectObjects(pickMeshes, false)[0]
+  return pickables.find(item => item.mesh === hit?.object)?.element
+}
+
 canvas.addEventListener('wheel', event => {
   event.preventDefault()
   const rect = canvas.getBoundingClientRect()
@@ -491,47 +555,50 @@ canvas.addEventListener('wheel', event => {
 }, { passive: false })
 
 let last: Vector2 | null = null
+let dragging = false
+const dragSlop = 4
+
 canvas.addEventListener('pointerdown', event => {
   last = new Vector2(event.clientX, event.clientY)
+  dragging = false
   canvas.setPointerCapture(event.pointerId)
 })
 canvas.addEventListener('pointermove', event => {
   if (last !== null) {
-    const { right, up } = viewAxes()
-    const scale = worldPerPixel()
     const dx = event.clientX - last.x
     const dy = event.clientY - last.y
-    camera.position.addScaledVector(right, -dx * scale)
-    camera.position.addScaledVector(up, dy * scale)
-    target.addScaledVector(right, -dx * scale)
-    target.addScaledVector(up, dy * scale)
-    last.set(event.clientX, event.clientY)
-    renderer.render(scene, camera)
+    if (!dragging && (dx * dx + dy * dy) > dragSlop * dragSlop) dragging = true
+    if (dragging) {
+      const { right, up } = viewAxes()
+      const scale = worldPerPixel()
+      camera.position.addScaledVector(right, -dx * scale)
+      camera.position.addScaledVector(up, dy * scale)
+      target.addScaledVector(right, -dx * scale)
+      target.addScaledVector(up, dy * scale)
+      last.set(event.clientX, event.clientY)
+      renderer.render(scene, camera)
+    }
     return
   }
-  const rect = canvas.getBoundingClientRect()
-  pointerNdc.set(
-    ((event.clientX - rect.left) / rect.width) * 2 - 1,
-    -((event.clientY - rect.top) / rect.height) * 2 + 1,
-  )
-  raycaster.setFromCamera(pointerNdc, camera)
-  const hit = raycaster.intersectObjects(pickMeshes, false)[0]
-  const picked = pickables.find(item => item.mesh === hit?.object)
-  canvas.title = picked?.title ?? ''
-  for (const item of pickables) {
-    item.pick.material.color.copy(item === picked ? accentColor : item.pick.ink)
-  }
-  renderer.render(scene, camera)
+  hoverId = hitElement(event.clientX, event.clientY)?.representationId ?? null
+  paintSelection()
 })
-canvas.addEventListener('pointerup', () => {
+canvas.addEventListener('pointerup', event => {
+  if (!dragging) {
+    selectedId = hitElement(event.clientX, event.clientY)?.representationId ?? null
+    paintSelection()
+  }
   last = null
+  dragging = false
 })
 canvas.addEventListener('pointerleave', () => {
-  for (const item of pickables) {
-    item.pick.material.color.copy(item.pick.ink)
-  }
-  canvas.title = ''
-  renderer.render(scene, camera)
+  hoverId = null
+  paintSelection()
+})
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  selectedId = null
+  paintSelection()
 })
 
 button2d.addEventListener('click', () => setMode(true))
@@ -540,4 +607,4 @@ window.addEventListener('resize', resize)
 
 renderer.setSize(host.clientWidth, host.clientHeight, false)
 fitCamera()
-renderer.render(scene, camera)
+paintSelection()
