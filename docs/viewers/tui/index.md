@@ -56,10 +56,13 @@ the map with nothing further right does the same. When the
 selection is a person who uses a launcher — software they use that
 starts other software they also use — the person's outgoing rows
 are that launcher's commands. Up and Down choose one command and
-light its path immediately. Esc or Left returns to the map and
-leaves the path on, so arrows, Enter, and zoom still inspect the
-boxes it touches. `x` clears the path. Choosing another person
-command replaces it.
+light its path immediately. A command picked from a person's details
+walks in from that person alone, even when other people share the
+launcher; picking the same command from the flows list or a
+Travelled-by row lights every sharer's approach. Esc or Left
+returns to the map and leaves the path on, so arrows, Enter, and
+zoom still inspect the boxes it touches. `x` clears the path.
+Choosing another person command replaces it.
 
 While a command is active, `s` traces its walk one relationship leg
 at a time: the traced leg draws heavy while the rest of the walk

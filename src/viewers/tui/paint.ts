@@ -32,13 +32,14 @@ export function paintWorld(
     focus?: ViewerFocus
     filter?: FilterState
     activeActionId?: string
+    activeActionPersonId?: string
     actionStep?: number
     actionCursor?: string
     detailsTab: DetailsTab
   },
 ): void {
   buffer.clear(theme.background)
-  const legs = actionLegs(options.activeActionId, world)
+  const legs = actionLegs(options.activeActionId, world, options.activeActionPersonId)
   const pathIds = new Set(legs.map(leg => leg.id))
   const traced = options.actionStep === undefined ? undefined : legs[options.actionStep]
   const selectionId = projection.currentId ?? undefined

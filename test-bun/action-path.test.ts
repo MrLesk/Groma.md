@@ -178,4 +178,11 @@ test.concurrent('action legs walk in travel order: approaches, then onward', () 
     'loop-a',
   ])
   expect(actionLegs('missing', world)).toEqual([])
+  // Scoped to one person, only their approach joins the walk.
+  expect(actionLegs('api-jobs', world, 'buyer').map(leg => leg.id)).toEqual([
+    'buyer-api',
+    'api-jobs',
+    'jobs-store',
+    'loop-a',
+  ])
 })
