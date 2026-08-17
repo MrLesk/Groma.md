@@ -13,6 +13,7 @@ import { projectWorld } from '../src/viewers/tui/projection.ts'
 import {
   cameraOn,
   navigationWorld,
+  press,
   projectedById,
   repositoryRoot,
   requiredElement,
@@ -112,7 +113,12 @@ test.concurrent('the details pane always shows the selection and reserves its co
     pane,
     new RegExp(`${kindGlyph('component')} ${kindLabel('component')} · observed`),
   )
-  assert.match(pane, /src\/architecture-model\.ts/)
+  // The code evidence lives on the How it's built tab.
+  const builtPane = (await press(setup, 't'))
+    .split('\n')
+    .map(line => [...line].slice(layout.details.x).join(''))
+    .join('\n')
+  assert.match(builtPane, /src\/architecture-model\.ts/)
   const treePane = lines
     .map(line => [...line].slice(layout.hierarchy.x, layout.map.x).join(''))
     .join('\n')

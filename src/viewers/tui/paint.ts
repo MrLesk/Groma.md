@@ -4,11 +4,10 @@ import {
   actionCaption,
   actionLegs,
   elementOnPath,
-  pickableActions,
 } from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
-import { filterMatches } from './navigation.ts'
-import type { FilterState, ViewerFocus } from './navigation.ts'
+import { detailsCommands, filterMatches } from './navigation.ts'
+import type { DetailsTab, FilterState, ViewerFocus } from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
 import { drawChrome } from './organisms/chrome.ts'
 import { drawDetails } from './organisms/details.ts'
@@ -34,6 +33,7 @@ export function paintWorld(
     activeActionId?: string
     actionStep?: number
     actionCursor?: string
+    detailsTab: DetailsTab
   },
 ): void {
   buffer.clear(theme.background)
@@ -65,6 +65,7 @@ export function paintWorld(
     drawDetails(buffer, layout.details, selected, world, theme, {
       focused: options.focus === 'details',
       scroll: options.detailsScroll,
+      tab: options.detailsTab,
       activeActionId: options.activeActionId,
       actionCursor: options.actionCursor,
     })
@@ -86,7 +87,10 @@ export function paintWorld(
     options.focus,
     options.filter && filterLine(world, options.filter),
     actionTitle,
-    options.focus === 'details' && pickableActions(selectionId, world).length > 0,
+    options.focus === 'details' && detailsCommands(world, {
+      currentId: selectionId,
+      detailsTab: options.detailsTab,
+    }).length > 0,
   )
 }
 

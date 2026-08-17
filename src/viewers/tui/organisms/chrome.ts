@@ -19,7 +19,7 @@ export function zoomReadout(zoom: number, fitZoom: number): string {
 const paneHints: Record<ViewerFocus, string> = {
   architecture: '←↑↓→ select   enter open   backspace back   tab tree',
   hierarchy: '↑↓ move   ←→ fold   enter select   tab map   [ ] panes',
-  details: '↑↓ scroll   backspace back   esc map   [ ] panes',
+  details: '↑↓ scroll   t tab   backspace back   esc map',
 }
 
 function footerHint(
@@ -29,7 +29,7 @@ function footerHint(
 ): string {
   if (picking) {
     return actionTitle === undefined
-      ? '↑↓ action   enter pick   esc map   [ ] panes   R refresh'
+      ? '↑↓ action   enter pick   t tab   esc map'
       : '↑↓ action   enter pick   x clear   esc map'
   }
   if (actionTitle !== undefined) {
