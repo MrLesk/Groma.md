@@ -44,10 +44,13 @@ person command replaces it.
 
 ## What it shows
 
-The whole world is one map resting on the sheet; a soft shadow
-grounds each root element. Iso, the default view, is a true isometric
+The whole world is one map resting on the sheet; a quiet survey grid
+rules the sheet and a soft shadow grounds each root element. Iso, the
+default view, is a true isometric
 projection; Plan is the top-down view. Parents with children render as plates; children sit on
-them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
+them; leaves render as prisms. A leaf with observed code rises with
+the lines behind it, so heavier components stand taller; leaves
+without code keep their kind's base height. Each C4 kind is visually distinct. Sibling
 groups are neighborhood zones. Planned items are ghosts with dashed
 edges. Routes follow the laid-out paths and ride on the surfaces
 they cross: a route climbs a plate's edge with a vertical step and

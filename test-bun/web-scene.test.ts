@@ -8,6 +8,7 @@ import {
   LAYER_RISE,
   orderScene,
   project,
+  WEIGHT_RISE,
 } from '../src/viewers/web/scene.ts'
 import type { SceneItem } from '../src/viewers/web/scene.ts'
 import type {
@@ -151,6 +152,26 @@ test.concurrent('a route rides each surface it crosses and never dips under a pl
     if (insideC1) expect(from.z).toBe(2 * LAYER_RISE)
     else if (insideS) expect(from.z).toBe(LAYER_RISE)
   }
+})
+
+test.concurrent('a leaf with more observed code stands taller', () => {
+  const world = fixtureWorld()
+  const heavy = element('heavy', 'component', 'c1', [], { x: 55, y: 52, width: 20, height: 10 })
+  heavy.codeLines = 400
+  const light = element('light', 'component', 'c1', [], { x: 80, y: 52, width: 20, height: 10 })
+  light.codeLines = 25
+  world.elements.push(heavy, light)
+
+  const heights = new Map(buildScene(world).flatMap(item =>
+    item.kind === 'prism'
+      ? [[item.element.representationId, item.top - item.bottom] as const]
+      : []))
+
+  expect(heights.get('heavy')!).toBeGreaterThan(heights.get('light')!)
+  // A leaf without code keeps its kind base height.
+  expect(heights.get('light')!).toBeGreaterThan(heights.get('k1')!)
+  // The heaviest leaf rises the full weight allowance above that base.
+  expect(heights.get('heavy')! - heights.get('k1')!).toBeCloseTo(WEIGHT_RISE)
 })
 
 test.concurrent('same-layer prisms draw back to front', () => {

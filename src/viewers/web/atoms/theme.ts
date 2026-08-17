@@ -5,6 +5,8 @@ export const accent = 0x1D9E75
 
 /** Pencil-weight hatch strokes on block faces. */
 export const hatchLine = 0x8F8C80
+/** Survey grid ruled under the sheet. */
+export const gridLine = 0xDDD9CC
 /** Tint for block faces turned away from the light. */
 export const shade = 0xECEAE2
 
