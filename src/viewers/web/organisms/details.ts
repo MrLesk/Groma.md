@@ -116,7 +116,7 @@ function marked(
   const row = document.createElement('span')
   if (kind !== null) {
     const mark = document.createElement('span')
-    mark.className = `mark ${kind}`
+    mark.className = 'mark'
     mark.textContent = kindGlyph(kind)
     if (external) mark.classList.add('ghost')
     row.append(mark, ' ')

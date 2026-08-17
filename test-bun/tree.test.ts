@@ -3,7 +3,7 @@ import { test } from 'bun:test'
 
 import { initialState, reduceViewer } from '../src/viewers/tui/navigation.ts'
 import { scrollOffset } from '../src/viewers/tui/organisms/hierarchy.ts'
-import { initialTree, treeRows } from '../src/viewers/tui/tree.ts'
+import { initialTree, toggleExpansion, treeRows } from '../src/viewers/tui/tree.ts'
 import { navigationWorld } from './helpers.ts'
 
 test.concurrent('the containment tree lists every element once and tracks collapse state', () => {
@@ -51,6 +51,27 @@ test.concurrent('the containment tree lists every element once and tracks collap
   const cright = rows.find(row => row.id === 'observed:cright')
   assert.equal(cright?.expanded, false)
   assert.equal(cright?.count, 1)
+})
+
+test.concurrent('manual toggles expand and collapse rows over the selection path', () => {
+  const world = navigationWorld()
+  let tree = initialTree()
+  let rows = treeRows(world, 'observed:pleft', tree)
+
+  const closedSibling = rows.find(row => row.id === 'observed:cright')!
+  tree = toggleExpansion(tree, closedSibling)
+  rows = treeRows(world, 'observed:pleft', tree)
+  assert.ok(rows.some(row => row.id === 'observed:pright'))
+  assert.ok(rows.some(row => row.id === 'observed:pleft'))
+
+  const selectionParent = rows.find(row => row.id === 'observed:cleft')!
+  tree = toggleExpansion(tree, selectionParent)
+  rows = treeRows(world, 'observed:pleft', tree)
+  assert.ok(!rows.some(row => row.id === 'observed:pleft'))
+
+  tree = toggleExpansion(tree, rows.find(row => row.id === 'observed:cleft')!)
+  rows = treeRows(world, 'observed:pleft', tree)
+  assert.ok(rows.some(row => row.id === 'observed:pleft'))
 })
 
 test.concurrent('tree focus moves the cursor and enter drives selection and level', () => {

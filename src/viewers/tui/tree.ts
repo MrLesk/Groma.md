@@ -24,6 +24,20 @@ export function initialTree(): TreeState {
   return { expanded: new Set(), collapsed: new Set() }
 }
 
+/** Manual expand or collapse of one row, on top of the selection path. */
+export function toggleExpansion(tree: TreeState, row: TreeRow): TreeState {
+  const expanded = new Set(tree.expanded)
+  const collapsed = new Set(tree.collapsed)
+  if (row.expanded) {
+    expanded.delete(row.id)
+    collapsed.add(row.id)
+  } else {
+    collapsed.delete(row.id)
+    expanded.add(row.id)
+  }
+  return { ...tree, expanded, collapsed }
+}
+
 function meaningRank(element: WorldElement): number {
   if (element.kind === 'person') return 0
   if (element.external) return 2

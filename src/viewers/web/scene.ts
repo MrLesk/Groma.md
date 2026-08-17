@@ -16,9 +16,10 @@ export interface Projection {
   elevation: number
 }
 
+/** True isometric: 45° around, arctan(1/√2) down. */
 export const defaultProjection: Projection = {
-  rotation: Math.PI / 6,
-  elevation: Math.PI / 4,
+  rotation: Math.PI / 4,
+  elevation: Math.atan(1 / Math.sqrt(2)),
 }
 
 /** Vertical rise of one containment layer; a parent's slab is exactly this thick. */

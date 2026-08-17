@@ -4,6 +4,7 @@ import { addPrism, addSlab } from '../molecules/block.ts'
 import type { CityPick } from '../molecules/block.ts'
 import { addRoute } from '../molecules/route.ts'
 import type { CityRoute } from '../molecules/route.ts'
+import { addShadow } from '../molecules/shadow.ts'
 import { addZone } from '../molecules/zone.ts'
 import { buildScene } from '../scene.ts'
 
@@ -20,9 +21,11 @@ export function buildCity(world: ArchitectureWorld): {
   for (const item of buildScene(world)) {
     switch (item.kind) {
       case 'slab':
+        if (item.bottom === 0) addShadow(city, item.element.bounds)
         pickables.push(addSlab(city, item.element, item.bottom, item.top))
         break
       case 'prism':
+        if (item.bottom === 0) addShadow(city, item.element.bounds)
         pickables.push(addPrism(city, item.element, item.bottom, item.top))
         break
       case 'zone':

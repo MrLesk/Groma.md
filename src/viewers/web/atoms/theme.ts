@@ -1,22 +1,21 @@
-export const paper = 0xEDE8D6
-export const raised = 0xF6F2E4
+export const paper = 0xFAF8F2
+export const raised = 0xFFFFFF
 export const ink = 0x26251D
 export const accent = 0x1D9E75
 
-export const kindColor = {
-  person: '#B8860B',
-  system: '#0B7A86',
-  container: '#5C6570',
-  component: '#9B3A96',
-} as const
+/** Pencil-weight hatch strokes on block faces. */
+export const hatchLine = 0x8F8C80
+/** Tint for block faces turned away from the light. */
+export const shade = 0xECEAE2
+
+export function css(color: number): string {
+  return `#${color.toString(16).padStart(6, '0').toUpperCase()}`
+}
 
 export const cssVars = `
-  --paper: #EDE8D6;
-  --raised: #F6F2E4;
-  --ink: #26251D;
-  --accent: #1D9E75;
-  --person: ${kindColor.person};
-  --system: ${kindColor.system};
-  --container: ${kindColor.container};
-  --component: ${kindColor.component};
+  --paper: ${css(paper)};
+  --ink: ${css(ink)};
+  --muted: #5D6167;
+  --hairline: #D9D6CB;
+  --accent: ${css(accent)};
 `

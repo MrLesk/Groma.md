@@ -6,6 +6,7 @@ import {
   SRGBColorSpace,
 } from 'three'
 import type { C4Kind } from '../../../types.ts'
+import { css, hatchLine, raised, shade } from '../atoms/theme.ts'
 
 function hatchTexture(paint: (ctx: CanvasRenderingContext2D, size: number) => void): CanvasTexture {
   const size = 64
@@ -13,7 +14,7 @@ function hatchTexture(paint: (ctx: CanvasRenderingContext2D, size: number) => vo
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#F6F2E4'
+  ctx.fillStyle = css(raised)
   ctx.fillRect(0, 0, size, size)
   paint(ctx, size)
   const texture = new CanvasTexture(canvas)
@@ -26,41 +27,41 @@ function hatchTexture(paint: (ctx: CanvasRenderingContext2D, size: number) => vo
 
 const hatches: Record<C4Kind, CanvasTexture> = {
   system: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 3
+    ctx.strokeStyle = css(hatchLine)
+    ctx.lineWidth = 2.5
     ctx.beginPath()
-    for (let offset = -size; offset <= size * 2; offset += 16) {
+    for (let offset = -size; offset <= size * 2; offset += 14) {
       ctx.moveTo(offset, size)
       ctx.lineTo(offset + size, 0)
     }
     ctx.stroke()
   }),
   container: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 2.5
+    ctx.strokeStyle = css(hatchLine)
+    ctx.lineWidth = 2
     ctx.beginPath()
-    for (let offset = -size; offset <= size * 2; offset += 20) {
+    for (let offset = -size; offset <= size * 2; offset += 22) {
       ctx.moveTo(offset, size)
       ctx.lineTo(offset + size, 0)
     }
     ctx.stroke()
   }),
   component: hatchTexture((ctx, size) => {
-    ctx.strokeStyle = '#26251D'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = css(hatchLine)
+    ctx.lineWidth = 1.5
     ctx.beginPath()
-    for (let y = 12; y < size; y += 16) {
+    for (let y = 10; y < size; y += 14) {
       ctx.moveTo(0, y)
       ctx.lineTo(size, y)
     }
     ctx.stroke()
   }),
   person: hatchTexture((ctx, size) => {
-    ctx.fillStyle = '#26251D'
-    for (let y = 10; y < size; y += 16) {
-      for (let x = 10; x < size; x += 16) {
+    ctx.fillStyle = css(hatchLine)
+    for (let y = 8; y < size; y += 14) {
+      for (let x = 8; x < size; x += 14) {
         ctx.beginPath()
-        ctx.arc(x, y, 3, 0, Math.PI * 2)
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2)
         ctx.fill()
       }
     }
@@ -77,6 +78,6 @@ export function sideMaterial(
   map.repeat.set(Math.max(faceWidth / 4, 0.5), Math.max(faceHeight / 4, 0.5))
   return new MeshBasicMaterial({
     map,
-    color: shaded ? 0xE4DFCC : 0xFFFFFF,
+    color: shaded ? shade : raised,
   })
 }

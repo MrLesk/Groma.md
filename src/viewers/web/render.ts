@@ -1,12 +1,15 @@
 import {
   Box3,
   Color,
+  Group,
   Line,
   LineSegments,
   Mesh,
+  MeshBasicMaterial,
   OrthographicCamera,
   Raycaster,
   Scene,
+  SphereGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -23,11 +26,10 @@ import {
   showsRelationshipText,
 } from '../relationship-text.ts'
 import { defaultSelection } from '../tui/navigation.ts'
-import { initialTree, treeRows } from '../tui/tree.ts'
-
-const tree = initialTree()
+import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
+import type { TreeRow } from '../tui/tree.ts'
 import { accent, paper } from './atoms/theme.ts'
-import { zoomReadout } from './organisms/chrome.ts'
+import { addBar } from './molecules/route.ts'
 import { buildCity } from './organisms/city.ts'
 import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -35,6 +37,8 @@ import { defaultProjection } from './scene.ts'
 import type { Projection } from './scene.ts'
 
 const planProjection: Projection = { rotation: 0, elevation: Math.PI / 2 }
+
+let tree = initialTree()
 
 const boot = JSON.parse(document.getElementById('world')!.textContent!) as {
   generation: number
@@ -120,9 +124,16 @@ function fitCamera(): void {
   camera.right = halfW
   camera.top = halfH
   camera.bottom = -halfH
-  camera.zoom = 1
+  setZoom(1)
+}
+
+/** Zoom 1 is fit, shown as nothing because the Fit control sits beside the readout. */
+function setZoom(zoom: number): void {
+  camera.zoom = Math.min(40, Math.max(0.2, zoom))
   camera.updateProjectionMatrix()
-  zoomHost.textContent = zoomReadout(camera.zoom)
+  zoomHost.textContent = Math.abs(camera.zoom - 1) < 1e-6
+    ? ''
+    : `${Math.round(camera.zoom * 100)}%`
 }
 
 function resize(): void {
@@ -180,6 +191,7 @@ function applyWorld(next: ArchitectureWorld): void {
   ;({ city, pickables, routes } = buildCity(world))
   pickMeshes = pickables.map(item => item.mesh)
   scene.add(city)
+  clearFlow()
   paintSelection()
 }
 
@@ -191,6 +203,11 @@ function select(id: string): void {
   selectedId = id
   activeActionId = nextActiveActionId(activeActionId, { type: 'select' })
   paintSelection()
+}
+
+function toggleRow(row: TreeRow): void {
+  tree = toggleExpansion(tree, row)
+  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
 }
 
 function setDimmed(object: Object3D, dimmed: boolean): void {
@@ -207,11 +224,110 @@ function setDimmed(object: Object3D, dimmed: boolean): void {
   })
 }
 
+// The traced journey: a green rule over each lit route with surveyed
+// points travelling source to target while a person command is active.
+const flowSpeed = 26
+const flowSpacing = 30
+const flowDotGeometry = new SphereGeometry(1.6, 14, 10)
+const flowMaterial = new MeshBasicMaterial({ color: accent })
+
+interface FlowLane {
+  points: Vector3[]
+  /** Cumulative length at each point; the last entry is the lane total. */
+  cums: number[]
+  total: number
+}
+
+let flow: {
+  group: Group
+  dots: { mesh: Mesh; lane: FlowLane; offset: number }[]
+} | null = null
+let flowKey = ''
+let flowFrame = 0
+let flowStart = 0
+
+function clearFlow(): void {
+  flowKey = ''
+  if (flow === null) return
+  cancelAnimationFrame(flowFrame)
+  scene.remove(flow.group)
+  flow.group.traverse(child => {
+    if (child instanceof Mesh && child.geometry !== flowDotGeometry) child.geometry.dispose()
+  })
+  flow = null
+}
+
+function placeFlowDots(travelled: number): void {
+  if (flow === null) return
+  for (const dot of flow.dots) {
+    const distance = (dot.offset + travelled) % dot.lane.total
+    const index = dot.lane.cums.findIndex(cum => cum > distance)
+    const from = dot.lane.points[index - 1]!
+    const to = dot.lane.points[index]!
+    const span = dot.lane.cums[index]! - dot.lane.cums[index - 1]!
+    const t = span > 0 ? (distance - dot.lane.cums[index - 1]!) / span : 0
+    dot.mesh.position.copy(from).lerp(to, t)
+  }
+}
+
+function stepFlow(now: number): void {
+  if (flow === null) return
+  // Anchor the clock to the first frame timestamp: it can precede a
+  // performance.now() taken at build, and elapsed time must stay >= 0.
+  if (flowStart === 0) flowStart = now
+  placeFlowDots(((now - flowStart) / 1000) * flowSpeed)
+  renderer.render(scene, camera)
+  flowFrame = requestAnimationFrame(stepFlow)
+}
+
+function syncFlow(pathIds: Set<string>): void {
+  const key = pathIds.size === 0 ? '' : activeActionId ?? ''
+  if (key === flowKey) return
+  clearFlow()
+  flowKey = key
+  if (key === '') return
+  const group = new Group()
+  const dots: { mesh: Mesh; lane: FlowLane; offset: number }[] = []
+  for (const route of routes) {
+    if (!pathIds.has(route.id) || route.points.length < 2) continue
+    const points = route.points.map(point => point.clone().setY(point.y + 0.3))
+    for (let index = 0; index < points.length - 1; index += 1) {
+      addBar(group, points[index]!, points[index + 1]!, 0.9, flowMaterial)
+    }
+    const cums = [0]
+    for (let index = 1; index < points.length; index += 1) {
+      cums.push(cums[index - 1]! + points[index]!.distanceTo(points[index - 1]!))
+    }
+    const lane: FlowLane = { points, cums, total: cums[cums.length - 1]! }
+    if (lane.total < 1) continue
+    const count = Math.max(1, Math.floor(lane.total / flowSpacing))
+    for (let index = 0; index < count; index += 1) {
+      const mesh = new Mesh(flowDotGeometry, flowMaterial)
+      mesh.raycast = () => {}
+      group.add(mesh)
+      dots.push({ mesh, lane, offset: (index / count) * lane.total })
+    }
+  }
+  scene.add(group)
+  flow = { group, dots }
+  flowStart = 0
+  placeFlowDots(0)
+  flowFrame = requestAnimationFrame(stepFlow)
+}
+
 function paintOutlines(pathIds = actionPath(activeActionId, world)): void {
   const tracing = pathIds.size > 0
+  const touched = new Set<string>()
+  if (tracing) {
+    for (const relationship of world.relationships) {
+      if (!pathIds.has(relationship.id)) continue
+      touched.add(relationship.source)
+      touched.add(relationship.target)
+    }
+  }
   for (const item of pickables) {
     const id = item.element.representationId
-    const on = id === selectedId || id === hoverId
+    const on = id === selectedId || id === hoverId || touched.has(id)
     item.material.color.copy(on ? accentColor : item.ink)
     const onPath = !tracing
       || id === selectedId
@@ -230,7 +346,7 @@ function paintSelection(): void {
     }
     setDimmed(route.group, pathIds.size > 0 && !pathIds.has(route.id))
   }
-  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select)
+  paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const selected = selectedElement()
   if (selected) {
     paintDetails(
@@ -244,8 +360,10 @@ function paintSelection(): void {
   const active = world.relationships.find(item => item.id === activeActionId)
   const names = new Map(world.elements.map(item => [item.representationId, item.name]))
   actionHost.textContent = active === undefined
-    ? ''
+    ? 'drag pan · right-drag orbit · scroll zoom'
     : `${actionCaption(active, true, id => names.get(id)).title}   x clear`
+  actionHost.classList.toggle('hint', active === undefined)
+  syncFlow(pathIds)
   paintOutlines(pathIds)
 }
 
@@ -276,25 +394,42 @@ canvas.addEventListener('wheel', event => {
   const before = camera.position.clone()
     .addScaledVector(right, ndcX * (camera.right - camera.left) / 2 / camera.zoom)
     .addScaledVector(up, ndcY * (camera.top - camera.bottom) / 2 / camera.zoom)
-  camera.zoom = Math.min(40, Math.max(0.2, camera.zoom / Math.exp(event.deltaY * 0.002)))
-  camera.updateProjectionMatrix()
+  setZoom(camera.zoom / Math.exp(event.deltaY * 0.002))
   const after = camera.position.clone()
     .addScaledVector(right, ndcX * (camera.right - camera.left) / 2 / camera.zoom)
     .addScaledVector(up, ndcY * (camera.top - camera.bottom) / 2 / camera.zoom)
   const delta = before.sub(after)
   camera.position.add(delta)
   target.add(delta)
-  zoomHost.textContent = zoomReadout(camera.zoom)
   renderer.render(scene, camera)
 }, { passive: false })
 
 let last: Vector2 | null = null
 let dragging = false
+let orbiting = false
 const dragSlop = 4
+// Just above ground and just under top-down: never under the city, never
+// across the top-down up-vector flip.
+const minElevation = 0.08
+const maxElevation = Math.PI / 2 - 0.02
 
+function orbitBy(dx: number, dy: number): void {
+  current = {
+    rotation: current.rotation - dx * 0.005,
+    elevation: Math.min(maxElevation, Math.max(minElevation, current.elevation - dy * 0.005)),
+  }
+  button2d.classList.remove('active')
+  button3d.classList.remove('active')
+  placeCamera(current)
+  renderer.render(scene, camera)
+}
+
+canvas.addEventListener('contextmenu', event => event.preventDefault())
 canvas.addEventListener('pointerdown', event => {
   last = new Vector2(event.clientX, event.clientY)
   dragging = false
+  orbiting = event.button === 2 || event.ctrlKey || event.altKey
+  canvas.style.cursor = ''
   canvas.setPointerCapture(event.pointerId)
 })
 canvas.addEventListener('pointermove', event => {
@@ -303,36 +438,54 @@ canvas.addEventListener('pointermove', event => {
     const dy = event.clientY - last.y
     if (!dragging && (dx * dx + dy * dy) > dragSlop * dragSlop) dragging = true
     if (dragging) {
-      const { right, up } = viewAxes()
-      const scale = worldPerPixel()
-      camera.position.addScaledVector(right, -dx * scale)
-      camera.position.addScaledVector(up, dy * scale)
-      target.addScaledVector(right, -dx * scale)
-      target.addScaledVector(up, dy * scale)
+      if (orbiting) {
+        orbitBy(dx, dy)
+      } else {
+        const { right, up } = viewAxes()
+        const scale = worldPerPixel()
+        camera.position.addScaledVector(right, -dx * scale)
+        camera.position.addScaledVector(up, dy * scale)
+        target.addScaledVector(right, -dx * scale)
+        target.addScaledVector(up, dy * scale)
+        renderer.render(scene, camera)
+      }
       last.set(event.clientX, event.clientY)
-      renderer.render(scene, camera)
     }
     return
   }
   hoverId = hitElement(event.clientX, event.clientY)?.representationId
+  canvas.style.cursor = hoverId === undefined ? '' : 'pointer'
   paintOutlines()
 })
 canvas.addEventListener('pointerup', event => {
-  if (!dragging) {
+  if (!dragging && event.button !== 2) {
     const hit = hitElement(event.clientX, event.clientY)
     if (hit) selectedId = hit.representationId
     paintSelection()
   }
   last = null
   dragging = false
+  orbiting = false
 })
 canvas.addEventListener('pointerleave', () => {
   hoverId = undefined
+  canvas.style.cursor = ''
   paintOutlines()
 })
 
 button2d.addEventListener('click', () => setMode(true))
 button3d.addEventListener('click', () => setMode(false))
+document.getElementById('fit')!.addEventListener('click', () => {
+  fitCamera()
+  renderer.render(scene, camera)
+})
+
+function zoomBy(factor: number): void {
+  setZoom(camera.zoom * factor)
+  renderer.render(scene, camera)
+}
+document.getElementById('zoom-in')!.addEventListener('click', () => zoomBy(1.25))
+document.getElementById('zoom-out')!.addEventListener('click', () => zoomBy(1 / 1.25))
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'x' && event.key !== 'X') return
