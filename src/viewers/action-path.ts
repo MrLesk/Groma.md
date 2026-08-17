@@ -115,24 +115,28 @@ export function actionPath(
   return new Set(actionLegs(actionId, world).map(leg => leg.id))
 }
 
-/** The person commands whose walk touches the element, deduped. */
-export function travelledBy(
-  elementId: string,
-  world: ArchitectureWorld,
-): WorldRelationship[] {
+/** Every person command in the world, deduped across the people who share it. */
+export function worldCommands(world: ArchitectureWorld): WorldRelationship[] {
   const seen = new Set<string>()
-  const walks: WorldRelationship[] = []
+  const commands: WorldRelationship[] = []
   for (const person of world.elements) {
     if (person.kind !== 'person') continue
     for (const action of pickableActions(person.representationId, world)) {
       if (seen.has(action.id)) continue
       seen.add(action.id)
-      if (elementOnPath(elementId, actionPath(action.id, world), world)) {
-        walks.push(action)
-      }
+      commands.push(action)
     }
   }
-  return walks
+  return commands
+}
+
+/** The person commands whose walk touches the element. */
+export function travelledBy(
+  elementId: string,
+  world: ArchitectureWorld,
+): WorldRelationship[] {
+  return worldCommands(world).filter(action =>
+    elementOnPath(elementId, actionPath(action.id, world), world))
 }
 
 export function elementOnPath(

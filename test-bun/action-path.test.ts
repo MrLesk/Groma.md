@@ -7,6 +7,7 @@ import {
   elementOnPath,
   outgoingActions,
   pickableActions,
+  worldCommands,
 } from '../src/viewers/action-path.ts'
 import type {
   ArchitectureWorld,
@@ -149,6 +150,15 @@ test.concurrent('an action path is one walk and keeps people who use its start',
   expect(elementOnPath('git', actionPath('shop-git', world), world)).toBe(true)
   expect(actionPath('missing', world).size).toBe(0)
   expect(actionPath(undefined, world).size).toBe(0)
+})
+
+test.concurrent('the world lists every person command once', () => {
+  expect(worldCommands(world).map(item => item.id)).toEqual([
+    'api-web',
+    'api-jobs',
+    'reader-web',
+    'ops-git',
+  ])
 })
 
 test.concurrent('action legs walk in travel order: approaches, then onward', () => {

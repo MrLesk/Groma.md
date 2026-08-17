@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { ArchitectureWorld, C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
-import { cssVars } from './atoms/theme.ts'
+import { cssBlock, palettes } from './atoms/theme.ts'
 
 const lockup = readFileSync(
   fileURLToPath(new URL('./atoms/lockup.svg', import.meta.url)),
@@ -16,7 +16,8 @@ const legendKinds: C4Kind[][] = [
 ]
 
 const style = `
-  :root { ${cssVars} }
+  :root { ${cssBlock(palettes.light)} }
+  [data-theme="dark"] { ${cssBlock(palettes.dark)} }
   html { margin: 0; height: 100%; overflow-x: auto; overflow-y: hidden; background: var(--paper); }
   body {
     margin: 0;
@@ -35,7 +36,7 @@ const style = `
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #legend span, #details .meta, #details .section, #action.hint, #zoom, .chip {
+  #legend span, #details .meta, #details .section, #flows .section, #action.hint, #zoom, .chip, #stats {
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -45,12 +46,14 @@ const style = `
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
+    gap: 20px;
     height: 52px;
     padding: 0 20px;
     border-bottom: 1px solid var(--ink);
   }
   #header svg { height: 26px; width: auto; display: block; }
-  #flow { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+  #stats { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  #flow { display: flex; align-items: center; gap: 16px; }
   #flow[hidden] { display: none; }
   #flow-name {
     font-size: 10px;
@@ -59,6 +62,9 @@ const style = `
   }
   #hierarchy, #details, #map { min-width: 0; min-height: 0; }
   #hierarchy { display: flex; flex-direction: column; border-right: 1px solid var(--ink); }
+  #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
+  #flows:empty { display: none; }
+  #flows .section { margin: 0 0 6px; padding: 0 14px; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }
@@ -113,7 +119,7 @@ const style = `
     text-align: left;
     padding: 5px 14px;
   }
-  .row:hover { background: rgba(38, 37, 29, 0.05); }
+  .row:hover { background: var(--hover); }
   .row.selected { background: rgba(29, 158, 117, 0.1); box-shadow: inset 2px 0 var(--accent); }
   .row .twist { width: 1em; flex: none; color: var(--muted); }
   .row .twist.toggle:hover { color: var(--accent); }
@@ -138,12 +144,14 @@ export function renderPage(world: ArchitectureWorld, generation = 1): string {
   const json = JSON.stringify({ generation, world }).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
-    + `<header id="header">${lockup}`
+    + `<header id="header">${lockup}<span id="stats"></span>`
     + '<div id="flow" hidden><span id="flow-name"></span>'
     + '<div class="controls"><button id="flow-pause">Pause</button><button id="flow-step">Step</button></div>'
     + '<div class="controls"><button id="rate-half">0.5×</button><button id="rate-one" class="active">1×</button><button id="rate-two">2×</button></div>'
-    + '</div></header>'
-    + `<nav id="hierarchy"><div id="tree"></div><div id="legend">${legend()}</div></nav>`
+    + '</div>'
+    + '<div class="controls"><button id="theme">Dark</button></div>'
+    + '</header>'
+    + `<nav id="hierarchy"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
     + '<aside id="details"><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>'
     + '<footer id="footer"><span id="action"></span><span id="zoom"></span>'
