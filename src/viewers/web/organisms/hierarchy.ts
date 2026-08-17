@@ -6,6 +6,7 @@ export function paintHierarchy(
   rows: TreeRow[],
   selectedId: string | undefined,
   onSelect: (id: string) => void,
+  onToggle: (row: TreeRow) => void,
 ): void {
   host.replaceChildren()
   for (const row of rows) {
@@ -15,14 +16,21 @@ export function paintHierarchy(
     button.dataset.id = row.id
     if (row.id === selectedId) button.classList.add('selected')
     if (row.origin !== 'observed' || row.external) button.classList.add('ghost')
-    button.style.paddingLeft = `${8 + row.depth * 14}px`
+    button.style.paddingLeft = `${14 + row.depth * 16}px`
 
     const twist = document.createElement('span')
     twist.className = 'twist'
     twist.textContent = row.hasChildren ? row.expanded ? '▾' : '▸' : ''
+    if (row.hasChildren) {
+      twist.classList.add('toggle')
+      twist.addEventListener('click', event => {
+        event.stopPropagation()
+        onToggle(row)
+      })
+    }
 
     const mark = document.createElement('span')
-    mark.className = `mark ${row.kind}`
+    mark.className = 'mark'
     mark.textContent = kindGlyph(row.kind)
 
     const name = document.createElement('span')

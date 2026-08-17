@@ -15,7 +15,7 @@ import {
 import type { Material } from 'three'
 import type { Bounds, WorldRelationship } from '../../../types.ts'
 import { at } from '../atoms/space.ts'
-import { ink, paper } from '../atoms/theme.ts'
+import { css, ink, paper } from '../atoms/theme.ts'
 
 /** ELK reserves a 1-unit-tall box; the plane is sized to the words. */
 function flowLabel(description: string, bounds: Bounds, z: number): Mesh {
@@ -35,9 +35,9 @@ function flowLabel(description: string, bounds: Bounds, z: number): Mesh {
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
   ctx.lineWidth = 6
-  ctx.strokeStyle = `#${paper.toString(16).padStart(6, '0')}`
+  ctx.strokeStyle = css(paper)
   ctx.strokeText(description, width / 2, height / 2)
-  ctx.fillStyle = '#26251D'
+  ctx.fillStyle = css(ink)
   ctx.fillText(description, width / 2, height / 2)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
@@ -61,9 +61,11 @@ export interface CityRoute {
   target: string
   group: Group
   mesh: Mesh | null
+  /** The laid-out polyline the route bars follow, already lifted to its z. */
+  points: Vector3[]
 }
 
-function addBar(
+export function addBar(
   parent: Group,
   from: Vector3,
   to: Vector3,
@@ -128,5 +130,6 @@ export function addRoute(
     target: relationship.target,
     group,
     mesh,
+    points,
   }
 }

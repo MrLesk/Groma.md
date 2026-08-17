@@ -28,9 +28,9 @@ const rootLayoutOptions = {
   'elk.separateConnectedComponents': 'false',
   'elk.spacing.componentComponent': '24',
   'elk.spacing.edgeEdge': '3',
-  'elk.spacing.edgeNode': '5',
-  'elk.spacing.nodeNode': '28',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '18',
+  'elk.spacing.edgeNode': '10',
+  'elk.spacing.nodeNode': '52',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '28',
 }
 
 const nestedLayoutOptions = {
@@ -55,6 +55,15 @@ const minimumSizes: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   container: { width: 42, height: 32 },
   person: { width: 28, height: 40 },
   system: { width: 44, height: 40 },
+}
+
+// Viewers draw the name on the box at roughly 3 units per monospace
+// glyph; the box must give the name that room plus a side margin.
+function elementWidth(element: AnnotatedElement): number {
+  return Math.max(
+    minimumSizes[element.kind].width,
+    element.name.length * 3 + 6,
+  )
 }
 
 function compareStrings(left: string, right: string): number {
@@ -127,12 +136,10 @@ function nodeFor(
     }),
     elementsById,
   )
-  const size = minimumSizes[element.kind]
-
   return {
     id: element.representationId,
-    width: size.width,
-    height: size.height,
+    width: elementWidth(element),
+    height: minimumSizes[element.kind].height,
     ...(children.length > 0 ? {
       children,
       layoutOptions: nestedLayoutOptions,

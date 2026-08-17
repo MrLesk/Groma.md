@@ -7,6 +7,7 @@ import {
 } from 'three'
 import type { Bounds } from '../../../types.ts'
 import { at } from './space.ts'
+import { css, ink } from './theme.ts'
 
 function labelTexture(
   bounds: Bounds,
@@ -48,16 +49,18 @@ export function drawName(
   alpha = 1,
 ): void {
   ctx.font = `${fontSize * scale}px ui-monospace, SFMono-Regular, Menlo, monospace`
-  ctx.fillStyle = '#26251D'
+  ctx.fillStyle = css(ink)
   ctx.globalAlpha = alpha
   if (align === 'center') {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(text, bounds.width * scale / 2, bounds.height * scale / 2, bounds.width * scale - 8)
+    const margin = 2 * scale
+    ctx.fillText(text, bounds.width * scale / 2, bounds.height * scale / 2, bounds.width * scale - margin * 2)
     return
   }
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
   ctx.letterSpacing = `${0.08 * fontSize * scale}px`
-  ctx.fillText(text, 6, 6)
+  const inset = 2.5 * scale
+  ctx.fillText(text, inset, inset)
 }
