@@ -21,6 +21,7 @@ import {
   actionLegs,
   actionPath,
   elementOnPath,
+  worldCommands,
 } from '../action-path.ts'
 import {
   parentOfElements,
@@ -29,12 +30,13 @@ import {
 import { defaultSelection } from '../tui/navigation.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
-import { accent, paper } from './atoms/theme.ts'
+import { accent, palettes, paper, setPalette } from './atoms/theme.ts'
 import { initialPlayback, nextPlayback } from './flow-playback.ts'
 import { addBar } from './molecules/route.ts'
 import { buildCity } from './organisms/city.ts'
 import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
 import type { DetailsTab } from './organisms/details.ts'
+import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { defaultProjection } from './scene.ts'
 import type { Projection } from './scene.ts'
@@ -58,6 +60,9 @@ scene.add(city)
 
 const host = document.getElementById('map')!
 const treeHost = document.getElementById('tree')!
+const flowsHost = document.getElementById('flows')!
+const statsHost = document.getElementById('stats')!
+const themeButton = document.getElementById('theme')!
 const detailsHost = document.getElementById('details')!
 const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
@@ -193,19 +198,23 @@ function disposeObject(object: Object3D): void {
   })
 }
 
-function applyWorld(next: ArchitectureWorld): void {
+function rebuildCity(): void {
   scene.remove(city)
   disposeObject(city)
-  world = next
-  parentOf = parentOfElements(world.elements)
-  if (!world.elements.some(element => element.representationId === selectedId)) {
-    selectedId = defaultSelection(world, 'context')?.representationId
-  }
   ;({ city, pickables, routes } = buildCity(world))
   pickMeshes = pickables.map(item => item.mesh)
   scene.add(city)
   clearFlow()
   paintSelection()
+}
+
+function applyWorld(next: ArchitectureWorld): void {
+  world = next
+  parentOf = parentOfElements(world.elements)
+  if (!world.elements.some(element => element.representationId === selectedId)) {
+    selectedId = defaultSelection(world, 'context')?.representationId
+  }
+  rebuildCity()
 }
 
 function selectedElement(): WorldElement | undefined {
@@ -408,6 +417,9 @@ function paintSelection(): void {
     setDimmed(route.group, pathIds.size > 0 && !pathIds.has(route.id))
   }
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
+  const commands = worldCommands(world)
+  paintFlows(flowsHost, commands, activeActionId, pickAction)
+  paintStats(commands.length)
   const selected = selectedElement()
   if (selected) {
     paintDetails(
@@ -431,6 +443,14 @@ function paintSelection(): void {
 function pickAction(id: string): void {
   activeActionId = nextActiveActionId(activeActionId, { type: 'pick', id })
   paintSelection()
+}
+
+function paintStats(flowCount: number): void {
+  const system = world.elements.find(element =>
+    element.kind === 'system' && element.origin === 'observed' && !element.external)
+  statsHost.textContent = system === undefined
+    ? ''
+    : `${system.name} · ${flowCount} flows · ${world.elements.length} elements`
 }
 
 const canvas = renderer.domElement
@@ -547,6 +567,17 @@ function zoomBy(factor: number): void {
 }
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomBy(1.25))
 document.getElementById('zoom-out')!.addEventListener('click', () => zoomBy(1 / 1.25))
+
+let darkTheme = false
+themeButton.addEventListener('click', () => {
+  darkTheme = !darkTheme
+  themeButton.textContent = darkTheme ? 'Light' : 'Dark'
+  if (darkTheme) document.documentElement.dataset.theme = 'dark'
+  else delete document.documentElement.dataset.theme
+  setPalette(darkTheme ? palettes.dark : palettes.light)
+  scene.background = new Color(paper)
+  rebuildCity()
+})
 
 pauseButton.addEventListener('click', () => playbackEvent({ type: 'toggle-pause' }))
 stepButton.addEventListener('click', () => playbackEvent({ type: 'step' }))

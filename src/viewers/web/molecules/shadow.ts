@@ -8,6 +8,7 @@ import {
 } from 'three'
 import type { Bounds } from '../../../types.ts'
 import { at } from '../atoms/space.ts'
+import { shadowInk } from '../atoms/theme.ts'
 
 /** Soft ambient shadow that grounds a root element on the sheet. */
 export function addShadow(parent: Group, bounds: Bounds): void {
@@ -23,7 +24,7 @@ export function addShadow(parent: Group, bounds: Bounds): void {
   // straddles its edge and stays inside the canvas.
   const inset = px * spread / width
   ctx.filter = `blur(${inset * 0.7}px)`
-  ctx.fillStyle = 'rgba(38, 37, 29, 0.25)'
+  ctx.fillStyle = shadowInk
   ctx.fillRect(inset, inset, canvas.width - inset * 2, canvas.height - inset * 2)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
