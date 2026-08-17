@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 
 import {
   actionCaption,
+  actionLegs,
   actionPath,
   elementOnPath,
   outgoingActions,
@@ -148,4 +149,23 @@ test.concurrent('an action path is one walk and keeps people who use its start',
   expect(elementOnPath('git', actionPath('shop-git', world), world)).toBe(true)
   expect(actionPath('missing', world).size).toBe(0)
   expect(actionPath(undefined, world).size).toBe(0)
+})
+
+test.concurrent('action legs walk in travel order: approaches, then onward', () => {
+  expect(actionLegs('api-jobs', world).map(leg => leg.id)).toEqual([
+    'buyer-api',
+    'ops-api',
+    'api-jobs',
+    'jobs-store',
+    'loop-a',
+  ])
+  expect(actionLegs('buyer-api', world).map(leg => leg.id)).toEqual([
+    'buyer-api',
+    'api-web',
+    'api-jobs',
+    'web-store',
+    'jobs-store',
+    'loop-a',
+  ])
+  expect(actionLegs('missing', world)).toEqual([])
 })

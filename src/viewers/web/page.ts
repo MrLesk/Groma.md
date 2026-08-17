@@ -50,6 +50,13 @@ const style = `
     border-bottom: 1px solid var(--ink);
   }
   #header svg { height: 26px; width: auto; display: block; }
+  #flow { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+  #flow[hidden] { display: none; }
+  #flow-name {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
   #hierarchy, #details, #map { min-width: 0; min-height: 0; }
   #hierarchy { display: flex; flex-direction: column; border-right: 1px solid var(--ink); }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
@@ -127,7 +134,11 @@ export function renderPage(world: ArchitectureWorld, generation = 1): string {
   const json = JSON.stringify({ generation, world }).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
-    + `<header id="header">${lockup}</header>`
+    + `<header id="header">${lockup}`
+    + '<div id="flow" hidden><span id="flow-name"></span>'
+    + '<div class="controls"><button id="flow-pause">Pause</button><button id="flow-step">Step</button></div>'
+    + '<div class="controls"><button id="rate-half">0.5×</button><button id="rate-one" class="active">1×</button><button id="rate-two">2×</button></div>'
+    + '</div></header>'
     + `<nav id="hierarchy"><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
     + '<aside id="details"><p class="meta"></p><h1></h1><p class="description"></p><div class="body"></div></aside>'

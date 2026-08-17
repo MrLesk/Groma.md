@@ -42,6 +42,15 @@ surveyed points travelling from source to target. The path stays
 while other boxes are selected. `x` clears it. Choosing another
 person command replaces it.
 
+While a command is active the header names it and offers playback:
+Pause freezes the travelling points in place and Play resumes them;
+0.5×, 1×, and 2× set the travel speed immediately. Step traces the
+walk one relationship leg at a time: only that leg's points ride,
+and the footer captions the leg as `step k/n · source → target ·
+label`, wrapping back to the first leg after the last. Pause or Play
+leaves tracing. Clearing the command removes the controls and the
+caption.
+
 ## What it shows
 
 The whole world is one map resting on the sheet; a quiet survey grid

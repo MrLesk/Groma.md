@@ -76,32 +76,43 @@ export function pickableActions(
   return outgoingActions(elementId, world)
 }
 
-export function actionPath(
+/** The walk's legs in travel order: people reaching the start, then onward. */
+export function actionLegs(
   actionId: string | undefined,
   world: ArchitectureWorld,
-): Set<string> {
+): WorldRelationship[] {
   const start = world.relationships.find(relationship => relationship.id === actionId)
+  if (start === undefined) return []
+  const legs: WorldRelationship[] = []
   const ids = new Set<string>()
-  if (start === undefined) return ids
-  const queue = [start]
-  while (queue.length > 0) {
-    const edge = queue.shift()
-    if (edge === undefined || ids.has(edge.id)) continue
-    ids.add(edge.id)
-    for (const next of world.relationships) {
-      if (next.source === edge.target && !ids.has(next.id)) queue.push(next)
-    }
-  }
   const byId = new Map(world.elements.map(item => [item.representationId, item]))
   for (const relationship of world.relationships) {
     if (
       relationship.target === start.source
       && byId.get(relationship.source)?.kind === 'person'
     ) {
+      legs.push(relationship)
       ids.add(relationship.id)
     }
   }
-  return ids
+  const queue = [start]
+  while (queue.length > 0) {
+    const edge = queue.shift()
+    if (edge === undefined || ids.has(edge.id)) continue
+    ids.add(edge.id)
+    legs.push(edge)
+    for (const next of world.relationships) {
+      if (next.source === edge.target && !ids.has(next.id)) queue.push(next)
+    }
+  }
+  return legs
+}
+
+export function actionPath(
+  actionId: string | undefined,
+  world: ArchitectureWorld,
+): Set<string> {
+  return new Set(actionLegs(actionId, world).map(leg => leg.id))
 }
 
 export function elementOnPath(
