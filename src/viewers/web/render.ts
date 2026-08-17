@@ -18,6 +18,7 @@ import type { Material, Object3D } from 'three'
 import type { ArchitectureWorld, WorldElement } from '../../types.ts'
 import {
   actionCaption,
+  actionLegs,
   actionPath,
   elementOnPath,
 } from '../action-path.ts'
@@ -29,6 +30,7 @@ import { defaultSelection } from '../tui/navigation.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import { accent, paper } from './atoms/theme.ts'
+import { initialPlayback, nextPlayback } from './flow-playback.ts'
 import { addBar } from './molecules/route.ts'
 import { buildCity } from './organisms/city.ts'
 import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
@@ -58,6 +60,15 @@ const treeHost = document.getElementById('tree')!
 const detailsHost = document.getElementById('details')!
 const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
+const flowHost = document.getElementById('flow')!
+const flowNameHost = document.getElementById('flow-name')!
+const pauseButton = document.getElementById('flow-pause')!
+const stepButton = document.getElementById('flow-step')!
+const rateButtons: [HTMLElement, number][] = [
+  [document.getElementById('rate-half')!, 0.5],
+  [document.getElementById('rate-one')!, 1],
+  [document.getElementById('rate-two')!, 2],
+]
 const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 8000)
 const renderer = new WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -240,14 +251,17 @@ interface FlowLane {
 
 let flow: {
   group: Group
-  dots: { mesh: Mesh; lane: FlowLane; offset: number }[]
+  dots: { mesh: Mesh; lane: FlowLane; offset: number; routeId: string }[]
 } | null = null
 let flowKey = ''
 let flowFrame = 0
-let flowStart = 0
+let flowTravelled = 0
+let flowLast = 0
+let playback = initialPlayback
 
 function clearFlow(): void {
   flowKey = ''
+  playback = initialPlayback
   if (flow === null) return
   cancelAnimationFrame(flowFrame)
   scene.remove(flow.group)
@@ -272,10 +286,13 @@ function placeFlowDots(travelled: number): void {
 
 function stepFlow(now: number): void {
   if (flow === null) return
-  // Anchor the clock to the first frame timestamp: it can precede a
-  // performance.now() taken at build, and elapsed time must stay >= 0.
-  if (flowStart === 0) flowStart = now
-  placeFlowDots(((now - flowStart) / 1000) * flowSpeed)
+  // Frame-to-frame deltas, so pause and rate apply without a clock rebase.
+  if (flowLast === 0) flowLast = now
+  if (!playback.paused) {
+    flowTravelled += ((now - flowLast) / 1000) * flowSpeed * playback.rate
+  }
+  flowLast = now
+  placeFlowDots(flowTravelled)
   renderer.render(scene, camera)
   flowFrame = requestAnimationFrame(stepFlow)
 }
@@ -287,7 +304,7 @@ function syncFlow(pathIds: Set<string>): void {
   flowKey = key
   if (key === '') return
   const group = new Group()
-  const dots: { mesh: Mesh; lane: FlowLane; offset: number }[] = []
+  const dots: { mesh: Mesh; lane: FlowLane; offset: number; routeId: string }[] = []
   for (const route of routes) {
     if (!pathIds.has(route.id) || route.points.length < 2) continue
     const points = route.points.map(point => point.clone().setY(point.y + 0.3))
@@ -305,14 +322,56 @@ function syncFlow(pathIds: Set<string>): void {
       const mesh = new Mesh(flowDotGeometry, flowMaterial)
       mesh.raycast = () => {}
       group.add(mesh)
-      dots.push({ mesh, lane, offset: (index / count) * lane.total })
+      dots.push({ mesh, lane, offset: (index / count) * lane.total, routeId: route.id })
     }
   }
   scene.add(group)
   flow = { group, dots }
-  flowStart = 0
+  flowTravelled = 0
+  flowLast = 0
   placeFlowDots(0)
   flowFrame = requestAnimationFrame(stepFlow)
+}
+
+/** Header controls, footer caption, and payload visibility for the playback. */
+function paintFlow(legs = actionLegs(activeActionId, world)): void {
+  const active = world.relationships.find(item => item.id === activeActionId)
+  flowHost.hidden = active === undefined
+  if (active === undefined) {
+    actionHost.textContent = 'drag pan · right-drag orbit · scroll zoom'
+    actionHost.classList.add('hint')
+    return
+  }
+  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
+  const nameOf = (id: string): string => names.get(id) ?? id
+  const title = actionCaption(active, true, id => names.get(id)).title
+  flowNameHost.textContent = title
+  pauseButton.textContent = playback.paused ? 'Play' : 'Pause'
+  for (const [button, rate] of rateButtons) {
+    button.classList.toggle('active', playback.rate === rate)
+  }
+  const leg = playback.step === null ? undefined : legs[playback.step]
+  actionHost.textContent = leg === undefined
+    ? `${title}   x clear`
+    : `step ${playback.step! + 1}/${legs.length} · ${nameOf(leg.source)}`
+      + ` → ${nameOf(leg.target)} · ${leg.description}   x clear`
+  actionHost.classList.remove('hint')
+  if (flow !== null) {
+    // While a leg is traced, only its payload dots ride; otherwise all do.
+    for (const dot of flow.dots) {
+      dot.mesh.visible = leg === undefined || dot.routeId === leg.id
+    }
+    renderer.render(scene, camera)
+  }
+}
+
+function playbackEvent(event: { type: 'toggle-pause' } | { type: 'rate'; rate: number } | { type: 'step' }): void {
+  const legs = actionLegs(activeActionId, world)
+  playback = nextPlayback(
+    playback,
+    event.type === 'step' ? { type: 'step', legCount: legs.length } : event,
+  )
+  paintFlow(legs)
 }
 
 function paintOutlines(pathIds = actionPath(activeActionId, world)): void {
@@ -357,13 +416,8 @@ function paintSelection(): void {
       activeActionId,
     )
   }
-  const active = world.relationships.find(item => item.id === activeActionId)
-  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
-  actionHost.textContent = active === undefined
-    ? 'drag pan · right-drag orbit · scroll zoom'
-    : `${actionCaption(active, true, id => names.get(id)).title}   x clear`
-  actionHost.classList.toggle('hint', active === undefined)
   syncFlow(pathIds)
+  paintFlow()
   paintOutlines(pathIds)
 }
 
@@ -486,6 +540,12 @@ function zoomBy(factor: number): void {
 }
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomBy(1.25))
 document.getElementById('zoom-out')!.addEventListener('click', () => zoomBy(1 / 1.25))
+
+pauseButton.addEventListener('click', () => playbackEvent({ type: 'toggle-pause' }))
+stepButton.addEventListener('click', () => playbackEvent({ type: 'step' }))
+for (const [button, rate] of rateButtons) {
+  button.addEventListener('click', () => playbackEvent({ type: 'rate', rate }))
+}
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'x' && event.key !== 'X') return
