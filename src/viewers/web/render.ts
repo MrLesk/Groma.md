@@ -34,6 +34,7 @@ import { initialPlayback, nextPlayback } from './flow-playback.ts'
 import { addBar } from './molecules/route.ts'
 import { buildCity } from './organisms/city.ts'
 import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
+import type { DetailsTab } from './organisms/details.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { defaultProjection } from './scene.ts'
 import type { Projection } from './scene.ts'
@@ -86,6 +87,7 @@ let parentOf = parentOfElements(world.elements)
 let selectedId = defaultSelection(world, 'context')?.representationId
 let hoverId: string | undefined
 let activeActionId: string | undefined
+let detailsTab: DetailsTab = 'what'
 
 function placeCamera(projection: Projection): void {
   const span = new Box3().setFromObject(city).getSize(new Vector3())
@@ -414,6 +416,11 @@ function paintSelection(): void {
       select,
       pickAction,
       activeActionId,
+      detailsTab,
+      tab => {
+        detailsTab = tab
+        paintSelection()
+      },
     )
   }
   syncFlow(pathIds)

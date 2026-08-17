@@ -94,6 +94,7 @@ export interface ArchitectureElement {
   parentId: string | null
   external: boolean
   group?: string
+  technology?: string
   code: CodeReference[]
   sourceFilename: string
 }
@@ -123,6 +124,7 @@ export interface AnnotatedElement {
   children: string[]
   external: boolean
   group?: string
+  technology?: string
   code: CodeReference[]
   /** Total lines across the code files; absent only in hand-built worlds. */
   codeLines?: number

@@ -115,6 +115,26 @@ export function actionPath(
   return new Set(actionLegs(actionId, world).map(leg => leg.id))
 }
 
+/** The person commands whose walk touches the element, deduped. */
+export function travelledBy(
+  elementId: string,
+  world: ArchitectureWorld,
+): WorldRelationship[] {
+  const seen = new Set<string>()
+  const walks: WorldRelationship[] = []
+  for (const person of world.elements) {
+    if (person.kind !== 'person') continue
+    for (const action of pickableActions(person.representationId, world)) {
+      if (seen.has(action.id)) continue
+      seen.add(action.id)
+      if (elementOnPath(elementId, actionPath(action.id, world), world)) {
+        walks.push(action)
+      }
+    }
+  }
+  return walks
+}
+
 export function elementOnPath(
   elementId: string,
   pathIds: Set<string>,

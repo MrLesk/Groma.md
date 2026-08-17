@@ -144,7 +144,7 @@ function relationshipTargetFilename(
 }
 
 function documentToElement(document: ArchitectureDocument): ArchitectureElement {
-  const { id, kind, parent, external, group, code } = document.frontmatter
+  const { id, kind, parent, external, group, technology, code } = document.frontmatter
   const { sourceFilename } = document
   const declaresExternal = Object.hasOwn(document.frontmatter, 'external')
 
@@ -193,6 +193,16 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
       'group must be a non-empty string when present',
     )
   }
+  if (
+    technology !== undefined
+    && (typeof technology !== 'string' || technology.trim().length === 0)
+  ) {
+    throw new ArchitectureModelError(
+      'INVALID_ELEMENT',
+      sourceFilename,
+      'technology must be a non-empty string when present',
+    )
+  }
 
   const { name, description } = elementNameAndDescription(document.nodes)
   const codeReferences = Array.isArray(code)
@@ -211,6 +221,7 @@ function documentToElement(document: ArchitectureDocument): ArchitectureElement 
     parentId: parent ?? null,
     external: external === true,
     ...(typeof group === 'string' ? { group } : {}),
+    ...(typeof technology === 'string' ? { technology } : {}),
     code: codeReferences,
     sourceFilename,
   }
