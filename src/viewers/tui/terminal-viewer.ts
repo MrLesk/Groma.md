@@ -142,6 +142,7 @@ export function mountTerminalViewer(
       detailsScroll: state.detailsScroll,
       filter: state.filter,
       activeActionId: state.activeActionId,
+      actionStep: state.actionStep,
       actionCursor: state.actionCursor,
     })
     frame.requestRender()
@@ -228,6 +229,7 @@ export function mountTerminalViewer(
     if (key.name === '[') return 'toggle-hierarchy'
     if (key.name === ']') return 'toggle-details'
     if (key.name === 'x') return 'clear-action'
+    if (key.name === 's') return 'step-action'
     if (
       key.name === 'up'
       || key.name === 'down'

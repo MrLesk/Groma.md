@@ -1,4 +1,4 @@
-import { pickableActions } from '../action-path.ts'
+import { actionLegs, pickableActions } from '../action-path.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -29,6 +29,7 @@ export type ViewerAction =
   | 'toggle-details'
   | 'dismiss'
   | 'clear-action'
+  | 'step-action'
 
 export type FilterInput =
   | { type: 'open' }
@@ -56,6 +57,8 @@ export interface ViewerState {
   detailsScroll: number
   /** One person command. Survives leaving the person until x or another pick. */
   activeActionId?: string
+  /** The traced leg of the active command's walk; absent while the whole walk shows. */
+  actionStep?: number
   /** The command row the details cursor rests on; Enter picks it. */
   actionCursor?: string
   filter?: FilterState
@@ -225,7 +228,12 @@ export function reduceViewer(
     }
   }
   if (action === 'clear-action') {
-    return { ...current, activeActionId: undefined }
+    return { ...current, activeActionId: undefined, actionStep: undefined }
+  }
+  if (action === 'step-action') {
+    const legs = actionLegs(current.activeActionId, world)
+    if (legs.length === 0) return current
+    return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
   if (action === 'dismiss') {
     if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
@@ -257,7 +265,7 @@ export function reduceViewer(
     if (action === 'enter') {
       const actions = pickableActions(current.currentId, world)
       if (actions.some(item => item.id === current.actionCursor)) {
-        return { ...current, activeActionId: current.actionCursor }
+        return { ...current, activeActionId: current.actionCursor, actionStep: undefined }
       }
       return current
     }

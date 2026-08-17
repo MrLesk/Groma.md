@@ -2,7 +2,7 @@ import type { OptimizedBuffer } from '@opentui/core'
 
 import {
   actionCaption,
-  actionPath,
+  actionLegs,
   elementOnPath,
   pickableActions,
 } from '../action-path.ts'
@@ -32,17 +32,21 @@ export function paintWorld(
     focus?: ViewerFocus
     filter?: FilterState
     activeActionId?: string
+    actionStep?: number
     actionCursor?: string
   },
 ): void {
   buffer.clear(theme.background)
-  const pathIds = actionPath(options.activeActionId, world)
+  const legs = actionLegs(options.activeActionId, world)
+  const pathIds = new Set(legs.map(leg => leg.id))
+  const traced = options.actionStep === undefined ? undefined : legs[options.actionStep]
   const selectionId = projection.currentId ?? undefined
   drawWorld(buffer, projection, theme, {
     pathIds,
     onPath: elementId => {
       return elementId === selectionId || elementOnPath(elementId, pathIds, world)
     },
+    tracedId: traced?.id,
   })
   const tree = options.tree
   drawHierarchy(
@@ -67,6 +71,13 @@ export function paintWorld(
   }
   const active = world.relationships.find(item => item.id === options.activeActionId)
   const names = new Map(world.elements.map(item => [item.representationId, item.name]))
+  const nameOf = (id: string): string => names.get(id) ?? id
+  const actionTitle = active === undefined
+    ? undefined
+    : traced === undefined
+      ? actionCaption(active, true, nameOf).title
+      : `step ${options.actionStep! + 1}/${legs.length} · ${nameOf(traced.source)}`
+        + ` → ${nameOf(traced.target)} · ${traced.description}`
   drawChrome(
     buffer,
     layout,
@@ -74,9 +85,7 @@ export function paintWorld(
     theme,
     options.focus,
     options.filter && filterLine(world, options.filter),
-    active === undefined
-      ? undefined
-      : actionCaption(active, true, id => names.get(id)).title,
+    actionTitle,
     options.focus === 'details' && pickableActions(selectionId, world).length > 0,
   )
 }

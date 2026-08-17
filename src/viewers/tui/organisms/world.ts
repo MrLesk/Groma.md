@@ -15,6 +15,8 @@ export function drawWorld(
   trace: {
     pathIds: Set<string>
     onPath: (elementId: string) => boolean
+    /** The relationship whose leg is being traced; drawn heavy. */
+    tracedId?: string
   } = {
     pathIds: new Set(),
     onPath: () => true,
@@ -45,7 +47,7 @@ export function drawWorld(
   }
   for (const relationship of projection.relationships) {
     const lit = tracing && trace.pathIds.has(relationship.id)
-    drawRoute(buffer, relationship, theme, tracing && !lit, lit)
+    drawRoute(buffer, relationship, theme, tracing && !lit, lit, relationship.id === trace.tracedId)
   }
   for (const element of shown(element => {
     return element.display === 'card' && element.kind === 'component'

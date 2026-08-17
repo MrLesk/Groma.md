@@ -18,6 +18,35 @@ function viewOf(state: ViewerState): Pick<ViewerState, 'level' | 'currentId'> {
   return { level: state.level, currentId: state.currentId }
 }
 
+const box = (
+  id: string,
+  kind: 'person' | 'container',
+  parent: string | null = null,
+) => ({
+  representationId: id,
+  id,
+  kind,
+  name: id,
+  description: '',
+  parent,
+  children: [] as string[],
+  external: false,
+  code: [],
+  origin: 'observed' as const,
+  bounds: { x: 0, y: 0, width: 8, height: 8 },
+})
+
+const edge = (id: string, source: string, target: string) => ({
+  id,
+  source,
+  target,
+  description: id,
+  technology: '',
+  origin: 'observed' as const,
+  route: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+  label: null,
+})
+
 test.concurrent('unit navigation covers selection, level changes, and spatial movement', () => {
   const world = navigationWorld()
   assert.equal(defaultSelection(world, 'context')?.representationId, 'observed:alpha')
@@ -236,48 +265,13 @@ test.concurrent('leave from details returns to the map and the parent Enter open
 })
 
 test.concurrent('a person action stays on after leaving details and x clears it', () => {
-  const box = (
-    id: string,
-    kind: 'person' | 'container',
-    parent: string | null = null,
-  ) => ({
-    representationId: id,
-    id,
-    kind,
-    name: id,
-    description: '',
-    parent,
-    children: [] as string[],
-    external: false,
-    code: [],
-    origin: 'observed' as const,
-    bounds: { x: 0, y: 0, width: 8, height: 8 },
-  })
   const world: ArchitectureWorld = {
     bounds: { x: 0, y: 0, width: 20, height: 10 },
     groups: [],
     elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
     relationships: [
-      {
-        id: 'buyer-api',
-        source: 'buyer',
-        target: 'api',
-        description: 'sends',
-        technology: 'https',
-        origin: 'observed' as const,
-        route: [{ x: 0, y: 0 }, { x: 1, y: 0 }],
-        label: null,
-      },
-      {
-        id: 'buyer-web',
-        source: 'buyer',
-        target: 'web',
-        description: 'reads',
-        technology: 'https',
-        origin: 'observed' as const,
-        route: [{ x: 0, y: 0 }, { x: 2, y: 0 }],
-        label: null,
-      },
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
     ],
   }
   let state: ViewerState = {
@@ -310,4 +304,44 @@ test.concurrent('a person action stays on after leaving details and x clears it'
   assert.equal(state.activeActionId, 'buyer-api')
   state = reduceViewer(world, state, 'clear-action')
   assert.equal(state.activeActionId, undefined)
+})
+
+test.concurrent('s traces the active walk one leg at a time and wraps', () => {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    // buyer uses api and web, making api a launcher, so picking its api-web
+    // command walks buyer-api then api-web.
+    relationships: [
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
+      edge('api-web', 'api', 'web'),
+    ],
+  }
+  let state: ViewerState = { ...initialState(world), currentId: 'buyer' }
+
+  // Without an active command s does nothing.
+  assert.equal(reduceViewer(world, state, 'step-action').actionStep, undefined)
+
+  state = { ...state, activeActionId: 'api-web' }
+  state = reduceViewer(world, state, 'step-action')
+  assert.equal(state.actionStep, 0)
+  state = reduceViewer(world, state, 'step-action')
+  assert.equal(state.actionStep, 1)
+  state = reduceViewer(world, state, 'step-action')
+  assert.equal(state.actionStep, 0)
+
+  // Picking a command again restarts the trace; x removes it with the path.
+  state = reduceViewer(world, {
+    ...state,
+    focus: 'details',
+    actionCursor: 'api-web',
+  }, 'enter')
+  assert.equal(state.activeActionId, 'api-web')
+  assert.equal(state.actionStep, undefined)
+  state = reduceViewer(world, state, 'step-action')
+  state = reduceViewer(world, state, 'clear-action')
+  assert.equal(state.activeActionId, undefined)
+  assert.equal(state.actionStep, undefined)
 })
