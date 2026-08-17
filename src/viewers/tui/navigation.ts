@@ -1,4 +1,9 @@
-import { actionLegs, pickableActions, travelledBy } from '../action-path.ts'
+import {
+  actionLegs,
+  pickableActions,
+  travelledBy,
+  worldCommands,
+} from '../action-path.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -153,15 +158,25 @@ function reduceTree(
   current: ViewerState,
   action: ViewerAction,
 ): ViewerState {
+  // One cursor space: the flow rows sit above the tree rows.
+  const commands = worldCommands(world)
   const rows = treeRows(world, current.currentId, current.tree)
-  const index = Math.max(0, rows.findIndex(row => row.id === current.tree.cursor))
-  const cursor = rows[index]
-  if (!cursor) return current
+  const ids = [...commands.map(command => command.id), ...rows.map(row => row.id)]
+  if (ids.length === 0) return current
+  const index = Math.max(0, ids.indexOf(current.tree.cursor ?? ''))
   if (action === 'up' || action === 'down') {
     const step = action === 'down' ? 1 : -1
-    const next = rows[Math.max(0, Math.min(rows.length - 1, index + step))]!
-    return { ...current, tree: { ...current.tree, cursor: next.id } }
+    const next = ids[Math.max(0, Math.min(ids.length - 1, index + step))]!
+    return { ...current, tree: { ...current.tree, cursor: next } }
   }
+  if (index < commands.length) {
+    if (action === 'enter') {
+      return { ...current, activeActionId: commands[index]!.id, actionStep: undefined }
+    }
+    if (action === 'right') return { ...current, focus: 'architecture' }
+    return current
+  }
+  const cursor = rows[index - commands.length]!
   if (action === 'left') {
     if (cursor.expanded) {
       const collapsed = new Set(current.tree.collapsed)
