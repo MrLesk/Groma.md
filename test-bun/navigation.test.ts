@@ -285,17 +285,25 @@ test.concurrent('a person action stays on after leaving details and x clears it'
     currentId: 'buyer',
     focus: 'details',
   }
+  // Browsing moves the cursor without lighting a path.
   state = reduceViewer(world, state, 'down')
-  assert.equal(state.activeActionId, 'buyer-api')
+  assert.equal(state.actionCursor, 'buyer-api')
+  assert.equal(state.activeActionId, undefined)
   state = reduceViewer(world, state, 'down')
+  assert.equal(state.actionCursor, 'buyer-web')
+  assert.equal(state.activeActionId, undefined)
+  // Enter picks the command under the cursor.
+  state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'buyer-web')
   state = reduceViewer(world, state, 'left')
   assert.equal(state.focus, 'architecture')
   assert.equal(state.activeActionId, 'buyer-web')
+  // A selection without commands scrolls instead of moving the cursor.
   state = reduceViewer(world, { ...state, currentId: 'api', focus: 'details' }, 'down')
   assert.equal(state.activeActionId, 'buyer-web')
   assert.equal(state.detailsScroll, 1)
   state = reduceViewer(world, { ...state, currentId: 'buyer', focus: 'details' }, 'up')
+  state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'buyer-api')
   state = reduceViewer(world, state, 'dismiss')
   assert.equal(state.focus, 'architecture')

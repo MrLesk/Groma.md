@@ -5,7 +5,7 @@ parent: core
 code:
   - scanner: typescript
     file: src/markdown-emitter.ts
-    symbol: renderObservedDocument
+    symbol: omitCode
 ---
 
 # Markdown emitter

@@ -1,7 +1,8 @@
 # TUI viewer
 
 The TUI plugin shows Groma's world in a terminal. `groma view` starts it.
-It does not scan.
+It does not scan on open. The live process starts the same watch as
+`groma scan --watch`.
 
 This page is the terminal surface. The shared viewer rules live in
 [Viewers](../index.md).
@@ -73,7 +74,10 @@ and arrows ignore them.
 The world is a map. The first view fits the whole map inside the map
 pane. `+` and `-` zoom the camera; at the closest zoom, one world unit
 is one cell and names stay readable. Cards and routes have places on
-that map. A relationship description is drawn on its route only while
+that map. A route attaches to the deepest displayed endpoint,
+crossing boundary walls to reach it; it promotes to a displayed
+ancestor only while the real endpoint is hidden. A relationship
+description is drawn on its route only while
 the selection is an endpoint or an ancestor of exactly one endpoint.
 Changing selection or terminal size never lays the architecture out
 again; only the camera viewport changes.
@@ -100,7 +104,10 @@ the last level. The first view fits the whole map.
   containers, a container one of its components. Components is the
   last level. Backspace is the reverse: it leaves that level for the
   parent Enter came from. From details it also returns to the map.
-- `R` asks core for the world again and redraws it.
+- A watched TypeScript change folds and redraws the map. An architecture
+  Markdown change reloads the world and redraws it. Selection stays if
+  that box still exists.
+- `R` asks core for the world again and redraws it. It does not scan.
 - Esc never changes level and does not exit. It returns focus from
   a side pane to the map.
 - Ctrl+C leaves the viewer and restores the terminal.

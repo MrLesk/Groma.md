@@ -122,10 +122,35 @@ test.concurrent('painter order layers surfaces, zones, routes, then standing blo
   expect(containerSlab).toBeLessThan(component)
 })
 
-test.concurrent('route sits on the lower endpoint surface', () => {
+test.concurrent('a route rides each surface it crosses and never dips under a plate', () => {
   const route = buildScene(fixtureWorld()).find(item => item.kind === 'route')
   expect(route?.kind).toBe('route')
-  if (route?.kind === 'route') expect(route.z).toBe(LAYER_RISE)
+  if (route?.kind !== 'route') return
+  const path = route.path
+
+  // From c2 standing on the system plate up onto c1's plate at k1.
+  expect(path[0]?.z).toBe(LAYER_RISE)
+  expect(path[path.length - 1]?.z).toBe(2 * LAYER_RISE)
+
+  // The climb happens exactly at c1's boundary, as a vertical step.
+  const step = path.findIndex((point, index) => {
+    const next = path[index + 1]
+    return next !== undefined && next.x === point.x && next.y === point.y && next.z !== point.z
+  })
+  expect(step).toBeGreaterThanOrEqual(0)
+  expect(path[step]?.x).toBe(110)
+
+  // No horizontal piece runs under a plate it is inside of.
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const from = path[index]!
+    const to = path[index + 1]!
+    if (from.z !== to.z) continue
+    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+    const insideC1 = mid.x > 50 && mid.x < 110 && mid.y > 20 && mid.y < 70
+    const insideS = mid.x > 40 && mid.x < 180 && mid.y > 10 && mid.y < 110
+    if (insideC1) expect(from.z).toBe(2 * LAYER_RISE)
+    else if (insideS) expect(from.z).toBe(LAYER_RISE)
+  }
 })
 
 test.concurrent('same-layer prisms draw back to front', () => {
@@ -179,8 +204,8 @@ test.concurrent('fit box contains every projected corner', () => {
           expect(inside(point.x, point.y)).toBe(true)
         }
       } else if (item.kind === 'route') {
-        for (const waypoint of item.relationship.route) {
-          const point = project(projection, waypoint.x, waypoint.y, item.z)
+        for (const waypoint of item.path) {
+          const point = project(projection, waypoint.x, waypoint.y, waypoint.z)
           expect(inside(point.x, point.y)).toBe(true)
         }
       }

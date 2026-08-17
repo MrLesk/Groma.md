@@ -34,8 +34,18 @@ export function drawWorld(
     })
   }
   const tracing = trace.pathIds.size > 0
+  // The displayed endpoints the lit routes attach to carry the accent too.
+  const touched = new Set<string>()
+  if (tracing) {
+    for (const relationship of projection.relationships) {
+      if (!trace.pathIds.has(relationship.id)) continue
+      touched.add(relationship.displaySource)
+      touched.add(relationship.displayTarget)
+    }
+  }
   for (const relationship of projection.relationships) {
-    drawRoute(buffer, relationship, theme, tracing && !trace.pathIds.has(relationship.id))
+    const lit = tracing && trace.pathIds.has(relationship.id)
+    drawRoute(buffer, relationship, theme, tracing && !lit, lit)
   }
   for (const element of shown(element => {
     return element.display === 'card' && element.kind === 'component'
@@ -46,6 +56,7 @@ export function drawWorld(
       projection,
       theme,
       tracing && !trace.onPath(element.representationId),
+      touched.has(element.representationId),
     )
   }
   for (const group of projection.groups) {
@@ -54,10 +65,10 @@ export function drawWorld(
     }
   }
   for (const element of shown(element => element.display === 'container-boundary')) {
-    drawBoundary(buffer, element, projection, theme)
+    drawBoundary(buffer, element, projection, theme, touched.has(element.representationId))
   }
   for (const element of shown(element => element.display === 'system-boundary')) {
-    drawBoundary(buffer, element, projection, theme)
+    drawBoundary(buffer, element, projection, theme, touched.has(element.representationId))
   }
   const selected = projection.elements.find(element => {
     return element.representationId === projection.currentId
@@ -74,6 +85,7 @@ export function drawWorld(
       projection,
       theme,
       tracing && !trace.onPath(element.representationId),
+      touched.has(element.representationId),
     )
   }
   if (selected?.display === 'card') {
@@ -89,8 +101,9 @@ export function drawWorld(
     )
   }
   for (const relationship of projection.relationships) {
-    if (tracing && !trace.pathIds.has(relationship.id)) continue
-    drawRouteArrow(buffer, relationship, projection, theme)
+    const lit = tracing && trace.pathIds.has(relationship.id)
+    if (tracing && !lit) continue
+    drawRouteArrow(buffer, relationship, projection, theme, lit)
   }
   buffer.popScissorRect()
 }

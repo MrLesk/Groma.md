@@ -56,6 +56,8 @@ export interface ViewerState {
   detailsScroll: number
   /** One person command. Survives leaving the person until x or another pick. */
   activeActionId?: string
+  /** The command row the details cursor rests on; Enter picks it. */
+  actionCursor?: string
   filter?: FilterState
 }
 
@@ -246,11 +248,18 @@ export function reduceViewer(
       if (actions.length === 0) {
         return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
       }
-      const index = actions.findIndex(item => item.id === current.activeActionId)
+      const index = actions.findIndex(item => item.id === current.actionCursor)
       const next = index < 0
         ? (step > 0 ? 0 : actions.length - 1)
         : Math.max(0, Math.min(actions.length - 1, index + step))
-      return { ...current, activeActionId: actions[next]!.id }
+      return { ...current, actionCursor: actions[next]!.id }
+    }
+    if (action === 'enter') {
+      const actions = pickableActions(current.currentId, world)
+      if (actions.some(item => item.id === current.actionCursor)) {
+        return { ...current, activeActionId: current.actionCursor }
+      }
+      return current
     }
     if (action === 'left') return { ...current, focus: 'architecture' }
     return current
@@ -259,11 +268,7 @@ export function reduceViewer(
     if (resolved.selected && canEnter(resolved.selected)) {
       return syncTree(world, { ...current, ...enterView(world, resolved.selected) })
     }
-    return {
-      ...current,
-      focus: 'details',
-      panes: { ...current.panes, details: true },
-    }
+    return enterDetails(current)
   }
   if (!resolved.selected) {
     return current
@@ -272,15 +277,19 @@ export function reduceViewer(
   if (moved.level === current.level && moved.currentId === current.currentId) {
     // Nothing lies further that way; the next stop is the side pane.
     if (action === 'left') return reduceViewer(world, current, 'tab')
-    if (action === 'right') {
-      return {
-        ...current,
-        focus: 'details',
-        panes: { ...current.panes, details: true },
-      }
-    }
+    if (action === 'right') return enterDetails(current)
   }
   return syncTree(world, { ...current, ...moved })
+}
+
+/** Details focus starts with the cursor on the already-picked command. */
+function enterDetails(current: ViewerState): ViewerState {
+  return {
+    ...current,
+    focus: 'details',
+    actionCursor: current.activeActionId,
+    panes: { ...current.panes, details: true },
+  }
 }
 
 export function filterMatches(

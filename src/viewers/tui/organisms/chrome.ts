@@ -29,8 +29,8 @@ function footerHint(
 ): string {
   if (picking) {
     return actionTitle === undefined
-      ? '↑↓ action   esc map   [ ] panes   R refresh'
-      : '↑↓ action   x clear   esc map'
+      ? '↑↓ action   enter pick   esc map   [ ] panes   R refresh'
+      : '↑↓ action   enter pick   x clear   esc map'
   }
   if (actionTitle !== undefined) {
     if (focus === 'architecture') {

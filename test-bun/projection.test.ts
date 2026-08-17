@@ -192,19 +192,35 @@ test.concurrent('resize and semantic projection preserve the core world', async 
   app.destroy()
 })
 
-test.concurrent('containers view promotes a component relationship to its parents', async () => {
+test.concurrent('containers view attaches a component relationship to its components', async () => {
   const fixture = await loadArchitectureViewModel(containersFixtureRoot)
   const projection = projectWorld(fixture.world, {
     viewport: mapViewportOf({ width: 120, height: 36 }),
     level: 'containers',
     currentId: 'observed:shop',
   })
+  const direct = projection.relationships.find(relationship => {
+    return relationship.source === 'observed:page'
+      && relationship.target === 'observed:orders'
+  })
+  assert.ok(direct)
+  assert.equal(direct.displaySource, 'observed:page')
+  assert.equal(direct.displayTarget, 'observed:orders')
+})
+
+test.concurrent('a hidden endpoint promotes its route to the nearest displayed ancestor', async () => {
+  const fixture = await loadArchitectureViewModel(containersFixtureRoot)
+  const projection = projectWorld(fixture.world, {
+    viewport: mapViewportOf({ width: 120, height: 36 }),
+    level: 'components',
+    currentId: 'observed:page',
+  })
   const promoted = projection.relationships.find(relationship => {
     return relationship.source === 'observed:page'
       && relationship.target === 'observed:orders'
   })
   assert.ok(promoted)
-  assert.equal(promoted.displaySource, 'observed:web')
+  assert.equal(promoted.displaySource, 'observed:page')
   assert.equal(promoted.displayTarget, 'observed:api')
 })
 
@@ -419,25 +435,17 @@ function routeWorld(target: 'container' | 'system'): ArchitectureWorld {
   }
 }
 
-test.concurrent('promoted context routes stay between the displayed boxes', () => {
+test.concurrent('a route reaches its displayed endpoint inside an ancestor boundary', () => {
   const world = routeWorld('container')
   const projection = projectWorld(world, {
     viewport: { x: 0, y: 0, width: 80, height: 36 },
     level: 'context',
     currentId: 'observed:ann',
   })
-  const byId = projectedById(projection.elements)
-  const person = requiredElement(byId, 'observed:ann').cellBounds
-  const system = requiredElement(byId, 'observed:shop').cellBounds
-  const route = projection.relationships[0]?.cellRoute
-  assert.ok(route)
-  const top = Math.min(person.y, system.y) - 1
-  const bottom = Math.max(person.y + person.height, system.y + system.height)
-  for (const point of route) {
-    assert.ok(point.y >= top && point.y <= bottom, `${point.y} left the boxes`)
-  }
-  const span = Math.max(...route.map(point => point.y)) - Math.min(...route.map(point => point.y))
-  assert.ok(span <= Math.max(person.height, system.height))
+  const relationship = projection.relationships[0]
+  assert.ok(relationship)
+  assert.equal(relationship.displaySource, 'observed:ann')
+  assert.equal(relationship.displayTarget, 'observed:api')
 })
 
 test.concurrent('authored endpoint routes keep their laid-out bend', () => {

@@ -15,9 +15,11 @@ export function drawCard(
   projection: WorldProjection,
   theme: ViewerTheme,
   dimmed = false,
+  lit = false,
 ): void {
   const bounds = element.cellBounds
-  const color = theme[element.kind]
+  const color = lit ? theme.selected : theme[element.kind]
+  const dim = !lit && (dimmed || element.external)
   const background = element.origin === 'observed'
     ? theme.observedTint
     : theme.background
@@ -35,7 +37,7 @@ export function drawCard(
     color,
     background,
     element.kind === 'person' ? 'person' : 'card',
-    dimmed || element.external ? TextAttributes.DIM : 0,
+    lit ? TextAttributes.BOLD : dim ? TextAttributes.DIM : 0,
   )
 
   if (element.origin === 'missing' && bounds.width > 4 && bounds.height > 2) {
@@ -58,6 +60,6 @@ export function drawCard(
     textWidth,
     color,
     background,
-    dimmed || element.external ? TextAttributes.DIM : TextAttributes.BOLD,
+    dim ? TextAttributes.DIM : TextAttributes.BOLD,
   )
 }

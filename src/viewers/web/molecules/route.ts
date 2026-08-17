@@ -14,6 +14,7 @@ import {
 } from 'three'
 import type { Material } from 'three'
 import type { Bounds, WorldRelationship } from '../../../types.ts'
+import type { RoutePoint } from '../scene.ts'
 import { at } from '../atoms/space.ts'
 import { css, ink, paper } from '../atoms/theme.ts'
 
@@ -72,13 +73,12 @@ export function addBar(
   width: number,
   material: Material,
 ): void {
-  const dx = to.x - from.x
-  const dz = to.z - from.z
-  const length = Math.hypot(dx, dz)
+  const direction = to.clone().sub(from)
+  const length = direction.length()
   if (length < 0.01) return
   const bar = new Mesh(new BoxGeometry(length, 0.12, width), material)
-  bar.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2)
-  bar.rotation.y = Math.atan2(dx, dz) - Math.PI / 2
+  bar.position.copy(from).add(to).multiplyScalar(0.5)
+  bar.quaternion.setFromUnitVectors(new Vector3(1, 0, 0), direction.normalize())
   bar.raycast = () => {}
   parent.add(bar)
 }
@@ -86,11 +86,12 @@ export function addBar(
 export function addRoute(
   parent: Group,
   relationship: WorldRelationship,
-  z: number,
+  path: RoutePoint[],
+  labelZ: number,
 ): CityRoute {
   const group = new Group()
   parent.add(group)
-  const points = relationship.route.map(point => at(point.x, point.y, z + 0.25))
+  const points = path.map(point => at(point.x, point.y, point.z + 0.25))
   const ghost = relationship.origin !== 'observed'
   if (ghost) {
     const line = new Line(
@@ -119,7 +120,7 @@ export function addRoute(
   }
   const mesh = relationship.label === null
     ? null
-    : flowLabel(relationship.description, relationship.label, z + 0.3)
+    : flowLabel(relationship.description, relationship.label, labelZ + 0.3)
   if (mesh) {
     mesh.visible = false
     group.add(mesh)

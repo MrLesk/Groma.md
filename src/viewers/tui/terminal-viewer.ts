@@ -142,6 +142,7 @@ export function mountTerminalViewer(
       detailsScroll: state.detailsScroll,
       filter: state.filter,
       activeActionId: state.activeActionId,
+      actionCursor: state.actionCursor,
     })
     frame.requestRender()
   }

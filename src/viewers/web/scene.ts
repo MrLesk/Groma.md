@@ -2,6 +2,7 @@ import type {
   ArchitectureWorld,
   Bounds,
   C4Kind,
+  Point,
   WorldElement,
   WorldGroup,
   WorldRelationship,
@@ -55,11 +56,86 @@ export function project(
   }
 }
 
+export interface RoutePoint extends Point {
+  z: number
+}
+
 export type SceneItem =
   | { kind: 'slab'; element: WorldElement; bottom: number; top: number }
   | { kind: 'zone'; group: WorldGroup; z: number }
-  | { kind: 'route'; relationship: WorldRelationship; z: number }
+  | {
+    kind: 'route'
+    relationship: WorldRelationship
+    /** The lower endpoint surface; painter ordering only. */
+    z: number
+    /** The stepped polyline riding the surfaces the route crosses. */
+    path: RoutePoint[]
+    labelZ: number
+  }
   | { kind: 'prism'; element: WorldElement; bottom: number; top: number }
+
+function contains(bounds: Bounds, x: number, y: number): boolean {
+  return x >= bounds.x && x <= bounds.x + bounds.width
+    && y >= bounds.y && y <= bounds.y + bounds.height
+}
+
+/** The walking height at a ground point: one rise per plate above it. */
+function surfaceAt(plates: Bounds[], x: number, y: number): number {
+  return LAYER_RISE * plates.filter(plate => contains(plate, x, y)).length
+}
+
+/**
+ * Splits one 2D segment at every parent boundary it crosses, so each
+ * piece lies fully on one surface.
+ */
+function crossings(from: Point, to: Point, plates: Bounds[]): number[] {
+  const ts = new Set([0, 1])
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  for (const plate of plates) {
+    if (dx !== 0) {
+      for (const edge of [plate.x, plate.x + plate.width]) {
+        const t = (edge - from.x) / dx
+        if (t > 0 && t < 1) ts.add(t)
+      }
+    }
+    if (dy !== 0) {
+      for (const edge of [plate.y, plate.y + plate.height]) {
+        const t = (edge - from.y) / dy
+        if (t > 0 && t < 1) ts.add(t)
+      }
+    }
+  }
+  return [...ts].sort((left, right) => left - right)
+}
+
+/**
+ * The route as a trace over the plates: each piece runs at the surface
+ * under its midpoint, with a vertical step where the surface changes.
+ * A route can never pass under a box.
+ */
+function elevatedRoute(route: Point[], plates: Bounds[]): RoutePoint[] {
+  const path: RoutePoint[] = []
+  const push = (x: number, y: number, z: number): void => {
+    const last = path[path.length - 1]
+    if (last && last.x === x && last.y === y && last.z === z) return
+    path.push({ x, y, z })
+  }
+  for (let index = 0; index < route.length - 1; index += 1) {
+    const from = route[index]!
+    const to = route[index + 1]!
+    const ts = crossings(from, to, plates)
+    for (let piece = 0; piece < ts.length - 1; piece += 1) {
+      const t0 = ts[piece]!
+      const t1 = ts[piece + 1]!
+      const mid = (t0 + t1) / 2
+      const z = surfaceAt(plates, from.x + (to.x - from.x) * mid, from.y + (to.y - from.y) * mid)
+      push(from.x + (to.x - from.x) * t0, from.y + (to.y - from.y) * t0, z)
+      push(from.x + (to.x - from.x) * t1, from.y + (to.y - from.y) * t1, z)
+    }
+  }
+  return path
+}
 
 /** Elevates the world; ordering is a separate, projection-dependent step. */
 export function buildScene(world: ArchitectureWorld): SceneItem[] {
@@ -92,9 +168,24 @@ export function buildScene(world: ArchitectureWorld): SceneItem[] {
     items.push({ kind: 'zone', group, z })
   }
 
+  const plates = world.elements
+    .filter(element => element.children.length > 0)
+    .map(element => element.bounds)
   for (const relationship of world.relationships) {
     const z = Math.min(baseOf(relationship.source), baseOf(relationship.target))
-    items.push({ kind: 'route', relationship, z })
+    items.push({
+      kind: 'route',
+      relationship,
+      z,
+      path: elevatedRoute(relationship.route, plates),
+      labelZ: relationship.label === null
+        ? 0
+        : surfaceAt(
+          plates,
+          relationship.label.x + relationship.label.width / 2,
+          relationship.label.y + relationship.label.height / 2,
+        ),
+    })
   }
 
   return items
@@ -156,7 +247,7 @@ export function fitScene(items: SceneItem[], projection: Projection): Bounds {
     } else if (item.kind === 'zone') {
       points.push(...corners(projection, item.group.bounds, item.z))
     } else {
-      points.push(...item.relationship.route.map(point => project(projection, point.x, point.y, item.z)))
+      points.push(...item.path.map(point => project(projection, point.x, point.y, point.z)))
     }
   }
   if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 }
