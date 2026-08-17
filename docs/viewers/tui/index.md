@@ -11,7 +11,8 @@ This page is the terminal surface. The shared viewer rules live in
 
 Fixed chrome frames the world. One blank row sits above the header
 and one below the footer. A one-row header shows the groma
-wordmark on the left and the exit hint on the right. A one-row footer
+wordmark, the observed system's name with live flow and element
+counts, and the exit hint on the right. A one-row footer
 shows the key hints for the focused pane, and zoom controls with a
 readout of the camera state: `fit` when the whole map fits, a
 percentage in between, `1:1` at the closest zoom. While the `/`
@@ -24,7 +25,12 @@ under a side pane. `[` and `]` collapse and restore the hierarchy and
 details panes; the map pane takes the freed width immediately, and
 only the camera viewport changes, never the world layout.
 
-The hierarchy pane lists the merged world as a containment tree:
+The hierarchy pane opens with the flows list: every person command
+in the world, deduped across the people who share it, above a rule.
+The pane cursor walks the flow rows and the tree as one column;
+Enter on a flow row lights its walk (the active row carries the
+accent mark) and Right on one returns to the map. Below the rule
+the pane lists the merged world as a containment tree:
 people, then systems, then external systems at the root, left to
 right as on the map. Containers sit under their system and
 components under their container, in the same left-to-right order.

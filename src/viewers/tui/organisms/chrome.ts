@@ -53,6 +53,7 @@ export function drawChrome(
   footerOverride?: string,
   actionTitle?: string,
   picking = false,
+  stats?: string,
 ): void {
   const panes: Array<[ViewerFocus, Bounds]> = [
     ['hierarchy', layout.hierarchy],
@@ -71,10 +72,11 @@ export function drawChrome(
     )
   }
 
+  const wordmark = 'groma'
   cell(buffer, layout.header.x, layout.header.y, '▌', theme.selected, theme.background)
   text(
     buffer,
-    'groma',
+    wordmark,
     layout.header.x + 2,
     layout.header.y,
     Math.max(0, layout.header.width - 2),
@@ -83,6 +85,19 @@ export function drawChrome(
     TextAttributes.BOLD,
   )
   const exitHint = 'Ctrl+C exit'
+  if (stats !== undefined) {
+    const statsX = layout.header.x + 2 + wordmark.length + 3
+    text(
+      buffer,
+      stats,
+      statsX,
+      layout.header.y,
+      Math.max(0, layout.header.width - (statsX - layout.header.x) - exitHint.length - 3),
+      theme.foreground,
+      theme.background,
+      TextAttributes.DIM,
+    )
+  }
   text(
     buffer,
     exitHint,

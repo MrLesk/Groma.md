@@ -28,9 +28,11 @@ export function scrollOffset(
 export function drawHierarchy(
   buffer: OptimizedBuffer,
   bounds: Bounds,
+  commands: { id: string; title: string }[],
   rows: TreeRow[],
   selectionId: string | undefined,
   cursorId: string | undefined,
+  activeActionId: string | undefined,
   focused: boolean,
   theme: ViewerTheme,
 ): void {
@@ -38,14 +40,72 @@ export function drawHierarchy(
   const height = Math.max(0, bounds.height - 2)
   if (width === 0 || height === 0) return
   const legendHeight = height >= 3 ? 1 + legendKinds.length : 0
-  const treeHeight = height - legendHeight
+  // Label, one row per command, and a closing rule; dropped when it
+  // would squeeze the tree out entirely.
+  const flowsHeight = commands.length > 0
+    && height - legendHeight - (commands.length + 2) >= 1
+    ? commands.length + 2
+    : 0
+
+  if (flowsHeight > 0) {
+    text(
+      buffer,
+      'Flows',
+      bounds.x + 2,
+      bounds.y + 1,
+      width,
+      theme.foreground,
+      theme.background,
+      TextAttributes.DIM,
+    )
+    for (const [index, command] of commands.entries()) {
+      const y = bounds.y + 2 + index
+      const active = focused && command.id === cursorId
+      const background = active ? theme.selected : theme.background
+      if (active) buffer.fillRect(bounds.x + 1, y, width, 1, background)
+      if (command.id === activeActionId) {
+        cell(
+          buffer,
+          bounds.x + 1,
+          y,
+          '▌',
+          active ? theme.background : theme.selected,
+          background,
+        )
+      }
+      const lit = command.id === activeActionId && !active
+      text(
+        buffer,
+        `→ ${command.title}`,
+        bounds.x + 2,
+        y,
+        width - 1,
+        active ? theme.background : lit ? theme.selected : theme.foreground,
+        background,
+        lit ? TextAttributes.BOLD : 0,
+      )
+    }
+    text(
+      buffer,
+      '─'.repeat(width),
+      bounds.x + 1,
+      bounds.y + 1 + flowsHeight - 1,
+      width,
+      theme.foreground,
+      theme.background,
+      TextAttributes.DIM,
+    )
+  }
+
+  const treeTop = bounds.y + 1 + flowsHeight
+  const treeHeight = height - legendHeight - flowsHeight
   const cursorIndex = Math.max(0, rows.findIndex(row => row.id === cursorId))
   const scroll = scrollOffset(cursorIndex, rows.length, treeHeight)
 
   for (let line = 0; line < treeHeight; line += 1) {
     const row = rows[scroll + line]
     if (!row) break
-    const y = bounds.y + 1 + line
+    const y = treeTop + line
     const active = focused && row.id === cursorId
     const background = active ? theme.selected : theme.background
     if (active) buffer.fillRect(bounds.x + 1, y, width, 1, background)
@@ -79,7 +139,7 @@ export function drawHierarchy(
   }
 
   if (legendHeight === 0) return
-  const ruleY = bounds.y + 1 + treeHeight
+  const ruleY = treeTop + treeHeight
   text(
     buffer,
     '─'.repeat(width),

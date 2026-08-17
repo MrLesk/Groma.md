@@ -389,3 +389,36 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   assert.equal(state.detailsScroll, 1)
   assert.equal(state.actionCursor, undefined)
 })
+
+test.concurrent('the hierarchy cursor reaches the flow rows and Enter lights one', () => {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    relationships: [
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
+      edge('api-web', 'api', 'web'),
+    ],
+  }
+  let state: ViewerState = { ...initialState(world), currentId: 'buyer' }
+  state = reduceViewer(world, state, 'tab')
+  assert.equal(state.focus, 'hierarchy')
+  assert.equal(state.tree.cursor, 'buyer')
+
+  // Up from the first tree row crosses onto the flow row above it.
+  state = reduceViewer(world, state, 'up')
+  assert.equal(state.tree.cursor, 'api-web')
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.activeActionId, 'api-web')
+  assert.equal(state.actionStep, undefined)
+  assert.equal(state.focus, 'hierarchy')
+
+  // Right on a flow row returns to the map; Down returns to the tree.
+  assert.equal(reduceViewer(world, state, 'right').focus, 'architecture')
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.tree.cursor, 'buyer')
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.currentId, 'buyer')
+  assert.equal(state.activeActionId, 'api-web')
+})

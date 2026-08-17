@@ -4,6 +4,7 @@ import {
   actionCaption,
   actionLegs,
   elementOnPath,
+  worldCommands,
 } from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import { detailsCommands, filterMatches } from './navigation.ts'
@@ -48,13 +49,16 @@ export function paintWorld(
     },
     tracedId: traced?.id,
   })
+  const commands = worldCommands(world)
   const tree = options.tree
   drawHierarchy(
     buffer,
     layout.hierarchy,
+    commands.map(command => ({ id: command.id, title: command.description })),
     treeRows(world, selectionId, tree),
     selectionId,
     tree.cursor ?? selectionId,
+    options.activeActionId,
     options.focus === 'hierarchy',
     theme,
   )
@@ -79,6 +83,8 @@ export function paintWorld(
       ? actionCaption(active, true, nameOf).title
       : `step ${options.actionStep! + 1}/${legs.length} · ${nameOf(traced.source)}`
         + ` → ${nameOf(traced.target)} · ${traced.description}`
+  const system = world.elements.find(element =>
+    element.kind === 'system' && element.origin === 'observed' && !element.external)
   drawChrome(
     buffer,
     layout,
@@ -91,6 +97,9 @@ export function paintWorld(
       currentId: selectionId,
       detailsTab: options.detailsTab,
     }).length > 0,
+    system === undefined
+      ? undefined
+      : `${system.name} · ${commands.length} flows · ${world.elements.length} elements`,
   )
 }
 
