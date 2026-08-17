@@ -1,4 +1,4 @@
-import { actionLegs, pickableActions } from '../action-path.ts'
+import { actionLegs, pickableActions, travelledBy } from '../action-path.ts'
 import type { PaneVisibility } from './layout.ts'
 import {
   canEnter,
@@ -14,9 +14,11 @@ import type {
   C4Kind,
   SemanticLevel,
   WorldElement,
+  WorldRelationship,
 } from '../../types.ts'
 
 export type ViewerFocus = 'architecture' | 'hierarchy' | 'details'
+export type DetailsTab = 'what' | 'how'
 export type ViewerAction =
   | 'enter'
   | 'leave'
@@ -30,6 +32,7 @@ export type ViewerAction =
   | 'dismiss'
   | 'clear-action'
   | 'step-action'
+  | 'toggle-details-tab'
 
 export type FilterInput =
   | { type: 'open' }
@@ -55,6 +58,7 @@ export interface ViewerState {
   panes: PaneVisibility
   /** First hidden content row of an overflowing details pane. */
   detailsScroll: number
+  detailsTab: DetailsTab
   /** One person command. Survives leaving the person until x or another pick. */
   activeActionId?: string
   /** The traced leg of the active command's walk; absent while the whole walk shows. */
@@ -102,7 +106,19 @@ export function initialState(world: ArchitectureWorld): ViewerState {
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what',
   }
+}
+
+/** The pickable command rows the details pane shows for its tab. */
+export function detailsCommands(
+  world: ArchitectureWorld,
+  state: Pick<ViewerState, 'currentId' | 'detailsTab'>,
+): WorldRelationship[] {
+  if (state.detailsTab === 'how') {
+    return state.currentId === undefined ? [] : travelledBy(state.currentId, world)
+  }
+  return pickableActions(state.currentId, world)
 }
 
 function resolve(
@@ -235,6 +251,13 @@ export function reduceViewer(
     if (legs.length === 0) return current
     return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
+  if (action === 'toggle-details-tab') {
+    return {
+      ...current,
+      detailsTab: current.detailsTab === 'what' ? 'how' : 'what',
+      detailsScroll: 0,
+    }
+  }
   if (action === 'dismiss') {
     if (current.focus !== 'architecture') return { ...current, focus: 'architecture' }
     return current
@@ -252,7 +275,7 @@ export function reduceViewer(
   if (current.focus === 'details') {
     if (action === 'up' || action === 'down') {
       const step = action === 'down' ? 1 : -1
-      const actions = pickableActions(current.currentId, world)
+      const actions = detailsCommands(world, current)
       if (actions.length === 0) {
         return { ...current, detailsScroll: Math.max(0, current.detailsScroll + step) }
       }
@@ -263,7 +286,7 @@ export function reduceViewer(
       return { ...current, actionCursor: actions[next]!.id }
     }
     if (action === 'enter') {
-      const actions = pickableActions(current.currentId, world)
+      const actions = detailsCommands(world, current)
       if (actions.some(item => item.id === current.actionCursor)) {
         return { ...current, activeActionId: current.actionCursor, actionStep: undefined }
       }

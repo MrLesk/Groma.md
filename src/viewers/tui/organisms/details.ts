@@ -5,7 +5,8 @@ import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
-import { actionCaption, outgoingActions } from '../../action-path.ts'
+import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
+import type { DetailsTab } from '../navigation.ts'
 import {
   parentOfElements,
   promotedPeer,
@@ -49,6 +50,7 @@ function detailsRows(
   world: ArchitectureWorld,
   theme: ViewerTheme,
   width: number,
+  tab: DetailsTab,
   activeActionId: string | undefined,
   actionCursor: string | undefined,
 ): { rows: Span[][]; cursorLine?: number } {
@@ -61,6 +63,14 @@ function detailsRows(
   const header = (value: string): Span => {
     return dim(`${value} ${'─'.repeat(Math.max(0, width - value.length - 1))}`)
   }
+  // The picked command renders in the accent, like its path on the map.
+  const accented = (id: string) => id === activeActionId
+    ? (span: Span): Span => ({
+        ...span,
+        foreground: theme.selected,
+        attributes: TextAttributes.BOLD,
+      })
+    : (span: Span): Span => span
 
   const mark = (kind: WorldElement['kind'], external = false): Span => {
     return {
@@ -69,6 +79,9 @@ function detailsRows(
       attributes: external ? TextAttributes.DIM : 0,
     }
   }
+  const tabSpan = (label: string, active: boolean): Span => active
+    ? { value: label, foreground: theme.selected, attributes: TextAttributes.BOLD }
+    : dim(label)
   const rows: Span[][] = [[
     mark(element.kind, element.external),
     {
@@ -79,6 +92,52 @@ function detailsRows(
     dim(' · '),
     { value: element.origin, foreground: theme[element.origin], attributes: TextAttributes.BOLD },
   ]]
+  rows.push([], [
+    tabSpan('What it does', tab === 'what'),
+    plain('   '),
+    tabSpan('How it\'s built', tab === 'how'),
+  ])
+
+  let cursorLine: number | undefined
+
+  if (tab === 'how') {
+    const technology = (element.technology ?? '')
+      .split(',')
+      .map(part => part.trim())
+      .filter(part => part.length > 0)
+    if (technology.length > 0) {
+      rows.push([], [header('Technology')])
+      rows.push([plain(technology.join(' · '))])
+    }
+
+    if (element.code.length > 0) {
+      rows.push([], [header('Code')])
+      const files = new Set(element.code.map(reference => reference.file)).size
+      if ((element.codeLines ?? 0) > 0) {
+        rows.push([dim(
+          `${files} ${files === 1 ? 'file' : 'files'} · ~${element.codeLines} lines`,
+        )])
+      }
+      for (const reference of element.code) {
+        rows.push([plain(reference.file)])
+        rows.push([dim(
+          reference.symbol === undefined
+            ? reference.scanner
+            : `${reference.symbol} · ${reference.scanner}`,
+        )])
+      }
+    }
+
+    const travelled = travelledBy(element.representationId, world)
+    if (travelled.length > 0) {
+      rows.push([], [header('Travelled by')])
+      for (const walk of travelled) {
+        if (walk.id === actionCursor) cursorLine = rows.length
+        rows.push([dim('→ '), plain(walk.description)].map(accented(walk.id)))
+      }
+    }
+    return { rows, cursorLine }
+  }
 
   if (element.description) {
     rows.push([])
@@ -93,7 +152,6 @@ function detailsRows(
     return promotedPeer(relationship, element.representationId, parentOf)?.outgoing === false
   })
   const relationships = [...actions, ...incoming]
-  let cursorLine: number | undefined
   if (relationships.length > 0) {
     rows.push([], [header('Relationships')])
     for (const relationship of relationships) {
@@ -113,14 +171,7 @@ function detailsRows(
         : [mark(peer.kind, peer.external), plain(' ')]
       const markWidth = peerMark.length === 0 ? 0 : 2
       if (relationship.id === actionCursor) cursorLine = rows.length
-      // The picked command renders in the accent, like its path on the map.
-      const style = relationship.id === activeActionId
-        ? (span: Span): Span => ({
-            ...span,
-            foreground: theme.selected,
-            attributes: TextAttributes.BOLD,
-          })
-        : (span: Span): Span => span
+      const style = accented(relationship.id)
       if (arrow.length + markWidth + caption.title.length + rest.length <= width) {
         rows.push([dim(arrow), ...peerMark, plain(caption.title), dim(rest)].map(style))
       } else {
@@ -146,18 +197,6 @@ function detailsRows(
     }
   }
 
-  if (element.code.length > 0) {
-    rows.push([], [header('Code')])
-    for (const reference of element.code) {
-      rows.push([plain(reference.file)])
-      rows.push([dim(
-        reference.symbol === undefined
-          ? reference.scanner
-          : `${reference.symbol} · ${reference.scanner}`,
-      )])
-    }
-  }
-
   return { rows, cursorLine }
 }
 
@@ -170,6 +209,7 @@ export function drawDetails(
   view: {
     focused: boolean
     scroll: number
+    tab: DetailsTab
     activeActionId?: string
     actionCursor?: string
   },
@@ -184,6 +224,7 @@ export function drawDetails(
     world,
     theme,
     width,
+    view.tab,
     view.activeActionId,
     view.actionCursor,
   )

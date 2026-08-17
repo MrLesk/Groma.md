@@ -144,6 +144,7 @@ export function mountTerminalViewer(
       activeActionId: state.activeActionId,
       actionStep: state.actionStep,
       actionCursor: state.actionCursor,
+      detailsTab: state.detailsTab,
     })
     frame.requestRender()
   }
@@ -230,6 +231,7 @@ export function mountTerminalViewer(
     if (key.name === ']') return 'toggle-details'
     if (key.name === 'x') return 'clear-action'
     if (key.name === 's') return 'step-action'
+    if (key.name === 't') return 'toggle-details-tab'
     if (
       key.name === 'up'
       || key.name === 'down'

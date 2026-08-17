@@ -36,9 +36,15 @@ and map moves keep the tree in step. The tree scrolls to keep its
 cursor visible. The bottom of the pane is the kind legend.
 Groups are invisible to the tree, matching navigation.
 
-The details pane always shows the current selection: name, kind,
-annotations, description, relationships, and children. Component
-details include the scanner, file, and optional symbol from `code`.
+The details pane always shows the current selection under two tabs;
+`t` switches them and the choice persists across selections. What it
+does holds the meaning: description, relationships, and children.
+How it's built holds the evidence: the technology the element's
+Markdown declares, the scanner, file, and optional symbol from
+`code` under a files-and-lines weight line, and Travelled by — the
+person commands whose walk touches the selection. While the pane is
+focused, Up and Down move over the tab's pickable command rows and
+Enter lights that walk.
 Enter on a person or other leaf focuses the details pane. Right on
 the map with nothing further right does the same. When the
 selection is a person who uses a launcher — software they use that

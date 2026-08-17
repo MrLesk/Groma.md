@@ -60,6 +60,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   })
 
   assert.deepEqual(viewOf(reduceViewer(world, state, 'enter')), {
@@ -86,6 +87,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
       tree: initialTree(),
       panes: { hierarchy: true, details: true },
       detailsScroll: 0,
+      detailsTab: 'what' as const,
     }, 'enter')),
     { level: 'components', currentId: 'observed:pleft' },
   )
@@ -116,6 +118,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   }
   assert.equal(reduceViewer(world, state, 'right').currentId, 'observed:cright')
 
@@ -126,6 +129,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'containers',
@@ -139,6 +143,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   }
   assert.deepEqual(viewOf(reduceViewer(world, state, 'right')), {
     level: 'context',
@@ -152,6 +157,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: true, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   }
   const escaped = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(escaped), { level: 'context', currentId: 'observed:ann' })
@@ -165,6 +171,7 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
     tree: initialTree(),
     panes: { hierarchy: false, details: true },
     detailsScroll: 0,
+    detailsTab: 'what' as const,
   }
   const toTree = reduceViewer(world, state, 'left')
   assert.deepEqual(viewOf(toTree), { level: 'context', currentId: 'observed:ann' })
@@ -344,4 +351,41 @@ test.concurrent('s traces the active walk one leg at a time and wraps', () => {
   state = reduceViewer(world, state, 'clear-action')
   assert.equal(state.activeActionId, undefined)
   assert.equal(state.actionStep, undefined)
+})
+
+test.concurrent('t flips the details tab and How lists travelled-by picks', () => {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [box('buyer', 'person'), box('api', 'container'), box('web', 'container')],
+    // buyer uses api and web, so api is a launcher and api-web its command.
+    relationships: [
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
+      edge('api-web', 'api', 'web'),
+    ],
+  }
+  let state: ViewerState = { ...initialState(world), currentId: 'web' }
+  assert.equal(state.detailsTab, 'what')
+
+  state = reduceViewer(world, { ...state, detailsScroll: 3 }, 'toggle-details-tab')
+  assert.equal(state.detailsTab, 'how')
+  assert.equal(state.detailsScroll, 0)
+
+  // The tab survives moving the selection.
+  state = reduceViewer(world, { ...state, focus: 'architecture' }, 'left')
+  assert.equal(state.detailsTab, 'how')
+
+  // On How, the details cursor walks the commands that travel the element.
+  state = reduceViewer(world, { ...state, currentId: 'web', focus: 'details' }, 'down')
+  assert.equal(state.actionCursor, 'api-web')
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.activeActionId, 'api-web')
+
+  // On What, a non-person selection scrolls instead.
+  state = reduceViewer(world, state, 'toggle-details-tab')
+  assert.equal(state.detailsTab, 'what')
+  state = reduceViewer(world, { ...state, actionCursor: undefined }, 'down')
+  assert.equal(state.detailsScroll, 1)
+  assert.equal(state.actionCursor, undefined)
 })
