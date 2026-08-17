@@ -76,10 +76,14 @@ export function pickableActions(
   return outgoingActions(elementId, world)
 }
 
-/** The walk's legs in travel order: people reaching the start, then onward. */
+/**
+ * The walk's legs in travel order: people reaching the start, then onward.
+ * With a personId, only that person's approach joins the walk.
+ */
 export function actionLegs(
   actionId: string | undefined,
   world: ArchitectureWorld,
+  personId?: string,
 ): WorldRelationship[] {
   const start = world.relationships.find(relationship => relationship.id === actionId)
   if (start === undefined) return []
@@ -90,6 +94,7 @@ export function actionLegs(
     if (
       relationship.target === start.source
       && byId.get(relationship.source)?.kind === 'person'
+      && (personId === undefined || relationship.source === personId)
     ) {
       legs.push(relationship)
       ids.add(relationship.id)

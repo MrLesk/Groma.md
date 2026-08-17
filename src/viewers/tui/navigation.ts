@@ -66,6 +66,8 @@ export interface ViewerState {
   detailsTab: DetailsTab
   /** One person command. Survives leaving the person until x or another pick. */
   activeActionId?: string
+  /** The person the command was picked from; scopes the walk's approach to them. */
+  activeActionPersonId?: string
   /** The traced leg of the active command's walk; absent while the whole walk shows. */
   actionStep?: number
   /** The command row the details cursor rests on; Enter picks it. */
@@ -171,7 +173,12 @@ function reduceTree(
   }
   if (index < commands.length) {
     if (action === 'enter') {
-      return { ...current, activeActionId: commands[index]!.id, actionStep: undefined }
+      return {
+        ...current,
+        activeActionId: commands[index]!.id,
+        activeActionPersonId: undefined,
+        actionStep: undefined,
+      }
     }
     if (action === 'right') return { ...current, focus: 'architecture' }
     return current
@@ -259,10 +266,15 @@ export function reduceViewer(
     }
   }
   if (action === 'clear-action') {
-    return { ...current, activeActionId: undefined, actionStep: undefined }
+    return {
+      ...current,
+      activeActionId: undefined,
+      activeActionPersonId: undefined,
+      actionStep: undefined,
+    }
   }
   if (action === 'step-action') {
-    const legs = actionLegs(current.activeActionId, world)
+    const legs = actionLegs(current.activeActionId, world, current.activeActionPersonId)
     if (legs.length === 0) return current
     return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
@@ -303,7 +315,13 @@ export function reduceViewer(
     if (action === 'enter') {
       const actions = detailsCommands(world, current)
       if (actions.some(item => item.id === current.actionCursor)) {
-        return { ...current, activeActionId: current.actionCursor, actionStep: undefined }
+        return {
+          ...current,
+          activeActionId: current.actionCursor,
+          // A What-tab pick comes from the selected person's own list.
+          activeActionPersonId: current.detailsTab === 'what' ? current.currentId : undefined,
+          actionStep: undefined,
+        }
       }
       return current
     }

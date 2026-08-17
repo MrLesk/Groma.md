@@ -381,6 +381,8 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   assert.equal(state.actionCursor, 'api-web')
   state = reduceViewer(world, state, 'enter')
   assert.equal(state.activeActionId, 'api-web')
+  // A travelled-by pick has no picking person.
+  assert.equal(state.activeActionPersonId, undefined)
 
   // On What, a non-person selection scrolls instead.
   state = reduceViewer(world, state, 'toggle-details-tab')
@@ -388,6 +390,55 @@ test.concurrent('t flips the details tab and How lists travelled-by picks', () =
   state = reduceViewer(world, { ...state, actionCursor: undefined }, 'down')
   assert.equal(state.detailsScroll, 1)
   assert.equal(state.actionCursor, undefined)
+})
+
+test.concurrent('a details pick scopes the walk to that person; a flows pick does not', () => {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [
+      box('buyer', 'person'),
+      box('ops', 'person'),
+      box('api', 'container'),
+      box('web', 'container'),
+    ],
+    // buyer and ops both use the api launcher, so both expose api-web.
+    relationships: [
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
+      edge('ops-api', 'ops', 'api'),
+      edge('ops-web', 'ops', 'web'),
+      edge('api-web', 'api', 'web'),
+    ],
+  }
+  let state: ViewerState = {
+    ...initialState(world),
+    currentId: 'buyer',
+    focus: 'details',
+    actionCursor: 'api-web',
+  }
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.activeActionId, 'api-web')
+  assert.equal(state.activeActionPersonId, 'buyer')
+
+  // The scoped walk has two legs (buyer's approach, then the command),
+  // so a third step wraps; the other person's approach is not walked.
+  state = reduceViewer(world, state, 'step-action')
+  state = reduceViewer(world, state, 'step-action')
+  state = reduceViewer(world, state, 'step-action')
+  assert.equal(state.actionStep, 0)
+
+  state = reduceViewer(world, state, 'clear-action')
+  assert.equal(state.activeActionPersonId, undefined)
+
+  // The flows list has no person context: the pick keeps the whole walk.
+  state = reduceViewer(world, {
+    ...state,
+    focus: 'hierarchy',
+    tree: { ...state.tree, cursor: 'api-web' },
+  }, 'enter')
+  assert.equal(state.activeActionId, 'api-web')
+  assert.equal(state.activeActionPersonId, undefined)
 })
 
 test.concurrent('the hierarchy cursor reaches the flow rows and Enter lights one', () => {
