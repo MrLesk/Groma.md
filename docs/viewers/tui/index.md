@@ -49,6 +49,12 @@ leaves the path on, so arrows, Enter, and zoom still inspect the
 boxes it touches. `x` clears the path. Choosing another person
 command replaces it.
 
+While a command is active, `s` traces its walk one relationship leg
+at a time: the traced leg draws heavy while the rest of the walk
+stays lit, and the footer captions it as `step k/n · source →
+target · label`, wrapping after the last leg. Picking a command
+again restarts the trace; `x` removes it with the path.
+
 ## What it shows
 
 System Context, Containers, and Components are three levels over one

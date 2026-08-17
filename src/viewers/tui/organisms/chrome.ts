@@ -34,12 +34,12 @@ function footerHint(
   }
   if (actionTitle !== undefined) {
     if (focus === 'architecture') {
-      return `${actionTitle}   x clear   enter open   backspace back`
+      return `${actionTitle}   s step   x clear   enter open`
     }
     if (focus === 'hierarchy') {
-      return `${actionTitle}   x clear   ↑↓ move   enter select`
+      return `${actionTitle}   s step   x clear   enter select`
     }
-    return `${actionTitle}   x clear   backspace back   esc map`
+    return `${actionTitle}   s step   x clear   esc map`
   }
   return paneHints[focus]
 }

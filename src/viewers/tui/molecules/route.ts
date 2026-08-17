@@ -51,12 +51,15 @@ function arrowFor(from: Point, to: Point): string {
   return '▲'
 }
 
+const heavyCorners: Record<string, string> = { '┘': '┛', '┐': '┓', '└': '┗', '┌': '┏' }
+
 export function drawRoute(
   buffer: OptimizedBuffer,
   relationship: ProjectedRelationship,
   theme: ViewerTheme,
   dimmed = false,
   lit = false,
+  traced = false,
 ): void {
   const color = lit
     ? theme.selected
@@ -64,9 +67,12 @@ export function drawRoute(
       ? theme.foreground
       : theme[relationship.origin]
   const attributes = lit ? TextAttributes.BOLD : dimmed ? TextAttributes.DIM : 0
-  const characters = relationship.origin === 'observed'
-    ? { horizontal: '─', vertical: '│' }
-    : { horizontal: '╌', vertical: '┆' }
+  // The traced leg draws heavy so it stands out from the rest of the walk.
+  const characters = traced
+    ? { horizontal: '━', vertical: '┃' }
+    : relationship.origin === 'observed'
+      ? { horizontal: '─', vertical: '│' }
+      : { horizontal: '╌', vertical: '┆' }
 
   for (let index = 1; index < relationship.cellRoute.length; index += 1) {
     drawLine(
@@ -84,11 +90,12 @@ export function drawRoute(
     const point = relationship.cellRoute[index]
     const next = relationship.cellRoute[index + 1]
     if ((previous.x === point.x) !== (next.x === point.x)) {
+      const corner = cornerFor(previous, point, next)
       cell(
         buffer,
         point.x,
         point.y,
-        cornerFor(previous, point, next),
+        traced ? heavyCorners[corner] ?? corner : corner,
         color,
         theme.background,
         attributes,
