@@ -30,10 +30,15 @@ expands or collapses it by hand without changing the selection. The
 tree and the map share one selection. The bottom of the pane is the kind legend.
 Groups are invisible to the tree.
 
-The details pane always shows the current selection: name, kind,
-origin, description, relationships, children, and code. Component
-details include the scanner, file, and optional symbol from `code`.
-Children and relationship peers select that element. When the
+The details pane always shows the current selection under two tabs
+that persist across selections. What it does holds the meaning:
+description, relationships, and children. How it's built holds the
+evidence: the technology the element's Markdown declares
+(`technology: Three.js, Bun serve` renders as one chip per
+comma-separated part), the scanner, file, and optional symbol from
+`code`, and Travelled by — the person commands whose walk touches
+the selection; clicking one lights that walk. Children and
+relationship peers select that element. When the
 selection is a person who uses a launcher — software they use that
 starts other software they also use — the person's outgoing rows
 are that launcher's commands. Click a command to light its path on

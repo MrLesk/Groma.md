@@ -35,7 +35,7 @@ const style = `
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #legend span, #details .meta, #details .section, #action.hint, #zoom {
+  #legend span, #details .meta, #details .section, #action.hint, #zoom, .chip {
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -77,6 +77,10 @@ const style = `
   }
   #details ul { margin: 0; padding: 0; list-style: none; }
   #details li { margin: 0 0 6px; }
+  #details .tabs { margin: 0 0 8px; }
+  #details .tabs button { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--hairline); padding: 2px 8px; margin: 0; }
   #footer {
     grid-column: 1 / -1;
     display: flex;
@@ -141,7 +145,7 @@ export function renderPage(world: ArchitectureWorld, generation = 1): string {
     + '</div></header>'
     + `<nav id="hierarchy"><div id="tree"></div><div id="legend">${legend()}</div></nav>`
     + '<div id="map"></div>'
-    + '<aside id="details"><p class="meta"></p><h1></h1><p class="description"></p><div class="body"></div></aside>'
+    + '<aside id="details"><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>'
     + '<footer id="footer"><span id="action"></span><span id="zoom"></span>'
     + '<div class="controls"><button id="zoom-out">−</button><button id="zoom-in">+</button></div>'
     + '<div class="controls"><button id="fit">Fit</button><button id="mode-2d">Plan</button><button id="mode-3d" class="active">Iso</button></div>'

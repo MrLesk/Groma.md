@@ -120,6 +120,7 @@ function annotateRevision(
         children: [],
         external: element.external,
         ...(element.group === undefined ? {} : { group: element.group }),
+        ...(element.technology === undefined ? {} : { technology: element.technology }),
         code: element.code,
         origin,
         ...(plan ? { plan } : {}),

@@ -5,7 +5,7 @@ import type {
   Origin,
   WorldElement,
 } from '../../../types.ts'
-import { actionCaption, outgoingActions } from '../../action-path.ts'
+import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
 import {
   parentOfElements,
@@ -38,7 +38,26 @@ export interface Inspected {
   description: string
   relationships: InspectedRelationship[]
   children: InspectedChild[]
+  technology: string[]
   code: CodeReference[]
+  travelledBy: { id: string; title: string }[]
+}
+
+export type DetailsTab = 'what' | 'how'
+
+type Section =
+  | 'description'
+  | 'relationships'
+  | 'children'
+  | 'technology'
+  | 'code'
+  | 'travelledBy'
+
+/** The pane's split: meaning on one tab, build evidence on the other. */
+export function tabSections(tab: DetailsTab): Section[] {
+  return tab === 'what'
+    ? ['description', 'relationships', 'children']
+    : ['technology', 'code', 'travelledBy']
 }
 
 export function nextActiveActionId(
@@ -97,7 +116,13 @@ export function inspectDetails(
     description: element.description,
     relationships,
     children,
+    technology: (element.technology ?? '')
+      .split(',')
+      .map(part => part.trim())
+      .filter(part => part.length > 0),
     code: element.code,
+    travelledBy: travelledBy(element.representationId, world)
+      .map(action => ({ id: action.id, title: action.description })),
   }
 }
 
@@ -130,75 +155,131 @@ export function paintDetails(
   inspected: Inspected,
   onSelect: (id: string) => void,
   onPickAction: (id: string) => void,
-  activeActionId?: string,
+  activeActionId: string | undefined,
+  tab: DetailsTab,
+  onTab: (tab: DetailsTab) => void,
 ): void {
   const title = host.querySelector('h1')!
   const meta = host.querySelector('.meta')!
-  const description = host.querySelector('.description') as HTMLElement
+  const tabsHost = host.querySelector('.tabs')!
   const body = host.querySelector('.body')!
   title.textContent = inspected.name
   meta.textContent = `${inspected.kindLabel} · ${inspected.origin}`
-  description.textContent = inspected.description
-  description.hidden = inspected.description === ''
+
+  tabsHost.replaceChildren()
+  for (const [key, label] of [['what', 'What it does'], ['how', 'How it\'s built']] as const) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = label
+    if (key === tab) button.classList.add('active')
+    button.addEventListener('click', () => onTab(key))
+    tabsHost.append(button)
+  }
+
   body.replaceChildren()
+  const sections: Record<Section, () => void> = {
+    description: () => {
+      if (inspected.description === '') return
+      const paragraph = document.createElement('p')
+      paragraph.className = 'description'
+      paragraph.textContent = inspected.description
+      body.append(paragraph)
+    },
 
-  if (inspected.relationships.length > 0) {
-    body.append(heading('Relationships'))
-    const list = document.createElement('ul')
-    for (const relationship of inspected.relationships) {
-      const item = document.createElement('li')
-      const link = document.createElement('button')
-      link.type = 'button'
-      link.className = 'link'
-      if (relationship.id === activeActionId) link.classList.add('active')
-      const rest = relationship.detail === '' ? '' : ` · ${relationship.detail}`
-      if (relationship.outgoing) {
-        link.append(`→ ${relationship.title}`)
-      } else {
-        link.append(
-          '← ',
-          marked(relationship.peerKind, relationship.peerExternal, relationship.title),
-        )
+    relationships: () => {
+      if (inspected.relationships.length === 0) return
+      body.append(heading('Relationships'))
+      const list = document.createElement('ul')
+      for (const relationship of inspected.relationships) {
+        const item = document.createElement('li')
+        const link = document.createElement('button')
+        link.type = 'button'
+        link.className = 'link'
+        if (relationship.id === activeActionId) link.classList.add('active')
+        const rest = relationship.detail === '' ? '' : ` · ${relationship.detail}`
+        if (relationship.outgoing) {
+          link.append(`→ ${relationship.title}`)
+        } else {
+          link.append(
+            '← ',
+            marked(relationship.peerKind, relationship.peerExternal, relationship.title),
+          )
+        }
+        link.addEventListener('click', () => {
+          if (relationship.pickable) onPickAction(relationship.id)
+          else onSelect(relationship.peerId)
+        })
+        item.append(link, rest)
+        list.append(item)
       }
-      link.addEventListener('click', () => {
-        if (relationship.pickable) onPickAction(relationship.id)
-        else onSelect(relationship.peerId)
-      })
-      item.append(link, rest)
-      list.append(item)
-    }
-    body.append(list)
-  }
+      body.append(list)
+    },
 
-  if (inspected.children.length > 0) {
-    body.append(heading('Children'))
-    const list = document.createElement('ul')
-    for (const child of inspected.children) {
-      const item = document.createElement('li')
-      const link = document.createElement('button')
-      link.type = 'button'
-      link.className = 'link'
-      link.append(marked(child.kind, child.external, child.name))
-      link.addEventListener('click', () => onSelect(child.id))
-      item.append(link)
-      list.append(item)
-    }
-    body.append(list)
-  }
+    children: () => {
+      if (inspected.children.length === 0) return
+      body.append(heading('Children'))
+      const list = document.createElement('ul')
+      for (const child of inspected.children) {
+        const item = document.createElement('li')
+        const link = document.createElement('button')
+        link.type = 'button'
+        link.className = 'link'
+        link.append(marked(child.kind, child.external, child.name))
+        link.addEventListener('click', () => onSelect(child.id))
+        item.append(link)
+        list.append(item)
+      }
+      body.append(list)
+    },
 
-  if (inspected.code.length > 0) {
-    body.append(heading('Code'))
-    const list = document.createElement('ul')
-    for (const reference of inspected.code) {
-      const file = document.createElement('li')
-      file.textContent = reference.file
-      const extra = document.createElement('li')
-      extra.className = 'ghost'
-      extra.textContent = reference.symbol === undefined
-        ? reference.scanner
-        : `${reference.symbol} · ${reference.scanner}`
-      list.append(file, extra)
-    }
-    body.append(list)
+    technology: () => {
+      if (inspected.technology.length === 0) return
+      body.append(heading('Technology'))
+      const list = document.createElement('ul')
+      list.className = 'chips'
+      for (const part of inspected.technology) {
+        const chip = document.createElement('li')
+        chip.className = 'chip'
+        chip.textContent = part
+        list.append(chip)
+      }
+      body.append(list)
+    },
+
+    code: () => {
+      if (inspected.code.length === 0) return
+      body.append(heading('Code'))
+      const list = document.createElement('ul')
+      for (const reference of inspected.code) {
+        const file = document.createElement('li')
+        file.textContent = reference.file
+        const extra = document.createElement('li')
+        extra.className = 'ghost'
+        extra.textContent = reference.symbol === undefined
+          ? reference.scanner
+          : `${reference.symbol} · ${reference.scanner}`
+        list.append(file, extra)
+      }
+      body.append(list)
+    },
+
+    travelledBy: () => {
+      if (inspected.travelledBy.length === 0) return
+      body.append(heading('Travelled by'))
+      const list = document.createElement('ul')
+      for (const walk of inspected.travelledBy) {
+        const item = document.createElement('li')
+        const link = document.createElement('button')
+        link.type = 'button'
+        link.className = 'link'
+        if (walk.id === activeActionId) link.classList.add('active')
+        link.append(walk.title)
+        link.addEventListener('click', () => onPickAction(walk.id))
+        item.append(link)
+        list.append(item)
+      }
+      body.append(list)
+    },
   }
+  for (const key of tabSections(tab)) sections[key]()
 }

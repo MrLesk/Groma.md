@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test'
 import {
   inspectDetails,
   nextActiveActionId,
+  tabSections,
 } from '../src/viewers/web/organisms/details.ts'
 import type {
   ArchitectureWorld,
@@ -28,6 +29,7 @@ function element(
     parent,
     children,
     external: extra.external ?? false,
+    ...(extra.technology === undefined ? {} : { technology: extra.technology }),
     code: extra.code ?? [],
     origin: extra.origin ?? 'observed',
     bounds,
@@ -51,6 +53,7 @@ function world(): ArchitectureWorld {
         bounds: { x: 24, y: 8, width: 20, height: 24 },
       }),
       element('web', 'container', 'groma', [], {
+        technology: 'Three.js, Bun serve',
         bounds: { x: 50, y: 8, width: 20, height: 24 },
       }),
       element('layout', 'component', 'core', [], {
@@ -101,6 +104,19 @@ test.concurrent('details list children, promoted peers, and code', () => {
     file: 'src/world-layout.ts',
     symbol: 'layoutWorld',
   }])
+})
+
+test.concurrent('a declared technology becomes chips; none stays empty', () => {
+  const fixture = world()
+  const web = inspectDetails(fixture.elements[3]!, fixture)
+  expect(web.technology).toEqual(['Three.js', 'Bun serve'])
+  const core = inspectDetails(fixture.elements[2]!, fixture)
+  expect(core.technology).toEqual([])
+})
+
+test.concurrent('the tabs split meaning from build evidence', () => {
+  expect(tabSections('what')).toEqual(['description', 'relationships', 'children'])
+  expect(tabSections('how')).toEqual(['technology', 'code', 'travelledBy'])
 })
 
 test.concurrent('a person lists launcher commands as pickable actions', () => {
@@ -166,6 +182,13 @@ test.concurrent('a person lists launcher commands as pickable actions', () => {
   ])
   const api = inspectDetails(fixture.elements[1]!, fixture)
   expect(api.relationships.every(item => item.pickable)).toBe(false)
+
+  // An element is travelled by exactly the commands whose walk touches it.
+  const jobs = inspectDetails(fixture.elements[3]!, fixture)
+  expect(jobs.travelledBy).toEqual([{ id: 'api-jobs', title: 'runs jobs' }])
+  const web = inspectDetails(fixture.elements[2]!, fixture)
+  expect(web.travelledBy).toEqual([{ id: 'api-web', title: 'starts' }])
+  expect(api.travelledBy.map(walk => walk.id)).toEqual(['api-web', 'api-jobs'])
 })
 
 test.concurrent('a picked action stays across selection and clears on x', () => {
