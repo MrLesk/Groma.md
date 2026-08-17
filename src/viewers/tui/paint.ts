@@ -32,6 +32,7 @@ export function paintWorld(
     focus?: ViewerFocus
     filter?: FilterState
     activeActionId?: string
+    actionCursor?: string
   },
 ): void {
   buffer.clear(theme.background)
@@ -61,6 +62,7 @@ export function paintWorld(
       focused: options.focus === 'details',
       scroll: options.detailsScroll,
       activeActionId: options.activeActionId,
+      actionCursor: options.actionCursor,
     })
   }
   const active = world.relationships.find(item => item.id === options.activeActionId)

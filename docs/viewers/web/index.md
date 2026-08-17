@@ -49,7 +49,9 @@ grounds each root element. Iso, the default view, is a true isometric
 projection; Plan is the top-down view. Parents with children render as plates; children sit on
 them; leaves render as prisms. Each C4 kind is visually distinct. Sibling
 groups are neighborhood zones. Planned items are ghosts with dashed
-edges. Routes follow the laid-out paths. Names sit on the top face. A
+edges. Routes follow the laid-out paths and ride on the surfaces
+they cross: a route climbs a plate's edge with a vertical step and
+never passes under a box. Names sit on the top face. A
 relationship description is drawn on its route only while the
 selection is an endpoint or an ancestor of exactly one endpoint,
 or while that route is on a lit person-command path.

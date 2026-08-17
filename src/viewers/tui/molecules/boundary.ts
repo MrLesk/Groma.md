@@ -79,8 +79,9 @@ export function drawBoundary(
   element: ProjectedElement,
   projection: WorldProjection,
   theme: ViewerTheme,
+  lit = false,
 ): void {
-  const color = theme[element.kind]
+  const color = lit ? theme.selected : theme[element.kind]
   const background = element.origin === 'observed'
     ? theme.observedTint
     : theme.background

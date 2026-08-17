@@ -50,6 +50,7 @@ function detailsRows(
   theme: ViewerTheme,
   width: number,
   activeActionId: string | undefined,
+  actionCursor: string | undefined,
 ): { rows: Span[][]; cursorLine?: number } {
   const plain = (value: string): Span => {
     return { value, foreground: theme.foreground, attributes: 0 }
@@ -111,14 +112,22 @@ function detailsRows(
         ? []
         : [mark(peer.kind, peer.external), plain(' ')]
       const markWidth = peerMark.length === 0 ? 0 : 2
-      if (relationship.id === activeActionId) cursorLine = rows.length
+      if (relationship.id === actionCursor) cursorLine = rows.length
+      // The picked command renders in the accent, like its path on the map.
+      const style = relationship.id === activeActionId
+        ? (span: Span): Span => ({
+            ...span,
+            foreground: theme.selected,
+            attributes: TextAttributes.BOLD,
+          })
+        : (span: Span): Span => span
       if (arrow.length + markWidth + caption.title.length + rest.length <= width) {
-        rows.push([dim(arrow), ...peerMark, plain(caption.title), dim(rest)])
+        rows.push([dim(arrow), ...peerMark, plain(caption.title), dim(rest)].map(style))
       } else {
-        rows.push([dim(arrow), ...peerMark, plain(caption.title)])
+        rows.push([dim(arrow), ...peerMark, plain(caption.title)].map(style))
         if (caption.detail !== '') {
           for (const row of wrap(caption.detail, width - arrow.length)) {
-            rows.push([dim(`${' '.repeat(arrow.length)}${row}`)])
+            rows.push([style(dim(`${' '.repeat(arrow.length)}${row}`))])
           }
         }
       }
@@ -162,6 +171,7 @@ export function drawDetails(
     focused: boolean
     scroll: number
     activeActionId?: string
+    actionCursor?: string
   },
 ): void {
   const background = theme.background
@@ -175,6 +185,7 @@ export function drawDetails(
     theme,
     width,
     view.activeActionId,
+    view.actionCursor,
   )
   if (bounds.width > 0 && bounds.height > 0) {
     buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, background)

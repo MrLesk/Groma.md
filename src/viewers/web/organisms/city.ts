@@ -32,7 +32,7 @@ export function buildCity(world: ArchitectureWorld): {
         addZone(city, item.group, item.z)
         break
       case 'route':
-        routes.push(addRoute(city, item.relationship, item.z))
+        routes.push(addRoute(city, item.relationship, item.path, item.labelZ))
     }
   }
   return { city, pickables, routes }

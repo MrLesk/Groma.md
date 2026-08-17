@@ -56,10 +56,14 @@ export function drawRoute(
   relationship: ProjectedRelationship,
   theme: ViewerTheme,
   dimmed = false,
+  lit = false,
 ): void {
-  const color = relationship.origin === 'observed'
-    ? theme.foreground
-    : theme[relationship.origin]
+  const color = lit
+    ? theme.selected
+    : relationship.origin === 'observed'
+      ? theme.foreground
+      : theme[relationship.origin]
+  const attributes = lit ? TextAttributes.BOLD : dimmed ? TextAttributes.DIM : 0
   const characters = relationship.origin === 'observed'
     ? { horizontal: '─', vertical: '│' }
     : { horizontal: '╌', vertical: '┆' }
@@ -71,7 +75,7 @@ export function drawRoute(
       relationship.cellRoute[index],
       color,
       theme.background,
-      dimmed ? TextAttributes.DIM : 0,
+      attributes,
       characters,
     )
   }
@@ -87,7 +91,7 @@ export function drawRoute(
         cornerFor(previous, point, next),
         color,
         theme.background,
-        dimmed ? TextAttributes.DIM : 0,
+        attributes,
       )
     }
   }
@@ -98,6 +102,7 @@ export function drawRouteArrow(
   relationship: ProjectedRelationship,
   projection: WorldProjection,
   theme: ViewerTheme,
+  lit = false,
 ): void {
   const route = relationship.cellRoute
   const target = route.at(-1)
@@ -114,9 +119,11 @@ export function drawRouteArrow(
       target.x,
       target.y,
       arrowFor(route[previousIndex]!, target),
-      relationship.origin === 'observed'
-        ? theme.foreground
-        : theme[relationship.origin],
+      lit
+        ? theme.selected
+        : relationship.origin === 'observed'
+          ? theme.foreground
+          : theme[relationship.origin],
       theme.background,
       TextAttributes.BOLD,
     )
@@ -128,10 +135,10 @@ export function drawRouteLabel(
   relationship: ProjectedRelationship,
   projection: WorldProjection,
   theme: ViewerTheme,
-  forced = false,
+  lit = false,
 ): void {
   if (!relationship.cellLabel) return
-  if (!forced && !showsRelationshipText(
+  if (!lit && !showsRelationshipText(
     relationship,
     projection.currentId,
     parentOfElements(projection.elements),
@@ -150,8 +157,8 @@ export function drawRouteLabel(
     relationship.cellLabel.x - 1,
     relationship.cellLabel.y,
     maxWidth,
-    theme.foreground,
+    lit ? theme.selected : theme.foreground,
     theme.background,
-    TextAttributes.DIM,
+    lit ? TextAttributes.BOLD : TextAttributes.DIM,
   )
 }

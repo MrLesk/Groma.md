@@ -121,6 +121,34 @@ function displayEndpoint(
     ?? topAncestor(element, elementsById)
 }
 
+type ProjectedElement = ReturnType<typeof projectElements>[number]
+
+/**
+ * The element a drawn route attaches to: the endpoint itself whenever
+ * it is displayed on screen, else its nearest displayed ancestor.
+ * Relationships happen at the code level, so a route only promotes
+ * when its real endpoint is genuinely not visible: hidden by the
+ * level rules or scrolled outside the viewport.
+ */
+function resolveEndpoint(
+  element: WorldElement,
+  projectedById: Map<string, ProjectedElement>,
+  elementsById: Map<string, WorldElement>,
+  viewport: Bounds,
+): ProjectedElement | undefined {
+  let current: WorldElement | undefined = element
+  while (current) {
+    const projected = projectedById.get(current.representationId)
+    if (
+      projected
+      && projected.display !== 'hidden'
+      && visibleIn(projected.cellBounds, viewport)
+    ) return projected
+    current = current.parent === null ? undefined : elementsById.get(current.parent)
+  }
+  return undefined
+}
+
 function relationshipVisibleAtLevel(
   relationship: WorldRelationship,
   level: SemanticLevel,
@@ -145,36 +173,6 @@ function relationshipVisibleAtLevel(
     within(source, focus.representationId, elementsById)
     || within(target, focus.representationId, elementsById)
   )
-}
-
-function visibleRelationships(
-  world: ArchitectureWorld,
-  level: SemanticLevel,
-  focus: WorldElement | null,
-  elementsById: Map<string, WorldElement>,
-): WorldRelationship[] {
-  const visible = world.relationships.filter(relationship => {
-    return relationshipVisibleAtLevel(
-      relationship,
-      level,
-      focus,
-      elementsById,
-    )
-  })
-  if (level !== 'context') return visible
-
-  const seenPairs = new Set<string>()
-  return visible.filter(relationship => {
-    const sourceElement = elementsById.get(relationship.source)
-    const targetElement = elementsById.get(relationship.target)
-    if (!sourceElement || !targetElement) return false
-    const source = topAncestor(sourceElement, elementsById)
-    const target = topAncestor(targetElement, elementsById)
-    const pair = `${source.representationId}\0${target.representationId}`
-    if (seenPairs.has(pair)) return false
-    seenPairs.add(pair)
-    return true
-  })
 }
 
 function projectElements(
@@ -265,34 +263,28 @@ function projectRelationships(
       .map(element => titleRow(element.cellBounds)),
     ...projectedGroups.map(group => titleRow(group.cellBounds)),
   ]
-  return visibleRelationships(world, level, focus, elementsById)
+  const promotedPairs = new Set<string>()
+  return world.relationships
+    .filter(relationship => relationshipVisibleAtLevel(relationship, level, focus, elementsById))
     .map(relationship => {
       const sourceElement = elementsById.get(relationship.source)
       const targetElement = elementsById.get(relationship.target)
       if (!sourceElement || !targetElement) return null
-      const source = displayEndpoint(
-        sourceElement,
-        level,
-        focus,
-        elementsById,
-      )
-      const target = displayEndpoint(
-        targetElement,
-        level,
-        focus,
-        elementsById,
-      )
+      const source = resolveEndpoint(sourceElement, projectedById, elementsById, viewport)
+      const target = resolveEndpoint(targetElement, projectedById, elementsById, viewport)
+      if (!source || !target) return null
       if (source.representationId === target.representationId) return null
-      const projectedSource = projectedById.get(source.representationId)
-      const projectedTarget = projectedById.get(target.representationId)
-      if (!projectedSource || !projectedTarget) return null
-      const sourceBounds = projectedSource.cellBounds
-      const targetBounds = projectedTarget.cellBounds
-      if (!visibleIn(sourceBounds, viewport) || !visibleIn(targetBounds, viewport)) {
-        return null
-      }
+      const sourceBounds = source.cellBounds
+      const targetBounds = target.cellBounds
       const promoted = source.representationId !== relationship.source
         || target.representationId !== relationship.target
+      if (promoted) {
+        // Promoted arrows are synthesized box-to-box; identical pairs
+        // would draw the exact same arrow, so only the first survives.
+        const pair = `${source.representationId}\0${target.representationId}`
+        if (promotedPairs.has(pair)) return null
+        promotedPairs.add(pair)
+      }
       const projectedRoute = promoted
         ? routeBetweenBoxes(sourceBounds, targetBounds)
         : trimRouteToDisplayedEndpoints(

@@ -5,7 +5,7 @@ parent: terminal-viewer
 code:
   - scanner: typescript
     file: src/viewers/tui/projection.ts
-    symbol: fitView
+    symbol: projectWorld
 ---
 
 # Projection
