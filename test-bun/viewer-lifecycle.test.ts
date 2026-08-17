@@ -109,6 +109,8 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
   }
 })
 
+// Eighteen keypresses, each waiting out its camera tween: under parallel
+// suite load this can pass bun's 5s default, so it gets a wide timeout.
 test.concurrent('headless keys drive the viewer and leave world coordinates unchanged', async () => {
   const response = await loadArchitectureViewModel(repositoryRoot)
   const before = structuredClone(geometry(response.world))
@@ -125,4 +127,4 @@ test.concurrent('headless keys drive the viewer and leave world coordinates unch
 
   assert.deepEqual(geometry(response.world), before)
   app.destroy()
-})
+}, 20000)
