@@ -56,6 +56,7 @@ test('returns every independently annotated architecture representation', async 
     children: ['observed:api', 'planned:inventory:api'],
     external: false,
     code: [],
+    codeLines: 0,
     origin: 'observed',
   })
   assert.deepEqual(elementByRepresentation(model, 'observed:orders').code, [
@@ -87,6 +88,7 @@ test('returns every independently annotated architecture representation', async 
     children: [],
     external: false,
     code: [{ scanner: 'typescript', file: 'src/legacy.ts' }],
+    codeLines: 0,
     origin: 'missing',
   })
   assert.deepEqual(elementByRepresentation(model, 'planned:checkout:orders'), {
@@ -103,6 +105,7 @@ test('returns every independently annotated architecture representation', async 
       file: 'src/checkout-orders.ts',
       symbol: 'checkout',
     }],
+    codeLines: 0,
     origin: 'planned',
     plan: 'checkout',
   })
@@ -119,6 +122,7 @@ test('returns every independently annotated architecture representation', async 
     ],
     external: false,
     code: [],
+    codeLines: 0,
     origin: 'planned',
     plan: 'inventory',
   })

@@ -33,6 +33,9 @@ const prismHeights: Record<C4Kind, number> = {
   component: 6,
 }
 
+/** Extra rise of the world's heaviest leaf above its kind base. */
+export const WEIGHT_RISE = 18
+
 export interface ScreenPoint {
   x: number
   y: number
@@ -154,12 +157,24 @@ export function buildScene(world: ArchitectureWorld): SceneItem[] {
 
   const items: SceneItem[] = []
 
+  // Leaves with code rise above their kind base; sqrt keeps light and heavy
+  // components on one legible scale.
+  const heaviest = Math.max(0, ...world.elements.map(element =>
+    element.children.length === 0 ? element.codeLines ?? 0 : 0))
+
   for (const element of world.elements) {
     const bottom = baseOf(element.representationId)
     if (element.children.length > 0) {
       items.push({ kind: 'slab', element, bottom, top: bottom + LAYER_RISE })
     } else {
-      items.push({ kind: 'prism', element, bottom, top: bottom + prismHeights[element.kind] })
+      const lines = element.codeLines ?? 0
+      const rise = lines > 0 ? WEIGHT_RISE * Math.sqrt(lines / heaviest) : 0
+      items.push({
+        kind: 'prism',
+        element,
+        bottom,
+        top: bottom + prismHeights[element.kind] + rise,
+      })
     }
   }
 

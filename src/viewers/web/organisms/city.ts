@@ -2,6 +2,7 @@ import { Group } from 'three'
 import type { ArchitectureWorld } from '../../../types.ts'
 import { addPrism, addSlab } from '../molecules/block.ts'
 import type { CityPick } from '../molecules/block.ts'
+import { addGrid } from '../molecules/grid.ts'
 import { addRoute } from '../molecules/route.ts'
 import type { CityRoute } from '../molecules/route.ts'
 import { addShadow } from '../molecules/shadow.ts'
@@ -18,6 +19,7 @@ export function buildCity(world: ArchitectureWorld): {
   const city = new Group()
   const pickables: CityPick[] = []
   const routes: CityRoute[] = []
+  if (world.elements.length > 0) addGrid(city, world.bounds)
   for (const item of buildScene(world)) {
     switch (item.kind) {
       case 'slab':

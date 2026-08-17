@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { buildArchitectureModel } from './architecture-model.ts'
@@ -153,11 +154,34 @@ export function annotateArchitecture(
   }
 }
 
+/** Weighs each element by the lines of its code files; an unreadable file counts 0. */
+async function attachCodeLines(
+  repositoryRoot: string,
+  elements: AnnotatedElement[],
+): Promise<void> {
+  const files = new Set(elements.flatMap(element => element.code.map(ref => ref.file)))
+  const lineCounts = new Map<string, number>()
+  await Promise.all([...files].map(async file => {
+    try {
+      const text = await readFile(path.join(repositoryRoot, file), 'utf8')
+      lineCounts.set(file, text.split('\n').length)
+    } catch {
+      lineCounts.set(file, 0)
+    }
+  }))
+  for (const element of elements) {
+    const own = new Set(element.code.map(ref => ref.file))
+    element.codeLines = [...own].reduce((total, file) => total + (lineCounts.get(file) ?? 0), 0)
+  }
+}
+
 export async function loadAnnotatedArchitecture(
   repositoryRoot: string,
   options: { onFilesystemAccess?: FilesystemAccessHandler } = {},
 ): Promise<AnnotatedArchitectureModel> {
-  return annotateArchitecture(await loadArchitecture(repositoryRoot, options))
+  const model = annotateArchitecture(await loadArchitecture(repositoryRoot, options))
+  await attachCodeLines(repositoryRoot, model.elements)
+  return model
 }
 
 export async function loadArchitectureViewModel(

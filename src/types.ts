@@ -124,6 +124,8 @@ export interface AnnotatedElement {
   external: boolean
   group?: string
   code: CodeReference[]
+  /** Total lines across the code files; absent only in hand-built worlds. */
+  codeLines?: number
   origin: Origin
   plan?: string
 }
