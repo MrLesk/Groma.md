@@ -116,8 +116,9 @@ export function actionLegs(
 export function actionPath(
   actionId: string | undefined,
   world: ArchitectureWorld,
+  personId?: string,
 ): Set<string> {
-  return new Set(actionLegs(actionId, world).map(leg => leg.id))
+  return new Set(actionLegs(actionId, world, personId).map(leg => leg.id))
 }
 
 /** Every person command in the world, deduped across the people who share it. */

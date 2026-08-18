@@ -52,9 +52,12 @@ selection is a person who uses a launcher — software they use that
 starts other software they also use — the person's outgoing rows
 are that launcher's commands. Click a command to light its path on
 the city: the rest dims and each lit route carries a green rule with
-surveyed points travelling from source to target. The path stays
-while other boxes are selected. `x` clears it. Choosing another
-person command replaces it.
+surveyed points travelling from source to target. A command picked
+from a person's details walks in from that person alone, even when
+other people share the launcher; picking the same command from the
+sidebar flows list or a Travelled-by row lights every sharer's
+approach. The path stays while other boxes are selected. `x` clears
+it. Choosing another person command replaces it.
 
 While a command is active the header names it and offers playback:
 Pause freezes the travelling points in place and Play resumes them;

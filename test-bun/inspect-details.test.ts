@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 
 import {
   inspectDetails,
-  nextActiveActionId,
+  nextActiveAction,
   tabSections,
 } from '../src/viewers/web/organisms/details.ts'
 import type {
@@ -192,13 +192,18 @@ test.concurrent('a person lists launcher commands as pickable actions', () => {
 })
 
 test.concurrent('a picked action stays across selection and clears on x', () => {
-  let id = nextActiveActionId(undefined, { type: 'pick', id: 'api-jobs' })
-  expect(id).toBe('api-jobs')
-  id = nextActiveActionId(id, { type: 'select' })
-  expect(id).toBe('api-jobs')
-  id = nextActiveActionId(id, { type: 'pick', id: 'api-web' })
-  expect(id).toBe('api-web')
-  id = nextActiveActionId(id, { type: 'clear' })
-  expect(id).toBeUndefined()
+  let action = nextActiveAction({}, { type: 'pick', id: 'api-jobs', personId: 'buyer' })
+  expect(action.id).toBe('api-jobs')
+  expect(action.personId).toBe('buyer')
+  action = nextActiveAction(action, { type: 'select' })
+  expect(action.id).toBe('api-jobs')
+  expect(action.personId).toBe('buyer')
+  // A person-less pick replaces the walk and drops the scope.
+  action = nextActiveAction(action, { type: 'pick', id: 'api-web' })
+  expect(action.id).toBe('api-web')
+  expect(action.personId).toBeUndefined()
+  action = nextActiveAction(action, { type: 'clear' })
+  expect(action.id).toBeUndefined()
+  expect(action.personId).toBeUndefined()
 })
 
