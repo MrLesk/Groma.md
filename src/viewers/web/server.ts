@@ -79,6 +79,27 @@ export async function startWebViewer(
           },
         )
       }
+      if (pathname === '/containers.svg') {
+        viewModel = await loadArchitectureViewModel(repositoryRoot)
+        const wanted = new URL(request.url).searchParams.get('focus')
+        const focus = viewModel.world.elements.find(element =>
+          wanted
+            ? element.id === wanted || element.representationId === wanted
+            : element.kind === 'system' && !element.external,
+        )
+        return new Response(
+          campusSvg(semanticView(viewModel.world, {
+            level: 'containers',
+            focusId: focus?.representationId,
+          })),
+          {
+            headers: {
+              'Content-Type': 'image/svg+xml; charset=utf-8',
+              'Cache-Control': 'no-store',
+            },
+          },
+        )
+      }
       if (pathname === '/events') {
         let controller: ReadableStreamDefaultController<Uint8Array>
         const stream = new ReadableStream<Uint8Array>({
