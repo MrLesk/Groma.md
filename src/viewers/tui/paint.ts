@@ -8,7 +8,12 @@ import {
 } from '../action-path.ts'
 import type { ViewerTheme } from './atoms/theme.ts'
 import { detailsCommands, filterMatches } from './navigation.ts'
-import type { DetailsTab, FilterState, ViewerFocus } from './navigation.ts'
+import type {
+  DetailsTab,
+  FilterState,
+  LitAction,
+  ViewerFocus,
+} from './navigation.ts'
 import type { PaneLayout } from './layout.ts'
 import { drawChrome } from './organisms/chrome.ts'
 import { drawDetails } from './organisms/details.ts'
@@ -31,15 +36,17 @@ export function paintWorld(
     detailsScroll: number
     focus?: ViewerFocus
     filter?: FilterState
+    /** The committed pick; details and the flows rows mark it. */
     activeActionId?: string
-    activeActionPersonId?: string
+    /** The walk the map lights: the details preview, or the committed pick. */
+    lit: LitAction
     actionStep?: number
     actionCursor?: string
     detailsTab: DetailsTab
   },
 ): void {
   buffer.clear(theme.background)
-  const legs = actionLegs(options.activeActionId, world, options.activeActionPersonId)
+  const legs = actionLegs(options.lit.id, world, options.lit.personId)
   const pathIds = new Set(legs.map(leg => leg.id))
   const traced = options.actionStep === undefined ? undefined : legs[options.actionStep]
   const selectionId = projection.currentId ?? undefined
@@ -75,13 +82,13 @@ export function paintWorld(
       actionCursor: options.actionCursor,
     })
   }
-  const active = world.relationships.find(item => item.id === options.activeActionId)
+  const litCommand = world.relationships.find(item => item.id === options.lit.id)
   const names = new Map(world.elements.map(item => [item.representationId, item.name]))
   const nameOf = (id: string): string => names.get(id) ?? id
-  const actionTitle = active === undefined
+  const actionTitle = litCommand === undefined
     ? undefined
     : traced === undefined
-      ? actionCaption(active, true, nameOf).title
+      ? actionCaption(litCommand, true, nameOf).title
       : `step ${options.actionStep! + 1}/${legs.length} · ${nameOf(traced.source)}`
         + ` → ${nameOf(traced.target)} · ${traced.description}`
   const system = world.elements.find(element =>

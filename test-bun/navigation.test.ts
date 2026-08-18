@@ -6,13 +6,14 @@ import {
   defaultSelection,
   filterMatches,
   initialState,
+  litAction,
   reduceFilter,
   reduceViewer,
 } from '../src/viewers/tui/navigation.ts'
 import type { ViewerState } from '../src/viewers/tui/navigation.ts'
 import type { ArchitectureWorld } from '../src/types.ts'
 import { initialTree } from '../src/viewers/tui/tree.ts'
-import { navigationWorld, repositoryRoot } from './helpers.ts'
+import { navigationWorld, viewerFixtureRoot } from './helpers.ts'
 
 function viewOf(state: ViewerState): Pick<ViewerState, 'level' | 'currentId'> {
   return { level: state.level, currentId: state.currentId }
@@ -206,13 +207,13 @@ test.concurrent('unit navigation covers selection, level changes, and spatial mo
 })
 
 test.concurrent('the filter narrows by name, drives selection live, and restores on cancel', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const world = response.world
 
   const viewerMatches = filterMatches(world, 'VIEW')
   assert.deepEqual(
     viewerMatches.map(element => element.representationId).sort(),
-    ['observed:terminal-viewer', 'observed:web-viewer'],
+    ['observed:order-viewer', 'observed:stock-viewer'],
   )
   assert.deepEqual(filterMatches(world, ''), [])
   assert.deepEqual(filterMatches(world, 'no such thing'), [])
@@ -439,6 +440,63 @@ test.concurrent('a details pick scopes the walk to that person; a flows pick doe
   }, 'enter')
   assert.equal(state.activeActionId, 'api-web')
   assert.equal(state.activeActionPersonId, undefined)
+})
+
+test.concurrent('browsing details previews a walk; only Enter keeps it', () => {
+  const world: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 20, height: 10 },
+    groups: [],
+    elements: [
+      box('buyer', 'person'),
+      box('api', 'container'),
+      box('web', 'container'),
+      box('jobs', 'container'),
+    ],
+    relationships: [
+      edge('buyer-api', 'buyer', 'api'),
+      edge('buyer-web', 'buyer', 'web'),
+      edge('api-web', 'api', 'web'),
+      edge('api-jobs', 'api', 'jobs'),
+    ],
+  }
+  let state: ViewerState = { ...initialState(world), currentId: 'buyer', focus: 'details' }
+  assert.deepEqual(litAction(world, state), { id: undefined, personId: undefined })
+
+  // Browsing lights the row under the cursor, scoped to the person.
+  state = reduceViewer(world, state, 'down')
+  assert.equal(state.actionCursor, 'api-web')
+  assert.deepEqual(litAction(world, state), { id: 'api-web', personId: 'buyer' })
+  assert.equal(state.activeActionId, undefined)
+  state = reduceViewer(world, state, 'down')
+  assert.deepEqual(litAction(world, state), { id: 'api-jobs', personId: 'buyer' })
+
+  // Leaving without Enter drops the preview: nothing was committed.
+  const left = reduceViewer(world, state, 'dismiss')
+  assert.equal(left.focus, 'architecture')
+  assert.deepEqual(litAction(world, left), { id: undefined, personId: undefined })
+
+  // Enter commits, so the walk survives leaving the pane.
+  state = reduceViewer(world, state, 'enter')
+  assert.equal(state.activeActionId, 'api-jobs')
+  const kept = reduceViewer(world, state, 'dismiss')
+  assert.deepEqual(litAction(world, kept), { id: 'api-jobs', personId: 'buyer' })
+
+  // Browsing again previews over the commitment without replacing it.
+  let browsing = reduceViewer(world, { ...kept, focus: 'details' }, 'up')
+  assert.deepEqual(litAction(world, browsing), { id: 'api-web', personId: 'buyer' })
+  assert.equal(browsing.activeActionId, 'api-jobs')
+  browsing = reduceViewer(world, browsing, 'dismiss')
+  assert.deepEqual(litAction(world, browsing), { id: 'api-jobs', personId: 'buyer' })
+
+  // A How-tab preview is a walk reference, so it carries no person scope.
+  const how = reduceViewer(world, {
+    ...state,
+    currentId: 'web',
+    focus: 'details',
+    detailsTab: 'how',
+    actionCursor: undefined,
+  }, 'down')
+  assert.deepEqual(litAction(world, how), { id: 'api-web', personId: undefined })
 })
 
 test.concurrent('the hierarchy cursor reaches the flow rows and Enter lights one', () => {

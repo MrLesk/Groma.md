@@ -16,6 +16,7 @@ import { createCamera } from './camera.ts'
 import { paneLayout } from './layout.ts'
 import {
   initialState,
+  litAction,
   reduceFilter,
   reduceViewer,
 } from './navigation.ts'
@@ -142,7 +143,7 @@ export function mountTerminalViewer(
       detailsScroll: state.detailsScroll,
       filter: state.filter,
       activeActionId: state.activeActionId,
-      activeActionPersonId: state.activeActionPersonId,
+      lit: litAction(viewModel.world, state),
       actionStep: state.actionStep,
       actionCursor: state.actionCursor,
       detailsTab: state.detailsTab,
