@@ -1,0 +1,19 @@
+---
+id: node
+kind: container
+parent: openclaw
+---
+
+# Node
+
+A paired companion (macOS menu bar, iOS, Android, or headless
+`openclaw node`) on the same WebSocket with `role: node`. It is a
+peripheral, not a second Gateway: chats still land on the Gateway, and the
+Gateway invokes canvas, camera, screen, location, and local exec on this
+device.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Gateway](../gateway/container.md) | Connects as a paired device and serves canvas, camera, and local exec | Gateway WebSocket |
