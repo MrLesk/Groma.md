@@ -21,7 +21,9 @@ their world origin, and their drawn size follows the named level. Ghost
 means planned. Underlay is not a ghost. Entering a system does not move
 that system, its people, or sibling systems. A relationship between
 nested endpoints attaches to the named software, mark, or campus wrapper
-above them, never to underlay. Viewers do not yet paint from this view.
+above them, never to underlay. The TUI map and the web SVG campus paint
+this view. When the camera is on a named system, that title docks in
+screen space and the system's containers become the named level.
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or
 lays the world out. It asks core for the world and projects it. A live
