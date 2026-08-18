@@ -1,11 +1,11 @@
 ---
 id: TASK-95.2
 title: Draw OpenClaw Context as an SVG campus
-status: In Progress
+status: Done
 assignee:
   - '@grok'
 created_date: '2026-08-18 20:48'
-updated_date: '2026-08-18 21:19'
+updated_date: '2026-08-18 21:32'
 labels: []
 dependencies:
   - TASK-95.1
@@ -34,19 +34,19 @@ This is the web proof of the city contract. It does not change TUI paint, add co
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An SVG of OpenClaw at Context names Operator, OpenClaw, WhatsApp, Telegram, and Anthropic
-- [ ] #2 OpenClaw's six containers appear as unnamed underlay inside the OpenClaw wrapper
-- [ ] #3 Titles are screen-space and stay sharp; they are not canvas textures on world planes
-- [ ] #4 People and external systems are marks, not campus-sized plates
-- [ ] #5 The proof uses the city contract from TASK-95.1
+- [x] #1 An SVG of OpenClaw at Context names Operator, OpenClaw, WhatsApp, Telegram, and Anthropic
+- [x] #2 OpenClaw's six containers appear as unnamed underlay inside the OpenClaw wrapper
+- [x] #3 Titles are screen-space and stay sharp; they are not canvas textures on world planes
+- [x] #4 People and external systems are marks, not campus-sized plates
+- [x] #5 The proof uses the city contract from TASK-95.1
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -72,4 +72,12 @@ Verification:
 - bunx tsc --noEmit — clean
 
 Look at it: from test/fixtures/openclaw-view run `bun ../../../src/cli.ts web` and open /context.svg.
+
+Spec review: compliant. Quality review: approved. Orchestrator re-ran bun test test-bun/campus-svg.test.ts — 4 pass. bunx tsc --noEmit clean.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+OpenClaw Context is an SVG campus from semanticView: titled named systems and marks, untitled container underlay, mark bounds not world plates, titles as SVG text. Served at GET /context.svg. Verified with bun test test-bun/campus-svg.test.ts (4 pass) and bunx tsc --noEmit. Spec and quality reviews approved.
+<!-- SECTION:FINAL_SUMMARY:END -->
