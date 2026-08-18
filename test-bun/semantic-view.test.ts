@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import { displaySize, semanticView } from '../src/semantic-view.ts'
-import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../src/types.ts'
+import type {
+  ArchitectureWorld,
+  SemanticRole,
+  SemanticView,
+  WorldElement,
+  WorldRelationship,
+} from '../src/types.ts'
 import { box } from './helpers.ts'
 
 function link(
@@ -51,9 +57,18 @@ function shopWorld(): ArchitectureWorld {
     children: [page.representationId, scene.representationId],
     name: 'Web',
   })
+  const soon = box('soon', 'container', { x: 120, y: 370, width: 60, height: 20 }, {
+    parent: 'observed:shop',
+    name: 'Soon',
+    origin: 'planned',
+    representationId: 'planned:soon',
+  })
   const shop = box('shop', 'system', { x: 100, y: 0, width: 200, height: 400 }, {
-    children: [api.representationId, web.representationId],
+    children: [api.representationId, web.representationId, soon.representationId],
     name: 'Shop',
+  })
+  const yard = box('yard', 'system', { x: 500, y: 0, width: 48, height: 40 }, {
+    name: 'Yard',
   })
   const buyer = box('buyer', 'person', { x: 0, y: 200, width: 20, height: 20 }, {
     name: 'Buyer',
@@ -63,9 +78,9 @@ function shopWorld(): ArchitectureWorld {
     external: true,
   })
   return {
-    bounds: { x: 0, y: 0, width: 500, height: 400 },
+    bounds: { x: 0, y: 0, width: 560, height: 400 },
     groups: [],
-    elements: [shop, api, web, orders, pay, page, scene, buyer, git],
+    elements: [shop, api, web, soon, orders, pay, page, scene, yard, buyer, git],
     relationships: [
       link('runs', buyer.representationId, orders.representationId, 'Runs a checkout'),
       link('uses', orders.representationId, page.representationId, 'Uses the page'),
@@ -74,65 +89,113 @@ function shopWorld(): ArchitectureWorld {
   }
 }
 
-function item(
-  view: ReturnType<typeof semanticView>,
-  id: string,
-): ReturnType<typeof semanticView>['items'][number] {
+function item(view: SemanticView, id: string): SemanticView['items'][number] {
   const found = view.items.find(entry => entry.id === id)
   assert.ok(found, `missing ${id}`)
   return found
 }
 
-function ids(view: ReturnType<typeof semanticView>): string[] {
-  return view.items.map(entry => entry.id).sort()
+function idsOf(view: SemanticView, role: SemanticRole): string[] {
+  return view.items.filter(entry => entry.role === role).map(entry => entry.id).sort()
 }
 
-test.concurrent('context sizes a nested system for its name, not its stacked children', () => {
+function originOf(view: SemanticView, id: string): { x: number; y: number } {
+  const found = item(view, id)
+  return { x: found.bounds.x, y: found.bounds.y }
+}
+
+function worldOf(world: ArchitectureWorld, id: string): WorldElement {
+  const found = world.elements.find(element => element.id === id)
+  assert.ok(found, `missing world ${id}`)
+  return found
+}
+
+test.concurrent('context keeps a system campus wrapper size from world-layout', () => {
   const world = shopWorld()
-  const shopEl = world.elements.find(element => element.id === 'shop') as WorldElement
+  const shopEl = worldOf(world, 'shop')
   const view = semanticView(world, { level: 'context' })
   const shop = item(view, 'shop')
-  const needed = displaySize('Shop', 'system')
-  assert.deepEqual(ids(view), ['buyer', 'git', 'shop'])
-  assert.equal(shop.collapsed, true)
-  assert.equal(shop.bounds.x, shopEl.bounds.x)
-  assert.equal(shop.bounds.y, shopEl.bounds.y)
-  assert.equal(shop.bounds.width, needed.width)
-  assert.equal(shop.bounds.height, needed.height)
-  assert.ok(shop.bounds.height < shopEl.bounds.height)
-  assert.ok(shop.bounds.width >= 'Shop'.length * 3 + 6)
+  assert.equal(shop.role, 'named')
+  assert.deepEqual(shop.bounds, shopEl.bounds)
+  assert.ok(shop.bounds.height > displaySize('Shop', 'system').height)
 })
 
-test.concurrent('entering containers keeps the system origin and hides components', () => {
+test.concurrent('context names systems, keeps containers as underlay, and marks people', () => {
+  const world = shopWorld()
+  const view = semanticView(world, { level: 'context' })
+  assert.deepEqual(idsOf(view, 'named'), ['shop', 'yard'])
+  assert.deepEqual(idsOf(view, 'underlay'), ['api', 'soon', 'web'])
+  assert.deepEqual(idsOf(view, 'mark'), ['buyer', 'git'])
+  assert.deepEqual(idsOf(view, 'campus'), [])
+  const soon = item(view, 'soon')
+  assert.equal(soon.role, 'underlay')
+  assert.equal(worldOf(world, 'soon').origin, 'planned')
+  assert.deepEqual(item(view, 'api').bounds, worldOf(world, 'api').bounds)
+})
+
+test.concurrent('marks keep their world origin and follow the named level size', () => {
+  const world = shopWorld()
+  const buyerEl = worldOf(world, 'buyer')
+  const context = semanticView(world, { level: 'context' })
+  const entered = semanticView(world, { level: 'containers', focusId: 'observed:shop' })
+  const deeper = semanticView(world, { level: 'components', focusId: 'observed:web' })
+  const contextBuyer = item(context, 'buyer')
+  const enteredBuyer = item(entered, 'buyer')
+  const deeperBuyer = item(deeper, 'buyer')
+  assert.equal(contextBuyer.role, 'mark')
+  assert.equal(enteredBuyer.role, 'mark')
+  assert.equal(deeperBuyer.role, 'mark')
+  assert.equal(contextBuyer.bounds.x, buyerEl.bounds.x)
+  assert.equal(contextBuyer.bounds.y, buyerEl.bounds.y)
+  assert.equal(enteredBuyer.bounds.x, buyerEl.bounds.x)
+  assert.equal(enteredBuyer.bounds.y, buyerEl.bounds.y)
+  assert.deepEqual(
+    { width: contextBuyer.bounds.width, height: contextBuyer.bounds.height },
+    displaySize('Buyer', 'system'),
+  )
+  assert.deepEqual(
+    { width: enteredBuyer.bounds.width, height: enteredBuyer.bounds.height },
+    displaySize('Buyer', 'container'),
+  )
+  assert.deepEqual(
+    { width: deeperBuyer.bounds.width, height: deeperBuyer.bounds.height },
+    displaySize('Buyer', 'component'),
+  )
+})
+
+test.concurrent('entering a system does not move that system, its people, or siblings', () => {
   const world = shopWorld()
   const context = semanticView(world, { level: 'context' })
   const entered = semanticView(world, { level: 'containers', focusId: 'observed:shop' })
-  const before = item(context, 'shop')
-  const after = item(entered, 'shop')
-  assert.equal(after.bounds.x, before.bounds.x)
-  assert.equal(after.bounds.y, before.bounds.y)
-  assert.deepEqual(ids(entered), ['api', 'buyer', 'git', 'shop', 'web'])
-  assert.equal(item(entered, 'api').collapsed, true)
-  assert.equal(item(entered, 'web').collapsed, true)
-  assert.equal(after.collapsed, false)
-  for (const entry of entered.items) {
-    const needed = displaySize(entry.name, entry.kind)
-    assert.equal(entry.bounds.width, needed.width)
-    assert.equal(entry.bounds.height, needed.height)
+  for (const id of ['shop', 'yard', 'buyer', 'git']) {
+    assert.deepEqual(originOf(entered, id), originOf(context, id), id)
+    const laid = worldOf(world, id)
+    assert.deepEqual(originOf(context, id), { x: laid.bounds.x, y: laid.bounds.y }, id)
   }
+  assert.equal(item(entered, 'shop').role, 'campus')
+  assert.deepEqual(item(entered, 'shop').bounds, worldOf(world, 'shop').bounds)
+  assert.equal(item(entered, 'yard').role, 'campus')
 })
 
-test.concurrent('components stay inside the entered container and keep names sized', () => {
+test.concurrent('containers name the focused system containers and underlay their components', () => {
+  const world = shopWorld()
+  const view = semanticView(world, { level: 'containers', focusId: 'observed:shop' })
+  assert.deepEqual(idsOf(view, 'named'), ['api', 'soon', 'web'])
+  assert.deepEqual(idsOf(view, 'underlay'), ['orders', 'page', 'pay', 'scene'])
+  assert.deepEqual(item(view, 'web').bounds, worldOf(world, 'web').bounds)
+  assert.deepEqual(item(view, 'page').bounds, worldOf(world, 'page').bounds)
+})
+
+test.concurrent('components name the focused container and have no underlay', () => {
   const world = shopWorld()
   const view = semanticView(world, { level: 'components', focusId: 'observed:web' })
-  assert.deepEqual(ids(view), ['api', 'page', 'scene', 'web'])
-  assert.equal(item(view, 'web').collapsed, false)
-  for (const entry of view.items) {
-    assert.ok(entry.bounds.width >= entry.name.length * 3 + 6)
-  }
+  assert.deepEqual(idsOf(view, 'named'), ['page', 'scene'])
+  assert.deepEqual(idsOf(view, 'underlay'), [])
+  assert.equal(item(view, 'web').role, 'campus')
+  assert.deepEqual(item(view, 'page').bounds, worldOf(world, 'page').bounds)
 })
 
-test.concurrent('nested relationships promote to the visible items at each level', () => {
+test.concurrent('relationships attach to named, mark, or campus items, never underlay', () => {
   const world = shopWorld()
   const context = semanticView(world, { level: 'context' })
   assert.deepEqual(
@@ -151,11 +214,14 @@ test.concurrent('nested relationships promote to the visible items at each level
       ['observed:shop', 'observed:git', 'Versions architecture'],
     ],
   )
-  const components = semanticView(world, { level: 'components', focusId: 'observed:web' })
-  assert.deepEqual(
-    components.edges.map(edge => [edge.source, edge.target, edge.description]).sort(),
-    [
-      ['observed:api', 'observed:page', 'Uses the page'],
-    ],
-  )
+  for (const view of [context, containers]) {
+    for (const edge of view.edges) {
+      const source = view.items.find(entry => entry.representationId === edge.source)
+      const target = view.items.find(entry => entry.representationId === edge.target)
+      assert.ok(source)
+      assert.ok(target)
+      assert.notEqual(source.role, 'underlay')
+      assert.notEqual(target.role, 'underlay')
+    }
+  }
 })

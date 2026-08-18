@@ -13,11 +13,15 @@ is showing the world.
 Groma core → world → viewer plugin
 ```
 
-A C4 level has a semantic view before any city is sized: the visible
-items, each with an intrinsic name-capable size and the same world origin
-it had in the laid-out world. Nested children do not enlarge a collapsed
-parent. A relationship between nested endpoints attaches to those visible
-items. Viewers do not yet paint from this view.
+A C4 level is one campus. Software wrappers keep the world-layout
+union size, from code up. Camera scale is the only shrink. The level
+names that layer of internal software and keeps the next software layer
+as unnamed underlay. People and external systems are marks: they keep
+their world origin, and their drawn size follows the named level. Ghost
+means planned. Underlay is not a ghost. Entering a system does not move
+that system, its people, or sibling systems. A relationship between
+nested endpoints attaches to the named software, mark, or campus wrapper
+above them, never to underlay. Viewers do not yet paint from this view.
 
 A viewer never reads architecture Markdown, walks `groma/` directories, or
 lays the world out. It asks core for the world and projects it. A live

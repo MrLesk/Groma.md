@@ -5,6 +5,7 @@ import type {
   SemanticEdge,
   SemanticItem,
   SemanticLevel,
+  SemanticRole,
   SemanticView,
   SemanticViewOptions,
   WorldElement,
@@ -20,6 +21,12 @@ const minimumSize: Record<C4Kind, Pick<Bounds, 'width' | 'height'>> = {
   container: { width: 42, height: 32 },
   person: { width: 28, height: 40 },
   system: { width: 44, height: 40 },
+}
+
+const namedKindAt: Record<SemanticLevel, C4Kind> = {
+  context: 'system',
+  containers: 'container',
+  components: 'component',
 }
 
 export function displaySize(
@@ -50,54 +57,65 @@ function within(
   return false
 }
 
-function topAncestor(
-  element: WorldElement,
-  elements: Map<string, WorldElement>,
-): WorldElement {
-  let current = element
-  while (current.parent !== null) {
-    const parent = elements.get(current.parent)
-    if (!parent) return current
-    current = parent
-  }
-  return current
+function isMark(element: WorldElement): boolean {
+  return element.kind === 'person' || element.external
 }
 
-function ancestorOfKind(
+function attachable(role: SemanticRole | undefined): boolean {
+  return role === 'named' || role === 'mark' || role === 'campus'
+}
+
+function roleOf(
   element: WorldElement,
-  kind: C4Kind,
+  level: SemanticLevel,
+  focus: WorldElement | undefined,
   elements: Map<string, WorldElement>,
-): WorldElement | undefined {
-  let current: WorldElement | undefined = element
-  while (current) {
-    if (current.kind === kind) return current
-    current = current.parent === null ? undefined : elements.get(current.parent)
+): SemanticRole | null {
+  if (isMark(element)) return 'mark'
+
+  if (level === 'context') {
+    if (element.kind === 'system') return 'named'
+    if (element.kind === 'container') {
+      const parent = element.parent === null ? undefined : elements.get(element.parent)
+      if (parent && parent.kind === 'system' && !parent.external) return 'underlay'
+    }
+    return null
   }
+
+  if (!focus) return null
+
+  if (level === 'containers') {
+    if (element.kind === 'system') return 'campus'
+    if (element.kind === 'container' && element.parent === focus.representationId) {
+      return 'named'
+    }
+    if (element.kind === 'component') {
+      const parent = element.parent === null ? undefined : elements.get(element.parent)
+      if (parent?.parent === focus.representationId) return 'underlay'
+    }
+    return null
+  }
+
+  if (element.kind === 'system') return 'campus'
+  if (element.kind === 'container' && element.representationId === focus.representationId) {
+    return 'campus'
+  }
+  if (element.kind === 'component' && element.parent === focus.representationId) {
+    return 'named'
+  }
+  return null
 }
 
 function displayOf(
   element: WorldElement,
-  level: SemanticLevel,
-  focusId: string | undefined,
+  roles: Map<string, SemanticRole>,
   elements: Map<string, WorldElement>,
-): WorldElement {
-  if (level === 'context') {
-    return element.kind === 'person' ? element : topAncestor(element, elements)
+): WorldElement | undefined {
+  let current: WorldElement | undefined = element
+  while (current) {
+    if (attachable(roles.get(current.representationId))) return current
+    current = current.parent === null ? undefined : elements.get(current.parent)
   }
-  if (level === 'containers') {
-    if (element.kind === 'person' || element.external) return element
-    const container = ancestorOfKind(element, 'container', elements)
-    if (container && container.parent === focusId) return container
-    if (focusId && within(element, focusId, elements)) {
-      return elements.get(focusId) ?? topAncestor(element, elements)
-    }
-    return topAncestor(element, elements)
-  }
-  if (focusId && within(element, focusId, elements)) {
-    return element.kind === 'component' ? element : elements.get(focusId) ?? element
-  }
-  return ancestorOfKind(element, 'container', elements)
-    ?? topAncestor(element, elements)
 }
 
 function touchesFocus(
@@ -110,54 +128,20 @@ function touchesFocus(
   return within(source, focusId, elements) || within(target, focusId, elements)
 }
 
-function coreVisible(
+function toItem(
   element: WorldElement,
+  role: SemanticRole,
   level: SemanticLevel,
-  focusId: string | undefined,
-  elements: Map<string, WorldElement>,
-  relationships: WorldRelationship[],
-): boolean {
-  if (level === 'context') {
-    return element.kind === 'person' || element.kind === 'system'
-  }
-  if (!focusId) return false
-  if (level === 'containers') {
-    if (element.representationId === focusId) return true
-    if (element.kind === 'container' && element.parent === focusId) return true
-    if (element.kind !== 'person' && !(element.kind === 'system' && element.external)) {
-      return false
-    }
-    return relationships.some(relationship => {
-      if (!touchesFocus(relationship, focusId, elements)) return false
-      return relationship.source === element.representationId
-        || relationship.target === element.representationId
-    })
-  }
-  if (element.representationId === focusId) return true
-  return element.kind === 'component' && element.parent === focusId
-}
-
-function collapsedInsides(
-  element: WorldElement,
-  level: SemanticLevel,
-  focusId: string | undefined,
-): boolean {
-  if (element.children.length === 0) return false
-  if (level === 'context') return element.kind === 'system'
-  if (level === 'containers') {
-    return element.kind === 'container' && element.parent === focusId
-  }
-  return false
-}
-
-function toItem(element: WorldElement, collapsed: boolean): SemanticItem {
-  const size = displaySize(element.name, element.kind)
+): SemanticItem {
+  const size = role === 'mark'
+    ? displaySize(element.name, namedKindAt[level])
+    : element.bounds
   return {
     representationId: element.representationId,
     id: element.id,
     kind: element.kind,
     name: element.name,
-    collapsed,
+    role,
     bounds: {
       x: element.bounds.x,
       y: element.bounds.y,
@@ -173,11 +157,14 @@ export function semanticView(
 ): SemanticView {
   const { level, focusId } = options
   const elements = byId(world)
-  const visible = new Set<string>()
+  const focus = focusId === undefined ? undefined : elements.get(focusId)
+  const roles = new Map<string, SemanticRole>()
+  const items: SemanticItem[] = []
   for (const element of world.elements) {
-    if (coreVisible(element, level, focusId, elements, world.relationships)) {
-      visible.add(element.representationId)
-    }
+    const role = roleOf(element, level, focus, elements)
+    if (!role) continue
+    roles.set(element.representationId, role)
+    items.push(toItem(element, role, level))
   }
 
   const edges: SemanticEdge[] = []
@@ -186,17 +173,13 @@ export function semanticView(
     const sourceElement = elements.get(relationship.source)
     const targetElement = elements.get(relationship.target)
     if (!sourceElement || !targetElement) continue
-    const source = displayOf(sourceElement, level, focusId, elements)
-    const target = displayOf(targetElement, level, focusId, elements)
-    if (source.representationId === target.representationId) continue
-    if (level === 'context') {
-      if (!visible.has(source.representationId) || !visible.has(target.representationId)) continue
-    } else if (!focusId || !touchesFocus(relationship, focusId, elements)) {
+    if (level !== 'context' && (!focusId || !touchesFocus(relationship, focusId, elements))) {
       continue
-    } else {
-      visible.add(source.representationId)
-      visible.add(target.representationId)
     }
+    const source = displayOf(sourceElement, roles, elements)
+    const target = displayOf(targetElement, roles, elements)
+    if (!source || !target) continue
+    if (source.representationId === target.representationId) continue
     const pair = `${source.representationId}\0${target.representationId}`
     if (seen.has(pair)) continue
     seen.add(pair)
@@ -207,10 +190,6 @@ export function semanticView(
       description: relationship.description,
     })
   }
-
-  const items = world.elements
-    .filter(element => visible.has(element.representationId))
-    .map(element => toItem(element, collapsedInsides(element, level, focusId)))
 
   return {
     level,
