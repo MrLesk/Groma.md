@@ -172,6 +172,38 @@ export interface ArchitectureWorld {
   relationships: WorldRelationship[]
 }
 
+/** An in-scope item at one C4 level, sized for its name, not its nested stack. */
+export interface SemanticItem {
+  representationId: string
+  id: string
+  kind: C4Kind
+  name: string
+  /** True when this item has children that are out of scope at this level. */
+  collapsed: boolean
+  bounds: Bounds
+}
+
+/** One authored relationship, attached to the visible items at this level. */
+export interface SemanticEdge {
+  id: string
+  source: string
+  target: string
+  description: string
+}
+
+export interface SemanticView {
+  level: SemanticLevel
+  focusId: string | null
+  items: SemanticItem[]
+  edges: SemanticEdge[]
+}
+
+export interface SemanticViewOptions {
+  level: SemanticLevel
+  /** The entered system at Containers, or the entered container at Components. */
+  focusId?: string
+}
+
 export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
   world: ArchitectureWorld
 }
