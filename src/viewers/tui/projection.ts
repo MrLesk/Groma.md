@@ -238,6 +238,7 @@ function projectRelationships(
   projectedGroups: ProjectedGroup[],
   transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
+  litIds: Set<string> | undefined,
 ): ProjectedRelationship[] {
   const projectedById = new Map(projectedElements.map(element => [
     element.representationId,
@@ -265,7 +266,9 @@ function projectRelationships(
   ]
   const promotedPairs = new Set<string>()
   return world.relationships
-    .filter(relationship => relationshipVisibleAtLevel(relationship, level, focus, elementsById))
+    // A lit walk is drawn whole: its legs cross whatever the level hides.
+    .filter(relationship => litIds?.has(relationship.id)
+      || relationshipVisibleAtLevel(relationship, level, focus, elementsById))
     .map(relationship => {
       const sourceElement = elementsById.get(relationship.source)
       const targetElement = elementsById.get(relationship.target)
@@ -394,6 +397,7 @@ export function projectWorld(
       groups,
       transform,
       viewport,
+      options.litIds,
     ),
   }
 }

@@ -216,4 +216,6 @@ export interface ProjectionOptions {
   currentId?: string
   camera?: MapCamera
   lockCamera?: boolean
+  /** Relationships on the lit walk; they draw at every level. */
+  litIds?: Set<string>
 }

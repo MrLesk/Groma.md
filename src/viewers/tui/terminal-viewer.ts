@@ -9,6 +9,7 @@ import type {
   NormalizedTerminalPalette,
 } from '@opentui/core'
 
+import { actionPath } from '../action-path.ts'
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
 import { watchScan } from '../../scanner.ts'
@@ -120,12 +121,14 @@ export function mountTerminalViewer(
   }
 
   function project(next?: MapCamera, lockCamera = camera.isAnimating()) {
+    const lit = litAction(viewModel.world, state)
     return projectWorld(viewModel.world, {
       viewport: currentLayout().mapViewport,
       level: state.level,
       currentId: state.currentId,
       camera: next ?? snapshot(),
       lockCamera,
+      litIds: actionPath(lit.id, viewModel.world, lit.personId),
     })
   }
 

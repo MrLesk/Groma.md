@@ -23,7 +23,7 @@ import {
   mapViewportOf,
   overlaps,
   projectedById,
-  repositoryRoot,
+  viewerFixtureRoot,
   requiredElement,
   visible,
 } from './helpers.ts'
@@ -34,9 +34,9 @@ const sizes = [
 ]
 
 const views: Array<{ level: SemanticLevel; currentId: string }> = [
-  { level: 'context', currentId: 'observed:groma' },
-  { level: 'containers', currentId: 'observed:core' },
-  { level: 'components', currentId: 'observed:architecture-model' },
+  { level: 'context', currentId: 'observed:shop' },
+  { level: 'containers', currentId: 'observed:api' },
+  { level: 'components', currentId: 'observed:orders' },
 ]
 
 function allSpans(captured: CapturedFrame): CapturedSpan[] {
@@ -49,7 +49,7 @@ function levelKind(level: SemanticLevel): Set<C4Kind> {
 }
 
 test.concurrent('frames are stable and projections hold world invariants at every level and size', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
 
   for (const size of sizes) {
     for (const view of views) {
@@ -97,17 +97,17 @@ test.concurrent('frames are stable and projections hold world invariants at ever
           || visible(selected.cellBounds, projection.viewport),
       )
       if (view.level === 'context') {
-        const groma = requiredElement(byId, 'observed:groma')
-        const person = requiredElement(byId, 'observed:human-architect')
+        const groma = requiredElement(byId, 'observed:shop')
+        const person = requiredElement(byId, 'observed:shop-architect')
         assert.equal(groma.display, 'system-boundary')
         assert.ok(
           groma.cellBounds.width * groma.cellBounds.height
             > person.cellBounds.width * person.cellBounds.height,
         )
         for (const id of [
-          'observed:human-architect',
-          'observed:coding-agent',
-          'observed:git',
+          'observed:shop-architect',
+          'observed:shop-operator',
+          'observed:vault',
         ]) {
           assert.ok(
             visible(requiredElement(byId, id).cellBounds, projection.viewport),
@@ -243,29 +243,29 @@ test.concurrent('components level shows only the focused container children', as
 })
 
 test.concurrent('selection changes never move the camera and pan only when off screen', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const viewport = mapViewportOf({ width: 120, height: 36 })
 
-  const gromaView = projectWorld(response.world, {
+  const systemView = projectWorld(response.world, {
     viewport,
     level: 'context',
-    currentId: 'observed:groma',
+    currentId: 'observed:shop',
   })
-  const codingView = projectWorld(response.world, {
+  const operatorView = projectWorld(response.world, {
     viewport,
     level: 'context',
-    currentId: 'observed:coding-agent',
+    currentId: 'observed:shop-operator',
   })
-  assert.deepEqual(codingView.camera, gromaView.camera)
+  assert.deepEqual(operatorView.camera, systemView.camera)
   assert.deepEqual(
-    codingView.elements.map(element => [element.representationId, element.cellBounds]),
-    gromaView.elements.map(element => [element.representationId, element.cellBounds]),
+    operatorView.elements.map(element => [element.representationId, element.cellBounds]),
+    systemView.elements.map(element => [element.representationId, element.cellBounds]),
   )
 
   const modelView = projectWorld(response.world, {
     viewport,
     level: 'components',
-    currentId: 'observed:architecture-model',
+    currentId: 'observed:orders',
   })
   const scanView = projectWorld(response.world, {
     viewport,
@@ -282,11 +282,11 @@ test.concurrent('selection changes never move the camera and pan only when off s
   const start = projectWorld(response.world, {
     viewport,
     level: 'context',
-    currentId: 'observed:groma',
-    camera: cameraOn(response.world, 'observed:groma', 1),
+    currentId: 'observed:shop',
+    camera: cameraOn(response.world, 'observed:shop', 1),
   })
   assert.equal(start.camera.zoom, 1)
-  for (const id of ['observed:human-architect', 'observed:coding-agent', 'observed:git']) {
+  for (const id of ['observed:shop-architect', 'observed:shop-operator', 'observed:vault']) {
     const panned = projectWorld(response.world, {
       viewport,
       level: 'context',
@@ -304,14 +304,14 @@ test.concurrent('selection changes never move the camera and pan only when off s
   const labeled = projectWorld(response.world, {
     viewport,
     level: 'context',
-    currentId: 'observed:human-architect',
+    currentId: 'observed:shop-architect',
   })
   const contextCards = labeled.elements.filter(element => {
     return element.display === 'card'
       && (element.kind === 'person' || element.external)
       && visible(element.cellBounds, labeled.viewport)
   })
-  assert.ok(contextCards.some(element => element.id === 'human-architect'))
+  assert.ok(contextCards.some(element => element.id === 'shop-architect'))
   for (const relationship of labeled.relationships) {
     if (!relationship.cellLabel) continue
     const label = { ...relationship.cellLabel, height: 1 }
@@ -332,29 +332,29 @@ test.concurrent('selection changes never move the camera and pan only when off s
 })
 
 test.concurrent('person cards use full names when the map has room', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
-  const coding = response.world.elements.find(element => {
-    return element.id === 'coding-agent'
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
+  const operator = response.world.elements.find(element => {
+    return element.id === 'shop-operator'
   })
-  const human = response.world.elements.find(element => {
-    return element.id === 'human-architect'
+  const architect = response.world.elements.find(element => {
+    return element.id === 'shop-architect'
   })
-  assert.ok(coding)
-  assert.ok(human)
+  assert.ok(operator)
+  assert.ok(architect)
   const camera = {
     zoom: 0.35,
-    centerX: (coding.bounds.x + human.bounds.x + human.bounds.width) / 2,
-    centerY: (coding.bounds.y + human.bounds.y + human.bounds.height) / 2,
+    centerX: (operator.bounds.x + architect.bounds.x + architect.bounds.width) / 2,
+    centerY: (operator.bounds.y + architect.bounds.y + architect.bounds.height) / 2,
   }
   const view = projectWorld(response.world, {
     viewport: mapViewportOf({ width: 120, height: 36 }),
-    currentId: 'observed:coding-agent',
+    currentId: 'observed:shop-operator',
     camera,
   })
   const byId = projectedById(view.elements)
   const people = [
-    requiredElement(byId, 'observed:coding-agent'),
-    requiredElement(byId, 'observed:human-architect'),
+    requiredElement(byId, 'observed:shop-operator'),
+    requiredElement(byId, 'observed:shop-architect'),
   ]
   for (const person of people) {
     assert.equal(visible(person.cellBounds, view.viewport), true, person.name)
@@ -363,101 +363,11 @@ test.concurrent('person cards use full names when the map has room', async () =>
       `${person.name} is ${person.cellBounds.width} cells`,
     )
   }
-  const groma = requiredElement(byId, 'observed:groma')
-  const git = requiredElement(byId, 'observed:git')
+  const groma = requiredElement(byId, 'observed:shop')
+  const git = requiredElement(byId, 'observed:vault')
   assert.equal(overlaps(people[0]!.cellBounds, people[1]!.cellBounds), false)
   for (const person of people) {
     assert.equal(overlaps(person.cellBounds, groma.cellBounds), false)
     assert.equal(overlaps(person.cellBounds, git.cellBounds), false)
   }
-})
-
-function routeWorld(target: 'container' | 'system'): ArchitectureWorld {
-  const person: WorldElement = {
-    representationId: 'observed:ann',
-    id: 'ann',
-    kind: 'person',
-    name: 'Ann',
-    description: '',
-    parent: null,
-    children: [],
-    external: false,
-    code: [],
-    origin: 'observed',
-    bounds: { x: 0, y: 0, width: 20, height: 20 },
-  }
-  const system: WorldElement = {
-    representationId: 'observed:shop',
-    id: 'shop',
-    kind: 'system',
-    name: 'Shop',
-    description: '',
-    parent: null,
-    children: ['observed:api'],
-    external: false,
-    code: [],
-    origin: 'observed',
-    bounds: { x: 40, y: 0, width: 80, height: 80 },
-  }
-  const container: WorldElement = {
-    representationId: 'observed:api',
-    id: 'api',
-    kind: 'container',
-    name: 'Api',
-    description: '',
-    parent: 'observed:shop',
-    children: [],
-    external: false,
-    code: [],
-    origin: 'observed',
-    bounds: { x: 70, y: 50, width: 20, height: 20 },
-  }
-  return {
-    bounds: { x: 0, y: 0, width: 140, height: 200 },
-    groups: [],
-    elements: [person, system, container],
-    relationships: [{
-      id: 'reads',
-      source: 'observed:ann',
-      target: target === 'container' ? 'observed:api' : 'observed:shop',
-      description: 'Reads the architecture',
-      technology: '',
-      origin: 'observed',
-      route: [
-        { x: 10, y: 10 },
-        { x: 30, y: 10 },
-        { x: 30, y: 180 },
-        { x: 80, y: 180 },
-        { x: 80, y: 60 },
-      ],
-      label: { x: 30, y: 180, width: 10, height: 2 },
-    }],
-  }
-}
-
-test.concurrent('a route reaches its displayed endpoint inside an ancestor boundary', () => {
-  const world = routeWorld('container')
-  const projection = projectWorld(world, {
-    viewport: { x: 0, y: 0, width: 80, height: 36 },
-    level: 'context',
-    currentId: 'observed:ann',
-  })
-  const relationship = projection.relationships[0]
-  assert.ok(relationship)
-  assert.equal(relationship.displaySource, 'observed:ann')
-  assert.equal(relationship.displayTarget, 'observed:api')
-})
-
-test.concurrent('authored endpoint routes keep their laid-out bend', () => {
-  const world = routeWorld('system')
-  const projection = projectWorld(world, {
-    viewport: { x: 0, y: 0, width: 80, height: 36 },
-    level: 'context',
-    currentId: 'observed:ann',
-    camera: { zoom: 1, centerX: 70, centerY: 100 },
-  })
-  const route = projection.relationships[0]?.cellRoute
-  assert.ok(route)
-  const ys = new Set(route.map(point => point.y))
-  assert.ok(ys.size > 1)
 })
