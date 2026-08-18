@@ -80,10 +80,16 @@ without code keep their kind's base height. Each C4 kind is visually distinct. S
 groups are neighborhood zones. Planned items are ghosts with dashed
 edges. Routes follow the laid-out paths and ride on the surfaces
 they cross: a route climbs a plate's edge with a vertical step and
-never passes under a box. Names sit on the top face. A
+never passes under a box. Names sit on the top face of that city. A
 relationship description is drawn on its route only while the
 selection is an endpoint or an ancestor of exactly one endpoint,
 or while that route is on a lit person-command path.
+
+At System Context the campus is SVG, not that city. `/context.svg`
+draws the city contract: named internal systems, people, and
+external systems carry screen-space SVG titles; the next software
+layer sits inside its parent as unnamed underlay; people and
+external systems are marks, not campus-sized plates.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.
