@@ -11,7 +11,7 @@ import {
   mapViewportOf,
   press,
   projectedById,
-  repositoryRoot,
+  viewerFixtureRoot,
   requiredElement,
   visible,
 } from './helpers.ts'
@@ -35,17 +35,17 @@ test.concurrent('camera tweens zoom in log space with ease-in-out cubic', () => 
 })
 
 test.concurrent('opening map fits the whole world and zoom stays inside its bounds', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const viewport = mapViewportOf({ width: 120, height: 36 })
   const start = projectWorld(response.world, { viewport })
   assert.equal(start.camera.zoom, start.fitZoom)
   assert.ok(start.camera.zoom < 1)
   const byId = projectedById(start.elements)
   for (const id of [
-    'observed:groma',
-    'observed:git',
-    'observed:human-architect',
-    'observed:coding-agent',
+    'observed:shop',
+    'observed:vault',
+    'observed:shop-architect',
+    'observed:shop-operator',
   ]) {
     assert.ok(visible(requiredElement(byId, id).cellBounds, start.viewport), id)
   }
@@ -73,22 +73,22 @@ test.concurrent('opening map fits the whole world and zoom stays inside its boun
 })
 
 test.concurrent('camera follows selection across levels with the outer zoom rule', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const from = {
     level: 'components' as const,
-    currentId: 'observed:world-layout',
+    currentId: 'observed:pricing',
   }
   const model = {
     level: 'components' as const,
-    currentId: 'observed:architecture-model',
+    currentId: 'observed:orders',
   }
   const workspace = {
     level: 'containers' as const,
-    currentId: 'observed:cli',
+    currentId: 'observed:gateway',
   }
   const core = {
     level: 'containers' as const,
-    currentId: 'observed:core',
+    currentId: 'observed:api',
   }
   const viewport = mapViewportOf({ width: 120, height: 36 })
   const tight = fitLayer(response.world, viewport, from.level, from.currentId)

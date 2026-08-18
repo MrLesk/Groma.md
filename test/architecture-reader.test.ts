@@ -108,13 +108,13 @@ test('keeps README and other prose as context rather than C4 documents', async (
 test('reports the selected revision filesystem read scope', async () => {
   const accesses: Array<{ operation: FilesystemAccess['operation']; path: string }> = []
   await loadRevision(
-    repositoryRoot,
+    fixtureRoot,
     { kind: 'observed' },
     {
       onFilesystemAccess(access) {
         accesses.push({
           operation: access.operation,
-          path: path.relative(repositoryRoot, access.filename),
+          path: path.relative(fixtureRoot, access.filename),
         })
       },
     },
