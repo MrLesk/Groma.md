@@ -73,13 +73,15 @@ again restarts the trace; `x` removes it with the path.
 ## What it shows
 
 System Context, Containers, and Components are three levels over one
-geometry. Observed items exist. Planned items are ghosts.
+campus. Observed items exist. Planned items are ghosts. Underlay is
+not a ghost.
 
-The map is built from the inside out. Components keep their laid-out
-size and spacing. Each container is the box around its components.
-Each internal system is the box around its containers. People and
-external systems are compact cards. Those cards show the full name
-when empty space around them is large enough.
+Software wrappers keep the world-layout size from code up. The camera
+is the only shrink. Each level names that layer of internal software
+and draws the next software layer as unnamed underlay. People and
+external systems are marks: they keep their world origin, and their
+drawn size follows the named level. Titles stay readable in screen
+cells. Context does not letter nested components.
 
 Each kind has one mark used in the tree, on the map, and in
 details: a yellow ● person, a cyan ■ system, a light □ container,
@@ -95,9 +97,9 @@ and arrows ignore them.
 The world is a map. The first view fits the whole map inside the map
 pane. `+` and `-` zoom the camera; at the closest zoom, one world unit
 is one cell and names stay readable. Cards and routes have places on
-that map. A route attaches to the deepest displayed endpoint,
-crossing boundary walls to reach it; it promotes to a displayed
-ancestor only while the real endpoint is hidden. A relationship
+that map. A route attaches to the named software, mark, or campus
+wrapper, never to underlay. It promotes to an ancestor only while
+the real endpoint is not one of those. A relationship
 description is drawn on its route only while
 the selection is an endpoint or an ancestor of exactly one endpoint.
 Changing selection or terminal size never lays the architecture out

@@ -7,6 +7,7 @@ import { createTestRenderer } from '@opentui/core/testing'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
+import { letterName } from '../src/viewers/tui/projection-display.ts'
 import { projectWorld } from '../src/viewers/tui/projection.ts'
 import type {
   ArchitectureWorld,
@@ -117,6 +118,7 @@ test.concurrent('frames are stable and projections hold world invariants at ever
         assert.ok(projection.elements.some(element => {
           return element.kind === 'container'
             && element.display === 'container-boundary'
+            && !letterName(element, 'context')
             && element.cellBounds.x >= groma.cellBounds.x
             && element.cellBounds.y >= groma.cellBounds.y
             && element.cellBounds.x + element.cellBounds.width
@@ -124,6 +126,11 @@ test.concurrent('frames are stable and projections hold world invariants at ever
             && element.cellBounds.y + element.cellBounds.height
               <= groma.cellBounds.y + groma.cellBounds.height
         }))
+        assert.ok(projection.elements.every(element => {
+          return element.kind !== 'component' || element.display === 'hidden'
+        }))
+        assert.ok(letterName(groma, 'context'))
+        assert.ok(letterName(person, 'context'))
       }
       for (const card of cards) {
         if (card.parent === null) continue
@@ -192,7 +199,7 @@ test.concurrent('resize and semantic projection preserve the core world', async 
   app.destroy()
 })
 
-test.concurrent('containers view attaches a component relationship to its components', async () => {
+test.concurrent('containers view attaches a component relationship to named containers', async () => {
   const fixture = await loadArchitectureViewModel(containersFixtureRoot)
   const projection = projectWorld(fixture.world, {
     viewport: mapViewportOf({ width: 120, height: 36 }),
@@ -204,8 +211,8 @@ test.concurrent('containers view attaches a component relationship to its compon
       && relationship.target === 'observed:orders'
   })
   assert.ok(direct)
-  assert.equal(direct.displaySource, 'observed:page')
-  assert.equal(direct.displayTarget, 'observed:orders')
+  assert.equal(direct.displaySource, 'observed:web')
+  assert.equal(direct.displayTarget, 'observed:api')
 })
 
 test.concurrent('a hidden endpoint promotes its route to the nearest displayed ancestor', async () => {
@@ -221,7 +228,7 @@ test.concurrent('a hidden endpoint promotes its route to the nearest displayed a
   })
   assert.ok(promoted)
   assert.equal(promoted.displaySource, 'observed:page')
-  assert.equal(promoted.displayTarget, 'observed:api')
+  assert.equal(promoted.displayTarget, 'observed:shop')
 })
 
 test.concurrent('components level shows only the focused container children', async () => {
@@ -267,15 +274,15 @@ test.concurrent('selection changes never move the camera and pan only when off s
     level: 'components',
     currentId: 'observed:orders',
   })
-  const scanView = projectWorld(response.world, {
+  const siblingView = projectWorld(response.world, {
     viewport,
     level: 'components',
-    currentId: 'observed:scan-reconciler',
+    currentId: 'observed:pricing',
     camera: modelView.camera,
   })
-  assert.deepEqual(scanView.camera, modelView.camera)
+  assert.deepEqual(siblingView.camera, modelView.camera)
   assert.deepEqual(
-    scanView.elements.map(element => [element.representationId, element.cellBounds]),
+    siblingView.elements.map(element => [element.representationId, element.cellBounds]),
     modelView.elements.map(element => [element.representationId, element.cellBounds]),
   )
 
