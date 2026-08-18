@@ -35,6 +35,10 @@ function titled(item: SemanticItem): boolean {
   return item.role === 'named' || item.role === 'mark'
 }
 
+function docked(item: SemanticItem, view: SemanticView): boolean {
+  return item.role === 'campus' && item.representationId === view.focusId
+}
+
 function fill(item: SemanticItem): string {
   if (item.role === 'underlay') return '#ECEAE2'
   if (item.role === 'mark') return '#FFFFFF'
@@ -65,6 +69,16 @@ function title(item: SemanticItem): string {
   )
 }
 
+/** Screen-space campus name; not a world-unit label on the plate. */
+function dockTitle(item: SemanticItem): string {
+  return (
+    `<text data-id="${escapeXml(item.id)}" data-dock="campus" x="12" y="20" ` +
+    `text-anchor="start" dominant-baseline="hanging" ` +
+    `font-size="16" font-family="ui-monospace,Menlo,monospace" fill="#26251D">` +
+    `${escapeXml(item.name)}</text>`
+  )
+}
+
 /** SVG campus for one semantic view. Titles are SVG text, not world-plane textures. */
 export function campusSvg(view: SemanticView): string {
   const box = union(view.items)
@@ -73,11 +87,24 @@ export function campusSvg(view: SemanticView): string {
     .map(shape)
     .join('')
   const titles = view.items.filter(titled).map(title).join('')
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" ` +
-    `viewBox="${box.x} ${box.y} ${box.width} ${box.height}">` +
+  const docks = view.items.filter(item => docked(item, view)).map(dockTitle).join('')
+  const world =
     `<g data-shapes>${shapes}</g>` +
-    `<g data-titles>${titles}</g>` +
+    `<g data-titles>${titles}</g>`
+  if (!docks) {
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" ` +
+      `viewBox="${box.x} ${box.y} ${box.width} ${box.height}">` +
+      world +
+      `</svg>`
+    )
+  }
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg">` +
+    `<svg viewBox="${box.x} ${box.y} ${box.width} ${box.height}" width="100%" height="100%">` +
+    world +
+    `</svg>` +
+    `<g data-dock>${docks}</g>` +
     `</svg>`
   )
 }
