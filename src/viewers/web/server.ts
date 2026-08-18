@@ -1,6 +1,8 @@
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
+import { semanticView } from '../../semantic-view.ts'
 import { watchScan } from '../../scanner.ts'
+import { campusSvg } from './campus-svg.ts'
 import { renderPage } from './page.ts'
 
 const defaultPort = 4747
@@ -64,6 +66,18 @@ export async function startWebViewer(
       }
       if (pathname === '/world.json') {
         return Response.json({ generation, world: viewModel.world })
+      }
+      if (pathname === '/context.svg') {
+        viewModel = await loadArchitectureViewModel(repositoryRoot)
+        return new Response(
+          campusSvg(semanticView(viewModel.world, { level: 'context' })),
+          {
+            headers: {
+              'Content-Type': 'image/svg+xml; charset=utf-8',
+              'Cache-Control': 'no-store',
+            },
+          },
+        )
       }
       if (pathname === '/events') {
         let controller: ReadableStreamDefaultController<Uint8Array>
