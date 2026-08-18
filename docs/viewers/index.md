@@ -13,6 +13,12 @@ is showing the world.
 Groma core → world → viewer plugin
 ```
 
+A C4 level has a semantic view before any city is sized: the visible
+items, each with an intrinsic name-capable size and the same world origin
+it had in the laid-out world. Nested children do not enlarge a collapsed
+parent. A relationship between nested endpoints attaches to those visible
+items. Viewers do not yet paint from this view.
+
 A viewer never reads architecture Markdown, walks `groma/` directories, or
 lays the world out. It asks core for the world and projects it. A live
 viewer starts the same watch as `groma scan --watch` in-process and applies
