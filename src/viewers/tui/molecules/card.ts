@@ -5,6 +5,7 @@ import { drawBorder } from '../atoms/border.ts'
 import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
+import { letterName } from '../projection-display.ts'
 import { drawHatch } from './hatch.ts'
 import { drawSpine } from './spine.ts'
 import type { ProjectedElement, WorldProjection } from '../../../types.ts'
@@ -43,7 +44,11 @@ export function drawCard(
   if (element.origin === 'missing' && bounds.width > 4 && bounds.height > 2) {
     drawHatch(buffer, bounds, theme.missing, background)
   }
-  if (bounds.height < 3 || bounds.width < 8) return
+  if (
+    !letterName(element, projection.level)
+    || bounds.height < 3
+    || bounds.width < 8
+  ) return
 
   const spineColor = element.representationId === projection.currentId
     ? theme.selected
