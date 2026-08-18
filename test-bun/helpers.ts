@@ -33,6 +33,13 @@ export const viewerFixtureRoot = path.join(
   'fixtures',
   'viewer-view',
 )
+/** Upper-band product world authored from OpenClaw docs, not its old scanner dump. */
+export const openclawFixtureRoot = path.join(
+  repositoryRoot,
+  'test',
+  'fixtures',
+  'openclaw-view',
+)
 
 export function mapViewportOf(size: { width: number; height: number }): Bounds {
   return paneLayout(size.width, size.height).mapViewport
