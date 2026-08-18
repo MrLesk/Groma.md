@@ -1,11 +1,11 @@
 ---
 id: TASK-95.3
 title: Dock the named system title when the camera is on it
-status: In Progress
+status: Done
 assignee:
   - '@grok'
 created_date: '2026-08-18 20:48'
-updated_date: '2026-08-18 21:39'
+updated_date: '2026-08-18 21:46'
 labels: []
 dependencies:
   - TASK-95.2
@@ -32,19 +32,19 @@ This task is the dock/name switch only. It does not add cone arrows or chrome ch
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With the camera on OpenClaw, the OpenClaw title docks in screen space instead of remaining a world-scale plate label
-- [ ] #2 The six OpenClaw containers become the named level
-- [ ] #3 Any components stay underlay
-- [ ] #4 People and external systems stay marks at their anchors
-- [ ] #5 Fixture tests cover the dock and name switch, not decorative type
+- [x] #1 With the camera on OpenClaw, the OpenClaw title docks in screen space instead of remaining a world-scale plate label
+- [x] #2 The six OpenClaw containers become the named level
+- [x] #3 Any components stay underlay
+- [x] #4 People and external systems stay marks at their anchors
+- [x] #5 Fixture tests cover the dock and name switch, not decorative type
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -73,4 +73,12 @@ Verification:
 - bunx tsc --noEmit — clean
 
 Look at it: from test/fixtures/openclaw-view run `bun ../../../src/cli.ts web` and open /containers.svg?focus=openclaw.
+
+Spec review: compliant. Quality review: approved. Orchestrator re-ran bun test test-bun/campus-svg.test.ts — 8 pass in the worktree. bunx tsc --noEmit clean.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+When the camera is on OpenClaw, campusSvg docks the OpenClaw title in screen space and names the six containers. Marks keep their anchors. Served at GET /containers.svg?focus=openclaw. Verified with bun test test-bun/campus-svg.test.ts (8 pass) and bunx tsc --noEmit. Spec and quality reviews approved.
+<!-- SECTION:FINAL_SUMMARY:END -->
