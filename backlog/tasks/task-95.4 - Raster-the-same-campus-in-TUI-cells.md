@@ -1,11 +1,11 @@
 ---
 id: TASK-95.4
 title: Raster the same campus in TUI cells
-status: In Progress
+status: Done
 assignee:
   - '@grok'
 created_date: '2026-08-18 20:48'
-updated_date: '2026-08-18 21:26'
+updated_date: '2026-08-18 21:40'
 labels: []
 dependencies:
   - TASK-95.1
@@ -30,19 +30,19 @@ This task is the TUI raster only. It does not add cone arrows or change chrome/m
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 TUI Context shows named systems, people, and externals plus container underlay
-- [ ] #2 Software wrappers keep campus size; people and externals are marks
-- [ ] #3 Titles remain readable at Context scale
-- [ ] #4 The TUI campus matches the city contract from TASK-95.1
-- [ ] #5 Fixture tests cover projection and navigation invariants, not decorative glyphs
+- [x] #1 TUI Context shows named systems, people, and externals plus container underlay
+- [x] #2 Software wrappers keep campus size; people and externals are marks
+- [x] #3 Titles remain readable at Context scale
+- [x] #4 The TUI campus matches the city contract from TASK-95.1
+- [x] #5 Fixture tests cover projection and navigation invariants, not decorative glyphs
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -67,4 +67,12 @@ Verification:
 - agent-tty 120x36 on test/fixtures/openclaw-view: Context shows titled OpenClaw campus, titled Operator/WhatsApp/Anthropic/Telegram marks, and untitled container underlay boxes. Wait used text OpenClaw, not System Context.
 
 Simplicity: dropped endpointOf wrapper and the letterName re-export; paint and tests import letterName from projection-display. Files stay under 500 lines.
+
+Spec review: compliant. Quality review: approved (Important follow-up: drive lettering from SemanticRole instead of kind+level). Orchestrator re-ran bun test test-bun/tui-campus.test.ts test-bun/projection.test.ts test-bun/projection-routes.test.ts — 15 pass. bunx tsc --noEmit clean.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+groma view rasters the city contract: Context names systems and marks, draws untitled container underlay, keeps campus wrapper size, and sizes marks at the named level. Verified with bun test tui-campus/projection/projection-routes (15 pass) and bunx tsc --noEmit. Spec and quality reviews approved.
+<!-- SECTION:FINAL_SUMMARY:END -->
