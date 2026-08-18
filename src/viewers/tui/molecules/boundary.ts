@@ -7,6 +7,7 @@ import { cell } from '../atoms/cell.ts'
 import { kindGlyph } from '../atoms/kind.ts'
 import { text } from '../atoms/text.ts'
 import type { ViewerTheme } from '../atoms/theme.ts'
+import { letterName } from '../projection-display.ts'
 import type {
   Bounds,
   Origin,
@@ -88,6 +89,19 @@ export function drawBoundary(
   const style: BorderStyle = element.display === 'system-boundary'
     ? 'system'
     : 'container'
+
+  if (!letterName(element, projection.level)) {
+    drawBorder(
+      buffer,
+      element.cellBounds,
+      element.origin,
+      color,
+      theme.background,
+      style,
+      TextAttributes.DIM,
+    )
+    return
+  }
 
   drawTitledFrame(
     buffer,

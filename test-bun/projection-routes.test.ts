@@ -78,7 +78,7 @@ test.concurrent('a route reaches its displayed endpoint inside an ancestor bound
   const relationship = projection.relationships[0]
   assert.ok(relationship)
   assert.equal(relationship.displaySource, 'observed:ann')
-  assert.equal(relationship.displayTarget, 'observed:api')
+  assert.equal(relationship.displayTarget, 'observed:shop')
 })
 
 test.concurrent('authored endpoint routes keep their laid-out bend', () => {
@@ -157,9 +157,10 @@ test.concurrent('a lit route draws at a level that would otherwise hide it', () 
   const lit = projectWorld(world, { ...view, litIds: new Set(['table-worker']) })
   const route = lit.relationships.find(item => item.id === 'table-worker')
   assert.ok(route)
-  // Its components are out of frame, so it promotes to their containers.
-  assert.equal(route.displaySource, 'observed:store')
-  assert.equal(route.displayTarget, 'observed:jobs')
+  // Sibling containers are not on this campus, so the lit walk keeps
+  // the hidden component ends instead of collapsing onto one wrapper.
+  assert.equal(route.displaySource, 'observed:table')
+  assert.equal(route.displayTarget, 'observed:worker')
 
   // Element geometry is untouched by lighting the walk.
   assert.deepEqual(
