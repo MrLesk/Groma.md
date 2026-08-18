@@ -89,7 +89,9 @@ At System Context the campus is SVG, not that city. `/context.svg`
 draws the city contract: named internal systems, people, and
 external systems carry screen-space SVG titles; the next software
 layer sits inside its parent as unnamed underlay; people and
-external systems are marks, not campus-sized plates.
+external systems are marks, not campus-sized plates. `/containers.svg`
+(optional `?focus=`) docks the focused system's title in screen space
+and names its containers.
 
 The map never reads architecture Markdown or calculates layout. It
 projects the world Core already has.
