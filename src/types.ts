@@ -1,6 +1,8 @@
 export type C4Kind = 'person' | 'system' | 'container' | 'component'
 export type Origin = 'observed' | 'planned' | 'missing'
 export type SemanticLevel = 'context' | 'containers' | 'components'
+/** How an item sits on the campus at one C4 level. Underlay is not a ghost. */
+export type SemanticRole = 'named' | 'underlay' | 'mark' | 'campus'
 export type DisplayRole =
   | 'card'
   | 'hidden'
@@ -172,14 +174,14 @@ export interface ArchitectureWorld {
   relationships: WorldRelationship[]
 }
 
-/** An in-scope item at one C4 level, sized for its name, not its nested stack. */
+/** An item on the campus at one C4 level. */
 export interface SemanticItem {
   representationId: string
   id: string
   kind: C4Kind
   name: string
-  /** True when this item has children that are out of scope at this level. */
-  collapsed: boolean
+  role: SemanticRole
+  /** World-layout wrapper, or a mark's world origin plus named-level drawn size. */
   bounds: Bounds
 }
 
