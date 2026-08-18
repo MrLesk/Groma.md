@@ -60,12 +60,21 @@ export function tabSections(tab: DetailsTab): Section[] {
     : ['technology', 'code', 'travelledBy']
 }
 
-export function nextActiveActionId(
-  current: string | undefined,
-  event: { type: 'pick'; id: string } | { type: 'select' } | { type: 'clear' },
-): string | undefined {
-  if (event.type === 'pick') return event.id
-  if (event.type === 'clear') return undefined
+/** The lit walk: its command and, for a person-details pick, the picker. */
+export interface ActiveAction {
+  id?: string
+  personId?: string
+}
+
+export function nextActiveAction(
+  current: ActiveAction,
+  event:
+    | { type: 'pick'; id: string; personId?: string }
+    | { type: 'select' }
+    | { type: 'clear' },
+): ActiveAction {
+  if (event.type === 'pick') return { id: event.id, personId: event.personId }
+  if (event.type === 'clear') return {}
   return current
 }
 
@@ -154,7 +163,8 @@ export function paintDetails(
   host: HTMLElement,
   inspected: Inspected,
   onSelect: (id: string) => void,
-  onPickAction: (id: string) => void,
+  /** ownCommand is true for the person's own command rows, false for walk references. */
+  onPickAction: (id: string, ownCommand: boolean) => void,
   activeActionId: string | undefined,
   tab: DetailsTab,
   onTab: (tab: DetailsTab) => void,
@@ -206,7 +216,7 @@ export function paintDetails(
           )
         }
         link.addEventListener('click', () => {
-          if (relationship.pickable) onPickAction(relationship.id)
+          if (relationship.pickable) onPickAction(relationship.id, true)
           else onSelect(relationship.peerId)
         })
         item.append(link, rest)
@@ -274,7 +284,7 @@ export function paintDetails(
         link.className = 'link'
         if (walk.id === activeActionId) link.classList.add('active')
         link.append(walk.title)
-        link.addEventListener('click', () => onPickAction(walk.id))
+        link.addEventListener('click', () => onPickAction(walk.id, false))
         item.append(link)
         list.append(item)
       }

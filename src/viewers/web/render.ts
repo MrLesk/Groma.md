@@ -15,7 +15,11 @@ import {
   WebGLRenderer,
 } from 'three'
 import type { Material, Object3D } from 'three'
-import type { ArchitectureWorld, WorldElement } from '../../types.ts'
+import type {
+  ArchitectureWorld,
+  WorldElement,
+  WorldRelationship,
+} from '../../types.ts'
 import {
   actionCaption,
   actionLegs,
@@ -34,8 +38,8 @@ import { accent, palettes, paper, setPalette } from './atoms/theme.ts'
 import { initialPlayback, nextPlayback } from './flow-playback.ts'
 import { addBar } from './molecules/route.ts'
 import { buildCity } from './organisms/city.ts'
-import { paintDetails, inspectDetails, nextActiveActionId } from './organisms/details.ts'
-import type { DetailsTab } from './organisms/details.ts'
+import { paintDetails, inspectDetails, nextActiveAction } from './organisms/details.ts'
+import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import { defaultProjection } from './scene.ts'
@@ -91,7 +95,7 @@ let parentOf = parentOfElements(world.elements)
 
 let selectedId = defaultSelection(world, 'context')?.representationId
 let hoverId: string | undefined
-let activeActionId: string | undefined
+let activeAction: ActiveAction = {}
 let detailsTab: DetailsTab = 'what'
 
 function placeCamera(projection: Projection): void {
@@ -223,7 +227,7 @@ function selectedElement(): WorldElement | undefined {
 
 function select(id: string): void {
   selectedId = id
-  activeActionId = nextActiveActionId(activeActionId, { type: 'select' })
+  activeAction = nextActiveAction(activeAction, { type: 'select' })
   paintSelection()
 }
 
@@ -309,7 +313,10 @@ function stepFlow(now: number): void {
 }
 
 function syncFlow(pathIds: Set<string>): void {
-  const key = pathIds.size === 0 ? '' : activeActionId ?? ''
+  // The person scope changes which routes light, so it is part of the key.
+  const key = pathIds.size === 0
+    ? ''
+    : `${activeAction.id}:${activeAction.personId ?? ''}`
   if (key === flowKey) return
   clearFlow()
   flowKey = key
@@ -344,9 +351,19 @@ function syncFlow(pathIds: Set<string>): void {
   flowFrame = requestAnimationFrame(stepFlow)
 }
 
+/** The active walk's legs in travel order, scoped to its picking person. */
+function walkLegs(): WorldRelationship[] {
+  return actionLegs(activeAction.id, world, activeAction.personId)
+}
+
+/** The ids of the routes that walk lights. */
+function litRoutes(): Set<string> {
+  return actionPath(activeAction.id, world, activeAction.personId)
+}
+
 /** Header controls, footer caption, and payload visibility for the playback. */
-function paintFlow(legs = actionLegs(activeActionId, world)): void {
-  const active = world.relationships.find(item => item.id === activeActionId)
+function paintFlow(legs = walkLegs()): void {
+  const active = world.relationships.find(item => item.id === activeAction.id)
   flowHost.hidden = active === undefined
   if (active === undefined) {
     actionHost.textContent = 'drag pan · right-drag orbit · scroll zoom'
@@ -377,7 +394,7 @@ function paintFlow(legs = actionLegs(activeActionId, world)): void {
 }
 
 function playbackEvent(event: { type: 'toggle-pause' } | { type: 'rate'; rate: number } | { type: 'step' }): void {
-  const legs = actionLegs(activeActionId, world)
+  const legs = walkLegs()
   playback = nextPlayback(
     playback,
     event.type === 'step' ? { type: 'step', legCount: legs.length } : event,
@@ -385,7 +402,7 @@ function playbackEvent(event: { type: 'toggle-pause' } | { type: 'rate'; rate: n
   paintFlow(legs)
 }
 
-function paintOutlines(pathIds = actionPath(activeActionId, world)): void {
+function paintOutlines(pathIds = litRoutes()): void {
   const tracing = pathIds.size > 0
   const touched = new Set<string>()
   if (tracing) {
@@ -408,7 +425,8 @@ function paintOutlines(pathIds = actionPath(activeActionId, world)): void {
 }
 
 function paintSelection(): void {
-  const pathIds = actionPath(activeActionId, world)
+  const legs = walkLegs()
+  const pathIds = new Set(legs.map(leg => leg.id))
   for (const route of routes) {
     if (route.mesh) {
       route.mesh.visible = pathIds.has(route.id)
@@ -418,7 +436,7 @@ function paintSelection(): void {
   }
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const commands = worldCommands(world)
-  paintFlows(flowsHost, commands, activeActionId, pickAction)
+  paintFlows(flowsHost, commands, activeAction.id, pickAction)
   paintStats(commands.length)
   const selected = selectedElement()
   if (selected) {
@@ -426,8 +444,9 @@ function paintSelection(): void {
       detailsHost,
       inspectDetails(selected, world),
       select,
-      pickAction,
-      activeActionId,
+      // A person's own command row scopes the walk to that person.
+      (id, ownCommand) => pickAction(id, ownCommand ? selected.representationId : undefined),
+      activeAction.id,
       detailsTab,
       tab => {
         detailsTab = tab
@@ -436,12 +455,12 @@ function paintSelection(): void {
     )
   }
   syncFlow(pathIds)
-  paintFlow()
+  paintFlow(legs)
   paintOutlines(pathIds)
 }
 
-function pickAction(id: string): void {
-  activeActionId = nextActiveActionId(activeActionId, { type: 'pick', id })
+function pickAction(id: string, personId?: string): void {
+  activeAction = nextActiveAction(activeAction, { type: 'pick', id, personId })
   paintSelection()
 }
 
@@ -588,7 +607,7 @@ for (const [button, rate] of rateButtons) {
 document.addEventListener('keydown', event => {
   if (event.key !== 'x' && event.key !== 'X') return
   if (event.metaKey || event.ctrlKey || event.altKey) return
-  activeActionId = nextActiveActionId(activeActionId, { type: 'clear' })
+  activeAction = nextActiveAction(activeAction, { type: 'clear' })
   paintSelection()
 })
 
