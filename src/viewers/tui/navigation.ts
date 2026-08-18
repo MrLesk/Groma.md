@@ -128,6 +128,33 @@ export function detailsCommands(
   return pickableActions(state.currentId, world)
 }
 
+/** A lit walk: its command and, for a person's own pick, the picker. */
+export interface LitAction {
+  id?: string
+  personId?: string
+}
+
+/**
+ * The walk the map lights: while the details cursor rests on a command
+ * that row is previewed, otherwise the committed pick shows.
+ */
+export function litAction(
+  world: ArchitectureWorld,
+  state: ViewerState,
+): LitAction {
+  if (state.focus === 'details' && state.actionCursor !== undefined) {
+    const browsing = detailsCommands(world, state)
+      .some(command => command.id === state.actionCursor)
+    if (browsing) {
+      return {
+        id: state.actionCursor,
+        personId: state.detailsTab === 'what' ? state.currentId : undefined,
+      }
+    }
+  }
+  return { id: state.activeActionId, personId: state.activeActionPersonId }
+}
+
 function resolve(
   world: ArchitectureWorld,
   state: ViewerState,
@@ -274,7 +301,8 @@ export function reduceViewer(
     }
   }
   if (action === 'step-action') {
-    const legs = actionLegs(current.activeActionId, world, current.activeActionPersonId)
+    const lit = litAction(world, current)
+    const legs = actionLegs(lit.id, world, lit.personId)
     if (legs.length === 0) return current
     return { ...current, actionStep: ((current.actionStep ?? -1) + 1) % legs.length }
   }
@@ -310,20 +338,20 @@ export function reduceViewer(
       const next = index < 0
         ? (step > 0 ? 0 : actions.length - 1)
         : Math.max(0, Math.min(actions.length - 1, index + step))
-      return { ...current, actionCursor: actions[next]!.id }
+      // Each previewed walk starts unstepped.
+      return { ...current, actionCursor: actions[next]!.id, actionStep: undefined }
     }
     if (action === 'enter') {
       const actions = detailsCommands(world, current)
-      if (actions.some(item => item.id === current.actionCursor)) {
-        return {
-          ...current,
-          activeActionId: current.actionCursor,
-          // A What-tab pick comes from the selected person's own list.
-          activeActionPersonId: current.detailsTab === 'what' ? current.currentId : undefined,
-          actionStep: undefined,
-        }
+      if (!actions.some(item => item.id === current.actionCursor)) return current
+      // Enter commits the walk the map is already lighting.
+      const lit = litAction(world, current)
+      return {
+        ...current,
+        activeActionId: lit.id,
+        activeActionPersonId: lit.personId,
+        actionStep: undefined,
       }
-      return current
     }
     if (action === 'left') return { ...current, focus: 'architecture' }
     return current

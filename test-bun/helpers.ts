@@ -26,6 +26,13 @@ export const containersFixtureRoot = path.join(
   'fixtures',
   'containers-view',
 )
+/** A minimum world with people, three levels, and an external system. */
+export const viewerFixtureRoot = path.join(
+  repositoryRoot,
+  'test',
+  'fixtures',
+  'viewer-view',
+)
 
 export function mapViewportOf(size: { width: number; height: number }): Bounds {
   return paneLayout(size.width, size.height).mapViewport
@@ -124,7 +131,7 @@ export function cameraOn(
   }
 }
 
-function box(
+export function box(
   id: string,
   kind: C4Kind,
   bounds: Bounds,
