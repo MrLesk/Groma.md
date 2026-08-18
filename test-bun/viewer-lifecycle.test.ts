@@ -17,6 +17,7 @@ import {
   geometry,
   press,
   repositoryRoot,
+  viewerFixtureRoot,
 } from './helpers.ts'
 
 async function listTypeScript(directory: string): Promise<string[]> {
@@ -112,7 +113,7 @@ test.concurrent('R reloads the world from core and keeps the current view', asyn
 // Eighteen keypresses, each waiting out its camera tween: under parallel
 // suite load this can pass bun's 5s default, so it gets a wide timeout.
 test.concurrent('headless keys drive the viewer and leave world coordinates unchanged', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const before = structuredClone(geometry(response.world))
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, response)

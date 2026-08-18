@@ -172,7 +172,7 @@ test('orders equivalent unchanged revisions deterministically', () => {
 
 test('contains no presentation state', async () => {
   const loadedRevision = await loadRevision(
-    repositoryRoot,
+    path.join(repositoryRoot, 'test', 'fixtures', 'core-view'),
     { kind: 'observed' },
   )
 

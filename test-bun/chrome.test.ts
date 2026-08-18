@@ -15,7 +15,7 @@ import {
   navigationWorld,
   press,
   projectedById,
-  repositoryRoot,
+  viewerFixtureRoot,
   requiredElement,
 } from './helpers.ts'
 
@@ -54,16 +54,16 @@ test.concurrent('pane toggles resize the map viewport without touching the world
   const partial = paneLayout(120, 36, { hierarchy: true, details: false })
   assert.equal(partial.map.x + partial.map.width, 120)
 
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const threePane = paneLayout(120, 36)
   const narrow = projectWorld(response.world, {
     viewport: threePane.mapViewport,
-    camera: cameraOn(response.world, 'observed:groma', 1),
+    camera: cameraOn(response.world, 'observed:shop', 1),
     lockCamera: true,
   })
   const wide = projectWorld(response.world, {
     viewport: full.mapViewport,
-    camera: cameraOn(response.world, 'observed:groma', 1),
+    camera: cameraOn(response.world, 'observed:shop', 1),
     lockCamera: true,
   })
   assert.equal(wide.camera.zoom, narrow.camera.zoom)
@@ -90,13 +90,13 @@ test.concurrent('the zoom readout names fit, in-between, and one-to-one states',
 })
 
 test.concurrent('the details pane always shows the selection and reserves its column', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, response)
   await setup.renderOnce()
 
   const layout = paneLayout(120, 36)
-  app.setView({ level: 'components', currentId: 'observed:architecture-model' })
+  app.setView({ level: 'components', currentId: 'observed:orders' })
   await setup.renderOnce()
   const frame = setup.captureCharFrame()
   const lines = frame.split('\n')
@@ -108,7 +108,7 @@ test.concurrent('the details pane always shows the selection and reserves its co
   const pane = lines
     .map(line => [...line].slice(layout.details.x).join(''))
     .join('\n')
-  assert.match(pane, /Architecture model/)
+  assert.match(pane, /Orders/)
   assert.match(
     pane,
     new RegExp(`${kindGlyph('component')} ${kindLabel('component')} · observed`),
@@ -118,7 +118,7 @@ test.concurrent('the details pane always shows the selection and reserves its co
     .split('\n')
     .map(line => [...line].slice(layout.details.x).join(''))
     .join('\n')
-  assert.match(builtPane, /src\/architecture-model\.ts/)
+  assert.match(builtPane, /src\/orders\.ts/)
   const treePane = lines
     .map(line => [...line].slice(layout.hierarchy.x, layout.map.x).join(''))
     .join('\n')
@@ -129,7 +129,7 @@ test.concurrent('the details pane always shows the selection and reserves its co
 })
 
 test.concurrent('the hierarchy pane ends with the kind legend', async () => {
-  const response = await loadArchitectureViewModel(repositoryRoot)
+  const response = await loadArchitectureViewModel(viewerFixtureRoot)
   const setup = await createTestRenderer({ width: 120, height: 36 })
   const app = mountTerminalViewer(setup.renderer, response)
   await setup.renderOnce()
