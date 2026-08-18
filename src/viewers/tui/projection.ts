@@ -1,4 +1,4 @@
-import { ancestorOfKind, defaultSelection } from './navigation.ts'
+import { defaultSelection } from './navigation.ts'
 import {
   clamp,
   fitZoomFor,
@@ -10,8 +10,8 @@ import {
   projectPoint,
   transformFor,
   visibleIn,
-  within,
 } from './projection-camera.ts'
+import { attachableRole, displayFor, letterName } from './projection-display.ts'
 import {
   attachRouteToBounds,
   boundsOverlap,
@@ -22,17 +22,18 @@ import {
   routeBetweenBoxes,
   trimRouteToDisplayedEndpoints,
 } from './projection-routes.ts'
+import { semanticView } from '../../semantic-view.ts'
 import type {
   ArchitectureWorld,
   Bounds,
-  DisplayRole,
   ProjectedGroup,
   ProjectedRelationship,
   ProjectionOptions,
+  SemanticEdge,
+  SemanticItem,
   SemanticLevel,
   WorldElement,
   WorldProjection,
-  WorldRelationship,
 } from '../../types.ts'
 
 export { fitLayer, fitView, followSelection } from './projection-camera.ts'
@@ -74,128 +75,57 @@ function leafCard(element: WorldElement): boolean {
   return element.kind === 'person' || element.external
 }
 
-function displayRole(
-  element: WorldElement,
-  level: SemanticLevel,
-  focus: WorldElement | null,
-): DisplayRole {
-  if (element.external && level !== 'context') return 'hidden'
-  if (element.kind === 'person' && level === 'components') return 'hidden'
-  if (
-    level === 'components'
-    && focus
-    && element.kind === 'component'
-    && element.parent !== focus.representationId
-  ) return 'hidden'
-  if (element.kind === 'component') return 'card'
-  if (element.kind === 'container') return 'container-boundary'
-  if (element.kind === 'system' && !element.external) return 'system-boundary'
-  return 'card'
-}
-
-function topAncestor(
-  element: WorldElement,
-  elementsById: Map<string, WorldElement>,
-): WorldElement {
-  let current = element
-  while (current.parent !== null) {
-    const parent = elementsById.get(current.parent)
-    if (!parent) throw new Error(`Unknown parent representation: ${current.parent}`)
-    current = parent
-  }
-  return current
-}
-
-function displayEndpoint(
-  element: WorldElement,
-  level: SemanticLevel,
-  focus: WorldElement | null,
-  elementsById: Map<string, WorldElement>,
-): WorldElement {
-  if (level === 'context') return topAncestor(element, elementsById)
-  if (level === 'containers') {
-    return ancestorOfKind(element, 'container', elementsById) ?? element
-  }
-  if (focus && within(element, focus.representationId, elementsById)) return element
-  return ancestorOfKind(element, 'container', elementsById)
-    ?? topAncestor(element, elementsById)
-}
-
 type ProjectedElement = ReturnType<typeof projectElements>[number]
 
 /**
- * The element a drawn route attaches to: the endpoint itself whenever
- * it is displayed on screen, else its nearest displayed ancestor.
- * Relationships happen at the code level, so a route only promotes
- * when its real endpoint is genuinely not visible: hidden by the
- * level rules or scrolled outside the viewport.
+ * The element a drawn route attaches to: a named, mark, or campus
+ * item on screen, else its nearest such ancestor. Underlay is drawn
+ * but never an attach point. Lit walks may fall back to a hidden
+ * endpoint so the walk still crosses what this level does not name.
  */
 function resolveEndpoint(
-  element: WorldElement,
+  startId: string,
   projectedById: Map<string, ProjectedElement>,
   elementsById: Map<string, WorldElement>,
   viewport: Bounds,
+  attachableIds: Set<string>,
+  mode: 'attachable' | 'any',
 ): ProjectedElement | undefined {
-  let current: WorldElement | undefined = element
+  let current: WorldElement | undefined = elementsById.get(startId)
   while (current) {
     const projected = projectedById.get(current.representationId)
-    if (
-      projected
-      && projected.display !== 'hidden'
-      && visibleIn(projected.cellBounds, viewport)
-    ) return projected
+    if (projected) {
+      if (mode === 'any') return projected
+      if (
+        projected.display !== 'hidden'
+        && attachableIds.has(projected.representationId)
+        && visibleIn(projected.cellBounds, viewport)
+      ) return projected
+    }
     current = current.parent === null ? undefined : elementsById.get(current.parent)
   }
   return undefined
 }
 
-function relationshipVisibleAtLevel(
-  relationship: WorldRelationship,
-  level: SemanticLevel,
-  focus: WorldElement | null,
-  elementsById: Map<string, WorldElement>,
-): boolean {
-  const source = elementsById.get(relationship.source)
-  const target = elementsById.get(relationship.target)
-  if (!source || !target) return false
-  const displaySource = displayEndpoint(source, level, focus, elementsById)
-  const displayTarget = displayEndpoint(target, level, focus, elementsById)
-  if (displaySource.representationId === displayTarget.representationId) return false
-  if (level === 'context') return true
-  if (level === 'containers') {
-    if (focus === null) return false
-    const sourceIn = within(displaySource, focus.representationId, elementsById)
-    const targetIn = within(displayTarget, focus.representationId, elementsById)
-    if (sourceIn && targetIn) return true
-    return (source.kind === 'person' && targetIn) || (target.kind === 'person' && sourceIn)
-  }
-  return focus !== null && (
-    within(source, focus.representationId, elementsById)
-    || within(target, focus.representationId, elementsById)
-  )
-}
-
 function projectElements(
   world: ArchitectureWorld,
-  level: SemanticLevel,
-  focus: WorldElement | null,
+  itemsById: Map<string, SemanticItem>,
   transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
+  level: SemanticLevel,
 ) {
   const elements = world.elements.map(element => {
-    const display = displayRole(element, level, focus)
-    const projected = projectBounds(element.bounds, transform)
-    return { ...element, display, cellBounds: projected }
+    const item = itemsById.get(element.representationId)
+    const display = displayFor(item, element)
+    const source = item?.bounds ?? element.bounds
+    return { ...element, display, cellBounds: projectBounds(source, transform) }
   })
   for (const element of elements) {
     if (element.display !== 'card' || !leafCard(element)) continue
     const desired = titledCardBounds(element.cellBounds, element)
     const growing = desired.width > element.cellBounds.width
       || desired.height > element.cellBounds.height
-    if (!growing) {
-      element.cellBounds = desired
-      continue
-    }
+    if (!growing) continue
     const placed = keepTitledCardInView(desired, viewport)
     const origin = {
       x: element.cellBounds.x + element.cellBounds.width / 2,
@@ -204,7 +134,8 @@ function projectElements(
     if (!pointInside(origin, placed)) continue
     const blocked = elements.some(other => {
       return other !== element
-        && other.display !== 'hidden'
+        && other.display === 'card'
+        && letterName(other, level)
         && boundsOverlap(placed, other.cellBounds)
     })
     if (!blocked) element.cellBounds = placed
@@ -232,12 +163,13 @@ function projectGroups(
 function projectRelationships(
   world: ArchitectureWorld,
   level: SemanticLevel,
-  focus: WorldElement | null,
   elementsById: Map<string, WorldElement>,
   projectedElements: ReturnType<typeof projectElements>,
   projectedGroups: ProjectedGroup[],
   transform: ReturnType<typeof transformFor>,
   viewport: Bounds,
+  edges: Map<string, SemanticEdge>,
+  attachableIds: Set<string>,
   litIds: Set<string> | undefined,
 ): ProjectedRelationship[] {
   const projectedById = new Map(projectedElements.map(element => [
@@ -252,7 +184,7 @@ function projectRelationships(
   })
   const cardBounds = [
     ...projectedElements
-      .filter(element => element.display === 'card')
+      .filter(element => element.display === 'card' && letterName(element, level))
       .map(element => ({
         x: element.cellBounds.x - 1,
         y: element.cellBounds.y - 1,
@@ -260,21 +192,42 @@ function projectRelationships(
         height: element.cellBounds.height + 2,
       })),
     ...projectedElements
-      .filter(element => element.display.endsWith('-boundary'))
+      .filter(element => {
+        return element.display.endsWith('-boundary') && letterName(element, level)
+      })
       .map(element => titleRow(element.cellBounds)),
     ...projectedGroups.map(group => titleRow(group.cellBounds)),
   ]
   const promotedPairs = new Set<string>()
+  const attach = (startId: string, mode: 'attachable' | 'any') => {
+    return resolveEndpoint(
+      startId,
+      projectedById,
+      elementsById,
+      viewport,
+      attachableIds,
+      mode,
+    )
+  }
   return world.relationships
     // A lit walk is drawn whole: its legs cross whatever the level hides.
-    .filter(relationship => litIds?.has(relationship.id)
-      || relationshipVisibleAtLevel(relationship, level, focus, elementsById))
+    .filter(relationship => litIds?.has(relationship.id) || edges.has(relationship.id))
     .map(relationship => {
-      const sourceElement = elementsById.get(relationship.source)
-      const targetElement = elementsById.get(relationship.target)
-      if (!sourceElement || !targetElement) return null
-      const source = resolveEndpoint(sourceElement, projectedById, elementsById, viewport)
-      const target = resolveEndpoint(targetElement, projectedById, elementsById, viewport)
+      const edge = edges.get(relationship.id)
+      const lit = litIds?.has(relationship.id) === true
+      let source = attach(edge?.source ?? relationship.source, 'attachable')
+      let target = attach(edge?.target ?? relationship.target, 'attachable')
+      if (
+        lit
+        && (
+          source === undefined
+          || target === undefined
+          || source.representationId === target.representationId
+        )
+      ) {
+        source = attach(relationship.source, 'any')
+        target = attach(relationship.target, 'any')
+      }
       if (!source || !target) return null
       if (source.representationId === target.representationId) return null
       const sourceBounds = source.cellBounds
@@ -357,8 +310,19 @@ export function projectWorld(
       zoom: clamp(camera.zoom, fitZoom, 1),
     }
   }
+  const view = semanticView(world, {
+    level,
+    ...(focus ? { focusId: focus.representationId } : {}),
+  })
+  const itemsById = new Map(view.items.map(item => [item.representationId, item]))
+  const attachableIds = new Set(
+    view.items
+      .filter(item => attachableRole(item.role))
+      .map(item => item.representationId),
+  )
+  const edges = new Map(view.edges.map(edge => [edge.id, edge]))
   let transform = transformFor(camera, viewport)
-  let elements = projectElements(world, level, focus, transform, viewport)
+  let elements = projectElements(world, itemsById, transform, viewport, level)
   const selectedElement = elements.find(element => {
     return element.representationId === selected?.representationId
   })
@@ -375,7 +339,7 @@ export function projectWorld(
         centerY: camera.centerY - nudge.y / transform.yScale,
       }
       transform = transformFor(camera, viewport)
-      elements = projectElements(world, level, focus, transform, viewport)
+      elements = projectElements(world, itemsById, transform, viewport, level)
     }
   }
   const groups = projectGroups(world, elements, transform)
@@ -391,12 +355,13 @@ export function projectWorld(
     relationships: projectRelationships(
       world,
       level,
-      focus,
       elementsById,
       elements,
       groups,
       transform,
       viewport,
+      edges,
+      attachableIds,
       options.litIds,
     ),
   }
