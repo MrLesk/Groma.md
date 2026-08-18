@@ -1,11 +1,11 @@
 ---
 id: TASK-95.1
 title: Encode the city contract in core
-status: In Progress
+status: Done
 assignee:
   - '@grok'
 created_date: '2026-08-18 20:48'
-updated_date: '2026-08-18 20:59'
+updated_date: '2026-08-18 21:11'
 labels: []
 dependencies:
   - TASK-94
@@ -33,20 +33,20 @@ Ghost means planned. Underlay is the unnamed next software layer, not a ghost.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 At Context, a fixture system keeps its campus wrapper size from world-layout, not a name-only collapsed card
-- [ ] #2 The named level lists internal software of that C4 kind; the next software layer is present as underlay, not as named cards and not as planned ghosts
-- [ ] #3 People and external systems are marks: same world origin as the campus, drawn size follows the named level
-- [ ] #4 Entering a system does not move that system, its people, or sibling systems
-- [ ] #5 Viewer docs state this contract and retire the collapse-before-size description
-- [ ] #6 Fixture tests cover named, underlay, and mark rules; bun test of the changed files passes
+- [x] #1 At Context, a fixture system keeps its campus wrapper size from world-layout, not a name-only collapsed card
+- [x] #2 The named level lists internal software of that C4 kind; the next software layer is present as underlay, not as named cards and not as planned ghosts
+- [x] #3 People and external systems are marks: same world origin as the campus, drawn size follows the named level
+- [x] #4 Entering a system does not move that system, its people, or sibling systems
+- [x] #5 Viewer docs state this contract and retire the collapse-before-size description
+- [x] #6 Fixture tests cover named, underlay, and mark rules; bun test of the changed files passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Acceptance criteria have objective verification evidence.
-- [ ] #2 Relevant checks pass and changes remain task-scoped.
-- [ ] #3 Public contracts or documentation are updated when behavior changes.
-- [ ] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
+- [x] #1 Acceptance criteria have objective verification evidence.
+- [x] #2 Relevant checks pass and changes remain task-scoped.
+- [x] #3 Public contracts or documentation are updated when behavior changes.
+- [x] #4 Implementation Plan reflects the final approach; correction history and verification are recorded in Implementation Notes.
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -72,4 +72,12 @@ Simplicity review: dropped sibling-container campus at Components (only the focu
 Verification:
 - bun test test-bun/semantic-view.test.ts test-bun/openclaw-view.test.ts — 10 pass
 - bunx tsc --noEmit — clean
+
+Spec review: compliant. Quality review: approved (minor follow-ups only). Orchestrator re-ran bun test test-bun/semantic-view.test.ts test-bun/openclaw-view.test.ts — 10 pass. bunx tsc --noEmit clean.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+semanticView is the city contract: software wrappers keep world-layout size, items carry named/underlay/mark/campus roles, marks keep world origin and follow named-level size, Enter does not move system/people/siblings. Collapse-before-size docs and the second-city ELK module are gone. Verified with bun test test-bun/semantic-view.test.ts test-bun/openclaw-view.test.ts (10 pass) and bunx tsc --noEmit. Spec and quality reviews approved.
+<!-- SECTION:FINAL_SUMMARY:END -->
