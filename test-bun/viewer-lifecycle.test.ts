@@ -8,10 +8,9 @@ import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
-import {
-  mountTerminalViewer,
-  startTerminalViewer,
-} from '../src/viewers/tui/terminal-viewer.ts'
+import type { WorkSource } from '../src/backlog-plugin.ts'
+import { startTerminalViewer } from '../src/view-host.ts'
+import { mountTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
 import {
   fixtureRoot,
   geometry,
@@ -19,6 +18,13 @@ import {
   repositoryRoot,
   viewerFixtureRoot,
 } from './helpers.ts'
+
+function emptyWorkSource(): WorkSource {
+  return {
+    read: async () => [],
+    watch: () => ({ close() {} }),
+  }
+}
 
 async function listTypeScript(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -40,7 +46,7 @@ test.concurrent('viewer modules consume only the core response and fixed world',
 
   assert.doesNotMatch(
     viewerSource,
-    /node:fs|architecture-reader|world-layout|elkjs|groma\/(?:observed|missing|plans)/,
+    /node:fs|node:child_process|architecture-reader|architecture-watch|backlog-plugin|loadArchitectureViewModel|repositoryRoot|watchScan|world-layout|elkjs|groma\/(?:observed|missing|plans)/,
   )
 })
 
@@ -50,6 +56,7 @@ test.concurrent('headless groma view startup releases its renderer and input han
   const app = await startTerminalViewer(fixtureRoot, {
     renderer: setup.renderer,
     palette: normalizeTerminalPalette(),
+    workSource: emptyWorkSource(),
   })
 
   assert.equal(
@@ -75,15 +82,15 @@ test.concurrent('headless groma view startup releases its renderer and input han
 test.concurrent('R reloads the world from core and keeps the current view', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'groma-refresh-'))
   const setup = await createTestRenderer({ width: 120, height: 36 })
-  let app: ReturnType<typeof mountTerminalViewer> | undefined
+  let app: Awaited<ReturnType<typeof startTerminalViewer>> | undefined
   try {
     await cp(fixtureRoot, root, { recursive: true })
-    const response = await loadArchitectureViewModel(root)
-    app = mountTerminalViewer(setup.renderer, response, {
-      level: 'components',
-      currentId: 'missing:legacy',
-      repositoryRoot: root,
+    app = await startTerminalViewer(root, {
+      renderer: setup.renderer,
+      palette: normalizeTerminalPalette(),
+      workSource: emptyWorkSource(),
     })
+    app.setView({ level: 'components', currentId: 'missing:legacy' })
     await setup.renderOnce()
     assert.match(setup.captureCharFrame(), /Legacy ordering/)
 

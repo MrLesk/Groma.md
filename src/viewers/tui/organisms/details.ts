@@ -14,6 +14,7 @@ import {
 import type {
   ArchitectureWorld,
   Bounds,
+  WorkMarker,
   WorldElement,
 } from '../../../types.ts'
 
@@ -53,6 +54,7 @@ function detailsRows(
   tab: DetailsTab,
   activeActionId: string | undefined,
   actionCursor: string | undefined,
+  work: readonly WorkMarker[],
 ): { rows: Span[][]; cursorLine?: number } {
   const plain = (value: string): Span => {
     return { value, foreground: theme.foreground, attributes: 0 }
@@ -99,6 +101,14 @@ function detailsRows(
   ])
 
   let cursorLine: number | undefined
+
+  if (work.length > 0) {
+    rows.push([], [header('Work')])
+    for (const marker of work) {
+      rows.push([plain(marker.assignees.join(', ')), dim(` · ${marker.taskId}`)])
+      for (const row of wrap(marker.taskTitle, width)) rows.push([dim(row)])
+    }
+  }
 
   if (tab === 'how') {
     const technology = (element.technology ?? '')
@@ -212,6 +222,7 @@ export function drawDetails(
     tab: DetailsTab
     activeActionId?: string
     actionCursor?: string
+    work: WorkMarker[]
   },
 ): void {
   const background = theme.background
@@ -227,6 +238,7 @@ export function drawDetails(
     view.tab,
     view.activeActionId,
     view.actionCursor,
+    view.work,
   )
   if (bounds.width > 0 && bounds.height > 0) {
     buffer.fillRect(bounds.x, bounds.y, bounds.width, bounds.height, background)

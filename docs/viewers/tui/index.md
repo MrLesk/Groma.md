@@ -82,6 +82,9 @@ and draws the next software layer as unnamed underlay. People and
 external systems are marks: they keep their world origin, and their
 drawn size follows the named level. Titles stay readable in screen
 cells. Context does not letter nested components.
+In-progress Backlog work may appear on matching elements after the
+map is already open. A missing or slow Backlog CLI does not block
+the view.
 
 Each kind has one mark used in the tree, on the map, and in
 details: a yellow ● person, a cyan ■ system, a light □ container,
