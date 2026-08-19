@@ -1,4 +1,9 @@
-import type { Bounds, SemanticItem, SemanticView } from '../../types.ts'
+import type {
+  Bounds,
+  SemanticItem,
+  SemanticRoute,
+  SemanticView,
+} from '../../types.ts'
 
 const PAD = 12
 const roleOrder = { campus: 0, named: 1, underlay: 2, mark: 3 } as const
@@ -11,16 +16,26 @@ function escapeXml(text: string): string {
     .replaceAll('"', '&quot;')
 }
 
-function union(items: readonly SemanticItem[]): Bounds {
+function union(view: SemanticView): Bounds {
+  const geometry: Bounds[] = view.items.map(item => item.bounds)
+  for (const route of view.routes) {
+    geometry.push(...route.route.map(point => ({
+      x: point.x,
+      y: point.y,
+      width: 0,
+      height: 0,
+    })))
+    if (route.label) geometry.push(route.label)
+  }
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
   let maxY = -Infinity
-  for (const item of items) {
-    minX = Math.min(minX, item.bounds.x)
-    minY = Math.min(minY, item.bounds.y)
-    maxX = Math.max(maxX, item.bounds.x + item.bounds.width)
-    maxY = Math.max(maxY, item.bounds.y + item.bounds.height)
+  for (const bounds of geometry) {
+    minX = Math.min(minX, bounds.x)
+    minY = Math.min(minY, bounds.y)
+    maxX = Math.max(maxX, bounds.x + bounds.width)
+    maxY = Math.max(maxY, bounds.y + bounds.height)
   }
   if (!Number.isFinite(minX)) return { x: 0, y: 0, width: 1, height: 1 }
   return {
@@ -79,9 +94,23 @@ function dockTitle(item: SemanticItem): string {
   )
 }
 
+function routePath(route: SemanticRoute): string {
+  const [first, ...rest] = route.route
+  if (!first) return ''
+  const commands = [`M ${first.x} ${first.y}`]
+  for (const point of rest) commands.push(`L ${point.x} ${point.y}`)
+  return (
+    `<path data-route-id="${escapeXml(route.id)}" ` +
+    `data-source="${escapeXml(route.source)}" ` +
+    `data-target="${escapeXml(route.target)}" ` +
+    `d="${escapeXml(commands.join(' '))}" fill="none" stroke="#26251D"/>`
+  )
+}
+
 /** SVG campus for one semantic view. Titles are SVG text, not world-plane textures. */
 export function campusSvg(view: SemanticView): string {
-  const box = union(view.items)
+  const box = union(view)
+  const routes = view.routes.map(routePath).join('')
   const shapes = [...view.items]
     .sort((left, right) => roleOrder[left.role] - roleOrder[right.role])
     .map(shape)
@@ -89,6 +118,7 @@ export function campusSvg(view: SemanticView): string {
   const titles = view.items.filter(titled).map(title).join('')
   const docks = view.items.filter(item => docked(item, view)).map(dockTitle).join('')
   const world =
+    `<g data-routes="">${routes}</g>` +
     `<g data-shapes>${shapes}</g>` +
     `<g data-titles>${titles}</g>`
   if (!docks) {

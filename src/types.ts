@@ -193,11 +193,34 @@ export interface SemanticEdge {
   description: string
 }
 
+/** A route between the visible semantic endpoints of one authored edge. */
+export interface SemanticRoute extends SemanticEdge {
+  /** Projection-independent world points, attached to source and target bounds. */
+  route: Point[]
+  /** World-space label bounds, or null when the relationship has no label. */
+  label: Bounds | null
+}
+
+/** A semantic item that a renderer may offer as a selection target. */
+export type SemanticSelectionTarget = Pick<
+  SemanticItem,
+  'representationId' | 'id' | 'role' | 'bounds'
+>
+
+/** The C4 level and entered boundary represented by one semantic city. */
+export interface SemanticFocusScope {
+  level: SemanticLevel
+  focusId: string | null
+}
+
 export interface SemanticView {
   level: SemanticLevel
   focusId: string | null
+  focusScope: SemanticFocusScope
   items: SemanticItem[]
   edges: SemanticEdge[]
+  routes: SemanticRoute[]
+  selectionTargets: SemanticSelectionTarget[]
 }
 
 export interface SemanticViewOptions {
