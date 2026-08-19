@@ -8,8 +8,16 @@ import { test } from 'bun:test'
 import { normalizeTerminalPalette } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
+import type { WorkSource } from '../src/backlog-plugin.ts'
 import { scanRepository } from '../src/scanner.ts'
-import { startTerminalViewer } from '../src/viewers/tui/terminal-viewer.ts'
+import { startTerminalViewer } from '../src/view-host.ts'
+
+function emptyWorkSource(): WorkSource {
+  return {
+    read: async () => [],
+    watch: () => ({ close() {} }),
+  }
+}
 
 function run(command: string, args: string[], cwd: string) {
   return new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
@@ -79,6 +87,7 @@ test.concurrent('groma view does not scan on open and applies a watched fold', a
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
       palette: normalizeTerminalPalette(),
+      workSource: emptyWorkSource(),
     })
     await setup.renderOnce()
     await new Promise(resolve => setTimeout(resolve, 400))
@@ -121,6 +130,7 @@ test.concurrent('groma view applies an architecture Markdown change without R', 
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
       palette: normalizeTerminalPalette(),
+      workSource: emptyWorkSource(),
     })
     app.setView({ level: 'context', currentId: 'observed:shop' })
     await setup.renderOnce()
@@ -150,6 +160,7 @@ test.concurrent('R reloads Markdown without scanning while the watch is running'
     app = await startTerminalViewer(root, {
       renderer: setup.renderer,
       palette: normalizeTerminalPalette(),
+      workSource: emptyWorkSource(),
     })
     app.setView({ level: 'context', currentId: 'observed:shop' })
     await setup.renderOnce()

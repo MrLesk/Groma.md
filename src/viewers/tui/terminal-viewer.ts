@@ -1,5 +1,4 @@
 import {
-  createCliRenderer,
   FrameBufferRenderable,
   normalizeTerminalPalette,
 } from '@opentui/core'
@@ -10,9 +9,6 @@ import type {
 } from '@opentui/core'
 
 import { actionPath } from '../action-path.ts'
-import { watchArchitecture } from '../../architecture-watch.ts'
-import { loadArchitectureViewModel } from '../../core.ts'
-import { watchScan } from '../../scanner.ts'
 import { createCamera } from './camera.ts'
 import { paneLayout } from './layout.ts'
 import {
@@ -37,18 +33,14 @@ interface ViewerOptions {
   currentId?: string
   camera?: MapCamera
   palette?: NormalizedTerminalPalette
-  repositoryRoot?: string
-}
-
-interface StartViewerOptions {
-  renderer?: CliRenderer
-  palette?: NormalizedTerminalPalette
+  onRefresh?: () => void | Promise<void>
 }
 
 export interface TerminalViewer {
   closed: Promise<void>
   destroy(): void
   refresh(): Promise<void>
+  update(next: ArchitectureViewModel): void
   setView(next: {
     level?: SemanticLevel
     currentId?: string
@@ -68,7 +60,6 @@ export function mountTerminalViewer(
     ...(options.currentId === undefined ? {} : { currentId: options.currentId }),
   }
   let closed = false
-  let refreshWork: Promise<void> | undefined
   let resolveClosed!: () => void
   const closedPromise = new Promise<void>(resolve => {
     resolveClosed = resolve
@@ -150,6 +141,7 @@ export function mountTerminalViewer(
       actionStep: state.actionStep,
       actionCursor: state.actionCursor,
       detailsTab: state.detailsTab,
+      work: viewModel.work ?? [],
     })
     frame.requestRender()
   }
@@ -211,20 +203,16 @@ export function mountTerminalViewer(
   }
 
   function refresh(): Promise<void> {
-    if (!options.repositoryRoot || closed) return Promise.resolve()
-    refreshWork ??= loadArchitectureViewModel(options.repositoryRoot)
-      .then(next => {
-        if (closed) return
-        viewModel = next
-        camera.snapTo(snapshot())
-        releaseLive()
-        repaint()
-      })
-      .catch(() => {})
-      .finally(() => {
-        refreshWork = undefined
-      })
-    return refreshWork
+    if (closed) return Promise.resolve()
+    return Promise.resolve(options.onRefresh?.())
+  }
+
+  function update(next: ArchitectureViewModel): void {
+    if (closed) return
+    viewModel = next
+    camera.snapTo(snapshot())
+    releaseLive()
+    repaint()
   }
 
   function actionFor(key: KeyEvent): ViewerAction | undefined {
@@ -341,6 +329,7 @@ export function mountTerminalViewer(
     closed: closedPromise,
     destroy,
     refresh,
+    update,
     setView(next: {
       level?: SemanticLevel
       currentId?: string
@@ -357,51 +346,5 @@ export function mountTerminalViewer(
       }
       repaint()
     },
-  }
-}
-
-export async function startTerminalViewer(
-  repositoryRoot: string,
-  options: StartViewerOptions = {},
-): Promise<TerminalViewer> {
-  const response = await loadArchitectureViewModel(repositoryRoot)
-  const renderer = options.renderer ?? await createCliRenderer({
-    clearOnShutdown: true,
-    consoleMode: 'disabled',
-    exitOnCtrlC: false,
-    screenMode: 'alternate-screen',
-    useMouse: false,
-  })
-
-  try {
-    const palette = options.palette ?? normalizeTerminalPalette(
-      await renderer.getPalette({ timeout: 100 }),
-    )
-    const viewer = mountTerminalViewer(renderer, response, {
-      palette,
-      repositoryRoot,
-    })
-    const sourceWatch = watchScan(repositoryRoot, {
-      onFold: () => viewer.refresh(),
-    })
-    const architectureWatch = watchArchitecture(repositoryRoot, {
-      onChange: () => viewer.refresh(),
-    })
-    const stopWatches = () => {
-      sourceWatch.close()
-      architectureWatch.close()
-    }
-    return {
-      closed: viewer.closed.finally(stopWatches),
-      destroy() {
-        stopWatches()
-        viewer.destroy()
-      },
-      refresh: () => viewer.refresh(),
-      setView: next => viewer.setView(next),
-    }
-  } catch (error) {
-    renderer.destroy()
-    throw error
   }
 }

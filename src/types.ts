@@ -88,6 +88,20 @@ export interface ScanSummary {
   matched: number
 }
 
+export interface ActiveWorkItem {
+  id: string
+  title: string
+  assignees: string[]
+  references: string[]
+}
+
+export interface WorkMarker {
+  elementId: string
+  taskId: string
+  taskTitle: string
+  assignees: string[]
+}
+
 export interface ArchitectureElement {
   id: string
   kind: C4Kind
@@ -231,6 +245,7 @@ export interface SemanticViewOptions {
 
 export interface ArchitectureViewModel extends AnnotatedArchitectureModel {
   world: ArchitectureWorld
+  work?: WorkMarker[]
 }
 
 export interface ProjectedElement extends WorldElement {

@@ -40,7 +40,7 @@ program
       console.log(await renderPlainWorld(process.cwd()))
       return
     }
-    const { startTerminalViewer } = await import('./viewers/tui/terminal-viewer.ts')
+    const { startTerminalViewer } = await import('./view-host.ts')
     const viewer = await startTerminalViewer(process.cwd())
     await viewer.closed
   })

@@ -6,7 +6,9 @@ import { drawBoundary, drawGroupBoundary } from '../molecules/boundary.ts'
 import { drawCard } from '../molecules/card.ts'
 import { drawRoute, drawRouteArrow, drawRouteLabel } from '../molecules/route.ts'
 import { drawSelection } from '../molecules/selection.ts'
-import type { WorldProjection } from '../../../types.ts'
+import { drawWorkMarker } from '../molecules/work-marker.ts'
+import type { WorkMarker, WorldProjection } from '../../../types.ts'
+import { assigneesOnElement } from '../../../work-projection.ts'
 
 export function drawWorld(
   buffer: OptimizedBuffer,
@@ -15,11 +17,13 @@ export function drawWorld(
   trace: {
     pathIds: Set<string>
     onPath: (elementId: string) => boolean
+    work: WorkMarker[]
     /** The relationship whose leg is being traced; drawn heavy. */
     tracedId?: string
   } = {
     pathIds: new Set(),
     onPath: () => true,
+    work: [],
   },
 ): void {
   buffer.pushScissorRect(
@@ -92,6 +96,12 @@ export function drawWorld(
   }
   if (selected?.display === 'card') {
     drawSelection(buffer, selected, theme)
+  }
+  for (const element of shown(item => item.display !== 'hidden')) {
+    const assignees = assigneesOnElement(trace.work, element.id)
+    if (assignees.length > 0) {
+      drawWorkMarker(buffer, element, assignees, theme)
+    }
   }
   for (const relationship of projection.relationships) {
     drawRouteLabel(

@@ -21,7 +21,7 @@ import { drawHierarchy } from './organisms/hierarchy.ts'
 import { drawWorld } from './organisms/world.ts'
 import { treeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
-import type { ArchitectureWorld, WorldProjection } from '../../types.ts'
+import type { ArchitectureWorld, WorkMarker, WorldProjection } from '../../types.ts'
 
 export { themeFromPalette } from './atoms/theme.ts'
 
@@ -43,6 +43,7 @@ export function paintWorld(
     actionStep?: number
     actionCursor?: string
     detailsTab: DetailsTab
+    work: WorkMarker[]
   },
 ): void {
   buffer.clear(theme.background)
@@ -56,6 +57,7 @@ export function paintWorld(
       return elementId === selectionId || elementOnPath(elementId, pathIds, world)
     },
     tracedId: traced?.id,
+    work: options.work,
   })
   const commands = worldCommands(world)
   const tree = options.tree
@@ -80,6 +82,7 @@ export function paintWorld(
       tab: options.detailsTab,
       activeActionId: options.activeActionId,
       actionCursor: options.actionCursor,
+      work: options.work.filter(marker => marker.elementId === selected.id),
     })
   }
   const litCommand = world.relationships.find(item => item.id === options.lit.id)
