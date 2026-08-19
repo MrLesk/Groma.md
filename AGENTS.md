@@ -53,6 +53,13 @@ administration, such as relabeling, status corrections, or metadata maintenance.
 in-scope code change may remain part of that code task. Continue to run `backlog instructions overview` for every user
 request.
 
+## Backlog references
+
+When a task changes a Groma architecture element, add that element's exact
+`id` as a Backlog reference (`backlog task edit TASK-N --add-ref <id>`).
+Do not use file paths as the join key. Only an exact element `id` produces
+a live marker.
+
 ## Commit messages
 
 When the user confirms that a task is done, commit that task's files

@@ -15,7 +15,7 @@ Starts Groma from the command line: `groma view`, `groma web`, `groma scan`, and
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Terminal viewer](../terminal-viewer/container.md) | Starts the terminal map | groma view |
+| [View host](../view-host/container.md) | Starts the terminal map | groma view |
 | [Web viewer](../web-viewer/container.md) | Starts the browser map | groma web |
 | [Scanner](../scanner/container.md) | Runs a scan | groma scan |
 | [Accept](../core/components/accept.md) | Accepts a matched ghost | groma accept |
