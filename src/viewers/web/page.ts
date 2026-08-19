@@ -70,8 +70,8 @@ const style = `
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
   #legend .mark { color: var(--ink); letter-spacing: 0; }
-  #map canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-  #map canvas:active { cursor: grabbing; }
+  #map svg { display: block; width: 100%; height: 100%; cursor: grab; }
+  #map svg:active { cursor: grabbing; }
   #details { overflow: auto; padding: 24px 20px; border-left: 1px solid var(--ink); }
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 20px; font-weight: 600; line-height: 1.3; margin: 0 0 14px; }
