@@ -11,6 +11,7 @@ import type {
   WorldElement,
   WorldRelationship,
 } from './types.ts'
+import { promotedEndpoints, semanticRoutes } from './semantic-city.ts'
 
 /** Same name room the world layout uses: three units per glyph plus a side margin. */
 const NAME_UNIT = 3
@@ -61,10 +62,6 @@ function isMark(element: WorldElement): boolean {
   return element.kind === 'person' || element.external
 }
 
-function attachable(role: SemanticRole | undefined): boolean {
-  return role === 'named' || role === 'mark' || role === 'campus'
-}
-
 function roleOf(
   element: WorldElement,
   level: SemanticLevel,
@@ -104,18 +101,6 @@ function roleOf(
     return 'named'
   }
   return null
-}
-
-function displayOf(
-  element: WorldElement,
-  roles: Map<string, SemanticRole>,
-  elements: Map<string, WorldElement>,
-): WorldElement | undefined {
-  let current: WorldElement | undefined = element
-  while (current) {
-    if (attachable(roles.get(current.representationId))) return current
-    current = current.parent === null ? undefined : elements.get(current.parent)
-  }
 }
 
 function touchesFocus(
@@ -158,27 +143,22 @@ export function semanticView(
   const { level, focusId } = options
   const elements = byId(world)
   const focus = focusId === undefined ? undefined : elements.get(focusId)
-  const roles = new Map<string, SemanticRole>()
   const items: SemanticItem[] = []
   for (const element of world.elements) {
     const role = roleOf(element, level, focus, elements)
     if (!role) continue
-    roles.set(element.representationId, role)
     items.push(toItem(element, role, level))
   }
 
   const edges: SemanticEdge[] = []
   const seen = new Set<string>()
   for (const relationship of world.relationships) {
-    const sourceElement = elements.get(relationship.source)
-    const targetElement = elements.get(relationship.target)
-    if (!sourceElement || !targetElement) continue
     if (level !== 'context' && (!focusId || !touchesFocus(relationship, focusId, elements))) {
       continue
     }
-    const source = displayOf(sourceElement, roles, elements)
-    const target = displayOf(targetElement, roles, elements)
-    if (!source || !target) continue
+    const endpoints = promotedEndpoints(relationship, items, world.elements)
+    if (!endpoints) continue
+    const { source, target } = endpoints
     if (source.representationId === target.representationId) continue
     const pair = `${source.representationId}\0${target.representationId}`
     if (seen.has(pair)) continue
@@ -191,10 +171,25 @@ export function semanticView(
     })
   }
 
+  const selectionTargets = items
+    .filter(item => item.role !== 'underlay')
+    .map(({ representationId, id, role, bounds }) => ({
+      representationId,
+      id,
+      role,
+      bounds: { ...bounds },
+    }))
+
   return {
     level,
     focusId: focusId ?? null,
+    focusScope: {
+      level,
+      focusId: focusId ?? null,
+    },
     items,
     edges,
+    routes: semanticRoutes(world.relationships, edges, items),
+    selectionTargets,
   }
 }

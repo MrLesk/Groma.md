@@ -93,8 +93,12 @@ external systems are marks, not campus-sized plates. `/containers.svg`
 (optional `?focus=`) docks the focused system's title in screen space
 and names its containers.
 
-The map never reads architecture Markdown or calculates layout. It
-projects the world Core already has.
+The map never reads architecture Markdown or calculates layout. Core supplies
+`ArchitectureWorld`, then `semanticView` supplies one semantic city for the
+current level and focus. The Web renderer owns only projection, camera, paint,
+hit testing, interaction, and playback; it consumes the city's roles, bounds,
+selection targets, promoted endpoints, routes, and labels without a second
+disclosure pass.
 
 ## What you can do
 

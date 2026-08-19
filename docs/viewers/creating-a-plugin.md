@@ -8,7 +8,7 @@ Surface facts stay in the plugin: terminal cells, browser pixels, MCP app
 chrome. They must not appear in Groma core or architecture Markdown.
 
 ```text
-Groma core → world → viewer plugin → a person
+ArchitectureWorld → semanticView (semantic city) → viewer plugin → a person
 ```
 
 ## What every viewer does
@@ -26,8 +26,11 @@ itself. Groma writes those files.
 ## The world
 
 Core returns the merged observed and planned architecture, already laid
-out, with origin annotations. That response is the only input. A live
-host may replace it after `groma scan --watch` folds. Keys, pointers,
+out, with origin annotations. For a requested C4 level and focus, the
+shared `semanticView` derives the semantic city before the plugin runs:
+roles, bounds, promoted endpoints, routes, labels, selection targets, and
+focus scope. That city is the renderer input. A live host may replace it
+after `groma scan --watch` folds. Keys, pointers, projection, camera, paint,
 and widgets are plugin concerns.
 
 The [TUI viewer](tui/index.md) is the first plugin. The [web

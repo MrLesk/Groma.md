@@ -4,6 +4,8 @@ import { test } from 'bun:test'
 import { displaySize, semanticView } from '../src/semantic-view.ts'
 import type {
   ArchitectureWorld,
+  Bounds,
+  Point,
   SemanticRole,
   SemanticView,
   WorldElement,
@@ -16,6 +18,8 @@ function link(
   source: string,
   target: string,
   description: string,
+  route: Point[] = [],
+  label: Bounds | null = null,
 ): WorldRelationship {
   return {
     id,
@@ -24,8 +28,8 @@ function link(
     description,
     technology: '',
     origin: 'observed',
-    route: [],
-    label: null,
+    route,
+    label,
   }
 }
 
@@ -82,9 +86,30 @@ function shopWorld(): ArchitectureWorld {
     groups: [],
     elements: [shop, api, web, soon, orders, pay, page, scene, yard, buyer, git],
     relationships: [
-      link('runs', buyer.representationId, orders.representationId, 'Runs a checkout'),
-      link('uses', orders.representationId, page.representationId, 'Uses the page'),
-      link('versions', shop.representationId, git.representationId, 'Versions architecture'),
+      link(
+        'runs',
+        buyer.representationId,
+        orders.representationId,
+        'Runs a checkout',
+        [{ x: 20, y: 210 }, { x: 100, y: 210 }],
+        { x: 50, y: 210, width: 10, height: 1 },
+      ),
+      link(
+        'uses',
+        orders.representationId,
+        page.representationId,
+        'Uses the page',
+        [{ x: 150, y: 58 }, { x: 150, y: 220 }],
+        { x: 150, y: 130, width: 10, height: 1 },
+      ),
+      link(
+        'versions',
+        shop.representationId,
+        git.representationId,
+        'Versions architecture',
+        [{ x: 300, y: 20 }, { x: 400, y: 20 }],
+        { x: 340, y: 20, width: 10, height: 1 },
+      ),
     ],
   }
 }
@@ -108,6 +133,18 @@ function worldOf(world: ArchitectureWorld, id: string): WorldElement {
   const found = world.elements.find(element => element.id === id)
   assert.ok(found, `missing world ${id}`)
   return found
+}
+
+function route(view: SemanticView, id: string): SemanticView['routes'][number] {
+  const found = view.routes.find(entry => entry.id === id)
+  assert.ok(found, `missing route ${id}`)
+  return found
+}
+
+function deepFreeze(value: unknown): void {
+  if (value === null || typeof value !== 'object') return
+  Object.freeze(value)
+  for (const child of Object.values(value)) deepFreeze(child)
 }
 
 test.concurrent('context keeps a system campus wrapper size from world-layout', () => {
@@ -224,4 +261,99 @@ test.concurrent('relationships attach to named, mark, or campus items, never und
       assert.notEqual(target.role, 'underlay')
     }
   }
+})
+
+test.concurrent('context exposes stable selection targets and direct route geometry', () => {
+  const world = shopWorld()
+  const before = structuredClone(world)
+  const view = semanticView(world, { level: 'context' })
+
+  assert.deepEqual(view.focusScope, { level: 'context', focusId: null })
+  assert.deepEqual(
+    view.selectionTargets.map(target => target.id).sort(),
+    ['buyer', 'git', 'shop', 'yard'],
+  )
+  assert.ok(view.selectionTargets.every(target => target.role !== 'underlay'))
+
+  const versions = route(view, 'versions')
+  assert.equal(versions.source, 'observed:shop')
+  assert.equal(versions.target, 'observed:git')
+  assert.deepEqual(versions.route[0], world.relationships[2]!.route[0])
+  assert.equal(versions.route.at(-1)?.x, item(view, 'git').bounds.x - 1)
+  assert.deepEqual(versions.label, world.relationships[2]!.label)
+  assert.deepEqual(world, before)
+})
+
+test.concurrent('containers promote endpoints once and route labels stay in world geometry', () => {
+  const world = shopWorld()
+  const view = semanticView(world, {
+    level: 'containers',
+    focusId: 'observed:shop',
+  })
+
+  assert.deepEqual(view.focusScope, {
+    level: 'containers',
+    focusId: 'observed:shop',
+  })
+  assert.ok(view.selectionTargets.some(target => target.id === 'api'))
+  assert.ok(view.selectionTargets.every(target => target.role !== 'underlay'))
+
+  const uses = route(view, 'uses')
+  assert.deepEqual(
+    [uses.source, uses.target],
+    ['observed:api', 'observed:web'],
+  )
+  assert.notDeepEqual(uses.route, world.relationships[1]!.route)
+  assert.ok(uses.route.length >= 2)
+  assert.ok(uses.label)
+  assert.ok(view.routes.every(entry => {
+    return view.selectionTargets.some(target => target.representationId === entry.source)
+      && view.selectionTargets.some(target => target.representationId === entry.target)
+  }))
+})
+
+test.concurrent('components keep the entered boundary anchor and promote to the visible component', () => {
+  const world = shopWorld()
+  const view = semanticView(world, {
+    level: 'components',
+    focusId: 'observed:web',
+  })
+  const web = item(view, 'web')
+  assert.equal(web.role, 'campus')
+  assert.deepEqual(web.bounds, worldOf(world, 'web').bounds)
+  assert.ok(view.selectionTargets.some(target => target.id === 'page'))
+  assert.ok(view.selectionTargets.every(target => target.role !== 'underlay'))
+
+  const uses = route(view, 'uses')
+  assert.deepEqual(
+    [uses.source, uses.target],
+    ['observed:shop', 'observed:page'],
+  )
+  assert.ok(uses.route.length >= 2)
+  for (let index = 1; index < uses.route.length; index += 1) {
+    const previous = uses.route[index - 1]!
+    const point = uses.route[index]!
+    assert.ok(previous.x === point.x || previous.y === point.y)
+  }
+})
+
+test.concurrent('semantic city reads a frozen fixture without changing world geometry', () => {
+  const world = shopWorld()
+  const before = structuredClone(world)
+  deepFreeze(world)
+
+  const context = semanticView(world, { level: 'context' })
+  const containers = semanticView(world, {
+    level: 'containers',
+    focusId: 'observed:shop',
+  })
+  const components = semanticView(world, {
+    level: 'components',
+    focusId: 'observed:web',
+  })
+
+  assert.ok(context.routes.length > 0)
+  assert.ok(containers.routes.length > 0)
+  assert.ok(components.routes.length > 0)
+  assert.deepEqual(world, before)
 })
