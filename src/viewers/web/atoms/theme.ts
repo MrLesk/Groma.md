@@ -14,7 +14,7 @@ export interface Palette {
   faceRight: string
   people: string
   external: string
-  /** Pattern strokes: dots, crosses and hatches. */
+  /** The kind patterns: dots, crosses, storey lines, grain and the zone hatch. */
   hatch: string
   grid: string
   gridMajor: string

@@ -7,10 +7,10 @@ function classOf(projected: ProjectedBuilding): string {
   const { building } = projected
   const kind = building.kind === 'person' ? 'person' : building.external ? 'external' : 'component'
   const ghost = building.origin === 'observed' ? '' : ` ghost ${building.origin}`
-  return `building ${kind} ${building.shape.kind}${ghost}`
+  return `building ${kind}${ghost}`
 }
 
-/** Buildings back to front: every tier's three faces, a hatch lying on each side face of a tower, the name on the roof. */
+/** Buildings back to front: every tier's three faces, the kind's pattern lying on each side face, the name on the plain roof. */
 export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const projected of scene.buildings) {
@@ -20,9 +20,7 @@ export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<s
     for (const tier of tiers) {
       for (const face of tier) {
         group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
-        if (building.shape.kind === 'tower' && face.side !== 'top') {
-          group.append(svg('polygon', { points: pointsAttribute(face.points) }, `hatch ${face.side}`))
-        }
+        if (face.side !== 'top') group.append(svg('polygon', { points: pointsAttribute(face.points) }, `pattern ${face.side}`))
       }
     }
     group.append(surfaceText(text, ROOF_FONT, 'label'))

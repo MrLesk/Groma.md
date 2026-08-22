@@ -38,7 +38,7 @@ const style = `
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-  #legend span, #details .meta, #details .section, #flows .section, #action.hint, #zoom, .chip, #stats {
+  #legend span, #details .meta, #details .section, #flows .section, #action.hint, #zoom, #details .chip, #stats {
     font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -80,7 +80,7 @@ const style = `
   #details .tabs { margin: 0 0 8px; }
   #details .tabs button { flex: 1; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { border: 1px solid var(--hairline); padding: 2px 8px; margin: 0; }
+  #details .chip { border: 1px solid var(--hairline); padding: 2px 8px; margin: 0; }
   #footer {
     grid-column: 1 / -1;
     display: flex;
