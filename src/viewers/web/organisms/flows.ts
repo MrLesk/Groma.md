@@ -1,6 +1,9 @@
 import type { WorldRelationship } from '../../../types.ts'
 
-/** The sidebar's flow list: every person command, the active one lit. */
+/** The list starts folded and keeps its state across repaints. */
+let unfolded = false
+
+/** The sidebar's flow list, folded under its heading: every person command, the active one lit. */
 export function paintFlows(
   host: HTMLElement,
   commands: WorldRelationship[],
@@ -9,10 +12,17 @@ export function paintFlows(
 ): void {
   host.replaceChildren()
   if (commands.length === 0) return
-  const label = document.createElement('p')
-  label.className = 'section'
-  label.textContent = 'Flows'
-  host.append(label)
+  const heading = document.createElement('button')
+  heading.type = 'button'
+  heading.className = 'section'
+  heading.textContent = `${unfolded ? '▾' : '▸'} Flows`
+  heading.setAttribute('aria-expanded', String(unfolded))
+  heading.addEventListener('click', () => {
+    unfolded = !unfolded
+    paintFlows(host, commands, activeActionId, onPick)
+  })
+  const list = document.createElement('div')
+  list.hidden = !unfolded
   for (const command of commands) {
     const button = document.createElement('button')
     button.type = 'button'
@@ -23,6 +33,7 @@ export function paintFlows(
     name.textContent = `→ ${command.description}`
     button.append(name)
     button.addEventListener('click', () => onPick(command.id))
-    host.append(button)
+    list.append(button)
   }
+  host.append(heading, list)
 }
