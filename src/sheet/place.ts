@@ -11,8 +11,8 @@ import {
   roofLines,
   shapeOf,
 } from './measure.ts'
-import { columns, shelf } from './pack.ts'
-import type { RankedItem } from './pack.ts'
+import { grow, shelf } from './pack.ts'
+import type { Partnered } from './pack.ts'
 import { flowRanks } from './rank.ts'
 import type {
   Building,
@@ -102,8 +102,9 @@ function lifted(siblings: readonly Node[], relationships: readonly WorldRelation
 }
 
 /**
- * A surface holding its children in flow columns (the people and external
- * islands stack theirs in one column), at least as wide as its own name.
+ * A surface holding its children by growth placement (the people and
+ * external islands stack theirs in one column), at least as wide as its own
+ * name.
  */
 function packed(
   key: string,
@@ -112,12 +113,11 @@ function packed(
   relationships: readonly WorldRelationship[],
   stack = false,
 ): Node {
-  const { entries, edges, partners } = lifted(children, relationships)
-  const ranks = flowRanks(children.map(child => child.key), entries, edges)
-  const items: RankedItem[] = children.map(child => ({
-    key: child.key, w: child.w, d: child.d, rank: ranks.get(child.key), partners: partners.get(child.key)!,
+  const { entries, partners } = lifted(children, relationships)
+  const items: Partnered[] = children.map(child => ({
+    key: child.key, w: child.w, d: child.d, entry: entries.has(child.key), partners: partners.get(child.key)!,
   }))
-  const placed = stack ? shelf(items, 1) : columns(items)
+  const placed = stack ? shelf(items, 1) : grow(items)
   return {
     key,
     w: Math.max(placed.w, nameWidth(paint)),
