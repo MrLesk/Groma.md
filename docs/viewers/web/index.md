@@ -75,11 +75,12 @@ systems; on screen the row runs from the upper left down to the right.
 The people and external islands are squares with their buildings
 centred, each a little bigger than what stands on it.
 Inside every surface, relationships decide where the children stand:
-they form columns from west to east by flow rank, the longest chain
-of relationships reaching them from the people (in a cycle, the one
-the people reach first goes west; a container ranks where the flow
-first enters it); a child lines up with its partners in earlier
-columns, a source centres on its targets, and children no
+they form columns from west to east by the flow among them. The
+children something outside the surface feeds stand first (in a
+system, whatever a person uses directly), and every other child stands
+east of whatever feeds it, by the longest chain; in a cycle, the one
+the flow reaches first goes west. A child lines up with its partners
+in earlier columns, a source centres on its targets, and children no
 relationship touches are packed as one block after the columns. The
 people and external islands slide along the row so their buildings
 face what they talk to.
@@ -88,13 +89,17 @@ thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one
 plane. Components are buildings on their slab: every 150 observed lines of
 code add half a floor up to three floors, one code file is a block,
-two or three files stack as tiers, four or more files make a hatched
-tower. People and external systems are one-floor buildings on their
-own islands, and the islands tell them apart: the people island is
-dotted, the external island cross-hatched, every pattern lying on the
-sheet like the names. Sibling groups are flat hatched zones around
-their members. Line style means origin and nothing else: observed
-items are solid, planned ghosts dashed, missing ghosts dotted.
+two or three files stack as tiers, four or more files make a tower.
+People and external systems are one-floor buildings on their own
+islands. One grey pattern tells each kind apart, on side faces and
+surfaces and never on a roof: component sides carry storey lines,
+person sides and the people island dots, external sides and the
+external island crosses, container slabs a faint grain, and system
+islands stay plain paper; every pattern is laid in the plane it lies
+on. Sibling groups are flat hatched zones around their members, and a
+translucent chip lies under every name that lies on a pattern. Line
+style means origin and nothing else: observed items are solid,
+planned ghosts dashed, missing ghosts dotted.
 
 Names lie on the surfaces they belong to, skewed with the sheet: a
 building's name on its roof, wrapped onto two lines when it is long,

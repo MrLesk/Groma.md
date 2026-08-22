@@ -44,7 +44,7 @@ export function roofLines(name: string): string[] {
   return [name.slice(0, split), name.slice(split + 1)]
 }
 
-/** Code files decide the shape: one box, a stack of one tier per file, or a hatched tower. */
+/** Code files decide the shape: one box, a stack of one tier per file, or a tower. */
 export function shapeOf(files: number): Shape {
   if (files >= 4) return { kind: 'tower', levels: 1 }
   if (files >= 2) return { kind: 'stack', levels: files }

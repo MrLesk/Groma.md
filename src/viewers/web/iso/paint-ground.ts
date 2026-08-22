@@ -1,4 +1,4 @@
-import { ISLAND_FONT, SURFACE_FONT } from '../../../sheet/measure.ts'
+import { ISLAND_FONT, ISLAND_SPACING, SURFACE_FONT } from '../../../sheet/measure.ts'
 import type { Compass, ProjectedScene, ProjectedZone, Segment } from './project.ts'
 import { planeMatrix } from './project.ts'
 import { pointsAttribute, round, svg } from './svg.ts'
@@ -46,7 +46,7 @@ function zoneGroup(zone: ProjectedZone): SVGGElement {
   const group = svg('g', {}, 'zone')
   group.append(
     svg('polygon', { points: pointsAttribute(zone.polygon) }, 'ground'),
-    surfaceText(zone.text, SURFACE_FONT, 'label'),
+    surfaceText(zone.text, SURFACE_FONT, 'label', true),
   )
   return group
 }
@@ -58,7 +58,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
     const group = svg('g', {}, `island ${island.kind}`)
     group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'ground'))
     if (island.kind !== 'system') group.append(svg('polygon', { points: pointsAttribute(polygon) }, 'pattern'))
-    group.append(surfaceText(text, ISLAND_FONT, 'label'))
+    group.append(surfaceText(text, ISLAND_FONT, 'label', island.kind !== 'system', ISLAND_SPACING))
     if (island.element) {
       group.dataset.id = island.element.representationId
       group.setAttribute('aria-label', island.name)
@@ -72,14 +72,16 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
   return nodes
 }
 
-/** Container slabs: the top level with the ground, the sides hanging below it, the name and the zones lying on top. */
+/** Container slabs: the top level with the ground under a faint grain, the sides hanging below it, the name on a chip and the zones lying on top. */
 export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const { slab, faces, text } of scene.slabs) {
     const group = svg('g', { 'aria-label': slab.name }, `slab${slab.origin === 'observed' ? '' : ` ghost ${slab.origin}`}`)
     group.dataset.id = slab.representationId
     for (const face of faces) group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
-    group.append(surfaceText(text, SURFACE_FONT, 'label'))
+    const top = faces.find(face => face.side === 'top')!
+    group.append(svg('polygon', { points: pointsAttribute(top.points) }, 'pattern'))
+    group.append(surfaceText(text, SURFACE_FONT, 'label', true))
     for (const zone of scene.zones) {
       if (zone.zone.parent === slab.representationId) group.append(zoneGroup(zone))
     }
