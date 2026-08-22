@@ -4,6 +4,7 @@ import type {
   CodeReference,
   Origin,
   WorldElement,
+  WorldRelationship,
 } from '../../../types.ts'
 import { actionCaption, outgoingActions, travelledBy } from '../../action-path.ts'
 import { kindGlyph, kindLabel } from '../atoms/kind.ts'
@@ -292,6 +293,32 @@ export function paintDetails(
     },
   }
   for (const key of tabSections(tab)) sections[key]()
+}
+
+/** The pane for a selected relationship: its description as the title, then both ends as links. */
+export function paintRelationship(
+  host: HTMLElement,
+  relationship: WorldRelationship,
+  world: ArchitectureWorld,
+  onSelect: (id: string) => void,
+): void {
+  const byId = new Map(world.elements.map(item => [item.representationId, item]))
+  host.querySelector('h1')!.textContent = relationship.description
+  host.querySelector('.meta')!.textContent = `Relationship · ${relationship.origin}`
+  host.querySelector('.tabs')!.replaceChildren()
+  const list = document.createElement('ul')
+  for (const [prefix, id] of [['', relationship.source], ['→ ', relationship.target]] as const) {
+    const end = byId.get(id)!
+    const item = document.createElement('li')
+    const link = document.createElement('button')
+    link.type = 'button'
+    link.className = 'link'
+    link.append(prefix, marked(end.kind, end.external, end.name))
+    link.addEventListener('click', () => onSelect(id))
+    item.append(link)
+    list.append(item)
+  }
+  host.querySelector('.body')!.replaceChildren(list)
 }
 
 /** Empties the pane while nothing is selected. */

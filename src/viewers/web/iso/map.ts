@@ -42,7 +42,7 @@ export interface IsoMap {
   move(camera: Camera): void
   /** Rebuilds every layer; only a world change needs this. */
   paint(scene: ProjectedScene): void
-  /** Marks the selected element, the surface it stands on, and the routes touching it. */
+  /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
   select(id: string | undefined): void
   /** Lights a picked flow's routes and dims everything off its path. */
   setFlow(litIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
@@ -98,13 +98,16 @@ export function createMap(host: HTMLElement): IsoMap {
       ])
     },
     select(id) {
-      const context = id === undefined ? undefined : surfaces.get(id)
+      const route = routes.get(id ?? '')
+      const ends = new Set(route === undefined ? [id] : [route.source, route.target])
+      const context = route === undefined ? surfaces.get(id ?? '') : undefined
       for (const [itemId, node] of items) {
-        node.classList.toggle('selected', itemId === id)
+        node.classList.toggle('selected', ends.has(itemId))
         node.classList.toggle('context', itemId === context)
       }
-      for (const route of routes.values()) {
-        route.group.classList.toggle('endpoint', id !== undefined && (route.source === id || route.target === id))
+      for (const [routeId, node] of routes) {
+        node.group.classList.toggle('selected', routeId === id)
+        node.group.classList.toggle('endpoint', route === undefined && (ends.has(node.source) || ends.has(node.target)))
       }
     },
     setFlow(litIds, onPath) {

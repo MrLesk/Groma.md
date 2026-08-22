@@ -2,25 +2,12 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import type { ArchitectureWorld, WorldRelationship } from '../src/types.ts'
+import type { ArchitectureWorld } from '../src/types.ts'
 import { readView, writeView } from '../src/viewers/web/url.ts'
 import type { ViewState } from '../src/viewers/web/url.ts'
-import { box } from './helpers.ts'
+import { box, uses } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
-
-function uses(id: string, source: string, target: string): WorldRelationship {
-  return {
-    id,
-    source: `observed:${source}`,
-    target: `observed:${target}`,
-    description: id,
-    technology: '',
-    origin: 'observed',
-    route: [],
-    label: null,
-  }
-}
 
 const world: ArchitectureWorld = {
   bounds: unit,
@@ -54,6 +41,13 @@ test.concurrent('defaults write nothing and read back as the default view', () =
   assert.deepEqual(readView('', world), rest)
   assert.equal(writeView({ ...rest, action: { id: 'relationship:1' } }, world), '?flow=commands/scan')
   assert.equal(writeView({ ...rest, selectedId: 'observed:dev' }, world), '?person=dev')
+})
+
+test.concurrent('a selected relationship is carried as its source and target ids', () => {
+  const state: ViewState = { selectedId: 'relationship:1', action: {}, tab: 'what', dark: false }
+  assert.equal(writeView(state, world), '?relationship=commands/scan')
+  assert.deepEqual(readView('?relationship=commands/scan', world), state)
+  assert.equal(readView('?relationship=dev/scan', world).selectedId, undefined)
 })
 
 test.concurrent('unknown ids, kinds and values are ignored', () => {
