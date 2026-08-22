@@ -1,5 +1,7 @@
 import { planeMatrix } from './project.ts'
 import type { Plane } from './project.ts'
+import { SIDE, depthOf, emphasis, strokeAt, tintAt } from './scale.ts'
+import type { Level } from './scale.ts'
 
 const ink = 'stroke="var(--map-hatch)" stroke-width="0.75"'
 const dot = '<circle cx="4" cy="4" r="0.75" fill="var(--map-hatch)"/>'
@@ -15,8 +17,8 @@ function tile(id: string, plane: Plane, size: number, body: string): string {
  * lies on and mapped by that plane's matrix: dots for people (their island
  * and the sides of their buildings), crosses for external systems, storey
  * lines for the sides of components, a faint grain for container slabs and a
- * diagonal hatch for group zones. Systems stay plain paper, and so does
- * every roof.
+ * diagonal hatch for group zones. Systems have no pattern, and neither does
+ * any roof.
  */
 export const mapDefs = '<defs>'
   + tile('dots', 'ground', 8, dot) + tile('dots-left', 'left', 8, dot) + tile('dots-right', 'right', 8, dot)
@@ -26,11 +28,28 @@ export const mapDefs = '<defs>'
   + tile('hatch-ground', 'ground', 8, `<path d="M0 8L8 0" ${ink}/>`)
   + '</defs>'
 
+/** Paper with a depth's share of ink mixed in, in whichever theme. */
+function tint(depth: number): string {
+  return `color-mix(in srgb, var(--ink) ${(tintAt(depth) * 100).toFixed(1)}%, var(--paper))`
+}
+
+function stroke(level: Level): string {
+  return `--stroke: ${strokeAt(depthOf(level)).toFixed(2)}px;`
+}
+
+/** A level's tokens: its stroke, the tint of its top and, deeper, of its sides. */
+function tokens(level: Level): string {
+  const depth = depthOf(level)
+  return `${stroke(level)} --top-fill: ${tint(depth)}; --right-fill: ${tint(depth + SIDE.right)}; --left-fill: ${tint(depth + SIDE.left)};`
+}
+
 /**
- * The map's own stylesheet; colours come from the page palette variables.
- * Line style means origin and nothing else: observed solid, planned dashed,
- * missing dotted; patterns mean kind and nothing else. Selection and
- * context change strokes, never fills.
+ * The map's own stylesheet. Every level group sets its tokens from the
+ * scale, one rule turns them into strokes (times the state's emphasis and
+ * the camera's zoom weight) and fills, and nothing else sets a width or a
+ * tint. Line style means origin and nothing else: observed solid, planned
+ * dashed, missing dotted; patterns mean kind and nothing else. Selection
+ * and context change strokes, never fills.
  */
 export const mapCss = `
   #map svg {
@@ -39,18 +58,28 @@ export const mapCss = `
   }
   #map svg:active { cursor: grabbing; }
   #map .camera { transform-box: view-box; transform-origin: 0 0; }
-  #map .sheet { pointer-events: none; }
+  #map .sheet { pointer-events: none; ${stroke('island')} }
+  #map .tick, #map .compass { ${stroke('building')} }
+  /* zones lie inside slab groups and keep their own weight while the slab is hovered or selected */
+  #map .zone { ${stroke('building')} --emphasis: 1; }
+  #map .island { ${tokens('island')} }
+  #map .slab { ${tokens('slab')} }
+  #map .building { ${tokens('building')} }
+  #map .route { ${stroke('route')} }
+  #map .frame, #map .tick, #map .compass .ring, #map .compass .star, #map .compass .north,
+  #map .ground, #map .face, #map .route .line {
+    stroke: var(--map-line); stroke-linejoin: round;
+    stroke-width: calc(var(--stroke) * var(--emphasis, 1) * var(--weight, 1));
+  }
+  #map .frame, #map .tick, #map .compass .ring, #map .compass .star { fill: none; }
+  #map .compass .north { fill: var(--map-line); }
+  #map .compass .text { fill: var(--muted); }
   #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
-  #map .frame { fill: none; stroke: var(--map-line); stroke-width: 1.5; }
-  #map .tick { fill: none; stroke: var(--map-line); stroke-width: 1; }
-  #map .compass .ring, #map .compass .star { fill: none; stroke: var(--map-line); stroke-width: 1; }
-  #map .compass .north { fill: var(--map-line); stroke: var(--map-line); stroke-width: 1; }
-  #map .compass .text { fill: var(--muted); }
-  #map .ground { stroke: var(--map-line); stroke-width: 1; stroke-linejoin: round; }
-  #map .island.people .ground { fill: var(--map-people); }
-  #map .island.external .ground { fill: var(--map-external); }
-  #map .island.system .ground { fill: var(--paper); stroke-width: 1.25; }
+  #map .ground, #map .face.top { fill: var(--top-fill); }
+  #map .face.right { fill: var(--right-fill); }
+  #map .face.left { fill: var(--left-fill); }
+  #map .person .face { fill: var(--paper); }
   #map .zone .ground { fill: url(#hatch-ground); stroke: var(--muted); }
   #map .pattern, #map .chip { stroke: none; pointer-events: none; }
   #map .island.people .pattern { fill: url(#dots); }
@@ -63,10 +92,6 @@ export const mapCss = `
   #map .building.external .pattern.left { fill: url(#cross-left); }
   #map .building.external .pattern.right { fill: url(#cross-right); }
   #map .chip { fill: var(--paper); fill-opacity: 0.75; }
-  #map .face { stroke: var(--map-line); stroke-width: 1; stroke-linejoin: round; }
-  #map .face.left { fill: var(--map-face-left); }
-  #map .face.right { fill: var(--map-face-right); }
-  #map .face.top { fill: var(--map-deck); }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .chip { display: none; }
@@ -74,15 +99,18 @@ export const mapCss = `
   #map .ghost.missing .face, #map .ghost.missing .ground, #map .route.ghost.missing .line { stroke-dasharray: 1 3; }
   #map .text { fill: var(--ink); pointer-events: none; }
   #map .zone > .label .text { fill: var(--muted); }
-  #map .route .line { fill: none; stroke: var(--map-line); stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; opacity: 0.9; }
+  #map .building > .label { opacity: var(--name-opacity, 1); }
+  #map .route .line { fill: none; stroke-linecap: round; opacity: 0.9; }
   #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
-  #map .route:hover .line { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
+  #map .route:hover, #map .route.endpoint { --emphasis: ${emphasis(1)}; }
+  #map .route:hover .line { stroke: var(--ink); opacity: 1; }
   #map .route:hover .arrow { fill: var(--ink); opacity: 1; }
-  #map .route.endpoint .line, #map .route.selected .line { stroke: var(--accent); stroke-width: 1.5; opacity: 1; }
+  #map .route.endpoint .line, #map .route.selected .line { stroke: var(--accent); opacity: 1; }
   #map .route.endpoint .arrow, #map .route.selected .arrow { fill: var(--accent); opacity: 1; }
+  #map .route.lit { --emphasis: ${emphasis(2)}; }
   #map .route.lit .line {
-    stroke: var(--accent); stroke-width: 2; opacity: 1;
+    stroke: var(--accent); opacity: 1;
     stroke-dasharray: 6 4; animation: map-flow 0.8s linear infinite;
   }
   #map .route.lit .arrow { fill: var(--accent); opacity: 1; }
@@ -93,9 +121,11 @@ export const mapCss = `
   #map .camera[data-tracing] .route:not(.lit):not(.selected) { opacity: 0.18; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
+  #map .building:not(.selected):hover, #map .slab:not(.selected):not(.context):hover,
+  #map .island.system:not(.selected):not(.context):hover, #map .context { --emphasis: ${emphasis(0.5)}; }
   #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,
-  #map .island.system:not(.selected):not(.context):hover .ground { stroke: var(--ink); stroke-width: 1.25; }
-  #map .context .face, #map .island.context > .ground { stroke: var(--accent); stroke-width: 1.25; }
-  #map .selected .face, #map .island.selected > .ground { stroke: var(--accent); stroke-width: 1.5; }
+  #map .island.system:not(.selected):not(.context):hover > .ground { stroke: var(--ink); }
+  #map .selected { --emphasis: ${emphasis(1)}; }
+  #map .context .face, #map .island.context > .ground, #map .selected .face, #map .island.selected > .ground { stroke: var(--accent); }
   #map .selected > .label .text { fill: var(--accent); font-weight: 600; }
 `

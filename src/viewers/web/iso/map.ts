@@ -4,6 +4,7 @@ import { paintBuildings } from './paint-buildings.ts'
 import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
 import type { ProjectedScene } from './project.ts'
+import { namesVisible, weightAt } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
 
@@ -38,8 +39,8 @@ function gridPattern(): { pattern: SVGPatternElement; lines: SVGPathElement[] } 
 
 export interface IsoMap {
   svg: SVGSVGElement
-  /** Applies the camera to the map; the grid stays aligned under it and the arrowheads keep their screen size. */
-  move(camera: Camera): void
+  /** Applies the camera to the map; the grid stays aligned under it, strokes and arrowheads take the zoom's weight, building names show when readable. */
+  move(camera: Camera, zoomRatio: number): void
   /** Rebuilds every layer; only a world change needs this. */
   paint(scene: ProjectedScene): void
   /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
@@ -77,11 +78,14 @@ export function createMap(host: HTMLElement): IsoMap {
 
   return {
     svg: root,
-    move(current) {
+    move(current, zoomRatio) {
       camera.style.transform = cameraTransform(current)
+      const weight = weightAt(zoomRatio)
+      camera.style.setProperty('--weight', String(weight))
+      camera.style.setProperty('--name-opacity', namesVisible(current.k) ? '1' : '0')
       grid.pattern.setAttribute('patternTransform', `translate(${current.x} ${current.y}) scale(${current.k})`)
       for (const line of grid.lines) line.style.strokeWidth = String(1 / current.k)
-      for (const route of routes.values()) route.head.setAttribute('transform', `scale(${1 / current.k})`)
+      for (const route of routes.values()) route.head.setAttribute('transform', `scale(${weight / current.k})`)
     },
     paint(scene) {
       for (const layer of Object.values(layers)) layer.replaceChildren()

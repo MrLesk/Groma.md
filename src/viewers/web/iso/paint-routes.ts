@@ -4,7 +4,7 @@ import { pointsAttribute, svg } from './svg.ts'
 
 export interface RouteNode {
   group: SVGGElement
-  /** The arrowhead's triangle; the map scales it by the inverse zoom so it keeps its screen size like every stroke. */
+  /** The arrowhead's triangle; the map scales it by the zoom weight over the camera scale, so it follows the stroke ladder in screen pixels. */
   head: SVGPathElement
   source: string
   target: string
