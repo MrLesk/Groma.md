@@ -21,6 +21,7 @@ import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
 import type { WebPayload } from './payload.ts'
+import { readView, writeView } from './url.ts'
 
 const ZOOM_STEP = 1.25
 const DRAG_THRESHOLD = 4
@@ -41,10 +42,11 @@ const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
 let tree = initialTree()
-let selectedId = firstSystem(world)?.representationId
-let activeAction: ActiveAction = {}
-let detailsTab: DetailsTab = 'what'
-let darkTheme = false
+const opened = readView(location.search, world)
+let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
+let activeAction: ActiveAction = opened.action
+let detailsTab: DetailsTab = opened.tab
+let darkTheme = opened.dark
 
 function viewport(): Viewport {
   return { width: host.clientWidth, height: host.clientHeight }
@@ -104,7 +106,14 @@ function paintStats(flowCount: number): void {
     : `${system.name} · ${flowCount} flows · ${world.elements.length} elements`
 }
 
+/** The URL follows the view, without adding history entries. */
+function syncUrl(): void {
+  const query = writeView({ selectedId, action: activeAction, tab: detailsTab, dark: darkTheme }, world)
+  history.replaceState(null, '', `${location.pathname}${query}`)
+}
+
 function paintSelection(): void {
+  syncUrl()
   const litIds = actionPath(activeAction.id, world, activeAction.personId)
   map.select(selectedId)
   map.setFlow(litIds, id => elementOnPath(id, litIds, world))
@@ -223,6 +232,7 @@ function applyTheme(): void {
   themeButton.textContent = darkTheme ? 'Light' : 'Dark'
   if (darkTheme) document.documentElement.dataset.theme = 'dark'
   else delete document.documentElement.dataset.theme
+  syncUrl()
 }
 
 themeButton.addEventListener('click', () => {
