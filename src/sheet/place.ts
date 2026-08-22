@@ -1,6 +1,6 @@
 import { compareElements } from '../element-order.ts'
 import type { ArchitectureWorld, WorldElement } from '../types.ts'
-import { ISLAND_GAP, MARGIN, translate, unionRects } from './grid.ts'
+import { ISLAND_GAP, MARGIN, PAD, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
   ISLAND_SPACING,
@@ -81,6 +81,27 @@ function packed(
   }
 }
 
+/**
+ * People and external islands are squares with their buildings centred, so a
+ * lone building does not sit in the corner of a strip cut for the island's
+ * name. The side grows by one cell when the west and east margins would differ.
+ */
+function squared(node: Node): Node {
+  const content = {
+    w: Math.max(...node.children.map(child => child.gx + child.node.w)) - PAD,
+    d: Math.max(...node.children.map(child => child.gy + child.node.d)) - PAD,
+  }
+  const side = Math.max(node.w, node.d) + (Math.max(node.w, node.d) - content.w) % 2
+  const dx = Math.floor((side - content.w) / 2) - PAD
+  const dy = Math.floor((side - content.d) / 2) - PAD
+  return {
+    ...node,
+    w: side,
+    d: side,
+    children: node.children.map(child => ({ ...child, gx: child.gx + dx, gy: child.gy + dy })),
+  }
+}
+
 /** Siblings in hierarchy order, with each group's members folded into one zone node where its first member sat. */
 function withZones(parentKey: string, siblings: readonly Node[], elements: readonly WorldElement[]): Node[] {
   const groupOf = new Map(elements.map(element => [element.representationId, element.group]))
@@ -137,13 +158,13 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
 
   const islands: Node[] = []
   if (people.length > 0) {
-    islands.push(packed(PEOPLE_ISLAND, people.map(building),
-      { kind: 'island', islandKind: 'people', name: 'People', element: null }, 1))
+    islands.push(squared(packed(PEOPLE_ISLAND, people.map(building),
+      { kind: 'island', islandKind: 'people', name: 'People', element: null }, 1)))
   }
   islands.push(...systems.map(systemIsland))
   if (externals.length > 0) {
-    islands.push(packed(EXTERNAL_ISLAND, externals.map(building),
-      { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, 1))
+    islands.push(squared(packed(EXTERNAL_ISLAND, externals.map(building),
+      { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, 1)))
   }
   return collect(islands, placeRow(islands))
 }

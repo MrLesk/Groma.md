@@ -72,6 +72,8 @@ People, external systems, and each internal system are flat islands
 on the sheet, in one row along the grid from west to east so flows
 read that way: the people island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
+The people and external islands are squares with their buildings
+centred, each a little bigger than what stands on it.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one

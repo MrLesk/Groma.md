@@ -129,6 +129,27 @@ test.concurrent('islands form one row along gx: people at the west end, external
   }
 })
 
+test.concurrent('people and external islands are squares with their buildings centred', () => {
+  const scene = sheetScene(world([
+    box('ann', 'person', unit),
+    box('bob', 'person', unit),
+    box('shop', 'system', unit),
+    box('bank', 'system', unit, { external: true }),
+  ]))
+  for (const kind of ['people', 'external'] as const) {
+    const island = scene.islands.find(item => item.kind === kind)!
+    assert.equal(island.rect.w, island.rect.d)
+    const rects = scene.buildings.filter(building => building.surface === island.key).map(building => building.rect)
+    const west = Math.min(...rects.map(rect => rect.gx)) - island.rect.gx
+    const east = island.rect.gx + island.rect.w - Math.max(...rects.map(rect => rect.gx + rect.w))
+    const north = Math.min(...rects.map(rect => rect.gy)) - island.rect.gy
+    const south = island.rect.gy + island.rect.d - Math.max(...rects.map(rect => rect.gy + rect.d))
+    assert.equal(west, east)
+    assert.ok(Math.abs(north - south) <= 1)
+    assert.ok(west >= PAD && north >= PAD && south >= PAD)
+  }
+})
+
 test.concurrent('a group becomes a zone around its members on the parent surface', () => {
   const scene = sheetScene(world([
     box('shop', 'system', unit),
