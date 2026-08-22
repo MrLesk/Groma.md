@@ -79,7 +79,7 @@ function known(id: string | undefined): boolean {
 }
 
 function applyCamera(): void {
-  map.move(camera)
+  map.move(camera, camera.k / fitted.k)
   zoomHost.textContent = zoomReadout(camera, fitted)
 }
 

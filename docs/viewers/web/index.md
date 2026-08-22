@@ -96,11 +96,24 @@ islands. One grey pattern tells each kind apart, on side faces and
 surfaces and never on a roof: component sides carry storey lines,
 person sides and the people island dots, external sides and the
 external island crosses, container slabs a faint grain, and system
-islands stay plain paper; every pattern is laid in the plane it lies
-on. Sibling groups are flat hatched zones around their members, and a
+islands have none; every pattern is laid in the plane it lies on.
+Sibling groups are flat hatched zones around their members, and a
 translucent chip lies under every name that lies on a pattern. Line
 style means origin and nothing else: observed items are solid,
 planned ghosts dashed, missing ghosts dotted.
+
+Weight follows depth, like heading levels: islands, slabs, buildings
+and routes each sit one level below the one before, every level 1.4
+times thinner in stroke and mixing 1.8 times the ink into its surface.
+So islands
+and slabs carry a light tint, a building's sides lie one level
+deeper than its roof (the left face half a level more), routes are
+hairlines, and people keep paper faces. Hover, selection and lit
+routes climb the same ladder instead of setting widths of their own,
+and every stroke scales with the square root of the zoom relative to
+fit, between three quarters and twice its fit width. Building names
+appear once their roof font reaches six screen pixels; island and
+slab names always show.
 
 Names lie on the surfaces they belong to, skewed with the sheet: a
 building's name on its roof, wrapped onto two lines when it is long,
