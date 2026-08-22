@@ -59,7 +59,7 @@ const style = `
   #hierarchy { display: flex; flex-direction: column; border-right: 1px solid var(--ink); }
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
   #flows:empty { display: none; }
-  #flows .section { margin: 0 0 6px; padding: 0 14px; }
+  #flows .section { margin: 0 0 6px; padding: 0 14px; width: 100%; border: 0; background: transparent; text-align: left; }
   #tree { flex: 1; overflow: auto; padding: 14px 0; }
   #legend { border-top: 1px solid var(--ink); padding: 12px 16px; display: grid; gap: 4px; }
   #legend div { display: flex; gap: 16px; }

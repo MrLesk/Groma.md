@@ -22,11 +22,12 @@ width: the hierarchy pane on the left, the map pane in the center, and
 the details pane on the right. The map pane is the camera viewport; the
 map never renders under a side pane.
 
-The hierarchy pane opens with the flows list: every person command
-in the world, deduped across the people who share it. Clicking one
-lights its walk on the map, exactly like picking it from a person's
-details, and the active row is highlighted. Below it the pane lists
-the merged world as a containment tree:
+The hierarchy pane starts with the flows list folded under its
+Flows heading; clicking the heading opens it. The list holds every
+person command in the world, deduped across the people who share
+it. Clicking one lights its walk on the map, exactly like picking it
+from a person's details, and the active row is highlighted. Below it
+the pane lists the merged world as a containment tree:
 people, then systems, then external systems at the root. Containers
 sit under their system and components under their container, in
 hierarchy order; the map places them by flow instead.
