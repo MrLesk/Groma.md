@@ -75,14 +75,21 @@ read that way: the people island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
 The people and external islands are squares with their buildings
 centred, each a little bigger than what stands on it.
-Inside every surface, relationships decide where the children stand:
-they form columns from west to east by the flow among them. The
-children something outside the surface feeds stand first (in a
-system, whatever a person uses directly), and every other child stands
-east of whatever feeds it, by the longest chain; in a cycle, the one
-the flow reaches first goes west. A child lines up with its partners
-in earlier columns, a source centres on its targets, and children no
-relationship touches are packed as one block after the columns. The
+Inside every surface, relationships decide where the children stand.
+The children something outside the surface feeds stand first, in a
+west column (in a system, whatever a person uses directly); when that
+column would be more than three times as deep as wide it folds into a
+square-ish block. Every other child then takes its place in order of
+weight, the one with the most relationships first, at the cheapest
+spot beside the siblings it talks to or beside everything placed so
+far: a spot is priced by the arrows it makes (their length, their
+bends, and a forced way around another sibling counting more than
+any length), by the arrows it would stand in the way of, and by the
+cells it adds to the surface's longer side, so a heavy target comes
+next to what feeds it, light intermediates settle at the edges,
+partners line up into straight runs and chains wrap instead of
+stretching. Nothing stands west of the entries, and children no
+relationship touches are packed as one block after them. The
 people and external islands slide along the row so their buildings
 face what they talk to.
 Containers are slabs whose top is level with the ground and whose
