@@ -175,6 +175,10 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     degree.set(relationship.source, (degree.get(relationship.source) ?? 0) + 1)
     degree.set(relationship.target, (degree.get(relationship.target) ?? 0) + 1)
   }
+  const observedLines = world.elements
+    .filter(element => element.kind === 'component' && element.origin === 'observed')
+    .map(element => element.codeLines ?? 0)
+  const range = { min: Math.min(...observedLines), max: Math.max(...observedLines) }
   const childrenOf = (parent: string | null): WorldElement[] => world.elements
     .filter(element => element.parent === parent)
     .sort(compareElements)
@@ -182,7 +186,7 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
   const building = (element: WorldElement): Node => {
     const lines = roofLines(element.name)
     const shape = element.kind === 'component' ? shapeOf(element.code.length) : shapeOf(0)
-    const floors = element.kind === 'component' ? floorsOf(element.origin, element.codeLines ?? 0) : 1
+    const floors = element.kind === 'component' ? floorsOf(element.origin, element.codeLines ?? 0, range) : 1
     const { w, d } = footprintOf(lines, shape, degree.get(element.representationId) ?? 0)
     return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, lines } }
   }
