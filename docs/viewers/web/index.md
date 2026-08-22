@@ -123,11 +123,15 @@ internal system is selected. Scrolling zooms about the cursor, and a
 trackpad pinch zooms as far as the fingers move; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits.
 Dragging pans. Click a building, a slab, a system island, or a tree
-row to select it; click empty sheet or press Escape to deselect, and
-the details pane empties. A person command stays on the map until `x`.
+row to select it; click a route to select its relationship, which
+draws the route and both of its ends in the accent and shows the
+relationship in the details pane with its ends as links; click empty
+sheet or press Escape to deselect, and the details pane empties. A
+person command stays on the map until `x`.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
-`container=<id>` or `component=<id>`), `flow=<source>/<target>` the lit
+`container=<id>` or `component=<id>`), `relationship=<source>/<target>`
+names a selected route, `flow=<source>/<target>` the lit
 command (with `by=<person>` when it was picked from that person's
 details), `tab=how` the How it's built tab and `theme=dark` the theme;
 defaults stay out of the URL and unknown values are ignored.

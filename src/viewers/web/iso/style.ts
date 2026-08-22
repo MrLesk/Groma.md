@@ -70,8 +70,8 @@ export const mapCss = `
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
   #map .route:hover .line { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
   #map .route:hover .arrow { fill: var(--ink); opacity: 1; }
-  #map .route.endpoint .line { stroke: var(--accent); stroke-width: 1.5; opacity: 1; }
-  #map .route.endpoint .arrow { fill: var(--accent); opacity: 1; }
+  #map .route.endpoint .line, #map .route.selected .line { stroke: var(--accent); stroke-width: 1.5; opacity: 1; }
+  #map .route.endpoint .arrow, #map .route.selected .arrow { fill: var(--accent); opacity: 1; }
   #map .route.lit .line {
     stroke: var(--accent); stroke-width: 2; opacity: 1;
     stroke-dasharray: 6 4; animation: map-flow 0.8s linear infinite;
@@ -81,7 +81,7 @@ export const mapCss = `
   @media (prefers-reduced-motion: reduce) {
     #map .route.lit .line { animation: none; stroke-dasharray: none; }
   }
-  #map .camera[data-tracing] .route:not(.lit) { opacity: 0.18; }
+  #map .camera[data-tracing] .route:not(.lit):not(.selected) { opacity: 0.18; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
   #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,

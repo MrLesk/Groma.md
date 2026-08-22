@@ -1,5 +1,5 @@
 import { compareElements } from '../../element-order.ts'
-import type { ArchitectureWorld, WorldElement } from '../../types.ts'
+import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../../types.ts'
 import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
@@ -16,7 +16,7 @@ import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { projectScene } from './iso/project.ts'
 import type { ProjectedScene } from './iso/project.ts'
-import { clearDetails, paintDetails, inspectDetails, nextActiveAction } from './organisms/details.ts'
+import { clearDetails, paintDetails, paintRelationship, inspectDetails, nextActiveAction } from './organisms/details.ts'
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -67,6 +67,15 @@ function worldElement(id: string | undefined): WorldElement | undefined {
   return id === undefined
     ? undefined
     : world.elements.find(element => element.representationId === id)
+}
+
+function worldRelationship(id: string | undefined): WorldRelationship | undefined {
+  return id === undefined ? undefined : world.relationships.find(item => item.id === id)
+}
+
+/** True for an element or relationship id the current world has. */
+function known(id: string | undefined): boolean {
+  return worldElement(id) !== undefined || worldRelationship(id) !== undefined
 }
 
 function applyCamera(): void {
@@ -122,7 +131,9 @@ function paintSelection(): void {
   paintFlows(flowsHost, commands, activeAction.id, pickAction)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
-  if (selected === undefined) clearDetails(detailsHost)
+  const relationship = worldRelationship(selectedId)
+  if (relationship !== undefined) paintRelationship(detailsHost, relationship, world, select)
+  else if (selected === undefined) clearDetails(detailsHost)
   else {
     paintDetails(
       detailsHost,
@@ -146,7 +157,7 @@ function toggleRow(row: TreeRow): void {
 }
 
 function select(id: string): void {
-  if (!worldElement(id)) return
+  if (!known(id)) return
   selectedId = id
   activeAction = nextActiveAction(activeAction, { type: 'select' })
   paintSelection()
@@ -279,7 +290,7 @@ function applyWorld(payload: WebPayload): void {
   scene = projectScene(payload.sheet)
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
-  if (selectedId !== undefined && !worldElement(selectedId)) selectedId = firstSystem(world)?.representationId
+  if (selectedId !== undefined && !known(selectedId)) selectedId = firstSystem(world)?.representationId
   map.paint(scene)
   applyCamera()
   paintSelection()
