@@ -11,3 +11,9 @@ code:
 # Page
 
 Serves the HTML shell: the chrome, the three panes, the embedded world and sheet, the palette variables, and the map stylesheet.
+
+## Relationships
+
+| Target | Description | Technology |
+| --- | --- | --- |
+| [Render](render.md) | Loads the browser bundle that drives the map | render.js |

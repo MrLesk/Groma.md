@@ -149,24 +149,17 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
 }
 
 /**
- * Islands on one screen row, people at the left, externals at the right: moving
- * along the anti-diagonal shifts an island right on screen, moving along the
- * main diagonal shifts it down, so each island gets `t` for its column and `s`
- * to align its centre with the widest island.
+ * Islands in one row along +gx: people at the west end, externals at the
+ * east end, their centres on one gy line, ISLAND_GAP cells apart.
  */
 function placeRow(islands: readonly Node[]): CellRect[] {
-  const spans = islands.map(island => island.w + island.d)
-  const widest = Math.max(0, ...spans)
+  const deepest = Math.max(0, ...islands.map(island => island.d))
   const origins: CellRect[] = []
-  let t = 0
-  islands.forEach((island, index) => {
-    if (index > 0) {
-      const previous = islands[index - 1]!
-      t += Math.ceil((previous.w + island.d + ISLAND_GAP) / 2)
-    }
-    const s = Math.round((widest - spans[index]!) / 4)
-    origins.push({ gx: t + s, gy: s - t, w: island.w, d: island.d })
-  })
+  let gx = 0
+  for (const island of islands) {
+    origins.push({ gx, gy: Math.round((deepest - island.d) / 2), w: island.w, d: island.d })
+    gx += island.w + ISLAND_GAP
+  }
   const union = unionRects(origins)
   if (!union) return origins
   return origins.map(origin => translate(origin, MARGIN - union.gx, MARGIN - union.gy))

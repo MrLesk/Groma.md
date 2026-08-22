@@ -18,6 +18,8 @@ const ZOOM_MAX = 4
 const FIT_MARGIN = 24
 /** One wheel notch of 100 units zooms by about 16 %. */
 const WHEEL_RATE = 0.0015
+/** A trackpad pinch arrives as ctrl+wheel whose delta is the percent change, so this rate follows the fingers. */
+const PINCH_RATE = 0.01
 
 /** The camera that shows every projected point with a margin, centred. */
 export function fitCamera(bounds: Bounds, viewport: Viewport): Camera {
@@ -60,8 +62,8 @@ export function resized(camera: Camera, from: Viewport, to: Viewport): Camera {
   return pan(camera, (to.width - from.width) / 2, (to.height - from.height) / 2)
 }
 
-export function wheelFactor(deltaY: number): number {
-  return Math.exp(-deltaY * WHEEL_RATE)
+export function wheelFactor(deltaY: number, pinch: boolean): number {
+  return Math.exp(-deltaY * (pinch ? PINCH_RATE : WHEEL_RATE))
 }
 
 export function cameraTransform(camera: Camera): string {
@@ -77,11 +79,15 @@ export function zoomReadout(camera: Camera, fit: Camera): string {
 export type KeyTarget = 'hierarchy' | 'control' | 'text' | 'other'
 
 /** Map keys, leaving text fields alone and `x` to the panes when they have focus. */
-export function keyAction(key: string, target: KeyTarget): 'in' | 'out' | 'fit' | 'clear' | undefined {
+export function keyAction(
+  key: string,
+  target: KeyTarget,
+): 'in' | 'out' | 'fit' | 'clear' | 'deselect' | undefined {
   if (target === 'text') return undefined
   if (key === '+' || key === '=') return 'in'
   if (key === '-' || key === '_') return 'out'
   if (key === '0') return 'fit'
+  if (key === 'Escape') return 'deselect'
   if ((key === 'x' || key === 'X') && target === 'other') return 'clear'
   return undefined
 }

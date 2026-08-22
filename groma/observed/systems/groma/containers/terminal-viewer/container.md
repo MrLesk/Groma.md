@@ -3,10 +3,6 @@ id: terminal-viewer
 kind: container
 parent: groma
 technology: OpenTUI
-code:
-  - scanner: typescript
-    file: src/viewers/tui/terminal-viewer.ts
-    symbol: mountTerminalViewer
 ---
 
 # Terminal viewer

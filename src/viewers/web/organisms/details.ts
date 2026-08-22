@@ -293,3 +293,8 @@ export function paintDetails(
   }
   for (const key of tabSections(tab)) sections[key]()
 }
+
+/** Empties the pane while nothing is selected. */
+export function clearDetails(host: HTMLElement): void {
+  for (const part of ['h1', '.meta', '.tabs', '.body']) host.querySelector(part)!.replaceChildren()
+}
