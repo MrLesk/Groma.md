@@ -135,10 +135,11 @@ may not move a footprint or reroute a relationship.
 ## What you can do
 
 The first view fits the whole sheet inside the map pane. The first
-internal system is selected. Scrolling zooms about the cursor, and a
-trackpad pinch zooms as far as the fingers move; the `-` and `+`
+internal system is selected. Two fingers on a trackpad, or the
+wheel, pan the map; a pinch zooms as far as the fingers move, and
+cmd or ctrl with the wheel zooms about the cursor; the `-` and `+`
 buttons and keys zoom about the center, and `0` refits.
-Dragging pans. Click a building, a slab, a system island, or a tree
+Dragging pans too. Click a building, a slab, a system island, or a tree
 row to select it; click a route to select its relationship, which
 draws the route and both of its ends in the accent and shows the
 relationship in the details pane with its ends as links; click empty
