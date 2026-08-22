@@ -2,6 +2,7 @@
 id: scanner
 kind: container
 parent: groma
+technology: TypeScript import graph
 code:
   - scanner: typescript
     file: src/scanner.ts
@@ -10,14 +11,10 @@ code:
 
 # Scanner
 
-Produces recognizable source observations and high-level Code references. It does not write architecture Markdown.
-
-## Technology
-
-Local scanner runtime and language plugins.
+Runs a scan once or as a watch: the language plugin reads the repository, core folds the candidates into Markdown, and the command prints `ok` with a short summary. It never writes architecture Markdown itself and never invents an architecture id.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Core](../core/container.md) | Supplies scan results | In-process data |
+| [Scan reconciler](../core/components/scan-reconciler.md) | Supplies scan results to fold | In-process data |

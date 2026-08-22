@@ -12,7 +12,8 @@ import {
   levelFor,
   moveView,
 } from './navigation-spatial.ts'
-import { ancestorsOf, compareElements, initialTree, treeRows } from './tree.ts'
+import { compareElements } from '../../element-order.ts'
+import { ancestorsOf, initialTree, treeRows } from './tree.ts'
 import type { TreeState } from './tree.ts'
 import type {
   ArchitectureWorld,

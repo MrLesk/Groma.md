@@ -127,8 +127,10 @@ does not invent evidence.
 
 Core is the only runtime that reads architecture Markdown. It loads every C4
 element document under `groma/observed/` and every plan, merges them into one
-world, and lays that world out once. A viewer plugin projects that world. It
-never reads the files itself.
+world, and lays that world out before any viewer sees it: `world-layout` gives
+the TUI map its bounds and routes, the `sheet` gives the web map its cells,
+floors and lanes. A viewer plugin projects what core computed. It never reads
+the files itself.
 
 A plan README is not an element. Other prose without C4 frontmatter is not an
 element.

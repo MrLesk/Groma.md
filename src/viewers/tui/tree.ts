@@ -1,3 +1,4 @@
+import { compareElements } from '../../element-order.ts'
 import type { ArchitectureWorld, C4Kind, Origin, WorldElement } from '../../types.ts'
 
 /** Manual overrides on top of the always-visible path to the selection. */
@@ -36,20 +37,6 @@ export function toggleExpansion(tree: TreeState, row: TreeRow): TreeState {
     expanded.add(row.id)
   }
   return { ...tree, expanded, collapsed }
-}
-
-function meaningRank(element: WorldElement): number {
-  if (element.kind === 'person') return 0
-  if (element.external) return 2
-  return 1
-}
-
-/** Sibling order: people, then internal software, then externals; left to right. */
-export function compareElements(left: WorldElement, right: WorldElement): number {
-  return meaningRank(left) - meaningRank(right)
-    || left.bounds.x - right.bounds.x
-    || left.bounds.y - right.bounds.y
-    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
 }
 
 function sorted(elements: WorldElement[]): WorldElement[] {

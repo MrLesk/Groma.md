@@ -11,7 +11,7 @@ code:
 
 # Architecture model
 
-Merges observed architecture and planned fragments into one world: one element per architecture ID, parents resolved across locations, planned documents as ghosts.
+Turns revision documents into one world: one element per architecture id, parents resolved across observed architecture and plans, relationship targets resolved by id, every containment rule checked, and planned documents marked as ghosts.
 
 ## Relationships
 

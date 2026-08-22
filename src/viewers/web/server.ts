@@ -1,9 +1,9 @@
 import { watchArchitecture } from '../../architecture-watch.ts'
 import { loadArchitectureViewModel } from '../../core.ts'
-import { semanticView } from '../../semantic-view.ts'
 import { watchScan } from '../../scanner.ts'
-import { campusSvg } from './campus-svg.ts'
+import { sheetScene } from '../../sheet/scene.ts'
 import { renderPage } from './page.ts'
+import type { WebPayload } from './payload.ts'
 
 const defaultPort = 4747
 
@@ -15,26 +15,31 @@ async function bundleRenderer(): Promise<string> {
   return build.outputs[0]!.text()
 }
 
+async function loadSheet(repositoryRoot: string): Promise<Omit<WebPayload, 'generation'>> {
+  const { world } = await loadArchitectureViewModel(repositoryRoot)
+  return { world, sheet: sheetScene(world) }
+}
+
 /** Starts the map server and returns its URL. */
 export async function startWebViewer(
   repositoryRoot: string,
   options: { port?: number } = {},
 ): Promise<{ url: string; close: () => void }> {
   const renderer = await bundleRenderer()
-  let viewModel = await loadArchitectureViewModel(repositoryRoot)
+  /** Counts published worlds; a browser ignores anything older than what it applied. */
   let generation = 1
+  let payload: WebPayload = { generation, ...(await loadSheet(repositoryRoot)) }
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>()
   const encoder = new TextEncoder()
 
   function worldEvent(): Uint8Array {
-    return encoder.encode(
-      `event: world\ndata: ${JSON.stringify({ generation, world: viewModel.world })}\n\n`,
-    )
+    return encoder.encode(`event: world\ndata: ${JSON.stringify(payload)}\n\n`)
   }
 
   async function publishWorld(): Promise<void> {
-    viewModel = await loadArchitectureViewModel(repositoryRoot)
+    const next = await loadSheet(repositoryRoot)
     generation += 1
+    payload = { generation, ...next }
     const chunk = worldEvent()
     for (const client of clients) {
       try {
@@ -54,6 +59,8 @@ export async function startWebViewer(
 
   const server = Bun.serve({
     port: options.port ?? defaultPort,
+    // The event stream stays open while nothing changes; Bun's default closes it after ten idle seconds.
+    idleTimeout: 0,
     fetch: async request => {
       const { pathname } = new URL(request.url)
       if (pathname === '/render.js') {
@@ -65,40 +72,7 @@ export async function startWebViewer(
         })
       }
       if (pathname === '/world.json') {
-        return Response.json({ generation, world: viewModel.world })
-      }
-      if (pathname === '/context.svg') {
-        viewModel = await loadArchitectureViewModel(repositoryRoot)
-        return new Response(
-          campusSvg(semanticView(viewModel.world, { level: 'context' })),
-          {
-            headers: {
-              'Content-Type': 'image/svg+xml; charset=utf-8',
-              'Cache-Control': 'no-store',
-            },
-          },
-        )
-      }
-      if (pathname === '/containers.svg') {
-        viewModel = await loadArchitectureViewModel(repositoryRoot)
-        const wanted = new URL(request.url).searchParams.get('focus')
-        const focus = viewModel.world.elements.find(element =>
-          wanted
-            ? element.id === wanted || element.representationId === wanted
-            : element.kind === 'system' && !element.external,
-        )
-        return new Response(
-          campusSvg(semanticView(viewModel.world, {
-            level: 'containers',
-            focusId: focus?.representationId,
-          })),
-          {
-            headers: {
-              'Content-Type': 'image/svg+xml; charset=utf-8',
-              'Cache-Control': 'no-store',
-            },
-          },
-        )
+        return Response.json(payload)
       }
       if (pathname === '/events') {
         let controller: ReadableStreamDefaultController<Uint8Array>
@@ -121,8 +95,8 @@ export async function startWebViewer(
         })
       }
       // Reload on every request so a browser refresh picks up architecture edits.
-      viewModel = await loadArchitectureViewModel(repositoryRoot)
-      return new Response(renderPage(viewModel.world, generation), {
+      payload = { generation, ...(await loadSheet(repositoryRoot)) }
+      return new Response(renderPage(payload), {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'no-store',
