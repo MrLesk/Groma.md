@@ -38,7 +38,7 @@ export interface Zone {
   rect: CellRect
 }
 
-/** A container: a low slab on its system island. */
+/** A container: a slab level with its system island. */
 export interface Slab extends SheetItem {
   island: string
   rect: CellRect
@@ -62,11 +62,10 @@ export interface Building extends SheetItem {
   lines: string[]
 }
 
+/** A lattice point on the ground plane; every route runs there. */
 export interface RoutePoint {
   gx: number
   gy: number
-  /** Floors above the sheet: the surface under the point, with risers where it changes. */
-  z: number
 }
 
 /** One authored relationship routed on the quarter-cell lattice. */

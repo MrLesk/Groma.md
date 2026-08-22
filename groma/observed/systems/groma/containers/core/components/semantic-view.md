@@ -6,7 +6,7 @@ group: World building
 code:
   - scanner: typescript
     file: src/semantic-view.ts
-    symbol: semanticView
+    symbol: displaySize
 ---
 
 # Semantic view

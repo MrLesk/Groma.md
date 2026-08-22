@@ -11,7 +11,7 @@ export function svg<K extends keyof SVGElementTagNameMap>(
   const element = document.createElementNS(NAMESPACE, tag)
   for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value))
   if (className !== '') element.setAttribute('class', className)
-  if (tag === 'polygon' || tag === 'polyline' || tag === 'path' || tag === 'line') {
+  if (tag === 'polygon' || tag === 'polyline' || tag === 'path' || tag === 'line' || tag === 'ellipse') {
     element.setAttribute('vector-effect', 'non-scaling-stroke')
   }
   return element

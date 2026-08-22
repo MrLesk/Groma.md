@@ -11,4 +11,4 @@ code:
 
 # Iso map
 
-Owns the SVG: the patterns, the camera group and its layers, one group per island, slab, building, and route, and the class toggles for selection and lit flows, so nothing is repainted until the world changes.
+Owns the SVG: the patterns, the camera group and its layers, one group per island, slab, building, and route, and the class toggles for the selection, the surface it stands on, and lit flows, so nothing is repainted until the world changes.

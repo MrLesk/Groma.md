@@ -32,6 +32,30 @@ function exclusiveOutgoing(
   })
 }
 
+/** Everything an element reaches along outgoing relationships, the element itself excluded. */
+function downstream(
+  elementId: string,
+  world: ArchitectureWorld,
+  parentOf: ReturnType<typeof parentOfElements>,
+): Set<string> {
+  const reached = new Set<string>()
+  const queue = [elementId]
+  while (queue.length > 0) {
+    for (const relationship of exclusiveOutgoing(queue.shift()!, world, parentOf)) {
+      if (reached.has(relationship.target)) continue
+      reached.add(relationship.target)
+      queue.push(relationship.target)
+    }
+  }
+  reached.delete(elementId)
+  return reached
+}
+
+/**
+ * A person's commands. When one of the person's targets reaches another of
+ * them, it is a launcher, such as the command line that starts the viewer the
+ * person reads, and its own relationships are the commands.
+ */
 export function outgoingActions(
   elementId: string | undefined,
   world: ArchitectureWorld,
@@ -45,8 +69,8 @@ export function outgoingActions(
   const used = new Set(own.map(relationship => relationship.target))
   const launchers: string[] = []
   for (const target of used) {
-    const starts = exclusiveOutgoing(target, world, parentOf)
-    if (starts.some(relationship => used.has(relationship.target))) {
+    const reached = downstream(target, world, parentOf)
+    if ([...used].some(other => reached.has(other))) {
       launchers.push(target)
     }
   }

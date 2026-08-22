@@ -11,6 +11,6 @@ Plans and implements software changes while sharing the same architecture as peo
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [CLI](../systems/groma/containers/cli/container.md) | Runs Groma while implementing | Command line |
-| [Terminal viewer](../systems/groma/containers/terminal-viewer/container.md) | Reads the architecture | groma view |
-| [Web viewer](../systems/groma/containers/web-viewer/container.md) | Reads the architecture | groma web |
+| [Commands](../systems/groma/containers/cli/components/commands.md) | Runs Groma while implementing | Command line |
+| [Screen](../systems/groma/containers/terminal-viewer/components/screen.md) | Reads the architecture in the terminal | groma view |
+| [Page](../systems/groma/containers/web-viewer/components/page.md) | Reads the architecture in the browser | groma web |

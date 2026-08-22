@@ -6,7 +6,9 @@ export interface Palette {
   hairline: string
   /** Sidebar row hover wash. */
   hover: string
-  /** Roofs, slab decks and the chrome's raised surfaces. */
+  /** Geometry strokes at rest: faces, grounds, routes and glyphs. */
+  line: string
+  /** Roofs, slab tops and the chrome's raised surfaces. */
   deck: string
   faceLeft: string
   faceRight: string
@@ -16,45 +18,40 @@ export interface Palette {
   hatch: string
   grid: string
   gridMajor: string
-  frame: string
-  /** Fill of a selected roof. */
-  accentWash: string
 }
 
 export const palettes: Record<'light' | 'dark', Palette> = {
   light: {
-    paper: '#FAF8F2',
-    ink: '#26251D',
-    muted: '#5D6167',
-    hairline: '#D9D6CB',
-    hover: 'rgba(38, 37, 29, 0.05)',
+    paper: '#FFFFFF',
+    ink: '#22262E',
+    muted: '#585B62',
+    hairline: '#E4E6EA',
+    hover: 'rgba(34, 38, 46, 0.05)',
+    line: '#A2A6AE',
     deck: '#FFFFFF',
-    faceLeft: '#ECEAE2',
-    faceRight: '#DAD7CC',
-    people: '#F4EFE3',
-    external: '#EBEDEE',
-    hatch: '#C9C5B8',
-    grid: '#ECE9DF',
-    gridMajor: '#DDD9CC',
-    frame: '#B8B4A6',
-    accentWash: 'rgba(29, 158, 117, 0.12)',
+    faceLeft: '#EEF1F6',
+    faceRight: '#DADBDE',
+    people: '#F4F5F7',
+    external: '#E9EDF2',
+    hatch: '#C4C8CF',
+    grid: '#EEF1F6',
+    gridMajor: '#E3E6EB',
   },
   dark: {
-    paper: '#14130F',
-    ink: '#E9E6DC',
-    muted: '#9DA1A6',
-    hairline: '#3A382F',
-    hover: 'rgba(233, 230, 220, 0.08)',
-    deck: '#24231B',
-    faceLeft: '#1C1B14',
-    faceRight: '#2E2D24',
-    people: '#1B1913',
-    external: '#15181A',
-    hatch: '#56544A',
-    grid: '#22211A',
-    gridMajor: '#2B2A22',
-    frame: '#4A483F',
-    accentWash: 'rgba(29, 158, 117, 0.18)',
+    paper: '#111315',
+    ink: '#E6E8EB',
+    muted: '#9AA0A8',
+    hairline: '#2A2E33',
+    hover: 'rgba(230, 232, 235, 0.08)',
+    line: '#6B717A',
+    deck: '#1B1E22',
+    faceLeft: '#15181B',
+    faceRight: '#24282D',
+    people: '#171A1D',
+    external: '#14181C',
+    hatch: '#4A5058',
+    grid: '#1A1D21',
+    gridMajor: '#22262B',
   },
 }
 
@@ -69,7 +66,7 @@ export function cssBlock(palette: Palette): string {
   --hairline: ${palette.hairline};
   --hover: ${palette.hover};
   --accent: ${accent};
-  --accent-wash: ${palette.accentWash};
+  --map-line: ${palette.line};
   --map-deck: ${palette.deck};
   --map-face-left: ${palette.faceLeft};
   --map-face-right: ${palette.faceRight};
@@ -78,6 +75,5 @@ export function cssBlock(palette: Palette): string {
   --map-hatch: ${palette.hatch};
   --map-grid: ${palette.grid};
   --map-grid-major: ${palette.gridMajor};
-  --map-frame: ${palette.frame};
 `
 }

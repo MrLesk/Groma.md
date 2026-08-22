@@ -10,7 +10,7 @@ function classOf(projected: ProjectedBuilding): string {
   return `building ${kind} ${building.shape.kind}${ghost}`
 }
 
-/** Buildings back to front: every tier's three faces, a hatch on tower sides, a pattern on people and externals, the name on the roof. */
+/** Buildings back to front: every tier's three faces, a hatch lying on each side face of a tower, the name on the roof. */
 export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const projected of scene.buildings) {
@@ -21,10 +21,7 @@ export function paintBuildings(layer: SVGGElement, scene: ProjectedScene): Map<s
       for (const face of tier) {
         group.append(svg('polygon', { points: pointsAttribute(face.points) }, `face ${face.side}`))
         if (building.shape.kind === 'tower' && face.side !== 'top') {
-          group.append(svg('polygon', { points: pointsAttribute(face.points) }, 'hatch'))
-        }
-        if (building.kind !== 'component' && face.side === 'top') {
-          group.append(svg('polygon', { points: pointsAttribute(face.points) }, 'pattern'))
+          group.append(svg('polygon', { points: pointsAttribute(face.points) }, `hatch ${face.side}`))
         }
       }
     }

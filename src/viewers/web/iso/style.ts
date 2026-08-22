@@ -1,20 +1,31 @@
 import { ISLAND_SPACING } from '../../../sheet/measure.ts'
+import { planeMatrix } from './project.ts'
 
 const hatch = 'stroke="var(--map-hatch)" stroke-width="0.75"'
 
-/** Patterns the islands, zones and towers are filled with; world-space, so they scale with the map. */
+/**
+ * Patterns the islands, zones and towers are filled with. Each tile is drawn
+ * in the pixels of the plane it lies on and mapped by that plane's matrix, so
+ * dots, crosses and hatches follow the sheet and the faces like every name.
+ */
 export const mapDefs = '<defs>'
-  + '<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse">'
+  + `<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix('ground')}">`
   + '<circle cx="4" cy="4" r="0.75" fill="var(--map-hatch)"/></pattern>'
-  + '<pattern id="cross" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
-  + `<path d="M4 0V8M0 4H8" ${hatch}/></pattern>`
-  + '<pattern id="hatch-45" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
-  + `<path d="M0 0V4" ${hatch}/></pattern>`
-  + '<pattern id="hatch-135" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">'
-  + `<path d="M0 0V8" ${hatch}/></pattern>`
+  + `<pattern id="cross" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix('ground')}">`
+  + `<path d="M4 2V6M2 4H6" ${hatch}/></pattern>`
+  + `<pattern id="hatch-ground" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix('ground')}">`
+  + `<path d="M0 8L8 0" ${hatch}/></pattern>`
+  + `<pattern id="hatch-left" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix('left')}">`
+  + `<path d="M0 4L4 0" ${hatch}/></pattern>`
+  + `<pattern id="hatch-right" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="${planeMatrix('right')}">`
+  + `<path d="M0 4L4 0" ${hatch}/></pattern>`
   + '</defs>'
 
-/** The map's own stylesheet; colours come from the page palette variables. */
+/**
+ * The map's own stylesheet; colours come from the page palette variables.
+ * Line style means origin and nothing else: observed solid, planned dashed,
+ * missing dotted. Selection and context change strokes, never fills.
+ */
 export const mapCss = `
   #map svg {
     display: block; width: 100%; height: 100%; cursor: grab;
@@ -22,29 +33,30 @@ export const mapCss = `
   }
   #map svg:active { cursor: grabbing; }
   #map .camera { transform-box: view-box; transform-origin: 0 0; }
-  #map .camera.animate { transition: transform 200ms ease-out; }
   #map .sheet { pointer-events: none; }
-  #map .grid { fill: none; stroke: var(--map-grid); stroke-width: 1; }
+  #map .grid { fill: none; stroke: var(--map-grid); }
   #map .grid.major { stroke: var(--map-grid-major); }
-  #map .frame { fill: none; stroke: var(--map-frame); stroke-width: 1; }
-  #map .tick { fill: none; stroke: var(--map-frame); stroke-width: 1; }
-  #map .ground { stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
-  #map .island.people .ground { fill: var(--map-people); stroke-dasharray: 4 3; }
-  #map .island.external .ground { fill: var(--map-external); stroke-dasharray: 6 2 1 2; }
+  #map .frame { fill: none; stroke: var(--map-line); stroke-width: 1.5; }
+  #map .tick { fill: none; stroke: var(--map-line); stroke-width: 1; }
+  #map .compass .ring, #map .compass .star { fill: none; stroke: var(--map-line); stroke-width: 1; }
+  #map .compass .north { fill: var(--map-line); stroke: var(--map-line); stroke-width: 1; }
+  #map .compass .text { fill: var(--muted); }
+  #map .ground { stroke: var(--map-line); stroke-width: 1; stroke-linejoin: round; }
+  #map .island.people .ground { fill: var(--map-people); }
+  #map .island.external .ground { fill: var(--map-external); }
   #map .island.system .ground { fill: var(--paper); stroke-width: 1.25; }
-  #map .zone .ground { fill: url(#hatch-135); stroke: var(--muted); stroke-dasharray: 2 2; }
+  #map .zone .ground { fill: url(#hatch-ground); stroke: var(--muted); }
   #map .pattern, #map .hatch { stroke: none; pointer-events: none; }
-  #map .island.people .pattern, #map .building.person .pattern { fill: url(#dots); }
-  #map .island.external .pattern, #map .building.external .pattern { fill: url(#cross); }
-  #map .hatch { fill: url(#hatch-45); }
-  #map .face { stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+  #map .island.people .pattern { fill: url(#dots); }
+  #map .island.external .pattern { fill: url(#cross); }
+  #map .hatch.left { fill: url(#hatch-left); }
+  #map .hatch.right { fill: url(#hatch-right); }
+  #map .face { stroke: var(--map-line); stroke-width: 1; stroke-linejoin: round; }
   #map .face.left { fill: var(--map-face-left); }
   #map .face.right { fill: var(--map-face-right); }
   #map .face.top { fill: var(--map-deck); }
   #map .building.person .face.top { fill: var(--map-people); }
   #map .building.external .face.top { fill: var(--map-external); }
-  #map .building.person .face { stroke-dasharray: 4 3; }
-  #map .building.external .face { stroke-dasharray: 6 2 1 2; }
   #map .ghost { opacity: 0.8; }
   #map .ghost .face, #map .ghost .ground { fill: none; }
   #map .ghost .pattern, #map .ghost .hatch { display: none; }
@@ -53,11 +65,11 @@ export const mapCss = `
   #map .text { fill: var(--ink); pointer-events: none; }
   #map .island > .label .text { letter-spacing: ${ISLAND_SPACING}em; }
   #map .zone > .label .text { fill: var(--muted); }
-  #map .route .line { fill: none; stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; opacity: 0.55; }
-  #map .route .arrow { fill: var(--ink); opacity: 0.55; }
+  #map .route .line { fill: none; stroke: var(--map-line); stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; opacity: 0.9; }
+  #map .route .arrow { fill: var(--map-line); opacity: 0.9; }
   #map .route .hit { fill: none; stroke: transparent; stroke-width: 12; }
-  #map .route:hover .line { stroke-width: 1.75; opacity: 1; }
-  #map .route:hover .arrow { opacity: 1; }
+  #map .route:hover .line { stroke: var(--ink); stroke-width: 1.75; opacity: 1; }
+  #map .route:hover .arrow { fill: var(--ink); opacity: 1; }
   #map .route.endpoint .line { stroke: var(--accent); stroke-width: 1.5; opacity: 1; }
   #map .route.endpoint .arrow { fill: var(--accent); opacity: 1; }
   #map .route.lit .line {
@@ -72,8 +84,9 @@ export const mapCss = `
   #map .camera[data-tracing] .route:not(.lit) { opacity: 0.18; }
   #map .camera[data-tracing] .building:not(.onpath):not(.selected),
   #map .camera[data-tracing] .slab:not(.onpath):not(.selected) { opacity: 0.3; }
-  #map .building:hover .face, #map .slab:hover .face, #map .island.system:hover .ground { stroke-width: 1.75; }
-  #map .selected .face.top, #map .selected > .ground { stroke: var(--accent); stroke-width: 2; }
-  #map .building.selected .face.top { fill: var(--accent-wash); }
-  #map .selected > .label .text { fill: var(--accent); }
+  #map .building:not(.selected):hover .face, #map .slab:not(.selected):not(.context):hover .face,
+  #map .island.system:not(.selected):not(.context):hover .ground { stroke: var(--ink); stroke-width: 1.25; }
+  #map .context .face, #map .island.context > .ground { stroke: var(--accent); stroke-width: 1.25; }
+  #map .selected .face, #map .island.selected > .ground { stroke: var(--accent); stroke-width: 1.5; }
+  #map .selected > .label .text { fill: var(--accent); font-weight: 600; }
 `

@@ -4,7 +4,6 @@ import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
 import {
-  cameraTransform,
   fitCamera,
   keyAction,
   pan,
@@ -17,7 +16,7 @@ import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
 import { createMap } from './iso/map.ts'
 import { projectScene } from './iso/project.ts'
 import type { ProjectedScene } from './iso/project.ts'
-import { paintDetails, inspectDetails, nextActiveAction } from './organisms/details.ts'
+import { clearDetails, paintDetails, inspectDetails, nextActiveAction } from './organisms/details.ts'
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
@@ -45,6 +44,7 @@ let tree = initialTree()
 let selectedId = firstSystem(world)?.representationId
 let activeAction: ActiveAction = {}
 let detailsTab: DetailsTab = 'what'
+let darkTheme = false
 
 function viewport(): Viewport {
   return { width: host.clientWidth, height: host.clientHeight }
@@ -67,24 +67,23 @@ function worldElement(id: string | undefined): WorldElement | undefined {
     : world.elements.find(element => element.representationId === id)
 }
 
-function applyCamera(animate: boolean): void {
-  map.camera.classList.toggle('animate', animate)
-  map.camera.style.transform = cameraTransform(camera)
+function applyCamera(): void {
+  map.move(camera)
   zoomHost.textContent = zoomReadout(camera, fitted)
 }
 
-function refit(animate: boolean): void {
+function refit(): void {
   fitted = fitCamera(scene.bounds, viewport())
   camera = fitted
   touched = false
-  applyCamera(animate)
+  applyCamera()
 }
 
 function zoomStep(factor: number): void {
   const { width, height } = viewport()
   camera = zoomAbout(camera, factor, { x: width / 2, y: height / 2 }, fitted)
   touched = true
-  applyCamera(true)
+  applyCamera()
 }
 
 function paintAction(): void {
@@ -114,7 +113,8 @@ function paintSelection(): void {
   paintFlows(flowsHost, commands, activeAction.id, pickAction)
   paintStats(commands.length)
   const selected = worldElement(selectedId)
-  if (selected) {
+  if (selected === undefined) clearDetails(detailsHost)
+  else {
     paintDetails(
       detailsHost,
       inspectDetails(selected, world),
@@ -143,6 +143,11 @@ function select(id: string): void {
   paintSelection()
 }
 
+function deselect(): void {
+  selectedId = undefined
+  paintSelection()
+}
+
 function pickAction(id: string, personId?: string): void {
   activeAction = nextActiveAction(activeAction, { type: 'pick', id, personId })
   paintSelection()
@@ -159,6 +164,7 @@ let pointer: {
   y: number
   dragging: boolean
   targetId: string | undefined
+  onSheet: boolean
 } | null = null
 
 map.svg.addEventListener('wheel', event => {
@@ -166,12 +172,12 @@ map.svg.addEventListener('wheel', event => {
   const rect = map.svg.getBoundingClientRect()
   camera = zoomAbout(
     camera,
-    wheelFactor(event.deltaY),
+    wheelFactor(event.deltaY, event.ctrlKey),
     { x: event.clientX - rect.left, y: event.clientY - rect.top },
     fitted,
   )
   touched = true
-  applyCamera(false)
+  applyCamera()
 }, { passive: false })
 
 map.svg.addEventListener('pointerdown', event => {
@@ -182,6 +188,7 @@ map.svg.addEventListener('pointerdown', event => {
     y: event.clientY,
     dragging: false,
     targetId: map.hitId(event.target),
+    onSheet: map.isSheet(event.target),
   }
   map.svg.setPointerCapture(event.pointerId)
 })
@@ -193,13 +200,16 @@ map.svg.addEventListener('pointermove', event => {
   if (!pointer.dragging) return
   camera = pan(camera, dx, dy)
   touched = true
-  applyCamera(false)
+  applyCamera()
   pointer.x = event.clientX
   pointer.y = event.clientY
 })
 map.svg.addEventListener('pointerup', event => {
   if (pointer === null || pointer.id !== event.pointerId) return
-  if (!pointer.dragging && pointer.targetId !== undefined) select(pointer.targetId)
+  if (!pointer.dragging) {
+    if (pointer.targetId !== undefined) select(pointer.targetId)
+    else if (pointer.onSheet) deselect()
+  }
   pointer = null
 })
 map.svg.addEventListener('pointercancel', () => {
@@ -209,13 +219,17 @@ map.svg.addEventListener('pointercancel', () => {
 document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
 document.getElementById('zoom-out')!.addEventListener('click', () => zoomStep(1 / ZOOM_STEP))
 
-let darkTheme = false
-themeButton.addEventListener('click', () => {
-  darkTheme = !darkTheme
+function applyTheme(): void {
   themeButton.textContent = darkTheme ? 'Light' : 'Dark'
   if (darkTheme) document.documentElement.dataset.theme = 'dark'
   else delete document.documentElement.dataset.theme
+}
+
+themeButton.addEventListener('click', () => {
+  darkTheme = !darkTheme
+  applyTheme()
 })
+applyTheme()
 
 function keyTarget(target: EventTarget | null): KeyTarget {
   if (!(target instanceof Element)) return 'other'
@@ -232,7 +246,8 @@ document.addEventListener('keydown', event => {
   event.preventDefault()
   if (action === 'in') zoomStep(ZOOM_STEP)
   else if (action === 'out') zoomStep(1 / ZOOM_STEP)
-  else if (action === 'fit') refit(true)
+  else if (action === 'fit') refit()
+  else if (action === 'deselect') deselect()
   else clearAction()
 })
 
@@ -242,9 +257,9 @@ new ResizeObserver(() => {
   if (touched) {
     camera = resized(camera, lastViewport, next)
     fitted = fitCamera(scene.bounds, next)
-    applyCamera(false)
+    applyCamera()
   } else {
-    refit(false)
+    refit()
   }
   lastViewport = next
 }).observe(host)
@@ -254,14 +269,14 @@ function applyWorld(payload: WebPayload): void {
   scene = projectScene(payload.sheet)
   fitted = fitCamera(scene.bounds, viewport())
   if (!touched) camera = fitted
-  if (!worldElement(selectedId)) selectedId = firstSystem(world)?.representationId
+  if (selectedId !== undefined && !worldElement(selectedId)) selectedId = firstSystem(world)?.representationId
   map.paint(scene)
-  applyCamera(false)
+  applyCamera()
   paintSelection()
 }
 
 map.paint(scene)
-applyCamera(false)
+applyCamera()
 paintSelection()
 
 const events = new EventSource('/events')

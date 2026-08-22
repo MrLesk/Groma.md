@@ -1,9 +1,10 @@
 import { ISLAND_FONT, SURFACE_FONT } from '../../../sheet/measure.ts'
-import type { ProjectedScene, ProjectedZone, Segment } from './project.ts'
+import type { Compass, ProjectedScene, ProjectedZone, Segment } from './project.ts'
+import { planeMatrix } from './project.ts'
 import { pointsAttribute, round, svg } from './svg.ts'
 import { surfaceText } from './text.ts'
 
-const TICK = 6
+const COMPASS_FONT = 10
 
 function pathOf(segments: readonly Segment[]): string {
   return segments
@@ -11,19 +12,34 @@ function pathOf(segments: readonly Segment[]): string {
     .join('')
 }
 
-/** The grid field with its frame and corner registration ticks. */
+function compassGroup(compass: Compass): SVGGElement {
+  const group = svg('g', {}, 'compass')
+  group.append(
+    svg('ellipse', {
+      cx: round(compass.centre.x), cy: round(compass.centre.y), rx: round(compass.rx), ry: round(compass.ry),
+    }, 'ring'),
+    svg('polygon', { points: pointsAttribute(compass.star) }, 'star'),
+    svg('polygon', { points: pointsAttribute(compass.north) }, 'north'),
+  )
+  for (const letter of compass.letters) {
+    const plane = svg('g', { transform: planeMatrix('ground', letter.at) })
+    const text = svg('text', {
+      'font-size': COMPASS_FONT, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+    }, 'text')
+    text.textContent = letter.text
+    plane.append(text)
+    group.append(plane)
+  }
+  return group
+}
+
+/** The sheet's border with its corner ticks and the compass; the grid itself is the map's endless pattern. */
 export function paintSheet(layer: SVGGElement, scene: ProjectedScene): void {
   layer.append(
-    svg('path', { d: pathOf(scene.sheet.minor) }, 'grid'),
-    svg('path', { d: pathOf(scene.sheet.major) }, 'grid major'),
-    svg('polygon', { points: pointsAttribute(scene.sheet.polygon) }, 'frame'),
+    svg('polygon', { points: pointsAttribute(scene.frame) }, 'frame'),
+    svg('path', { d: pathOf(scene.ticks) }, 'tick'),
+    compassGroup(scene.compass),
   )
-  for (const corner of scene.sheet.polygon) {
-    layer.append(svg('path', {
-      d: `M${round(corner.x - TICK)} ${round(corner.y)}H${round(corner.x + TICK)}`
-        + `M${round(corner.x)} ${round(corner.y - TICK)}V${round(corner.y + TICK)}`,
-    }, 'tick'))
-  }
 }
 
 function zoneGroup(zone: ProjectedZone): SVGGElement {
@@ -56,7 +72,7 @@ export function paintIslands(layer: SVGGElement, scene: ProjectedScene): Map<str
   return nodes
 }
 
-/** Container slabs with their faces, name and the zones lying on their deck. */
+/** Container slabs: the top level with the ground, the sides hanging below it, the name and the zones lying on top. */
 export function paintSlabs(layer: SVGGElement, scene: ProjectedScene): Map<string, Element> {
   const nodes = new Map<string, Element>()
   for (const { slab, faces, text } of scene.slabs) {

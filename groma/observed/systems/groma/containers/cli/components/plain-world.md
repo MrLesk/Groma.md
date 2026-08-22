@@ -8,12 +8,12 @@ code:
     symbol: formatPlainWorld
 ---
 
-# Plain world
+# Plain text view
 
-Prints the merged world as plain text: every element with its kind, origin and relationships, for `groma view --plain`, for a single record, and for hosts without a terminal.
+What `groma view --plain` prints: the merged world as indented text, every element with its kind, origin and relationships. `groma view <id>` prints one record the same way, and any host without a terminal gets this view instead of the map.
 
 ## Relationships
 
 | Target | Description | Technology |
 | --- | --- | --- |
-| [Core](../../core/container.md) | Loads the merged world | In-process data |
+| [World loader](../../core/components/world-loader.md) | Loads the merged world | In-process data |

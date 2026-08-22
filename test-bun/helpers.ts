@@ -13,6 +13,7 @@ import type {
   Point,
   ProjectedElement,
   WorldElement,
+  WorldRelationship,
 } from '../src/types.ts'
 
 export const repositoryRoot = path.resolve(
@@ -202,5 +203,24 @@ export function navigationWorld(): ArchitectureWorld {
         parent: 'observed:cfar',
       }),
     ],
+  }
+}
+
+/** A world of hand-built boxes with no layout bounds of its own. */
+export function worldOf(elements: WorldElement[], relationships: WorldRelationship[] = []): ArchitectureWorld {
+  return { bounds: { x: 0, y: 0, width: 1, height: 1 }, elements, groups: [], relationships }
+}
+
+/** An observed relationship between two boxes, by id. */
+export function uses(id: string, source: string, target: string): WorldRelationship {
+  return {
+    id,
+    source: `observed:${source}`,
+    target: `observed:${target}`,
+    description: id,
+    technology: '',
+    origin: 'observed',
+    route: [],
+    label: null,
   }
 }

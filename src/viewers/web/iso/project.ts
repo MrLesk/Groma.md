@@ -1,4 +1,4 @@
-import { PAD, SLAB_RISE } from '../../../sheet/grid.ts'
+import { MARGIN, PAD } from '../../../sheet/grid.ts'
 import type {
   Building,
   CellRect,
@@ -10,16 +10,41 @@ import type {
 } from '../../../sheet/types.ts'
 import type { Bounds, Point } from '../../../types.ts'
 
-/** A cell is a 48 × 24 diamond; a floor is 14 px tall. 2:1 dimetric keeps every lattice point on integers. */
+/** A cell is a 48 × 24 diamond; a floor is 12 px tall, so a roof's shadow is exactly half a cell per floor and lands on the lattice. 2:1 dimetric keeps every lattice point on integers. */
 const CELL_X = 24
 const CELL_Y = 12
-export const FLOOR = 14
+export const FLOOR = 12
 
 /** Insets of each stack tier above the one below, in cells per side. */
 const TIER_INSET = 0.25
+/** Screen pixels a slab's thickness hangs below the grid line: its top is the ground, its sides are drawn over the island in front of it. */
+const SLAB_HANG = 3
+/** The compass rose: a circle of this many cells lying in the sheet's west corner. */
+const COMPASS_RADIUS = 1
+/** Cells between a needle tip and its letter. */
+const COMPASS_LETTER = 0.4
+/** Cells each arm of a corner tick runs along its grid axis. */
+const TICK = 0.25
 
 export function project(gx: number, gy: number, z: number): Point {
   return { x: (gx - gy) * CELL_X, y: (gx + gy) * CELL_Y - z * FLOOR }
+}
+
+/** The planes the viewer sees. Every flat decoration (names, patterns, compass letters) is drawn in plane pixels and laid onto the screen by one matrix per plane. */
+export type Plane = 'ground' | 'left' | 'right'
+
+/** Screen vector of one plane pixel along each plane axis: 24 plane pixels make a cell, 14 make a floor. */
+const PLANE_AXES: Record<Plane, [Point, Point]> = {
+  ground: [project(1 / CELL_X, 0, 0), project(0, 1 / CELL_X, 0)],
+  left: [project(0, 1 / CELL_X, 0), project(0, 0, 1 / FLOOR)],
+  right: [project(1 / CELL_X, 0, 0), project(0, 0, 1 / FLOOR)],
+}
+
+/** The SVG matrix that lays a plane's pixels onto the screen with the plane's origin at `origin`. */
+export function planeMatrix(plane: Plane, origin: Point = { x: 0, y: 0 }): string {
+  const [u, v] = PLANE_AXES[plane]
+  const fixed = (value: number): string => String(Math.round(value * 100) / 100)
+  return `matrix(${fixed(u.x)} ${fixed(u.y)} ${fixed(v.x)} ${fixed(v.y)} ${fixed(origin.x)} ${fixed(origin.y)})`
 }
 
 export interface Face {
@@ -47,6 +72,7 @@ export interface ProjectedZone {
 
 export interface ProjectedSlab {
   slab: Slab
+  /** Top level with the ground, sides hanging below it. */
   faces: Face[]
   text: SurfaceText
 }
@@ -61,7 +87,8 @@ export interface ProjectedBuilding {
 export interface ProjectedRoute {
   route: Route
   points: Point[]
-  arrow: { at: Point; angle: number }
+  /** The arrowhead lies on the sheet at the route's end, turned in plane degrees along the last step. */
+  arrow: { at: Point; turn: number }
 }
 
 export interface Segment {
@@ -69,15 +96,33 @@ export interface Segment {
   to: Point
 }
 
+/** A compass rose lying on the sheet, its needles on the grid's axes: N is −gy, up and to the right on screen. */
+export interface Compass {
+  /** The rose's centre on the sheet. */
+  at: { gx: number; gy: number }
+  centre: Point
+  rx: number
+  ry: number
+  /** Four-point star: the N, E, S and W tips with a notch between each pair. */
+  star: Point[]
+  /** The north half of the star, filled. */
+  north: Point[]
+  letters: { text: string; at: Point }[]
+}
+
 export interface ProjectedScene {
-  sheet: { polygon: Point[]; minor: Segment[]; major: Segment[] }
+  /** The sheet's border. */
+  frame: Point[]
+  /** Crop marks at the sheet's four corners, two arms each along the grid's axes; the grid itself is endless. */
+  ticks: Segment[]
+  compass: Compass
   islands: ProjectedIsland[]
   zones: ProjectedZone[]
   slabs: ProjectedSlab[]
   routes: ProjectedRoute[]
   /** Painter order, back to front. */
   buildings: ProjectedBuilding[]
-  /** Everything but the sheet, for the fitted camera. */
+  /** What the fitted camera shows: the framed sheet and every roof above it. */
   bounds: Bounds
 }
 
@@ -115,17 +160,13 @@ function inset(rect: CellRect, by: number): CellRect {
   return { gx: rect.gx + by, gy: rect.gy + by, w: rect.w - 2 * by, d: rect.d - 2 * by }
 }
 
-/** Stack tiers from the bottom up, each inset a quarter cell per side and sharing the floors equally. */
-function buildingTiers(building: Building, base: number): Face[][] {
+/** Stack tiers from the ground up, each inset a quarter cell per side and sharing the floors equally. */
+function buildingTiers(building: Building): Face[][] {
   const levels = building.shape.levels
   const tierHeight = building.floors / levels
   const tiers: Face[][] = []
   for (let level = 0; level < levels; level += 1) {
-    tiers.push(boxFaces(
-      inset(building.rect, TIER_INSET * level),
-      base + level * tierHeight,
-      base + (level + 1) * tierHeight,
-    ))
+    tiers.push(boxFaces(inset(building.rect, TIER_INSET * level), level * tierHeight, (level + 1) * tierHeight))
   }
   return tiers
 }
@@ -138,20 +179,6 @@ function roofText(rect: CellRect, z: number, lines: string[]): SurfaceText {
 /** A surface's own name lies in its front band along the west corner, in front of every child. */
 function bandText(rect: CellRect, z: number, lines: string[]): SurfaceText {
   return { origin: project(rect.gx, rect.gy + rect.d - PAD, z), lines }
-}
-
-function gridSegments(sheet: CellRect): { minor: Segment[]; major: Segment[] } {
-  const minor: Segment[] = []
-  const major: Segment[] = []
-  for (let gx = sheet.gx; gx <= sheet.gx + sheet.w; gx += 1) {
-    const segment = { from: project(gx, sheet.gy, 0), to: project(gx, sheet.gy + sheet.d, 0) }
-    ;(gx % 4 === 0 ? major : minor).push(segment)
-  }
-  for (let gy = sheet.gy; gy <= sheet.gy + sheet.d; gy += 1) {
-    const segment = { from: project(sheet.gx, gy, 0), to: project(sheet.gx + sheet.w, gy, 0) }
-    ;(gy % 4 === 0 ? major : minor).push(segment)
-  }
-  return { minor, major }
 }
 
 function boundsOf(points: readonly Point[]): Bounds {
@@ -169,11 +196,43 @@ function boundsOf(points: readonly Point[]): Bounds {
   return { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) }
 }
 
+/** Two arms per corner, each along one grid axis. */
+function ticksOf(sheet: CellRect): Segment[] {
+  const cornersOf = [
+    [sheet.gx, sheet.gy], [sheet.gx + sheet.w, sheet.gy],
+    [sheet.gx + sheet.w, sheet.gy + sheet.d], [sheet.gx, sheet.gy + sheet.d],
+  ]
+  return cornersOf.flatMap(([gx, gy]) => [
+    { from: project(gx! - TICK, gy!, 0), to: project(gx! + TICK, gy!, 0) },
+    { from: project(gx!, gy! - TICK, 0), to: project(gx!, gy! + TICK, 0) },
+  ])
+}
+
+/** The rose lies in the middle of the sheet's west corner, clear of the border; a circle on the sheet projects to a 2:1 ellipse. */
+function compassOf(sheet: CellRect): Compass {
+  const at = { gx: sheet.gx + MARGIN / 2, gy: sheet.gy + sheet.d - MARGIN / 2 }
+  const on = (dx: number, dy: number): Point => project(at.gx + dx, at.gy + dy, 0)
+  const r = COMPASS_RADIUS
+  const n = 0.18 * r
+  const tip = r + COMPASS_LETTER
+  return {
+    at,
+    centre: on(0, 0),
+    rx: r * CELL_X * Math.SQRT2,
+    ry: r * CELL_Y * Math.SQRT2,
+    star: [on(0, -r), on(n, -n), on(r, 0), on(n, n), on(0, r), on(-n, n), on(-r, 0), on(-n, -n)],
+    north: [on(0, -r), on(n, -n), on(0, 0), on(-n, -n)],
+    letters: [
+      { text: 'N', at: on(0, -tip) },
+      { text: 'E', at: on(tip, 0) },
+      { text: 'S', at: on(0, tip) },
+      { text: 'W', at: on(-tip, 0) },
+    ],
+  }
+}
+
 /** Projects the sheet into screen polygons, route polylines and surface text, ready to paint. */
 export function projectScene(scene: SheetScene): ProjectedScene {
-  const slabRise = new Map(scene.slabs.map(slab => [slab.representationId, SLAB_RISE]))
-  const surfaceZ = (surface: string): number => slabRise.get(surface) ?? 0
-
   const islands = scene.islands.map(island => ({
     island,
     polygon: corners(island.rect, 0),
@@ -181,45 +240,42 @@ export function projectScene(scene: SheetScene): ProjectedScene {
   }))
   const zones = scene.zones.map(zone => ({
     zone,
-    polygon: corners(zone.rect, surfaceZ(zone.parent)),
-    text: bandText(zone.rect, surfaceZ(zone.parent), [zone.name]),
+    polygon: corners(zone.rect, 0),
+    text: bandText(zone.rect, 0, [zone.name]),
   }))
   const slabs = paintOrder(scene.slabs).map(slab => ({
     slab,
-    faces: boxFaces(slab.rect, 0, SLAB_RISE),
-    text: bandText(slab.rect, SLAB_RISE, [slab.name]),
+    faces: boxFaces(slab.rect, -SLAB_HANG / FLOOR, 0),
+    text: bandText(slab.rect, 0, [slab.name]),
   }))
   const buildings = paintOrder(scene.buildings).map(building => {
-    const base = surfaceZ(building.surface)
     const roof = inset(building.rect, TIER_INSET * (building.shape.levels - 1))
     return {
       building,
-      tiers: buildingTiers(building, base),
-      text: roofText(roof, base + building.floors, building.lines),
+      tiers: buildingTiers(building),
+      text: roofText(roof, building.floors, building.lines),
     }
   })
   const routes = scene.routes.map(route => {
-    const points = route.points.map(point => project(point.gx, point.gy, point.z))
-    const last = points[points.length - 1]!
-    const before = points[points.length - 2] ?? last
-    return {
-      route,
-      points,
-      arrow: { at: last, angle: (Math.atan2(last.y - before.y, last.x - before.x) * 180) / Math.PI },
-    }
+    const points = route.points.map(point => project(point.gx, point.gy, 0))
+    const last = route.points[route.points.length - 1]!
+    const before = route.points[route.points.length - 2] ?? last
+    const turn = last.gx > before.gx ? 0 : last.gy > before.gy ? 90 : last.gx < before.gx ? 180 : 270
+    return { route, points, arrow: { at: points[points.length - 1]!, turn } }
   })
-  const allPoints = [
-    ...islands.flatMap(item => item.polygon),
-    ...buildings.flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
-    ...routes.flatMap(item => item.points),
-  ]
+  const frame = corners(scene.sheet, 0)
   return {
-    sheet: { polygon: corners(scene.sheet, 0), ...gridSegments(scene.sheet) },
+    frame,
+    ticks: ticksOf(scene.sheet),
+    compass: compassOf(scene.sheet),
     islands,
     zones,
     slabs,
     routes,
     buildings,
-    bounds: boundsOf(allPoints),
+    bounds: boundsOf([
+      ...frame,
+      ...buildings.flatMap(item => item.tiers.flatMap(tier => tier.flatMap(face => face.points))),
+    ]),
   }
 }

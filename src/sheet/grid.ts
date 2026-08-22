@@ -8,12 +8,10 @@ export const GAP = 2
 export const PAD = 1
 /** Cells of screen width between islands. */
 export const ISLAND_GAP = 3
-/** Cells of sheet around the islands. */
-export const MARGIN = 3
+/** Cells of sheet around the islands; the compass rose lives in a corner of this band. */
+export const MARGIN = 4
 /** Side of an empty slab or empty island. */
 export const EMPTY = 4
-/** Floors a container slab rises above its island. */
-export const SLAB_RISE = 0.5
 
 export function translate(rect: CellRect, dx: number, dy: number): CellRect {
   return { gx: rect.gx + dx, gy: rect.gy + dy, w: rect.w, d: rect.d }

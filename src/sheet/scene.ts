@@ -5,8 +5,9 @@ import type { SheetScene } from './types.ts'
 
 /**
  * Composes the merged world into one grid-snapped sheet: flat islands for
- * people, external systems and each internal system, container slabs on the
- * system islands, buildings on the slabs and islands, group zones, and one
+ * people, external systems and each internal system, container slabs level
+ * with the system islands, buildings on the slabs and islands, group zones,
+ * and one
  * lattice route per authored relationship. Pure: the same world gives the same
  * sheet and the world is never touched.
  */
@@ -32,6 +33,7 @@ export function sheetScene(world: Pick<ArchitectureWorld, 'elements' | 'relation
       kind: 'building',
       rect: building.rect,
       within: island === building.surface ? [island] : [building.surface, island],
+      roof: building.floors,
     })
   }
   return { ...placement, routes: routeAll(placement.sheet, endpoints, world.relationships) }

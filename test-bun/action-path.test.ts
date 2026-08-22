@@ -127,6 +127,30 @@ test.concurrent('a person who uses a launcher lists that launcher\'s outgoing', 
   expect(pickableActions('api', world)).toEqual([])
 })
 
+test.concurrent('a launcher may reach the person\'s other target through a chain', () => {
+  const chain: ArchitectureWorld = {
+    bounds: { x: 0, y: 0, width: 40, height: 20 },
+    groups: [],
+    elements: [
+      element('dev', 'person'),
+      element('tool', 'system'),
+      element('cli', 'container', 'tool'),
+      element('host', 'container', 'tool'),
+      element('viewer', 'container', 'tool'),
+      element('commands', 'component', 'cli'),
+      element('start', 'component', 'host'),
+      element('screen', 'component', 'viewer'),
+    ],
+    relationships: [
+      edge('dev-commands', 'dev', 'commands'),
+      edge('dev-screen', 'dev', 'screen'),
+      edge('commands-start', 'commands', 'start'),
+      edge('start-screen', 'start', 'screen'),
+    ],
+  }
+  expect(outgoingActions('dev', chain).map(item => item.id)).toEqual(['commands-start', 'dev-screen'])
+})
+
 test.concurrent('an action path is one walk and keeps people who use its start', () => {
   expect([...actionPath('buyer-api', world)].sort()).toEqual([
     'api-jobs',

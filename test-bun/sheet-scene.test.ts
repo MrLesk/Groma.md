@@ -107,7 +107,7 @@ test.concurrent('children sit inside their parent with padding and leave the fro
   assert.equal(scene.slabs.length, 3)
 })
 
-test.concurrent('islands read left to right on one screen row: people, systems, externals', () => {
+test.concurrent('islands form one row along gx: people at the west end, externals at the east end', () => {
   const scene = sheetScene(world([
     box('ann', 'person', unit),
     box('bob', 'person', unit),
@@ -118,14 +118,11 @@ test.concurrent('islands read left to right on one screen row: people, systems, 
     box('tax', 'system', unit, { external: true }),
   ]))
   assert.deepEqual(scene.islands.map(island => island.kind), ['people', 'system', 'system', 'external'])
-  const spans = scene.islands.map(({ rect }) => ({
-    left: (rect.gx - rect.gy - rect.d) * 24,
-    right: (rect.gx + rect.w - rect.gy) * 24,
-    centreY: (rect.gx + rect.gy + (rect.w + rect.d) / 2) * 12,
-  }))
-  for (let index = 1; index < spans.length; index += 1) {
-    assert.ok(spans[index]!.left - spans[index - 1]!.right >= ISLAND_GAP * 24)
-    assert.ok(Math.abs(spans[index]!.centreY - spans[0]!.centreY) <= 12)
+  const rects = scene.islands.map(island => island.rect)
+  const centre = (rect: CellRect): number => rect.gy + rect.d / 2
+  for (let index = 1; index < rects.length; index += 1) {
+    assert.ok(rects[index]!.gx - (rects[index - 1]!.gx + rects[index - 1]!.w) >= ISLAND_GAP)
+    assert.ok(Math.abs(centre(rects[index]!) - centre(rects[0]!)) <= 0.5)
   }
   for (const [index, island] of scene.islands.entries()) {
     for (const other of scene.islands.slice(index + 1)) assert.equal(overlaps(island.rect, other.rect), false)

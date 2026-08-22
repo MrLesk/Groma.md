@@ -3,10 +3,6 @@ id: core
 kind: container
 parent: groma
 technology: comark, ELK
-code:
-  - scanner: typescript
-    file: src/core.ts
-    symbol: annotateArchitecture
 ---
 
 # Core
