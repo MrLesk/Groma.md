@@ -184,8 +184,10 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     .sort(compareElements)
 
   const building = (element: WorldElement): Node => {
-    const lines = roofLines(element.name)
-    const shape = element.kind === 'component' ? shapeOf(element.code.length) : shapeOf(0)
+    const shape: Shape = element.kind === 'person'
+      ? { kind: 'round', levels: 1 }
+      : element.external ? { kind: 'pill', levels: 1 } : shapeOf(element.code.length)
+    const lines = shape.kind === 'pill' ? [element.name] : roofLines(element.name)
     const floors = element.kind === 'component' ? floorsOf(element.origin, element.codeLines ?? 0, range) : 1
     const { w, d } = footprintOf(lines, shape, degree.get(element.representationId) ?? 0)
     return { key: element.representationId, w, d, children: [], paint: { kind: 'building', element, floors, shape, lines } }

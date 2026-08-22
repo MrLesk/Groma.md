@@ -62,17 +62,37 @@ export function floorsOf(origin: Origin, lines: number, range: { min: number; ma
   return 1 + Math.round(2 * (MAX_FLOORS - 1) * share) / 2
 }
 
-/** Footprint in cells: the top tier's roof holds every line of the name; a hub deepens for its ports. */
+/** A person's round building or an external system's pill: one curved tier. */
+export const curved = (shape: Shape): boolean => shape.kind === 'round' || shape.kind === 'pill'
+
+/** The name's block on a roof in plane pixels: the longest line with ROOF_PAD around it, one ROOF_LINE_HEIGHT per line. */
+export function roofBlock(lines: readonly string[]): { w: number; d: number } {
+  return {
+    w: Math.max(...lines.map(line => textWidth(line))) + 2 * ROOF_PAD,
+    d: 2 * ROOF_PAD + lines.length * ROOF_LINE_HEIGHT,
+  }
+}
+
+/** Footprint in cells: the roof holds the name's block (a box on its top tier, a round building inside its circle, a pill along its straight middle); a hub deepens for its ports. */
 export function footprintOf(
   lines: readonly string[],
   shape: Shape,
   degree: number,
 ): { w: number; d: number } {
-  const longest = Math.max(...lines.map(line => textWidth(line)))
+  const block = roofBlock(lines)
+  if (shape.kind === 'round') {
+    const side = Math.max(MIN_SIDE, Math.ceil(Math.hypot(block.w, block.d) / PLANE))
+    return { w: side, d: side }
+  }
+  if (shape.kind === 'pill') {
+    /** A semicircle of radius d / 2 at each end adds d to the straight middle. */
+    const d = MIN_SIDE
+    return { w: Math.ceil(block.w / PLANE) + d, d }
+  }
   /** Each tier above the first insets the roof a quarter cell per side. */
   const inset = 0.5 * (shape.levels - 1)
-  const w = Math.ceil((longest + 2 * ROOF_PAD) / PLANE + inset)
-  const d = Math.ceil((2 * ROOF_PAD + lines.length * ROOF_LINE_HEIGHT) / PLANE + inset)
+  const w = Math.ceil(block.w / PLANE + inset)
+  const d = Math.ceil(block.d / PLANE + inset)
   return {
     w: Math.max(MIN_SIDE, shape.kind === 'tower' ? 3 : MIN_SIDE, w),
     d: Math.max(MIN_SIDE, d, degree >= HUB_DEGREE ? 3 : MIN_SIDE),

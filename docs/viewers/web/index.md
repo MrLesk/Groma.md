@@ -100,8 +100,11 @@ with the most code lines stands four floors, the one with the fewest
 one floor, and every other in between in half floors by its share of
 that range; one code file is a block, two or three files stack as
 tiers, four or more files make a tower.
-People and external systems are one-floor buildings on their own
-islands. One grey pattern tells each kind apart, on side faces and
+People are round buildings (a cylinder whose circular roof holds the
+name) and external systems are pills (a stadium roof with the name on
+one line), one floor each, on their own islands; a route still meets
+the middle of a footprint side, where the curve touches it. One grey
+pattern tells each kind apart, on side faces and
 surfaces and never on a roof: component sides carry storey lines,
 person sides and the people island dots, external sides and the
 external island crosses, container slabs a faint grain, and system

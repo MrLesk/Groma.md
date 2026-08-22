@@ -1,4 +1,5 @@
 import { MARGIN, PAD } from '../../../sheet/grid.ts'
+import { PLANE, curved, roofBlock } from '../../../sheet/measure.ts'
 import type {
   Building,
   CellRect,
@@ -17,6 +18,8 @@ export const FLOOR = 12
 
 /** Insets of each stack tier above the one below, in cells per side. */
 const TIER_INSET = 0.25
+/** Straight segments drawn along a semicircle of a curved roof. */
+const ARC_STEPS = 16
 /** Screen pixels a slab's thickness hangs below the grid line: its top is the ground, its sides are drawn over the island in front of it. */
 const SLAB_HANG = 3
 /** The compass rose: a circle of this many cells lying in the sheet's west corner. */
@@ -160,8 +163,48 @@ function inset(rect: CellRect, by: number): CellRect {
   return { gx: rect.gx + by, gy: rect.gy + by, w: rect.w - 2 * by, d: rect.d - 2 * by }
 }
 
-/** Stack tiers from the ground up, each inset a quarter cell per side and sharing the floors equally. */
+/** Points around a curved roof in ground cells: a stadium with a semicircle at each end along +gx; in a square the two share a centre and make a circle. The ring starts at the east cap's north, runs over its east to the south, and returns along the west cap. */
+function roofOutline(rect: CellRect): { gx: number; gy: number }[] {
+  const r = Math.min(rect.w, rect.d) / 2
+  const cy = rect.gy + rect.d / 2
+  const arc = (cx: number, from: number, to: number): { gx: number; gy: number }[] => Array.from(
+    { length: ARC_STEPS + 1 },
+    (_, step) => {
+      const t = from + ((to - from) * step) / ARC_STEPS
+      return { gx: cx + r * Math.cos(t), gy: cy + r * Math.sin(t) }
+    },
+  )
+  return [...arc(rect.gx + rect.w - r, -Math.PI / 2, Math.PI / 2), ...arc(rect.gx + r, Math.PI / 2, (3 * Math.PI) / 2)]
+}
+
+/**
+ * The roof and the one front band of a curved building: the ring between its
+ * screen-left and screen-right extremes along the base and back along the
+ * top. Stepping back through the ring from the left extreme reaches the right
+ * extreme along the front, the part turned to the viewer. The band is the
+ * left face for tint and pattern.
+ */
+function curvedFaces(outline: readonly { gx: number; gy: number }[], z0: number, z1: number): Face[] {
+  const base = outline.map(point => project(point.gx, point.gy, z0))
+  const top = outline.map(point => project(point.gx, point.gy, z1))
+  const extreme = (better: (a: Point, b: Point) => boolean): number =>
+    base.reduce((best, point, index) => (better(point, base[best]!) ? index : best), 0)
+  const left = extreme((a, b) => a.x < b.x)
+  const right = extreme((a, b) => a.x > b.x)
+  const band: number[] = []
+  for (let index = left; ; index = (index - 1 + base.length) % base.length) {
+    band.push(index)
+    if (index === right) break
+  }
+  return [
+    { side: 'left', points: [...band.map(index => base[index]!), ...band.map(index => top[index]!).reverse()] },
+    { side: 'top', points: top },
+  ]
+}
+
+/** A box stacks tiers from the ground up, each inset a quarter cell per side and sharing the floors equally; a round building or pill is one curved tier. */
 function buildingTiers(building: Building): Face[][] {
+  if (curved(building.shape)) return [curvedFaces(roofOutline(building.rect), 0, building.floors)]
   const levels = building.shape.levels
   const tierHeight = building.floors / levels
   const tiers: Face[][] = []
@@ -171,9 +214,13 @@ function buildingTiers(building: Building): Face[][] {
   return tiers
 }
 
-/** A building's name starts at its roof's north corner. */
-function roofText(rect: CellRect, z: number, lines: string[]): SurfaceText {
-  return { origin: project(rect.gx, rect.gy, z), lines }
+/** A box's name starts at the north corner of its top tier's roof; a curved roof centres the name's block. */
+function roofText(building: Building): SurfaceText {
+  const { shape, floors, lines } = building
+  const roof = inset(building.rect, TIER_INSET * (shape.levels - 1))
+  if (!curved(shape)) return { origin: project(roof.gx, roof.gy, floors), lines }
+  const block = roofBlock(lines)
+  return { origin: project(roof.gx + (roof.w - block.w / PLANE) / 2, roof.gy + (roof.d - block.d / PLANE) / 2, floors), lines }
 }
 
 /** A surface's own name lies in its front band along the west corner, in front of every child. */
@@ -248,14 +295,11 @@ export function projectScene(scene: SheetScene): ProjectedScene {
     faces: boxFaces(slab.rect, -SLAB_HANG / FLOOR, 0),
     text: bandText(slab.rect, 0, [slab.name]),
   }))
-  const buildings = paintOrder(scene.buildings).map(building => {
-    const roof = inset(building.rect, TIER_INSET * (building.shape.levels - 1))
-    return {
-      building,
-      tiers: buildingTiers(building),
-      text: roofText(roof, building.floors, building.lines),
-    }
-  })
+  const buildings = paintOrder(scene.buildings).map(building => ({
+    building,
+    tiers: buildingTiers(building),
+    text: roofText(building),
+  }))
   const routes = scene.routes.map(route => {
     const points = route.points.map(point => project(point.gx, point.gy, 0))
     const last = route.points[route.points.length - 1]!
