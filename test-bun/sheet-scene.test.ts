@@ -18,20 +18,16 @@ import {
 } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { CellRect, SheetScene } from '../src/sheet/types.ts'
-import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../src/types.ts'
-import { box, openclawFixtureRoot, viewerFixtureRoot } from './helpers.ts'
+import type { ArchitectureWorld, WorldElement } from '../src/types.ts'
+import { box, openclawFixtureRoot, viewerFixtureRoot, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
-
-function world(elements: WorldElement[], relationships: WorldRelationship[] = []): ArchitectureWorld {
-  return { bounds: unit, elements, groups: [], relationships }
-}
 
 /** One person, one system with three containers (0, 2 and 5 components), one external system. */
 function shopWorld(): ArchitectureWorld {
   const components = (container: string, names: string[]): WorldElement[] => names.map(name =>
     box(name, 'component', unit, { parent: `observed:${container}` }))
-  return world([
+  return worldOf([
     box('buyer', 'person', unit),
     box('shop', 'system', unit, { children: ['observed:api', 'observed:web', 'observed:jobs'] }),
     box('api', 'container', unit, { parent: 'observed:shop' }),
@@ -108,7 +104,7 @@ test.concurrent('children sit inside their parent with padding and leave the fro
 })
 
 test.concurrent('islands form one row along gx: people at the west end, externals at the east end', () => {
-  const scene = sheetScene(world([
+  const scene = sheetScene(worldOf([
     box('ann', 'person', unit),
     box('bob', 'person', unit),
     box('shop', 'system', unit),
@@ -130,7 +126,7 @@ test.concurrent('islands form one row along gx: people at the west end, external
 })
 
 test.concurrent('people and external islands are squares with their buildings centred', () => {
-  const scene = sheetScene(world([
+  const scene = sheetScene(worldOf([
     box('ann', 'person', unit),
     box('bob', 'person', unit),
     box('shop', 'system', unit),
@@ -151,7 +147,7 @@ test.concurrent('people and external islands are squares with their buildings ce
 })
 
 test.concurrent('a group becomes a zone around its members on the parent surface', () => {
-  const scene = sheetScene(world([
+  const scene = sheetScene(worldOf([
     box('shop', 'system', unit),
     box('api', 'container', unit, { parent: 'observed:shop' }),
     ...['orders', 'pricing', 'stock', 'mailer', 'audit'].map(name => ({
@@ -195,8 +191,8 @@ test.concurrent('adding a sibling that sorts last keeps the earlier buildings in
     return new Map(scene.buildings.map(building =>
       [building.id, [building.rect.gx - slab.gx, building.rect.gy - slab.gy]]))
   }
-  const before = offsets(sheetScene(world(base)))
-  const after = offsets(sheetScene(world([...base, box('d', 'component', unit, { parent: 'observed:api' })])))
+  const before = offsets(sheetScene(worldOf(base)))
+  const after = offsets(sheetScene(worldOf([...base, box('d', 'component', unit, { parent: 'observed:api' })])))
   for (const [id, offset] of before) assert.deepEqual(after.get(id), offset)
 })
 
@@ -217,7 +213,7 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.equal(floorsOf('observed', 2000), 3)
   assert.equal(floorsOf('planned', 2000), 1)
 
-  const scene = sheetScene(world([
+  const scene = sheetScene(worldOf([
     box('ann', 'person', unit, { name: 'Ann the architect' }),
     { ...box('bank', 'system', unit, { external: true }), codeLines: 900 },
   ]))
@@ -230,7 +226,7 @@ test.concurrent('roof text, code files and code lines size a building', () => {
 })
 
 test.concurrent('a surface is at least as wide as its own name', () => {
-  const scene = sheetScene(world([
+  const scene = sheetScene(worldOf([
     box('bank', 'system', unit, { external: true, name: 'Ab' }),
     box('shop', 'system', unit, { name: 'A shop with a remarkably long name' }),
     box('api', 'container', unit, { parent: 'observed:shop', name: 'An application programming interface' }),
@@ -254,7 +250,7 @@ test.concurrent('the sheet is the islands plus the margin, starting at the margi
   assert.deepEqual(scene.sheet, { gx: 0, gy: 0, w: maxX + MARGIN, d: maxY + MARGIN })
 })
 
-test.concurrent('empty containers pack as four-cell slabs in a square-ish shelf', async () => {
+test.concurrent('empty containers are four-cell slabs', async () => {
   const { world: fixture } = await loadArchitectureViewModel(openclawFixtureRoot)
   const scene = sheetScene(fixture)
   assert.equal(scene.slabs.length, 6)
@@ -262,6 +258,13 @@ test.concurrent('empty containers pack as four-cell slabs in a square-ish shelf'
     assert.equal(slab.rect.d, EMPTY)
     assert.ok(slab.rect.w >= EMPTY)
   }
+})
+
+test.concurrent('children no relationship touches keep the square-ish shelf', () => {
+  const scene = sheetScene(worldOf([
+    box('shop', 'system', unit),
+    ...['a', 'b', 'c', 'd', 'e', 'f'].map(name => box(name, 'container', unit, { parent: 'observed:shop' })),
+  ]))
   const rows = new Map<number, number>()
   for (const slab of scene.slabs) rows.set(slab.rect.gy, (rows.get(slab.rect.gy) ?? 0) + 1)
   assert.deepEqual([...rows.values()], [3, 3])

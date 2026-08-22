@@ -11,7 +11,7 @@ code:
 
 # Sheet
 
-Composes the web map's blueprint sheet from the merged world: flat islands for people, external systems, and each internal system, container slabs level with their island, buildings sized for their names and raised by their code, group zones, all snapped to whole grid cells, and one lattice route per authored relationship. The same world always gives the same sheet.
+Composes the web map's blueprint sheet from the merged world: flat islands for people, external systems, and each internal system, container slabs level with their island, buildings sized for their names and raised by their code, group zones, all snapped to whole grid cells, and one lattice route per authored relationship. Inside every surface the children stand in columns by the flow among them, what the outside feeds first and everything else east of what feeds it, partners lined up, so routes stay short and straight. The same world always gives the same sheet.
 
 ## Relationships
 

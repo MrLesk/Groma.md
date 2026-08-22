@@ -1,5 +1,5 @@
 import { compareElements } from '../element-order.ts'
-import type { ArchitectureWorld, WorldElement } from '../types.ts'
+import type { ArchitectureWorld, WorldElement, WorldRelationship } from '../types.ts'
 import { ISLAND_GAP, MARGIN, PAD, translate, unionRects } from './grid.ts'
 import {
   ISLAND_FONT,
@@ -11,7 +11,9 @@ import {
   roofLines,
   shapeOf,
 } from './measure.ts'
-import { shelf } from './pack.ts'
+import { columns, shelf } from './pack.ts'
+import type { RankedItem } from './pack.ts'
+import { flowRanks } from './rank.ts'
 import type {
   Building,
   CellRect,
@@ -64,19 +66,63 @@ function nameWidth(paint: Node['paint']): number {
   return 0
 }
 
-/** A surface holding its packed children, at least as wide as its own name. */
+/** The relationships among siblings, lifted from whatever stands inside them. */
+interface Lifted {
+  /** Siblings something outside them feeds: a person, or anything beyond their surface. */
+  entries: Set<string>
+  /** Directed edges between siblings, in relationship order. */
+  edges: Map<string, string[]>
+  /** Every sibling's partners with the number of relationships between them. */
+  partners: Map<string, Map<string, number>>
+}
+
+function lifted(siblings: readonly Node[], relationships: readonly WorldRelationship[]): Lifted {
+  /** The sibling each node inside the surface stands in. */
+  const holder = new Map<string, string>()
+  const claim = (node: Node, sibling: string): void => {
+    holder.set(node.key, sibling)
+    for (const inner of node.children) claim(inner.node, sibling)
+  }
+  for (const sibling of siblings) claim(sibling, sibling.key)
+  const result: Lifted = {
+    entries: new Set(),
+    edges: new Map(),
+    partners: new Map(siblings.map(sibling => [sibling.key, new Map()])),
+  }
+  for (const { source, target } of relationships) {
+    const a = holder.get(source)
+    const b = holder.get(target)
+    if (a === undefined && b !== undefined) result.entries.add(b)
+    if (a === undefined || b === undefined || a === b) continue
+    result.edges.set(a, [...(result.edges.get(a) ?? []), b])
+    result.partners.get(a)!.set(b, (result.partners.get(a)!.get(b) ?? 0) + 1)
+    result.partners.get(b)!.set(a, (result.partners.get(b)!.get(a) ?? 0) + 1)
+  }
+  return result
+}
+
+/**
+ * A surface holding its children in flow columns (the people and external
+ * islands stack theirs in one column), at least as wide as its own name.
+ */
 function packed(
   key: string,
   children: readonly Node[],
   paint: Node['paint'],
-  cols?: number,
+  relationships: readonly WorldRelationship[],
+  stack = false,
 ): Node {
-  const packedShelf = shelf(children.map(child => ({ key: child.key, w: child.w, d: child.d })), cols)
+  const { entries, edges, partners } = lifted(children, relationships)
+  const ranks = flowRanks(children.map(child => child.key), entries, edges)
+  const items: RankedItem[] = children.map(child => ({
+    key: child.key, w: child.w, d: child.d, rank: ranks.get(child.key), partners: partners.get(child.key)!,
+  }))
+  const placed = stack ? shelf(items, 1) : columns(items)
   return {
     key,
-    w: Math.max(packedShelf.w, nameWidth(paint)),
-    d: packedShelf.d,
-    children: children.map(child => ({ node: child, ...packedShelf.at.get(child.key)! })),
+    w: Math.max(placed.w, nameWidth(paint)),
+    d: placed.d,
+    children: children.map(child => ({ node: child, ...placed.at.get(child.key)! })),
     paint,
   }
 }
@@ -103,7 +149,12 @@ function squared(node: Node): Node {
 }
 
 /** Siblings in hierarchy order, with each group's members folded into one zone node where its first member sat. */
-function withZones(parentKey: string, siblings: readonly Node[], elements: readonly WorldElement[]): Node[] {
+function withZones(
+  parentKey: string,
+  siblings: readonly Node[],
+  elements: readonly WorldElement[],
+  relationships: readonly WorldRelationship[],
+): Node[] {
   const groupOf = new Map(elements.map(element => [element.representationId, element.group]))
   const buckets = new Map<string, { group: string | undefined; nodes: Node[] }>()
   for (const node of siblings) {
@@ -115,7 +166,7 @@ function withZones(parentKey: string, siblings: readonly Node[], elements: reado
   }
   return [...buckets].map(([key, { group, nodes }]) => group === undefined
     ? nodes[0]!
-    : packed(key, nodes, { kind: 'zone', name: group, members: nodes.map(member => member.key) }))
+    : packed(key, nodes, { kind: 'zone', name: group, members: nodes.map(member => member.key) }, relationships))
 }
 
 export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relationships'>): Placement {
@@ -139,16 +190,18 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
     const components = childrenOf(container.representationId).filter(child => child.kind === 'component')
     return packed(
       container.representationId,
-      withZones(container.representationId, components.map(building), components),
+      withZones(container.representationId, components.map(building), components, world.relationships),
       { kind: 'slab', element: container },
+      world.relationships,
     )
   }
   const systemIsland = (system: WorldElement): Node => {
     const containers = childrenOf(system.representationId).filter(child => child.kind === 'container')
     return packed(
       system.representationId,
-      withZones(system.representationId, containers.map(slab), containers),
+      withZones(system.representationId, containers.map(slab), containers, world.relationships),
       { kind: 'island', islandKind: 'system', name: system.name, element: system },
+      world.relationships,
     )
   }
   const roots = childrenOf(null)
@@ -159,21 +212,26 @@ export function placeWorld(world: Pick<ArchitectureWorld, 'elements' | 'relation
   const islands: Node[] = []
   if (people.length > 0) {
     islands.push(squared(packed(PEOPLE_ISLAND, people.map(building),
-      { kind: 'island', islandKind: 'people', name: 'People', element: null }, 1)))
+      { kind: 'island', islandKind: 'people', name: 'People', element: null }, world.relationships, true)))
   }
-  islands.push(...systems.map(systemIsland))
-  if (externals.length > 0) {
-    islands.push(squared(packed(EXTERNAL_ISLAND, externals.map(building),
-      { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, 1)))
-  }
-  return collect(islands, placeRow(islands))
+  const systemIslands = systems.map(systemIsland)
+  const externalIslands = externals.length === 0 ? [] : [squared(packed(EXTERNAL_ISLAND, externals.map(building),
+    { kind: 'island', islandKind: 'external', name: 'External systems', element: null }, world.relationships, true))]
+  const all = [...islands, ...systemIslands, ...externalIslands]
+  const { entries, edges } = lifted(all, world.relationships)
+  const ranks = flowRanks(all.map(island => island.key), entries, edges)
+  const rankOf = (island: Node): number => ranks.get(island.key) ?? Number.MAX_SAFE_INTEGER
+  islands.push(...systemIslands.sort((a, b) => rankOf(a) - rankOf(b)), ...externalIslands)
+  return collect(islands, placeRow(islands, world.relationships))
 }
 
 /**
- * Islands in one row along +gx: people at the west end, externals at the
- * east end, their centres on one gy line, ISLAND_GAP cells apart.
+ * Islands in one row along +gx in the order given (people, systems by the
+ * flow among them, externals), their centres on one gy line, ISLAND_GAP
+ * cells apart; then the people and external islands slide along gy so the
+ * centre of their buildings faces the centre of what those buildings talk to.
  */
-function placeRow(islands: readonly Node[]): CellRect[] {
+function placeRow(islands: readonly Node[], relationships: readonly WorldRelationship[]): CellRect[] {
   const deepest = Math.max(0, ...islands.map(island => island.d))
   const origins: CellRect[] = []
   let gx = 0
@@ -181,6 +239,29 @@ function placeRow(islands: readonly Node[]): CellRect[] {
     origins.push({ gx, gy: Math.round((deepest - island.d) / 2), w: island.w, d: island.d })
     gx += island.w + ISLAND_GAP
   }
+  const rects = new Map<string, CellRect>()
+  const islandOf = new Map<string, string>()
+  const walk = (node: Node, rect: CellRect, island: string): void => {
+    rects.set(node.key, rect)
+    islandOf.set(node.key, island)
+    for (const child of node.children) {
+      walk(child.node, { gx: rect.gx + child.gx, gy: rect.gy + child.gy, w: child.node.w, d: child.node.d }, island)
+    }
+  }
+  islands.forEach((island, index) => walk(island, origins[index]!, island.key))
+  const centre = (id: string): number => rects.get(id)!.gy + rects.get(id)!.d / 2
+  islands.forEach((island, index) => {
+    if (island.paint.kind !== 'island' || island.paint.islandKind === 'system') return
+    let shift = 0
+    let count = 0
+    for (const { source, target } of relationships) {
+      const inside = islandOf.get(source) === island.key
+      if (inside === (islandOf.get(target) === island.key)) continue
+      shift += inside ? centre(target) - centre(source) : centre(source) - centre(target)
+      count += 1
+    }
+    if (count > 0) origins[index] = translate(origins[index]!, 0, Math.round(shift / count))
+  })
   const union = unionRects(origins)
   if (!union) return origins
   return origins.map(origin => translate(origin, MARGIN - union.gx, MARGIN - union.gy))
