@@ -10,4 +10,4 @@ code:
 
 # Page
 
-Serves the HTML shell for the browser map.
+Serves the HTML shell: the chrome, the three panes, the embedded world and sheet, the palette variables, and the map stylesheet.

@@ -11,4 +11,8 @@ code:
 
 # World layout
 
-Positions every element from containment and relationships, then routes directed arrows. It returns that geometry as renderer-independent objects.
+Lays the whole world out once for the terminal map: containment boxes, group boundaries, and orthogonal routes, with one stable id per relationship that every viewer shares.
+
+## Technology
+
+ELK layered layout, run in a worker.

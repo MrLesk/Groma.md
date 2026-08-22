@@ -26,12 +26,14 @@ itself. Groma writes those files.
 ## The world
 
 Core returns the merged observed and planned architecture, already laid
-out, with origin annotations. For a requested C4 level and focus, the
-shared `semanticView` derives the semantic city before the plugin runs:
-roles, bounds, promoted endpoints, routes, labels, selection targets, and
-focus scope. That city is the renderer input. A live host may replace it
-after `groma scan --watch` folds. Keys, pointers, projection, camera, paint,
-and widgets are plugin concerns.
+out, with origin annotations. Core also derives the plugin's map before the
+plugin runs: for the TUI, the shared `semanticView` derives the semantic
+city for a requested C4 level and focus (roles, bounds, promoted endpoints,
+routes, labels, selection targets, and focus scope); for the web,
+`sheetScene` composes the blueprint sheet (islands, slabs, buildings, zones
+and lattice routes on whole cells). That map is the renderer input. A live
+host may replace it after `groma scan --watch` folds. Keys, pointers,
+projection, camera, paint, and widgets are plugin concerns.
 
 The [TUI viewer](tui/index.md) is the first plugin. The [web
 viewer](web/index.md) is the same interface for another surface. Neither

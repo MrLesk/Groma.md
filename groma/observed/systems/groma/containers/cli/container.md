@@ -2,14 +2,15 @@
 id: cli
 kind: container
 parent: groma
+technology: commander, Bun
 code:
   - scanner: typescript
     file: src/cli.ts
 ---
 
-# Cli
+# CLI
 
-Starts Groma from the command line: `groma view`, `groma web`, `groma scan`, and `groma accept`.
+The `groma` command. It starts the viewers, runs a scan, authors and edits plan ghosts, accepts a matched ghost, and prints the merged world as plain text when there is no terminal to draw in.
 
 ## Relationships
 

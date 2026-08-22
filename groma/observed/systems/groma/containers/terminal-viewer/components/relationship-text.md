@@ -10,5 +10,4 @@ code:
 
 # Relationship text
 
-Decides when a relationship label is on for the current selection.
-
+Decides when a relationship label is on for the current selection, and which peer a relationship shows once its endpoints promote to their parents. Both viewers share it.

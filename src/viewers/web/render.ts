@@ -1,71 +1,35 @@
-import type {
-  ArchitectureWorld,
-  Point,
-  SemanticLevel,
-  WorldElement,
-  WorldRelationship,
-} from '../../types.ts'
-import {
-  actionLegs,
-  actionPath,
-  worldCommands,
-} from '../action-path.ts'
+import { compareElements } from '../../element-order.ts'
+import type { ArchitectureWorld, WorldElement } from '../../types.ts'
+import { actionPath, elementOnPath, worldCommands } from '../action-path.ts'
 import { initialTree, toggleExpansion, treeRows } from '../tui/tree.ts'
 import type { TreeRow } from '../tui/tree.ts'
-import { palettes, setPalette } from './atoms/theme.ts'
-import { initialPlayback, nextPlayback } from './flow-playback.ts'
+import {
+  cameraTransform,
+  fitCamera,
+  keyAction,
+  pan,
+  resized,
+  wheelFactor,
+  zoomAbout,
+  zoomReadout,
+} from './iso/camera.ts'
+import type { Camera, KeyTarget, Viewport } from './iso/camera.ts'
+import { createMap } from './iso/map.ts'
+import { projectScene } from './iso/project.ts'
+import type { ProjectedScene } from './iso/project.ts'
 import { paintDetails, inspectDetails, nextActiveAction } from './organisms/details.ts'
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
-import { SvgFlow } from './svg-flow.ts'
-import { paintSvgMap } from './svg-dom.ts'
-import {
-  buildSvgScene,
-  cameraViewBox,
-  defaultProjection,
-  enterSemanticScope,
-  fitCamera,
-  leaveSemanticScope,
-  orbitProjection,
-  panCamera,
-  resizeCamera,
-  selectionScope,
-  semanticKeyAction,
-  synchronizeSemanticScope,
-  zoomAt,
-} from './svg-scene.ts'
-import type {
-  Projection,
-  SemanticKeyTarget,
-  SemanticScope,
-  SvgCamera,
-  SvgScene,
-} from './svg-scene.ts'
+import type { WebPayload } from './payload.ts'
 
-const svgNamespace = 'http://www.w3.org/2000/svg'
+const ZOOM_STEP = 1.25
+const DRAG_THRESHOLD = 4
 
-function svgElement<K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] {
-  return document.createElementNS(svgNamespace, tag)
-}
-
-function worldElement(
-  world: ArchitectureWorld,
-  id: string | undefined,
-): WorldElement | undefined {
-  return id === undefined
-    ? undefined
-    : world.elements.find(element => element.representationId === id)
-}
-
-let tree = initialTree()
-
-const boot = JSON.parse(document.getElementById('world')!.textContent!) as {
-  generation: number
-  world: ArchitectureWorld
-}
+const boot = JSON.parse(document.getElementById('world')!.textContent!) as WebPayload
 let world = boot.world
 let applied = boot.generation
+let scene: ProjectedScene = projectScene(boot.sheet)
 
 const host = document.getElementById('map')!
 const treeHost = document.getElementById('tree')!
@@ -75,146 +39,81 @@ const themeButton = document.getElementById('theme')!
 const detailsHost = document.getElementById('details')!
 const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
-const flowHost = document.getElementById('flow')!
-const flowNameHost = document.getElementById('flow-name')!
-const pauseButton = document.getElementById('flow-pause')!
-const stepButton = document.getElementById('flow-step')!
-const rateButtons: [HTMLElement, number][] = [
-  [document.getElementById('rate-half')!, 0.5],
-  [document.getElementById('rate-one')!, 1],
-  [document.getElementById('rate-two')!, 2],
-]
-const button2d = document.getElementById('mode-2d')!
-const button3d = document.getElementById('mode-3d')!
 
-let projection: Projection = defaultProjection
-const initialSemantic = synchronizeSemanticScope(world, {
-  level: 'context',
-  focusId: null,
-  selectedId: undefined,
-})
-let level: SemanticLevel = initialSemantic.scope.level
-let focusId: string | null = initialSemantic.scope.focusId
-let selectedId = initialSemantic.scope.selectedId
-let hoverId: string | undefined
+const map = createMap(host)
+let tree = initialTree()
+let selectedId = firstSystem(world)?.representationId
 let activeAction: ActiveAction = {}
 let detailsTab: DetailsTab = 'what'
-let playback = initialPlayback
-let semantic = initialSemantic.view
-let scene: SvgScene = buildSvgScene(semantic, projection)
-let camera: SvgCamera = fitCamera(scene, host.clientWidth, host.clientHeight)
 
-const mapSvg = svgElement('svg')
-mapSvg.setAttribute('xmlns', svgNamespace)
-mapSvg.setAttribute('role', 'img')
-mapSvg.setAttribute('aria-label', 'Architecture map')
-mapSvg.tabIndex = 0
-host.replaceChildren(mapSvg)
-
-const flow = new SvgFlow()
-
-function selectedElement(): WorldElement | undefined {
-  return worldElement(world, selectedId)
+function viewport(): Viewport {
+  return { width: host.clientWidth, height: host.clientHeight }
 }
 
-function applyCamera(): void {
-  const box = cameraViewBox(camera)
-  mapSvg.setAttribute('viewBox', `${box.x} ${box.y} ${box.width} ${box.height}`)
-  mapSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-  zoomHost.textContent = Math.abs(camera.zoom - 1) < 1e-6
-    ? ''
-    : `${Math.round(camera.zoom * 100)}%`
+let fitted: Camera = fitCamera(scene.bounds, viewport())
+let camera: Camera = fitted
+/** Once the person moved the camera, refits stop until they press 0. */
+let touched = false
+
+function firstSystem(current: ArchitectureWorld): WorldElement | undefined {
+  return current.elements
+    .filter(element => element.kind === 'system' && !element.external)
+    .sort(compareElements)[0]
 }
 
-function paintMap(pathIds: Set<string>): void {
-  paintSvgMap({
-    mapSvg,
-    semantic,
-    scene,
-    world,
-    selectedId,
-    hoverId,
-    pathIds,
-    applyCamera,
-    appendFlow: () => flow.appendTo(mapSvg),
-  })
+function worldElement(id: string | undefined): WorldElement | undefined {
+  return id === undefined
+    ? undefined
+    : world.elements.find(element => element.representationId === id)
 }
 
-function clientPoint(clientX: number, clientY: number): Point {
-  const rect = mapSvg.getBoundingClientRect()
-  const view = cameraViewBox(camera)
-  const width = Math.max(rect.width, 1)
-  const height = Math.max(rect.height, 1)
-  return {
-    x: view.x + ((clientX - rect.left) / width) * view.width,
-    y: view.y + ((clientY - rect.top) / height) * view.height,
-  }
+function applyCamera(animate: boolean): void {
+  map.camera.classList.toggle('animate', animate)
+  map.camera.style.transform = cameraTransform(camera)
+  zoomHost.textContent = zoomReadout(camera, fitted)
 }
 
-function hitId(target: EventTarget | null): string | undefined {
-  if (!(target instanceof Element)) return undefined
-  return target.closest('[data-selectable="true"]')?.getAttribute('data-id') ?? undefined
+function refit(animate: boolean): void {
+  fitted = fitCamera(scene.bounds, viewport())
+  camera = fitted
+  touched = false
+  applyCamera(animate)
 }
 
-function clearFlow(): void {
-  playback = initialPlayback
-  flow.clear()
+function zoomStep(factor: number): void {
+  const { width, height } = viewport()
+  camera = zoomAbout(camera, factor, { x: width / 2, y: height / 2 }, fitted)
+  touched = true
+  applyCamera(true)
 }
 
-function syncFlow(pathIds: Set<string>): void {
-  const key = pathIds.size === 0
-    ? ''
-    : `${activeAction.id}:${activeAction.personId ?? ''}:${level}:${focusId ?? ''}`
-  flow.sync(key, scene.routes.map(route => ({ id: route.route.id, points: route.points })), pathIds)
-}
-
-function walkLegs(): WorldRelationship[] {
-  return actionLegs(activeAction.id, world, activeAction.personId)
-}
-
-function litRoutes(): Set<string> {
-  return actionPath(activeAction.id, world, activeAction.personId)
-}
-
-function paintFlow(legs = walkLegs()): void {
+function paintAction(): void {
   const active = world.relationships.find(item => item.id === activeAction.id)
-  flowHost.hidden = active === undefined
   if (active === undefined) {
-    actionHost.textContent = 'drag pan · right-drag orbit · scroll zoom'
+    actionHost.textContent = 'drag pan · scroll zoom · + − 0'
     actionHost.classList.add('hint')
     return
   }
-  const names = new Map(world.elements.map(item => [item.representationId, item.name]))
-  const nameOf = (id: string): string => names.get(id) ?? id
-  flowNameHost.textContent = active.description
-  pauseButton.textContent = playback.paused ? 'Play' : 'Pause'
-  for (const [button, rate] of rateButtons) button.classList.toggle('active', playback.rate === rate)
-  const leg = playback.step === null ? undefined : legs[playback.step]
-  actionHost.textContent = leg === undefined
-    ? `${active.description}   x clear`
-    : `step ${playback.step! + 1}/${legs.length} · ${nameOf(leg.source)}`
-      + ` → ${nameOf(leg.target)} · ${leg.description}   x clear`
+  actionHost.textContent = `${active.description}   x clear`
   actionHost.classList.remove('hint')
-  flow.paint(playback.step, legs, playback.paused, playback.rate)
 }
 
 function paintStats(flowCount: number): void {
-  const system = world.elements.find(element =>
-    element.kind === 'system' && element.origin === 'observed' && !element.external)
+  const system = firstSystem(world)
   statsHost.textContent = system === undefined
     ? ''
     : `${system.name} · ${flowCount} flows · ${world.elements.length} elements`
 }
 
 function paintSelection(): void {
-  const legs = walkLegs()
-  const pathIds = new Set(legs.map(leg => leg.id))
-  syncFlow(pathIds)
+  const litIds = actionPath(activeAction.id, world, activeAction.personId)
+  map.select(selectedId)
+  map.setFlow(litIds, id => elementOnPath(id, litIds, world))
   paintHierarchy(treeHost, treeRows(world, selectedId, tree), selectedId, select, toggleRow)
   const commands = worldCommands(world)
   paintFlows(flowsHost, commands, activeAction.id, pickAction)
   paintStats(commands.length)
-  const selected = selectedElement()
+  const selected = worldElement(selectedId)
   if (selected) {
     paintDetails(
       detailsHost,
@@ -229,8 +128,7 @@ function paintSelection(): void {
       },
     )
   }
-  paintFlow(legs)
-  paintMap(pathIds)
+  paintAction()
 }
 
 function toggleRow(row: TreeRow): void {
@@ -239,15 +137,10 @@ function toggleRow(row: TreeRow): void {
 }
 
 function select(id: string): void {
-  const next = selectionScope(world, id)
-  if (!next) return
-  const scopeChanged = next.level !== level || next.focusId !== focusId
-  level = next.level
-  focusId = next.focusId
-  selectedId = next.selectedId
+  if (!worldElement(id)) return
+  selectedId = id
   activeAction = nextActiveAction(activeAction, { type: 'select' })
-  if (scopeChanged) rebuildSemantic(true)
-  else paintSelection()
+  paintSelection()
 }
 
 function pickAction(id: string, personId?: string): void {
@@ -255,158 +148,76 @@ function pickAction(id: string, personId?: string): void {
   paintSelection()
 }
 
-function rebuildScene(resetCamera: boolean, resetPlayback = true): void {
-  scene = buildSvgScene(semantic, projection)
-  if (resetCamera) camera = fitCamera(scene, host.clientWidth, host.clientHeight)
-  if (resetPlayback) clearFlow()
+function clearAction(): void {
+  activeAction = nextActiveAction(activeAction, { type: 'clear' })
   paintSelection()
 }
 
-function rebuildSemantic(resetCamera: boolean): void {
-  const next = synchronizeSemanticScope(world, {
-    level,
-    focusId,
-    selectedId,
-  })
-  level = next.scope.level
-  focusId = next.scope.focusId
-  selectedId = next.scope.selectedId
-  semantic = next.view
-  rebuildScene(resetCamera)
-}
-
-function transition(direction: 'enter' | 'leave'): void {
-  const scope: SemanticScope = { level, focusId, selectedId }
-  const next = direction === 'enter'
-    ? enterSemanticScope(world, scope)
-    : leaveSemanticScope(world, scope)
-  if (next.level === level && next.focusId === focusId && next.selectedId === selectedId) return
-  level = next.level
-  focusId = next.focusId
-  selectedId = next.selectedId
-  rebuildSemantic(true)
-}
-
-function setProjection(next: Projection, fit = false): void {
-  projection = next
-  button2d.classList.toggle('active', Math.abs(next.elevation - Math.PI / 2) < 1e-6)
-  button3d.classList.toggle('active', !button2d.classList.contains('active'))
-  rebuildScene(fit, false)
-}
-
-function zoomBy(factor: number): void {
-  camera = zoomAt(camera, factor, camera.center)
-  applyCamera()
-}
-
-function resize(): void {
-  camera = resizeCamera(camera, host.clientWidth, host.clientHeight)
-  applyCamera()
-}
-
 let pointer: {
+  id: number
   x: number
   y: number
   dragging: boolean
-  orbiting: boolean
   targetId: string | undefined
 } | null = null
 
-mapSvg.addEventListener('wheel', event => {
+map.svg.addEventListener('wheel', event => {
   event.preventDefault()
-  const anchor = clientPoint(event.clientX, event.clientY)
-  camera = zoomAt(camera, Math.exp(-event.deltaY * 0.002), anchor)
-  applyCamera()
+  const rect = map.svg.getBoundingClientRect()
+  camera = zoomAbout(
+    camera,
+    wheelFactor(event.deltaY),
+    { x: event.clientX - rect.left, y: event.clientY - rect.top },
+    fitted,
+  )
+  touched = true
+  applyCamera(false)
 }, { passive: false })
 
-mapSvg.addEventListener('contextmenu', event => event.preventDefault())
-mapSvg.addEventListener('pointerdown', event => {
+map.svg.addEventListener('pointerdown', event => {
+  if (event.button !== 0) return
   pointer = {
+    id: event.pointerId,
     x: event.clientX,
     y: event.clientY,
     dragging: false,
-    orbiting: event.button === 2 || event.ctrlKey || event.altKey,
-    targetId: hitId(event.target),
+    targetId: map.hitId(event.target),
   }
-  mapSvg.setPointerCapture(event.pointerId)
+  map.svg.setPointerCapture(event.pointerId)
 })
-mapSvg.addEventListener('pointermove', event => {
-  if (pointer === null) {
-    const nextHover = hitId(event.target)
-    if (nextHover !== hoverId) {
-      hoverId = nextHover
-      paintMap(litRoutes())
-    }
-    return
-  }
+map.svg.addEventListener('pointermove', event => {
+  if (pointer === null || pointer.id !== event.pointerId) return
   const dx = event.clientX - pointer.x
   const dy = event.clientY - pointer.y
-  if (!pointer.dragging && dx * dx + dy * dy > 16) pointer.dragging = true
+  if (!pointer.dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD) pointer.dragging = true
   if (!pointer.dragging) return
-  if (pointer.orbiting) {
-    setProjection(orbitProjection(projection, dx, dy))
-  } else {
-    camera = panCamera(camera, dx, dy)
-    applyCamera()
-  }
+  camera = pan(camera, dx, dy)
+  touched = true
+  applyCamera(false)
   pointer.x = event.clientX
   pointer.y = event.clientY
 })
-mapSvg.addEventListener('pointerup', event => {
-  if (pointer !== null && !pointer.dragging && !pointer.orbiting && event.button !== 2) {
-    if (pointer.targetId) select(pointer.targetId)
-  }
+map.svg.addEventListener('pointerup', event => {
+  if (pointer === null || pointer.id !== event.pointerId) return
+  if (!pointer.dragging && pointer.targetId !== undefined) select(pointer.targetId)
   pointer = null
-  hoverId = undefined
-  paintMap(litRoutes())
 })
-mapSvg.addEventListener('pointerleave', () => {
-  if (pointer !== null) return
-  if (hoverId !== undefined) {
-    hoverId = undefined
-    paintMap(litRoutes())
-  }
+map.svg.addEventListener('pointercancel', () => {
+  pointer = null
 })
 
-button2d.addEventListener('click', () => setProjection({ rotation: 0, elevation: Math.PI / 2 }, true))
-button3d.addEventListener('click', () => setProjection(defaultProjection, true))
-document.getElementById('fit')!.addEventListener('click', () => {
-  camera = fitCamera(scene, host.clientWidth, host.clientHeight)
-  applyCamera()
-})
-document.getElementById('zoom-in')!.addEventListener('click', () => zoomBy(1.25))
-document.getElementById('zoom-out')!.addEventListener('click', () => zoomBy(1 / 1.25))
+document.getElementById('zoom-in')!.addEventListener('click', () => zoomStep(ZOOM_STEP))
+document.getElementById('zoom-out')!.addEventListener('click', () => zoomStep(1 / ZOOM_STEP))
 
 let darkTheme = false
 themeButton.addEventListener('click', () => {
   darkTheme = !darkTheme
   themeButton.textContent = darkTheme ? 'Light' : 'Dark'
-  if (darkTheme) {
-    document.documentElement.dataset.theme = 'dark'
-    setPalette(palettes.dark)
-  } else {
-    delete document.documentElement.dataset.theme
-    setPalette(palettes.light)
-  }
-  paintSelection()
+  if (darkTheme) document.documentElement.dataset.theme = 'dark'
+  else delete document.documentElement.dataset.theme
 })
 
-pauseButton.addEventListener('click', () => {
-  playback = nextPlayback(playback, { type: 'toggle-pause' })
-  paintFlow()
-})
-stepButton.addEventListener('click', () => {
-  playback = nextPlayback(playback, { type: 'step', legCount: walkLegs().length })
-  paintFlow()
-})
-for (const [button, rate] of rateButtons) {
-  button.addEventListener('click', () => {
-    playback = nextPlayback(playback, { type: 'rate', rate })
-    paintFlow()
-  })
-}
-
-function keyTarget(target: EventTarget | null): SemanticKeyTarget {
+function keyTarget(target: EventTarget | null): KeyTarget {
   if (!(target instanceof Element)) return 'other'
   if (target.closest('input, textarea, [contenteditable]')) return 'text'
   if (target.closest('#tree')) return 'hierarchy'
@@ -416,49 +227,47 @@ function keyTarget(target: EventTarget | null): SemanticKeyTarget {
 
 document.addEventListener('keydown', event => {
   if (event.metaKey || event.ctrlKey || event.altKey) return
-  const targetKind = keyTarget(event.target)
-  const action = semanticKeyAction(event.key, targetKind)
+  const action = keyAction(event.key, keyTarget(event.target))
   if (action === undefined) return
   event.preventDefault()
-  if (action === 'enter') {
-    if (targetKind === 'hierarchy' && event.target instanceof Element) {
-      const row = event.target.closest<HTMLButtonElement>('#tree button')
-      const id = row?.dataset.id
-      if (id !== undefined) select(id)
-    }
-    transition('enter')
-  } else if (action === 'leave') {
-    transition('leave')
-  } else {
-    activeAction = nextActiveAction(activeAction, { type: 'clear' })
-    paintSelection()
-  }
+  if (action === 'in') zoomStep(ZOOM_STEP)
+  else if (action === 'out') zoomStep(1 / ZOOM_STEP)
+  else if (action === 'fit') refit(true)
+  else clearAction()
 })
 
-function applyWorld(next: ArchitectureWorld): void {
-  world = next
-  const synchronized = synchronizeSemanticScope(world, {
-    level,
-    focusId,
-    selectedId,
-  })
-  level = synchronized.scope.level
-  focusId = synchronized.scope.focusId
-  selectedId = synchronized.scope.selectedId
-  semantic = synchronized.view
-  rebuildScene(false)
+let lastViewport = viewport()
+new ResizeObserver(() => {
+  const next = viewport()
+  if (touched) {
+    camera = resized(camera, lastViewport, next)
+    fitted = fitCamera(scene.bounds, next)
+    applyCamera(false)
+  } else {
+    refit(false)
+  }
+  lastViewport = next
+}).observe(host)
+
+function applyWorld(payload: WebPayload): void {
+  world = payload.world
+  scene = projectScene(payload.sheet)
+  fitted = fitCamera(scene.bounds, viewport())
+  if (!touched) camera = fitted
+  if (!worldElement(selectedId)) selectedId = firstSystem(world)?.representationId
+  map.paint(scene)
+  applyCamera(false)
+  paintSelection()
 }
 
-new ResizeObserver(resize).observe(host)
+map.paint(scene)
+applyCamera(false)
 paintSelection()
 
 const events = new EventSource('/events')
 events.addEventListener('world', event => {
-  const payload = JSON.parse(event.data) as {
-    generation: number
-    world: ArchitectureWorld
-  }
+  const payload = JSON.parse(event.data) as WebPayload
   if (payload.generation <= applied) return
   applied = payload.generation
-  applyWorld(payload.world)
+  applyWorld(payload)
 })

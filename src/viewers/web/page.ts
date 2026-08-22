@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-import type { ArchitectureWorld, C4Kind } from '../../types.ts'
+import type { C4Kind } from '../../types.ts'
 import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
+import { mapCss } from './iso/style.ts'
+import type { WebPayload } from './payload.ts'
 
 const lockup = readFileSync(
   fileURLToPath(new URL('./atoms/lockup.svg', import.meta.url)),
@@ -53,13 +55,6 @@ const style = `
   }
   #header svg { height: 26px; width: auto; display: block; }
   #stats { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  #flow { display: flex; align-items: center; gap: 16px; }
-  #flow[hidden] { display: none; }
-  #flow-name {
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
   #hierarchy, #details, #map { min-width: 0; min-height: 0; }
   #hierarchy { display: flex; flex-direction: column; border-right: 1px solid var(--ink); }
   #flows { padding: 14px 0 10px; border-bottom: 1px solid var(--hairline); }
@@ -70,8 +65,7 @@ const style = `
   #legend div { display: flex; gap: 16px; }
   #legend span { display: inline-flex; align-items: center; gap: 6px; }
   #legend .mark { color: var(--ink); letter-spacing: 0; }
-  #map svg { display: block; width: 100%; height: 100%; cursor: grab; }
-  #map svg:active { cursor: grabbing; }
+  #map { position: relative; overflow: hidden; }
   #details { overflow: auto; padding: 24px 20px; border-left: 1px solid var(--ink); }
   #details .meta { margin: 0 0 6px; }
   #details h1 { font-size: 20px; font-weight: 600; line-height: 1.3; margin: 0 0 14px; }
@@ -129,7 +123,7 @@ const style = `
   .link.active { box-shadow: inset 2px 0 var(--accent); padding-left: 6px; }
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
-`
+${mapCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
@@ -140,15 +134,11 @@ function legend(): string {
   }).join('')
 }
 
-export function renderPage(world: ArchitectureWorld, generation = 1): string {
-  const json = JSON.stringify({ generation, world }).replace(/</g, '\\u003c')
+export function renderPage(payload: WebPayload): string {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c')
   return '<!doctype html><html><head><meta charset="utf-8"><title>groma.md</title>'
     + `<style>${style}</style></head><body>`
     + `<header id="header">${lockup}<span id="stats"></span>`
-    + '<div id="flow" hidden><span id="flow-name"></span>'
-    + '<div class="controls"><button id="flow-pause">Pause</button><button id="flow-step">Step</button></div>'
-    + '<div class="controls"><button id="rate-half">0.5×</button><button id="rate-one" class="active">1×</button><button id="rate-two">2×</button></div>'
-    + '</div>'
     + '<div class="controls"><button id="theme">Dark</button></div>'
     + '</header>'
     + `<nav id="hierarchy"><div id="flows"></div><div id="tree"></div><div id="legend">${legend()}</div></nav>`
@@ -156,7 +146,6 @@ export function renderPage(world: ArchitectureWorld, generation = 1): string {
     + '<aside id="details"><p class="meta"></p><h1></h1><nav class="controls tabs"></nav><div class="body"></div></aside>'
     + '<footer id="footer"><span id="action"></span><span id="zoom"></span>'
     + '<div class="controls"><button id="zoom-out">−</button><button id="zoom-in">+</button></div>'
-    + '<div class="controls"><button id="fit">Fit</button><button id="mode-2d">Plan</button><button id="mode-3d" class="active">Iso</button></div>'
     + '</footer>'
     + `<script type="application/json" id="world">${json}</script>`
     + '<script src="/render.js"></script>'

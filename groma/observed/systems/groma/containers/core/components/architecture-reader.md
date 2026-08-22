@@ -10,4 +10,4 @@ code:
 
 # Architecture reader
 
-Reads observed and planned Markdown from the repository and returns revision documents.
+Reads every element document under `groma/observed/` and every plan directory into revision records: frontmatter, Markdown body, and source filename. It is the only code that walks the `groma/` tree.

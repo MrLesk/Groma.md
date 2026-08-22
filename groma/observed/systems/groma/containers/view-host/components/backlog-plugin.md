@@ -10,6 +10,4 @@ code:
 
 # Backlog plugin
 
-Reads in-progress Backlog tasks and watches the task directory. The view
-host owns when that happens; a failed read leaves the map alone.
-
+Reads in-progress Backlog tasks through the `backlog` CLI and watches the task directory for changes. The view host owns when that happens; a failed read leaves the map alone.

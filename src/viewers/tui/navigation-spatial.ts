@@ -1,4 +1,4 @@
-import { compareElements } from './tree.ts'
+import { compareElements } from '../../element-order.ts'
 import { ancestorOfKind, type ViewerState } from './navigation.ts'
 import type {
   ArchitectureWorld,

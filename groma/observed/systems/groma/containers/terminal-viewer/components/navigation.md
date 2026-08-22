@@ -2,6 +2,7 @@
 id: navigation
 kind: component
 parent: terminal-viewer
+group: Navigation
 code:
   - scanner: typescript
     file: src/viewers/tui/navigation.ts
@@ -10,4 +11,4 @@ code:
 
 # Navigation
 
-Owns viewer state: C4 level, selection, focus, filter, and which panes are open.
+Owns viewer state: C4 level, selection, focus, the filter, the lit command, and which panes are open. Every key becomes one action reduced over that state.
