@@ -27,9 +27,9 @@ in the world, deduped across the people who share it. Clicking one
 lights its walk on the map, exactly like picking it from a person's
 details, and the active row is highlighted. Below it the pane lists
 the merged world as a containment tree:
-people, then systems, then external systems at the root, left to
-right as on the map. Containers sit under their system and
-components under their container, in the same left-to-right order.
+people, then systems, then external systems at the root. Containers
+sit under their system and components under their container, in
+hierarchy order; the map places them by flow instead.
 Ghost names are dim. Rows are collapsed except the path to the current
 selection; a collapsed row shows its child count. A row's arrow
 expands or collapses it by hand without changing the selection. The
@@ -74,6 +74,15 @@ read that way: the people island, then the systems, then the external
 systems; on screen the row runs from the upper left down to the right.
 The people and external islands are squares with their buildings
 centred, each a little bigger than what stands on it.
+Inside every surface, relationships decide where the children stand:
+they form columns from west to east by flow rank, the longest chain
+of relationships reaching them from the people (in a cycle, the one
+the people reach first goes west; a container ranks where the flow
+first enters it); a child lines up with its partners in earlier
+columns, a source centres on its targets, and children no
+relationship touches are packed as one block after the columns. The
+people and external islands slide along the row so their buildings
+face what they talk to.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one
