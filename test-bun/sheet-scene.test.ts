@@ -208,10 +208,12 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.deepEqual(footprintOf(['A very long component', 'name indeed'], shapeOf(4), 0), { w: 7, d: 2 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(3), 0), { w: 3, d: 3 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 8), { w: 2, d: 3 })
-  assert.equal(floorsOf('observed', 0), 1)
-  assert.equal(floorsOf('observed', 450), 2.5)
-  assert.equal(floorsOf('observed', 2000), 3)
-  assert.equal(floorsOf('planned', 2000), 1)
+  const range = { min: 0, max: 2000 }
+  assert.equal(floorsOf('observed', 0, range), 1)
+  assert.equal(floorsOf('observed', 450, range), 1.5)
+  assert.equal(floorsOf('observed', 2000, range), 4)
+  assert.equal(floorsOf('observed', 700, { min: 700, max: 700 }), 1)
+  assert.equal(floorsOf('planned', 2000, range), 1)
 
   const scene = sheetScene(worldOf([
     box('ann', 'person', unit, { name: 'Ann the architect' }),

@@ -18,9 +18,8 @@ const MAX_LINE_CELLS = 4
 const MIN_SIDE = 2
 /** A building touched by this many routes deepens so its front sides keep free ports. */
 const HUB_DEGREE = 8
-/** Every 150 observed lines add half a floor, up to three floors. */
-const LINES_PER_HALF_FLOOR = 150
-const MAX_HALF_FLOORS = 4
+/** Floors of the observed component with the most code lines. */
+const MAX_FLOORS = 4
 
 export function textWidth(text: string, size = ROOF_FONT, spacing = 0): number {
   return text.length * size * (ROOF_ADVANCE + spacing)
@@ -51,10 +50,16 @@ export function shapeOf(files: number): Shape {
   return { kind: 'block', levels: 1 }
 }
 
-/** Observed code lines raise a component; ghosts, people and external systems stay one floor. */
-export function floorsOf(origin: Origin, lines: number): number {
-  if (origin !== 'observed') return 1
-  return 1 + Math.min(MAX_HALF_FLOORS, Math.floor(lines / LINES_PER_HALF_FLOOR)) / 2
+/**
+ * Observed code lines raise a component by its share of the range between
+ * the fewest and the most lines among the observed components, in half
+ * floors. Ghosts, people and external systems stay one floor, as does every
+ * component when there are no observed components or all have the same count.
+ */
+export function floorsOf(origin: Origin, lines: number, range: { min: number; max: number }): number {
+  if (origin !== 'observed' || range.max <= range.min) return 1
+  const share = (lines - range.min) / (range.max - range.min)
+  return 1 + Math.round(2 * (MAX_FLOORS - 1) * share) / 2
 }
 
 /** Footprint in cells: the top tier's roof holds every line of the name; a hub deepens for its ports. */

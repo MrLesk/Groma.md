@@ -95,9 +95,11 @@ face what they talk to.
 Containers are slabs whose top is level with the ground and whose
 thickness hangs below the grid line, drawn over the island in front of
 them, so they read as slabs while everything on them stays on the one
-plane. Components are buildings on their slab: every 150 observed lines of
-code add half a floor up to three floors, one code file is a block,
-two or three files stack as tiers, four or more files make a tower.
+plane. Components are buildings on their slab: the observed component
+with the most code lines stands four floors, the one with the fewest
+one floor, and every other in between in half floors by its share of
+that range; one code file is a block, two or three files stack as
+tiers, four or more files make a tower.
 People and external systems are one-floor buildings on their own
 islands. One grey pattern tells each kind apart, on side faces and
 surfaces and never on a roof: component sides carry storey lines,
