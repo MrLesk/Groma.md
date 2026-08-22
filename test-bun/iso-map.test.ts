@@ -4,7 +4,7 @@ import { test } from 'bun:test'
 
 import { loadArchitectureViewModel } from '../src/core.ts'
 import { PAD } from '../src/sheet/grid.ts'
-import { PLANE, ROOF_PAD, textWidth } from '../src/sheet/measure.ts'
+import { PLANE, ROOF_PAD, curved, roofBlock, textWidth } from '../src/sheet/measure.ts'
 import { sheetScene } from '../src/sheet/scene.ts'
 import type { Bounds, Point } from '../src/types.ts'
 import {
@@ -56,7 +56,9 @@ function overlaps(a: Bounds, b: Bounds): boolean {
 
 test.concurrent('the lattice projects to integer screen units and depth grows down the screen', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
-  for (const point of everyPoint(scene)) {
+  // Curved roofs are sampled arcs, so only boxes take part in the integer check.
+  const boxes = scene.buildings.filter(({ building }) => !curved(building.shape))
+  for (const point of everyPoint({ ...scene, buildings: boxes })) {
     assert.equal(Number.isInteger(point.x) && Number.isInteger(point.y), true)
   }
   assert.ok(project(3, 2, 0).y > project(2, 2, 0).y && project(2, 3, 0).y > project(2, 2, 0).y)
@@ -170,15 +172,27 @@ test.concurrent('every relationship has a polyline whose arrowhead lies on the s
   }
 })
 
-test.concurrent('roof text fits the roof it lies on', async () => {
+test.concurrent('roof text fits the roof it lies on: a box from its north corner, a curved roof centred', async () => {
   const scene = await fixtureScene(viewerFixtureRoot)
-  assert.ok(scene.buildings.length > 0)
+  const rounded = scene.buildings.filter(({ building }) => curved(building.shape))
+  assert.ok(scene.buildings.length > rounded.length && rounded.length > 0)
   for (const { building, text, tiers } of scene.buildings) {
     const inset = 0.25 * (building.shape.levels - 1)
     const roofWidth = (building.rect.w - 2 * inset) * PLANE
     for (const line of text.lines) assert.ok(textWidth(line) + 2 * ROOF_PAD <= roofWidth)
+    if (curved(building.shape)) continue
     const roofNorth = tiers[tiers.length - 1]![2]!.points[0]!
     assert.deepEqual(text.origin, roofNorth)
+  }
+  for (const { building, text, tiers } of rounded) {
+    const { rect, lines } = building
+    const block = roofBlock(lines)
+    assert.deepEqual(text.origin, project(rect.gx + (rect.w - block.w / PLANE) / 2, rect.gy + (rect.d - block.d / PLANE) / 2, building.floors))
+    assert.equal(tiers.length, 1)
+    const [band, top] = tiers[0]!
+    assert.ok(top!.side === 'top' && top!.points.length > 4 && band!.side === 'left')
+    const box = screenBox(boxFaces(rect, 0, building.floors).find(face => face.side === 'top')!.points)
+    for (const point of top!.points) assert.ok(point.x >= box.x - 0.01 && point.x <= box.x + box.width + 0.01 && point.y >= box.y - 0.01 && point.y <= box.y + box.height + 0.01)
   }
   for (const { island, text } of scene.islands) {
     assert.deepEqual(text.origin, project(island.rect.gx, island.rect.gy + island.rect.d - PAD, 0))

@@ -208,6 +208,9 @@ test.concurrent('roof text, code files and code lines size a building', () => {
   assert.deepEqual(footprintOf(['A very long component', 'name indeed'], shapeOf(4), 0), { w: 7, d: 2 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(3), 0), { w: 3, d: 3 })
   assert.deepEqual(footprintOf(['Ab'], shapeOf(0), 8), { w: 2, d: 3 })
+  assert.deepEqual(footprintOf(['Ab'], { kind: 'round', levels: 1 }, 0), { w: 2, d: 2 })
+  assert.deepEqual(footprintOf(['Ann the architect'], { kind: 'round', levels: 1 }, 0), { w: 6, d: 6 })
+  assert.deepEqual(footprintOf(['Git'], { kind: 'pill', levels: 1 }, 0), { w: 4, d: 2 })
   const range = { min: 0, max: 2000 }
   assert.equal(floorsOf('observed', 0, range), 1)
   assert.equal(floorsOf('observed', 450, range), 1.5)
@@ -219,12 +222,13 @@ test.concurrent('roof text, code files and code lines size a building', () => {
     box('ann', 'person', unit, { name: 'Ann the architect' }),
     { ...box('bank', 'system', unit, { external: true }), codeLines: 900 },
   ]))
-  for (const building of scene.buildings) {
-    assert.equal(building.floors, 1)
-    assert.equal(building.shape.kind, 'block')
-  }
+  for (const building of scene.buildings) assert.equal(building.floors, 1)
   const ann = scene.buildings.find(building => building.id === 'ann')!
-  assert.ok(ann.rect.w > 2 && ann.lines.length === 2)
+  assert.equal(ann.shape.kind, 'round')
+  assert.ok(ann.rect.w === ann.rect.d && ann.rect.w > 2 && ann.lines.length === 2)
+  const bank = scene.buildings.find(building => building.id === 'bank')!
+  assert.equal(bank.shape.kind, 'pill')
+  assert.ok(bank.rect.d === 2 && bank.lines.length === 1)
 })
 
 test.concurrent('a surface is at least as wide as its own name', () => {

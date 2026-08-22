@@ -44,8 +44,9 @@ export interface Slab extends SheetItem {
   rect: CellRect
 }
 
+/** A component's box, stack of tiers or tower; a person's round building; an external system's pill. */
 export interface Shape {
-  kind: 'block' | 'stack' | 'tower'
+  kind: 'block' | 'stack' | 'tower' | 'round' | 'pill'
   levels: number
 }
 
