@@ -62,8 +62,14 @@ export function resized(camera: Camera, from: Viewport, to: Viewport): Camera {
   return pan(camera, (to.width - from.width) / 2, (to.height - from.height) / 2)
 }
 
-export function wheelFactor(deltaY: number, pinch: boolean): number {
-  return Math.exp(-deltaY * (pinch ? PINCH_RATE : WHEEL_RATE))
+/** Two fingers on a trackpad, or the wheel, pan; a pinch (which arrives as ctrl+wheel) and cmd or ctrl with the wheel zoom. */
+export function wheelAction(
+  event: { deltaX: number; deltaY: number; ctrlKey: boolean; metaKey: boolean },
+): { kind: 'pan'; dx: number; dy: number } | { kind: 'zoom'; factor: number } {
+  if (event.ctrlKey || event.metaKey) {
+    return { kind: 'zoom', factor: Math.exp(-event.deltaY * (event.ctrlKey ? PINCH_RATE : WHEEL_RATE)) }
+  }
+  return { kind: 'pan', dx: -event.deltaX, dy: -event.deltaY }
 }
 
 export function cameraTransform(camera: Camera): string {

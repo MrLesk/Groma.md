@@ -10,7 +10,7 @@ import type { Bounds, Point } from '../src/types.ts'
 import {
   fitCamera,
   pan,
-  wheelFactor,
+  wheelAction,
   zoomAbout,
   zoomLimits,
   zoomReadout,
@@ -122,8 +122,17 @@ test.concurrent('zooming keeps the point under the cursor still, clamps, and rea
   assert.equal(zoomAbout(fit, 0.0001, anchor, fit).k, limits.min)
   assert.ok(limits.min < fit.k && limits.max >= 4)
   assert.deepEqual(pan(fit, 10, -5), { ...fit, x: fit.x + 10, y: fit.y - 5 })
-  assert.ok(Math.abs(wheelFactor(-100, false) - Math.exp(0.15)) < 1e-12)
-  assert.ok(Math.abs(wheelFactor(-10, true) - Math.exp(0.1)) < 1e-12)
+})
+
+test.concurrent('a plain wheel pans by the scroll delta; a pinch or cmd+wheel zooms', () => {
+  assert.deepEqual(
+    wheelAction({ deltaX: 30, deltaY: -12, ctrlKey: false, metaKey: false }),
+    { kind: 'pan', dx: -30, dy: 12 },
+  )
+  const pinch = wheelAction({ deltaX: 0, deltaY: -10, ctrlKey: true, metaKey: false })
+  assert.ok(pinch.kind === 'zoom' && Math.abs(pinch.factor - Math.exp(0.1)) < 1e-12)
+  const wheel = wheelAction({ deltaX: 0, deltaY: -100, ctrlKey: false, metaKey: true })
+  assert.ok(wheel.kind === 'zoom' && Math.abs(wheel.factor - Math.exp(0.15)) < 1e-12)
 })
 
 test.concurrent('the frame and its ticks enclose every island and the compass sits in the west corner', async () => {

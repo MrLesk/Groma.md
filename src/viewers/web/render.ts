@@ -8,7 +8,7 @@ import {
   keyAction,
   pan,
   resized,
-  wheelFactor,
+  wheelAction,
   zoomAbout,
   zoomReadout,
 } from './iso/camera.ts'
@@ -100,7 +100,7 @@ function zoomStep(factor: number): void {
 function paintAction(): void {
   const active = world.relationships.find(item => item.id === activeAction.id)
   if (active === undefined) {
-    actionHost.textContent = 'drag pan · scroll zoom · + − 0'
+    actionHost.textContent = 'drag or scroll pan · pinch zoom · + − 0'
     actionHost.classList.add('hint')
     return
   }
@@ -189,13 +189,12 @@ let pointer: {
 
 map.svg.addEventListener('wheel', event => {
   event.preventDefault()
-  const rect = map.svg.getBoundingClientRect()
-  camera = zoomAbout(
-    camera,
-    wheelFactor(event.deltaY, event.ctrlKey),
-    { x: event.clientX - rect.left, y: event.clientY - rect.top },
-    fitted,
-  )
+  const action = wheelAction(event)
+  if (action.kind === 'pan') camera = pan(camera, action.dx, action.dy)
+  else {
+    const rect = map.svg.getBoundingClientRect()
+    camera = zoomAbout(camera, action.factor, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fitted)
+  }
   touched = true
   applyCamera()
 }, { passive: false })
