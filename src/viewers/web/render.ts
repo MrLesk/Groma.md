@@ -20,6 +20,7 @@ import { clearDetails, paintDetails, paintRelationship, inspectDetails, nextActi
 import type { ActiveAction, DetailsTab } from './organisms/details.ts'
 import { paintFlows } from './organisms/flows.ts'
 import { paintHierarchy } from './organisms/hierarchy.ts'
+import { createPins } from './organisms/pins.ts'
 import type { WebPayload } from './payload.ts'
 import { readView, writeView } from './url.ts'
 
@@ -41,6 +42,7 @@ const actionHost = document.getElementById('action')!
 const zoomHost = document.getElementById('zoom')!
 
 const map = createMap(host)
+const pins = createPins(host, id => map.anchorOf(id), id => worldElement(id)?.name ?? id, id => select(id))
 let tree = initialTree()
 const opened = readView(location.search, world)
 let selectedId = opened.selectedId ?? firstSystem(world)?.representationId
@@ -80,6 +82,7 @@ function known(id: string | undefined): boolean {
 
 function applyCamera(): void {
   map.move(camera, camera.k / fitted.k)
+  pins.place(camera)
   zoomHost.textContent = zoomReadout(camera, fitted)
 }
 
@@ -291,11 +294,13 @@ function applyWorld(payload: WebPayload): void {
   if (!touched) camera = fitted
   if (selectedId !== undefined && !known(selectedId)) selectedId = firstSystem(world)?.representationId
   map.paint(scene)
+  pins.paint(payload.pins)
   applyCamera()
   paintSelection()
 }
 
 map.paint(scene)
+pins.paint(boot.pins)
 applyCamera()
 paintSelection()
 

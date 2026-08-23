@@ -171,6 +171,20 @@ draws the route and both of its ends in the accent and shows the
 relationship in the details pane with its ends as links; click empty
 sheet or press Escape to deselect, and the details pane empties. A
 person command stays on the map until `x`.
+Agents at work show as pins. Every Backlog task In Progress, and
+every task Done in the last day, puts one pin per assignee on the
+element the task touched last: the element whose code holds the
+task's newest modified file, else the first element the task
+references. A pin is a round badge with the assignee's two-letter
+monogram inside a ring that fills by checked acceptance criteria over
+total, the task id under it, a stem to the roof and a tooltip with
+the task's title; when the task is Done the badge flips to a green
+checkmark and flips back while hovered. Every assignee and task pair
+has its own colour, the pairs in task order over a fixed palette. The
+Live agents card in the map's top-right corner lists the pins with
+assignee, task, progress and element; clicking a row selects the
+element. Pins move as Backlog changes, through the same live channel
+as the world.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`

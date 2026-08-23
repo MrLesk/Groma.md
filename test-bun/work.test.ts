@@ -20,11 +20,23 @@ import { viewerFixtureRoot } from './helpers.ts'
 
 test.concurrent('active work projects only exact architecture ID references', async () => {
   const model = await loadArchitectureViewModel(viewerFixtureRoot)
+  const done = { done: 0, total: 2 }
   const projected = projectActiveWork(model, [{
     id: 'TASK-1',
     title: 'Change Shop',
+    status: 'In Progress',
     assignees: ['@codex'],
     references: ['shop', 'src/shop.ts', 'not-a-groma-id'],
+    modifiedFiles: [],
+    acceptance: done,
+  }, {
+    id: 'TASK-2',
+    title: 'Finished',
+    status: 'Done',
+    assignees: ['@luna'],
+    references: ['vault'],
+    modifiedFiles: [],
+    acceptance: done,
   }])
 
   assert.deepEqual(projected.work, [{
@@ -62,35 +74,45 @@ test.concurrent('two tasks on one element keep every unique assignee', () => {
   assert.deepEqual(names, ['@grok', '@codex', '@luna'])
 })
 
-test.concurrent('Backlog plugin returns in-progress task references as plain work', async () => {
+test.concurrent('Backlog plugin reads the tasks in progress and those done in the last day, with their progress and files', async () => {
   const calls: string[][] = []
+  const now = Date.parse('2026-08-23T12:00:00Z')
   const run: BacklogCommand = async arguments_ => {
     calls.push(arguments_)
     if (arguments_[1] === 'list') {
-      return JSON.stringify({ tasks: [{ id: 'TASK-1' }] })
+      return JSON.stringify({ tasks: [
+        { id: 'TASK-1', status: 'In Progress', updatedAt: '2026-08-20T12:00:00Z' },
+        { id: 'TASK-2', status: 'Done', updatedAt: '2026-08-23T01:00:00Z' },
+        { id: 'TASK-3', status: 'Done', updatedAt: '2026-08-21T12:00:00Z' },
+        { id: 'TASK-4', status: 'To Do', updatedAt: '2026-08-23T11:00:00Z' },
+      ] })
     }
+    const id = arguments_[2]!
     return JSON.stringify({
       task: {
-        id: 'TASK-1',
-        title: 'Change Shop',
+        id,
+        title: `Change ${id}`,
+        status: id === 'TASK-2' ? 'Done' : 'In Progress',
         assignees: ['@codex'],
         references: ['shop', 'https://example.com'],
+        modifiedFiles: ['src/shop.ts'],
+        acceptanceCriteria: [{ checked: true }, { checked: false }, { checked: true }],
       },
     })
   }
 
-  const work = await createBacklogPlugin('/repo', run).read()
+  const work = await createBacklogPlugin('/repo', run, () => now).read()
 
   assert.deepEqual(calls, [
-    ['task', 'list', '--status', 'In Progress', '--json'],
+    ['task', 'list', '--json'],
     ['task', 'view', 'TASK-1', '--json'],
+    ['task', 'view', 'TASK-2', '--json'],
   ])
-  assert.deepEqual(work, [{
-    id: 'TASK-1',
-    title: 'Change Shop',
-    assignees: ['@codex'],
-    references: ['shop', 'https://example.com'],
-  }])
+  assert.deepEqual(work.map(item => [item.id, item.status, item.acceptance, item.modifiedFiles]), [
+    ['TASK-1', 'In Progress', { done: 2, total: 3 }, ['src/shop.ts']],
+    ['TASK-2', 'Done', { done: 2, total: 3 }, ['src/shop.ts']],
+  ])
+  assert.deepEqual(work[0]!.references, ['shop', 'https://example.com'])
 })
 
 test.concurrent('Backlog plugin signals a task-directory change', async () => {
@@ -201,8 +223,11 @@ test.concurrent('host refreshes the viewer from a changed work snapshot', async 
     items = [{
       id: 'TASK-LIVE',
       title: 'Change Shop',
-      assignees: ['@codex'],
+      status: 'In Progress',
+        assignees: ['@codex'],
       references: ['shop'],
+      modifiedFiles: [],
+      acceptance: { done: 0, total: 1 },
     }]
     changed()
     const deadline = Date.now() + 3000

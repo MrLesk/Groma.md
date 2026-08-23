@@ -35,30 +35,37 @@ function runBacklog(arguments_: string[], repositoryRoot: string): Promise<strin
   })
 }
 
+/** Done tasks stay in the active work this long after their last change, so their pins can show the finish. */
+const DONE_WINDOW_MS = 24 * 60 * 60 * 1000
+
 interface TaskListJson {
-  tasks: { id: string }[]
+  tasks: { id: string; status: string; updatedAt: string }[]
 }
 
 interface TaskViewJson {
   task: {
     id: string
     title: string
+    status: string
     assignees: string[]
     references: string[]
+    modifiedFiles: string[]
+    acceptanceCriteria: { checked: boolean }[]
   }
 }
 
 export function createBacklogPlugin(
   repositoryRoot: string,
   run: BacklogCommand = runBacklog,
+  now: () => number = () => Date.now(),
 ): WorkSource {
   return {
     async read() {
-      const list = JSON.parse(await run(
-        ['task', 'list', '--status', 'In Progress', '--json'],
-        repositoryRoot,
-      )) as TaskListJson
-      return Promise.all(list.tasks.map(async summary => {
+      const list = JSON.parse(await run(['task', 'list', '--json'], repositoryRoot)) as TaskListJson
+      const since = now() - DONE_WINDOW_MS
+      const active = list.tasks.filter(task =>
+        task.status === 'In Progress' || (task.status === 'Done' && Date.parse(task.updatedAt) >= since))
+      return Promise.all(active.map(async summary => {
         const { task } = JSON.parse(await run(
           ['task', 'view', summary.id, '--json'],
           repositoryRoot,
@@ -66,8 +73,14 @@ export function createBacklogPlugin(
         return {
           id: task.id,
           title: task.title,
+          status: task.status,
           assignees: task.assignees,
           references: task.references,
+          modifiedFiles: task.modifiedFiles,
+          acceptance: {
+            done: task.acceptanceCriteria.filter(criterion => criterion.checked).length,
+            total: task.acceptanceCriteria.length,
+          },
         }
       }))
     },

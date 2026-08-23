@@ -29,6 +29,7 @@ export function projectActiveWork(
   const work: WorkMarker[] = []
 
   for (const item of items) {
+    if (item.status !== 'In Progress') continue
     for (const reference of item.references) {
       if (!elementIds.has(reference)) continue
       work.push({

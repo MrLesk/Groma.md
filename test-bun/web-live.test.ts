@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'bun:test'
 
+import type { WorkSource } from '../src/backlog-plugin.ts'
 import { scanRepository } from '../src/scanner.ts'
+import type { ActiveWorkItem } from '../src/types.ts'
 import { startWebViewer } from '../src/viewers/web/server.ts'
 
 function run(command: string, args: string[], cwd: string) {
@@ -38,6 +40,7 @@ async function createLiveRepo(): Promise<string> {
     '.gitignore': 'node_modules/\n',
     'groma/observed/README.md': '# Observed\n',
     'groma/missing/README.md': '# Missing\n',
+    'backlog/tasks/.keep': '',
     'groma/plans/README.md': '# Plans\n',
     'src/cli.ts': "import { scan } from './scanner.ts'\nexport function run() {}\n",
     'src/scanner.ts': 'export function scan() {}\n',
@@ -125,6 +128,51 @@ test.concurrent('groma web applies an architecture Markdown change without a ref
     })
     assert.ok((await worldNames(server.url)).includes('Shopfront'))
     assert.ok(!(await worldNames(server.url)).includes('Orders'))
+    await reader.cancel()
+  } finally {
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.concurrent('groma web ships agent pins and republishes them when the work source changes', async () => {
+  const root = await createLiveRepo()
+  await scanRepository(root)
+  let items: ActiveWorkItem[] = [{
+    id: 'TASK-PIN',
+    title: 'Change Shop',
+    status: 'In Progress',
+    assignees: ['@codex'],
+    references: ['shop'],
+    modifiedFiles: [],
+    acceptance: { done: 1, total: 2 },
+  }]
+  let changed: () => void = () => {}
+  const workSource: WorkSource = {
+    read: async () => items,
+    watch(onChange) {
+      changed = onChange
+      return { close() {} }
+    },
+  }
+  const server = await startWebViewer(root, { port: 0, workSource })
+  try {
+    const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      pins: { key: string; elementId: string; done: number; total: number }[]
+    }
+    assert.deepEqual(payload.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
+
+    const events = await fetch(`${server.url}/events`)
+    const reader = events.body!.getReader()
+    const decoder = new TextDecoder()
+    let pushed = ''
+    items = [{ ...items[0]!, status: 'Done', acceptance: { done: 2, total: 2 } }]
+    changed()
+    await waitUntil(async () => {
+      const { value } = await reader.read()
+      if (value) pushed += decoder.decode(value, { stream: true })
+      return pushed.includes('"generation":2') && pushed.includes('"status":"Done"')
+    })
     await reader.cancel()
   } finally {
     server.close()

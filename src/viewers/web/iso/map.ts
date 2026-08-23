@@ -4,6 +4,7 @@ import { paintBuildings } from './paint-buildings.ts'
 import { paintIslands, paintSheet, paintSlabs } from './paint-ground.ts'
 import { paintRoutes, type RouteNode } from './paint-routes.ts'
 import type { ProjectedScene } from './project.ts'
+import type { Point } from '../../../types.ts'
 import { namesVisible, weightAt } from './scale.ts'
 import { mapDefs } from './style.ts'
 import { svg } from './svg.ts'
@@ -50,6 +51,15 @@ export interface IsoMap {
   hitId(target: EventTarget | null): string | undefined
   /** True when a click hit nothing but the sheet. */
   isSheet(target: EventTarget | null): boolean
+  /** The centre of an element's roof or top in world pixels, where a pin stands. */
+  anchorOf(id: string): Point | undefined
+}
+
+function centroid(points: readonly Point[]): Point {
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  }
 }
 
 /** The map SVG: patterns, one camera group, and the layers back to front. */
@@ -72,6 +82,7 @@ export function createMap(host: HTMLElement): IsoMap {
   host.replaceChildren(root)
 
   let items = new Map<string, Element>()
+  let painted: ProjectedScene | undefined
   let routes = new Map<string, RouteNode>()
   /** The slab or system island each building and slab stands on, by id. */
   let surfaces = new Map<string, string>()
@@ -88,6 +99,7 @@ export function createMap(host: HTMLElement): IsoMap {
       for (const route of routes.values()) route.head.setAttribute('transform', `scale(${weight / current.k})`)
     },
     paint(scene) {
+      painted = scene
       for (const layer of Object.values(layers)) layer.replaceChildren()
       paintSheet(layers.sheet, scene)
       items = new Map([
@@ -126,6 +138,14 @@ export function createMap(host: HTMLElement): IsoMap {
     },
     isSheet(target) {
       return target === root || target === field
+    },
+    anchorOf(id) {
+      const building = painted?.buildings.find(item => item.building.representationId === id)
+      if (building) return centroid(building.tiers.at(-1)!.find(face => face.side === 'top')!.points)
+      const slab = painted?.slabs.find(item => item.slab.representationId === id)
+      if (slab) return centroid(slab.faces.find(face => face.side === 'top')!.points)
+      const island = painted?.islands.find(item => item.island.element?.representationId === id)
+      return island === undefined ? undefined : centroid(island.polygon)
     },
   }
 }
