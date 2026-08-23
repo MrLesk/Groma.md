@@ -46,6 +46,8 @@ export interface IsoMap {
   paint(scene: ProjectedScene): void
   /** Marks a selected element with its surface and the routes touching it, or a selected route with both of its ends. */
   select(id: string | undefined): void
+  /** Outlines the elements a selected task touches; an empty set clears them. */
+  mark(ids: ReadonlySet<string>): void
   /** Lights a picked flow's routes and dims everything off its path. */
   setFlow(litIds: ReadonlySet<string>, onPath: (id: string) => boolean): void
   hitId(target: EventTarget | null): string | undefined
@@ -125,6 +127,9 @@ export function createMap(host: HTMLElement): IsoMap {
         node.group.classList.toggle('selected', routeId === id)
         node.group.classList.toggle('endpoint', route === undefined && (ends.has(node.source) || ends.has(node.target)))
       }
+    },
+    mark(ids) {
+      for (const [itemId, node] of items) node.classList.toggle('touched', ids.has(itemId))
     },
     setFlow(litIds, onPath) {
       const tracing = litIds.size > 0

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { ActiveWorkItem } from '../src/types.ts'
-import { PIN_COLOURS, monogram, pinsOf } from '../src/work-pins.ts'
+import { PIN_COLOURS, monogram, pinsOf, touchedElements } from '../src/work-pins.ts'
 import { box, worldOf } from './helpers.ts'
 
 const unit = { x: 0, y: 0, width: 1, height: 1 }
@@ -38,6 +38,11 @@ test.concurrent('a pin stands on the element holding the last modified file, els
     ['TASK-2', 'observed:vault'],
     ['TASK-3', 'observed:vault'],
   ])
+})
+
+test.concurrent('a task touches the elements of its modified files, newest first, then the ones it references, each once', () => {
+  const touched = touchedElements(item('TASK-5', { references: ['api', 'not-an-id'], modifiedFiles: ['src/api.ts', 'README.md', 'src/vault.ts'] }), world)
+  assert.deepEqual(touched, ['observed:vault', 'observed:api'])
 })
 
 test.concurrent('every assignee and task pair gets its own colour in task order, with its progress from the criteria and its monogram', () => {

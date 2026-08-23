@@ -194,9 +194,11 @@ head or a chip selects the task: the details pane shows its id,
 status and assignees over its title, then its description, its
 acceptance criteria as a checklist, its modified files and its
 references, where a reference naming an element is a link that
-selects the element. Pins move as Backlog changes, through the same
-live channel as the world. The island eases its width and height
-between sizes whenever it folds, unfolds, or its chips change.
+selects the element; the map outlines every element the task
+touches, those whose code holds one of its modified files and those
+it references. Pins move as Backlog changes, through the same live
+channel as the world. The island eases its width and height between
+sizes whenever it folds, unfolds, or its chips change.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
