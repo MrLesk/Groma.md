@@ -12,6 +12,7 @@ test.concurrent('the page embeds the world and its sheet and mounts one SVG map'
   const { world } = await loadArchitectureViewModel(viewerFixtureRoot)
   const page = renderPage({
     generation: 1,
+    workGeneration: 0,
     world,
     sheet: sheetScene(world),
     work: { statuses: [], defaultStatus: '', items: [] },
