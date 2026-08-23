@@ -143,9 +143,10 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
     title: 'Change Shop',
     status: 'In Progress',
     assignees: ['@codex'],
+    description: '',
     references: ['shop'],
     modifiedFiles: [],
-    acceptance: { done: 1, total: 2 },
+    criteria: [{ text: 'a', checked: true }, { text: 'b', checked: false }],
   }]
   let changed: () => void = () => {}
   const workSource: WorkSource = {
@@ -158,15 +159,17 @@ test.concurrent('groma web ships agent pins and republishes them when the work s
   const server = await startWebViewer(root, { port: 0, workSource })
   try {
     const payload = await (await fetch(`${server.url}/world.json`)).json() as {
+      work: { id: string }[]
       pins: { key: string; elementId: string; done: number; total: number }[]
     }
+    assert.deepEqual(payload.work.map(item => item.id), ['TASK-PIN'])
     assert.deepEqual(payload.pins.map(pin => [pin.key, pin.elementId, pin.done, pin.total]), [['@codex TASK-PIN', 'observed:shop', 1, 2]])
 
     const events = await fetch(`${server.url}/events`)
     const reader = events.body!.getReader()
     const decoder = new TextDecoder()
     let pushed = ''
-    items = [{ ...items[0]!, status: 'Done', acceptance: { done: 2, total: 2 } }]
+    items = [{ ...items[0]!, status: 'Done', criteria: items[0]!.criteria.map(criterion => ({ ...criterion, checked: true })) }]
     changed()
     await waitUntil(async () => {
       const { value } = await reader.read()

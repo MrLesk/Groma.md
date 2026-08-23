@@ -94,10 +94,12 @@ export interface ActiveWorkItem {
   title: string
   status: string
   assignees: string[]
+  description: string
   references: string[]
   /** Repository-relative paths the task recorded as touched, oldest first. */
   modifiedFiles: string[]
-  acceptance: { done: number; total: number }
+  /** The acceptance criteria in order, each with its checked state. */
+  criteria: { text: string; checked: boolean }[]
 }
 
 export interface WorkMarker {

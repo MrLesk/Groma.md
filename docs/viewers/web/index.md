@@ -188,16 +188,21 @@ pointing up; unfolded it shows the Live work label, an Agents toggle
 and a Completed toggle that hide the in-progress or the finished pins
 and their chips, and a scrollable strip of chips, one per pin with
 its badge and task id, in progress first and the finished ones in
-grey; clicking a chip selects the element its pin stands on. The pins
-still shown on an element fan out afresh, so a pin left alone stands
-over its roof. Pins move as Backlog changes, through the same live
+grey. The pins still shown on an element fan out afresh, so a pin
+left alone stands over its roof. Clicking a pin's head or a chip
+selects the task: the details pane shows its id, status and
+assignees over its title, then its description, its acceptance
+criteria as a checklist, its modified files and its references,
+where a reference naming an element is a link that selects the
+element. Pins move as Backlog changes, through the same live
 channel as the world.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`
-names a selected route, `flow=<source>/<target>` the lit
-command (with `by=<person>` when it was picked from that person's
-details), `tab=how` the How it's built tab and `theme=dark` the theme;
+names a selected route, `task=<id>` a selected task,
+`flow=<source>/<target>` the lit command (with `by=<person>` when it
+was picked from that person's details), `tab=how` the How it's built
+tab and `theme=dark` the theme;
 defaults stay out of the URL and unknown values are ignored.
 A watched TypeScript change folds and rebuilds the map without a
 browser refresh. An architecture Markdown change does the same

@@ -63,7 +63,7 @@ function button(className: string, html: string, onClick: () => void): HTMLButto
 }
 
 function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
-  const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onSelect(pin.elementId))
+  const node = button(`chip${pin.status === 'Done' ? ' done' : ''}`, `${BADGE}<span>${pin.taskId}</span>`, () => onSelect(pin.taskId))
   node.style.setProperty('--pin', pin.colour)
   node.title = `${pin.assignee} · ${pin.title}`
   fillBadge(node, pin)
@@ -73,11 +73,12 @@ function chip(pin: WorkPin, onSelect: (id: string) => void): HTMLButtonElement {
 /**
  * The Live work island at the map's bottom centre: a pill that unfolds into
  * the label, the two toggles and the chip strip. It starts folded with both
- * kinds of work shown and keeps its fold and toggles across repaints.
+ * kinds of work shown and keeps its fold and toggles across repaints;
+ * clicking a chip selects its task.
  */
 export function createWorkIsland(
   host: HTMLElement,
-  onSelect: (id: string) => void,
+  onSelect: (taskId: string) => void,
   onShow: (agents: boolean, completed: boolean) => void,
 ): WorkIsland {
   const island = document.createElement('div')
