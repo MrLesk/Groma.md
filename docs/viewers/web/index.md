@@ -181,10 +181,15 @@ total, the task id under it, a stem to the roof and a tooltip with
 the task's title; when the task is Done the badge flips to a green
 checkmark and flips back while hovered. Every assignee and task pair
 has its own colour, the pairs in task order over a fixed palette. The
-Live agents card in the map's top-right corner lists the pins with
-assignee, task, progress and element; clicking a row selects the
-element. Pins move as Backlog changes, through the same live channel
-as the world.
+Live work island sits at the bottom centre of the map, above the
+footer, while any pin exists: folded it is a pill with the Backlog
+mark, a dot while a task is in progress, and a chevron; unfolded it
+shows the Live work label, an Agents toggle that hides the
+in-progress pins and a Completed toggle that hides the finished ones,
+and a scrollable strip of chips, one per pin with its badge and task
+id, in progress first, then a Done divider and the finished chips in
+grey; clicking a chip selects the element its pin stands on. Pins
+move as Backlog changes, through the same live channel as the world.
 The URL follows the view so any view opens again from its link:
 the selected element's kind names it (`?person=<id>`, `system=<id>`,
 `container=<id>` or `component=<id>`), `relationship=<source>/<target>`

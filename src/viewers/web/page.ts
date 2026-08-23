@@ -6,6 +6,7 @@ import { kindGlyph, kindLabel } from './atoms/kind.ts'
 import { cssBlock, palettes } from './atoms/theme.ts'
 import { mapCss } from './iso/style.ts'
 import { pinsCss } from './organisms/pins.ts'
+import { workCss } from './organisms/work-island.ts'
 import type { WebPayload } from './payload.ts'
 
 const lockup = readFileSync(
@@ -124,7 +125,7 @@ const style = `
   .link.active { box-shadow: inset 2px 0 var(--accent); padding-left: 6px; }
   .mark { flex: none; }
   .ghost { opacity: 0.5; }
-${mapCss}${pinsCss}`
+${mapCss}${pinsCss}${workCss}`
 
 function legend(): string {
   return legendKinds.map(line => {
