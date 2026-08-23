@@ -8,8 +8,8 @@ let unfolded = true
 export function paintHierarchy(
   host: HTMLElement,
   rows: TreeRow[],
-  selectedId: string | undefined,
-  onSelect: (id: string) => void,
+  selectedIds: ReadonlySet<string>,
+  onSelect: (id: string, additive: boolean) => void,
   onToggle: (row: TreeRow) => void,
 ): void {
   const list = document.createElement('div')
@@ -18,7 +18,7 @@ export function paintHierarchy(
     button.type = 'button'
     button.className = 'row'
     button.dataset.id = row.id
-    if (row.id === selectedId) button.classList.add('selected')
+    if (selectedIds.has(row.id)) button.classList.add('selected')
     if (row.origin !== 'observed' || row.external) button.classList.add('ghost')
     button.style.paddingLeft = `${14 + row.depth * 16}px`
 
@@ -44,12 +44,12 @@ export function paintHierarchy(
       : row.name
 
     button.append(twist, mark, name)
-    button.addEventListener('click', () => onSelect(row.id))
+    button.addEventListener('click', event => onSelect(row.id, event.shiftKey))
     list.append(button)
   }
   const heading = sectionHeading('Structure', unfolded, () => {
     unfolded = !unfolded
-    paintHierarchy(host, rows, selectedId, onSelect, onToggle)
+    paintHierarchy(host, rows, selectedIds, onSelect, onToggle)
   })
   list.hidden = !unfolded
   host.replaceChildren(heading, list)

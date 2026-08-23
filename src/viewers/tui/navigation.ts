@@ -190,7 +190,7 @@ function reduceTree(
 ): ViewerState {
   // One cursor space: the flow rows sit above the tree rows.
   const commands = worldCommands(world)
-  const rows = treeRows(world, current.currentId, current.tree)
+  const rows = treeRows(world, current.currentId === undefined ? [] : [current.currentId], current.tree)
   const ids = [...commands.map(command => command.id), ...rows.map(row => row.id)]
   if (ids.length === 0) return current
   const index = Math.max(0, ids.indexOf(current.tree.cursor ?? ''))
