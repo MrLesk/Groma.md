@@ -3,6 +3,7 @@ import {
   BEND,
   CLEARANCE_PUSH,
   CLEARANCE_REACH,
+  FINAL_BEND,
   OFF_CENTRE,
   REUSE,
   RING,
@@ -433,7 +434,7 @@ export function routeAll(
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
         const neighbour = nodeOf(nx, ny)
         if (blocked[neighbour]) continue
-        const turn = next === direction ? 0 : BEND * (nearGoal[node] !== -1 && nearGoal[node]! < LANES ? 1 + LANES : 1)
+        const turn = next === direction ? 0 : nearGoal[node] !== -1 && nearGoal[node]! < LANES ? FINAL_BEND : BEND
         const cost = g[state]! + STEP + turn + REUSE * used[edgeOf(node, neighbour)]!
           + offClearance(neighbour) + offRoutes(neighbour)
           + (goal[neighbour] ? goalCost[neighbour]! : 0)
