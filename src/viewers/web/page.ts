@@ -205,6 +205,7 @@ const style = `
     border: 1px solid var(--hairline);
     border-radius: 6px;
     overflow: hidden;
+    transform: translateY(-1px);
   }
   #map-controls button { display: flex; align-items: center; gap: 6px; border: 0; border-right: 1px solid var(--hairline); }
   #zoom { display: grid; min-width: 54px; place-items: center; padding: 0 8px; border-right: 1px solid var(--hairline); }
