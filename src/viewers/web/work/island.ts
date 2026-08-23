@@ -15,7 +15,7 @@ export const workCss = `
   /* Centred by margins, not by a translate: a fractional transform would resample the blurred layer and soften the text. */
   #work {
     position: absolute; left: 0; right: 0; bottom: 12px; margin: 0 auto; width: fit-content; box-sizing: border-box; max-width: calc(100% - 24px);
-    display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 28px;
+    display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: var(--chrome-radius);
     background: color-mix(in srgb, var(--paper) 35%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
     backdrop-filter: blur(14px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
     overflow: hidden; white-space: nowrap;
@@ -81,7 +81,7 @@ function chip(pin: WorkPin, finishing: boolean, onToggle: (id: string) => void, 
 }
 
 /**
- * The Backlog task island at the map's bottom centre: a pill that unfolds into
+ * The Backlog task island at the map's bottom centre: a compact panel that unfolds into
  * the label, the configured statuses that have pins and the chip strip. It starts
  * folded with the workflow statuses other than the default and terminal ones
  * shown, and keeps its fold and filters across repaints;
@@ -118,7 +118,7 @@ export function createWorkIsland(
     node.setAttribute('aria-pressed', String(pressed))
     return node
   }
-  /** The island's parts for the current state: nothing, the folded pill, or the open row. */
+  /** The island's parts for the current state: nothing, the folded panel, or the open row. */
   const parts = (): Node[] => {
     if (pins.length === 0) return []
     const mark = document.createElement('span')
